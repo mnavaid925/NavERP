@@ -1,4 +1,44 @@
 ---
+# Module 5 — Inventory — Sub-module 5.18 Accounting & Financial Integration — review (2026-08-25)
+
+**Built 5.18 as the SYNC ENGINE between the warehouse and Module 2's ledger (L29: ledger stays
+accounting's; L36: PO/GRN/SO/shipment documents stay 4.x's).** 4.18's AP/AR pages are read-only
+registers — nothing actually drafted money documents from stock events until now.
+
+## What landed
+
+- **Models** (`apps/inventory/models/AccountingFinancialIntegration/`): `TaxRule` [TRT-]
+  product×geography → `accounting.TaxCode` (SKU > category > catch-all specificity scoring +
+  priority tie-break, PutawayRule resolver semantics; `resolve_tax_rule`/`TaxRule.rate_for`),
+  `GLPostRule` (ONE active account map per event type — adjustment/cogs — unique per tenant),
+  `JournalSyncLog` [JSY-] register of automated postings + the two posting services
+  (`post_adjustment_to_gl`, `post_cogs_batch`) which create balanced POSTED `accounting.JournalEntry`s
+  (entry_type="manual", source stamped in reference) inside `transaction.atomic()` under an
+  open-fiscal-period guard. COGS values moves at issue-time stamped unit_cost (historical fact);
+  overlapping windows refused.
+- **Computed pages + verbs**: `ap_sync` (received GRNs w/o bill → DRAFT accounting.Bill at PO
+  prices, link grn.bill, recompute three-way match; PO lines are L28 free-text so tax resolves on
+  geography alone), `ar_sync` (delivered outbound shipments w/ uninvoiced SO → DRAFT Invoice from
+  ORDER lines w/ discounts folded to net unit prices, link so.invoice), `je_automation` board
+  (account map state + pending adjustments + recent JSY register + COGS window runner defaulting
+  day-after-last-batch → today) + CRUD quintets for taxrule/glpostrule. Writes tenant-admin gated;
+  list/detail member-readable with is_admin affordance hiding.
+- **Templates** `templates/inventory/finint/{ap_sync,ar_sync,je_automation}.html +
+  taxrule/* glpostrule/*`; **wiring**: `LIVE_LINKS["5.18"]` (4 bullets + GL Posting Rules extra);
+  seeder `_seed_finint` walks REAL paths (scm `_post_grn_receipt` for the AP demo row, real
+  TrackingEvent delivery for AR, real JE posting for the adjustment demo); admin x3; migration 0024.
+
+## Notes
+
+- Concurrent-session collision handled by design: shared __init__/admin/seeder edits were re-read
+  immediately before each surgical merge; migration 0024 contains only this run's models (the other
+  session took 0020–0023).
+- Smoke (temp/smoke_518.py): all pages 200; sync artifacts verified (draft Bill w/ lines+totals,
+  linked Invoice, JSY→posted-JE chain incl. 15-move COGS batch $45,091.29); overlap refusal polite;
+  cross-tenant IDOR 404; member writes 403.
+
+---
+
 # Module 5 — Inventory — Sub-module 5.3 Purchase Order (PO) Management — review (2026-08-23)
 
 **Built 5.3 end-to-end as the management layer AROUND 4.1's `scm.PurchaseOrder` spine (L36 — the PO
@@ -26992,10 +27032,25 @@ Whole run inside transaction.atomic(); summary dict rendered by the view.
 (procurement alert-center precedent). IDOR verified cross-tenant 404 on all three models.
 
 **Verification:** makemigrations 0020 (rides incidental pre-existing rfidtag.epc
-help_text drift), migrate OK, seed x2 idempotent (Acme 9 alerts/11 deliveries, Globex
-10/13 from real spine data), manage.py check clean, smoke temp/smoke_516.py ALL PASS
-(31 checks incl. dedup re-run equality, lifecycle verbs, email-without-recipients
-rejection, ARL- auto-number, sidebar lens links).
+help_text drift) + 0021 (overstock_pct validator cap, ack/resolved_by editable=False),
+migrate OK, seed x2 idempotent (Acme 9 alerts/11 deliveries, Globex 10/13 from real
+spine data), manage.py check clean, smoke temp/smoke_516.py ALL PASS (31 checks incl.
+dedup re-run equality, lifecycle verbs, email-without-recipients rejection, ARL-
+auto-number, sidebar lens links).
+
+**Test wave (single-writer lane - no fan-out, no collision surface):**
+test_alerts_{models(20),forms(10),views(17),security(11)}.py = 53/53 green under
+config.settings_test. Tests caught two REAL product bugs: T1 recipients list stored
+as repr string (save() now re-joins), T2 ValidationError NameError on the triage
+refusal paths (import added). Plus 5 test-authoring fixes: 405-vs-404 on GET of
+POST-only verbs (IDOR probes ride the verb's real method), tenant_b fixture missing,
+cooldown test lacked a spine condition so the branch never ran, channels order
+expectation vs declared in_app>email>sms>push, delivery fan-out test wired to
+po_pending_a instead of conditionally skipping.
+
+**Concurrency note:** sibling lanes built 5.15/5.17/5.19 and started 5.18 DURING this
+run; shared-file wirings (__init__ x4, admin, seeder, navigation) landed inside their
+commits and were verified intact in HEAD; their WIP files untouched per L45.
 
 **Gotchas of record:** `{% url %}` cannot carry a query string - overview links use
 `{% url %}?type=...`; elif-after-for syntax slip in the engine caught by import; class
@@ -27003,7 +27058,7 @@ attr `number = None` would have shadowed TenantNumbered's field - removed before
 
 ---
 
-## 5.15 Quality Control (QC) & Inspection � built 2026-08-25
+## 5.15 Quality Control (QC) & Inspection � built 2026-08-25
 
 **Scope ruling:** SCM 4.9 owns the quality-ENGINEERING layer (InspectionPlan,
 QualityInspection, NonConformance + MRB). 5.15 is the warehouse-FLOOR gate AROUND it
@@ -27037,3 +27092,528 @@ quarantine POST verb -> 302 + exactly two legs).
 (first-match-wins) - every entity module needs its own literal prefix; as_db_int lives in
 apps.core.crud not utils; parallel-session integration means shared __init__ snapshots may
 carry sibling sub-module import blocks - committed only on green-check windows.
+
+---
+
+## Inventory 5.19 Third-Party Integrations & API — build plan (2026-08-25)
+
+Source: `.claude/tasks/research-inventory-5.19.md` (Phase-1). Backend package
+`apps/inventory/models/ThirdPartyIntegrations/` (PascalCase of the NavERP.md title); template
+folder `templates/inventory/integration/` (short slug) — the asymmetry is the house rule
+(scm 4.19 docstrings), do not "fix" either side.
+
+### 0. Scope & boundaries
+
+NavERP.md 978-982, the four bullets: E-commerce Integration (stock sync with Shopify/Amazon/
+WooCommerce) · ERP Integration (bi-directional SAP/Oracle/NetSuite) · Accounting Software
+Integration (QuickBooks/Xero/Sage) · API Management (REST/GraphQL APIs for custom integrations).
+
+- OWN: `IntegrationChannel` (connection register discriminated by kind — serves bullets 1-3),
+  `ChannelListingMap` (local SKU <-> external product/variant id <-> stocking location — THE
+  inventory-domain asset nothing else owns), `StockSyncRun` (append-only push/pull batch log),
+  `ApiClient` (keys WE issue to third parties calling OUR surface — bullet 4's inbound half).
+- POINT AT: `scm.Item`, `scm.Location` (string FKs only — spine is 4.3's, L36);
+  `accounting.IntegrationConfig` is COPIED (secret mechanics), never imported (peer apps don't
+  import each other's internals).
+- NON-GOALS (from research §4): NO gateway/webhook/EDI tables — scm 4.19 owns
+  IntegrationEndpoint/Message/WebhookSubscription/WebhookDelivery and 5.19 declares no
+  interchange_id/device_identifier/transport vocabulary beyond rest/graphql/feed-file; NO GL
+  posting and NO accounting model touched — inventory 5.18 owns internal JE automation, our
+  QuickBooks/Xero/Sage rows are EXTERNAL connector registrations only; NO outbound HTTP — zero
+  requests/urllib/httpx/http.client imports, `base_url` carries a `# WARNING SSRF` comment,
+  `stocksyncrun_retry` sends nothing, `simulated` is a first-class status, rate-limit notes are
+  prose not throttles; stock quantities are NEVER mutated by sync rows (`last_pushed_qty` /
+  `last_pushed_at` are derived display copies, no StockMove is ever written); no GenericForeignKey;
+  no OAuth token storage (auth_method records intent).
+
+### 1. Contract — models
+
+First entity module owns `apps/inventory/models/ThirdPartyIntegrations/_choices.py`: pure data,
+imports NOTHING, explicit `__all__`; siblings import FROM IT BY NAME (never star-import a
+_choices module). Every entity module does `from apps.inventory.models._base import *` PLUS
+`import hashlib` AND `import secrets` ITSELF — inventory `_base.py` star-exports NEITHER
+(verified) and `_base.py` must not be edited mid-flight (L43).
+
+Constants to declare (names pinned; values verbatim):
+
+- `CHANNEL_KIND_CHOICES = [("ecommerce", "E-commerce"), ("erp", "ERP"), ("accounting",
+  "Accounting"), ("custom", "Custom")]` (max_length=12)
+- `CHANNEL_PLATFORM_CHOICES = [("shopify", "Shopify"), ("amazon_sp_api", "Amazon SP-API"),
+  ("woocommerce", "WooCommerce"), ("ebay", "eBay"), ("walmart", "Walmart"), ("magento",
+  "Magento"), ("bigcommerce", "BigCommerce"), ("sap", "SAP"), ("oracle_erp", "Oracle ERP"),
+  ("netsuite", "NetSuite"), ("dynamics", "Microsoft Dynamics"), ("quickbooks", "QuickBooks"),
+  ("xero", "Xero"), ("sage", "Sage"), ("custom", "Custom")]` (max_length=20; longest value
+  `amazon_sp_api` = 13)
+- `CHANNEL_SYNC_DIRECTION_CHOICES = [("push_stock", "Push Stock"), ("pull_orders", "Pull
+  Orders"), ("bidirectional", "Bidirectional")]` (max_length=14)
+- `CHANNEL_AUTH_METHOD_CHOICES = [("none", "None"), ("api_key", "API Key"), ("basic", "Basic
+  Auth"), ("oauth2", "OAuth 2.0"), ("signature", "Signature")]` (max_length=10)
+- `ENVIRONMENT_CHOICES = [("sandbox", "Sandbox"), ("production", "Production")]`
+  (max_length=10)
+- `CHANNEL_STATUS_CHOICES = [("disconnected", "Disconnected"), ("connected", "Connected"),
+  ("error", "Error"), ("disabled", "Disabled")]` (max_length=14)
+- `CHANNEL_TRIGGER_CHOICES = [("manual", "Manual"), ("scheduled", "Scheduled"), ("webhook",
+  "Webhook")]` (max_length=10)
+- `RUN_DIRECTION_CHOICES = [("outbound_push", "Outbound Push"), ("inbound_pull", "Inbound
+  Pull")]` (max_length=14)
+- `RUN_TRIGGER_CHOICES = [("manual", "Manual"), ("scheduled", "Scheduled"), ("webhook_inbound",
+  "Webhook Inbound")]` (max_length=15)
+- `RUN_STATUS_CHOICES = [("pending", "Pending"), ("success", "Success"), ("partial", "Partial"),
+  ("failed", "Failed"), ("exhausted", "Exhausted"), ("simulated", "Simulated")]`
+  (max_length=10)
+- `SYNC_BACKOFF_SECONDS = (0, 5, 300, 1800, 7200, 18000, 36000, 36000)` (Svix tuple, adopted
+  verbatim — same posture as scm DELIVERY_BACKOFF_SECONDS)
+- `API_PROTOCOL_CHOICES = [("rest", "REST"), ("graphql", "GraphQL")]` (max_length=8)
+- `API_STATUS_CHOICES = [("active", "Active"), ("revoked", "Revoked")]` (max_length=8)
+
+#### 1.1 `IntegrationChannel` — TenantNumbered, NUMBER_PREFIX `"INT"` -> INT-
+
+The connection register (Celigo/Patchworks compression; bullets 1-3). File:
+`models/ThirdPartyIntegrations/IntegrationChannels.py`.
+
+Fields (own, in declaration order; every model also inherits tenant FK core.Tenant CASCADE
+related_name="+" + created_at/updated_at, and `number CharField(20, editable=False)`):
+
+1. `name` CharField(120)
+2. `kind` CharField(12, choices=CHANNEL_KIND_CHOICES, default="custom")
+3. `platform` CharField(20, choices=CHANNEL_PLATFORM_CHOICES, blank=True, default="custom")
+4. `direction` CharField(14, choices=CHANNEL_SYNC_DIRECTION_CHOICES, default="bidirectional")
+5. `auth_method` CharField(10, choices=CHANNEL_AUTH_METHOD_CHOICES, default="api_key") — oauth2
+   RECORDS INTENT and stores nothing
+6. `base_url` CharField(500, blank=True) — `# WARNING SSRF:` tenant-editable URL the server WOULD
+   dial; no transport exists in this build; any future pass needs allow-list + private-IP block +
+   DNS-rebinding re-resolve FIRST. Deliberately a CharField, not URLField (non-HTTP schemes stay
+   legal; scm IntegrationEndpoint.endpoint_url rationale)
+7. `external_account_ref` CharField(120, blank=True) — shop domain / seller id / realm / company id
+8. `api_key_prefix` CharField(12, blank=True, editable=False)
+9. `api_key_hash` CharField(64, blank=True, editable=False) — prefix + SHA-256 marker; plaintext
+   NEVER persisted, shown exactly once on rotate (accounting.IntegrationConfig mechanics VERBATIM)
+10. `environment` CharField(10, choices=ENVIRONMENT_CHOICES, default="sandbox")
+11. `status` CharField(14, choices=CHANNEL_STATUS_CHOICES, default="disconnected") — ON the form
+    deliberately: human-maintained marker, no transport observes anything (scm endpoint.status
+    ruling)
+12. `trigger_mode` CharField(10, choices=CHANNEL_TRIGGER_CHOICES, default="manual") — INTENT only,
+    no scheduler exists
+13. `schedule_note` CharField(200, blank=True)
+14. `rate_limit_note` CharField(120, blank=True) — P1 documentation column, e.g. "QBO: 429 w/
+    Retry-After, ~10 concurrent"; prose humans read, never enforced
+15. `default_location` ForeignKey("scm.Location", on_delete=SET_NULL, null=True, blank=True,
+    related_name="+") — WHICH stocking location backs this channel's availability
+16. `last_sync_at` DateTimeField(null=True, blank=True, editable=False) — home for the future
+    transport pass; NOTHING in this build writes it (LogisticsClient.last_synced_at ruling)
+17. `last_run_status` CharField(14, blank=True, editable=False) — written ONLY by the sync verb,
+    honestly reflecting the latest recorded run
+18. `is_active` BooleanField(default=True)
+19. `notes` TextField(blank=True)
+
+Meta: `ordering = ["name", "id"]` (TOTAL order — id tie-break makes page 2 deterministic);
+`unique_together = (("tenant", "number"), ("tenant", "name"))`;
+indexes `[Index(fields=["tenant","kind"], name="inv_int_tnt_kind_idx"),
+Index(fields=["tenant","status"], name="inv_int_tnt_status_idx"),
+Index(fields=["tenant","is_active"], name="inv_int_tnt_active_idx")]`.
+`TENANT_SCOPED_FKS = ("default_location",)` — read by BOTH the form's `_reject_foreign` and this
+model's own `clean()` loop (scm idiom: one table, two readers).
+`__str__` -> `f"{self.number} — {self.name}"`.
+Classmethods/methods (copied from accounting.IntegrationConfig, renamed for tokens):
+`hash_secret(secret)` staticmethod (sha256 hexdigest); `set_api_key(secret)` (prefix=secret[:6],
+hash=hash_secret); `generate_api_key()` staticmethod returning `secrets.token_urlsafe(24)`;
+`masked` property -> `f"{self.api_key_prefix}{'•' * 8}"` or `""` when no hash — templates render
+THIS, never the raw columns.
+
+#### 1.2 `ChannelListingMap` — TenantOwned (NO number — DECIDED: plain TenantOwned join-like row)
+
+High-volume plumbing nobody cites a CLM- number for (WebhookDelivery telemetry side of the line).
+File: `models/ThirdPartyIntegrations/ChannelListingMaps.py`.
+
+Fields: 1. `channel` ForeignKey("inventory.IntegrationChannel", CASCADE, related_name="listings")
+(the sub-module's ONE cascade, like scm MSG.endpoint) · 2. `item` ForeignKey("scm.Item", PROTECT,
+null=True, blank=True, related_name="channel_listings") (blank = channel-wide row) · 3. `location`
+ForeignKey("scm.Location", PROTECT, null=True, blank=True, related_name="+") (blank = every
+location) · 4. `external_product_id` CharField(80, blank=True) · 5. `external_variant_id`
+CharField(80, blank=True) · 6. `external_sku` CharField(80, blank=True) (Shopify variant gid /
+Amazon ASIN-SKU / Woo product id) · 7. `sync_enabled` BooleanField(default=True) · 8.
+`price_override` DecimalField(max_digits=18, decimal_places=2, null=True, blank=True) · 9.
+`last_pushed_qty` DecimalField(max_digits=18, decimal_places=2, null=True, blank=True,
+editable=False) · 10. `last_pushed_at` DateTimeField(null=True, blank=True, editable=False) · 11.
+`notes` TextField(blank=True).
+
+Meta: `ordering = ["channel__name", "id"]`;
+`unique_together = (("tenant", "channel", "external_variant_id"),)` — MariaDB allows duplicate
+NULLs so local-only rows coexist (research-verified);
+indexes `[Index(fields=["tenant","item"], name="inv_clm_tnt_item_idx")]`.
+`TENANT_SCOPED_FKS = ("channel", "item", "location")`; clean() = the standard guard loop.
+`__str__` -> `f"{self.channel.number} — {self.external_sku or (self.item.sku if self.item_id
+else '') or 'channel-wide'}"`.
+
+#### 1.3 `StockSyncRun` — TenantNumbered, NUMBER_PREFIX `"SYN"` -> SYN-
+
+Append-only run log (Boomi document tracking / Workato job reports; scm.IntegrationMessage
+posture). File: `models/ThirdPartyIntegrations/StockSyncRuns.py`.
+
+**SYN- numbering justification (human-discussed batches):** runs ARE discussed by name ("last
+night's Shopify push", "chase SYN-00042"), unlike per-attempt telemetry (scm.WebhookDelivery's
+explicit no-number ruling) — hence numbered.
+
+Fields: 1. `channel` ForeignKey("inventory.IntegrationChannel", CASCADE, related_name="runs") ·
+2. `direction` CharField(14, choices=RUN_DIRECTION_CHOICES) — NO default, never assume · 3.
+`trigger_mode` CharField(15, choices=RUN_TRIGGER_CHOICES, default="manual") · 4. `status`
+CharField(10, choices=RUN_STATUS_CHOICES, default="pending") — `simulated` is mandatory honesty:
+nothing leaves the process, recording "success" would fabricate evidence · 5. `records_total`
+PositiveIntegerField(default=0) · 6. `records_ok` PositiveIntegerField(default=0) · 7.
+`records_failed` PositiveIntegerField(default=0) (batch counts — one row per batch, never one row
+per record) · 8. `payload_excerpt` TextField(blank=True) — TRUNCATED excerpt only, may contain
+buyer PII, never a full body · 9. `error_code` CharField(40, blank=True) · 10. `error_message`
+TextField(blank=True) · 11. `attempt_no` PositiveSmallIntegerField(default=1) · 12. `next_retry_at`
+DateTimeField(null=True, blank=True) — a STAMP not a trigger · 13. `started_at`
+DateTimeField(default=timezone.now, editable=False) (default=now, NOT auto_now_add: seeder must
+back-date demo runs) · 14. `finished_at` DateTimeField(null=True, blank=True).
+
+Meta: `ordering = ["-started_at", "-id"]`;
+`unique_together = (("tenant", "number"),)`;
+indexes `[Index(fields=["tenant","channel"], name="inv_syn_tnt_channel_idx"),
+Index(fields=["tenant","status","started_at"], name="inv_syn_tnt_status_idx")]`.
+`TENANT_SCOPED_FKS = ("channel",)`; clean() = guard loop (no form exists, so clean() is the whole
+boundary for shell/admin/seeder).
+`__str__` -> `f"{self.number} — {self.get_direction_display()}"`.
+Methods: `@classmethod record(cls, tenant, channel, *, direction, trigger_mode="manual", **extra)`
+— THE append-only creator; assigns nothing else, saves, returns the instance. Views (sync verb)
+and the seeder create runs ONLY through it; there is NO edit/delete route anywhere. Plus
+`next_backoff_seconds` property (index = attempt_no into SYNC_BACKOFF_SECONDS, None when spent —
+WHD logic verbatim) read by the detail page and the retry verb.
+
+#### 1.4 `ApiClient` — TenantNumbered, NUMBER_PREFIX `"API"` -> API-
+
+Bullet 4: keys WE issue to third parties calling OUR REST/GraphQL surface (MuleSoft/Jitterbit
+client-management half). crm/scm webhooks are OUTBOUND push; nobody else owns inbound access
+control. File: `models/ThirdPartyIntegrations/ApiClients.py`.
+
+Fields: 1. `name` CharField(120) · 2. `description` TextField(blank=True) · 3. `scopes`
+CharField(255, blank=True) — comma list e.g. "stock:read,moves:read"; RECORDED intent, no
+enforcement middleware this pass · 4. `protocol` CharField(8, choices=API_PROTOCOL_CHOICES,
+default="rest") · 5. `api_token_prefix` CharField(12, blank=True, editable=False) · 6.
+`api_token_hash` CharField(64, blank=True, editable=False) — SAME prefix+SHA-256 mechanics;
+plaintext shown exactly once on issue/rotate · 7. `status` CharField(8, choices=API_STATUS_CHOICES,
+default="active") — moves ONLY via the revoke POST verb (verb-driven, never a form field) · 8.
+`revoked_at` DateTimeField(null=True, blank=True, editable=False) · 9. `allowed_ips` CharField(255,
+blank=True) — RECORDED intent not enforced; help_text MUST say so · 10. `last_used_at`
+DateTimeField(null=True, blank=True, editable=False) — home for the future gateway pass · 11.
+`rate_limit_note` CharField(120, blank=True) — our budget promise to the consumer.
+
+Meta: `ordering = ["name", "id"]`;
+`unique_together = (("tenant", "number"), ("tenant", "name"))`;
+indexes `[Index(fields=["tenant","status"], name="inv_apc_tnt_status_idx")]`.
+`TENANT_SCOPED_FKS = ()` — declared EMPTY (WebhookSubscription precedent: absence reads as
+"checked, nothing to check"); no clean() override, no _reject_foreign in its form.
+`__str__` -> `f"{self.number} — {self.name}"`.
+Methods: `hash_secret` / `set_api_token(secret)` (prefix=secret[:6]) / `generate_api_token()`
+(secrets.token_urlsafe(24)) / `masked` property over api_token_prefix/hash — accounting quartet
+again; plus `revoke()` (no-op-safe: sets status="revoked" + revoked_at=timezone.now only when
+active, save(update_fields=[...])).
+
+All prefixes INT-/SYN-/API- fit TenantNumbered's max_length=20; collision retry is already handled
+by the base save() — never roll your own. All unique constraints/indexes lead with `tenant`.
+
+### 2. Contract — forms
+
+Base classes: `TenantUniqueMixin, TenantModelForm` (mix in BEFORE TenantModelForm —
+forms/_common.py). Package re-exports go in forms/__init__.py later (integrator only).
+
+- `IntegrationChannelForm` (forms/ThirdPartyIntegrations/IntegrationChannels.py) — Meta.model =
+  IntegrationChannel; fields IN ORDER: `["name", "kind", "platform", "direction", "auth_method",
+  "base_url", "external_account_ref", "environment", "status", "trigger_mode", "schedule_note",
+  "rate_limit_note", "default_location", "is_active", "notes"]`. Structurally excluded (never
+  listed): tenant, number, api_key_prefix, api_key_hash, last_sync_at, last_run_status (all
+  editable=False). clean(): `_reject_foreign(self, cleaned, ["default_location"])`. Unique checks
+  come free via TenantUniqueMixin ((tenant,number) + (tenant,name)). Narrow
+  `default_location.queryset` to `Location.objects.filter(tenant=self.tenant)` in __init__.
+- `ChannelListingMapForm` (forms/ThirdPartyIntegrations/ChannelListingMaps.py) — fields IN ORDER:
+  `["channel", "item", "location", "external_product_id", "external_variant_id", "external_sku",
+  "price_override", "sync_enabled", "notes"]`. Excluded: tenant, last_pushed_qty, last_pushed_at.
+  clean(): `_reject_foreign(self, cleaned, ["channel", "item", "location"])`. __init__ narrows all
+  three querysets to the tenant (Item ordered by sku, Location by code, Channel by name).
+- `ApiClientForm` (forms/ThirdPartyIntegrations/ApiClients.py) — fields IN ORDER: `["name",
+  "protocol", "scopes", "description", "allowed_ips", "rate_limit_note"]`. Excluded: tenant,
+  number, api_token_prefix, api_token_hash, status, revoked_at, last_used_at. clean(): NO
+  _reject_foreign (no foreign FKs); TenantUniqueMixin for (tenant,name). Token issue/rotate is a
+  VIEW verb, not a form field.
+- **`StockSyncRunForm` DOES NOT EXIST** — created only via `StockSyncRun.record()`; reached through
+  list + detail + retry POST only (NotificationDelivery / scm.IntegrationMessage precedent). The
+  forms sub-package `__init__.py` carries the "deliberately absent" comment instead of an import.
+  A reviewer must not "complete" this CRUD.
+
+### 3. Contract — urls
+
+`apps/inventory/urls/__init__.py` keeps `app_name = "inventory"` and concatenates the new module's
+urlpatterns (integrator adds `from .ThirdPartyIntegrations.X import urlpatterns as _tpi_x` lines +
+entries at the END of urlpatterns). Four url modules under `urls/ThirdPartyIntegrations/`, one per
+entity file. Literal-before-pk INSIDE each block; the four prefixes below are distinct whole
+components so nothing cross-module can swallow another (verified against the existing first
+segments in urls/__init__.py).
+
+| Prefix | Name | View | Methods |
+|---|---|---|---|
+| `channels/` | `integrationchannel_list` | integrationchannel_list | GET |
+| `channels/add/` | `integrationchannel_create` | integrationchannel_create | GET/POST |
+| `channels/<int:pk>/` | `integrationchannel_detail` | integrationchannel_detail | GET |
+| `channels/<int:pk>/edit/` | `integrationchannel_edit` | integrationchannel_edit | GET/POST |
+| `channels/<int:pk>/delete/` | `integrationchannel_delete` | integrationchannel_delete | POST |
+| `channels/<int:pk>/rotate-key/` | `integrationchannel_rotate_key` | integrationchannel_rotate_key | POST |
+| `channels/<int:pk>/sync/` | `integrationchannel_sync` | integrationchannel_sync | POST |
+| `listings/` | `listingmap_list` | listingmap_list | GET |
+| `listings/add/` | `listingmap_create` | listingmap_create | GET/POST |
+| `listings/<int:pk>/` | `listingmap_detail` | listingmap_detail | GET |
+| `listings/<int:pk>/edit/` | `listingmap_edit` | listingmap_edit | GET/POST |
+| `listings/<int:pk>/delete/` | `listingmap_delete` | listingmap_delete | POST |
+| `runs/` | `stocksyncrun_list` | stocksyncrun_list | GET |
+| `runs/<int:pk>/` | `stocksyncrun_detail` | stocksyncrun_detail | GET |
+| `runs/<int:pk>/retry/` | `stocksyncrun_retry` | stocksyncrun_retry | POST |
+| `api-clients/` | `apiclient_list` | apiclient_list | GET |
+| `api-clients/add/` | `apiclient_create` | apiclient_create | GET/POST |
+| `api-clients/<int:pk>/` | `apiclient_detail` | apiclient_detail | GET |
+| `api-clients/<int:pk>/edit/` | `apiclient_edit` | apiclient_edit | GET/POST |
+| `api-clients/<int:pk>/delete/` | `apiclient_delete` | apiclient_delete | POST |
+| `api-clients/<int:pk>/issue-token/` | `apiclient_issue_token` | apiclient_issue_token | POST |
+| `api-clients/<int:pk>/revoke/` | `apiclient_revoke` | apiclient_revoke | POST |
+
+DECIDED custom verbs: `integrationchannel_sync` = admin-gated POST creating a SIMULATED
+StockSyncRun through `StockSyncRun.record(...)` with status="simulated", records_total = count of
+that channel's sync_enabled listing maps, records_ok=records_failed=0, finished_at=now, then
+stamps `channel.last_run_status="simulated"` (NEVER `last_sync_at` — nothing synced) and redirects
+to the new run's detail; `apiclient_revoke` = admin POST calling `revoke()`; `apiclient_issue_token`
+and `integrationchannel_rotate_key` = admin POSTs generating plaintext once into a flash message,
+persisting only prefix+hash, writing_audit_log WITHOUT the plaintext. No greedy `<str:...>`
+converters anywhere in this module.
+
+### 4. Contract — views (FULL context keys — the L7 contract)
+
+Shared: `from apps.inventory.views._common import *` gives login_required/get_object_or_404/
+redirect/render/messages/require_POST/crud_* /write_audit_log; `as_db_int` comes from
+`apps.core.crud` (NOT utils); `tenant_admin_required` from `apps.core.decorators`. crud helpers
+always add `object_list` + `page_obj` + `q` (list) / `obj` (detail+edit) / `form` + `is_edit`
+(forms). Junk GET values fall back to "" (valid_statuses dict check), FK filters parse via
+`as_db_int` before filtering.
+
+- `integrationchannel_list` @login_required -> `inventory/integration/channel/list.html`.
+  extra_context: `stats` {total, connected, error, disabled}; `kind_choices` (CHANNEL_KIND_CHOICES);
+  `kind` (echoed selection); `platform_choices` (CHANNEL_PLATFORM_CHOICES); `platform`; `status_choices`
+  (CHANNEL_STATUS_CHOICES); `status`; `is_admin`. Filters applied pre-pagination: q (search_fields =
+  name, external_account_ref, platform, default_location__code), ?kind= (sidebar lenses),
+  ?platform=, ?status=.
+- `integrationchannel_detail` @login_required -> `.../channel/detail.html`. obj via crud_detail
+  select_related=("default_location",). extra_context: `listings` =
+  obj.listings.select_related("item","location").order_by("external_sku","id");
+  `runs` = obj.runs.order_by("-started_at","-id")[:10]; `run_stats` = {total, failed} over
+  obj.runs (failed chip deep-links `inventory:stocksyncrun_list?channel=<pk>&status=failed`);
+  `is_admin`.
+- `integrationchannel_create` @tenant_admin_required -> `.../channel/form.html`; ctx `form`,
+  `is_edit=False`. success_url inventory:integrationchannel_list.
+- `integrationchannel_edit` @tenant_admin_required -> same template; ctx `form`, `obj`, `is_edit=True`.
+- `integrationchannel_delete` @tenant_admin_required @require_POST -> crud_delete, redirect list.
+- `integrationchannel_rotate_key` @tenant_admin_required @require_POST — no template; plaintext
+  once in messages.success; write_audit_log(user, obj, "update", {"action": "rotate_api_key"}).
+- `integrationchannel_sync` @tenant_admin_required @require_POST — builds the simulated run (see
+  §3), messages.success names SYN- number + "simulated — nothing was sent", redirect
+  stocksyncrun_detail.
+- `listingmap_list` @login_required -> `inventory/integration/listingmap/list.html`.
+  extra_context: `stats` {total, enabled, paused}; `channel_choices` = [(pk, str(c)) for tenant
+  channels ordered by name]; `channel` (echoed); `enabled_choices` = [("true","Enabled"),
+  ("false","Paused")]; `enabled`; `is_admin`. Filters: q (external_sku, external_variant_id,
+  item__sku, channel__name), ?channel=<int> via as_db_int, ?sync_enabled=true/false (crud_list
+  bool mapping handles it). select_related("channel","item","location").
+- `listingmap_detail` @login_required -> `.../listingmap/detail.html`; obj select_related
+  ("channel","item","location").
+- `listingmap_create`/`listingmap_edit` @login_required (research: staff-level CRUD — NOT
+  admin-gated) -> `.../listingmap/form.html`; ctx `form`, [`obj`,] `is_edit`.
+- `listingmap_delete` @login_required @require_POST.
+- `stocksyncrun_list` @login_required -> `inventory/integration/syncrun/list.html`.
+  extra_context: `stats` {total, success, partial, failed, simulated}; `status_choices`
+  (RUN_STATUS_CHOICES); `status`; `channel_choices`; `channel`; `is_admin`. Filters: q (number,
+  error_code), ?status=, ?channel=<int>. select_related("channel"). Deep-links honored:
+  ?channel=<pk>&status=failed from the channel detail panel.
+- `stocksyncrun_detail` @login_required -> `.../syncrun/detail.html`; obj select_related
+  ("channel",). extra_context: `max_attempts` = len(SYNC_BACKOFF_SECONDS); `is_admin`. Template
+  renders obj.next_backoff_seconds itself; shows channel name/number via obj.channel.
+- `stocksyncrun_retry` @tenant_admin_required @require_POST — loads tenant-scoped, advances
+  attempt_no += 1 and stamps next_retry_at from next_backoff_seconds (marks status="exhausted"
+  when the schedule is spent), touches NO recorded outcome (counts/error/payload untouched),
+  fires NO HTTP, write_audit_log, redirect stocksyncrun_detail.
+- `apiclient_list` @login_required -> `inventory/integration/apiclient/list.html`.
+  extra_context: `stats` {total, active, revoked}; `status_choices` (API_STATUS_CHOICES);
+  `status`; `protocol_choices` (API_PROTOCOL_CHOICES); `protocol`; `is_admin`. Filters: q (name,
+  scopes), ?status=, ?protocol=.
+- `apiclient_detail` @login_required -> `.../apiclient/detail.html`; obj; extra_context `is_admin`
+  (token/revoke buttons gated on it).
+- `apiclient_create` @tenant_admin_required -> `.../apiclient/form.html`; ctx `form`,
+  `is_edit=False`.
+- `apiclient_edit` @tenant_admin_required -> same; ctx `form`, `obj`, `is_edit=True`.
+- `apiclient_delete` @tenant_admin_required @require_POST.
+- `apiclient_issue_token` @tenant_admin_required @require_POST — generate_api_token()+set_api_token(),
+  plaintext once, audit without plaintext, redirect apiclient_detail.
+- `apiclient_revoke` @tenant_admin_required @require_POST — calls revoke(), audit, redirect detail.
+
+### 5. Templates
+
+Paths under `templates/inventory/integration/` (short slug; backend stays PascalCase
+ThirdPartyIntegrations/). List convention copied verbatim from
+`templates/inventory/barcode/rfidtag/list.html`: `{% extends "base.html" %}`, stat-grid KPI strip
+off `stats.*`, filter-bar GET form, `{% for obj in object_list %}`, `{% include
+"partials/pagination.html" %}`, Actions column (view/edit/delete + verbs, admin-gated on
+`is_admin`), `{% empty %}` state. Detail/form conventions: `obj` / `form`+`is_edit`. pk compares
+use `|stringformat:"d"`.
+
+- `channel/list.html`, `channel/detail.html` (masked credential chip via `{{ obj.masked }}` +
+  rotate button + Sync-now button + listings panel + recent-runs panel), `channel/form.html`
+- `listingmap/list.html`, `listingmap/detail.html`, `listingmap/form.html`
+- `syncrun/list.html`, `syncrun/detail.html` (NO form.html — append-only)
+- `apiclient/list.html`, `apiclient/detail.html` (masked token chip + Issue/Rotate Token + Revoke),
+  `apiclient/form.html`
+
+Badge colours — ONLY badge-green/red/amber/info/muted/slate exist in theme.css (no
+success/warning/danger — those render unstyled); every chain gets an {% else %} fallback of
+`get_<field>_display` in badge-muted:
+- channel.status: connected=green, disconnected=muted, error=red, disabled=slate
+- channel.kind: ecommerce=info, erp=amber, accounting=green, custom=muted; environment:
+  production=slate, sandbox=info
+- run.status: success=green, partial=amber, failed=red, exhausted=slate, pending=muted,
+  simulated=info; run.direction: outbound_push=info, inbound_pull=slate
+- apiclient.status: active=green, revoked=red; protocol: rest=info, graphql=amber
+- listingmap.sync_enabled: True=green, False=muted
+
+Filter dropdowns (each fed by the exact context key above): channel list = q + kind_choices +
+status_choices + platform_choices; listingmap list = q + channel_choices + enabled_choices;
+syncrun list = q + status_choices + channel_choices; apiclient list = q + status_choices +
+protocol_choices. String compares use `{% if request.GET.kind == val %}`.
+
+### 6. Admin
+
+Register all four in `apps/inventory/admin.py` (house shape: `@admin.register(X)` + ModelAdmin
+with list_display/list_filter/search_fields; StockSyncRun gets list_filter on status + channel,
+search on number/error_code — admin edits remain possible but no UI route exists, matching scm's
+append-only registers).
+
+### 7. Seeder
+
+Add `_seed_integrations(self, tenant, items)` to `apps/inventory/management/commands/
+seed_inventory.py`, called from handle()'s per-tenant flow right after `self._seed_finint(tenant,
+items)` (do NOT pin line numbers — the concurrent session owns dirty hunks in this file). Plan:
+
+- Idempotent guard first: `if IntegrationChannel.objects.filter(tenant=tenant).exists(): print
+  skip; return`.
+- Reuse seed_scm's REAL `items` argument (scm.Item rows already handed to every other _seed_
+  hook) and existing parties/locations — NEVER invent duplicates. Pick 3-4 items by index.
+- Demo rows per tenant: one Shopify-flavored ECOMMERCE channel (platform="shopify",
+  base_url="https://<tenant-slug>.myshopify.com/admin" — seeded configuration text only, nothing
+  dials it, rate_limit_note="GraphQL cost bucket 1,000 pts / 50 s refill"), one QuickBooks
+  ACCOUNTING channel (quickbooks, rate_limit_note="429 w/ Retry-After, ~10 concurrent"), one SAP
+  ERP channel (sap, direction bidirectional, auth basic, rate_limit_note="OData batch caps").
+  Each gets `set_api_key(generate_api_key())` (plaintext discarded immediately).
+- 3-4 ChannelListingMap rows over those items (one with external_product_id+variant_id+sku, one
+  local-only row with blank external ids to exercise the NULL-coalescing unique constraint, one
+  channel-wide row with item=None, one with sync_enabled=False).
+- ONE StockSyncRun per Shopify channel walked through the REAL creator:
+  `StockSyncRun.record(tenant, channel, direction="outbound_push", trigger_mode="manual",
+  status="simulated", records_total=<enabled listing count>, records_ok=..., finished_at=...)
+  ` — never a bare .create().
+- ApiClients: one ACTIVE (token issued via generate/set) + one REVOKED via `revoke()`.
+- Flush-order note: children first when flushing — ChannelListingMap + StockSyncRun rows reference
+  channels; ApiClient standalone.
+
+### 8. LIVE_LINKS['5.19']
+
+In `apps/core/navigation.py`, add entry "5.19" right after the "5.18" dict (bullet names EXACTLY
+as NavERP.md 978-982; the `?query` suffix precedent is 6.2's `procurement:req_list?dupes=1`):
+
+```python
+"5.19": {
+    "E-commerce Integration":            "inventory:integrationchannel_list?kind=ecommerce",
+    "ERP Integration":                   "inventory:integrationchannel_list?kind=erp",
+    "Accounting Software Integration":   "inventory:integrationchannel_list?kind=accounting",
+    "API Management":                    "inventory:apiclient_list",
+},
+```
+
+NO sidebar keys for stocksyncrun_list or listingmap_list — logs/plumbing are reached from the
+channel detail page's panels + deep-link filters (ClientRateCardLine/ReorderRule rule; scm stated
+the same omission per-log at navigation.py:1406-1414).
+
+### 9. Migration claim — 0026
+
+Disk today ends at `0025_alter_quarantineorder_status.py` (0024 = the CONCURRENT session's
+uncommitted 5.18 work — never renumber it). **Claim `0026_integrationchannel_...` BUT re-list
+`ls apps/inventory/migrations/` IMMEDIATELY before running makemigrations**: if 0026 appeared in
+the meantime, take the NEXT FREE number instead. Integrator-only step (single DB writer).
+
+### 10. Verification checklist
+
+**build-backend (x4 entities — brand-new files ONLY under ThirdPartyIntegrations/, never shared
+files):**
+- [ ] Entity 1 backend: models/ThirdPartyIntegrations/_choices.py + IntegrationChannels.py (model
+      per §1.1) + forms/…/IntegrationChannels.py (§2) + views/…/IntegrationChannels.py (§4) +
+      urls/…/IntegrationChannels.py (§3 channels block)
+- [ ] Entity 2 backend: models/…/ChannelListingMaps.py + form + views + urls (listings block)
+- [ ] Entity 3 backend: models/…/StockSyncRuns.py (record() + next_backoff_seconds) + views +
+      urls (runs block); NO form file — comment-only absence
+- [ ] Entity 4 backend: models/…/ApiClients.py + form + views + urls (api-clients block)
+
+**build-templates (x4):**
+- [ ] channel/ list+detail+form.html (§5 keys/badges verbatim)
+- [ ] listingmap/ list+detail+form.html
+- [ ] syncrun/ list+detail.html only
+- [ ] apiclient/ list+detail+form.html
+
+**integrate (solo, single writer, after polling gates in §11):**
+- [ ] Verify every expected file landed BEFORE wiring (L21)
+- [ ] Surgical re-export blocks: models/forms/views package __init__.py + urls/__init__.py concat
+      (Edit-anchored, absolute imports)
+- [ ] admin.py registration x4 (Edit-anchored)
+- [ ] seed_inventory.py `_seed_integrations` hook + handle() call (Edit-anchored)
+- [ ] navigation.py LIVE_LINKS["5.19"] (Edit-anchored)
+- [ ] Re-list migrations dir; makemigrations (claimed number) -> migrate -> seed_inventory x2 ->
+      manage.py check clean
+- [ ] Commit one file per commit, explicit paths, PowerShell `;` separators, NO git push
+
+**smoke (qa-smoke-tester; asserts CONTENT not status):**
+- [ ] Render all 11 pages as admin_acme asserting seeded content (INT-/SYN-/API- numbers, masked
+      chips, listing rows, simulated run)
+- [ ] Junk params: ?status=zzz, ?kind=zzz, ?channel=abc, ?channel=999999999999999999999 -> no 500,
+      silently-unfiltered fallback
+- [ ] Page 2 deterministic on channel/run lists
+- [ ] Cross-tenant IDOR: admin_globex hits acme pks on every detail/edit/delete/retry route -> 404
+- [ ] POST verbs: rotate-key/issue-token reveal plaintext ONCE and store only prefix+hash; sync
+      verb creates exactly one simulated SYN- row and touches NO StockMove/last_sync_at; retry
+      sends no HTTP; revoke flips status+revoked_at
+
+**review:**
+- [ ] Phase-4 six-lane parallel wave over BASE...HEAD -> `.claude/tasks/review-inventory-5.19.md`
+      committed; re-run any NO-RESULT lane
+
+**fix:**
+- [ ] code-fixer burns findings in ID order, one commit per file, marks [x]/[~] in the findings
+      file; manage.py check green at the end
+
+**tests (parallel wave; subslug = `integrationapi` — VERIFIED no collision: scm ships
+test_integration_{models,forms,views,security}.py, a different stem; inventory has no
+test_integration* yet):**
+- [ ] Solo contract step owns tests/conftest.py additions
+- [ ] test_integrationapi_models.py / _forms.py / _views.py / _security.py (every fn named
+      test_integrationapi_*)
+- [ ] Full UNFILTERED inventory suite green (never -k)
+
+**docs:**
+- [ ] README.md inventory progress row -> '19 of 20'
+- [ ] SKILL.md 5.19 section (models/routes/templates/seeder/LIVE_LINKS rows)
+- [ ] Close-out section here + build_state finish
+
+### 11. Concurrency gates (L43/L45)
+
+Shared files this build TOUCHES LATER are CURRENTLY DIRTY with the concurrent session's 5.18 work:
+`apps/inventory/models/__init__.py`, `forms/__init__.py`, `views/__init__.py`,
+`urls/__init__.py`, `admin.py`, `management/commands/seed_inventory.py`,
+`apps/core/navigation.py`, `README.md`, `.claude/skills/inventory/SKILL.md`,
+`tests/conftest.py`, and `todo.md` itself. RULES: the integrator must POLL until each file's
+foreign hunks are COMMITTED before editing+committing ours; Edit-anchored only, NEVER Write
+(no full-file rewrites — a rewrite swallows their hunks); never git-commit a hunk we didn't
+author; build agents create ONLY brand-new files under `apps/inventory/*/ThirdPartyIntegrations/`
++ `templates/inventory/integration/`; `_base.py` is off-limits to everyone (import hashlib/secrets
+locally instead); 5.18's AccountingFinancialIntegration files are READ-ONLY. Migration etiquette
+per §9.
