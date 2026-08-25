@@ -2,9 +2,13 @@
 from django.contrib import admin
 
 from .models import (
+    ApprovalDelegation,
+    ApprovalRoutingRule,
+    EscalationPolicy,
     ProcurementAlert,
     RequisitionAmendment,
     RequisitionAmendmentLine,
+    RequisitionApproval,
     RequisitionTemplate,
     RequisitionTemplateLine,
     WidgetPreference,
@@ -62,3 +66,42 @@ class WidgetPreferenceAdmin(admin.ModelAdmin):
     list_display = ("user", "widget_key", "is_visible", "updated_at")
     list_filter = ("tenant", "widget_key", "is_visible")
     search_fields = ("user__username",)
+
+
+@admin.register(ApprovalRoutingRule)
+class ApprovalRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "org_unit", "commodity", "min_total",
+                    "max_total", "required_tiers", "escalation_hours", "is_active")
+    list_select_related = ("org_unit",)
+    list_filter = ("tenant", "is_active")
+    search_fields = ("commodity", "notes", "org_unit__name")
+
+
+@admin.register(RequisitionApproval)
+class RequisitionApprovalAdmin(admin.ModelAdmin):
+    # status/decision are read-only ON PURPOSE: signatures append through the
+    # deciding view under the spine row lock - never from the admin.
+    list_display = ("number", "requisition", "tier", "tier_count", "decision",
+                    "approver", "via_delegation", "decided_at")
+    list_select_related = ("requisition", "approver", "via_delegation")
+    list_filter = ("tenant", "decision")
+    search_fields = ("number", "requisition__number", "comment")
+    raw_id_fields = ("requisition", "approver", "via_delegation")
+    readonly_fields = ("number", "decided_at")
+
+
+@admin.register(ApprovalDelegation)
+class ApprovalDelegationAdmin(admin.ModelAdmin):
+    list_display = ("delegator", "delegate", "scope_org_unit", "valid_from",
+                    "valid_until", "is_active")
+    list_select_related = ("delegator", "delegate", "scope_org_unit")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("delegator__username", "delegate__username", "reason")
+    raw_id_fields = ("delegator", "delegate", "scope_org_unit")
+
+
+@admin.register(EscalationPolicy)
+class EscalationPolicyAdmin(admin.ModelAdmin):
+    list_display = ("id", "idle_hours", "escalate_to", "is_active")
+    list_filter = ("tenant", "is_active")
+    raw_id_fields = ("escalate_to",)
