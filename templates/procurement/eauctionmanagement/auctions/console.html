@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Console · {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Monitoring console · {{ obj.number }}
+        {% if obj.accepts_bids %}
+          <span class="badge badge-green" id="countdown">{{ obj.time_left_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:eauc_list' %}">E-Auctions</a><span class="sep">›</span><a href="{% url 'procurement:eauc_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Console</span></div>
+      <p class="text-muted">{{ obj.title }} — live participation and rankings; the board refreshes every 5 seconds.</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'scheduled' %}
+        <a href="{% url 'procurement:eauc_bid' obj.pk %}" class="btn btn-primary"><i data-lucide="gavel"></i> Record a bid</a>
+        <form method="post" action="{% url 'procurement:eauc_close' obj.pk %}" onsubmit="return confirm('Close this auction now?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close now</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div id="live-board" hx-get="{% url 'procurement:eauc_board' obj.pk %}" hx-trigger="every 5s" hx-swap="innerHTML">
+    {% include "procurement/eauctionmanagement/board.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Participation ({{ participants|length }} invited)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th>Bids</th><th>Best</th><th>Last bid</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for p in participants %}
+            <tr>
+              <td>{{ p.invite.supplier.name }}</td>
+              <td>{% if p.stats %}{{ p.stats.count }}{% else %}0{% endif %}</td>
+              <td>{% if p.stats %}{{ p.stats.best|floatformat:2 }}{% else %}—{% endif %}</td>
+              <td>{% if p.stats %}{{ p.stats.last_at|date:"H:i:s" }}{% else %}—{% endif %}</td>
+              <td>
+                {% if p.stats %}
+                  <span class="badge badge-info">Participating</span>
+                {% elif obj.accepts_bids %}
+                  <span class="badge badge-amber">Awaiting first bid</span>
+                {% else %}
+                  <span class="badge badge-muted">No bids</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="users"></i><p>No invitees.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">Extensions used: {{ obj.extensions_used }} / {{ obj.max_extensions }} — a bid inside {{ obj.extension_trigger_seconds }}s of the close adds {{ obj.extension_seconds }}s.</div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:eauc_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to auction</a>
+  </div>
+{% endblock %}
