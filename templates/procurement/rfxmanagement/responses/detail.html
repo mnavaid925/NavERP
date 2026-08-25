@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.supplier.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.supplier.name }}
+        <span class="badge {% if obj.status == 'scored' %}badge-green{% elif obj.status == 'under_review' %}badge-amber{% elif obj.status == 'submitted' %}badge-info{% elif obj.status == 'disqualified' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:rfx_list' %}">RFx Management</a><span class="sep">›</span><a href="{% url 'procurement:rfx_response_list' %}">Responses</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% for to, label in allowed_actions %}
+        <form method="post" action="{% url 'procurement:rfx_response_set_status' obj.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="to" value="{{ to }}">
+          {% if to == 'disqualified' %}
+            <button class="btn btn-outline" type="submit" onclick="return confirm('Disqualify this response? It can be reinstated later.');">{{ label }}</button>
+          {% else %}
+            <button class="btn btn-primary" type="submit">{{ label }}</button>
+          {% endif %}
+        </form>
+      {% endfor %}
+      <a href="{% url 'procurement:rfx_response_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit answers & scores</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Event</dt><dd><a href="{% url 'procurement:rfx_detail' obj.event.pk %}">{{ obj.event.number }} · {{ obj.event.title }}</a></dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.supplier.name }}</dd></div>
+      <div class="detail-item"><dt>Submitted</dt><dd>{% if obj.submitted_at %}{{ obj.submitted_at|date:"M d, Y H:i" }}{% else %}Not yet submitted{% endif %}</dd></div>
+      <div class="detail-item"><dt>Recorded by</dt><dd>{% if obj.recorded_by %}{{ obj.recorded_by.get_full_name|default:obj.recorded_by.username }}{% else %}System{% endif %}</dd></div>
+      <div class="detail-item"><dt>Attachment</dt><dd>{% if obj.attachment %}<a href="{{ obj.attachment.url }}" target="_blank" rel="noopener">View document</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Cover note</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Answers ({{ answers|length }})</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th style="width:35%;">Question</th><th>Answer</th><th>Score</th><th>Weighted</th><th>Max</th></tr></thead>
+        <tbody>
+          {% for a in answers %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <div class="fw-600">{{ a.question.prompt }}</div>
+                <div class="form-help">{% if a.question.section %}{{ a.question.section }} · {% endif %}{% if a.question.is_scored %}weight {{ a.question.weight|floatformat:2 }}{% else %}not scored{% endif %}</div>
+              </td>
+              <td>{{ a.answer_text|default:"—" }}</td>
+              <td>{{ a.score|default:"—" }}</td>
+              <td>{% if a.weighted_points is not None %}{{ a.weighted_points }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ a.question.max_points|floatformat:1 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-plus"></i><p>No answers yet — the event has no questions.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th colspan="3" class="fw-600">Total — earned of {{ obj.event.possible_points|floatformat:1 }} possible</th>
+            <th class="fw-600">{{ obj.earned_points|floatformat:2 }}</th>
+            <th colspan="2" class="fw-600">{% if obj.score_percent is not None %}{{ obj.score_percent }}%{% else %}—{% endif %}</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="card-body text-muted">Weighted = score × question weight. The percentage compares earned points against this event's scoreable maximum.</div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:rfx_response_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to responses</a>
+    {% if obj.status == 'draft' or obj.event.status != 'closed' %}
+      <form method="post" action="{% url 'procurement:rfx_response_delete' obj.pk %}" onsubmit="return confirm('Delete this response?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete response</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
