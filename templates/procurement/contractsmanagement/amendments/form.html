@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Propose Amendment{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Propose a contract amendment</h1>
+    <nav class="breadcrumb">Procurement / <a href="{% url 'procurement:camendment_list' %}">Amendments</a> / New</nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="form-error">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="form-group">
+        <label class="form-label" for="id_contract">Contract (amendable agreements only)</label>
+        <select name="contract" id="id_contract" class="form-select" required>
+          <option value="">Select agreement…</option>
+          {% for c in contracts %}
+            <option value="{{ c.pk }}" {% if preselect|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
+              {{ c.number }} · {{ c.title }} — {{ c.party.name }}
+            </option>
+          {% endfor %}
+        </select>
+        {% if not contracts %}<div class="form-error">No agreement is in an amendable state right now.</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.reason.id_for_label }}">Reason</label>
+        <textarea name="{{ form.reason.html_name }}" id="{{ form.reason.id_for_label }}" rows="3" class="form-textarea" required>{{ form.reason.value|default:'' }}</textarea>
+        {% for e in form.reason.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <p class="text-muted">Propose only what changes — blank fields leave the standing term untouched.</p>
+      <div class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.proposed_end_date.id_for_label }}">New end date</label>
+          <input type="date" name="{{ form.proposed_end_date.html_name }}" id="{{ form.proposed_end_date.id_for_label }}" value="{{ form.proposed_end_date.value|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.proposed_value.id_for_label }}">New value</label>
+          <input type="number" step="0.01" min="0" name="{{ form.proposed_value.html_name }}" id="{{ form.proposed_value.id_for_label }}" value="{{ form.proposed_value.value|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.proposed_notice_days.id_for_label }}">New notice window (days)</label>
+          <input type="number" min="0" name="{{ form.proposed_notice_days.html_name }}" id="{{ form.proposed_notice_days.id_for_label }}" value="{{ form.proposed_notice_days.value|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label"><input type="checkbox" name="{{ form.proposed_auto_renew.html_name }}" {% if form.proposed_auto_renew.value %}checked{% endif %}> Change auto-renew to ON (leave unticked = no change)</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.proposed_summary.id_for_label }}">Clause-level change digest</label>
+        <textarea name="{{ form.proposed_summary.html_name }}" id="{{ form.proposed_summary.id_for_label }}" rows="3" class="form-textarea">{{ form.proposed_summary.value|default:'' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">File amendment</button>
+        <a href="{% url 'procurement:camendment_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
