@@ -3,6 +3,12 @@
 Re-exports every form so ``from apps.procurement.forms import ProcurementAlertForm`` works
 everywhere (views, tests). Imports inside the entity modules are ABSOLUTE.
 """
+from .ApprovalWorkflowEngine import (
+    ApprovalDecisionForm,
+    ApprovalDelegationForm,
+    ApprovalRoutingRuleForm,
+    EscalationPolicyForm,
+)
 from .DashboardPortal.ProcurementAlerts import ProcurementAlertForm
 from .DashboardPortal.QuickRequisitions import QuickRequisitionForm
 from .DashboardPortal.WidgetPreferences import WidgetToggleForm
@@ -17,6 +23,10 @@ from .RequisitionManagement.Templates import (
 )
 
 __all__ = [
+    "ApprovalDecisionForm",
+    "ApprovalDelegationForm",
+    "ApprovalRoutingRuleForm",
+    "EscalationPolicyForm",
     "AmendmentDecisionForm",
     "ProcurementAlertForm",
     "QuickRequisitionForm",
