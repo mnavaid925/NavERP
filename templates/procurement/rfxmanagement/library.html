@@ -44,10 +44,10 @@
               <td>
                 <div class="table-actions">
                   <form method="post" action="{% url 'procurement:rfx_clone' obj.pk %}" onsubmit="return confirm('Clone this template into a new draft event?');">
-                    {% csrf_token %}<button class="btn-icon" type="submit" title="Use — clone into a new event"><i data-lucide="copy-plus"></i></button>
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="Use — clone into a new event" aria-label="Use — clone into a new event"><i data-lucide="copy-plus"></i></button>
                   </form>
-                  <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                 </div>
               </td>
             </tr>
