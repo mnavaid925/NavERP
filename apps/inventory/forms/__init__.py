@@ -56,6 +56,7 @@ from .ThirdPartyIntegrations import (
     ChannelListingMapForm,
     IntegrationChannelForm,
 )
+from .UnitsOfMeasure.UomConversions import UomConversionForm
 
 __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommunicationForm",
            "FulfillmentWaveForm", "FulfillmentWaveOrderForm",
@@ -76,5 +77,6 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "QcChecklistForm", "QcChecklistItemForm", "QcChecklistItemFormSet",
            "QcRoutingRuleForm", "QuarantineOrderForm", "DefectReportForm",
            "ReportSnapshotForm",
-           "IntegrationChannelForm", "ChannelListingMapForm", "ApiClientForm"]
+           "IntegrationChannelForm", "ChannelListingMapForm", "ApiClientForm",
+           "UomConversionForm"]
 
