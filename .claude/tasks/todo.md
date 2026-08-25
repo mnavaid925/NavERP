@@ -27691,10 +27691,19 @@ per §9.
 - **Verification**: temp/verify_awe_63.py 35/35 (all pages, gate matrix incl. member
   self/final/elevated refusals + admin closes, two-tier chains, DOA-stamped intermediate
   signature, closed-chain refusal, idempotent double Run, IDOR/gating sweeps);
-  temp/verify_awe_tests_63.py 22/22 (model/form contracts unit-style). DB-backed pytest still
-  killed by this shell (4th occurrence of the documented caveat) - test_awe_{models,forms,
-  views,security}.py (27 tests) collect cleanly and must run green via pytest in a normal dev
-  shell.
+  temp/verify_awe_tests_63.py 22/22 (model/form contracts unit-style).
+- **Suite green (2026-08-26, follow-up session)**: test_awe_{models,forms,views,security}.py
+  **27 passed** via real pytest (detached Scheduled Task/batch + `--no-migrations`). Two
+  environment findings worth keeping: (a) the "pytest killed by this shell" caveat was mostly
+  the Django fresh-test-DB migration-state pit on :memory: SQLite (`--reuse-db` cannot persist
+  across processes) - py-spy showed pytest alive inside `django_db_setup -> migrate`; launching
+  detached (`start /min` batch or schtasks) and adding `--no-migrations` turns a ~20-min silent
+  pit into a ~12s run; (b) an external Ctrl-C hit one mid-setup run - only the detached launch
+  survives that. First execution exposed 7 stale probes written against pre-F-01/pre-BUG-1
+  behavior plus the qty=2 helper doubling (the session's own recorded gotcha); all seven were
+  TEST-side drift - production code untouched, commits 37181c7b / 250e8017 / a9240eaa. Full
+  procurement app suite after the fix: 338 passed with only the concurrent 6.4 session's own
+  WIP vendormgmt tests failing (their lane).
 
 ## 6.6 RFx Management (RFI, RFP, RFQ) close-out (2026-08-26)
 
