@@ -27,6 +27,7 @@
         <div class="detail-item"><dt>Factor</dt><dd class="fw-600">1 {{ obj.from_uom.code }} = {{ obj.factor }} {{ obj.to_uom.code }}</dd></div>
         <div class="detail-item"><dt>Inverse (rounded)</dt><dd>1 {{ obj.to_uom.code }} ≈ {{ obj.reverse_factor }} {{ obj.from_uom.code }}</dd></div>
         <div class="detail-item"><dt>State</dt><dd><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span></dd></div>
+        <div class="detail-item"><dt>Fires today?</dt><dd>{% if fires %}<span class="badge badge-green">Yes — this rule wins for its scope</span>{% else %}<span class="badge badge-amber">No — another rule outranks it</span>{% endif %}</dd></div>
       </dl>
       {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
     </div>
