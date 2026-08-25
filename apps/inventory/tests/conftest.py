@@ -1099,3 +1099,160 @@ def rfid_tag_b(db, tenant_b):
     from apps.inventory.models import RfidTag
     return RfidTag.objects.create(tenant=tenant_b, epc="E280-689E-0000-000B")
 
+
+
+# ---- 5.16 Alerts & Notifications --------------------------------------------------------------
+#
+# Fixtures give every lane an owned rule, an OPEN alert snapshot and one queued delivery,
+# plus foreign-workspace mirrors so the security lane has both sides of the tenant fence.
+# Spine rows (items/locations/reorder rules/lots/POs) reuse the existing fixtures above;
+# detection tests post their own StockMoves through the module-level _post_move helper.
+
+@pytest.fixture
+def alert_rule_a(db, tenant_a):
+    from apps.inventory.models import AlertRule
+    return AlertRule.objects.create(
+        tenant=tenant_a, name="Acme low stock watch", alert_type="low_stock",
+        severity="warning", notify_inapp=True, cooldown_days=7)
+
+
+@pytest.fixture
+def alert_rule_b(db, tenant_b):
+    from apps.inventory.models import AlertRule
+    return AlertRule.objects.create(
+        tenant=tenant_b, name="Globex low stock watch", alert_type="low_stock",
+        severity="warning", notify_inapp=True, cooldown_days=7)
+
+
+@pytest.fixture
+def inventory_alert_open_a(db, tenant_a, alert_rule_a, item_a, location_a):
+    """An OPEN low-stock alert snapshot with its metric frozen at raise time."""
+    from apps.inventory.models import InventoryAlert
+    return InventoryAlert.objects.create(
+        tenant=tenant_a, rule=alert_rule_a, alert_type="low_stock", severity="warning",
+        dedup_key=f"low_stock:{item_a.pk}:{location_a.pk}",
+        title="Low stock: CAT-1 @ DOCK-1",
+        message="On-hand for CAT-1 at DOCK-1 is 2, at/below the reorder point 5.",
+        item=item_a, location=location_a, metric_value=Decimal("2"))
+
+
+@pytest.fixture
+def inventory_alert_open_b(db, tenant_b, alert_rule_b, item_b):
+    """Globex's own open alert — the foreign-workspace control."""
+    from apps.inventory.models import InventoryAlert
+    return InventoryAlert.objects.create(
+        tenant=tenant_b, rule=alert_rule_b, alert_type="low_stock", severity="warning",
+        dedup_key=f"low_stock:{item_b.pk}:0",
+        title="Low stock: CAT-1", message="Foreign workspace row.",
+        item=item_b, metric_value=Decimal("1"))
+
+
+@pytest.fixture
+def notification_delivery_a(db, tenant_a, inventory_alert_open_a):
+    from apps.inventory.models import NotificationDelivery
+    return NotificationDelivery.objects.create(
+        tenant=tenant_a, alert=inventory_alert_open_a, channel="email",
+        recipient="ops@example.com", status="queued",
+        detail="Queued only - no gateway configured.")
+
+
+# ---------------------------------------------------------------- 5.15 Quality Control fixtures
+
+
+def _qc_zone(tenant, code, name="QC Hold Zone"):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant, code=code, name=name, location_type="zone")
+
+
+def _stock(item, location, quantity, cost="4.00"):
+    """Opening stock via a direct receipt move (valuation walks the same ledger)."""
+    from apps.scm.models import StockMove
+    return StockMove.objects.create(
+        tenant_id=item.tenant_id, item=item, location=location,
+        quantity=Decimal(quantity), unit_cost=Decimal(cost), move_type="receipt",
+        reference="OPENING-QC", moved_at=timezone.now())
+
+
+@pytest.fixture
+def qc_zone_a(db, tenant_a):
+    return _qc_zone(tenant_a, "QH-A")
+
+
+@pytest.fixture
+def qc_zone_b(db, tenant_b):
+    return _qc_zone(tenant_b, "QH-B")
+
+
+@pytest.fixture
+def qc_warehouse_a(db, tenant_a):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant_a, code="WHA", name="Acme WH",
+                                   location_type="warehouse")
+
+
+@pytest.fixture
+def qc_stocked_a(db, tenant_a, item_a, qc_warehouse_a):
+    """item_a holding 10 units at the Acme warehouse."""
+    return _stock(item_a, qc_warehouse_a, "10.0000")
+
+
+@pytest.fixture
+def qc_checklist_a(db, tenant_a):
+    from apps.inventory.models import QcChecklist, QcChecklistItem
+    checklist = QcChecklist.objects.create(tenant=tenant_a, name="Dock Check A")
+    for seq, label in [(10, "Seal intact"), (20, "Count matches")]:
+        QcChecklistItem.objects.create(
+            tenant=tenant_a, checklist=checklist, label=label,
+            kind="visual", is_mandatory=True, sequence=seq)
+    return checklist
+
+
+@pytest.fixture
+def qc_checklist_b(db, tenant_b):
+    from apps.inventory.models import QcChecklist
+    return QcChecklist.objects.create(tenant=tenant_b, name="Foreign Dock Check")
+
+
+@pytest.fixture
+def qc_rule_catchall_a(db, tenant_a, qc_zone_a):
+    from apps.inventory.models import QcRoutingRule
+    return QcRoutingRule.objects.create(
+        tenant=tenant_a, name="Catch-all inspect", verdict="inspect",
+        qc_location=qc_zone_a, priority=100)
+
+
+@pytest.fixture
+def qc_rule_item_a(db, tenant_a, item_a, qc_zone_a):
+    from apps.inventory.models import QcRoutingRule
+    return QcRoutingRule.objects.create(
+        tenant=tenant_a, name="Item-tier inspect", item=item_a, verdict="inspect",
+        qc_location=qc_zone_a, priority=5)
+
+
+@pytest.fixture
+def qrd_draft_a(db, tenant_a, item_a, qc_warehouse_a, qc_zone_a):
+    from apps.inventory.models import QuarantineOrder
+    return QuarantineOrder.objects.create(
+        tenant=tenant_a, item=item_a, source_location=qc_warehouse_a,
+        quarantine_location=qc_zone_a, quantity=Decimal("2.0000"), reason="qc_hold")
+
+
+@pytest.fixture
+def qrd_quarantined_a(db, tenant_a, qrd_draft_a, qc_stocked_a):
+    """A REAL hold walked through quarantine() - posts the genuine transfer pair."""
+    return qrd_draft_a.quarantine(None)
+
+
+@pytest.fixture
+def defect_open_a(db, tenant_a, item_a, qc_warehouse_a):
+    from apps.inventory.models import DefectReport
+    return DefectReport.objects.create(
+        tenant=tenant_a, item=item_a, location=qc_warehouse_a,
+        quantity=Decimal("1.0000"), defect_type="packaging", severity="major",
+        photo_url="https://files.example.com/defects/x.jpg")
+
+
+@pytest.fixture
+def defect_written_off_a(db, tenant_a, defect_open_a, qc_stocked_a):
+    """A REAL write-off through writeoff() - posts the negative adjustment leg."""
+    return defect_open_a.writeoff(None)
