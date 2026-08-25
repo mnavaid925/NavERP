@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.name }}{% else %}New Alert Rule{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Alert Rule{% else %}New Alert Rule{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alert_list' %}">Alerts &amp; Notifications</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alertrule_list' %}">Rules</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="form-error mb-4">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="card mb-6">
+      <div class="card-header"><h2 class="card-title">Watch Condition</h2></div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.name.id_for_label }}">Rule Name *</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.alert_type.id_for_label }}">Type *</label>
+            {{ form.alert_type }}
+            {% if form.alert_type.errors %}<div class="form-error">{{ form.alert_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.severity.id_for_label }}">Severity *</label>
+            {{ form.severity }}
+            {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.item.id_for_label }}">Item Scope</label>
+            {{ form.item }}
+            {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% else %}
+              <div class="form-help">Blank = every item. Ignored by the PO/shipment trigger types.</div>
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.location.id_for_label }}">Location Scope</label>
+            {{ form.location }}
+            {% if form.location.errors %}<div class="form-error">{{ form.location.errors }}</div>{% else %}
+              <div class="form-help">Blank = every location. Lots carry no location, so expiry ignores this.</div>
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.expiry_days.id_for_label }}">Expiry Window (days)</label>
+            {{ form.expiry_days }}
+            {% if form.expiry_days.errors %}<div class="form-error">{{ form.expiry_days.errors }}</div>{% else %}
+              <div class="form-help">Expiry rules: flag lots expiring within this many days. 0 = expired only.</div>
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.overstock_pct.id_for_label }}">Overstock Threshold (%)</label>
+            {{ form.overstock_pct }}
+            {% if form.overstock_pct.errors %}<div class="form-error">{{ form.overstock_pct.errors }}</div>{% else %}
+              <div class="form-help">Overstock rules: raise when bin utilisation exceeds this % of its declared maximum.</div>
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.cooldown_days.id_for_label }}">Cooldown (days) *</label>
+            {{ form.cooldown_days }}
+            {% if form.cooldown_days.errors %}<div class="form-error">{{ form.cooldown_days.errors }}</div>{% else %}
+              <div class="form-help">Do not re-raise the same condition within this many days.</div>
+            {% endif %}
+          </div>
+          <div class="form-group flex items-center">
+            <label class="flex items-center gap-2 cursor-pointer">
+              {{ form.is_active }} <span>Rule active</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-6">
+      <div class="card-header"><h2 class="card-title">Delivery Channels</h2></div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group col-span-2">
+            <label class="form-label">Notify Via</label>
+            <div class="flex gap-5 items-center flex-wrap">
+              <label class="flex items-center gap-2 cursor-pointer">{{ form.notify_inapp }} In-App inbox</label>
+              <label class="flex items-center gap-2 cursor-pointer">{{ form.notify_email }} Email</label>
+              <label class="flex items-center gap-2 cursor-pointer">{{ form.notify_sms }} SMS</label>
+              <label class="flex items-center gap-2 cursor-pointer">{{ form.notify_push }} Push</label>
+            </div>
+            <div class="form-help">Email/SMS/push dispatches are queued and logged; a gateway is not configured yet — the in-app inbox is live today.</div>
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.email_recipients.id_for_label }}">Email Recipients</label>
+            {{ form.email_recipients }}
+            {% if form.email_recipients.errors %}<div class="form-error">{{ form.email_recipients.errors }}</div>{% else %}
+              <div class="form-help">Comma-separated addresses. Required when the email channel is on.</div>
+            {% endif %}
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Rule</button>
+      <a href="{% url 'inventory:alertrule_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
