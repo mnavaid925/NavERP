@@ -81,12 +81,17 @@ def eauc_detail(request, pk):
     invites = list(obj.invites.select_related("supplier"))
     invite_form = EaucInviteForm(tenant=request.tenant, auction=obj)
     best = obj.best_bid()
+    # Dict lookup per invite instead of an O(invites × rankings) nested template loop.
+    ranked_map = {r["supplier_id"]: r for r in obj.rankings()}
+    participants = [{"invite": inv, "stats": ranked_map.get(inv.supplier_id)}
+                    for inv in invites]
     return render(request, "procurement/eauctionmanagement/auctions/detail.html", {
         "obj": obj,
         "bids": bids,
         "invites": invites,
+        "participants": participants,
         "invite_form": invite_form,
-        "ranked": obj.rankings(),
+        "ranked": list(ranked_map.values()),
         "best": best,
         # Derived from the ALREADY-fetched leader — savings_vs_start() would re-query it.
         "savings": (obj.start_price - best.amount) if best is not None else None,
