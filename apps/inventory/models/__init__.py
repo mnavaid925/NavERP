@@ -68,6 +68,12 @@ from .ThirdPartyIntegrations import (
     IntegrationChannel,
     StockSyncRun,
 )
+from .UnitsOfMeasure import (
+    MAX_PATH_DEPTH,
+    UomConversion,
+    convert_quantity,
+    find_conversion_path,
+)
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "FulfillmentWave", "FulfillmentWaveOrder",
@@ -90,5 +96,6 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "QcChecklist", "QcChecklistItem", "QcRoutingRule", "QuarantineOrder",
            "DefectReport", "resolve_qc_routing",
            "InventoryReportSnapshot",
-           "IntegrationChannel", "ChannelListingMap", "StockSyncRun", "ApiClient"]
+           "IntegrationChannel", "ChannelListingMap", "StockSyncRun", "ApiClient",
+           "UomConversion", "convert_quantity", "find_conversion_path", "MAX_PATH_DEPTH"]
 
