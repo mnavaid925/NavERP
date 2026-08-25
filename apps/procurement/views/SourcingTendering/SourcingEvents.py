@@ -5,10 +5,12 @@ CRUD for the header + evaluation matrix, plus the POST-only lifecycle verbs (ope
 cancel) and the admin-gated award decision. Statuses never move through the edit form; the
 verbs stamp their ``*_at`` timestamps together with the audit row so the timeline cannot drift.
 """
+from decimal import Decimal
+
 from django.db import transaction
 from django.db.models import Count
 
-from apps.core.crud import crud_delete, crud_list
+from apps.core.crud import crud_list
 from apps.procurement.forms import EventCriterionFormSet, SourcingEventForm
 from apps.procurement.models import SourcingBid, SourcingEvent
 from apps.procurement.views._common import *  # noqa: F401,F403
@@ -28,7 +30,7 @@ def _get_event(request, pk):
 @login_required
 def event_list(request):
     qs = (SourcingEvent.objects.filter(tenant=request.tenant)
-          .select_related("currency", "requisition")
+          .select_related("currency")
           # Aggregation ignores Meta.ordering, and an unordered queryset makes the paginator
           # warn (and page boundaries unstable) — restate it explicitly.
           .annotate(n_bids=Count("bids"))
@@ -44,22 +46,22 @@ def event_list(request):
 @login_required
 def event_detail(request, pk):
     obj = _get_event(request, pk)
-    criteria = list(obj.criteria.all())
     bids = list(obj.bids.select_related("supplier", "submitted_by"))
-    # Batch the score math: one query for every bid's scores, then in-memory weighting.
-    _, score_map = event_scores_map(obj)
+    # One fetch of the matrix + every score; the candidate ranking below re-uses both.
+    criteria, score_map = event_scores_map(obj)
     for bid in bids:
         bid.score_value = weighted_from_map(score_map.get(bid.pk, {}), criteria)
 
     candidates = []
     recommended = None
     if obj.is_evaluating:
-        criteria_eval, candidate_rows = evaluate_event(obj)
-        candidates = candidate_rows
-        recommended = candidate_rows[0] if candidate_rows else None
+        candidates = evaluate_event(obj, criteria=criteria, score_map=score_map)
+        recommended = candidates[0] if candidates else None
+    total_weight = sum((c.weight_pct for c in criteria), Decimal("0"))
     return render(request, "procurement/sourcingtendering/events/detail.html", {
         "obj": obj,
         "criteria": criteria,
+        "total_weight": total_weight,
         "bids": bids,
         "candidates": candidates,
         "recommended": recommended,
@@ -115,15 +117,23 @@ def _event_form(request, instance):
 @login_required
 @require_POST
 def event_delete(request, pk):
-    """Refused once ANY bid exists — CASCADE would silently destroy suppliers' submissions."""
+    """Refused once ANY bid exists — CASCADE would silently destroy suppliers' submissions.
+
+    The guard re-runs under a row lock so a bid recorded between check and delete cannot
+    slip past it (TOCTOU).
+    """
     obj = get_object_or_404(SourcingEvent, pk=pk, tenant=request.tenant)
-    if obj.bids.exists():
-        messages.error(request,
-                       "This event has bids recorded against it and cannot be deleted — "
-                       "cancel it instead to keep the history.")
-        return redirect("procurement:event_detail", pk=pk)
-    return crud_delete(request, model=SourcingEvent, pk=pk,
-                       success_url="procurement:event_list")
+    with transaction.atomic():
+        locked = SourcingEvent.objects.select_for_update().get(pk=obj.pk)
+        if locked.bids.exists():
+            messages.error(request,
+                           "This event has bids recorded against it and cannot be deleted — "
+                           "cancel it instead to keep the history.")
+            return redirect("procurement:event_detail", pk=pk)
+        locked.delete()
+    write_audit_log(request.user, locked, "delete")
+    messages.success(request, f"Sourcing event {locked.number} deleted.")
+    return redirect("procurement:event_list")
 
 
 # -- lifecycle verbs -------------------------------------------------------------------------------
@@ -158,8 +168,11 @@ def event_open(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def event_close(request, pk):
+    """Admin-gated (SEC-M2): closing ends the competition — the same class of spend-affecting
+    decision as an amendment rejection, so it carries the same authority bar."""
     return _verb(
         request, pk, ("open",),
         lambda ev: (setattr(ev, "status", "closed"),
@@ -169,8 +182,10 @@ def event_close(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def event_cancel(request, pk):
+    """Admin-gated for the same reason as close: cancelling kills a live competition."""
     return _verb(
         request, pk, ("draft", "open", "closed"),
         lambda ev: (setattr(ev, "status", "cancelled"),),
