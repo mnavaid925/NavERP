@@ -1428,6 +1428,22 @@ LIVE_LINKS = {
         "Requisition Templates":           "procurement:template_list",        # bullet (recurring-order blueprints + apply-into-draft)
         "Requisition Cancellation/Amendment": "procurement:amendment_list",    # bullet (request → admin approve/reject workflow)
     },
+    # 6.3 Approval Workflow Engine. The requisition DOCUMENT and its status machine stay
+    # 4.1's scm.PurchaseRequisition (L36 - its own single-step approve remains); this layer
+    # adds the multi-tier governance AROUND it: ApprovalRoutingRule resolves how many
+    # sequential signatures spend needs (department/commodity/amount dimensions,
+    # most-specific-wins, no match = ONE tier never zero), RequisitionApproval [RQA-] is the
+    # append-only signature log whose final tier performs the spine's own transition under a
+    # row lock, ApprovalDelegation is the dated DOA register stamped onto signatures made
+    # under delegated authority, and EscalationPolicy + its Run engine raise 6.1
+    # ProcurementAlerts for chains idle past their window.
+    "6.3": {
+        "Dynamic Routing Rules":         "procurement:routingrule_list",  # bullet (dept × commodity × amount band → tier count)
+        "Delegation of Authority (DOA)": "procurement:delegation_list",   # bullet (dated grants; signatures credit via_delegation)
+        "Approval History & Audit Trail": "procurement:approval_history",  # bullet (the RQA- signature register)
+        "Escalation Management":         "procurement:escalation_queue",  # bullet (idle-chain board + idempotent Run)
+        "Mobile Approval Interface":     "procurement:approval_mine",     # bullet (pocket triage surface with one-tap decisions)
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
