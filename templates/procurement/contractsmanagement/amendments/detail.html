@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Amendment{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} <span class="badge {% if obj.status == 'pending' %}badge-amber{% elif obj.status == 'applied' %}badge-green{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span></h1>
+    <nav class="breadcrumb">Procurement / <a href="{% url 'procurement:camendment_list' %}">Amendments</a> / {{ obj.number }}</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'procurement:contract_detail' obj.contract_id %}" class="btn btn-outline"><i data-lucide="file-signature"></i> {{ obj.contract.number }} workspace</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Proposal</h2></div>
+  <div class="card-body">
+    <p><strong>Contract:</strong> {{ obj.contract.number }} · {{ obj.contract.title }} ({{ obj.contract.party.name }})</p>
+    <p><strong>Moves:</strong> {{ obj.proposal_digest }}</p>
+    <p><strong>Reason:</strong> {{ obj.reason }}</p>
+    {% if obj.proposed_summary %}<pre style="white-space:pre-wrap;border:1px solid var(--border);padding:1rem;border-radius:.5rem;">{{ obj.proposed_summary }}</pre>{% endif %}
+    <p class="text-muted">Filed by {{ obj.requested_by|default:"—" }} on {{ obj.created_at|date:"d M Y H:i" }}</p>
+  </div>
+</div>
+
+{% if obj.status != "pending" %}
+<div class="card">
+  <div class="card-header"><h2>Decision</h2></div>
+  <div class="card-body">
+    <p>{{ obj.get_status_display }} by {{ obj.decided_by|default:"—" }} on {{ obj.decided_at|date:"d M Y H:i"|default:"—" }}
+    {% if obj.status == "applied" %} · written to the contract {{ obj.applied_at|date:"d M Y H:i" }}{% endif %}</p>
+    {% if obj.decision_note %}<p>{{ obj.decision_note }}</p>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
