@@ -68,7 +68,13 @@ def eauc_bid(request, pk):
             messages.error(request, "Pick which invited supplier you are recording for.")
             return redirect("procurement:eauc_bid", pk=obj.pk)
         form = EaucBidForm(request.POST)
-        if form.is_valid() and floor is not None:
+        if form.is_valid():
+            if floor is None:
+                # A silent re-render would look like the POST did nothing — say why not.
+                messages.error(request,
+                               "No legal bid is available for this supplier right now — "
+                               "the window may have closed or their ladder is exhausted.")
+                return redirect("procurement:eauc_bid", pk=obj.pk)
             bid = EaucBid(tenant=request.tenant, auction=obj, supplier=chosen,
                           amount=form.cleaned_data["amount"],
                           note=form.cleaned_data.get("note", ""),
