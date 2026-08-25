@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — GL Posting Rule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="badge badge-info">{{ obj.get_event_type_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:glpostrule_list' %}">GL Posting Rules</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:glpostrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:glpostrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:glpostrule_delete' obj.pk %}" onsubmit="return confirm('Delete this posting rule? The automation refuses to run without one.');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Account Mapping</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Event type</dt><dd>{{ obj.get_event_type_display }}</dd></div>
+        <div class="detail-item"><dt>Inventory account</dt><dd>{{ obj.inventory_account.code }} · {{ obj.inventory_account.name }} <span class="badge badge-slate">{{ obj.inventory_account.account_type }}</span></dd></div>
+        <div class="detail-item"><dt>Offset account</dt><dd>{{ obj.offset_account.code }} · {{ obj.offset_account.name }} <span class="badge badge-slate">{{ obj.offset_account.account_type }}</span><div class="text-muted">{{ obj.offset_role }}</div></dd></div>
+        {% if obj.event_type == "adjustment" %}
+          <div class="detail-item"><dt>Posting direction</dt><dd>Value up → DR inventory / CR offset (found stock) · Value down → DR offset / CR inventory (write-off)</dd></div>
+        {% else %}
+          <div class="detail-item"><dt>Posting direction</dt><dd>DR offset (COGS) / CR inventory — one balanced entry per date window, at each move's stamped unit cost</dd></div>
+        {% endif %}
+        <div class="detail-item"><dt>State</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Entries are created as POSTED in an open fiscal period of Accounting (Module 2 owns the ledger) with the source stamped in the JE reference.</p>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}GL Posting Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">GL Posting Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Accounting &amp; Financial Integration</span><span class="sep">›</span><span>GL Posting Rules</span></div>
+      <p class="text-muted">The account map the JE automation posts through — exactly one mapping per event type.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:je_automation' %}" class="btn btn-outline"><i data-lucide="calculator"></i> JE Automation</a>
+      {% if is_admin %}<a href="{% url 'inventory:glpostrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name or account…">
+        </div>
+        <div class="form-group">
+          <select name="active" aria-label="Active" class="form-select">
+            <option value="">All states</option>
+            <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:glpostrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Event</th><th>Inventory account</th><th>Offset account</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:glpostrule_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_event_type_display }}</span></td>
+              <td>{{ obj.inventory_account.code }} · {{ obj.inventory_account.name }}</td>
+              <td>{{ obj.offset_account.code }} · {{ obj.offset_account.name }}<div class="text-muted">{{ obj.offset_role }}</div></td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:glpostrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:glpostrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:glpostrule_delete' obj.pk %}" onsubmit="return confirm('Delete this posting rule? The automation refuses to run without one.');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="calculator"></i><h3>No posting rules yet</h3><p>The JE automation needs an inventory account and an offset per event type before it will post anything.{% if not is_admin %} Ask a workspace admin to add them.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}

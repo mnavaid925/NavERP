@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Tax Rule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="text-muted">· {{ obj.number }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:taxrule_list' %}">Tax Rules</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:taxrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:taxrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:taxrule_delete' obj.pk %}" onsubmit="return confirm('Delete this tax rule?');">{% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Scope &amp; Rate</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Product scope</dt><dd>{% if obj.item %}<span class="badge badge-info">{{ obj.item.sku }}</span> {{ obj.item.name }}{% elif obj.category %}<span class="badge badge-slate">{{ obj.category.name }}</span> (whole category){% else %}<span class="badge badge-muted">All products</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Country</dt><dd>{% if obj.country %}{{ obj.country }}{% else %}<span class="text-muted">Any geography</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Tax code</dt><dd class="fw-600">{{ obj.tax_code }}</dd></div>
+        <div class="detail-item"><dt>Rate</dt><dd>{{ obj.tax_code.rate_pct }}%</dd></div>
+        <div class="detail-item"><dt>Jurisdiction / type</dt><dd>{{ obj.tax_code.jurisdiction|default:"—" }} · {{ obj.tax_code.get_tax_type_display }}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }}</dd></div>
+        <div class="detail-item"><dt>Specificity score</dt><dd>{{ specificity }} <span class="text-muted">(SKU 8 · category 4 · country 2)</span></dd></div>
+        <div class="detail-item"><dt>State</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">The AP/AR sync resolves rules at draft time — changing a rule never rewrites lines already handed to Accounting.</p>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}AR Integration{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Accounts Receivable (AR) Integration</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Accounting &amp; Financial Integration</span><span class="sep">›</span><span>AR Integration</span></div>
+      <p class="text-muted">Sync delivered shipments into draft AR invoices — order lines at net prices, taxed by rule. Accounting posts them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:ap_sync' %}" class="btn btn-outline"><i data-lucide="landmark"></i> AP Sync</a>
+      <a href="{% url 'inventory:taxrule_list' %}" class="btn btn-outline"><i data-lucide="percent"></i> Tax Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Deliveries awaiting an invoice <span class="badge badge-amber">{{ page_obj.paginator.count }}</span></h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search shipment, order or customer…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:ar_sync' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="text-muted">Syncing drafts the invoice for the FULL ordered quantity — wait until an order ships completely.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Delivery</th><th>Sales order</th><th>Customer</th><th>Order value</th><th>Delivered</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td><a href="{% url 'scm:salesorder_detail' obj.sales_order_id %}">{{ obj.sales_order.number }}</a></td>
+              <td>{{ obj.sales_order.customer.name }}</td>
+              <td>{{ obj.sales_order.total|floatformat:2 }}</td>
+              <td>{{ obj.actual_delivery_at|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:shipment_detail' obj.pk %}" class="btn-icon" title="View shipment"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <form method="post" action="{% url 'inventory:ar_sync_run' obj.pk %}" onsubmit="return confirm('Draft an AR invoice for this delivery from its sales order lines?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Sync to AR"><i data-lucide="receipt"></i></button></form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="receipt"></i><h3>No deliveries awaiting an invoice</h3><p>Delivered outbound shipments whose order is not invoiced yet land here automatically.{% if not is_admin %} Ask a workspace admin to run the sync.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Recently synced</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Delivery</th><th>Customer</th><th>Draft invoice</th><th>Invoice total</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for obj in register %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td>{{ obj.sales_order.customer.name }}</td>
+              <td><a href="{% url 'accounting:invoice_detail' obj.sales_order.invoice_id %}">{{ obj.sales_order.invoice.number }}</a></td>
+              <td>{{ obj.sales_order.invoice.total|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if obj.sales_order.invoice.status == 'draft' %}muted{% elif obj.sales_order.invoice.status == 'paid' %}green{% elif obj.sales_order.invoice.status == 'void' %}red{% else %}amber{% endif %}">{{ obj.sales_order.invoice.get_status_display }}</span></td>
+              <td><a href="{% url 'accounting:invoice_detail' obj.sales_order.invoice_id %}" class="btn-icon" title="Open invoice"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-circle-2"></i><h3>Nothing synced yet</h3><p>Invoices drafted from deliveries appear here with their accounting status.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

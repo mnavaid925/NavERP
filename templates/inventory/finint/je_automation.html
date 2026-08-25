@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Journal Entry Automation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Journal Entry Automation</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Accounting &amp; Financial Integration</span><span class="sep">›</span><span>JE Automation</span></div>
+      <p class="text-muted">Post stock value into the ledger — posted adjustments and customer-issue COGS become balanced, posted journal entries in Accounting.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:glpostrule_list' %}" class="btn btn-outline"><i data-lucide="calculator"></i> GL Posting Rules</a>
+      <a href="{% url 'accounting:journal_entry_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Journal Entries</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Account map</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Adjustments</dt>
+          <dd>{% if adjustment_rule %}<span class="badge badge-green">Active</span> {{ adjustment_rule.inventory_account.code }} ↔ {{ adjustment_rule.offset_account.code }}{% else %}<span class="badge badge-red">No active rule</span> — add one under GL Posting Rules{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>COGS</dt>
+          <dd>{% if cogs_rule %}<span class="badge badge-green">Active</span> {{ cogs_rule.offset_account.code }} (COGS) ↔ {{ cogs_rule.inventory_account.code }}{% else %}<span class="badge badge-red">No active rule</span> — add one under GL Posting Rules{% endif %}</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Pending adjustments <span class="badge badge-amber">{{ pending|length }}{% if pending|length == 50 %}+{% endif %}</span></h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Adjustment</th><th>Reason</th><th>Location</th><th>Value impact</th><th>Posted</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in pending %}
+            <tr>
+              <td><a href="{% url 'scm:stockadjustment_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.get_reason_display }}</td>
+              <td>{{ obj.location.code }}</td>
+              <td>{% if obj.value_impact >= 0 %}<span class="badge badge-green">+{{ obj.value_impact|floatformat:2 }}</span>{% else %}<span class="badge badge-red">{{ obj.value_impact|floatformat:2 }}</span>{% endif %}</td>
+              <td>{{ obj.posted_at|date:"M d, Y H:i" }}</td>
+              <td>
+                {% if is_admin and adjustment_rule %}
+                  <form method="post" action="{% url 'inventory:je_post_adjustment' obj.pk %}" onsubmit="return confirm('Post {{ obj.number }} to the GL?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Post to GL"><i data-lucide="upload"></i></button></form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-circle-2"></i><h3>Nothing pending</h3><p>Every posted stock adjustment has already reached the ledger.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if pending %}<p class="text-muted" style="margin:8px 12px;">Net pending value: {{ pending_value|floatformat:2 }} — value up posts as found-stock gain, value down as write-off.</p>{% endif %}
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Cost of goods sold batch</h2></div>
+    <div class="card-body">
+      {% if last_batch %}
+        <p class="text-muted">Last batch covered <strong>{{ last_batch.date_from|date:"M d, Y" }} → {{ last_batch.date_to|date:"M d, Y" }}</strong> ({{ last_batch.moves_count }} moves · {{ last_batch.total_value|floatformat:2 }}){% if last_batch.journal_entry_id %} as <a href="{% url 'accounting:journal_entry_detail' last_batch.journal_entry_id %}">{{ last_batch.journal_entry.number }}</a>{% else %} <span class="badge badge-muted">Entry removed</span>{% endif %}.</p>
+      {% endif %}
+      {% if is_admin and cogs_rule %}
+        <form method="post" action="{% url 'inventory:je_post_cogs' %}" class="filter-bar">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="date_from">From</label>
+            <input type="date" id="date_from" name="date_from" value="{{ default_from|date:'Y-m-d' }}" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="date_to">To</label>
+            <input type="date" id="date_to" name="date_to" value="{{ default_to|date:'Y-m-d' }}" class="form-input">
+          </div>
+          <button class="btn btn-primary" type="submit" style="align-self:end;" onclick="return confirm('Post every customer-issue move in this window as ONE COGS entry?');"><i data-lucide="calculator"></i> Post COGS window</button>
+        </form>
+        <p class="text-muted" style="margin-top:8px;">Expenses every customer issue move in the window at its stamped unit cost as ONE balanced entry. Overlapping windows are refused.</p>
+      {% else %}
+        <p class="text-muted">{% if not cogs_rule %}Add an active COGS posting rule first.{% else %}Ask a workspace admin to run a batch.{% endif %}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Recently posted</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Sync</th><th>Type</th><th>Source</th><th>Moves / lines</th><th>Value</th><th>Journal entry</th><th>Posted at</th></tr></thead>
+        <tbody>
+          {% for log in logs %}
+            <tr>
+              <td><span class="fw-600">{{ log.number }}</span></td>
+              <td><span class="badge badge-info">{{ log.get_source_kind_display }}</span></td>
+              <td>{% if log.stock_adjustment_id %}<a href="{% url 'scm:stockadjustment_detail' log.stock_adjustment_id %}">{{ log.stock_adjustment.number }}</a>{% else %}{{ log.date_from|date:"M d" }} → {{ log.date_to|date:"M d, Y" }}{% endif %}</td>
+              <td>{{ log.moves_count }}</td>
+              <td>{{ log.total_value|floatformat:2 }}</td>
+              <td>{% if log.journal_entry_id %}<a href="{% url 'accounting:journal_entry_detail' log.journal_entry_id %}">{{ log.journal_entry.number }}</a>{% else %}<span class="badge badge-muted">Entry removed</span>{% endif %}</td>
+              <td>{{ log.posted_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="book-open"></i><h3>Nothing posted yet</h3><p>Post a pending adjustment or run a COGS batch — every automated entry is registered here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Tax Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tax Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Accounting &amp; Financial Integration</span><span class="sep">›</span><span>Tax Management</span></div>
+      <p class="text-muted">Which accounting tax code a product earns at a geography — the most specific rule wins (SKU beats category beats catch-all; a named country beats any).</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:ap_sync' %}" class="btn btn-outline"><i data-lucide="landmark"></i> AP Sync</a>
+      {% if is_admin %}<a href="{% url 'inventory:taxrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, SKU, country…">
+        </div>
+        <div class="form-group">
+          <select name="active" aria-label="Active" class="form-select">
+            <option value="">All states</option>
+            <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:taxrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Product scope</th><th>Country</th><th>Tax code</th><th>Priority</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:taxrule_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a> <span class="text-muted">{{ obj.number }}</span></td>
+              <td>{% if obj.item %}<span class="badge badge-info">{{ obj.item.sku }}</span>{% elif obj.category %}<span class="badge badge-slate">{{ obj.category.name }}</span>{% else %}<span class="badge badge-muted">All products</span>{% endif %}</td>
+              <td>{% if obj.country %}{{ obj.country }}{% else %}<span class="text-muted">Any</span>{% endif %}</td>
+              <td>{{ obj.tax_code }} <span class="text-muted">· {{ obj.tax_code.get_tax_type_display }}</span></td>
+              <td>{{ obj.priority }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:taxrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}<a href="{% url 'inventory:taxrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:taxrule_delete' obj.pk %}" onsubmit="return confirm('Delete this tax rule?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button></form>{% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="percent"></i><h3>No tax rules yet</h3><p>Add a catch-all rule first — then pin SKUs or categories where a different rate applies.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}

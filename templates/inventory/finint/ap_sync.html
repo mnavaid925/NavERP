@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}AP Integration{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Accounts Payable (AP) Integration</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Accounting &amp; Financial Integration</span><span class="sep">›</span><span>AP Integration</span></div>
+      <p class="text-muted">Sync received goods receipts into draft AP bills — priced at the PO's unit prices, taxed by rule, matched on link. Accounting posts them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:ar_sync' %}" class="btn btn-outline"><i data-lucide="receipt"></i> AR Sync</a>
+      <a href="{% url 'inventory:taxrule_list' %}" class="btn btn-outline"><i data-lucide="percent"></i> Tax Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Receipts awaiting a bill <span class="badge badge-amber">{{ page_obj.paginator.count }}</span></h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search receipt, PO or vendor…">
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for pk, name in vendors %}
+              <option value="{{ pk }}" {% if request.GET.vendor|stringformat:"s" == pk|stringformat:"d" %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:ap_sync' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Receipt</th><th>PO</th><th>Vendor</th><th>Received value</th><th>Date</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span>{% if obj.delivery_note_ref %}<div class="text-muted">DN {{ obj.delivery_note_ref }}</div>{% endif %}</td>
+              <td><a href="{% url 'scm:purchaseorder_detail' obj.purchase_order_id %}">{{ obj.purchase_order.number }}</a></td>
+              <td>{{ obj.purchase_order.vendor.name }}</td>
+              <td>{{ obj.received_total|floatformat:2 }}</td>
+              <td>{{ obj.receipt_date|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:goodsreceipt_detail' obj.pk %}" class="btn-icon" title="View in SCM"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <form method="post" action="{% url 'inventory:ap_sync_run' obj.pk %}" onsubmit="return confirm('Draft an AP bill from this receipt at PO prices?');">{% csrf_token %}<button class="btn-icon" type="submit" title="Sync to AP"><i data-lucide="landmark"></i></button></form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="landmark"></i><h3>No receipts awaiting a bill</h3><p>Every received GRN already has a vendor bill — receipts booked in SCM land here automatically until they are synced.{% if not is_admin %} Ask a workspace admin to run the sync.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Recently synced</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Receipt</th><th>Vendor</th><th>Draft bill</th><th>Bill total</th><th>Three-way match</th><th></th></tr></thead>
+        <tbody>
+          {% for obj in register %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td>{{ obj.purchase_order.vendor.name }}</td>
+              <td><a href="{% url 'accounting:bill_detail' obj.bill_id %}">{{ obj.bill.number }}</a></td>
+              <td>{{ obj.bill.total|floatformat:2 }}</td>
+              <td><span class="badge badge-{% if obj.match_status == 'matched' %}green{% elif obj.match_status == 'not_matched' %}muted{% else %}amber{% endif %}">{{ obj.get_match_status_display }}</span></td>
+              <td><a href="{% url 'accounting:bill_detail' obj.bill_id %}" class="btn-icon" title="Open bill"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="check-circle-2"></i><h3>Nothing synced yet</h3><p>Bills drafted from receipts appear here with their three-way match verdict.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
