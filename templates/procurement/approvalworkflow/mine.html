@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Mobile Approvals{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Mobile Approvals</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Approval Workflow</span><span class="sep">›</span><span>Mobile</span></div>
+      <p class="text-muted">The pocket triage surface: oldest queues first, one tap to sign. Elevated spend stays admin-only, exactly as on the desktop queue.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:approval_queue' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Full Queue</a>
+    </div>
+  </div>
+
+  {% if covering %}
+    <div class="card">
+      <div class="card-body">
+        <p style="margin:0;"><span class="badge badge-amber">Acting under DOA</span> You cover for
+          {% for d in covering %}{{ d.delegator.username|default:"an approver" }}
+          ({% if d.scope_org_unit %}{{ d.scope_org_unit.name }}-scoped{% else %}workspace-wide{% endif %}, until {{ d.valid_until|date:"M d, Y" }}){% if not forloop.last %}, {% endif %}{% endfor %}
+          — signatures you make are stamped with their grant.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% for row in rows %}
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-body">
+        <p style="margin:0 0 4px;"><a href="{% url 'procurement:req_detail' row.req.pk %}" class="fw-600">{{ row.req.number }}</a> · {{ row.req.title }}</p>
+        <p class="text-muted" style="margin:0 0 8px;">
+          {{ row.req.requester.username|default:"—" }} · {{ row.req.estimated_total|floatformat:"-2" }}
+          · tier {{ row.next_tier }} of {{ row.tier_count }}
+          {% if row.elevated %}· <span class="badge badge-amber">{{ row.req.approval_tier.1 }}</span>{% endif %}
+          {% if row.rule %}· routed by rule{% endif %}
+        </p>
+        {% if row.may_decide %}
+          <div style="display:flex; gap:8px;">
+            <form method="post" action="{% url 'procurement:approval_approve' row.req.pk %}" onsubmit="return confirm('Approve {{ row.req.number }} — tier {{ row.next_tier }}/{{ row.tier_count }}?');">
+              {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+            </form>
+            <form method="post" action="{% url 'procurement:approval_reject' row.req.pk %}" onsubmit="return confirm('Reject {{ row.req.number }}?');">
+              {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+            </form>
+          </div>
+        {% else %}
+          <p style="margin:0;"><span class="badge badge-muted">Elevated — a tenant administrator signs this one</span></p>
+        {% endif %}
+      </div>
+    </div>
+  {% empty %}
+    <div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="check-check"></i><h3>Nothing waiting</h3><p>No requisitions are pending approval right now.</p></div></div></div>
+  {% endfor %}
+{% endblock %}
