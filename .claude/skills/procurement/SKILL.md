@@ -1,6 +1,6 @@
 ---
 name: procurement
-description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1/6.2/6.3/6.5), or invokes /procurement.
+description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1/6.2/6.3/6.5/6.8), or invokes /procurement.
 ---
 
 # Procurement — Procurement Management System (Module 6)
@@ -383,3 +383,45 @@ RfxAnswer + the batch scoring helpers.
 - Migration `0008_rfx_management` (RFX ops ONLY — 6.5's sourcing models ship their own 0009;
   one owner per migration, L43). Tests: `test_rfx_{models,forms,views,security}.py` (84 total,
   every function `test_rfx_*`). Sidebar: `LIVE_LINKS["6.6"]` maps all five NavERP.md bullets.
+
+
+
+### 6.8 ContractsManagement
+
+**6.8 Contract Management** - the CLM surface AROUND scm.SupplierContract (L36: the agreement spine,
+its activate/renew/terminate verbs and SC- numbering stay scm's; procurement authors/signs/tracks).
+
+Models (`apps/procurement/models/ContractsManagement/`, re-exported in the package __init__):
+- `ContractClause` - pre-approved clause library (title/category/body/version/is_pre_approved/is_active);
+  config posture, no numbering; writes tenant-admin gated.
+- `ContractClauseLink` - contract x clause selection, `section_order`, `custom_text` negotiated override
+  (`effective_text`); unique (contract, clause); PROTECT on clause so drafted language cannot vanish.
+- `ContractSigner` - one signature slot: role internal/supplier (+optional core.Party binding),
+  unique `token` = secrets.token_urlsafe(32) minted in save(); viewed/signed/declined_at + ip.
+  Completion DERIVED (`all_signed` on the detail page), never written back to the spine.
+- `ContractAmendment` [CAM-] - header-term proposals (end/value/auto_renew/notice_days, blank = term
+  stands; form refuses nothing-to-amend); AMENDABLE_STATUSES draft/active/expiring; one OPEN per
+  contract (`has_open_for`); approve -> `apply(decider, contract_locked)` writes only set terms under
+  the CONTRACT row lock; reject terminal; `proposal_digest` for registers.
+- `ContractMilestone` [CMI-] - deliverable/payment/penalty events with due_date/amount/status;
+  complete/waive verbs stamp completed_by/at; decided rows frozen (edit/delete refused).
+- Engine `Renewals.py`: `expiring_contracts(tenant)` = contracts inside their OWN notice window
+  (`end_date - renewal_notice_days`, live statuses, dated ends only); `run_renewal_alerts` raises
+  idempotent ProcurementAlert(kind=contract, link /scm/contracts/<pk>/).
+
+Routes (first segments `clauses/ contracts/ contract-sign/ contract-amendments/ milestones/ renewals/`):
+clause_list/_detail/_create/_edit/_delete; contract_list/_detail/_create + contract_add_link/
+remove_link/add_signer/remove_signer; **contract_sign_page `contract-sign/<str:token>/` is PUBLIC**
+(token = bearer credential, crm 1.9 flow; exclude token from admin); camendment_list/_detail/_create/
+_approve/_reject (decisions admin-gated); milestone_list/_create/_edit/_complete/_delete;
+renewals_board + renewals_run (admin).
+
+Templates: `templates/procurement/contractsmanagement/{clauses,contracts,amendments,milestones}/`
+(list/detail/form shapes) + `contracts/sign.html` (public, extends base_auth.html, escaped text only)
++ `contracts/renewals.html`.
+
+Seeder: `_seed_contracts` (called after `_seed_eauction`) - 5-clause library, one authored master
+agreement (SC- spine row + links + 2 signers + 3 milestones), one pending CAM amendment; guarded per
+tenant. NOTE: until the 6.7 lane fixes `_seed_eauction`'s award step on Globex, seed_procurement aborts
+the tenant loop there - call `Command()._seed_contracts(tenant)` directly if you need Globex data.
+Tests: `tests/test_contracts_68.py` (12 green; run pytest with --no-migrations).
