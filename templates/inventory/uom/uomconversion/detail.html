@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ obj }} — UOM Conversion{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.from_uom.code }} → {{ obj.to_uom.code }} <span class="text-muted">×{{ obj.factor }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:uomconversion_list' %}">UOM Conversions</a><span class="sep">›</span><span>{{ obj.pk }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:uomconversion_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:uomconversion_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:uomconversion_delete' obj.pk %}" onsubmit="return confirm('Delete this conversion rule?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rule</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Scope</dt><dd>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name|truncatechars:40 }}</span>{% else %}<span class="badge badge-info">Tenant-wide default</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>From unit</dt><dd><span class="fw-600">{{ obj.from_uom.code }}</span> — {{ obj.from_uom.name }}</dd></div>
+        <div class="detail-item"><dt>To unit</dt><dd><span class="fw-600">{{ obj.to_uom.code }}</span> — {{ obj.to_uom.name }}</dd></div>
+        <div class="detail-item"><dt>Factor</dt><dd class="fw-600">1 {{ obj.from_uom.code }} = {{ obj.factor }} {{ obj.to_uom.code }}</dd></div>
+        <div class="detail-item"><dt>Inverse (rounded)</dt><dd>1 {{ obj.to_uom.code }} ≈ {{ obj.reverse_factor }} {{ obj.from_uom.code }}</dd></div>
+        <div class="detail-item"><dt>State</dt><dd><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span></dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ladder through this rule</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Quantity in {{ obj.from_uom.code }}</th><th>equals</th><th>Quantity in {{ obj.to_uom.code }}</th></tr></thead>
+        <tbody>
+          {% for row in ladder %}
+            <tr><td class="fw-600">{{ row.0 }} {{ obj.from_uom.code }}</td><td class="text-muted">×</td><td class="fw-600">{{ row.1 }} {{ obj.to_uom.code }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted" style="padding:8px 16px;">Converting units on paper moves no stock — this is configuration, not a StockMove.</p>
+  </div>
+
+  {% if rivals %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Other rules over the same pair</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Scope</th><th>Factor</th><th>State</th><th>Verdict</th></tr></thead>
+          <tbody>
+            {% for r in rivals %}
+              <tr>
+                <td>{% if r.item %}<a href="{% url 'scm:item_detail' r.item_id %}">{{ r.item.sku }}</a>{% else %}<span class="badge badge-info">Default</span>{% endif %}</td>
+                <td class="fw-600">×{{ r.factor }}</td>
+                <td><span class="badge {% if r.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if r.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                <td>
+                  {% if not r.is_active %}<span class="badge badge-slate">Never fires</span>
+                  {% elif obj.item_id and r.item_id %}<span class="text-muted">different SKU's own rule</span>
+                  {% elif obj.item_id and not r.item_id %}<span class="badge badge-amber">loses to this item rule</span>
+                  {% elif not obj.item_id and r.item_id %}<span class="badge badge-green">wins over this default for its SKU</span>
+                  {% else %}<span class="text-muted">parallel default</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if neighbours %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Chainable edges in scope</h2></div>
+      <p class="text-muted" style="padding:8px 16px;">Other rules the resolver can hop through when no single rule joins a pair directly.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Scope</th><th>Edge</th><th>Factor</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for n in neighbours %}
+              <tr>
+                <td>{% if n.item %}{{ n.item.sku }}{% else %}<span class="badge badge-info">Default</span>{% endif %}</td>
+                <td class="fw-600">{{ n.from_uom.code }} → {{ n.to_uom.code }}</td>
+                <td>×{{ n.factor }}</td>
+                <td><span class="badge {% if n.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if n.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                <td><div class="table-actions"><a href="{% url 'inventory:uomconversion_detail' n.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
