@@ -14,8 +14,7 @@ class UomConversionForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        # The from==to refusal lives ONLY in the model's clean() — a keyed field error
+        # there renders once; duplicating it here would show the message twice.
         _reject_foreign(self, cleaned, ["item", "from_uom", "to_uom"])
-        if (cleaned.get("from_uom") and cleaned.get("to_uom")
-                and cleaned["from_uom"] == cleaned["to_uom"]):
-            self.add_error("to_uom", "A conversion needs two different units.")
         return cleaned
