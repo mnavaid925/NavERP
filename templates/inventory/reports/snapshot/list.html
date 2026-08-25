@@ -39,9 +39,9 @@
               <td class="fw-600">{{ obj.number }}</td>
               <td>{% if obj.report_type == "valuation" %}<span class="badge badge-info">{{ obj.get_report_type_display }}</span>{% elif obj.report_type == "turnover" %}<span class="badge badge-green">{{ obj.get_report_type_display }}</span>{% elif obj.report_type == "aging" %}<span class="badge badge-amber">{{ obj.get_report_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_report_type_display }}</span>{% endif %}</td>
               <td>{{ obj.title|default:"—" }}</td>
-              <td>{{ obj.location.code|default:"All locations" }}{% if obj.window_days %} · {{ obj.window_days }}d{% endif %}</td>
+              <td>{% if obj.location %}{{ obj.location.code }}{% else %}All locations{% endif %}{% if obj.window_days %} · {{ obj.window_days }}d{% endif %}</td>
               <td>{{ obj.created_at|date:"d M Y H:i" }}</td>
-              <td>{{ obj.generated_by.get_short_name|default:obj.generated_by.username|default:"—" }}</td>
+              <td>{% if obj.generated_by %}{{ obj.generated_by.get_short_name|default:obj.generated_by.username }}{% else %}—{% endif %}</td>
               <td class="table-actions">
                 <a href="{% url 'inventory:snapshot_detail' obj.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye"></i></a>
                 {% if request.user.is_tenant_admin or request.user.is_superuser %}
