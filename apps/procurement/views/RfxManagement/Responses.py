@@ -6,6 +6,7 @@ guarded evaluation lifecycle (submit → under review → scored / disqualified)
 """
 from django.db import transaction
 
+from apps.core.crud import as_db_int
 from apps.procurement.forms import RfxAnswerFormSet, RfxResponseForm
 from apps.procurement.models import RfxAnswer, RfxEvent, RfxResponse
 from apps.procurement.views._common import *  # noqa: F401,F403
@@ -59,10 +60,12 @@ def rfx_response_create(request):
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before recording responses.")
         return redirect("dashboard:home")
-    event_id = request.GET.get("event")
+    event_pk = as_db_int(request.GET.get("event"))
     initial = {}
-    if event_id and event_id.isdecimal():
-        initial["event"] = RfxEvent.objects.filter(pk=int(event_id), tenant=request.tenant).first()
+    if event_pk is not None and RfxEvent.objects.filter(
+            pk=event_pk, tenant=request.tenant, is_template=False).exists():
+        # ModelChoiceField preselects by PK — handing it an instance silently matches nothing.
+        initial["event"] = event_pk
     if request.method == "POST":
         form = RfxResponseForm(request.POST, request.FILES, tenant=request.tenant)
         if form.is_valid():
