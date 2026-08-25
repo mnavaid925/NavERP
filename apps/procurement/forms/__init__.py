@@ -31,6 +31,20 @@ from .RfxManagement.Responses import (
     RfxAnswerFormSet,
     RfxResponseForm,
 )
+from .SourcingTendering import (
+    EventCriterionForm,
+    EventCriterionFormSet,
+    SourcingBidForm,
+    SourcingEventForm,
+)
+from .VendorManagement import (
+    SubmissionReviewForm,
+    SuspensionDecisionForm,
+    SuspensionLiftForm,
+    VendorInvoiceSubmissionForm,
+    VendorPortalAccessForm,
+    VendorSuspensionForm,
+)
 
 __all__ = [
     "ApprovalDecisionForm",
@@ -51,4 +65,14 @@ __all__ = [
     "RfxQuestionForm",
     "RfxQuestionFormSet",
     "RfxResponseForm",
+    "SourcingEventForm",
+    "EventCriterionForm",
+    "EventCriterionFormSet",
+    "SourcingBidForm",
+    "VendorPortalAccessForm",
+    "VendorSuspensionForm",
+    "SuspensionDecisionForm",
+    "SuspensionLiftForm",
+    "VendorInvoiceSubmissionForm",
+    "SubmissionReviewForm",
 ]
