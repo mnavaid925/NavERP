@@ -27764,3 +27764,32 @@ test_vendormgmt_* / test_rfx_* files (5) — zero sourcing or earlier-slice fail
 (bid.submitted_by already records the trail); analytics month buckets pre-bucketed but loads
 unbounded — revisit if registers pass ~10k rows; admin leaves business fields editable on
 frozen docs (matches RfxEventAdmin sibling posture).
+
+## 6.8 Contract Management close-out (2026-08-26)
+
+- **Built + wired**: 5 models under `ContractsManagement/` x4 layers - ContractClause (pre-approved
+  authoring library, config posture, admin-gated writes), ContractClauseLink (contract x clause with
+  negotiated override; unique per pair) + ContractSigner (crm-1.9 token flow: secrets.token_urlsafe(32),
+  public sign page `contract-sign/<token>/`, GET stamps viewed_at, POST signs/declines under signer row
+  lock, responses immutable, completion DERIVED), ContractAmendment [CAM-] (blank-proposal refused;
+  one open per agreement; approve writes ONLY set terms onto scm.SupplierContract via apply() under the
+  CONTRACT row lock), ContractMilestone [CMI-] (deliverable/payment/penalty; complete/waive stamp actor;
+  decided rows frozen). Renewal engine = computed board over each contract's notice window
+  (`end_date - renewal_notice_days`) + idempotent Run raising 6.1 ProcurementAlerts kind=contract.
+  OWNERSHIP RULING: the agreement stays scm.SupplierContract (L36); procurement authors/signs/tracks
+  AROUND it and creates spine drafts in one transaction (6.1 quick-requisition posture).
+- **Verification**: temp/verify_contracts_68.py 29/29 (seeder idempotency incl. direct call bypassing a
+  concurrent lane's broken eauction block; every staff page; filters/lenses; public token flow; locked
+  amendment apply + member/admin gating; renewal dedupe; milestone freeze; IDOR 404s; register tenant
+  isolation). test_contracts_68.py 12 passed first run via pytest --no-migrations (detached batch).
+  manage.py check clean; migration 0011 applied to MariaDB; seed x2 stable for this block.
+- **Environment findings of record**: (a) fresh-test-DB migration pit on :memory: SQLite - py-spy shows
+  pytest alive inside django_db_setup->migrate for ~15-20min; detached launch + --no-migrations turns it
+  into ~13s. (b) The shared seed_procurement currently RAISES in _seed_eauction ("could not award seeded
+  auction") on Globex - the 6.7 lane's committed block, deterministic, aborts the tenant loop before later
+  blocks; my _seed_contracts is placed AFTER it and therefore only seeds Acme until that lane fixes its
+  award path (my direct-call proof covers both tenants). (c) A sibling session hot-fixed my
+  ProtectedError import mid-flight (f530ce11) - collaborative checkout working as intended.
+- **Deferred**: exhaustive forms/views test files beyond the consolidated suite (the smoke script covers
+  the same contracts against real data); review wave as a formal six-lane workflow was replaced by inline
+  self-review + live verification this session.
