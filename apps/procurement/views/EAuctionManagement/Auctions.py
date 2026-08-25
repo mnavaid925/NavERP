@@ -80,14 +80,16 @@ def eauc_detail(request, pk):
     bids = list(obj.bids.select_related("supplier", "placed_by")[:100])
     invites = list(obj.invites.select_related("supplier"))
     invite_form = EaucInviteForm(tenant=request.tenant, auction=obj)
+    best = obj.best_bid()
     return render(request, "procurement/eauctionmanagement/auctions/detail.html", {
         "obj": obj,
         "bids": bids,
         "invites": invites,
         "invite_form": invite_form,
         "ranked": obj.rankings(),
-        "best": obj.best_bid(),
-        "savings": obj.savings_vs_start(),
+        "best": best,
+        # Derived from the ALREADY-fetched leader — savings_vs_start() would re-query it.
+        "savings": (obj.start_price - best.amount) if best is not None else None,
     })
 
 
