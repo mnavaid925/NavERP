@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Approval History{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Approval History &amp; Audit Trail</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Approval Workflow</span><span class="sep">›</span><span>History</span></div>
+      <p class="text-muted">The signature register — who approved what, when, under whose authority, and what they said. Rows are appended at decision time and never edited; every one is also mirrored into the immutable audit log.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:approval_queue' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Approval Queue</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ request.GET.q }}" aria-label="Search" class="form-input" placeholder="Search requisition, approver or comment…">
+        </div>
+        <div class="form-group">
+          <select name="decision" aria-label="Decision" class="form-select">
+            <option value="">All decisions</option>
+            {% for val, label in decision_choices %}
+              <option value="{{ val }}" {% if request.GET.decision == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:approval_history' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Signature</th><th>Requisition</th><th>Tier</th><th>Decision</th><th>Signed by</th><th>Authority</th><th>Comment</th><th>When</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td><a href="{% url 'procurement:req_detail' obj.requisition_id %}" class="fw-600">{{ obj.requisition.number }}</a> · {{ obj.requisition.title|truncatechars:30 }}</td>
+              <td>{{ obj.tier }}/{{ obj.tier_count }}</td>
+              <td><span class="badge {% if obj.decision == 'approved' %}badge-green{% else %}badge-red{% endif %}">{{ obj.get_decision_display }}</span>{% if obj.is_final_tier and obj.decision == 'approved' %} <span class="badge badge-info">final</span>{% endif %}</td>
+              <td>{{ obj.approver.username|default:"—" }}</td>
+              <td>{% if obj.via_delegation %}<a href="{% url 'procurement:delegation_detail' obj.via_delegation_id %}" class="badge badge-amber">DOA · {{ obj.via_delegation.delegator.username|default:"delegated" }}</a>{% else %}<span class="text-muted">own</span>{% endif %}</td>
+              <td>{{ obj.comment|truncatechars:44 }}</td>
+              <td>{{ obj.decided_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="history"></i><h3>No signatures yet</h3><p>Decide a chain from the approval queue — each sign-off lands here instantly and permanently.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ signed_count }} signature{{ signed_count|pluralize }} on record. The tier count is snapshotted per signature, so changing a routing rule never rewrites what an approver thought they were signing.</p>
+{% endblock %}
