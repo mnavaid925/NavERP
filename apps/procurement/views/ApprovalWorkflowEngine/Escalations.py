@@ -43,7 +43,6 @@ def escalation_queue(request):
         "policy": policy,
         "stats": stats,
         "lens": lens,
-        "now": timezone.now(),
         "is_admin": _is_admin(request),
     })
 
@@ -54,7 +53,10 @@ def escalation_queue(request):
 def escalation_run(request):
     if not _is_admin(request):
         raise PermissionDenied("Running escalations requires a tenant administrator.")
-    policy = EscalationPolicy.for_tenant(request.tenant)
+    # The policy row lock is the per-tenant mutex: two concurrent Runs serialize,
+    # so the second sees the first's alerts and raises nothing twice.
+    policy = EscalationPolicy.objects.select_for_update().get(
+        tenant=request.tenant)
     if not policy.is_active:
         messages.warning(request, "The escalation policy is inactive — nothing was raised.")
         return redirect("procurement:escalation_queue")
