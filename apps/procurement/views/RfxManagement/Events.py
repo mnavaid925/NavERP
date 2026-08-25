@@ -78,10 +78,14 @@ def rfx_detail(request, pk):
     questions = list(obj.questions.all())
     responses = list(obj.responses.select_related("supplier")
                      .exclude(status="draft").order_by("-created_at"))
+    # The comparison matrix excludes disqualified rows, so the Compare button must count
+    # ADMISSIBLE submissions only — otherwise the button leads to an empty matrix.
+    n_comparable = sum(1 for r in responses if r.status in RfxResponse.SUBMITTED_STATUSES)
     return render(request, "procurement/rfxmanagement/events/detail.html", {
         "obj": obj,
         "questions": questions,
         "response_rows": _scored_rows(responses),
+        "n_comparable": n_comparable,
     })
 
 
