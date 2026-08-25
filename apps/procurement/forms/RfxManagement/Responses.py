@@ -33,10 +33,14 @@ class RfxResponseForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["supplier"])
-        event = self.instance.event if self.instance.pk else cleaned.get("event")
-        if event is not None and not event.accepts_responses:
-            self.add_error("event", f"Event {event.number or event.pk} is {event.status} — "
-                                    f"responses can only be recorded while it is open.")
+        # CREATE-only gate: on edit ``__init__`` popped ``event`` (a response never moves
+        # events), so an add_error("event", ...) would raise ValueError — and a save after the
+        # event closed is legitimate evaluation work anyway; accepts_responses stops NEW bids.
+        if self.instance.pk is None:
+            event = cleaned.get("event")
+            if event is not None and not event.accepts_responses:
+                self.add_error("event", f"Event {event.number or event.pk} is {event.status} — "
+                                        f"responses can only be recorded while it is open.")
         return cleaned
 
 
