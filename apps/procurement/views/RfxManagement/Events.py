@@ -117,7 +117,11 @@ def _event_form(request, instance):
             with transaction.atomic():
                 event = form.save(commit=False)
                 event.tenant = request.tenant
-                if not is_edit:
+                if is_edit:
+                    # Lock the parent row so the formset's MAX(order) read (_next_order) cannot
+                    # interleave with a concurrent builder save or the reorder verb's own lock.
+                    RfxEvent.objects.select_for_update().get(pk=event.pk)
+                else:
                     event.created_by = request.user
                 event.save()
                 formset.instance = event
@@ -185,31 +189,35 @@ def rfx_cancel(request, pk):
 @login_required
 @require_POST
 def rfx_question_move(request, pk, q_pk):
-    """The builder's reorder action: swap a question with its neighbour under a resequence."""
+    """The builder's reorder action: swap a question with its neighbour under a resequence.
+
+    The event row is locked across the whole read-resequence-write cycle — two concurrent
+    moves reading the same orders unlocked could both "win" and duplicate order values."""
     direction = request.POST.get("direction")
     if direction not in ("up", "down"):
         messages.error(request, "Unknown move direction.")
         return redirect("procurement:rfx_detail", pk=pk)
-    event = get_object_or_404(RfxEvent, pk=pk, tenant=request.tenant)
-    if not event.is_editable:
-        messages.error(request, "Questions are locked once an event is issued.")
-        return redirect("procurement:rfx_detail", pk=event.pk)
-    questions = list(event.questions.order_by("order", "id"))
-    index = next((i for i, q in enumerate(questions) if q.pk == q_pk), None)
-    if index is None:
-        raise Http404("No matching question on this event.")
-    neighbour = index - 1 if direction == "up" else index + 1
-    if not 0 <= neighbour < len(questions):
-        return redirect("procurement:rfx_detail", pk=event.pk)  # already at the edge — no-op
-    # Resequence first so historical gaps/collapses can never make a swap ambiguous.
-    for i, question in enumerate(questions):
-        question.order = i + 1
-    # Swap the ORDER VALUES, not the list slots — each object keeps its own identity here.
-    questions[index].order, questions[neighbour].order = (
-        neighbour + 1,
-        index + 1,
-    )
     with transaction.atomic():
+        event = get_object_or_404(RfxEvent.objects.select_for_update(), pk=pk,
+                                  tenant=request.tenant)
+        if not event.is_editable:
+            messages.error(request, "Questions are locked once an event is issued.")
+            return redirect("procurement:rfx_detail", pk=event.pk)
+        questions = list(event.questions.order_by("order", "id"))
+        index = next((i for i, q in enumerate(questions) if q.pk == q_pk), None)
+        if index is None:
+            raise Http404("No matching question on this event.")
+        neighbour = index - 1 if direction == "up" else index + 1
+        if not 0 <= neighbour < len(questions):
+            return redirect("procurement:rfx_detail", pk=event.pk)  # already at the edge — no-op
+        # Resequence first so historical gaps/collapses can never make a swap ambiguous.
+        for i, question in enumerate(questions):
+            question.order = i + 1
+        # Swap the ORDER VALUES, not the list slots — each object keeps its own identity here.
+        questions[index].order, questions[neighbour].order = (
+            neighbour + 1,
+            index + 1,
+        )
         RfxQuestion.objects.bulk_update(questions, ["order"])
     write_audit_log(request.user, event, "update", {"questionnaire": "reordered"})
     return redirect("procurement:rfx_detail", pk=event.pk)
