@@ -320,9 +320,11 @@ class EauctionAdmin(admin.ModelAdmin):
     search_fields = ("number", "title")
     raw_id_fields = ("currency", "requisition", "created_by", "awarded_supplier")
     # The award decision is written ONCE through the view (which validates leader-only);
-    # status/extensions_used/awarded_amount/awarded_at are state-machine outputs, never inputs.
+    # status/extensions_used/awarded_amount/awarded_at/award_note are state-machine outputs,
+    # never inputs.
     readonly_fields = ("number", "extensions_used", "status", "awarded_supplier",
-                       "awarded_amount", "awarded_at", "created_by", "created_at", "updated_at")
+                       "awarded_amount", "award_note", "awarded_at", "created_by",
+                       "created_at", "updated_at")
     inlines = [EaucInviteInline]
 
 
@@ -368,7 +370,7 @@ class ContractSignerAdmin(admin.ModelAdmin):
                     "signed_at", "declined_at")
     list_filter = ("tenant", "role")
     search_fields = ("signer_name", "signer_email", "contract__number")
-    # WARNING: never expose `token` in any form/list — it IS the bearer credential
+    # WARNING: never expose `token` in any form/list ï¿½ it IS the bearer credential
     # for the public sign page. Admin sees outcomes (viewed/signed/declined), not secrets.
     exclude = ("token",)
     readonly_fields = ("viewed_at", "signed_at", "declined_at", "ip_address",
