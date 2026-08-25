@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}RFx Events{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">RFx Events</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>RFx Management</span></div>
+      <p class="text-muted">Structured RFI / RFP / RFQ questionnaires issued to suppliers, scored against weighted criteria.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:rfx_library' %}" class="btn btn-outline"><i data-lucide="layout-template"></i> Template Library</a>
+      <a href="{% url 'procurement:rfx_scoring' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Scoring</a>
+      <a href="{% url 'procurement:rfx_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Event</a>
+    </div>
+  </div>
+
+  {% if compare_mode %}
+    <div class="card"><div class="card-body text-muted">
+      Showing only events with two or more submitted responses — open one to compare its bids side by side.
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% if compare_mode %}<input type="hidden" name="compare" value="1">{% endif %}
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or title…">
+        </div>
+        <div class="form-group">
+          <select name="rfx_type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.rfx_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:rfx_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Title</th><th>Requisition</th><th>Responses due</th><th>Questions</th><th>Submitted</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td><span class="badge badge-slate">{{ obj.get_rfx_type_display|cut:"— Request for " }}</span></td>
+              <td>{{ obj.title }}</td>
+              <td>{% if obj.requisition %}<a href="{% url 'procurement:req_detail' obj.requisition.pk %}">{{ obj.requisition.number }}</a>{% else %}—{% endif %}</td>
+              <td>{% if obj.response_due %}{{ obj.response_due|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
+              <td>{{ obj.n_questions|default:0 }}</td>
+              <td>{{ obj.n_submitted|default:0 }}</td>
+              <td>
+                <span class="badge {% if obj.status == 'issued' %}badge-info{% elif obj.status == 'closed' %}badge-green{% elif obj.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}<a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  {% if obj.n_submitted >= 2 %}<a href="{% url 'procurement:rfx_compare' obj.pk %}" class="btn-icon" title="Compare responses side by side"><i data-lucide="columns-2"></i></a>{% endif %}
+                  {% if obj.status == 'draft' or obj.status == 'cancelled' %}
+                    <form method="post" action="{% url 'procurement:rfx_delete' obj.pk %}" onsubmit="return confirm('Delete this event and its questionnaire?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No RFx events yet</h3><p>Create a questionnaire event — or clone one from the template library.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
