@@ -23,8 +23,13 @@ class CatalogUploadBatch(TenantNumbered):
 
     NUMBER_PREFIX = "CUB"
 
-    #: Extensions clean() accepts; anything else is refused before the file is ever reviewed.
-    ALLOWED_EXTENSIONS = (".csv", ".xls", ".xlsx", ".xml")
+    #: Extensions clean() accepts — .csv ONLY until a real XLSX/XML parser exists (the
+    #: staging parser is csv.DictReader); anything else is refused before review.
+    ALLOWED_EXTENSIONS = (".csv",)
+
+    #: Hard ceiling on data rows one batch may stage — keeps a runaway file from turning
+    #: one POST into a ten-minute staging storm.
+    MAX_DATA_ROWS = 10_000
 
     #: Expected CSV headers; extra columns are ignored, missing ones reject their row.
     EXPECTED_HEADERS = ("name", "supplier_part_no", "unit_price", "uom_code", "category_text")
@@ -73,7 +78,8 @@ class CatalogUploadBatch(TenantNumbered):
         if self.file and self.file.name:
             name = self.file.name.lower()
             if not any(name.endswith(ext) for ext in self.ALLOWED_EXTENSIONS):
-                raise ValidationError({"file": "Allowed file types: .csv, .xls, .xlsx, .xml."})
+                raise ValidationError({"file": "CSV only (.csv) — the staging parser reads "
+                                               "CSV; export Excel/XML to CSV first."})
 
     @property
     def is_editable(self):
@@ -111,6 +117,11 @@ class CatalogUploadBatch(TenantNumbered):
         uom_cache = {}
         for row in csv.DictReader(io.StringIO(text)):
             parsed += 1
+            if parsed > self.MAX_DATA_ROWS:
+                # Clean refusal, nothing staged: the batch stays received so the buyer can
+                # split or reject it — a runaway file never becomes a staging storm.
+                return False, (f"file exceeds the {self.MAX_DATA_ROWS:,} data-row limit "
+                               f"- split it into smaller batches")
             name = (row.get("name") or "").strip()
             part_no = (row.get("supplier_part_no") or "").strip()
             price_raw = (row.get("unit_price") or "").strip()
