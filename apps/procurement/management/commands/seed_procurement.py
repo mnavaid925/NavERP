@@ -847,33 +847,43 @@ class Command(BaseCommand):
         admin_user = User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
         member = User.objects.filter(tenant=tenant, is_tenant_admin=False).first()
         supplier = self._contract_supplier(tenant, "Northwind Industrial Supply")
-
-        clauses = {}
-        for title, category, body in [
-            ("Governing law & venue", "legal",
-             "This Agreement is governed by the laws agreed in writing by the Parties; "
-             "the courts of that jurisdiction have exclusive venue."),
-            ("Payment terms — net 30", "payment",
-             "Invoices are payable within thirty (30) days of a valid invoice. Late "
-             "payments accrue interest at 1% per month."),
-            ("Delivery & acceptance", "delivery",
-             "Goods must conform to the purchase order. Buyer has five (5) business "
-             "days to inspect; acceptance waives non-conformity discoverable then."),
-            ("Confidentiality", "confidentiality",
-             "Each Party protects the other's confidential information with at least "
-             "the care it applies to its own, for three (3) years after disclosure."),
-            ("Termination for convenience", "termination",
-             "Either Party may terminate on sixty (60) days' written notice; Buyer pays "
-             "for conforming goods delivered before the effective date."),
-        ]:
-            clauses[title] = ContractClause.objects.create(
-                tenant=tenant, title=title, category=category, body=body,
-                version="v1.0", is_pre_approved=True)
-            write_audit_log(None, clauses[title], "create")
+        # User rows are optional in bare tenants — never assume an admin exists when
+        # stamping the internal signer.
+        internal_name = ((admin_user.get_full_name() or admin_user.username)
+                         if admin_user else "Tenant Admin")
+        internal_email = (admin_user.email or "admin@example.com"
+                          if admin_user else "admin@example.com")
 
         today = timezone.localdate()
         made = 0
         with transaction.atomic():
+            # The clause library is part of this sub-module's seeded state, so it is
+            # created INSIDE the atomic block: a partial failure must roll back
+            # together with the agreement, or the exists() guard above would see the
+            # half-built clauses on the next run and silently skip the tenant forever.
+            clauses = {}
+            for title, category, body in [
+                ("Governing law & venue", "legal",
+                 "This Agreement is governed by the laws agreed in writing by the Parties; "
+                 "the courts of that jurisdiction have exclusive venue."),
+                ("Payment terms — net 30", "payment",
+                 "Invoices are payable within thirty (30) days of a valid invoice. Late "
+                 "payments accrue interest at 1% per month."),
+                ("Delivery & acceptance", "delivery",
+                 "Goods must conform to the purchase order. Buyer has five (5) business "
+                 "days to inspect; acceptance waives non-conformity discoverable then."),
+                ("Confidentiality", "confidentiality",
+                 "Each Party protects the other's confidential information with at least "
+                 "the care it applies to its own, for three (3) years after disclosure."),
+                ("Termination for convenience", "termination",
+                 "Either Party may terminate on sixty (60) days' written notice; Buyer pays "
+                 "for conforming goods delivered before the effective date."),
+            ]:
+                clauses[title] = ContractClause.objects.create(
+                    tenant=tenant, title=title, category=category, body=body,
+                    version="v1.0", is_pre_approved=True)
+                write_audit_log(None, clauses[title], "create")
+
             contract = SupplierContract.objects.create(
                 tenant=tenant,
                 party=supplier,
@@ -893,8 +903,8 @@ class Command(BaseCommand):
                     contract=contract, clause=clause, section_order=order)
             internal_signer = ContractSigner.objects.create(
                 tenant=tenant, contract=contract, role="internal",
-                signer_name=(admin_user.get_full_name() or admin_user.username),
-                signer_email=admin_user.email or "admin@example.com", order=1)
+                signer_name=internal_name,
+                signer_email=internal_email, order=1)
             supplier_signer = ContractSigner.objects.create(
                 tenant=tenant, contract=contract, role="supplier",
                 signer_party=supplier, signer_name="Dana Reyes",
