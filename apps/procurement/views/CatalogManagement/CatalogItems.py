@@ -3,7 +3,8 @@
 The catalogue register (search + status/source/supplier/preferred filters + one-aggregate
 stats), the detail page with its price-tier table and guarded approval lifecycle
 (submit / approve / reject / block), and the hand-rolled create/edit form following the
-RfxManagement ``_event_form`` precedent.
+RfxManagement ``_event_form`` precedent. Decisions (approve/reject/block) are tenant-admin
+verbs; any member may propose (submit) and view.
 """
 from django.db.models import Count, Q
 
@@ -114,6 +115,7 @@ def catalog_item_delete(request, pk):
 @login_required
 @require_POST
 def catalog_item_submit(request, pk):
+    # Proposing stays open to every member — maker-checker needs makers.
     obj = get_object_or_404(CatalogItem, pk=pk, tenant=request.tenant)
     if obj.submit(request.user):
         write_audit_log(request.user, obj, "submit")
@@ -123,7 +125,7 @@ def catalog_item_submit(request, pk):
     return redirect("procurement:catalog_item_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_item_approve(request, pk):
     obj = get_object_or_404(CatalogItem, pk=pk, tenant=request.tenant)
@@ -136,7 +138,7 @@ def catalog_item_approve(request, pk):
     return redirect("procurement:catalog_item_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_item_reject(request, pk):
     obj = get_object_or_404(CatalogItem, pk=pk, tenant=request.tenant)
@@ -149,7 +151,7 @@ def catalog_item_reject(request, pk):
     return redirect("procurement:catalog_item_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_item_block(request, pk):
     obj = get_object_or_404(CatalogItem, pk=pk, tenant=request.tenant)
