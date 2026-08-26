@@ -102,13 +102,29 @@ class CatalogPriceTier(TenantOwned):
     # -- actions -------------------------------------------------------------------------------------
 
     def approve(self, user):
-        """Proposed → active, stamping who approved and when. Returns False otherwise."""
+        """Proposed → active, stamping who approved and when. Returns False otherwise.
+
+        The single-occupancy invariant is re-checked HERE, not just ``clean()``: two *draft*
+        tiers may share a ``(tenant, item, min_quantity)`` break while nothing is active
+        (the unique_together cannot see them across NULL ``valid_from``), so the overlap
+        guard must run on the approval path too — approving the second one is refused.
+        Check + flip + save happen inside one transaction.
+        """
         if self.status != "draft":
             return False
-        self.status = "active"
-        self.approved_by = user
-        self.approved_at = timezone.now()
-        self.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+        with transaction.atomic():
+            clash = (CatalogPriceTier.objects
+                     .filter(tenant_id=self.tenant_id,
+                             catalog_item_id=self.catalog_item_id,
+                             min_quantity=self.min_quantity,
+                             status=self.ACTIVE_STATUS)
+                     .exclude(pk=self.pk))
+            if clash.exists():
+                return False
+            self.status = "active"
+            self.approved_by = user
+            self.approved_at = timezone.now()
+            self.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
         return True
 
     def retire(self):
