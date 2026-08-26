@@ -16,7 +16,11 @@
       <p class="text-muted">The agreement's drafted terms are being finalized.</p>
     {% endif %}
 
-    {% if already %}
+    {% if closed %}
+      <p><span class="badge badge-red">Closed</span> This agreement is
+      {{ contract.get_status_display|lower }} and no longer open for signature.
+      Please contact your counterpart at the buyer.</p>
+    {% elif already %}
       <p>You have already responded to this document. Thank you.</p>
     {% else %}
       <form method="post">
@@ -29,7 +33,7 @@
     {% endif %}
 
     <p class="text-muted">
-      {% if already %}Your response is on record.{% elif remaining_after %}After you sign, {{ remaining_after }} signature{{ remaining_after|pluralize }} will still be outstanding.{% else %}You are the last signer — your response completes this agreement.{% endif %}
+      {% if closed %}Nothing was recorded — the agreement was closed before you responded.{% elif already %}Your response is on record.{% elif remaining_after %}After you sign, {{ remaining_after }} signature{{ remaining_after|pluralize }} will still be outstanding.{% else %}You are the last signer — your response completes this agreement.{% endif %}
     </p>
   </div>
 </div>
