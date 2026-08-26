@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Submit an Invoice{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Submit an invoice</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:vendor_portal_home' %}">Vendor Portal</a><span class="sep">›</span><span>New invoice submission</span></div>
+  </div></div>
+
+  {% if suspension %}
+    <div style="border:1px solid #fecaca; background:#fef2f2; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+      <strong style="color:#b91c1c;">Account suspended — invoice submission disabled.</strong>
+      <div style="color:#7f1d1d; margin-top:4px;">
+        Category: {{ suspension.get_reason_category_display|default:"—" }}
+        {% if suspension.reason %} · {{ suspension.reason }}{% endif %}
+        <br>Since {{ suspension.starts_on|date:"M d, Y" }}{% if suspension.ends_on %} until {{ suspension.ends_on|date:"M d, Y" }}{% else %}, until lifted{% endif %}.
+        Contact procurement to resolve it.
+      </div>
+      <a href="{% url 'procurement:vendor_portal_home' %}" class="btn btn-outline" style="margin-top:10px;"><i data-lucide="arrow-left"></i> Back to portal</a>
+    </div>
+  {% else %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="card"><div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted">Our procurement team reviews every invoice you submit; approved invoices are scheduled for payment by our accounts team.</p>
+      </div></div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit invoice</button>
+        <a href="{% url 'procurement:vendor_portal_home' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  {% endif %}
+{% endblock %}
