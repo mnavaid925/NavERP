@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Punch-out Endpoints{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Punch-out Endpoints</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Catalog Management</span></div>
+      <p class="text-muted">Stored connections into suppliers' live catalogues — cXML, SAP OCI or a manual link. Secrets are write-only and never displayed.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:punchout_endpoint_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Endpoint</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="plug"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Endpoints</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="plug-zap"></i></div><div class="stat-value">{{ stats.enabled }}</div><div class="stat-label">Enabled</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="plug"></i></div><div class="stat-value">{{ stats.cxml }}</div><div class="stat-label">cXML protocol endpoints</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, supplier or URL…">
+        </div>
+        <div class="form-group">
+          <select name="protocol" aria-label="Protocol" class="form-select">
+            <option value="">All protocols</option>
+            {% for val, label in protocol_choices %}
+              <option value="{{ val }}" {% if request.GET.protocol == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="enabled" aria-label="State" class="form-select">
+            <option value="">All states</option>
+            <option value="True" {% if request.GET.enabled == 'True' %}selected{% endif %}>Enabled</option>
+            <option value="False" {% if request.GET.enabled == 'False' %}selected{% endif %}>Disabled</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:punchout_endpoint_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Endpoint</th><th>Protocol</th><th>URL</th><th>Enabled</th><th>Last session</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{{ obj.name }}<div class="text-muted">{{ obj.party.name }}</div></td>
+              <td>
+                <span class="badge {% if obj.protocol == 'cxml' %}badge-info{% elif obj.protocol == 'oci' %}badge-amber{% elif obj.protocol == 'manual_link' %}badge-muted{% else %}badge-slate{% endif %}">{{ obj.get_protocol_display }}</span>
+              </td>
+              <td>{{ obj.punchout_url|truncatechars:40 }}</td>
+              <td>{% if obj.enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}</td>
+              <td>{% if obj.last_session_at %}{{ obj.last_session_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:punchout_endpoint_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:punchout_endpoint_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'procurement:punchout_endpoint_delete' obj.pk %}" onsubmit="return confirm('Delete this endpoint connection?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="plug"></i><h3>No punch-out endpoints yet</h3><p>Store a supplier's cXML, OCI or manual catalogue link so buyers can launch straight into it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
