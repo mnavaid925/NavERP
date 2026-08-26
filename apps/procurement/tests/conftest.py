@@ -326,3 +326,92 @@ def sourcing_bid_second_a(sourcing_event_open_a, second_party_a):
     """A shortlisted rival bid on the same open event."""
     return _bid(sourcing_event_open_a, second_party_a,
                 status="shortlisted", price="9800.00")
+
+
+# ------------------------------------------------------------------ 6.9 Catalog Management
+@pytest.fixture
+def uom_a(db, tenant_a):
+    from apps.scm.models import UOM
+    obj, _ = UOM.objects.get_or_create(tenant=tenant_a, code="EA",
+                                       defaults={"name": "Each", "factor": Decimal("1")})
+    return obj
+
+
+@pytest.fixture
+def item_a(db, tenant_a, uom_a):
+    from apps.scm.models import Item
+    return Item.objects.create(
+        tenant=tenant_a, sku="A4-PAPER", name="A4 copy paper 80gsm",
+        uom=uom_a, standard_cost=Decimal("4.20"))
+
+
+def _catalog_item(tenant, **overrides):
+    from apps.procurement.models import CatalogItem
+    fields = dict(tenant=tenant, source_type="supplier_product",
+                  name="Industrial safety gloves", supplier_part_no="NW-GLOVE-D1",
+                  base_price=Decimal("34.90"), status="draft")
+    fields.update(overrides)
+    return CatalogItem.objects.create(**fields)
+
+
+@pytest.fixture
+def catalog_item_approved_a(db, tenant_a, item_a, usd):
+    """An APPROVED internal catalog line for tenant A (purchasable)."""
+    from django.utils import timezone as tz
+    ci = _catalog_item(
+        tenant_a, source_type="internal", item=item_a, currency=usd,
+        uom=item_a.uom, name="A4 copy paper (preferred buy)", status="approved",
+        is_preferred=True)
+    ci.approved_at = tz.now()
+    ci.save(update_fields=["approved_at"])
+    return ci
+
+
+@pytest.fixture
+def catalog_item_pending_a(db, tenant_a):
+    """A supplier product awaiting approval in tenant A."""
+    return _catalog_item(tenant_a, status="pending_approval")
+
+
+@pytest.fixture
+def catalog_item_blocked_a(db, tenant_a):
+    return _catalog_item(tenant_a, name="Generic toner cartridge",
+                         status="blocked")
+
+
+@pytest.fixture
+def catalog_item_b(db, tenant_b):
+    """Tenant B's own catalog row - the IDOR target."""
+    return _catalog_item(tenant_b, name="Globex-only catalog line")
+
+
+def _tier(catalog_item, **overrides):
+    from apps.procurement.models import CatalogPriceTier
+    fields = dict(tenant=catalog_item.tenant, catalog_item=catalog_item,
+                  min_quantity=Decimal("10"), unit_price=Decimal("31.50"),
+                  status="active")
+    fields.update(overrides)
+    return CatalogPriceTier.objects.create(**fields)
+
+
+@pytest.fixture
+def tier_active_a(db, catalog_item_approved_a):
+    return _tier(catalog_item_approved_a)
+
+
+@pytest.fixture
+def punchout_endpoint_a(db, tenant_a, supplier_a):
+    from apps.procurement.models import PunchOutEndpoint
+    _, party = supplier_a
+    return PunchOutEndpoint.objects.create(
+        tenant=tenant_a, party=party, name="Amazon Business (sandbox)",
+        protocol="cxml", punchout_url="https://sandbox.example/cxml")
+
+
+@pytest.fixture
+def upload_batch_received_a(db, tenant_a, supplier_a):
+    from apps.procurement.models import CatalogUploadBatch
+    _, party = supplier_a
+    return CatalogUploadBatch.objects.create(
+        tenant=tenant_a, party=party, original_filename="northwind.csv",
+        status="received")
