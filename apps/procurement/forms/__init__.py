@@ -42,6 +42,7 @@ from .VendorManagement import (
     SubmissionReviewForm,
     SuspensionDecisionForm,
     SuspensionLiftForm,
+    VendorBidForm,
     VendorInvoiceSubmissionForm,
     VendorPortalAccessForm,
     VendorSuspensionForm,
@@ -56,6 +57,10 @@ from .ContractsManagement import (
     ContractSignerForm,
     amendable_contracts,
 )
+from .CatalogManagement.CatalogItems import CatalogItemForm
+from .CatalogManagement.Tiers import CatalogPriceTierForm
+from .CatalogManagement.PunchOutEndpoints import PunchOutEndpointForm
+from .CatalogManagement.UploadBatches import CatalogUploadBatchForm
 
 __all__ = [
     "EaucBidForm",
@@ -84,6 +89,7 @@ __all__ = [
     "EventCriterionFormSet",
     "SourcingBidForm",
     "VendorPortalAccessForm",
+    "VendorBidForm",
     "VendorSuspensionForm",
     "SuspensionDecisionForm",
     "SuspensionLiftForm",
@@ -95,4 +101,8 @@ __all__ = [
     "ContractSignerForm",
     "ContractAmendmentForm",
     "ContractAmendmentDecisionForm",
+    "CatalogItemForm",
+    "CatalogPriceTierForm",
+    "PunchOutEndpointForm",
+    "CatalogUploadBatchForm",
 ]
