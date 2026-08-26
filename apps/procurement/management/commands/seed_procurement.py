@@ -35,6 +35,11 @@ LIVE auction whose bids already consumed one anti-snipe extension (its close is 
 ``extension_seconds`` to match ``extensions_used``), so the floor, console, rules and results
 pages all have honest rows on a fresh workspace.
 
+6.9 seeds Catalog Management: an approved+preferred internal catalog line carrying two active
+volume tiers, a supplier product pending approval, a blocked line, two punch-out endpoint
+configurations (cXML + manual-link fallback) and one validated upload batch with rejected rows
+in its error log - the governed buy-side layer over seed_scm's item master.
+
 Each seeded alert also writes one ``core.AuditLog`` row (user=None → rendered as "System"), which
 gives the Recent Activity Feed an honest baseline instead of an empty page on a fresh workspace.
 
@@ -55,12 +60,16 @@ from apps.procurement.models import (
     ApprovalDelegation,
     ApprovalRoutingRule,
     BidScore,
+    CatalogItem,
+    CatalogPriceTier,
+    CatalogUploadBatch,
     EaucBid,
     EaucInvite,
     Eauction,
     EscalationPolicy,
     EventCriterion,
     ProcurementAlert,
+    PunchOutEndpoint,
     RequisitionAmendment,
     RequisitionAmendmentLine,
     RequisitionApproval,
@@ -81,7 +90,8 @@ from apps.procurement.models import (
     VendorPortalAccess,
     VendorSuspension,
 )
-from apps.scm.models import PurchaseRequisition, SupplierProfile
+from apps.accounting.models import Currency
+from apps.scm.models import Item, PurchaseRequisition, SupplierProfile, UOM
 
 User = get_user_model()
 
@@ -155,6 +165,12 @@ class Command(BaseCommand):
             VendorPortalAccess.objects.all().delete()
             VendorSuspension.objects.all().delete()
             VendorInvoiceSubmission.objects.all().delete()
+            # 6.9 catalog rows: tiers are item children (cascade) but go first so the
+            # register clears in one pass; endpoints/batches are standalone config.
+            CatalogPriceTier.objects.all().delete()
+            CatalogItem.objects.all().delete()
+            CatalogUploadBatch.objects.all().delete()
+            PunchOutEndpoint.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -167,6 +183,7 @@ class Command(BaseCommand):
             self._seed_rfx(tenant)
             self._seed_eauction(tenant)
             self._seed_contracts(tenant)
+            self._seed_catalog(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -935,3 +952,85 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: contracts ready ({made} agreement: clause library x{len(clauses)}, "
             f"2 signature slots, 3 milestones, 1 pending amendment)."))
+
+    # -- 6.9 Catalog Management -------------------------------------------------------------------
+
+    def _seed_catalog(self, tenant):
+        """6.9 Catalog Management - the governed buy-side layer over seed_scm's item master and
+        4.2 suppliers: one approved+preferred internal catalog line carrying two active volume
+        tiers, a supplier product still pending approval, a blocked line, two punch-out endpoint
+        configurations and one validated upload batch whose error log shows rejected rows.
+        Reuses existing Item/UOM/Currency/Party rows; guarded per tenant like every block."""
+        if CatalogItem.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: catalog items already present, skipping.")
+            return
+        item = Item.objects.filter(tenant=tenant).select_related("uom").first()
+        currency = Currency.objects.order_by("id").first()
+        if item is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no scm.Item rows (run seed_scm first) - catalog skipped."))
+            return
+        supplier = self._eauc_supplier(tenant, "Northwind Industrial Supply")
+        made = 0
+        with transaction.atomic():
+            approved = CatalogItem.objects.create(
+                tenant=tenant, source_type="internal", item=item,
+                uom=item.uom, currency=currency,
+                name=f"{item.name} (preferred buy)", description="Internal stock item "
+                "published to the buying catalog with contracted volume breaks.",
+                base_price=item.standard_cost or Decimal("120.00"),
+                status="approved", approved_at=NOW,
+                is_preferred=True, category_text="Office supplies",
+            )
+            approved.approved_by = User.objects.filter(tenant=tenant).order_by("id").first()
+            approved.save(update_fields=["approved_by"])
+            write_audit_log(None, approved, "create")
+            for qty, price in ((Decimal("10"), Decimal("118.00")), (Decimal("50"), Decimal("112.50"))):
+                tier = CatalogPriceTier.objects.create(
+                    tenant=tenant, catalog_item=approved, min_quantity=qty,
+                    unit_price=price, valid_from=timezone.localdate(), status="active",
+                    approved_by=approved.approved_by, approved_at=NOW)
+                write_audit_log(None, tier, "create")
+                made += 1
+            pending = CatalogItem.objects.create(
+                tenant=tenant, source_type="supplier_product", supplier=supplier,
+                name="Industrial safety gloves (cut level D)",
+                supplier_part_no="NW-GLOVE-D1", description="Nitrile-coated cut-resistant "
+                "gloves, pack of 12.", base_price=Decimal("34.90"),
+                status="pending_approval", submitted_at=NOW, category_text="Safety",
+            )
+            pending.submitted_by = approved.approved_by
+            pending.save(update_fields=["submitted_by"])
+            write_audit_log(None, pending, "create")
+            blocked = CatalogItem.objects.create(
+                tenant=tenant, source_type="supplier_product",
+                name="Generic toner cartridge 85A",
+                supplier_part_no="GEN-TONER-85A",
+                description="Off-brand cartridge; blocked after two quality returns.",
+                base_price=Decimal("58.00"), status="blocked",
+                rejection_reason="Blocked by purchasing after repeated defect reports.",
+            )
+            write_audit_log(None, blocked, "create")
+            PunchOutEndpoint.objects.create(
+                tenant=tenant, party=supplier, name="Amazon Business (sandbox)",
+                protocol="cxml", punchout_url="https://sandbox.amazon-business.example/cxml",
+                username="naverp-procurement", shared_secret="demo-only-not-a-secret",
+                notes="cXML punch-out configuration; live handshake deferred.")
+            PunchOutEndpoint.objects.create(
+                tenant=tenant, party=self._eauc_supplier(tenant, "Cascade Components Ltd"),
+                name="Grainger public catalogue", protocol="manual_link",
+                punchout_url="https://www.grainger.example/", enabled=False,
+                notes="Manual link fallback while OCI credentials are pending.")
+            batch = CatalogUploadBatch.objects.create(
+                tenant=tenant, party=supplier,
+                original_filename="northwind-catalogue-2026-08.csv",
+                notes="August price-file submission from Northwind.",
+                rows_parsed=8, rows_accepted=6, rows_rejected=2,
+                error_log="row 3: unit_price missing\nrow 7: unknown uom_code 'BOXES'",
+                status="validated", validated_at=NOW,
+                validated_by=approved.approved_by)
+            write_audit_log(None, batch, "create")
+            made += 3
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: catalog ready ({made} items/tiers, 2 punch-out endpoints, "
+            f"1 validated upload batch)."))
