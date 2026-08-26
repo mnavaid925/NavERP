@@ -7,8 +7,8 @@ audit entry, mirroring the RfxEvent lifecycle pattern.
 from django.db.models import Count, Q
 
 from apps.core.models import Party
-from apps.procurement.forms.CatalogManagement.UploadBatches import CatalogUploadBatchForm
-from apps.procurement.models.CatalogManagement.UploadBatches import CatalogUploadBatch
+from apps.procurement.forms import CatalogUploadBatchForm
+from apps.procurement.models import CatalogUploadBatch
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 
