@@ -32,6 +32,11 @@ def _choices(model, field):
 STATUS_CHOICES = _choices(SupplierContract, "status")
 TYPE_CHOICES = _choices(SupplierContract, "contract_type")
 
+#: A signature is evidence about a LIVE agreement. Once the spine is expired /
+#: terminated / renewed the document is history — its tokens must be inert, exactly
+#: like crm 1.9's expired branch refusing render AND POST.
+SIGNABLE_STATUSES = ("draft", "active", "expiring")
+
 
 @login_required
 def contract_list(request):
@@ -226,12 +231,14 @@ def contract_remove_signer(request, pk, signer_id):
 def contract_sign_page(request, token):
     """PUBLIC e-signature page — no login; the unguessable token IS the credential
     (crm 1.9's exact flow). GET stamps viewed_at; POST signs/declines under a row
-    lock so two racing last-signer POSTs cannot double-write."""
+    lock so two racing last-signer POSTs cannot double-write. A spine that has since
+    expired / been terminated / renewed renders a closed notice and accepts nothing."""
     signer = get_object_or_404(
         ContractSigner.objects.select_related("contract"), token=token)
     contract = signer.contract
     already = signer.has_responded
-    if request.method == "POST" and not already:
+    closed = contract.status not in SIGNABLE_STATUSES
+    if request.method == "POST" and not (already or closed):
         with transaction.atomic():
             locked = (ContractSigner.objects.select_for_update()
                       .select_related("contract").get(pk=signer.pk))
@@ -246,7 +253,7 @@ def contract_sign_page(request, token):
                     locked.signed_at = timezone.now()
                     locked.save(update_fields=["signed_at", "ip_address"])
         return redirect("procurement:contract_sign_page", token=token)
-    if signer.viewed_at is None and not already:
+    if signer.viewed_at is None and not (already or closed):
         signer.viewed_at = timezone.now()
         signer.save(update_fields=["viewed_at"])
     remaining = contract.procurement_signers.filter(
@@ -255,6 +262,7 @@ def contract_sign_page(request, token):
         "signer": signer,
         "contract": contract,
         "already": already,
+        "closed": closed,
         "remaining_after": max(0, remaining - (0 if already else 1)),
         "links": list(contract.procurement_clause_links
                       .select_related("clause").order_by("section_order")),
