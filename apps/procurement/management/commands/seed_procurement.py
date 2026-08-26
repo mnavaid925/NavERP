@@ -976,6 +976,9 @@ class Command(BaseCommand):
                 f"  {tenant.name}: no scm.Item rows (run seed_scm first) - catalog skipped."))
             return
         supplier = self._catalog_supplier(tenant, "Northwind Industrial Supply")
+        # ONE lookup before the atomic block — the same user stamps every approval/submit;
+        # no post-create UPDATE round-trips.
+        approver = User.objects.filter(tenant=tenant).order_by("id").first()
         made = 0
         with transaction.atomic():
             approved = CatalogItem.objects.create(
@@ -984,17 +987,15 @@ class Command(BaseCommand):
                 name=f"{item.name} (preferred buy)", description="Internal stock item "
                 "published to the buying catalog with contracted volume breaks.",
                 base_price=item.standard_cost or Decimal("120.00"),
-                status="approved", approved_at=NOW,
+                status="approved", approved_by=approver, approved_at=NOW,
                 is_preferred=True, category_text="Office supplies",
             )
-            approved.approved_by = User.objects.filter(tenant=tenant).order_by("id").first()
-            approved.save(update_fields=["approved_by"])
             write_audit_log(None, approved, "create")
             for qty, price in ((Decimal("10"), Decimal("118.00")), (Decimal("50"), Decimal("112.50"))):
                 tier = CatalogPriceTier.objects.create(
                     tenant=tenant, catalog_item=approved, min_quantity=qty,
                     unit_price=price, valid_from=timezone.localdate(), status="active",
-                    approved_by=approved.approved_by, approved_at=NOW)
+                    approved_by=approver, approved_at=NOW)
                 write_audit_log(None, tier, "create")
                 made += 1
             pending = CatalogItem.objects.create(
@@ -1002,10 +1003,9 @@ class Command(BaseCommand):
                 name="Industrial safety gloves (cut level D)",
                 supplier_part_no="NW-GLOVE-D1", description="Nitrile-coated cut-resistant "
                 "gloves, pack of 12.", base_price=Decimal("34.90"),
-                status="pending_approval", submitted_at=NOW, category_text="Safety",
+                status="pending_approval", submitted_by=approver, submitted_at=NOW,
+                category_text="Safety",
             )
-            pending.submitted_by = approved.approved_by
-            pending.save(update_fields=["submitted_by"])
             write_audit_log(None, pending, "create")
             blocked = CatalogItem.objects.create(
                 tenant=tenant, source_type="supplier_product",
@@ -1035,7 +1035,7 @@ class Command(BaseCommand):
                 rows_parsed=8, rows_accepted=6, rows_rejected=2,
                 error_log="row 3: unit_price missing\nrow 7: unknown uom_code 'BOXES'",
                 status="validated", validated_at=NOW,
-                validated_by=approved.approved_by)
+                validated_by=approver)
             write_audit_log(None, batch, "create")
             made += 3
         self.stdout.write(self.style.SUCCESS(
