@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Invoice Submissions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Invoice Submissions</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Vendor Management</span><span class="sep">›</span><span>Invoice Submissions</span></div>
+      <p class="text-muted">Supplier-filed invoices from the vendor portal awaiting review. Accepting is a review decision only — nothing posts to the ledger; the approved bill is keyed in Accounting › Accounts Payable.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:vendor_portal_home' %}" class="btn btn-outline"><i data-lucide="store"></i> Vendor Portal</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ request.GET.q }}" aria-label="Search" class="form-input" placeholder="Search supplier ref, supplier or note…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:vis_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Their ref</th><th>PO</th><th>Amount</th><th>Status</th><th>Submitted</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td>{{ obj.supplier.name|default:"—" }}</td>
+              <td>{{ obj.invoice_ref }}</td>
+              <td>{% if obj.purchase_order %}{{ obj.purchase_order.number }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.amount|floatformat:2 }}</td>
+              <td>{% if obj.status == 'submitted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'under_review' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'accepted' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{{ obj.created_at|date:"M d, Y" }}{% if obj.submitted_by %} · {{ obj.submitted_by.username }}{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:vis_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin and obj.status == 'submitted' %}
+                    <form method="post" action="{% url 'procurement:vis_start_review' obj.pk %}" onsubmit="return confirm('Mark this submission as Under Review?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Start review"><i data-lucide="scan-search"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if is_admin and obj.status != 'accepted' and obj.status != 'rejected' %}
+                    <form method="post" action="{% url 'procurement:vis_accept' obj.pk %}" onsubmit="return confirm('Accept this submission? The decision is final — key the bill in Accounts Payable afterwards.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Accept (review decision only)"><i data-lucide="check"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'procurement:vis_reject' obj.pk %}" onsubmit="return confirm('Reject this submission? The supplier sees the rejection.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject"><i data-lucide="x"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if is_admin and obj.status == 'submitted' %}
+                    <form method="post" action="{% url 'procurement:vis_delete' obj.pk %}" onsubmit="return confirm('Delete this unreviewed submission? Reviewed rows are register history.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-text"></i><h3>No invoice submissions</h3><p>Suppliers file invoices through the vendor portal; anything they submit lands here for review.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ pending_count }} awaiting review · {{ accepted_count }} accepted to date. Acceptance is a review decision only — the bill itself is keyed into Accounting › Accounts Payable.</p>
+{% endblock %}
