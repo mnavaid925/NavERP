@@ -1517,6 +1517,21 @@ LIVE_LINKS = {
         "Contract Amendment Tracking":       "procurement:camendment_list",
         "Obligation & Milestone Management": "procurement:milestone_list",
     },
+    # 6.9 Catalog Management. The governed buy-side layer OVER 4.2's simple supplier price
+    # lists (L36 - scm.SupplierCatalog/SupplierCatalogItem are NOT re-declared): CatalogItem
+    # [PCI-] is the approval-gated catalog line (internal scm.Item FK or free-text supplier
+    # product), CatalogPriceTier is the volume/contract effective-dated break whose own
+    # propose->approve lifecycle IS the price-change path, PunchOutEndpoint [POE-] holds the
+    # cXML/OCI/manual-link connection config with a WRITE-ONLY secret (live handshake deferred
+    # behind the CRM-webhooks SSRF-guard precedent), and CatalogUploadBatch [CUB-] is the
+    # supplier-hosted file intake whose validate pass stages DRAFT items for review.
+    "6.9": {
+        "Catalog Item Creation":         "procurement:catalog_item_list",
+        "Pricing & Tier Management":     "procurement:catalog_tier_list",
+        "Catalog Approval Workflow":     "procurement:catalog_item_list?status=pending_approval",
+        "Punch-out Catalog Integration": "procurement:punchout_endpoint_list",
+        "Supplier Catalog Hosting":      "procurement:catalog_upload_list",
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
