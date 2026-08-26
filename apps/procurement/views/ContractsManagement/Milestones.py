@@ -6,6 +6,7 @@ through the edit form — only through the verbs, which stamp who/when together 
 the audit row.
 """
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.core.crud import crud_list
 
@@ -16,6 +17,18 @@ from apps.scm.models import SupplierContract
 
 KIND_CHOICES = [value for value in ContractMilestone.KIND_CHOICES]
 STATUS_CHOICES = [value for value in ContractMilestone.STATUS_CHOICES]
+
+
+def _safe_next(request):
+    """POST ``next`` honoured only as a same-host target. Scheme-relative URLs
+    ("//evil.com") and absolute URLs fall back to the caller's default — a bare
+    ``redirect(request.POST.get(...))`` here would be an open redirect."""
+    candidate = request.POST.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+            candidate, allowed_hosts={request.get_host()},
+            require_https=request.is_secure()):
+        return candidate
+    return None
 
 
 @login_required
@@ -114,10 +127,9 @@ def milestone_complete(request, pk):
     write_audit_log(request.user, obj, f"milestone_{action}")
     messages.success(request,
                      f"Milestone {obj.number} {'completed' if action == 'complete' else 'waived'}.")
-    return redirect(request.POST.get("next")
+    return redirect(_safe_next(request)
                     or reverse("procurement:contract_detail",
-                               args=[obj.contract_id])
-                    or "procurement:milestone_list")
+                               args=[obj.contract_id]))
 
 
 @login_required
@@ -133,5 +145,4 @@ def milestone_delete(request, pk):
     obj.delete()
     write_audit_log(request.user, obj, "delete")
     messages.success(request, f"Milestone {number} deleted.")
-    return redirect(request.POST.get("next")
-                    or reverse("procurement:milestone_list"))
+    return redirect(_safe_next(request) or reverse("procurement:milestone_list"))
