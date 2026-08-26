@@ -26,6 +26,10 @@ from .models import (
     ContractClause,
     ContractMilestone,
     ContractSigner,
+    CatalogItem,
+    CatalogPriceTier,
+    CatalogUploadBatch,
+    PunchOutEndpoint,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -395,4 +399,53 @@ class ContractMilestoneAdmin(admin.ModelAdmin):
     search_fields = ("number", "title", "contract__number")
     raw_id_fields = ("contract",)
     readonly_fields = ("number", "completed_at", "completed_by",
+                       "created_at", "updated_at")
+
+
+@admin.register(CatalogItem)
+class CatalogItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "source_type", "status",
+                    "supplier", "item", "base_price", "is_preferred")
+    list_filter = ("tenant", "source_type", "status")
+    search_fields = ("number", "name", "supplier_part_no", "category_text")
+    raw_id_fields = ("item", "supplier", "contract", "uom", "currency")
+    # The approval machine (submit/approve/reject/block) is written through the views;
+    # admin sees the outcomes, it does not drive the workflow.
+    readonly_fields = ("number", "submitted_by", "submitted_at", "approved_by",
+                       "approved_at", "rejection_reason", "created_by",
+                       "created_at", "updated_at")
+
+
+@admin.register(CatalogPriceTier)
+class CatalogPriceTierAdmin(admin.ModelAdmin):
+    list_display = ("catalog_item", "min_quantity", "unit_price", "discount_pct",
+                    "valid_from", "valid_until", "contract", "status")
+    list_filter = ("tenant", "status")
+    search_fields = ("catalog_item__number", "catalog_item__name")
+    raw_id_fields = ("catalog_item", "contract")
+    readonly_fields = ("submitted_by", "approved_by", "approved_at",
+                       "created_at", "updated_at")
+
+
+@admin.register(PunchOutEndpoint)
+class PunchOutEndpointAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "party", "protocol", "enabled",
+                    "last_session_at")
+    list_filter = ("tenant", "protocol", "enabled")
+    search_fields = ("number", "name", "party__name", "punchout_url")
+    # WARNING: shared_secret is a credential - admin sees that it exists, never its value.
+    exclude = ("shared_secret",)
+    readonly_fields = ("number", "last_session_at", "created_at", "updated_at")
+
+
+@admin.register(CatalogUploadBatch)
+class CatalogUploadBatchAdmin(admin.ModelAdmin):
+    list_display = ("number", "original_filename", "party", "status",
+                    "rows_parsed", "rows_accepted", "rows_rejected")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "original_filename", "notes")
+    raw_id_fields = ("party",)
+    # Parse output is written once by validate_and_stage(); the error log is evidence.
+    readonly_fields = ("number", "original_filename", "validated_by", "validated_at",
+                       "rows_parsed", "rows_accepted", "rows_rejected", "error_log",
                        "created_at", "updated_at")
