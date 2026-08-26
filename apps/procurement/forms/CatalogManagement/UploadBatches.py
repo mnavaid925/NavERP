@@ -7,7 +7,7 @@ can ever write it.
 """
 from apps.procurement.forms._common import *  # noqa: F401,F403
 from apps.procurement.forms._common import TenantUniqueMixin, _reject_foreign
-from apps.procurement.models.CatalogManagement.UploadBatches import CatalogUploadBatch
+from apps.procurement.models import CatalogUploadBatch
 
 #: Resource limit (OWASP A05): one catalog file may weigh at most 2 MB on the wire.
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
