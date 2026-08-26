@@ -1,6 +1,6 @@
 ---
 name: procurement
-description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1/6.2/6.3/6.5/6.8), or invokes /procurement.
+description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics) and 6.4 Vendor Management (VendorPortalAccess[VPA-] login<->supplier binding behind the gated vendor-portal pages with crm-1.4-style refusal ladder, VendorSuspension[VSU-] request->decide->lift block register whose blocking_for() honours ends_on expiry and gates portal invoice submission, VendorInvoiceSubmission[VIS-] supplier-filed invoices reviewed submitted->under_review->accepted/rejected with NO GL posting; onboarding/classification/risk bullets map onto scm 4.2's existing pages). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1–6.8), or invokes /procurement.
 ---
 
 # Procurement — Procurement Management System (Module 6)
@@ -9,10 +9,11 @@ App path: `apps/procurement`. Templates: `templates/procurement/`. URL prefix: `
 `app_name = "procurement"`. Mirrors `NavERP.md` "## 6. Procurement Management System" (19
 sub-modules, 6.1–6.19).
 
-**As-built: 6.1–6.3 + 6.5 built here; 6.4 Vendor Management & 6.6 RFx landed from their own
-sessions (6 of 19).** Build the next one with `/next-module` (it takes the lowest `6.M`
-without a `LIVE_LINKS["6.M"]` entry) — see the reference apps `apps/crm`/`apps/accounting`
-for the package layout and the mandatory Module Creation Sequence.
+**As-built: 6.1–6.9 built across parallel sessions — 6.4 Vendor Management lives in
+`VendorManagement/` (models/forms/views/urls) + `templates/procurement/vendormanagement/`.
+Build the next one with `/next-module` (it takes the lowest `6.M` without a `LIVE_LINKS["6.M"]`
+entry) — see the reference apps `apps/crm`/`apps/accounting` for the package layout and the
+mandatory Module Creation Sequence.**
 
 ## Overview
 
@@ -468,3 +469,48 @@ bids/bid.html, floor.html, rules.html, results.html, board.html}` (board = fragm
 `test_eauction_{models,forms,views,security}.py` (85, functions `test_eauction_*`). Sidebar:
 `LIVE_LINKS["6.7"]` maps all five bullets (two via ?state= deep-links, rules page hosts the
 enforcement bullet).
+
+## 6.4 Vendor Management (built 2026-08-26)
+
+### Models (`models/VendorManagement/`)
+Three numbered rows over the scm 4.2 spine (L36: vendors ARE `core.Party`; onboarding/tier/risk
+stay `scm.SupplierProfile` / `SupplierRiskAssessment` — the 6.4 sidebar bullets for those map to
+the EXISTING scm pages, incl. `scm:supplierprofile_list?tier=strategic`):
+- `VendorPortalAccess` [VPA-, TenantNumbered] — `supplier` FK Party SET_NULL, `portal_user`
+  OneToOne user SET_NULL (one login = one vendor identity; several logins MAY share a supplier),
+  `invited_by` (stamped by the hand-rolled `vpa_create`, NOT crud_create), `is_active`, `note`.
+  `for_user(tenant, user)` is the single lookup every gated page makes first.
+- `VendorSuspension` [VSU-] — kind suspension/blacklist, reason_category
+  quality/delivery/compliance/financial/other, `po_reference` FK scm.PurchaseOrder SET_NULL,
+  starts_on/ends_on, status requested→active|rejected→lifted with decided_*/lifted_* stamps.
+  Properties `is_blocking/is_expired/is_current`; **`blocking_for(tenant, supplier_id)` answers
+  only ACTIVE + unexpired** (`Q(ends_on__isnull=True) | Q(ends_on__gte=today)`). clean() uses
+  `_id` guards — bare `getattr(self, "supplier")` raises RelatedObjectDoesNotExist on a cleared
+  FK and WAS a live 500 (L-lesson: two-arg getattr does not swallow it).
+- `VendorInvoiceSubmission` [VIS-] — supplier PROTECT, optional PO (clean() enforces
+  po.vendor == supplier), invoice_ref/date/amount (q2-clamped in save), status
+  submitted→under_review→accepted/rejected + reviewed_* stamps. NO GL posting ever; acceptance
+  is a review decision, the bill stays keyed in Accounting AP.
+
+### Views / URLs / Templates
+`views/VendorManagement/{VendorPortalAccess,VendorSuspensions,VendorInvoiceSubmissions,Portal}.py`;
+url names `vpa_*`, `vsu_*`, `vis_*`, plus `vendor_portal_home` / `vendor_invoice_new`.
+Portal gating mirrors crm 1.4's refusal ladder in `_vendor_access()` — no row → refused,
+NULL supplier → refused (never widen NULL into unlinked rows), blocked → read-only. The active
+suspension rides to templates as **`suspension`, NEVER `block`** — Django pushes its own
+BlockNode as context var `block`, so `{% if block %}` is always truthy and an `{% else %}` form
+never renders (this exact bug shipped once; do not reintroduce it).
+Lifecycle gates: vsu_edit wraps crud_edit inside `select_for_update` + status re-check (decided
+rows immutable); vsu/vsu delete are pending-only ("requested" / "submitted"); invalid decision
+notes bounce WITHOUT deciding (same contract as lift's mandatory reason); approve/reject share
+ONE detail-page form whose buttons use `formaction` so the note travels with either decision;
+the list's lift icon LINKS to detail (a bare POST could never carry the mandatory note).
+
+### Seeder / Tests / Sidebar
+`_seed_vendor_management`: per-register guards over scm APPROVED suppliers (skips without any);
+access row + requested/active/lifted suspensions + accepted/submitted submissions per tenant.
+Flush deletes all three registers. Migration `0007_alter_escalationpolicy_unique_together_and_more`.
+Tests: `test_vendormgmt_{models,forms,views,security}.py` (52, functions `test_vendormgmt_*`),
+fixtures appended to `tests/conftest.py` (`supplier_a/b -> (profile, party)`, `po_a`, `vpa_a`,
+`vsu_requested_a`, `vis_submitted_a`). Sidebar: `LIVE_LINKS["6.4"]` maps Onboarding/
+Classification/Risk to the scm pages and Portal/Blacklisting to `vpa_list`/`vsu_list`.
