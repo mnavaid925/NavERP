@@ -46,10 +46,13 @@
             <td class="table-actions">
               {% if m.status == "pending" or m.status == "in_progress" %}
               <form method="post" action="{% url 'procurement:milestone_complete' m.pk %}" onsubmit="return confirm('Complete {{ m.number }}?');">{% csrf_token %}
+                <input type="hidden" name="action" value="complete">
+                <input type="hidden" name="next" value="{% url 'procurement:milestone_list' %}">
                 <button type="submit" class="btn btn-icon" title="Complete"><i data-lucide="check"></i></button>
               </form>
               <form method="post" action="{% url 'procurement:milestone_complete' m.pk %}" onsubmit="return confirm('Waive {{ m.number }}?');">{% csrf_token %}
                 <input type="hidden" name="action" value="waive">
+                <input type="hidden" name="next" value="{% url 'procurement:milestone_list' %}">
                 <button type="submit" class="btn btn-icon" title="Waive"><i data-lucide="circle-off"></i></button>
               </form>
               {% endif %}
