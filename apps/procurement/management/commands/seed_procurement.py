@@ -1011,16 +1011,18 @@ class Command(BaseCommand):
                 rejection_reason="Blocked by purchasing after repeated defect reports.",
             )
             write_audit_log(None, blocked, "create")
-            PunchOutEndpoint.objects.create(
+            poe_amazon = PunchOutEndpoint.objects.create(
                 tenant=tenant, party=supplier, name="Amazon Business (sandbox)",
                 protocol="cxml", punchout_url="https://sandbox.amazon-business.example/cxml",
                 username="naverp-procurement", shared_secret="demo-only-not-a-secret",
                 notes="cXML punch-out configuration; live handshake deferred.")
-            PunchOutEndpoint.objects.create(
+            write_audit_log(None, poe_amazon, "create")
+            poe_grainger = PunchOutEndpoint.objects.create(
                 tenant=tenant, party=self._eauc_supplier(tenant, "Cascade Components Ltd"),
                 name="Grainger public catalogue", protocol="manual_link",
                 punchout_url="https://www.grainger.example/", enabled=False,
                 notes="Manual link fallback while OCI credentials are pending.")
+            write_audit_log(None, poe_grainger, "create")
             batch = CatalogUploadBatch.objects.create(
                 tenant=tenant, party=supplier,
                 original_filename="northwind-catalogue-2026-08.csv",
