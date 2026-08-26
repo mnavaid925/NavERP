@@ -124,7 +124,13 @@ class CatalogUploadBatch(TenantNumbered):
         parsed = 0
         items = []
         uom_cache = {}
-        for row in csv.DictReader(io.StringIO(text)):
+        reader = csv.DictReader(io.StringIO(text))
+        # The declared contract is checked, not assumed: without this a file missing whole
+        # columns would "validate" with every row rejected for a confusing field-level reason.
+        missing = [h for h in self.EXPECTED_HEADERS if h not in (reader.fieldnames or [])]
+        if missing:
+            return False, "missing columns: " + ", ".join(missing)
+        for row in reader:
             parsed += 1
             if parsed > self.MAX_DATA_ROWS:
                 # Clean refusal, nothing staged: the batch stays received so the buyer can
