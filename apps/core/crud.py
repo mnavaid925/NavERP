@@ -186,6 +186,9 @@ _SENSITIVE_AUDIT_FIELDS = frozenset({
     # OneOnOneMeeting.manager_private_notes) — never surfaced to the subject/employee, so must not
     # be copied verbatim into AuditLog.changes either.
     "private_notes", "manager_private_notes",
+    # Procurement 6.9 PunchOutEndpoint.shared_secret — a punch-out credential; any future
+    # refactor onto crud_edit must redact it, never copy the plaintext into the audit trail.
+    "shared_secret",
 })
 
 
