@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}My Bids — Vendor Portal{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sourcing bids</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:vendor_portal_home' %}">Vendor Portal</a><span class="sep">›</span><span>My bids</span></div>
+      <p class="text-muted">Proposals you have against our sourcing events. Drafts stay editable until you submit them; submitted proposals go to evaluation and can no longer be changed.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:vendor_portal_home' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to portal</a>
+    </div>
+  </div>
+
+  {% if suspension %}
+    <div style="border:1px solid #fecaca; background:#fef2f2; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+      <strong style="color:#b91c1c;">Account suspended — bid submission disabled.</strong>
+      <span style="color:#7f1d1d;">Contact procurement to resolve it.</span>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Event</th><th>Your price</th><th>Lead time</th><th>Compliant</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in bids %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td>{{ obj.event.title|truncatechars:40 }} <span class="text-muted">({{ obj.event.get_status_display|lower }})</span></td>
+              <td>{{ obj.total_price|floatformat:2 }}</td>
+              <td>{% if obj.lead_time_days %}{{ obj.lead_time_days }} days{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.is_compliant %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td>
+              <td>{% if obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>{% elif obj.status == 'submitted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'shortlisted' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'won' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'lost' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  {% if obj.status == 'draft' %}
+                    <a href="{% url 'procurement:vendor_portal_bid_edit' obj.pk %}" class="btn-icon" title="Complete this draft"><i data-lucide="pencil"></i></a>
+                    {% if not suspension %}
+                      <form method="post" action="{% url 'procurement:vendor_portal_bid_submit' obj.pk %}" onsubmit="return confirm('Submit this bid? Submitted proposals cannot be changed.');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Submit for evaluation"><i data-lucide="send"></i></button>
+                      </form>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted" title="Submitted proposals are immutable">🔒</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="gavel"></i><h3>No bids yet</h3><p>When procurement invites you to quote on a sourcing event, your draft proposal will appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Evaluation is handled by our procurement team — shortlisting, scoring and awards happen there. You will see the outcome on this page.</p>
+{% endblock %}
