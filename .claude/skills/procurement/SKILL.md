@@ -524,3 +524,65 @@ Classification/Risk to the scm pages and Portal/Blacklisting to `vpa_list`/`vsu_
 `_seed_vendor_management`: per-register guards over scm APPROVED suppliers (skips without any);
 access row + requested/active/lifted suspensions + accepted/submitted submissions per tenant.
 Flush deletes all three registers. Migration `0007_alter_escalationpolicy_unique_together_and_more`.
+
+## 6.9 Catalog Management (built 2026-08-26)
+
+**As-built now: 6.1-6.9.** Package folder `CatalogManagement/` across all four layers.
+The governed BUY-side layer OVER scm 4.2's simple `SupplierCatalog`/`SupplierCatalogItem`
+price lists (never re-declared, L36): approval-gated catalog lines, effective-dated volume
+pricing with its own propose->approve path (so price CHANGES route through the same gate as
+new items), punch-out connection config, and supplier-hosted file intake.
+
+### Models (`models/CatalogManagement/`)
+- **`CatalogItem` [PCI-, `CatalogItems.py`]** - `source_type` internal/supplier_product;
+  internal lines hard-FK verified `scm.Item` (+`scm.UOM`, `accounting.Currency`), supplier
+  identity stays FREE TEXT (`name`/`supplier_part_no`/`description`) per L28; optional
+  `scm.SupplierContract` FK = contract pricing. Status machine
+  draft->pending_approval->approved/rejected->blocked/archived; EDITABLE draft/rejected only;
+  actions submit/approve/reject/block/archive return bool + stamp once; `is_purchasable`
+  property; `is_preferred`/`is_active`/`category_text` flags. Unique (tenant,number); indexes
+  prc_catitem_tnt_status_idx / prc_catitem_tnt_item_idx.
+- **`CatalogPriceTier` [no number, `Tiers.py`]** - child rows via related_name
+  `price_tiers`: min_quantity/unit_price/discount_pct + valid_from/valid_until window +
+  optional contract FK. Own lifecycle draft(proposed)->active->superseded/cancelled.
+  **Invariant: exactly ONE active tier per (tenant,item,min_quantity)** - guarded in clean()
+  AND re-checked inside approve() (review C1: two drafts could otherwise both activate).
+  `effective_price(base)` q2-clamped; unique_together includes nullable valid_from.
+- **`PunchOutEndpoint` [POE-, `PunchOutEndpoints.py`]** - cxml/oci/manual_link config per
+  core.Party supplier. `shared_secret` is WRITE-ONLY: PasswordInput(render_value=False),
+  form pops the field on edit, admin excludes it, `_redacted_changes` skips it in audit AND
+  "shared_secret" now sits in `core.crud._SENSITIVE_AUDIT_FIELDS` belt-and-braces. Demo
+  stores plaintext behind a WARNING - production must hash (tenants.EncryptionKey pattern).
+  Live handshake DEFERRED (CRM webhooks SSRF-guard precedent); `record_session()` test verb
+  stamps last_session_at only.
+- **`CatalogUploadBatch` [CUB-, `UploadBatches.py`]** - supplier file intake. `.csv` ONLY
+  allowlist (parser is CSV-text; xls/xml deferred with the real parsers), 2 MB cap +
+  10k-row refusal (review I3). `validate_and_stage(user)` under ONE atomic block with a
+  `select_for_update` status re-check (review I1): parses name,supplier_part_no,
+  unit_price,uom_code,category_text -> stages items as **pending_approval** (bullet-3 gate
+  holds even for malicious files), formula-injection cells prefixed `'` (M1), counters +
+  line-numbered error_log editable=False.
+
+### Views / URLs / Templates
+Views `views/CatalogManagement/{CatalogItems,Tiers,PunchOutEndpoints,UploadBatches}.py`;
+url first segments `catalog-items/ catalog-tiers/ punchout/ catalog-uploads/`; names
+`catalog_item_* catalog_tier_* punchout_endpoint_* catalog_upload_*` (+ verbs
+submit/approve/reject/block | approve/retire | test | validate/publish/reject).
+**Decision verbs are @tenant_admin_required** (maker-checker, review I2) while members keep
+viewing rights, item submit, tier propose and the endpoint test stamp. Hand-rolled form views
+stamp created_by/submitted_by CREATE-only; edit gates honor EDITABLE_STATUSES. Templates
+`templates/procurement/catalogmanagement/<entity>/{list,detail,form}.html`; tier filter
+selects compare `{% if request.GET.catalog_item == it.pk|stringformat:"d" %}` (the swapped-
+operand bug shipped once in review F-01/I4 - do not reintroduce).
+
+### Seeder / Tests
+`_seed_catalog(self, tenant)` in seed_procurement.py: approved+preferred internal line w/
+two active tiers, pending supplier product, blocked line, two punch-out endpoints (cXML+
+manual-link), one validated batch (8 parsed/6 accepted/2 rejected + error_log). Reuses
+seed_scm's Item/UOM/Currency + `_catalog_supplier` alias of the shared supplier helper;
+per-entity guards; friendly skip without scm.Item. Flush deletes tiers->items->batches->
+endpoints. Migration `0013_catalogitem_...` (+0014 related_name prefixes).
+Tests: `test_catalogmgmt_{models(27),forms(20),views(31),security(14)}.py` - functions
+`test_catalogmgmt_*`, fixtures appended to conftest (uom_a/item_a/catalog_item_*_a/
+tier_active_a/punchout_endpoint_a/upload_batch_received_a). Sidebar: `LIVE_LINKS["6.9"]`
+maps all five bullets (approval deep-links ?status=pending_approval).
