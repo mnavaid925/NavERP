@@ -93,7 +93,7 @@ def catalog_upload_delete(request, pk):
 # -- lifecycle ------------------------------------------------------------------------------------
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_upload_validate(request, pk):
     obj = get_object_or_404(CatalogUploadBatch, pk=pk, tenant=request.tenant)
@@ -107,7 +107,7 @@ def catalog_upload_validate(request, pk):
     return redirect("procurement:catalog_upload_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_upload_publish(request, pk):
     obj = get_object_or_404(CatalogUploadBatch, pk=pk, tenant=request.tenant)
@@ -120,7 +120,7 @@ def catalog_upload_publish(request, pk):
     return redirect("procurement:catalog_upload_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_upload_reject(request, pk):
     obj = get_object_or_404(CatalogUploadBatch, pk=pk, tenant=request.tenant)
