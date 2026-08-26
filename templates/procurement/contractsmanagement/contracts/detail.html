@@ -37,14 +37,14 @@
     {% if links %}
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>§</th><th>Clause</th><th>Wording in force</th>{% if request.user.is_authenticated %}<th class="table-actions"></th>{% endif %}</tr></thead>
+        <thead><tr><th>§</th><th>Clause</th><th>Wording in force</th>{% if is_admin %}<th class="table-actions"></th>{% endif %}</tr></thead>
         <tbody>
           {% for link in links %}
           <tr>
             <td>{{ link.section_order }}</td>
             <td>{{ link.clause.title }} <span class="badge badge-muted">{{ link.clause.get_category_display }}</span>{% if not link.clause.is_pre_approved %} <span class="badge badge-amber">not pre-approved</span>{% endif %}</td>
             <td>{% if link.custom_text %}<details><summary>Negotiated override</summary><pre style="white-space:pre-wrap;">{{ link.custom_text }}</pre></details>{% else %}<details><summary>Standard wording</summary><pre style="white-space:pre-wrap;">{{ link.clause.body }}</pre></details>{% endif %}</td>
-            {% if request.user.is_authenticated %}
+            {% if is_admin %}
             <td class="table-actions">
               <form method="post" action="{% url 'procurement:contract_remove_link' obj.pk link.pk %}" onsubmit="return confirm('Remove clause {{ link.clause.title }} from the draft?');">{% csrf_token %}
                 <button type="submit" class="btn btn-icon btn-danger" title="Remove clause"><i data-lucide="trash-2"></i></button>
@@ -57,6 +57,7 @@
       </table>
     </div>
     {% else %}<div class="empty-state"><p>No clauses drafted yet.</p></div>{% endif %}
+    {% if is_admin %}
     <form method="post" action="{% url 'procurement:contract_add_link' obj.pk %}" class="filter-bar">
       {% csrf_token %}
       <select name="clause" class="form-select" required>
@@ -67,7 +68,9 @@
       </select>
       <input type="number" name="section_order" min="1" placeholder="§ order" class="form-input" style="max-width:8rem;">
       <button type="submit" class="btn btn-outline">Add to draft</button>
-    </form>  </div>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card">
