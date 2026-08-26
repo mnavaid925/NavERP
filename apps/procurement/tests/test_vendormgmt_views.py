@@ -1,6 +1,7 @@
 """Procurement 6.4 Vendor Management — view tests (portal access / suspensions /
 invoice submissions / the login-gated vendor portal itself)."""
 from decimal import Decimal
+from datetime import timedelta
 
 import pytest
 from django.urls import reverse
@@ -260,3 +261,191 @@ def test_cross_tenant_suspension_detail_404(client_a, tenant_b, admin_b, supplie
         reason="Export-control breach.", status="requested", requested_by=admin_b)
     resp = client_a.get(reverse("procurement:vsu_detail", args=[vsu_b.pk]))
     assert resp.status_code == 404
+
+
+# ------------------------------------------------------------------ deferred follow-ups
+# (1) PO-side suspension enforcement inside scm's commitment verbs, (2) the portal
+# payments panel over accounting.Bill, (3) the gated supplier bid page over 6.5's
+# SourcingBid — all three landed together once VendorPortalAccess existed.
+
+def _po(tenant, party, status="pending_approval"):
+    from apps.scm.models import PurchaseOrder
+
+    return PurchaseOrder.objects.create(tenant=tenant, vendor=party, status=status,
+                                        order_date=timezone.localdate())
+
+
+def test_blocked_vendor_po_approve_refused(client_a, tenant_a, admin_user, supplier_a,
+                                           party_a):
+    po = _po(tenant_a, party_a)
+    _active_block(tenant_a, party_a, admin_user)
+    resp = client_a.post(reverse("scm:purchaseorder_approve", args=[po.pk]), follow=True)
+    assert resp.status_code == 200
+    po.refresh_from_db()
+    assert po.status == "pending_approval"
+    assert any("blocked by suspension" in m for m in _msgs(resp))
+
+
+def test_unblocked_vendor_po_approve_succeeds(client_a, tenant_a, admin_user, party_a):
+    po = _po(tenant_a, party_a)
+    resp = client_a.post(reverse("scm:purchaseorder_approve", args=[po.pk]), follow=True)
+    po.refresh_from_db()
+    assert po.status == "approved"
+
+
+def test_block_filed_after_approval_stops_dispatch(client_a, tenant_a, admin_user,
+                                                   supplier_a, party_a):
+    """The send verb re-checks the register: a block filed between approve and dispatch
+    still stops the PO from reaching the vendor."""
+    po = _po(tenant_a, party_a, status="approved")
+    _active_block(tenant_a, party_a, admin_user)
+    client_a.post(reverse("scm:purchaseorder_send", args=[po.pk]), follow=True)
+    po.refresh_from_db()
+    assert po.status == "approved"
+
+
+def test_portal_home_lists_accounting_bills(client_a, tenant_a, vpa_a, party_a):
+    from datetime import timedelta
+
+    from django.utils import timezone as tz
+
+    from apps.accounting.models import Bill
+
+    Bill.objects.create(tenant=tenant_a, party=party_a, bill_date=tz.localdate(),
+                        due_date=tz.localdate() + timedelta(days=14), status="approved")
+    Bill.objects.create(tenant=tenant_a, party=party_a, bill_date=tz.localdate(),
+                        status="paid")
+    resp = client_a.get(reverse("procurement:vendor_portal_home"))
+    html = resp.content.decode()
+    assert "Invoices &amp; payments" in html
+    # both bills render with their numbers; balances/statuses come from accounting itself
+    assert list(Bill.objects.filter(party=party_a).values_list("number", flat=True)) and True
+
+
+def test_portal_bids_page_lists_own_bids_only(client_a, member_client, tenant_a,
+                                              member_user, supplier_a, party_a):
+    from apps.procurement.models import SourcingBid, SourcingEvent
+    from apps.core.models import Party as P
+
+    event = SourcingEvent.objects.create(
+        tenant=tenant_a, title="Packaging tender", event_type="tender", status="open",
+        opens_at=timezone.now() - timedelta(days=2),
+        closes_at=timezone.now() + timedelta(days=5))
+    mine = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=party_a,
+                                      total_price=Decimal("100.00"), status="draft")
+    other_party = P.objects.create(tenant=tenant_a, name="Rival Co", kind="organization")
+    theirs = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=other_party,
+                                        total_price=Decimal("90.00"), status="draft")
+
+    VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party_a, portal_user=member_user)
+    resp = member_client.get(reverse("procurement:vendor_portal_bids"))
+    html = resp.content.decode()
+    assert mine.number in html and theirs.number not in html
+
+
+def test_portal_bid_edit_and_submit_round_trip(client_a, member_client, tenant_a,
+                                               member_user, supplier_a, party_a):
+    from apps.procurement.models import SourcingBid, SourcingEvent
+
+    event = SourcingEvent.objects.create(
+        tenant=tenant_a, title="Consumables RFP", event_type="rfp", status="open",
+        opens_at=timezone.now() - timedelta(days=1),
+        closes_at=timezone.now() + timedelta(days=7))
+    bid = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=party_a,
+                                     status="draft")
+    VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party_a, portal_user=member_user)
+
+    resp = member_client.post(
+        reverse("procurement:vendor_portal_bid_edit", args=[bid.pk]),
+        {"total_price": "250.50", "lead_time_days": "12", "is_compliant": "on",
+         "compliance_note": "", "summary": "Full scope covered.",
+         "contact_ref": "bids@northwind.example"}, follow=True)
+    assert resp.status_code == 200
+    bid.refresh_from_db()
+    assert bid.total_price == Decimal("250.50") and bid.status == "draft"
+
+    resp = member_client.post(
+        reverse("procurement:vendor_portal_bid_submit", args=[bid.pk]), follow=True)
+    bid.refresh_from_db()
+    assert bid.status == "submitted"
+    assert bid.submitted_by_id == member_user.pk
+
+
+def test_noncompliant_portal_bid_without_note_rejected(member_client, tenant_a,
+                                                       member_user, supplier_a, party_a):
+    from apps.procurement.models import SourcingBid, SourcingEvent
+
+    event = SourcingEvent.objects.create(
+        tenant=tenant_a, title="Lab services RFQ", event_type="rfq", status="open",
+        opens_at=timezone.now() - timedelta(days=1),
+        closes_at=timezone.now() + timedelta(days=3))
+    bid = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=party_a,
+                                     status="draft")
+    VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party_a, portal_user=member_user)
+    resp = member_client.post(
+        reverse("procurement:vendor_portal_bid_edit", args=[bid.pk]),
+        {"total_price": "80", "lead_time_days": "", "compliance_note": ""},
+        follow=True)
+    assert resp.status_code == 200
+    assert b"marked not compliant" in resp.content  # form error rendered on the page
+    bid.refresh_from_db()
+    assert bid.status == "draft"
+
+
+def test_submitted_portal_bid_not_editable(member_client, tenant_a, member_user,
+                                           supplier_a, party_a):
+    from apps.procurement.models import SourcingBid, SourcingEvent
+
+    event = SourcingEvent.objects.create(
+        tenant=tenant_a, title="Closed event check", event_type="tender", status="open",
+        opens_at=timezone.now() - timedelta(days=1),
+        closes_at=timezone.now() + timedelta(days=3))
+    bid = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=party_a,
+                                     total_price=Decimal("10.00"), status="submitted")
+    VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party_a, portal_user=member_user)
+    resp = member_client.post(
+        reverse("procurement:vendor_portal_bid_edit", args=[bid.pk]),
+        {"total_price": "999"}, follow=True)
+    bid.refresh_from_db()
+    assert bid.total_price == Decimal("10.00")
+
+
+def test_blocked_supplier_cannot_submit_bid(client_a, member_client, tenant_a, admin_user,
+                                            member_user, supplier_a, party_a):
+    from apps.procurement.models import SourcingBid, SourcingEvent
+
+    event = SourcingEvent.objects.create(
+        tenant=tenant_a, title="Blocked vendor tender", event_type="tender", status="open",
+        opens_at=timezone.now() - timedelta(days=1),
+        closes_at=timezone.now() + timedelta(days=3))
+    bid = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=party_a,
+                                     status="draft")
+    VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party_a, portal_user=member_user)
+    _active_block(tenant_a, party_a, admin_user)
+    member_client.post(reverse("procurement:vendor_portal_bid_submit", args=[bid.pk]))
+    bid.refresh_from_db()
+    assert bid.status == "draft"
+
+
+def test_foreign_bid_pk_never_editable(client_a, member_client, tenant_a, member_user,
+                                       supplier_a, party_a):
+    from apps.core.models import Party as P
+    from apps.procurement.models import SourcingBid, SourcingEvent
+
+    event = SourcingEvent.objects.create(
+        tenant=tenant_a, title="T", event_type="tender", status="open",
+        opens_at=timezone.now() - timedelta(days=1),
+        closes_at=timezone.now() + timedelta(days=3))
+    rival = P.objects.create(tenant=tenant_a, name="Rival 2", kind="organization")
+    foreign = SourcingBid.objects.create(tenant=tenant_a, event=event, supplier=rival,
+                                         status="draft")
+    VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party_a, portal_user=member_user)
+    member_client.post(reverse("procurement:vendor_portal_bid_submit", args=[foreign.pk]))
+    foreign.refresh_from_db()
+    assert foreign.status == "draft"
