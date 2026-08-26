@@ -6,7 +6,7 @@ rendered back into HTML nor demanded again on edit.
 """
 from apps.procurement.forms._common import *  # noqa: F401,F403
 from apps.procurement.forms._common import TenantUniqueMixin, _reject_foreign
-from apps.procurement.models.CatalogManagement.PunchOutEndpoints import PunchOutEndpoint
+from apps.procurement.models import PunchOutEndpoint
 
 
 class PunchOutEndpointForm(TenantUniqueMixin, TenantModelForm):
