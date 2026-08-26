@@ -155,19 +155,29 @@ class CatalogUploadBatch(TenantNumbered):
             # A header-only (or empty) file is not a validation result — leave the batch received.
             return False, "no data rows"
 
+        # ONE transaction for the whole staging write-out: items land together with the
+        # batch's new status/counters/error-log, so a mid-way failure rolls back to a
+        # coherent ``received`` batch instead of staged-orphan rows.
         with transaction.atomic():
+            # Re-check under a row lock: two near-simultaneous POSTs can both pass the cheap
+            # pre-parse guard above; only one may hold the lock and stage.
+            locked = (CatalogUploadBatch.objects.select_for_update()
+                      .filter(pk=self.pk).first())
+            if locked is None or locked.status != "received":
+                state = locked.get_status_display().lower() if locked else "missing"
+                return False, f"batch is {state}, not received"
             for item in items:
                 item.save()  # NOT bulk_create: TenantNumbered must assign each CUB-staged number
 
-        self.status = "validated"
-        self.rows_parsed = parsed
-        self.rows_accepted = len(items)
-        self.rows_rejected = parsed - len(items)
-        self.error_log = "\n".join(errors)
-        self.validated_by = user
-        self.validated_at = timezone.now()
-        self.save(update_fields=["status", "rows_parsed", "rows_accepted", "rows_rejected",
-                                 "error_log", "validated_by", "validated_at", "updated_at"])
+            self.status = "validated"
+            self.rows_parsed = parsed
+            self.rows_accepted = len(items)
+            self.rows_rejected = parsed - len(items)
+            self.error_log = "\n".join(errors)
+            self.validated_by = user
+            self.validated_at = timezone.now()
+            self.save(update_fields=["status", "rows_parsed", "rows_accepted", "rows_rejected",
+                                     "error_log", "validated_by", "validated_at", "updated_at"])
         return True, self.rows_accepted
 
     def publish(self):
