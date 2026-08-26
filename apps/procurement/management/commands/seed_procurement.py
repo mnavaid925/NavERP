@@ -955,6 +955,11 @@ class Command(BaseCommand):
 
     # -- 6.9 Catalog Management -------------------------------------------------------------------
 
+    def _catalog_supplier(self, tenant, name):
+        """Catalog block's own name for the shared get-or-create-by-name supplier helper —
+        one supplier identity per name per tenant, never a duplicate Party."""
+        return self._eauc_supplier(tenant, name)
+
     def _seed_catalog(self, tenant):
         """6.9 Catalog Management - the governed buy-side layer over seed_scm's item master and
         4.2 suppliers: one approved+preferred internal catalog line carrying two active volume
@@ -970,7 +975,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f"  {tenant.name}: no scm.Item rows (run seed_scm first) - catalog skipped."))
             return
-        supplier = self._eauc_supplier(tenant, "Northwind Industrial Supply")
+        supplier = self._catalog_supplier(tenant, "Northwind Industrial Supply")
         made = 0
         with transaction.atomic():
             approved = CatalogItem.objects.create(
@@ -1018,7 +1023,7 @@ class Command(BaseCommand):
                 notes="cXML punch-out configuration; live handshake deferred.")
             write_audit_log(None, poe_amazon, "create")
             poe_grainger = PunchOutEndpoint.objects.create(
-                tenant=tenant, party=self._eauc_supplier(tenant, "Cascade Components Ltd"),
+                tenant=tenant, party=self._catalog_supplier(tenant, "Cascade Components Ltd"),
                 name="Grainger public catalogue", protocol="manual_link",
                 punchout_url="https://www.grainger.example/", enabled=False,
                 notes="Manual link fallback while OCI credentials are pending.")
