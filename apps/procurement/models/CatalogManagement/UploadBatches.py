@@ -49,7 +49,7 @@ class CatalogUploadBatch(TenantNumbered):
     EDITABLE_STATUSES = ("received",)
 
     party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True,
-                              related_name="catalog_upload_batches",
+                              related_name="procurement_catalog_upload_batches",
                               help_text="Supplier whose catalog this file carries")
     original_filename = models.CharField(max_length=255, blank=True)
     file = models.FileField(upload_to="procurement/catalog_uploads/%Y/%m/")
