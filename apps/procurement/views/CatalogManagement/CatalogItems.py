@@ -22,7 +22,9 @@ from apps.procurement.views._common import *  # noqa: F401,F403
 @login_required
 def catalog_item_list(request):
     qs = (CatalogItem.objects.filter(tenant=request.tenant)
-          .select_related("item", "supplier", "uom", "currency")
+          # The LIST row renders supplier + contract.number + currency — never obj.item,
+          # so that join stays detail-only (perf: no unused join per page of rows).
+          .select_related("supplier", "contract", "uom", "currency")
           .order_by("-created_at", "-id"))
     stats = CatalogItem.objects.filter(tenant=request.tenant).aggregate(
         total=Count("id"),
