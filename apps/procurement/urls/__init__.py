@@ -8,11 +8,13 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 `reports/`, `widgets/`, `requisitions/`, `templates/`, `amendments/`, `approvals/`, `escalations/`,
 `rfx/`, `events/`, `bids/`, `awards/`, `analytics/`, `portal-access/`, `suspensions/`,
 `submissions/`, `vendor-portal/`, `auctions/`, `clauses/`, `contracts/`, `contract-sign/`,
-`contract-amendments/`, `milestones/`, `renewals/`) is a distinct whole component — no greedy
+`contract-amendments/`, `milestones/`, `renewals/`, `catalog-items/`, `catalog-tiers/`,
+`punchout/`, `catalog-uploads/`) is a distinct whole component — no greedy
 ``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
 about.
 """
 from .ApprovalWorkflowEngine import urlpatterns as _awe_approvalengine
+from .CatalogManagement import urlpatterns as _cat_catalogmanagement
 from .DashboardPortal.ActivityFeed import urlpatterns as _dp_activity
 from .DashboardPortal.Overview import urlpatterns as _dp_overview
 from .DashboardPortal.ProcurementAlerts import urlpatterns as _dp_alerts
@@ -46,4 +48,6 @@ urlpatterns = [
     *_vm_vendormanagement,  # 6.4 portal access, suspensions, invoice submissions, vendor portal
     *_cm_contractsmanagement,  # 6.8 clause library, contract register/authoring + token sign page,
                                #    amendments, milestones, renewal board
+    *_cat_catalogmanagement,  # 6.9 catalog items + approval, price tiers, punch-out endpoints,
+                              #    supplier upload batches
 ]
