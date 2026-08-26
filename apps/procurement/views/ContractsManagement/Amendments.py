@@ -46,7 +46,10 @@ def camendment_detail(request, pk):
         pk=pk, tenant=request.tenant)
     return render(request,
                   "procurement/contractsmanagement/amendments/detail.html",
-                  {"obj": obj})
+                  {"obj": obj,
+                   # The decision forms (and their note capture) are admin-only.
+                   "is_admin": bool(request.user.is_authenticated
+                                    and request.user.is_tenant_admin)})
 
 
 @login_required
