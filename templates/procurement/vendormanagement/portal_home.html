@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Vendor Portal{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Vendor Portal</h1>
+      <p class="text-muted">Welcome{% if supplier.name %}, {{ supplier.name }}{% endif %} — your purchase orders and invoice submissions live here. Procurement reviews every invoice you submit.</p>
+    </div>
+    <div class="page-actions">
+      {% if suspension %}
+        <button class="btn btn-outline" type="button" disabled title="Account suspended — submission disabled"><i data-lucide="file-up"></i> Submit invoice</button>
+      {% else %}
+        <a href="{% url 'procurement:vendor_invoice_new' %}" class="btn btn-primary"><i data-lucide="file-up"></i> Submit invoice</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if suspension %}
+    <div style="border:1px solid #fecaca; background:#fef2f2; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+      <strong style="color:#b91c1c;">Account suspended — invoice submission disabled.</strong>
+      <div style="color:#7f1d1d; margin-top:4px;">
+        Category: {{ suspension.get_reason_category_display|default:"—" }}
+        {% if suspension.reason %} · {{ suspension.reason }}{% endif %}
+        <br>Since {{ suspension.starts_on|date:"M d, Y" }}{% if suspension.ends_on %} until {{ suspension.ends_on|date:"M d, Y" }}{% else %}, until lifted{% endif %}.
+        Contact procurement to resolve it.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="shopping-cart"></i></div>
+      <div class="stat-value">{{ stats.orders_on_file }}</div>
+      <div class="stat-label">Orders on file</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="scan-search"></i></div>
+      <div class="stat-value">{{ stats.in_review }}</div>
+      <div class="stat-label">In-review submissions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ stats.accepted }}</div>
+      <div class="stat-label">Accepted to date</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Recent purchase orders</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Order date</th><th>Expected</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for po in pos %}
+            <tr>
+              <td><span class="fw-600">{{ po.number }}</span></td>
+              <td>{{ po.order_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ po.expected_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ po.total|floatformat:2 }}</td>
+              <td>{{ po.get_status_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="shopping-cart"></i><h3>No purchase orders yet</h3><p>Orders issued to you will appear here once procurement raises them.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">My recent submissions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Their ref</th><th>Amount</th><th>Status</th><th>Submitted</th></tr></thead>
+        <tbody>
+          {% for obj in my_submissions %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td>{{ obj.invoice_ref }}</td>
+              <td>{{ obj.amount|floatformat:2 }}</td>
+              <td>{% if obj.status == 'submitted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'under_review' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'accepted' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{{ obj.created_at|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="file-text"></i><h3>No submissions yet</h3><p>Use “Submit invoice” to send us an invoice against one of your orders.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if profile %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Our record of you</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Tier</dt><dd><span class="badge badge-info">{{ profile.tier|default:"—" }}</span></dd></div>
+          <div class="detail-item"><dt>Category</dt><dd>{{ profile.category|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Country</dt><dd>{{ profile.country|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Onboarding status</dt><dd>{{ profile.onboarding_status|default:"—" }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
