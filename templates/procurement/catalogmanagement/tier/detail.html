@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Tier · {{ obj.catalog_item.name }} ≥ {{ obj.min_quantity }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.catalog_item.name }} — buy ≥ {{ obj.min_quantity|floatformat:2 }}
+        <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'active' %}badge-green{% elif obj.status == 'superseded' %}badge-slate{% elif obj.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Catalog Management</span><span class="sep">›</span><a href="{% url 'procurement:catalog_tier_list' %}">Price Tiers</a><span class="sep">›</span><span>{{ obj.catalog_item.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'procurement:catalog_tier_approve' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve &amp; activate</button>
+        </form>
+        <a href="{% url 'procurement:catalog_tier_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.status == 'active' %}
+        <form method="post" action="{% url 'procurement:catalog_tier_retire' obj.pk %}" onsubmit="return confirm('Retire this tier? The break stops quoting and is kept as history.');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Retire</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Catalog item</dt><dd>{{ obj.catalog_item.name }} <span class="text-muted">({{ obj.catalog_item.number }})</span></dd></div>
+      <div class="detail-item"><dt>Break</dt><dd>≥ {{ obj.min_quantity|floatformat:2 }} units</dd></div>
+      <div class="detail-item"><dt>Unit price</dt><dd>{{ obj.unit_price }}</dd></div>
+      <div class="detail-item"><dt>Discount</dt><dd>{% if obj.discount_pct %}−{{ obj.discount_pct }}% off base{% else %}<span class="text-muted">— (prices at unit price)</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Valid from</dt><dd>{% if obj.valid_from %}{{ obj.valid_from|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Valid until</dt><dd>{% if obj.valid_until %}{{ obj.valid_until|date:"M d, Y" }}{% else %}<em>open-ended</em>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Contract</dt><dd>{% if obj.contract %}{{ obj.contract.number }} · {{ obj.contract.title|truncatechars:40 }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Submitted by</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved at</dt><dd>{% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Effective price vs catalogue base</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item base price</th><th>Pricing rule on this tier</th><th>Effective price</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>{{ base_price }}</td>
+            <td>{% if obj.discount_pct %}base − {{ obj.discount_pct }}%{% else %}unit price{% endif %}</td>
+            <td class="fw-600">{{ effective_price }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Other tiers on this item ({{ item_tiers|length }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Break</th><th>Pricing</th><th>Window</th><th>Contract</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for t in item_tiers %}
+            <tr>
+              <td>≥ {{ t.min_quantity|floatformat:2 }}</td>
+              <td>{% if t.discount_pct %}<span class="badge badge-info">−{{ t.discount_pct }}%</span>{% else %}{{ t.unit_price }}{% endif %}</td>
+              <td>{% if t.valid_from %}{{ t.valid_from|date:"M d, Y" }}{% else %}—{% endif %} – {% if t.valid_until %}{{ t.valid_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td>{% if t.contract %}{{ t.contract.number }}{% else %}—{% endif %}</td>
+              <td>
+                <span class="badge {% if t.status == 'draft' %}badge-muted{% elif t.status == 'active' %}badge-green{% elif t.status == 'superseded' %}badge-slate{% elif t.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ t.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:catalog_tier_detail' t.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="tags"></i><p>No other tiers — this is the only break on {{ obj.catalog_item.name }}.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:catalog_tier_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to price tiers</a>
+    {% if obj.status != 'active' %}
+      <form method="post" action="{% url 'procurement:catalog_tier_delete' obj.pk %}" onsubmit="return confirm('Delete this price tier?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete tier</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
