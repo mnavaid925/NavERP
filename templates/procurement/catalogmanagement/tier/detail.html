@@ -30,7 +30,7 @@
       <div class="detail-item"><dt>Catalog item</dt><dd>{{ obj.catalog_item.name }} <span class="text-muted">({{ obj.catalog_item.number }})</span></dd></div>
       <div class="detail-item"><dt>Break</dt><dd>≥ {{ obj.min_quantity|floatformat:2 }} units</dd></div>
       <div class="detail-item"><dt>Unit price</dt><dd>{{ obj.unit_price }}</dd></div>
-      <div class="detail-item"><dt>Discount</dt><dd>{% if obj.discount_pct %}−{{ obj.discount_pct }}% off base{% else %}<span class="text-muted">— (prices at unit price)</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Discount</dt><dd>{% if obj.discount_pct is not None %}−{{ obj.discount_pct|floatformat:"-2" }}% off base{% else %}<span class="text-muted">— (prices at unit price)</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Valid from</dt><dd>{% if obj.valid_from %}{{ obj.valid_from|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Valid until</dt><dd>{% if obj.valid_until %}{{ obj.valid_until|date:"M d, Y" }}{% else %}<em>open-ended</em>{% endif %}</dd></div>
       <div class="detail-item"><dt>Contract</dt><dd>{% if obj.contract %}{{ obj.contract.number }} · {{ obj.contract.title|truncatechars:40 }}{% else %}—{% endif %}</dd></div>
@@ -50,7 +50,7 @@
         <tbody>
           <tr>
             <td>{{ base_price }}</td>
-            <td>{% if obj.discount_pct %}base − {{ obj.discount_pct }}%{% else %}unit price{% endif %}</td>
+            <td>{% if obj.discount_pct is not None %}base − {{ obj.discount_pct|floatformat:"-2" }}%{% else %}unit price{% endif %}</td>
             <td class="fw-600">{{ effective_price }}</td>
           </tr>
         </tbody>
@@ -67,7 +67,7 @@
           {% for t in item_tiers %}
             <tr>
               <td>≥ {{ t.min_quantity|floatformat:2 }}</td>
-              <td>{% if t.discount_pct %}<span class="badge badge-info">−{{ t.discount_pct }}%</span>{% else %}{{ t.unit_price }}{% endif %}</td>
+              <td>{% if t.discount_pct is not None %}<span class="badge badge-info">−{{ t.discount_pct|floatformat:"-2" }}%</span>{% else %}{{ t.unit_price }}{% endif %}</td>
               <td>{% if t.valid_from %}{{ t.valid_from|date:"M d, Y" }}{% else %}—{% endif %} – {% if t.valid_until %}{{ t.valid_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if t.contract %}{{ t.contract.number }}{% else %}—{% endif %}</td>
               <td>
