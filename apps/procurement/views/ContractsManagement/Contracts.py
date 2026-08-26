@@ -187,8 +187,12 @@ def contract_remove_link(request, pk, link_id):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def contract_add_signer(request, pk):
-    """Add one signature slot; the minted token is shown once, to be sent out-of-band."""
+    """Add one signature slot; the minted token is shown once, to be sent out-of-band.
+
+    Admin-gated like the legal verbs: whoever can add a slot mints a bearer token
+    to the agreement, so members must not be able to self-issue signing links."""
     contract = _get_contract(request, pk)
     form = ContractSignerForm(request.POST, tenant=request.tenant)
     if not form.is_valid():
@@ -212,6 +216,7 @@ def contract_add_signer(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def contract_remove_signer(request, pk, signer_id):
     """Remove a slot only while it is UNSIGNED — a response is evidence, keep it."""
     contract = _get_contract(request, pk)
