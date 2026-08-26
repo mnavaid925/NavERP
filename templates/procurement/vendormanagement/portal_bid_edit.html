@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Edit Bid {{ bid.number }} — Vendor Portal{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Complete bid {{ bid.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:vendor_portal_home' %}">Vendor Portal</a><span class="sep">›</span><a href="{% url 'procurement:vendor_portal_bids' %}">My bids</a><span class="sep">›</span><span>{{ bid.number }}</span></div>
+    <p class="text-muted">Event: <strong>{{ bid.event.title }}</strong> — {{ bid.event.get_status_display|lower }}. Your proposal stays a private draft until you submit it.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted">Mark the bid compliant only if you meet every requirement stated in the event's rules; otherwise say what is missing so evaluators can score it fairly.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save draft</button>
+      <a href="{% url 'procurement:vendor_portal_bids' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
