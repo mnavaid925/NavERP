@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'pending_approval' %}badge-amber{% elif obj.status == 'approved' %}badge-green{% elif obj.status == 'rejected' %}badge-red{% elif obj.status == 'blocked' or obj.status == 'archived' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.is_preferred %}<span class="badge badge-info"><i data-lucide="star"></i> Preferred</span>{% endif %}
+        {% if not obj.is_active %}<span class="badge badge-slate">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:catalog_item_list' %}">Catalog Management</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.is_editable %}
+        <a href="{% url 'procurement:catalog_item_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'procurement:catalog_item_submit' obj.pk %}" onsubmit="return confirm('Submit this entry for approval? It stays editable only while draft or rejected.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="clock"></i> Submit for approval</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{% url 'procurement:catalog_item_delete' obj.pk %}" onsubmit="return confirm('Delete catalog entry {{ obj.number }} and its price tiers?');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Source type</dt><dd>{{ obj.get_source_type_display }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Stock item</dt><dd>{% if obj.item %}{{ obj.item.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.supplier %}{{ obj.supplier.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Contract</dt><dd>{% if obj.contract %}{{ obj.contract.number }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Supplier part no</dt><dd>{{ obj.supplier_part_no|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Manufacturer</dt><dd>{{ obj.manufacturer|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>UOM</dt><dd>{% if obj.uom %}{{ obj.uom.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Base price</dt><dd class="fw-600">{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.base_price|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd>{{ obj.category_text|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Purchasable</dt><dd>{% if obj.is_purchasable %}<span class="badge badge-green">Yes — approved and active</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  {% if obj.status == 'pending_approval' %}
+    <div class="card" id="act"><div class="card-body">
+      <h2 class="card-title">Approval decision</h2>
+      <div class="filter-bar">
+        <form method="post" action="{% url 'procurement:catalog_item_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}? It becomes purchasable while active.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Approve</button>
+        </form>
+        <form method="post" action="{% url 'procurement:catalog_item_reject' obj.pk %}" onsubmit="return confirm('Reject {{ obj.number }}? The reason below travels back to the maintainer.');">
+          {% csrf_token %}
+          <input type="text" name="reason" class="form-input" style="flex:1; min-width:240px;" placeholder="Rejection reason (returned to the maintainer)…">
+          <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Reject</button>
+        </form>
+      </div>
+    </div></div>
+  {% endif %}
+  {% if obj.status == 'approved' %}
+    <div class="card"><div class="card-body">
+      <form method="post" action="{% url 'procurement:catalog_item_block' obj.pk %}" onsubmit="return confirm('Block {{ obj.number }}? Its history is kept but it can no longer be picked onto purchase documents.');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Block this entry</button>
+      </form>
+    </div></div>
+  {% endif %}
+  {% if obj.rejection_reason %}
+    <div class="card"><div class="card-body">
+      <h2 class="card-title">Rejection reason</h2>
+      <p>{{ obj.rejection_reason }}</p>
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Price tiers ({{ tiers|length }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Break quantity</th><th>Pricing</th><th>Effective window</th><th>Contract</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for tier in tiers %}
+            <tr>
+              <td class="fw-600">{{ tier.min_quantity|floatformat:"-2" }}+</td>
+              <td>{% if tier.discount_pct is not None %}<span class="badge badge-info">−{{ tier.discount_pct|floatformat:"-2" }}%</span> of base{% else %}{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ tier.unit_price|floatformat:2 }}{% endif %}</td>
+              <td>{% if tier.valid_from %}{{ tier.valid_from|date:"M d, Y" }}{% else %}open{% endif %} → {% if tier.valid_until %}{{ tier.valid_until|date:"M d, Y" }}{% else %}<span class="text-muted">no end</span>{% endif %}</td>
+              <td>{% if tier.contract %}{{ tier.contract.number }}{% else %}—{% endif %}</td>
+              <td>
+                <span class="badge {% if tier.status == 'draft' %}badge-muted{% elif tier.status == 'active' %}badge-green{% elif tier.status == 'superseded' %}badge-slate{% elif tier.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ tier.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="tags"></i><p>No price tiers yet — the base price applies until breaks are added.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Submitted</dt><dd>{% if obj.submitted_by %}{{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% else %}—{% endif %} {{ obj.submitted_at|date:"M d, Y H:i"|default:"" }}</dd></div>
+      <div class="detail-item"><dt>Approved</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% else %}—{% endif %} {{ obj.approved_at|date:"M d, Y H:i"|default:"" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:catalog_item_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to catalog items</a>
+  </div>
+{% endblock %}
