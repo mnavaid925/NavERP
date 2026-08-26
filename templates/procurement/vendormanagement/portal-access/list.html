@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Vendor Portal Access{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Vendor Portal Access</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Vendor Management</span><span class="sep">›</span><span>Vendor Portal Access</span></div>
+      <p class="text-muted">Binds one login user to one supplier — the lookup every gated supplier-portal page makes to decide what that login may see. Switch a binding off instead of deleting it.</p>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}<a href="{% url 'procurement:vpa_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Access</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ request.GET.q }}" aria-label="Search" class="form-input" placeholder="Search supplier, portal user or note…">
+        </div>
+        <div class="form-group">
+          <select name="state" aria-label="State" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.state == 'True' %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.state == 'False' %}selected{% endif %}>Off only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:vpa_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Portal user</th><th>Status</th><th>Created</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="fw-600">{{ obj.number }}</span></td>
+              <td>{{ obj.supplier.name|default:"—" }}</td>
+              <td>{{ obj.portal_user.username|default:"—" }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Off</span>{% endif %}</td>
+              <td>{{ obj.created_at|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:vpa_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'procurement:vpa_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:vpa_delete' obj.pk %}" onsubmit="return confirm('Delete this binding? The supplier loses portal access immediately.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="door-open"></i><h3>No portal accesses</h3><p>No supplier login is bound yet. Create a binding so a vendor can sign in and see only their own POs, invoices and payments.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ active_count }} active binding{{ active_count|pluralize }} of {{ access_count }} total. A switched-off binding keeps its history — switch it back on rather than re-inviting.</p>
+{% endblock %}
