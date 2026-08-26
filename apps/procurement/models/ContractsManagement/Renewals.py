@@ -59,31 +59,37 @@ def run_renewal_alerts(tenant, user):
     critical once the end date is within 7 days or already past, warning otherwise.
     """
     from apps.procurement.models import ProcurementAlert
+    from apps.scm.models import SupplierContract
 
     raised = skipped = 0
     for row in expiring_contracts(tenant):
         contract = row["contract"]
-        if ProcurementAlert.objects.filter(
-                tenant=tenant, kind="contract",
-                link_url=_alert_link(contract.pk),
-                status__in=("open", "acknowledged")).exists():
-            skipped += 1
-            continue
-        days = row["days_left"]
-        action = ("auto-renews" if row["auto_renews"] else "expires")
-        ProcurementAlert.objects.create(
-            tenant=tenant,
-            kind="contract",
-            severity="critical" if days <= 7 else "warning",
-            status="open",
-            title=f"{contract.number} {action} on {contract.end_date:%d %b %Y}",
-            message=(f"{contract.title} with {contract.party.name} {action} in {days} day(s) "
-                     f"(notice window {contract.renewal_notice_days}d). Decide: renew, "
-                     f"renegotiate via an amendment, or let it lapse."),
-            link_url=_alert_link(contract.pk),
-            due_at=None,
-        )
-        raised += 1
+        # Dedupe is check-then-create — two concurrent Runs could both find no open
+        # alert and both raise. Taking the CONTRACT row lock makes one contract's
+        # check+create sequential against every other Run scanning that agreement.
+        with transaction.atomic():
+            locked = SupplierContract.objects.select_for_update().get(pk=contract.pk)
+            if ProcurementAlert.objects.filter(
+                    tenant=tenant, kind="contract",
+                    link_url=_alert_link(locked.pk),
+                    status__in=("open", "acknowledged")).exists():
+                skipped += 1
+                continue
+            days = row["days_left"]
+            action = ("auto-renews" if row["auto_renews"] else "expires")
+            ProcurementAlert.objects.create(
+                tenant=tenant,
+                kind="contract",
+                severity="critical" if days <= 7 else "warning",
+                status="open",
+                title=f"{locked.number} {action} on {locked.end_date:%d %b %Y}",
+                message=(f"{locked.title} with {locked.party.name} {action} in {days} day(s) "
+                         f"(notice window {locked.renewal_notice_days}d). Decide: renew, "
+                         f"renegotiate via an amendment, or let it lapse."),
+                link_url=_alert_link(locked.pk),
+                due_at=None,
+            )
+            raised += 1
     return {"raised": raised, "skipped_open": skipped}
 
 
