@@ -76,7 +76,7 @@
     {% if signers %}
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>#</th><th>Signer</th><th>Role</th><th>Status</th><th class="table-actions"></th></tr></thead>
+        <thead><tr><th>#</th><th>Signer</th><th>Role</th><th>Status</th>{% if is_admin %}<th class="table-actions"></th>{% endif %}</tr></thead>
         <tbody>
           {% for s in signers %}
           <tr>
@@ -89,6 +89,7 @@
               {% elif s.viewed_at %}<span class="badge badge-info">Viewed, unsigned</span>
               {% else %}<span class="badge badge-slate">Not yet viewed</span>{% endif %}
             </td>
+            {% if is_admin %}
             <td class="table-actions">
               {% if not s.has_responded %}
               <a href="{% url 'procurement:contract_sign_page' s.token %}" class="btn btn-icon" title="Open sign page (share this link)"><i data-lucide="link"></i></a>
@@ -97,12 +98,14 @@
               </form>
               {% endif %}
             </td>
+            {% endif %}
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {% else %}<div class="empty-state"><p>No signature slots yet — add the people who must sign.</p></div>{% endif %}
+    {% if is_admin %}
     <form method="post" action="{% url 'procurement:contract_add_signer' obj.pk %}" class="filter-bar">
       {% csrf_token %}
       <select name="{{ signer_form.role.html_name }}" class="form-select">
@@ -120,6 +123,7 @@
       <input type="email" name="{{ signer_form.signer_email.html_name }}" placeholder="Signer email" class="form-input" required>
       <button type="submit" class="btn btn-outline"><i data-lucide="user-plus"></i> Add signer</button>
     </form>
+    {% endif %}
   </div>
 </div>
 
