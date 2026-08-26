@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Catalog Items{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Catalog Items</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Catalog Management</span><span class="sep">›</span><span>Catalog Items</span></div>
+      <p class="text-muted">One purchasable register per workspace — internal stock mirrors and supplier products with their price breaks, approval state and preferred-source flags.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:catalog_item_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Catalog Item</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="package"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total entries</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending approval</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.approved }}</div><div class="stat-label">Approved</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocked }}</div><div class="stat-label">Blocked</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, name, part no or category…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source_type" aria-label="Source type" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in supplier_choices %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_preferred" aria-label="Preferred" class="form-select">
+            <option value="">Preferred + standard</option>
+            <option value="True" {% if request.GET.is_preferred == "True" %}selected{% endif %}>Preferred only</option>
+            <option value="False" {% if request.GET.is_preferred == "False" %}selected{% endif %}>Standard only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:catalog_item_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Item</th><th>Supplier / Contract</th><th>Price</th><th>Status</th><th>Preferred</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{{ obj.name }}
+                <span class="badge badge-slate">{{ obj.get_source_type_display }}</span>
+                {% if obj.supplier_part_no %}<div class="text-muted">{{ obj.supplier_part_no }}</div>{% endif %}
+              </td>
+              <td>{% if obj.supplier %}{{ obj.supplier.name }}{% elif obj.contract %}<span class="text-muted">Contract</span> {{ obj.contract.number }}{% else %}—{% endif %}</td>
+              <td class="fw-600">{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.base_price|floatformat:2 }}</td>
+              <td>
+                <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'pending_approval' %}badge-amber{% elif obj.status == 'approved' %}badge-green{% elif obj.status == 'rejected' %}badge-red{% elif obj.status == 'blocked' or obj.status == 'archived' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>{% if obj.is_preferred %}<i data-lucide="star" title="Preferred source" aria-label="Preferred source"></i>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:catalog_item_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}<a href="{% url 'procurement:catalog_item_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  <form method="post" action="{% url 'procurement:catalog_item_delete' obj.pk %}" onsubmit="return confirm('Delete catalog entry {{ obj.number }} and its price tiers?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="package"></i><h3>No catalog items yet</h3><p>Add an internal stock mirror or a supplier product — approved entries are what requisition matching picks from.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
