@@ -24,7 +24,6 @@ from .models import (
     SourcingEvent,
     ContractAmendment,
     ContractClause,
-    ContractClauseLink,
     ContractMilestone,
     ContractSigner,
     VendorInvoiceSubmission,
@@ -358,12 +357,6 @@ class ContractClauseAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
 
-class ContractClauseLinkInline(admin.TabularInline):
-    model = ContractClauseLink
-    extra = 0
-    raw_id_fields = ("clause",)
-
-
 @admin.register(ContractSigner)
 class ContractSignerAdmin(admin.ModelAdmin):
     list_display = ("signer_name", "contract", "role", "order",
@@ -384,8 +377,13 @@ class ContractAmendmentAdmin(admin.ModelAdmin):
     search_fields = ("number", "reason", "contract__number")
     raw_id_fields = ("contract",)
     # Decisions are written ONCE through the view under the contract row lock;
-    # the decision stamps are state-machine outputs, never admin inputs.
-    readonly_fields = ("number", "status", "requested_by", "decided_by",
+    # the decision stamps are state-machine outputs, never admin inputs. The
+    # proposal itself is equally frozen: once filed, its terms are evidence —
+    # editing reason/proposed_* here would rewrite what was approved or rejected.
+    readonly_fields = ("number", "status", "reason", "proposed_end_date",
+                       "proposed_value", "proposed_auto_renew",
+                       "proposed_notice_days", "proposed_summary",
+                       "requested_by", "decided_by",
                        "decided_at", "applied_at", "created_at", "updated_at")
 
 
