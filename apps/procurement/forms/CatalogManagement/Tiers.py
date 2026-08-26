@@ -6,7 +6,7 @@ by the view on create.
 """
 from apps.procurement.forms._common import *  # noqa: F401,F403
 from apps.procurement.forms._common import TenantUniqueMixin, _reject_foreign
-from apps.procurement.models.CatalogManagement.Tiers import CatalogPriceTier
+from apps.procurement.models import CatalogPriceTier
 
 
 class CatalogPriceTierForm(TenantUniqueMixin, TenantModelForm):
