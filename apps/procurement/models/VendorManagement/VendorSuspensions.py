@@ -10,11 +10,11 @@ triggered it, who decided it and when, and a mandatory reason on the way back ou
 L36: we extend, never re-declare, the scm master — the vendor is a ``core.Party`` and the
 evidence link is an ``scm.PurchaseOrder``; both stay owned where they were born.
 
-**Enforcement today is at the portal gate only.** ``blocking_for`` refuses invoice
-submissions for a blocked supplier; the PO-side hook ("block from receiving new POs")
-would have to live inside scm's PurchaseOrder flow, which this app may not edit — that
-integration stays deferred, and the register's banner copy says "flagged", promising
-nothing the code does not do.
+**Enforcement is shared with SCM at its commitment verbs.** ``blocking_for`` refuses portal
+invoice submissions AND bid submissions for a blocked supplier, and scm's
+``purchaseorder_approve`` / ``purchaseorder_send`` consult the same register (local import,
+one direction only) so a blocked vendor cannot be handed a new or dispatched PO. The
+register stays the single writer of block state; scm only reads it.
 """
 from django.conf import settings
 from django.core.exceptions import ValidationError
