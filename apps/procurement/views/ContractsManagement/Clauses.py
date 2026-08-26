@@ -4,7 +4,7 @@ The clause library is legal language, so WRITES are tenant-admin gated (the same
 authority bar as the approval engine's routing rules); reads are open to every
 signed-in member of the workspace.
 """
-from django.db.models import ProtectedError
+from django.db.models import Count, ProtectedError
 
 from apps.core.crud import crud_list
 
@@ -17,7 +17,10 @@ CATEGORY_CHOICES = [value for value in ContractClause.CATEGORY_CHOICES]
 
 @login_required
 def clause_list(request):
-    qs = ContractClause.objects.filter(tenant=request.tenant)
+    # n_links annotated once per page: rendering the reverse relation's .count()
+    # in the table would fire one COUNT query per row.
+    qs = (ContractClause.objects.filter(tenant=request.tenant)
+          .annotate(n_links=Count("procurement_clause_links")))
     return crud_list(
         request, qs, "procurement/contractsmanagement/clauses/list.html",
         search_fields=["title", "body", "notes"],
