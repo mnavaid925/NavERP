@@ -8,8 +8,8 @@ form handler whose EDIT path controls exactly what reaches the audit trail, and 
 from django.db.models import Count, Q
 
 from apps.core.crud import crud_delete, crud_list
-from apps.procurement.forms.CatalogManagement.PunchOutEndpoints import PunchOutEndpointForm
-from apps.procurement.models.CatalogManagement.PunchOutEndpoints import PunchOutEndpoint
+from apps.procurement.forms import PunchOutEndpointForm
+from apps.procurement.models import PunchOutEndpoint
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 
