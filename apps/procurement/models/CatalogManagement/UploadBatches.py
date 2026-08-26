@@ -31,6 +31,11 @@ class CatalogUploadBatch(TenantNumbered):
     #: one POST into a ten-minute staging storm.
     MAX_DATA_ROWS = 10_000
 
+    #: Leading characters that spreadsheet applications execute as formulas (OWASP CSV
+    #: injection). Text cells get an apostrophe prefix at staging; identifier cells are
+    #: rejected outright.
+    FORMULA_PREFIXES = ("=", "+", "-", "@", "\t")
+
     #: Expected CSV headers; extra columns are ignored, missing ones reject their row.
     EXPECTED_HEADERS = ("name", "supplier_part_no", "unit_price", "uom_code", "category_text")
 
@@ -111,6 +116,10 @@ class CatalogUploadBatch(TenantNumbered):
         except UnicodeDecodeError:
             return False, "file is not valid UTF-8 text"
 
+        def _formula_safe(cell):
+            """Neutralize a leading spreadsheet operator in a TEXT cell with an apostrophe."""
+            return "'" + cell if cell[:1] in self.FORMULA_PREFIXES else cell
+
         errors = []
         parsed = 0
         items = []
@@ -149,17 +158,24 @@ class CatalogUploadBatch(TenantNumbered):
                     errors.append(f"row {parsed}: unknown UOM code '{uom_code}'")
                     continue
 
+            if part_no[:1] in self.FORMULA_PREFIXES:
+                # An identifier is never displayed as text — it would be matched onto
+                # purchase documents verbatim, so a formula-looking part number is rejected.
+                errors.append(f"row {parsed}: supplier_part_no '{part_no}' starts with a "
+                              f"spreadsheet formula character (= + - @ tab) and was rejected")
+                continue
+
             items.append(CatalogItem(
                 tenant=self.tenant,
                 source_type="supplier_product",
                 status="pending_approval",
                 supplier=self.party,
-                name=name,
+                name=_formula_safe(name),
                 supplier_part_no=part_no,
                 base_price=price,
                 uom=uom,
                 currency=None,
-                category_text=category_text,
+                category_text=_formula_safe(category_text),
             ))
 
         if parsed == 0:
