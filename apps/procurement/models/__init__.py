@@ -40,6 +40,10 @@ from .ContractsManagement import (
     expiring_contracts,
     run_renewal_alerts,
 )
+from .CatalogManagement.CatalogItems import CatalogItem
+from .CatalogManagement.Tiers import CatalogPriceTier
+from .CatalogManagement.PunchOutEndpoints import PunchOutEndpoint
+from .CatalogManagement.UploadBatches import CatalogUploadBatch
 
 __all__ = [
     "EaucBid",
@@ -79,4 +83,8 @@ __all__ = [
     "ContractMilestone",
     "expiring_contracts",
     "run_renewal_alerts",
+    "CatalogItem",
+    "CatalogPriceTier",
+    "PunchOutEndpoint",
+    "CatalogUploadBatch",
 ]
