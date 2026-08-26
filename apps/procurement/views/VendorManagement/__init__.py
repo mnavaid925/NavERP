@@ -1,5 +1,11 @@
 """Procurement 6.4 Vendor Management — views package."""
-from .Portal import vendor_invoice_new, vendor_portal_home
+from .Portal import (
+    vendor_invoice_new,
+    vendor_portal_bid_edit,
+    vendor_portal_bid_submit,
+    vendor_portal_bids,
+    vendor_portal_home,
+)
 from .VendorInvoiceSubmissions import (
     vis_accept,
     vis_delete,
@@ -47,5 +53,8 @@ __all__ = [
     "vis_reject",
     "vis_delete",
     "vendor_portal_home",
+    "vendor_portal_bids",
+    "vendor_portal_bid_edit",
+    "vendor_portal_bid_submit",
     "vendor_invoice_new",
 ]
