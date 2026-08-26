@@ -23,9 +23,20 @@ same day, and re-proven by `temp/verify_64_fixes.py` (14/14) + `smoke_64.py` (18
 | F7 | Minor | code | VPA docstring overclaimed what the OneToOne constrains | [x] fixed — corrected rationale (multi-login-per-supplier is deliberate) |
 | FE3–FE6 | Minor | fe | Dead `#act` anchor (id added), no confirms on irreversible decisions (added), "Open orders" label overstated (→ Orders on file), AP jargon leaking into supplier page (rewritten) | [x] fixed |
 | F8 | Minor | code | Whitelist entries for procurement models are no-ops (filter gates only `app_label="scm"`) | [x] removed my three entries (sibling session's entries left to them) |
-| F3 | Deferred | code | Bullet says "blocked from receiving POs"; enforcement today is portal-gate only — scm owns the PO flow (L36), model docstring + banner copy now promise only what ships | [~] skipped — cross-app hook deferred; documented |
+| F3 | Deferred | code | Bullet says "blocked from receiving POs"; enforcement today is portal-gate only — scm owns the PO flow (L36), model docstring + banner copy now promise only what ships | [x] FIXED in follow-up — `purchaseorder_approve` AND `purchaseorder_send` consult the register via local import (`_vendor_block`); send re-checks so a block filed after approval still stops dispatch; tests prove all three paths |
 | VM1 | Low | sec | No `(tenant, supplier)` uniqueness — two logins per supplier is permitted BY DESIGN (AP clerk + buyer) | [~] skipped — docstring corrected to state the intent |
 | F10 | Minor | code | `MinValueValidator(ZERO)` allows 0 while clean() forbids ≤0 | [~] skipped — harmless duplicate boundary; clean() enforces on every form path |
 | QA2 | Minor | qa | Audit actions outside core ACTION_CHOICES ("approve"/"review"/…) | [~] skipped — pre-existing app-wide convention (e.g. 6.3's "tier_approve"), not 6.4's to change |
 
 No lane returned NO RESULT. Residual risk: none Critical open.
+
+## Follow-up wave (same day) — the three "deferred by design" items shipped
+
+| ID | What shipped | Proof |
+|----|--------------|-------|
+| FU1 (was F3) | PO-side enforcement: scm's approve+send verbs refuse POs to a vendor with an active VSU (`_vendor_block` lazy import, SCM reads procurement's register — never writes it); banner/list copy updated to match | `test_blocked_vendor_po_approve_refused`, `test_block_filed_after_approval_stops_dispatch`, `test_unblocked_vendor_po_approve_succeeds` |
+| FU2 | Portal **Invoices & payments** panel: read-only projection of accounting.Bill rows for the bound party (number/date/due/total/balance/status badges; void excluded) — same posture as 4.16 showing invoices | `test_portal_home_lists_accounting_bills` |
+| FU3 | Gated supplier **bid page** (the page 6.5's SourcingBid docstring deferred): `vendor_portal_bids` lists OWN bids only; drafts editable via `VendorBidForm` (event/supplier server-forced, non-compliant-needs-note rule); submit reuses `SourcingBid.submit()` under the bid+event double lock; blocked suppliers refused; foreign pks bounced; submitted proposals immutable | `test_portal_bids_page_lists_own_bids_only`, `test_portal_bid_edit_and_submit_round_trip`, `test_noncompliant_portal_bid_without_note_rejected`, `test_submitted_portal_bid_not_editable`, `test_blocked_supplier_cannot_submit_bid`, `test_foreign_bid_pk_never_editable` |
+
+Scoped rerun after the wave: **63 passed / 0 failed**.
+
