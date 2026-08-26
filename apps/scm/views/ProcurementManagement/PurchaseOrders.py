@@ -13,6 +13,19 @@ from apps.scm.forms import (
 )
 
 
+def _vendor_block(tenant, vendor_id):
+    """The procurement 6.4 register row currently blocking this vendor, or None.
+
+    Local import on purpose (same rule as PortalAccounts.linked_user_count): SCM does not
+    import peer apps at module scope. The suspension REGISTER is owned by procurement
+    (L36); SCM only consults it at its own commitment verbs so a blocked vendor cannot be
+    handed a new PO — which is exactly what that register exists to prevent.
+    """
+    from apps.procurement.models import VendorSuspension
+
+    return VendorSuspension.blocking_for(tenant, vendor_id)
+
+
 @login_required
 def purchaseorder_list(request):
     qs = (PurchaseOrder.objects
@@ -181,6 +194,13 @@ def purchaseorder_approve(request, pk):
     if obj.status != "pending_approval":
         messages.info(request, "This order is not awaiting approval.")
         return redirect("scm:purchaseorder_detail", pk=pk)
+    block = _vendor_block(request.tenant, obj.vendor_id)
+    if block is not None:
+        messages.error(
+            request,
+            f"Cannot approve {obj.number} — {obj.vendor.name} is blocked by suspension "
+            f"{block.number}. Lift the block in Procurement › Vendor Management first.")
+        return redirect("scm:purchaseorder_detail", pk=pk)
     obj.recalc_totals()
     obj.status = "approved"
     obj.approved_by = request.user
@@ -197,6 +217,15 @@ def purchaseorder_send(request, pk):
     obj = get_object_or_404(PurchaseOrder, pk=pk, tenant=request.tenant)
     if obj.status != "approved":
         messages.error(request, "Only an approved order can be sent to the vendor.")
+        return redirect("scm:purchaseorder_detail", pk=pk)
+    # Re-checked here as well as at approve: a block filed AFTER an order was approved must
+    # still stop the dispatch — sending is the moment the vendor actually receives it.
+    block = _vendor_block(request.tenant, obj.vendor_id)
+    if block is not None:
+        messages.error(
+            request,
+            f"Cannot send {obj.number} — {obj.vendor.name} is blocked by suspension "
+            f"{block.number}. Lift the block in Procurement › Vendor Management first.")
         return redirect("scm:purchaseorder_detail", pk=pk)
     obj.status = "sent"
     obj.save(update_fields=["status", "updated_at"])
