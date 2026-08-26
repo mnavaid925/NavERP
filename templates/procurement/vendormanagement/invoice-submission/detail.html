@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Invoice Submission {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="text-muted">· {{ obj.invoice_ref }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:vis_list' %}">Invoice Submissions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:vis_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin and obj.status == 'submitted' %}
+        <form method="post" action="{% url 'procurement:vis_start_review' obj.pk %}" onsubmit="return confirm('Mark this submission as Under Review?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="scan-search"></i> Start Review</button>
+        </form>
+      {% endif %}
+      {% if is_admin and obj.status == 'submitted' %}
+        <form method="post" action="{% url 'procurement:vis_delete' obj.pk %}" onsubmit="return confirm('Delete this unreviewed submission? Reviewed rows are register history.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Submission</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == 'submitted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'under_review' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'accepted' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd><span class="fw-600">{{ obj.supplier.name|default:"—" }}</span></dd></div>
+        <div class="detail-item"><dt>Purchase order</dt><dd>{% if obj.purchase_order %}{{ obj.purchase_order.number }}{% else %}<span class="text-muted">No PO referenced</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Their invoice ref</dt><dd>{{ obj.invoice_ref }}</dd></div>
+        <div class="detail-item"><dt>Invoice date</dt><dd>{% if obj.invoice_date %}{{ obj.invoice_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Amount</dt><dd><span class="fw-600">{{ obj.amount|floatformat:2 }}</span></dd></div>
+        <div class="detail-item" style="grid-column:1 / -1;"><dt>Supplier's note</dt><dd>{% if obj.note %}{{ obj.note|linebreaksbr }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Submitted by</dt><dd>{{ obj.submitted_by.username|default:"—" }}{% if obj.submitted_by.get_full_name %} · {{ obj.submitted_by.get_full_name }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Filed at</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if is_admin and obj.status != 'accepted' and obj.status != 'rejected' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Decide this submission</h2></div>
+      <div class="card-body">
+        <div style="border:1px solid #fecaca; background:#fef2f2; border-radius:10px; padding:14px 16px; margin-bottom:14px;">
+          <strong style="color:#b91c1c;">Review decision notice:</strong>
+          <span style="color:#7f1d1d;">Acceptance is a REVIEW decision — nothing posts to the ledger here. Key the approved bill in Accounting › Accounts Payable.</span>
+        </div>
+        <form method="post" action="{% url 'procurement:vis_accept' obj.pk %}" style="margin-bottom:10px;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="accept_note">Review note (optional on accept)</label>
+            <textarea name="review_note" id="accept_note" rows="2" class="form-textarea" placeholder="e.g. matches PO delivery, approved for keying in AP"></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Accept this submission? The decision is final — nothing posts here; key the bill in AP afterwards.');"><i data-lucide="check"></i> Accept</button>
+        </form>
+        <form method="post" action="{% url 'procurement:vis_reject' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="reject_note">Review note (encouraged on reject — the supplier sees the decision)</label>
+            <textarea name="review_note" id="reject_note" rows="2" class="form-textarea" placeholder="e.g. quantities do not match goods received"></textarea>
+          </div>
+          <button class="btn btn-danger" type="submit" onclick="return confirm('Reject this submission? The supplier sees the rejection.');"><i data-lucide="x"></i> Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Review trail</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Reviewed by</dt><dd>{{ obj.reviewed_by.username|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Reviewed at</dt><dd>{% if obj.reviewed_at %}{{ obj.reviewed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item" style="grid-column:1 / -1;"><dt>Review note</dt><dd>{% if obj.review_note %}{{ obj.review_note|linebreaksbr }}{% else %}<span class="text-muted">Not yet decided.</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+{% endblock %}
