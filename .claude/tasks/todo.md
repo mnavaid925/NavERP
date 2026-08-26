@@ -27817,3 +27817,32 @@ frozen docs (matches RfxEventAdmin sibling posture).
 - **Verification**: smoke_67.py GET matrix + IDOR + leak scan green; smoke67_post.py full
   write-flow green (it caught the missing tenant stamp on bids); test_eauction_
   {models,forms,views,security}.py = 85 tests green; full procurement suite 464 passed.
+
+## 6.4 Vendor Management — close-out (2026-08-26, parallel with 6.5/6.6/6.7/6.8 sessions)
+
+Built the lowest unbuilt procurement sub-module per LIVE_LINKS (6.1–6.3 were wired). Three own
+models in `VendorManagement/`: VendorPortalAccess [VPA-] login↔supplier binding + gated
+vendor-portal pages (crm-1.4 refusal ladder), VendorSuspension [VSU-] request→decide→lift block
+register (blocking_for honours ends_on; portal gate refuses submissions), VendorInvoiceSubmission
+[VIS-] supplier-filed invoices reviewed with NO GL posting. Onboarding/classification/risk bullets
+map onto scm 4.2's existing supplier pages (L36). Migration **0007**; `_seed_vendor_management`
+per-register guarded over approved suppliers.
+
+**Review wave** (6 parallel lanes → `.claude/tasks/review-procurement-6.4.md`): 20 findings —
+2 Critical (Django `block` context-var shadowing made the invoice form unreachable;
+non-reversible crud_edit success_url = post-commit 500), expiry never enforced at the gate,
+plus immutability/note-loss/perf/honesty fixes — all burned down same-session, re-proven by
+`temp/verify_64_fixes.py` (14/14) and `temp/smoke_64.py` (18/18, cross-tenant IDOR → 404).
+Three deliberate skips documented in the file (PO-side enforcement hook stays inside scm,
+multi-login-per-supplier is by design, validator boundary duplicate).
+
+**Test wave**: `test_vendormgmt_{models,forms,views,security}.py` (52 tests) + conftest fixtures.
+Full app suite ran once clean mid-churn: only my 5 failures (all fixed: NULL-FK getattr crash in
+VSU.clean() was a real product bug the tests caught; two unbound-form assertion bugs; a
+PATH_INFO-specific portal assert). Final scoped rerun: **53 passed / 0 failed**. A later full-app
+rerun hung during collection while the concurrent sessions' pytest processes saturated the shared
+checkout — environment contention, not test failures (evidence: three hangs all stuck pre-output
+on sibling files; scoped runs green).
+
+**Carried forward**: PO-side suspension hook lives inside scm's PurchaseOrder flow when scm ever
+exposes one; portal "track payments" surface waits for accounting AP read APIs.
