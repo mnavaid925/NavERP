@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Catalog Price Tiers{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Pricing &amp; Tier Management</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Catalog Management</span><span class="sep">›</span><span>Price Tiers</span></div>
+      <p class="text-muted">Volume price breaks on catalogue items — propose a break, approve it into the live price, retire it when superseded.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:catalog_tier_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add tier</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="tags"></i></div><div class="stat-value">{{ stats.proposed }}</div><div class="stat-label">Proposed tiers</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="tags"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active breaks</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.superseded }}</div><div class="stat-label">Superseded</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search item name or number…">
+        </div>
+        <div class="form-group">
+          <select name="catalog_item" aria-label="Catalog item" class="form-select">
+            <option value="">All items</option>
+            {% for it in item_choices %}
+              <option value="{{ it.pk }}" {% if request.GET.catalog_item|stringformat:"d" == it.pk|stringformat:"d" %}selected{% endif %}>{{ it.name|truncatechars:40 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:catalog_tier_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tier</th><th>Break</th><th>Pricing</th><th>Window</th><th>Contract</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'procurement:catalog_tier_detail' obj.pk %}" class="fw-600">{{ obj.catalog_item.name|truncatechars:36 }}</a>
+                <div class="form-help">{{ obj.catalog_item.number }}</div>
+              </td>
+              <td>≥ {{ obj.min_quantity|floatformat:2 }}</td>
+              <td>{% if obj.discount_pct %}<span class="badge badge-info">−{{ obj.discount_pct }}%</span>{% else %}{{ obj.unit_price }}{% endif %}</td>
+              <td>{% if obj.valid_from %}{{ obj.valid_from|date:"M d, Y" }}{% else %}—{% endif %} – {% if obj.valid_until %}{{ obj.valid_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.contract %}{{ obj.contract.number }}{% else %}—{% endif %}</td>
+              <td>
+                <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'active' %}badge-green{% elif obj.status == 'superseded' %}badge-slate{% elif obj.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:catalog_tier_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' %}<a href="{% url 'procurement:catalog_tier_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  <form method="post" action="{% url 'procurement:catalog_tier_delete' obj.pk %}" onsubmit="return confirm('Delete this price tier?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="tags"></i><h3>No price tiers yet</h3><p>Add a volume break to a catalogue item to start tiered pricing.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
