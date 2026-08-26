@@ -69,16 +69,33 @@ def camendment_create(request):
                 f"{contract.number} already has a pending amendment — decide it first "
                 f"(change control is sequential).")
         elif form.is_valid():
-            amendment = form.save(commit=False)
-            amendment.contract = contract
-            amendment.tenant = request.tenant
-            amendment.requested_by = request.user
-            amendment.save()
-            write_audit_log(request.user, amendment, "create")
-            messages.success(request,
-                             f"Amendment {amendment.number} filed against "
-                             f"{contract.number}.")
-            return redirect("procurement:camendment_detail", pk=amendment.pk)
+            # Sequential change control is DECIDED UNDER THE CONTRACT ROW LOCK: the
+            # friendly pre-checks above sit outside any lock, so two filings racing
+            # them could both pass — the locked re-check below cannot.
+            amendment = None
+            with transaction.atomic():
+                locked = (SupplierContract.objects.select_for_update()
+                          .get(pk=contract.pk))
+                if locked.status not in ContractAmendment.AMENDABLE_STATUSES:
+                    form.add_error(None,
+                                   "That agreement's state does not accept amendments.")
+                elif ContractAmendment.has_open_for(locked):
+                    form.add_error(
+                        None,
+                        f"{locked.number} already has a pending amendment — decide it "
+                        f"first (change control is sequential).")
+                else:
+                    amendment = form.save(commit=False)
+                    amendment.contract = locked
+                    amendment.tenant = request.tenant
+                    amendment.requested_by = request.user
+                    amendment.save()
+            if amendment is not None:
+                write_audit_log(request.user, amendment, "create")
+                messages.success(request,
+                                 f"Amendment {amendment.number} filed against "
+                                 f"{contract.number}.")
+                return redirect("procurement:camendment_detail", pk=amendment.pk)
     else:
         form = ContractAmendmentForm()
     return render(request,
