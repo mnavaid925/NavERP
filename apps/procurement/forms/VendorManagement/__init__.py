@@ -1,4 +1,5 @@
 """Procurement 6.4 Vendor Management — forms package."""
+from .VendorBids import VendorBidForm
 from .VendorInvoiceSubmissions import (
     SubmissionReviewForm,
     VendorInvoiceSubmissionForm,
@@ -11,6 +12,7 @@ from .VendorSuspensions import (
 )
 
 __all__ = [
+    "VendorBidForm",
     "VendorPortalAccessForm",
     "VendorSuspensionForm",
     "SuspensionDecisionForm",
