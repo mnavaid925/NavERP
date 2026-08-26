@@ -31,6 +31,8 @@ class ProcurementAlert(TenantOwned):
         ("approval", "Approval"),
         ("delivery", "Delivery"),
         ("task", "Task"),
+        # 6.8 Renewal & Expiration Alerts raise kind="contract" rows into this inbox.
+        ("contract", "Contract"),
     ]
     SEVERITY_CHOICES = [
         ("info", "Info"),
