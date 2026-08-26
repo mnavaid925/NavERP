@@ -199,3 +199,84 @@ def test_register_isolates_tenants(client_b, tenant_a, contract):
     r = client_b.get(reverse("procurement:contract_list"))
     assert r.status_code == 200
     assert f"/procurement/contracts/{contract.pk}/".encode() not in r.content
+
+
+# -- review burn-down (R9/R14): gates, sign branch, severity, PROTECT, terminal spine ----------
+
+
+def test_member_post_403_on_add_link_approve_and_renewals_run(
+        member_client, admin_user, tenant_a, contract):
+    """The signature/legal verbs are admin-only: members get 403 and change nothing."""
+    amendment = ContractAmendment.objects.create(
+        tenant=tenant_a, contract=contract, reason="extend",
+        proposed_value=Decimal("1.00"), requested_by=admin_user)
+    r1 = member_client.post(reverse("procurement:contract_add_link", args=[contract.pk]),
+                            {"clause": ""})
+    r2 = member_client.post(reverse("procurement:camendment_approve", args=[amendment.pk]))
+    r3 = member_client.post(reverse("procurement:renewals_run"))
+    assert r1.status_code == 403 and r2.status_code == 403 and r3.status_code == 403
+    amendment.refresh_from_db()
+    assert amendment.status == "pending"      # nothing was decided behind the gate
+
+
+def test_public_sign_flow_signature_branch(tenant_a, contract):
+    """The SIGN action (not just decline) stamps the signer under its token."""
+    signer = ContractSigner.objects.create(
+        tenant=tenant_a, contract=contract, role="internal",
+        signer_name="Sig", signer_email="sig@x.com")
+    anon = Client()
+    r = anon.post(reverse("procurement:contract_sign_page", args=[signer.token]),
+                  {"action": "sign"})
+    signer.refresh_from_db()
+    assert r.status_code == 302 and signer.signed_at is not None
+    assert signer.declined_at is None         # exactly one response verb landed
+
+
+def test_renewal_alert_severity_boundary_at_seven_days(tenant_a, admin_user):
+    """≤7 days left raises CRITICAL; 8 days is still WARNING."""
+    today = timezone.localdate()
+    edge = SupplierContract.objects.create(
+        tenant=tenant_a, party=_supplier(tenant_a, "Boundary Edge Co"),
+        title="edge agreement", contract_type="purchase", status="active",
+        start_date=today - datetime.timedelta(days=30),
+        end_date=today + datetime.timedelta(days=7),
+        renewal_notice_days=30, owner=admin_user)
+    late = SupplierContract.objects.create(
+        tenant=tenant_a, party=_supplier(tenant_a, "Boundary Late Co"),
+        title="late agreement", contract_type="purchase", status="active",
+        start_date=today - datetime.timedelta(days=30),
+        end_date=today + datetime.timedelta(days=8),
+        renewal_notice_days=30, owner=admin_user)
+    run_renewal_alerts(tenant_a, admin_user)
+    crit = ProcurementAlert.objects.get(link_url=f"/scm/contracts/{edge.pk}/")
+    warn = ProcurementAlert.objects.get(link_url=f"/scm/contracts/{late.pk}/")
+    assert crit.severity == "critical"
+    assert warn.severity == "warning"
+
+
+def test_clause_delete_refused_while_drafted(client_a, tenant_a, contract, clause):
+    """PROTECT posture: a drafted clause cannot be deleted, only retired."""
+    ContractClauseLink.objects.create(contract=contract, clause=clause,
+                                      section_order=1)
+    r = client_a.post(reverse("procurement:clause_delete", args=[clause.pk]))
+    assert r.status_code == 302
+    assert ContractClause.objects.filter(pk=clause.pk).exists()
+
+
+def test_terminated_contract_refuses_amendment_apply(client_a, admin_user, tenant_a,
+                                                     contract):
+    """A spine terminated while an amendment sat pending refuses apply (R5)."""
+    amendment = ContractAmendment.objects.create(
+        tenant=tenant_a, contract=contract, reason="extend",
+        proposed_end_date=timezone.localdate() + datetime.timedelta(days=200),
+        requested_by=admin_user)
+    standing_end = contract.end_date
+    contract.status = "terminated"
+    contract.save(update_fields=["status", "updated_at"])
+    r = client_a.post(reverse("procurement:camendment_approve", args=[amendment.pk]),
+                      {"decision_note": "agreement closed before decision"})
+    amendment.refresh_from_db()
+    contract.refresh_from_db()
+    assert r.status_code == 302
+    assert amendment.status == "pending" and amendment.applied_at is None
+    assert contract.end_date == standing_end   # no term moved onto a dead agreement
