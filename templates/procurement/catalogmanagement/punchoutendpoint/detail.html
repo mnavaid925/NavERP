@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        <span class="badge {% if obj.protocol == 'cxml' %}badge-info{% elif obj.protocol == 'oci' %}badge-amber{% elif obj.protocol == 'manual_link' %}badge-muted{% else %}badge-slate{% endif %}">{{ obj.get_protocol_display }}</span>
+        {% if obj.enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Catalog Management</span><span class="sep">›</span><a href="{% url 'procurement:punchout_endpoint_list' %}">Punch-out Endpoints</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'procurement:punchout_endpoint_test' obj.pk %}" onsubmit="return confirm('Record a session attempt against this endpoint? No handshake is executed.');">
+        {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="plug-zap"></i> Test connection</button>
+      </form>
+      <a href="{% url 'procurement:punchout_endpoint_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'procurement:punchout_endpoint_delete' obj.pk %}" onsubmit="return confirm('Delete this endpoint connection?');">
+        {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.party.name }}</dd></div>
+      <div class="detail-item"><dt>Protocol</dt><dd>{{ obj.get_protocol_display }}</dd></div>
+      <div class="detail-item"><dt>Punch-out URL</dt><dd><a href="{{ obj.punchout_url }}" target="_blank" rel="noopener noreferrer">{{ obj.punchout_url }}</a></dd></div>
+      <div class="detail-item"><dt>Username</dt><dd>{% if obj.username %}{{ obj.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Shared secret</dt><dd><span class="badge badge-muted">••••••••</span> <span class="text-muted">write-only — never displayed</span></dd></div>
+      <div class="detail-item"><dt>Last session</dt><dd>{% if obj.last_session_at %}{{ obj.last_session_at|date:"M d, Y H:i" }}{% else %}Never recorded{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Created / updated</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }} / {{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:punchout_endpoint_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to endpoints</a>
+  </div>
+{% endblock %}
