@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Catalog upload{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.original_filename|default:"catalog upload" }}
+        <span class="badge {% if obj.status == 'received' %}badge-info{% elif obj.status == 'validated' %}badge-green{% elif obj.status == 'published' %}badge-green{% elif obj.status == 'rejected' %}badge-red{% else %}badge-muted{% endif %}">
+          {% if obj.status == 'received' %}Received{% elif obj.status == 'validated' %}Validated{% elif obj.status == 'published' %}Published{% elif obj.status == 'rejected' %}Rejected{% else %}{{ obj.get_status_display }}{% endif %}
+        </span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:catalog_upload_list' %}">Catalog Management</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.file %}<a href="{{ obj.file.url }}" class="btn btn-outline"><i data-lucide="download"></i> Download file</a>{% endif %}
+      {% if obj.status == 'received' %}
+        <form method="post" action="{% url 'procurement:catalog_upload_validate' obj.pk %}" onsubmit="return confirm('Validate this batch? Good rows are staged as pending catalog items.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-square"></i> Validate</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'validated' %}
+        <form method="post" action="{% url 'procurement:catalog_upload_publish' obj.pk %}" onsubmit="return confirm('Publish this batch? The staged items are confirmed as live catalog entries.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="upload"></i> Publish</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'received' or obj.status == 'validated' %}
+        <form method="post" action="{% url 'procurement:catalog_upload_reject' obj.pk %}" onsubmit="return confirm('Reject this batch?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Reject</button>
+        </form>
+      {% endif %}
+      {% if obj.is_editable %}
+        <a href="{% url 'procurement:catalog_upload_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      <form method="post" action="{% url 'procurement:catalog_upload_delete' obj.pk %}" onsubmit="return confirm('Delete this catalog upload batch?');">
+        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Original filename</dt><dd>{{ obj.original_filename|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Stored file</dt><dd>{% if obj.file %}<a href="{{ obj.file.url }}">{{ obj.file.name }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Validated by / at</dt><dd>{% if obj.validated_by %}{{ obj.validated_by.get_full_name|default:obj.validated_by.username }}{% else %}—{% endif %} · {{ obj.validated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Row counters</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Rows parsed</dt><dd class="fw-600">{{ obj.rows_parsed }}</dd></div>
+        <div class="detail-item"><dt>Rows accepted (staged)</dt><dd class="fw-600">{{ obj.rows_accepted }}</dd></div>
+        <div class="detail-item"><dt>Rows rejected</dt><dd class="fw-600">{{ obj.rows_rejected }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if obj.rows_rejected > 0 %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Rejections ({{ obj.rows_rejected }})</h2></div>
+      <div class="card-body"><pre>{{ obj.error_log }}</pre></div>
+    </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:catalog_upload_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to uploads</a>
+  </div>
+{% endblock %}
