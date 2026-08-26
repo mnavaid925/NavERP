@@ -9,6 +9,9 @@ from apps.procurement.forms._common import *  # noqa: F401,F403
 from apps.procurement.forms._common import TenantUniqueMixin, _reject_foreign
 from apps.procurement.models.CatalogManagement.UploadBatches import CatalogUploadBatch
 
+#: Resource limit (OWASP A05): one catalog file may weigh at most 2 MB on the wire.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+
 
 class CatalogUploadBatchForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
@@ -18,7 +21,7 @@ class CatalogUploadBatchForm(TenantUniqueMixin, TenantModelForm):
         # through the guarded validate/publish/reject actions.
         fields = ["party", "file", "notes"]
         help_texts = {
-            "file": "CSV (.csv), Excel (.xls/.xlsx) or XML (.xml). CSV columns: "
+            "file": "CSV only (.csv), max 2 MB. Required columns: "
                     "name, supplier_part_no, unit_price, uom_code, category_text.",
         }
 
@@ -27,8 +30,11 @@ class CatalogUploadBatchForm(TenantUniqueMixin, TenantModelForm):
         _reject_foreign(self, cleaned, ["party"])
         upload = cleaned.get("file")
         if upload is not None and getattr(upload, "name", ""):
+            if getattr(upload, "size", 0) and upload.size > MAX_UPLOAD_BYTES:
+                self.add_error("file",
+                               f"Catalog files are limited to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
             name = upload.name.lower()
             if not any(name.endswith(ext) for ext in CatalogUploadBatch.ALLOWED_EXTENSIONS):
                 self.add_error("file",
-                               "Allowed file types: .csv, .xls, .xlsx, .xml.")
+                               "CSV only (.csv) — export Excel/XML to CSV first.")
         return cleaned
