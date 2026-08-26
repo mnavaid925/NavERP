@@ -29,7 +29,7 @@ class PunchOutEndpoint(TenantNumbered):
     ]
 
     party = models.ForeignKey("core.Party", on_delete=models.CASCADE,
-                              related_name="punchout_endpoints",
+                              related_name="procurement_punchout_endpoints",
                               help_text="Supplier this punch-out connection belongs to")
     name = models.CharField(max_length=120)
     protocol = models.CharField(max_length=20, choices=PROTOCOL_CHOICES, default="cxml")
