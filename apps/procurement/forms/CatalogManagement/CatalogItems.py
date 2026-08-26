@@ -5,7 +5,7 @@ One header form; price breaks are managed on the detail page as ``CatalogPriceTi
 """
 from apps.procurement.forms._common import *  # noqa: F401,F403
 from apps.procurement.forms._common import TenantUniqueMixin, _reject_foreign
-from apps.procurement.models.CatalogManagement.CatalogItems import CatalogItem
+from apps.procurement.models import CatalogItem
 
 
 class CatalogItemForm(TenantUniqueMixin, TenantModelForm):
