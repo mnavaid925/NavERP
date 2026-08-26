@@ -7,6 +7,7 @@
       <p class="text-muted">Welcome{% if supplier.name %}, {{ supplier.name }}{% endif %} — your purchase orders and invoice submissions live here. Procurement reviews every invoice you submit.</p>
     </div>
     <div class="page-actions">
+      <a href="{% url 'procurement:vendor_portal_bids' %}" class="btn btn-outline"><i data-lucide="gavel"></i> My bids</a>
       {% if suspension %}
         <button class="btn btn-outline" type="button" disabled title="Account suspended — submission disabled"><i data-lucide="file-up"></i> Submit invoice</button>
       {% else %}
@@ -42,6 +43,29 @@
       <div class="stat-icon green"><i data-lucide="check-check"></i></div>
       <div class="stat-value">{{ stats.accepted }}</div>
       <div class="stat-label">Accepted to date</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2 class="card-title">Invoices &amp; payments</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Bill</th><th>Billed</th><th>Due</th><th>Total</th><th>Balance</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for b in bills %}
+            <tr>
+              <td><span class="fw-600">{{ b.number }}</span></td>
+              <td>{{ b.bill_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ b.due_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ b.total|floatformat:2 }}</td>
+              <td>{{ b.balance_due|floatformat:2 }}</td>
+              <td>{% if b.status == 'paid' %}<span class="badge badge-green">{{ b.get_status_display }}</span>{% elif b.status == 'partial' %}<span class="badge badge-amber">{{ b.get_status_display }}</span>{% elif b.status == 'approved' %}<span class="badge badge-info">{{ b.get_status_display }}</span>{% elif b.status == 'pending_approval' %}<span class="badge badge-amber">{{ b.get_status_display }}</span>{% else %}<span class="badge badge-muted">{{ b.get_status_display }}</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="receipt"></i><h3>No invoices on file</h3><p>Invoices our accounts team has processed for you will appear here with their payment status.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 
