@@ -11,8 +11,8 @@ from django.db.models import Count, Q
 from apps.core.crud import crud_delete, crud_list
 from apps.core.models import Party
 
-from apps.procurement.forms.CatalogManagement.CatalogItems import CatalogItemForm
-from apps.procurement.models.CatalogManagement.CatalogItems import CatalogItem
+from apps.procurement.forms import CatalogItemForm
+from apps.procurement.models import CatalogItem
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 
