@@ -55,7 +55,7 @@
                 <div class="form-help">{{ obj.catalog_item.number }}</div>
               </td>
               <td>≥ {{ obj.min_quantity|floatformat:2 }}</td>
-              <td>{% if obj.discount_pct %}<span class="badge badge-info">−{{ obj.discount_pct }}%</span>{% else %}{{ obj.unit_price }}{% endif %}</td>
+              <td>{% if obj.discount_pct is not None %}<span class="badge badge-info">−{{ obj.discount_pct|floatformat:"-2" }}%</span>{% else %}{{ obj.unit_price }}{% endif %}</td>
               <td>{% if obj.valid_from %}{{ obj.valid_from|date:"M d, Y" }}{% else %}—{% endif %} – {% if obj.valid_until %}{{ obj.valid_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if obj.contract %}{{ obj.contract.number }}{% else %}—{% endif %}</td>
               <td>
