@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Vendor Suspensions &amp; Blacklists</h1>
       <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Vendor Management</span><span class="sep">›</span><span>Block Register</span></div>
-      <p class="text-muted">Blocks non-compliant or underperforming suppliers — every block is a numbered register row with a reason, a decision trail and a mandatory lift note. While in force, the vendor portal refuses the supplier's invoice submissions.</p>
+      <p class="text-muted">Blocks non-compliant or underperforming suppliers — every block is a numbered register row with a reason, a decision trail and a mandatory lift note. While in force, POs to the vendor cannot be approved or dispatched and their portal submissions are refused.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'procurement:vsu_create' %}" class="btn btn-primary"><i data-lucide="shield-off"></i> Request a block</a>
