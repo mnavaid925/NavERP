@@ -7,9 +7,8 @@ prices the break against its item's current base price alongside the sibling tie
 from django.db.models import Count, Q
 
 from apps.core.crud import crud_delete, crud_list
-from apps.procurement.forms.CatalogManagement.Tiers import CatalogPriceTierForm
-from apps.procurement.models.CatalogManagement.CatalogItems import CatalogItem
-from apps.procurement.models.CatalogManagement.Tiers import CatalogPriceTier
+from apps.procurement.forms import CatalogPriceTierForm
+from apps.procurement.models import CatalogItem, CatalogPriceTier
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 
