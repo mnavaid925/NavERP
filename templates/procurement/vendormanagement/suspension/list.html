@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Vendor Suspensions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Vendor Suspensions &amp; Blacklists</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Vendor Management</span><span class="sep">›</span><span>Block Register</span></div>
+      <p class="text-muted">Blocks non-compliant or underperforming suppliers — every block is a numbered register row with a reason, a decision trail and a mandatory lift note. While in force, the vendor portal refuses the supplier's invoice submissions.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:vsu_create' %}" class="btn btn-primary"><i data-lucide="shield-off"></i> Request a block</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search supplier, reason or decision note…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:vsu_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Kind</th><th>Reason</th><th>Window</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{{ obj.supplier.name }}</td>
+              <td><span class="badge {% if obj.kind == 'blacklist' %}badge-red{% else %}badge-info{% endif %}">{{ obj.get_kind_display }}</span></td>
+              <td title="{{ obj.reason }}">{{ obj.get_reason_category_display }} · {{ obj.reason|truncatechars:40 }}</td>
+              <td>{{ obj.starts_on|date:"M d, Y" }} → {% if obj.ends_on %}{{ obj.ends_on|date:"M d, Y" }}{% else %}<span class="text-muted">Until lifted</span>{% endif %}</td>
+              <td>{% if obj.status == 'requested' %}<span class="badge badge-amber">Requested</span>{% elif obj.status == 'active' %}{% if obj.is_expired %}<span class="badge badge-slate">Expired</span>{% else %}<span class="badge badge-red">In force</span>{% endif %}{% elif obj.status == 'rejected' %}<span class="badge badge-muted">Rejected</span>{% else %}<span class="badge badge-green">Lifted</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:vsu_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    {% if obj.status == 'requested' %}
+                      <a href="{% url 'procurement:vsu_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                      <form method="post" action="{% url 'procurement:vsu_approve' obj.pk %}" onsubmit="return confirm('Approve this block without a note? Use View to add one — the supplier is barred from portal invoice submission while it stays in force.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Approve — put the block in force"><i data-lucide="shield-off"></i></button>
+                      </form>
+                      <form method="post" action="{% url 'procurement:vsu_reject' obj.pk %}" onsubmit="return confirm('Reject this block request?');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject request"><i data-lucide="x"></i></button>
+                      </form>
+                      <form method="post" action="{% url 'procurement:vsu_delete' obj.pk %}" onsubmit="return confirm('Delete this pending request? Decided entries cannot be deleted.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete pending request"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% elif obj.status == 'active' %}
+                      {# The mandatory lift reason lives on the detail page — a bare POST here could never carry it. #}
+                      <a href="{% url 'procurement:vsu_detail' obj.pk %}#act" class="btn-icon" title="Lift the block (reason required)"><i data-lucide="shield-check"></i></a>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield-off"></i><h3>No suspensions</h3><p>Raise a block against a non-compliant or underperforming supplier — an admin decides it, and nothing reaches a PO without that decision.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ active_count }} block{{ active_count|pluralize }} currently in force of {{ total_count }} total · {{ requested_count }} awaiting decision. A decided entry is immutable history — corrections are new filings.</p>
+{% endblock %}
