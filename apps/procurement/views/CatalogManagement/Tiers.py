@@ -106,7 +106,7 @@ def catalog_tier_delete(request, pk):
 # -- lifecycle -------------------------------------------------------------------------------------
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_tier_approve(request, pk):
     obj = get_object_or_404(CatalogPriceTier.objects.select_related("catalog_item"),
@@ -121,7 +121,7 @@ def catalog_tier_approve(request, pk):
     return redirect("procurement:catalog_tier_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def catalog_tier_retire(request, pk):
     obj = get_object_or_404(CatalogPriceTier.objects.select_related("catalog_item"),
