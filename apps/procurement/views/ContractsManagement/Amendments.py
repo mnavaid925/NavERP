@@ -133,6 +133,17 @@ def _decide(request, pk, approve):
         else:
             contract_locked = (SupplierContract.objects.select_for_update()
                                .get(pk=obj.contract_id))
+            # The spine may have been terminated/expired/renewed while this amendment
+            # sat pending — apply() writes live spend terms, so re-assert amendability
+            # under the same lock that guards the write.
+            if contract_locked.status not in ContractAmendment.AMENDABLE_STATUSES:
+                messages.error(
+                    request,
+                    f"{contract_locked.number} is "
+                    f"{contract_locked.get_status_display().lower()} — its terms are "
+                    f"closed and amendment {locked_amendment.number} can no longer be "
+                    f"applied.")
+                return redirect("procurement:camendment_detail", pk=pk)
             applied = locked_amendment.apply(request.user, contract_locked, note)
             if not applied:
                 messages.error(request,
