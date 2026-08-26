@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Suspension {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.supplier.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:vsu_list' %}">Block Register</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:vsu_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}
+        {% if obj.status == 'requested' %}
+          <a href="{% url 'procurement:vsu_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% elif obj.status == 'active' %}
+          <a href="#act" class="btn btn-outline"><i data-lucide="shield-check"></i> Lift the block</a>
+        {% endif %}
+        {% if obj.status == 'requested' %}
+          <form method="post" action="{% url 'procurement:vsu_delete' obj.pk %}" onsubmit="return confirm('Delete this pending request? Decided entries cannot be deleted.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit" title="Delete pending request"><i data-lucide="trash-2"></i></button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_current %}
+    <div class="card" style="border-color:var(--danger,#dc2626);">
+      <div class="card-body" style="display:flex; gap:10px; align-items:center;">
+        <i data-lucide="shield-off"></i>
+        <strong>This supplier is currently blocked — the vendor portal refuses their invoice submissions while this entry is in force.</strong>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Register entry</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd><span class="fw-600">{{ obj.number }}</span></dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd><span class="fw-600">{{ obj.supplier.name }}</span>{% if obj.supplier.email %} · {{ obj.supplier.email }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Kind</dt><dd>{% if obj.kind == 'blacklist' %}<span class="badge badge-red">Blacklist</span>{% else %}<span class="badge badge-info">Suspension</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reason category</dt><dd>{{ obj.get_reason_category_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.status == 'requested' %}<span class="badge badge-amber">Requested</span>{% elif obj.status == 'active' %}{% if obj.is_expired %}<span class="badge badge-slate">Expired</span>{% else %}<span class="badge badge-red">In force</span>{% endif %}{% elif obj.status == 'rejected' %}<span class="badge badge-muted">Rejected</span>{% else %}<span class="badge badge-green">Lifted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Window</dt><dd>{{ obj.starts_on|date:"M d, Y" }} → {% if obj.ends_on %}{{ obj.ends_on|date:"M d, Y" }}{% else %}<span class="text-muted">Until lifted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Evidence (PO)</dt><dd>{% if obj.po_reference %}{{ obj.po_reference.number|default:obj.po_reference.pk }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.username }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Filed</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item" style="grid-column:1 / -1;"><dt>Reason (the documented case)</dt><dd>{{ obj.reason|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Decision trail</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Decided by</dt><dd>{% if obj.decided_by %}{{ obj.decided_by.get_full_name|default:obj.decided_by.username }}{% else %}<span class="text-muted">Not yet decided</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Decided at</dt><dd>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item" style="grid-column:1 / -1;"><dt>Decision note</dt><dd>{% if obj.decision_note %}{{ obj.decision_note|linebreaksbr }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lifted by</dt><dd>{% if obj.lifted_by %}{{ obj.lifted_by.get_full_name|default:obj.lifted_by.username }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lifted at</dt><dd>{% if obj.lifted_at %}{{ obj.lifted_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item" style="grid-column:1 / -1;"><dt>Lift note</dt><dd>{% if obj.lift_note %}{{ obj.lift_note|linebreaksbr }}{% else %}—{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if is_admin %}
+    <div class="card" id="act">
+      <div class="card-header"><h2 class="card-title">Act on this entry</h2></div>
+      <div class="card-body">
+        {% if obj.status == 'requested' %}
+          {# ONE form so the note travels with EITHER decision — two forms would silently drop it on reject. #}
+          <form method="post">
+            {% csrf_token %}
+            {% for e in decision_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            <div class="form-group">
+              <label class="form-label" for="{{ decision_form.note.id_for_label }}">{{ decision_form.note.label }}</label>
+              {{ decision_form.note }}
+              {% if decision_form.note.help_text %}<div class="form-help">{{ decision_form.note.help_text }}</div>{% endif %}
+              {% for e in decision_form.note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-danger" type="submit" formaction="{% url 'procurement:vsu_approve' obj.pk %}" onclick="return confirm('Approve this block? The supplier is barred from portal invoice submission while it stays in force.');"><i data-lucide="shield-off"></i> Approve &amp; block</button>
+              <button class="btn btn-outline" type="submit" formaction="{% url 'procurement:vsu_reject' obj.pk %}" onclick="return confirm('Reject this request? The note above is recorded with the rejection.');"><i data-lucide="x"></i> Reject request</button>
+            </div>
+          </form>
+        {% elif obj.status == 'active' %}
+          <form method="post" action="{% url 'procurement:vsu_lift' obj.pk %}">
+            {% csrf_token %}
+            {% for e in lift_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            <div class="form-group">
+              <label class="form-label" for="{{ lift_form.lift_note.id_for_label }}">{{ lift_form.lift_note.label }} <span class="req">*</span></label>
+              {{ lift_form.lift_note }}
+              {% if lift_form.lift_note.help_text %}<div class="form-help">{{ lift_form.lift_note.help_text }}</div>{% endif %}
+              {% for e in lift_form.lift_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit" onclick="return confirm('Lift this block? The reason you typed becomes permanent history.');"><i data-lucide="shield-check"></i> Lift the block</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="text-muted">This entry has been decided — nothing left to act on. Corrections are new register filings.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
