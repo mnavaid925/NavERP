@@ -506,11 +506,21 @@ notes bounce WITHOUT deciding (same contract as lift's mandatory reason); approv
 ONE detail-page form whose buttons use `formaction` so the note travels with either decision;
 the list's lift icon LINKS to detail (a bare POST could never carry the mandatory note).
 
-### Seeder / Tests / Sidebar
-`_seed_vendor_management`: per-register guards over scm APPROVED suppliers (skips without any);
-access row + requested/active/lifted suspensions + accepted/submitted submissions per tenant.
-Flush deletes all three registers. Migration `0007_alter_escalationpolicy_unique_together_and_more`.
-Tests: `test_vendormgmt_{models,forms,views,security}.py` (52, functions `test_vendormgmt_*`),
+**Enforcement is shared with SCM at its commitment verbs** (same-day follow-up): scm's
+`purchaseorder_approve`/`purchaseorder_send` consult `blocking_for` via `_vendor_block`
+(local import, read-only), so a blocked vendor cannot receive a new or dispatched PO; send
+re-checks so a block filed after approval still stops dispatch. The portal also hosts
+6.5's deferred gated **bid page** (`vendor_portal_bids/bid_edit/bid_submit`): own bids
+only, drafts edited through `VendorBidForm` (event/supplier server-forced), submit reuses
+`SourcingBid.submit()` under the bid+event double lock, blocked suppliers refused. Portal
+home carries an **Invoices & payments** panel projecting accounting.Bill rows (read-only,
+void excluded, balances derived) — SCM/accounting compute nothing here.
+Tests: `test_vendormgmt_{models,forms,views,security}.py` (63, functions `test_vendormgmt_*`),
 fixtures appended to `tests/conftest.py` (`supplier_a/b -> (profile, party)`, `po_a`, `vpa_a`,
 `vsu_requested_a`, `vis_submitted_a`). Sidebar: `LIVE_LINKS["6.4"]` maps Onboarding/
 Classification/Risk to the scm pages and Portal/Blacklisting to `vpa_list`/`vsu_list`.
+
+### Seeder
+`_seed_vendor_management`: per-register guards over scm APPROVED suppliers (skips without any);
+access row + requested/active/lifted suspensions + accepted/submitted submissions per tenant.
+Flush deletes all three registers. Migration `0007_alter_escalationpolicy_unique_together_and_more`.
