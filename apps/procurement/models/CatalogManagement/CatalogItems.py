@@ -83,7 +83,7 @@ class CatalogItem(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at", "-id"]
-        unique_together = [("tenant", "number")]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "status"], name="prc_catitem_tnt_status_idx"),
             models.Index(fields=["tenant", "item"], name="prc_catitem_tnt_item_idx"),
