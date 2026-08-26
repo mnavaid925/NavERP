@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Portal Access {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:vpa_list' %}">Vendor Portal Access</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:vpa_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}
+        <a href="{% url 'procurement:vpa_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'procurement:vpa_delete' obj.pk %}" onsubmit="return confirm('Delete this binding?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Binding</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd><span class="fw-600">{{ obj.number }}</span></dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.supplier %}<span class="fw-600">{{ obj.supplier.name }}</span>{% else %}<span class="badge badge-muted">Unlinked</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Portal user</dt><dd><span class="fw-600">{{ obj.portal_user.username|default:"—" }}</span>{% if obj.portal_user.get_full_name %} · {{ obj.portal_user.get_full_name }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Invited by</dt><dd>{{ obj.invited_by.username|default:"—" }}{% if obj.invited_by %} · {{ obj.invited_by.date_joined|date:"M d, Y" }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Off</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Note</dt><dd>{{ obj.note|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How this binding is used</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Every gated supplier-portal page resolves access through this row, and refuses at whichever step fails:</p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>1 · Login</dt><dd>The visitor must be signed in as {{ obj.portal_user.username|default:"—" }} — no session, no view.</dd></div>
+        <div class="detail-item"><dt>2 · Binding</dt><dd>The page calls <span class="fw-600">VendorPortalAccess.for_user(tenant, user)</span>; no active row for this login, no view.</dd></div>
+        <div class="detail-item"><dt>3 · Supplier</dt><dd>Only then does it resolve {{ obj.supplier.name|default:"the supplier" }} — every PO, invoice and payment shown is filtered to that Party, and nothing else.</dd></div>
+      </dl>
+    </div>
+  </div>
+{% endblock %}
