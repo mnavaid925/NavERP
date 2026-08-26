@@ -411,7 +411,7 @@ class CatalogItemAdmin(admin.ModelAdmin):
     raw_id_fields = ("item", "supplier", "contract", "uom", "currency")
     # The approval machine (submit/approve/reject/block) is written through the views;
     # admin sees the outcomes, it does not drive the workflow.
-    readonly_fields = ("number", "submitted_by", "submitted_at", "approved_by",
+    readonly_fields = ("number", "status", "submitted_by", "submitted_at", "approved_by",
                        "approved_at", "rejection_reason", "created_by",
                        "created_at", "updated_at")
 
@@ -423,7 +423,9 @@ class CatalogPriceTierAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status")
     search_fields = ("catalog_item__number", "catalog_item__name")
     raw_id_fields = ("catalog_item", "contract")
-    readonly_fields = ("submitted_by", "approved_by", "approved_at",
+    # approve/retire/cancel move status only through the views — the admin may look,
+    # never flip the state machine.
+    readonly_fields = ("status", "submitted_by", "approved_by", "approved_at",
                        "created_at", "updated_at")
 
 
@@ -446,6 +448,7 @@ class CatalogUploadBatchAdmin(admin.ModelAdmin):
     search_fields = ("number", "original_filename", "notes")
     raw_id_fields = ("party",)
     # Parse output is written once by validate_and_stage(); the error log is evidence.
-    readonly_fields = ("number", "original_filename", "validated_by", "validated_at",
+    # Status moves only through the guarded validate/publish/reject verbs.
+    readonly_fields = ("number", "status", "original_filename", "validated_by", "validated_at",
                        "rows_parsed", "rows_accepted", "rows_rejected", "error_log",
                        "created_at", "updated_at")
