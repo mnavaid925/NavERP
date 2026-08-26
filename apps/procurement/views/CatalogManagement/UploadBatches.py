@@ -85,7 +85,8 @@ def _batch_form(request, instance):
 @login_required
 @require_POST
 def catalog_upload_delete(request, pk):
-    obj = get_object_or_404(CatalogUploadBatch, pk=pk, tenant=request.tenant)
+    # No pre-fetch: crud_delete re-fetches the row itself (a prior get_object_or_404 here
+    # was a dead query).
     return crud_delete(request, model=CatalogUploadBatch, pk=pk,
                        success_url="procurement:catalog_upload_list")
 
