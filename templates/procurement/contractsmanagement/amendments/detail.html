@@ -22,7 +22,36 @@
   </div>
 </div>
 
-{% if obj.status != "pending" %}
+{% if obj.status == "pending" %}
+<div class="card">
+  <div class="card-header"><h2>Decide</h2></div>
+  <div class="card-body">
+    {% if is_admin %}
+    <p class="text-muted">Applying writes the proposed terms onto {{ obj.contract.number }} under the contract row lock; the note below is recorded with the decision.</p>
+    <form method="post" action="{% url 'procurement:camendment_approve' obj.pk %}" onsubmit="return confirm('Apply amendment {{ obj.number }} to {{ obj.contract.number }}?');">
+      {% csrf_token %}
+      <label class="form-label" for="approve_note">Decision note</label>
+      <textarea id="approve_note" name="decision_note" rows="2" class="form-input"
+                placeholder="Optional — recorded with the approval"></textarea>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><i data-lucide="check-check"></i> Apply amendment</button>
+      </div>
+    </form>
+    <form method="post" action="{% url 'procurement:camendment_reject' obj.pk %}" onsubmit="return confirm('Reject amendment {{ obj.number }}?');">
+      {% csrf_token %}
+      <label class="form-label" for="reject_note">Rejection note</label>
+      <textarea id="reject_note" name="decision_note" rows="2" class="form-input"
+                placeholder="Optional — recorded with the rejection"></textarea>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-outline btn-danger"><i data-lucide="x"></i> Reject amendment</button>
+      </div>
+    </form>
+    {% else %}
+    <p class="text-muted">This amendment is awaiting a tenant-admin decision.</p>
+    {% endif %}
+  </div>
+</div>
+{% else %}
 <div class="card">
   <div class="card-header"><h2>Decision</h2></div>
   <div class="card-body">
