@@ -99,9 +99,12 @@
                   <a href="{% url 'procurement:asn_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   {% if obj.is_editable %}<a href="{% url 'procurement:asn_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>{% endif %}
                   {% if obj.status == 'draft' %}
-                    <form method="post" action="{% url 'procurement:asn_delete' obj.pk %}" onsubmit="return confirm('Delete draft ASN {{ obj.number }} and its declared lines?');">
-                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                    </form>
+                    {% comment %}asn_delete is @tenant_admin_required AND drafts-only, so both halves of the gate belong here — offering the bin to a non-admin only buys them a 403. Nested rather than one mixed expression because Django's `and` binds tighter than `or`. Same shape as the detail page's can_delete and the sibling backorder register.{% endcomment %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'procurement:asn_delete' obj.pk %}" onsubmit="return confirm('Delete draft ASN {{ obj.number }} and its declared lines?');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
