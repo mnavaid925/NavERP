@@ -586,3 +586,92 @@ Tests: `test_catalogmgmt_{models(27),forms(20),views(31),security(14)}.py` - fun
 `test_catalogmgmt_*`, fixtures appended to conftest (uom_a/item_a/catalog_item_*_a/
 tier_active_a/punchout_endpoint_a/upload_batch_received_a). Sidebar: `LIVE_LINKS["6.9"]`
 maps all five bullets (approval deep-links ?status=pending_approval).
+
+## 6.11 Order Fulfillment & Tracking (built 2026-08-29)
+
+**As-built now: 6.1-6.11.** Package folder `OrderFulfillment/` across all four layers.
+The INBOUND-visibility layer over the scm 4.1 order spine: what the supplier says is coming,
+when each instalment is due, and what is short. 6.11 is **READ-ONLY against `scm.PurchaseOrder*`**
+- it never writes `PurchaseOrderLine.quantity/unit_price` (6.10's `PurchaseOrderChange.apply()`
+is the only spine mutator) and never books a receipt/QC/StockMove (that is 6.12).
+
+**Why there is no tracking-event table (L36):** scm 4.6 TMS already owns inbound freight -
+`scm.Shipment` (`direction="inbound"`, `purchase_order` FK) plus the append-only
+`scm.TrackingEvent` and the editable=False projections `current_status_text`/
+`last_known_location`/`eta`. 6.11 holds a **nullable `shipment` FK and READS those projections**
+with the supplier-declared `carrier`/`carrier_name`/`tracking_number` as fallback. It never
+creates a Shipment and never appends a TrackingEvent. Likewise `inventory.PurchaseOrderDispatch`
+is the OPPOSITE direction (buyer->supplier transmission) - not a duplicate.
+
+### Models (`models/OrderFulfillment/`)
+- **`AdvancedShipmentNotice` [ASN-, `AdvancedShipmentNotice.py`]** - the supplier's declaration
+  of what is in the box, against one `scm.PurchaseOrder` (PROTECT). Status
+  draft->submitted->in_transit->delivered / cancelled; `OPEN_STATUSES`/`IN_FLIGHT_STATUSES`/
+  `EDITABLE_STATUSES` class constants. Verbs `submit/mark_in_transit/confirm_delivery/cancel`
+  **re-check their own guard inside the method** so a double-submit cannot re-stamp
+  `delivered_at` or the POD block (all editable=False, written only by the verb). Flat packing
+  cube (`package_count`/`pallet_count`/`gross_weight_kg`/`volume_cbm`) - deliberately NOT a
+  recursive pallet->carton tree. `source` = portal/email/edi/manual is the provenance column
+  the deferred EDI 856 intake will write. `supplier_reference` is the hand-off hook to
+  `scm.GoodsReceiptNote.delivery_note_ref` in 6.12.
+- **`AsnLine` [no number, same file]** - tenant-less child (the `PurchaseOrderChangeLine`
+  precedent) FK'd to `scm.PurchaseOrderLine`. **No item FK - `core.Item` does not exist (L28)**,
+  so it MIRRORS the PO line free text (`item_description`/`sku_hint`/`uom_hint`, auto-copied
+  when blank). Lot/serial/expiry/country are the supplier's PRE-ARRIVAL declaration as plain
+  text; the real `scm.LotSerial` row is created at receipt (6.12). Derived
+  `outstanding_at_declare`/`variance`/`shortfall`/`is_short` feed the detail page's discrepancy
+  verdict and the prefilled "record the shortfall" backorder link.
+- **`DeliverySchedule` [DSC-, `DeliverySchedule.py`]** - Coupa's four columns on one row: buyer
+  `scheduled_quantity`/`need_by_date` vs supplier `promised_quantity`/`promised_date`, plus
+  `ship_to`->`core.OrgUnit`. **Status stays editable on the form by design** - this ladder hangs
+  no timestamps off its status, so it needs no verbs. `clean()` HARD-BLOCKS over-commitment past
+  the ordered quantity; under-coverage is only a derived warning. `split_po_line()` divides the
+  **UNCOMMITTED remainder** into K evenly spaced rows with the last absorbing the rounding
+  remainder, entirely inside `transaction.atomic()` holding `select_for_update()` over the
+  line's existing rows so two buyers cannot both over-commit.
+- **`Backorder` [BKO-, `Backorder.py`]** - the recorded shortfall: reason (7 choices),
+  `original_`/`revised_promise_date`, and a `reschedule_count` only `reschedule()` may move.
+  Verbs `reschedule/fulfil/cancel` re-validate inside themselves; `raise_alert()` is idempotent
+  and builds `link_url` via `reverse("procurement:backorder_detail", ...)` because
+  `ProcurementAlert.clean()` rejects anything that is not a single-slash internal path.
+  Risk buckets past_due/at_risk/no_commitment/on_track are **derived, not stored**, and the
+  `?risk=` filter is expressed as ORM date arithmetic BEFORE pagination (a Python-side bucket
+  filter would make the page counts lie).
+
+### Views / URLs / Templates
+Views `views/OrderFulfillment/{AdvancedShipmentNotice,DeliverySchedule,Backorder,FulfillmentBoards}.py`
+(26 functions). Url first segments `asn/ delivery-schedules/ backorders/ inbound-tracking/
+delivery-confirmation/`; literal `add/`+`split/` declared BEFORE `<int:pk>/` (first-match-wins).
+Names `asn_* deliveryschedule_* backorder_*` + the two boards `inbound_tracking` /
+`delivery_confirmation`. **All mutation verbs are POST-only, atomic and row-locked; deletes are
+`@tenant_admin_required` and the list/detail buttons carry the SAME gate** (review I7/I8 - a
+member must not see a button the view will refuse).
+`FulfillmentBoards.py` holds **two computed boards with zero new state**: `inbound_tracking`
+(in-flight ASNs, soonest arrival first, reading the 4.6 projections) and `delivery_confirmation`
+(today/overdue/awaiting/confirmed-7d buckets, whitelist-sanitized so `?due=zzz` still renders
+200, and the inline confirm form posts to the existing `asn_confirm_delivery` verb rather than a
+second confirm path). Templates
+`templates/procurement/orderfulfillment/{asn,deliveryschedule,backorder}/{list,detail,form}.html`
++ `deliveryschedule/split.html`, with the two boards at the **sub-module root**
+(`inbound_tracking.html`, `delivery_confirmation.html`) per the `purchaseordermanagement/
+linetracking.html` precedent.
+
+**Query traps already paid for (do not reintroduce):** `PurchaseOrderLine.outstanding_quantity()`
+calls `received_quantity()`, which is ONE GRN aggregate PER LINE - `asn_detail` seeds the
+per-instance cache from `purchase_order.received_by_line()` (1 query, not N). The ASN form's
+`purchase_order` dropdown needs `select_related("vendor")` because `PurchaseOrder.__str__` hops
+to `core.Party`. `confirmed_by` is select_related on the confirmation board ONLY (the tracking
+board never renders it).
+
+### Seeder / Tests
+`_seed_order_fulfillment(self, tenant)` in seed_procurement.py: reuses a **receivable PO whose
+line still has an outstanding balance** (review I2 - picking `lines[0]` blindly landed on a
+fully-received line, so the shortfall folded to `over` with `shortfall == 0` and the whole
+ASN->backorder hand-off was unreachable from demo data), one in-flight ASN with a deliberately
+short first line, one ASN taken to delivered through the REAL `confirm_delivery` verb so the POD
+block is stamped exactly as the view stamps it, a three-instalment ladder keyed on
+(po_line, sequence), and two backorders with different risk shapes. Flush order:
+backorders -> schedules -> ASN lines -> notices. Migration `0016_advancedshipmentnotice_...`.
+Tests: `test_fulfillment_{models(202),forms(77),views(105),security(36)}.py` - functions
+`test_fulfillment_*`, fixtures `fulfillment_*` appended to conftest. Sidebar: `LIVE_LINKS["6.11"]`
+maps all five bullets (Real-time Freight Tracking -> the board, not a table).
