@@ -126,7 +126,12 @@ def escalation_candidates(tenant, policy=None, *, rules=None, limit=ESCALATION_C
             "anchor": anchor,
             "idle_for": idle_for,
             "idle_hours_f": round(idle_for.total_seconds() / 3600, 1),
-            "is_idle": idle_for > timedelta(hours=hours),
+            # ``>=``, not ``>``: a rule window of 0 means "escalate immediately", and a
+            # strict comparison quietly breaks that promise — the system clock on Windows
+            # ticks every ~15.6ms, so a chain created inside the current tick reads back
+            # an idle time of EXACTLY zero and a zero window would never fire. For a real
+            # (non-zero) window the two forms differ only on an exact microsecond tie.
+            "is_idle": idle_for >= timedelta(hours=hours),
             "escalated": _alert_link(req.pk) in open_alert_links,
         })
     rows.sort(key=lambda row: (-row["idle_for"].total_seconds(),
