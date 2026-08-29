@@ -57,6 +57,15 @@ from .PurchaseOrderManagement import (
     convertible_requisitions,
     generate_po_from_requisition,
 )
+from .GoodsReceiptInspection import (
+    ReceiptDiscrepancy,
+    ReceiptTolerancePolicy,
+    ReturnToVendor,
+    ReturnToVendorLine,
+    evaluate_receipt_tolerance,
+    resolve_line_item,
+    resolve_receipt_tolerance,
+)
 
 __all__ = [
     "EaucBid",
@@ -109,4 +118,11 @@ __all__ = [
     "PurchaseOrderChangeLine",
     "convertible_requisitions",
     "generate_po_from_requisition",
+    "ReceiptTolerancePolicy",
+    "resolve_receipt_tolerance",
+    "evaluate_receipt_tolerance",
+    "resolve_line_item",
+    "ReceiptDiscrepancy",
+    "ReturnToVendor",
+    "ReturnToVendorLine",
 ]
