@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, Q
+from django.urls import reverse
 
 from apps.core.crud import _changed
 from apps.procurement.forms import (
@@ -27,6 +28,9 @@ from apps.procurement.forms import (
 )
 from apps.procurement.models import AdvancedShipmentNotice
 from apps.procurement.views._common import *  # noqa: F401,F403
+# The confirmation board's tab whitelist — the inline confirm form posts back here with its
+# ?due= tab, and this is the one definition of which values are real.
+from apps.procurement.views.OrderFulfillment.FulfillmentBoards import _BUCKET_KEYS
 from apps.scm.models import Carrier, PurchaseOrder
 
 #: Statuses whose header/lines are frozen — the edit page refuses them server-side.
@@ -287,11 +291,21 @@ def asn_confirm_delivery(request, pk):
     # single literal "confirmation" is honoured (never an arbitrary URL, which would be an open
     # redirect).
     back_to_board = request.POST.get("next", "").strip() == "confirmation"
+    # ...and which TAB of it. Whitelisted against the board's own bucket keys, so this stays a
+    # hardcoded url + a known query value — never a user-supplied URL.
+    bucket = request.POST.get("due", "").strip()
+    if bucket not in _BUCKET_KEYS:
+        bucket = ""
     success_url = ("procurement:delivery_confirmation" if back_to_board
                    else "procurement:asn_detail")
 
     def _back(**kwargs):
-        return redirect(success_url) if back_to_board else redirect(success_url, **kwargs)
+        if not back_to_board:
+            return redirect(success_url, **kwargs)
+        url = reverse(success_url)
+        # Without the tab, a buyer working Overdue or Awaiting is silently dropped back onto
+        # "Due today" after every single confirmation.
+        return redirect(f"{url}?due={bucket}" if bucket else url)
 
     with transaction.atomic():
         obj = get_object_or_404(AdvancedShipmentNotice.objects.select_for_update(),
