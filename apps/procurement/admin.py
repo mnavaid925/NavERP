@@ -2,6 +2,10 @@
 from django.contrib import admin
 
 from .models import (
+    AdvancedShipmentNotice,
+    AsnLine,
+    Backorder,
+    DeliverySchedule,
     ApprovalDelegation,
     ApprovalRoutingRule,
     BidScore,
@@ -452,3 +456,56 @@ class CatalogUploadBatchAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "status", "original_filename", "validated_by", "validated_at",
                        "rows_parsed", "rows_accepted", "rows_rejected", "error_log",
                        "created_at", "updated_at")
+
+
+class AsnLineInline(admin.TabularInline):
+    model = AsnLine
+    extra = 0
+    fields = ("po_line", "item_description", "sku_hint", "uom_hint", "quantity_shipped",
+              "package_ref", "lot_number", "serial_number", "expiry_date", "country_of_origin")
+    raw_id_fields = ("po_line",)
+
+
+@admin.register(AdvancedShipmentNotice)
+class AdvancedShipmentNoticeAdmin(admin.ModelAdmin):
+    list_display = ("number", "purchase_order", "supplier_reference", "status", "source",
+                    "carrier", "tracking_number", "expected_delivery_date", "delivered_at")
+    list_filter = ("tenant", "status", "source", "freight_terms")
+    search_fields = ("number", "supplier_reference", "tracking_number", "bill_of_lading_ref",
+                     "container_ref", "purchase_order__number")
+    raw_id_fields = ("purchase_order", "carrier", "shipment")
+    inlines = (AsnLineInline,)
+    # status and the whole proof-of-delivery block move ONLY through the guarded verbs
+    # (submit / mark_in_transit / confirm_delivery / cancel), which re-check their own
+    # preconditions and refuse to re-stamp a delivery. The admin looks; it never arrives goods.
+    readonly_fields = ("number", "status", "delivered_at", "arrival_condition", "pod_reference",
+                       "received_signature_name", "confirmed_by", "created_by", "submitted_at",
+                       "cancelled_at", "cancellation_reason", "created_at", "updated_at")
+
+
+@admin.register(DeliverySchedule)
+class DeliveryScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "po_line", "sequence", "scheduled_quantity", "need_by_date",
+                    "promised_quantity", "promised_date", "status", "delivery_mode")
+    list_filter = ("tenant", "status", "delivery_mode")
+    search_fields = ("number", "po_line__item_description", "po_line__sku_hint",
+                     "po_line__purchase_order__number")
+    raw_id_fields = ("po_line", "ship_to", "asn")
+    # status IS editable here (and on the form) by design: this ladder hangs no timestamps and
+    # no who-stamps off its status, so it needs no verbs. Only the number and the audit stamps
+    # are locked.
+    readonly_fields = ("number", "created_by", "created_at", "updated_at")
+
+
+@admin.register(Backorder)
+class BackorderAdmin(admin.ModelAdmin):
+    list_display = ("number", "po_line", "quantity_backordered", "reason", "status",
+                    "original_promise_date", "revised_promise_date", "reschedule_count")
+    list_filter = ("tenant", "status", "reason")
+    search_fields = ("number", "reason_note", "notes", "po_line__item_description",
+                     "po_line__purchase_order__number")
+    raw_id_fields = ("po_line", "delivery_schedule", "asn")
+    # reschedule / fulfil / cancel / raise_alert own status, the reschedule counter, the
+    # closure stamps and the raised-alert link — each re-checking its guard inside itself.
+    readonly_fields = ("number", "status", "reschedule_count", "closed_at", "closure_note",
+                       "alert", "created_by", "created_at", "updated_at")
