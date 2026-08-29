@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Tolerance Exceptions{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Receipt Tolerances — the exceptions board.
+
+    A COMPUTED, READ-ONLY board over every non-cancelled goods receipt line of
+    this workspace, bucketed by the verdict a receipt tolerance policy returns
+    for it. It owns no state and writes nothing: the only action on a row is the
+    one-click hand-off that pre-fills a discrepancy claim.
+
+    The policy is ADVISORY by design. It colours this board and pre-fills the
+    claim; it never blocks the receipt verb, which belongs to SCM. A line the
+    board calls "over-receipt" was still received — that is the point of showing
+    it here.
+
+    The buckets are narrowed in the ORM before pagination, so the stat tiles and
+    the page counts always agree; `no_policy` is a tile rather than a bucket
+    because a configuration gap should be visible without being a work queue.
+
+    Context consumed: object_list (the paginated line page — NOT iterated; `rows`
+    is built from it and is what this template loops), page_obj, q, bucket,
+    bucket_choices, vendors, stats.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tolerance Exceptions</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Goods Receipt &amp; Inspection</span><span class="sep">›</span><span>Tolerance Exceptions</span></div>
+      <p class="text-muted">Receipt lines that fell outside the tolerance policy covering them — too much, too little, too early or too late. Tolerances flag; they never block a receipt. Raise a discrepancy from a row to turn a flag into a claim against the supplier.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:tolerancepolicy_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Tolerance policies</a>
+      <a href="{% url 'procurement:receiving_console' %}" class="btn btn-outline"><i data-lucide="package-search"></i> Receiving console</a>
+      <a href="{% url 'procurement:discrepancy_list' %}" class="btn btn-primary"><i data-lucide="triangle-alert"></i> Discrepancies</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="arrow-up-narrow-wide"></i></div><div class="stat-value">{{ stats.over }}</div><div class="stat-label">Over-receipt</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="arrow-down-narrow-wide"></i></div><div class="stat-value">{{ stats.short }}</div><div class="stat-label">Under-receipt</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-arrow-up"></i></div><div class="stat-value">{{ stats.early }}</div><div class="stat-label">Early</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.late }}</div><div class="stat-label">Late</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="shield-off"></i></div><div class="stat-value">{{ stats.no_policy }}</div><div class="stat-label">No policy covers it</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group" style="margin-bottom:.8rem;">
+        {% for val, label in bucket_choices %}
+          <a class="btn btn-sm {% if bucket == val %}btn-primary{% else %}btn-outline{% endif %}"
+             href="?bucket={{ val }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if request.GET.vendor %}&vendor={{ request.GET.vendor|urlencode }}{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </div>
+
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="exceptions_q">Search</label>
+          <input type="text" id="exceptions_q" name="q" value="{{ q }}" class="form-input" placeholder="Receipt number, item description or SKU…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="exceptions_bucket">Exception</label>
+          {% comment %}No blank option: the board always shows one bucket, and an unknown value falls back to Over-receipt rather than rendering an empty page.{% endcomment %}
+          <select id="exceptions_bucket" name="bucket" class="form-select">
+            {% for val, label in bucket_choices %}
+              <option value="{{ val }}" {% if bucket == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="exceptions_vendor">Vendor</label>
+          <select id="exceptions_vendor" name="vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:tolerance_exceptions' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Receipt</th>
+            <th>Item</th>
+            <th class="text-right">Ordered</th>
+            <th class="text-right">Received</th>
+            <th class="text-right">Rejected</th>
+            <th>Policy</th>
+            <th>Verdict</th>
+            <th>Dates</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% if row.receipt %}
+                  <a href="{% url 'scm:goodsreceipt_detail' row.receipt.pk %}" class="fw-600">{{ row.receipt.number }}</a>
+                  <div>
+                    <span class="badge {% if row.receipt.status == 'received' %}badge-green{% elif row.receipt.status == 'cancelled' %}badge-muted{% elif row.receipt.status == 'draft' %}badge-slate{% else %}badge-info{% endif %}">{{ row.receipt.get_status_display }}</span>
+                  </div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                <div class="text-muted">
+                  {% if row.order %}{{ row.order.number }}{% else %}No order{% endif %}
+                  · {% if row.vendor %}{{ row.vendor.name }}{% else %}No vendor{% endif %}
+                </div>
+              </td>
+              <td>
+                <span class="fw-600">{{ row.description|default:"—" }}</span>
+                <div class="text-muted">{% if row.sku_hint %}SKU {{ row.sku_hint }}{% else %}No SKU on the order line{% endif %}</div>
+              </td>
+              <td class="text-right">{{ row.ordered|floatformat:"-4" }}</td>
+              <td class="text-right">{{ row.received|floatformat:"-4" }}</td>
+              <td class="text-right">{{ row.rejected|floatformat:"-4" }}</td>
+              <td>
+                {% if row.rule %}
+                  <a href="{% url 'procurement:tolerancepolicy_detail' row.rule.pk %}">{{ row.rule.name }}</a>
+                  <div><span class="badge {{ row.rule.action_css|default:'badge-slate' }}">{{ row.rule.get_action_display }}</span></div>
+                {% else %}
+                  <span class="badge badge-muted">No policy</span>
+                  <div class="text-muted">Nothing covers this line</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ row.verdict_css|default:'badge-slate' }}">
+                  {% if row.verdict == 'ok' %}Within tolerance
+                  {% elif row.verdict == 'over' %}Over-receipt
+                  {% elif row.verdict == 'short' %}Under-receipt
+                  {% elif row.verdict == 'early' %}Early
+                  {% elif row.verdict == 'late' %}Late
+                  {% else %}No policy{% endif %}
+                </span>
+                {% if row.reason %}<div class="text-muted">{{ row.reason }}</div>{% endif %}
+              </td>
+              <td>
+                <div>{% if row.receipt_date %}Received {{ row.receipt_date|date:"M d, Y" }}{% else %}<span class="text-muted">No receipt date</span>{% endif %}</div>
+                <div class="text-muted">{% if row.expected_date %}Expected {{ row.expected_date|date:"M d, Y" }}{% else %}No date promised{% endif %}</div>
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% if row.receipt %}
+                    <a href="{% url 'scm:goodsreceipt_detail' row.receipt.pk %}" class="btn-icon" title="View receipt" aria-label="View receipt"><i data-lucide="eye"></i></a>
+                  {% endif %}
+                  {% if row.prefill_url %}
+                    <a href="{{ row.prefill_url }}" class="btn btn-outline btn-sm" title="Raise a discrepancy pre-filled from this line"><i data-lucide="triangle-alert"></i> Raise</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="scale"></i>
+                {% if bucket == 'short' %}
+                  <h3>Nothing under-received</h3>
+                  <p>No receipt line fell short of its policy band. Under-receipts show up here once a delivery closes out below the ordered quantity by more than the policy allows.</p>
+                {% elif bucket == 'early' %}
+                  <h3>Nothing arrived early</h3>
+                  <p>No receipt beat its expected date by more than its policy allows. Set an early-receipt window on a policy to start catching them.</p>
+                {% elif bucket == 'late' %}
+                  <h3>Nothing arrived late</h3>
+                  <p>No receipt missed its expected date by more than its policy allows. Set a late-receipt window on a policy to start catching them.</p>
+                {% else %}
+                  <h3>Nothing over-received</h3>
+                  <p>No receipt line exceeded the band of the policy covering it. If you expected exceptions here, check that a policy actually covers those items — the "no policy" tile counts the lines nothing governs.</p>
+                {% endif %}
+                <a href="{% url 'procurement:tolerancepolicy_list' %}" class="btn btn-primary"><i data-lucide="sliders-horizontal"></i> Review tolerance policies</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
