@@ -95,9 +95,17 @@ class ReturnToVendorForm(TenantUniqueMixin, TenantModelForm):
             PurchaseOrder.objects.filter(tenant=tenant)
             .select_related("vendor").order_by("-order_date", "-id")
         )
-        # A cancelled receipt never happened; returning goods against it would be meaningless.
+        # A cancelled receipt never happened; returning goods against it would be meaningless —
+        # EXCEPT where this return already points at one, in which case dropping it from the
+        # queryset would render a <select> with no matching option and, because the field is
+        # ``null=True, blank=True``, silently save ``goods_receipt = NULL`` on the next edit,
+        # losing the origin link with no error. Same exemption ``ReturnToVendorLineForm`` applies
+        # to a stored receipt line.
+        offerable = ~Q(status="cancelled")
+        if self.instance.pk and self.instance.goods_receipt_id:
+            offerable |= Q(pk=self.instance.goods_receipt_id)
         self.fields["goods_receipt"].queryset = (
-            GoodsReceiptNote.objects.filter(tenant=tenant).exclude(status="cancelled")
+            GoodsReceiptNote.objects.filter(tenant=tenant).filter(offerable)
             .select_related("purchase_order").order_by("-receipt_date", "-id")
         )
         self.fields["discrepancy"].queryset = (
