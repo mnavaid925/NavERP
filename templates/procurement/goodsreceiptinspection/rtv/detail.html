@@ -4,8 +4,8 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">{{ obj.number }}
-        <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'authorized' %}badge-info{% elif obj.status == 'shipped' %}badge-amber{% elif obj.status == 'closed' %}badge-green{% elif obj.status == 'cancelled' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
-        <span class="badge {% if obj.reason == 'damaged' %}badge-red{% elif obj.reason == 'defective' %}badge-red{% elif obj.reason == 'expired' %}badge-red{% elif obj.reason == 'wrong_item' %}badge-amber{% elif obj.reason == 'over_shipment' %}badge-amber{% elif obj.reason == 'not_to_spec' %}badge-amber{% elif obj.reason == 'other' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.reason_css }}">{{ obj.get_reason_display }}</span>
         {% comment %}
           Advisory only — a repeated supplier RMA is usually a duplicate raise, but suppliers do reuse one
           authorisation across shipments, so this warns and never blocks the workflow.
@@ -39,10 +39,10 @@
       <div class="detail-item"><dt>Source discrepancy</dt>
         <dd>{% if discrepancy %}<a href="{% url 'procurement:discrepancy_detail' discrepancy.pk %}" class="fw-600">{{ discrepancy.number }}</a> <span class="badge badge-slate">{{ discrepancy.get_kind_display }}</span>{% else %}<span class="text-muted">Raised directly, not from a discrepancy</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Reason</dt>
-        <dd><span class="badge {% if obj.reason == 'damaged' %}badge-red{% elif obj.reason == 'defective' %}badge-red{% elif obj.reason == 'expired' %}badge-red{% elif obj.reason == 'wrong_item' %}badge-amber{% elif obj.reason == 'over_shipment' %}badge-amber{% elif obj.reason == 'not_to_spec' %}badge-amber{% elif obj.reason == 'other' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span>
+        <dd><span class="badge {{ obj.reason_css }}">{{ obj.get_reason_display }}</span>
           {% if obj.reason_note %}<div class="text-muted">{{ obj.reason_note }}</div>{% endif %}</dd></div>
       <div class="detail-item"><dt>Remedy sought</dt>
-        <dd><span class="badge {% if obj.remedy == 'credit' %}badge-info{% elif obj.remedy == 'replacement' %}badge-slate{% elif obj.remedy == 'repair' %}badge-amber{% elif obj.remedy == 'none' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_remedy_display }}</span></dd></div>
+        <dd><span class="badge {{ obj.remedy_css }}">{{ obj.get_remedy_display }}</span></dd></div>
       <div class="detail-item"><dt>Expected credit</dt><dd class="fw-600">{{ expected_credit_value|floatformat:2 }}</dd></div>
       <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
     </dl>
