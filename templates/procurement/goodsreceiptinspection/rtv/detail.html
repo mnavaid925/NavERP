@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Return to Vendor{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'authorized' %}badge-info{% elif obj.status == 'shipped' %}badge-amber{% elif obj.status == 'closed' %}badge-green{% elif obj.status == 'cancelled' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge {% if obj.reason == 'damaged' %}badge-red{% elif obj.reason == 'defective' %}badge-red{% elif obj.reason == 'expired' %}badge-red{% elif obj.reason == 'wrong_item' %}badge-amber{% elif obj.reason == 'over_shipment' %}badge-amber{% elif obj.reason == 'not_to_spec' %}badge-amber{% elif obj.reason == 'other' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span>
+        {% comment %}
+          Advisory only — a repeated supplier RMA is usually a duplicate raise, but suppliers do reuse one
+          authorisation across shipments, so this warns and never blocks the workflow.
+        {% endcomment %}
+        {% if has_duplicate_rma %}<span class="badge badge-amber">Duplicate supplier RMA</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:rtv_list' %}">Returns to vendor</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase order</a>{% endif %}
+      {% if receipt %}<a href="{% url 'scm:goodsreceipt_detail' receipt.pk %}" class="btn btn-outline"><i data-lucide="package-check"></i> Goods receipt</a>{% endif %}
+      {% if can_edit %}<a href="{% url 'procurement:rtv_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">This return posts nothing</h2><span class="text-muted">deliberate, not an omission</span></div>
+    <div class="card-body">
+      <p>{{ non_posting_note }}</p>
+      <p class="text-muted">Receiving posts only the accepted quantity, so quantity rejected on the dock never entered stock or the ledger and there is nothing here to remove. Accepted stock that later fails inspection is taken out by a quarantine disposition or a stock adjustment in inventory. The credit note reference below is free text for the supplier document — no accounts-payable entry is created from this page.</p>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Vendor</dt><dd>{% if vendor %}<span class="fw-600">{{ vendor.name }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Purchase order</dt>
+        <dd>{% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a> <span class="badge badge-slate">{{ order.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Goods receipt</dt>
+        <dd>{% if receipt %}<a href="{% url 'scm:goodsreceipt_detail' receipt.pk %}" class="fw-600">{{ receipt.number }}</a> <span class="badge badge-slate">{{ receipt.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Source discrepancy</dt>
+        <dd>{% if discrepancy %}<a href="{% url 'procurement:discrepancy_detail' discrepancy.pk %}" class="fw-600">{{ discrepancy.number }}</a> <span class="badge badge-slate">{{ discrepancy.get_kind_display }}</span>{% else %}<span class="text-muted">Raised directly, not from a discrepancy</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Reason</dt>
+        <dd><span class="badge {% if obj.reason == 'damaged' %}badge-red{% elif obj.reason == 'defective' %}badge-red{% elif obj.reason == 'expired' %}badge-red{% elif obj.reason == 'wrong_item' %}badge-amber{% elif obj.reason == 'over_shipment' %}badge-amber{% elif obj.reason == 'not_to_spec' %}badge-amber{% elif obj.reason == 'other' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span>
+          {% if obj.reason_note %}<div class="text-muted">{{ obj.reason_note }}</div>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Remedy sought</dt>
+        <dd><span class="badge {% if obj.remedy == 'credit' %}badge-info{% elif obj.remedy == 'replacement' %}badge-slate{% elif obj.remedy == 'repair' %}badge-amber{% elif obj.remedy == 'none' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_remedy_display }}</span></dd></div>
+      <div class="detail-item"><dt>Expected credit</dt><dd class="fw-600">{{ expected_credit_value|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Return logistics</h2><span class="text-muted">carrier and tracking are free text here — freight milestones belong to SCM transportation</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier RMA</dt>
+          <dd>{{ obj.supplier_rma_number|default:"—" }}{% if has_duplicate_rma %} <span class="badge badge-amber">Also used on another return</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Carrier</dt><dd>{{ obj.carrier_name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Tracking number</dt><dd>{{ obj.tracking_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Shipped back on</dt><dd>{{ obj.shipped_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Expected return date</dt><dd>{{ obj.expected_return_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Credit note reference</dt><dd>{{ obj.credit_note_ref|default:"—" }}<div class="text-muted">Reference only — no ledger entry is created.</div></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Return lines ({{ lines|length }})</h2><span class="text-muted">the credit is sized from each purchase-order line unit price</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Description</th><th>SKU / UOM</th><th>Receipt line</th><th class="text-right">Qty returned</th><th class="text-right">Unit price</th><th class="text-right">Expected credit</th><th>Lot / serial</th><th>Condition</th></tr></thead>
+        <tbody>
+          {% for row in line_rows %}
+            <tr>
+              <td class="fw-600">{{ row.description|default:"—" }}</td>
+              <td>{{ row.sku_hint|default:"—" }}{% if row.uom_hint %} <span class="text-muted">/ {{ row.uom_hint }}</span>{% endif %}</td>
+              <td>
+                {% if row.line.goods_receipt_line %}
+                  {{ row.line.goods_receipt_line }}
+                {% elif row.line.po_line %}
+                  <span class="text-muted">Order line only</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ row.quantity|floatformat:"-4" }}</td>
+              <td class="text-right">{{ row.unit_price|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ row.expected_credit|floatformat:2 }}</td>
+              <td>{{ row.line.lot_number|default:"—" }}{% if row.line.serial_number %}<div class="text-muted">{{ row.line.serial_number }}</div>{% endif %}</td>
+              <td>{{ row.line.condition_note|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-x"></i><p>No lines on this return yet. Edit the draft to add the receipt or order lines that are going back to the supplier.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if line_rows %}
+          <tfoot><tr><td colspan="5" class="text-right fw-600">Expected credit total</td><td class="text-right fw-600">{{ expected_credit_value|floatformat:2 }}</td><td colspan="2"></td></tr></tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {% if can_ship %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Ship the return</h2><span class="text-muted">records the despatch back to the supplier — it moves no stock</span></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:rtv_ship' obj.pk %}" onsubmit="return confirm('Mark this return as shipped back to the supplier?');">
+          {% csrf_token %}
+          {% for e in ship_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in ship_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="truck"></i> Mark shipped</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if can_close %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Close the return</h2><span class="text-muted">the credit note reference is recorded here, not posted</span></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:rtv_close' obj.pk %}" onsubmit="return confirm('Close this return? It becomes a read-only record.');">
+          {% csrf_token %}
+          {% for e in close_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in close_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Close return</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% if can_edit %}
+          <a href="{% url 'procurement:rtv_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_authorize %}
+          <form method="post" action="{% url 'procurement:rtv_authorize' obj.pk %}" onsubmit="return confirm('Authorize this return? The lines are fixed once it leaves draft.');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="shield-check"></i> Authorize</button>
+          </form>
+        {% endif %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'procurement:rtv_delete' obj.pk %}" onsubmit="return confirm('Delete draft return {{ obj.number }} and its return lines?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'procurement:rtv_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to returns</a>
+      </div>
+
+      {% if can_cancel %}
+        <hr>
+        <form method="post" action="{% url 'procurement:rtv_cancel' obj.pk %}" onsubmit="return confirm('Cancel this return? A return that has already shipped can never be cancelled.');">
+          {% csrf_token %}
+          {% for e in cancel_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          {% for field in cancel_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Cancel return</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.status == 'cancelled' %}
+    <div class="card"><div class="card-body">
+      <p><span class="badge badge-slate">Cancelled</span> {% if obj.cancelled_at %}on {{ obj.cancelled_at|date:"M d, Y H:i" }}{% endif %}</p>
+      {% if obj.cancellation_reason %}<p class="text-muted">{{ obj.cancellation_reason }}</p>{% endif %}
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created by</dt>
+        <dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Authorized by</dt>
+        <dd>{% if obj.authorized_by %}{{ obj.authorized_by.get_full_name|default:obj.authorized_by.username }}{% else %}—{% endif %}{% if obj.authorized_at %} · {{ obj.authorized_at|date:"M d, Y H:i" }}{% endif %}</dd></div>
+      <div class="detail-item"><dt>Closed</dt><dd>{{ obj.closed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div></div>
+{% endblock %}
