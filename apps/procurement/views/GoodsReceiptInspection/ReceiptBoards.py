@@ -852,8 +852,12 @@ def tolerance_exceptions(request):
     # Counted per bucket rather than in one conditional aggregate: the over/short predicates read
     # a correlated-subquery annotation, and a Subquery inside a ``Count(filter=...)`` is not
     # portable across the backends this project runs on. Four cheap COUNTs, same numbers.
+    # Fetched ONCE per request and handed to both consumers below — the coverage count and
+    # the page's rows used to issue this same three-join query twice for no benefit.
+    rules = _tolerance_rules(tenant)
+
     stats = {key: annotated.filter(condition).count() for key, condition in conditions.items()}
-    stats["no_policy"] = _uncovered_line_count(tenant, base)
+    stats["no_policy"] = _uncovered_line_count(tenant, base, rules)
 
     qs = (annotated.filter(conditions[bucket])
           .select_related("goods_receipt", "goods_receipt__purchase_order",
@@ -873,7 +877,7 @@ def tolerance_exceptions(request):
         "object_list": page_obj.object_list,
         "page_obj": page_obj,
         "q": q,
-        "rows": _exception_rows(tenant, list(page_obj.object_list)),
+        "rows": _exception_rows(tenant, list(page_obj.object_list), rules),
         "bucket": bucket,
         "bucket_choices": BUCKET_CHOICES,
         "vendors": _supplier_parties(tenant),
@@ -881,7 +885,7 @@ def tolerance_exceptions(request):
     })
 
 
-def _uncovered_line_count(tenant, base):
+def _uncovered_line_count(tenant, base, rules):
     """How many live receipt lines NO active tolerance policy covers.
 
     A silent configuration gap is the failure mode a tolerance board exists to surface: with no
@@ -889,7 +893,6 @@ def _uncovered_line_count(tenant, base):
     DISTINCT (sku hint, vendor) groups rather than per line — resolution depends on nothing else,
     so one grouped query plus one pass over the groups answers it exactly, whatever the row count.
     """
-    rules = _tolerance_rules(tenant)
     groups = list(
         base.values("po_line__sku_hint", "goods_receipt__purchase_order__vendor_id")
         .annotate(n=Count("id")).order_by("-n")[:_COVERAGE_CAP]
@@ -909,12 +912,15 @@ def _uncovered_line_count(tenant, base):
     return uncovered
 
 
-def _exception_rows(tenant, lines):
-    """One derived row per receipt line on the page, judged against its governing policy."""
+def _exception_rows(tenant, lines, rules):
+    """One derived row per receipt line on the page, judged against its governing policy.
+
+    ``rules`` is passed in rather than fetched: ``tolerance_exceptions`` needs the same list
+    for its coverage tile, and fetching it twice per render bought nothing.
+    """
     if not lines:
         return []
 
-    rules = _tolerance_rules(tenant)
     items = _item_map(tenant, {_norm(line.po_line.sku_hint) for line in lines if line.po_line_id})
     # Resolved once per request: a NoReverseMatch here means the discrepancy lane is not wired,
     # which is a wiring bug worth seeing rather than hiding behind a fallback link.
