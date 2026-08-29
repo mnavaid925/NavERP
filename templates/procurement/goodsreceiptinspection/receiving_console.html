@@ -23,7 +23,9 @@
     Context consumed: object_list (the paginated ASN page — NOT iterated; `rows`
     is built from it and is what this template loops), page_obj, q,
     status_choices, vendors, purchase_orders, locations, arrival,
-    arrival_choices, can_mint, stats.
+    arrival_choices, status (the SANITIZED ?status=, echoed back — never
+    request.GET.status, which may hold a value the board rejected), can_mint,
+    stats.
   {% endcomment %}
   <div class="page-header">
     <div>
@@ -66,7 +68,7 @@
           <select id="console_status" name="status" class="form-select">
             <option value="">All open statuses</option>
             {% for val, label in status_choices %}
-              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+              <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>
