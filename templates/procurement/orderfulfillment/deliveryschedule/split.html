@@ -68,7 +68,7 @@
               <td><a href="{% url 'scm:purchaseorder_detail' line.purchase_order.pk %}" class="fw-600">{{ line.purchase_order.number }}</a></td>
               <td>
                 {{ line.item_description|default:"—" }}
-                {% if line.sku_hint %}<div class="text-muted small">{{ line.sku_hint }}</div>{% endif %}
+                {% if line.sku_hint %}<div class="text-muted">{{ line.sku_hint }}</div>{% endif %}
               </td>
               <td class="text-right">{{ line.quantity|floatformat:"-4" }}{% if line.uom_hint %} <span class="text-muted">{{ line.uom_hint }}</span>{% endif %}</td>
               <td class="text-right">{{ line.scheduled_total|floatformat:"-4" }}</td>
