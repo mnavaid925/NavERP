@@ -481,3 +481,590 @@ Every list page: filter bar reflecting `request.GET` (string fields `==` compare
 
 ## Review notes
 (filled in at close-out)
+
+---
+# Sub-module 6.12 - Goods Receipt & Inspection (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.12.md  (2026-08-30)
+
+App EXISTS (`apps/procurement/`, 6.1-6.11 built) -> this pass EXTENDS it. **No `config/settings.py` /
+`config/urls.py` change** (procurement is already installed and included).
+Sub-module package folder: **`GoodsReceiptInspection/`** in all four backend layers.
+Template sub-module folder: **`goodsreceiptinspection/`**. Test subslug: **`receipt`**.
+Migration **0017 is CLAIMED** and generated **LAST** (0016 is 6.11's, already on disk as
+`0016_advancedshipmentnotice_asnline_deliveryschedule_and_more.py` - do not touch it).
+Number prefixes **`RDS`** and **`RTV`** re-verified free across `apps/` this session.
+
+## THE HEADLINE - 6 of the 10 NavERP.md bullets are ALREADY BUILT (L36: map, do not rebuild)
+
+This sub-module is mostly an **ownership map**. Only 4 bullets need new procurement tables/pages;
+the other 6 point at pages that exist today. Every one of the "already built" claims below was
+re-verified by grep this session:
+
+| NavERP.md bullet (line 1069-1078) | Verdict | Where it already lives |
+|---|---|---|
+| Goods Receipt Note (GRN) Creation | NEW computed page | `scm.GoodsReceiptNote`/`GoodsReceiptLine` exist; 6.12 adds the ASN->GRN booking desk |
+| Receipt Tolerances | **NEW TABLE** | nothing in the repo has a quantity tolerance |
+| Quality Inspection Checklists | MAP | `inventory.QcChecklist`/`QcChecklistItem` (`QcChecklists.py:24,72`) |
+| Quarantine & Inspection Hold | MAP | `inventory.QuarantineOrder` (`QuarantineOrders.py:48`) |
+| Lot, Batch & Serial Capture | MAP | `scm.LotSerial` (`LotSerials.py:5`) |
+| Discrepancy Reporting | **NEW TABLE** | nothing anchors a finding to a GRN line |
+| Return to Vendor (RTV) Processing | **NEW TABLE** | genuinely absent - see the RTV note below |
+| Item Tagging & Barcoding | MAP | `inventory.BarcodeLabel` (`BarcodeLabels.py:17`) + scan console |
+| Inventory Posting | MAP | `_post_grn_receipt` (`apps/scm/views/_helpers.py:299`) |
+| Receipt Reversal & Audit Trail | MAP + NEW page | `_reverse_grn_receipt` (`_helpers.py:335`) + a computed trail |
+
+**Spine re-verified by `^class` grep this session (L28) - every FK below targets a real class:**
+`scm.GoodsReceiptNote` (`ProcurementManagement/GoodsReceiptNotes.py:15`, `[GRN-]`,
+`delivery_note_ref`, `status` draft/received/cancelled, `PRICE_TOLERANCE_PCT = Decimal("2")`) -
+`scm.GoodsReceiptLine` (`:166`; `quantity_received`, `quantity_rejected`, `rejection_reason`;
+**no item FK, no lot field, no tenant column** - scoped through the header) -
+`scm.PurchaseOrder`/`PurchaseOrderLine` (`PurchaseOrders.py:15,172`; free-text
+`item_description`/`sku_hint`/`uom_hint`; `received_by_line()`, `received_quantity()`,
+`outstanding_quantity()`) - `scm.NonConformance` (`NonConformances.py:28`) -
+`scm.QualityInspection` (`QualityInspections.py:62`) - `scm.LotSerial` (`LotSerials.py:5`,
+`unique_together = ("tenant","item","number")`) - `scm.Item` (`Items.py:73`, has `sku` +
+`category`) - `scm.ItemCategory` (`Items.py:34`) - `inventory.QuarantineOrder`
+(`QuarantineOrders.py:48`) - `inventory.QcRoutingRule` + `resolve_qc_routing()`
+(`QcRoutingRules.py:24,89`) - `core.Party` (`Party.py:5`) - `core.Tenant` (`Tenant.py:5`) -
+`core.AuditLog` (`AuditLog.py:5`).
+**`apps/quality` does NOT exist** (`apps/*/apps.py` = core accounts tenants dashboard crm
+accounting hrm scm inventory procurement). **`core.Item` does NOT exist** - free-text mirrors only.
+
+## Boundaries this pass must not cross (L36 - encode these in the model docstrings)
+
+- [ ] **NEVER re-declare or add a field to** `scm.GoodsReceiptNote` / `GoodsReceiptLine` /
+      `QualityInspection` / `NonConformance` / `LotSerial`, or `inventory.QuarantineOrder` /
+      `QcChecklist` / `QcRoutingRule`. 6.12 EXTENDS them **by FK, by string**, nothing else.
+- [ ] **NEVER post a `StockMove` and NEVER post a `JournalEntry`.** `_post_grn_receipt`
+      (`apps/scm/views/_helpers.py:299`, line 319 `qty = line.quantity_received or ZERO`) posts
+      **only the RECEIVED quantity** - a quantity rejected at the dock never entered the ledger
+      and has nothing to remove. Stock that failed QC *after* acceptance is removed by
+      `inventory.QuarantineOrder.scrap()` or `scm:stockadjustment`. `apps/accounting` owns the
+      ledger (L29) and `accounting.Bill` has no `kind` for a vendor credit (already flagged to
+      Modules 2/6 in `scm.WarrantyClaim`'s docstring). **Write this reasoning into
+      `ReturnToVendor`'s docstring and onto the RTV detail page** so a reviewer does not "fix" it.
+- [ ] **NEVER open a third quality register.** SCM 4.9 owns engineering/metrology
+      (`InspectionPlan`->`QualityInspection`->`NonConformance`), inventory 5.15 owns the
+      warehouse floor (`QcChecklist`, `QcRoutingRule`, `QuarantineOrder`, `DefectReport`).
+      6.12 owns only the **commercial** consequence of a bad receipt (discrepancy claim + RTV).
+- [ ] **NEVER block or replace `scm:goodsreceipt_receive`.** The tolerance policy is
+      **ADVISORY** this pass: it colours the console, drives the exceptions board and pre-fills a
+      discrepancy. Hard-blocking is an SCM change to negotiate later.
+- [ ] **NEVER add a vendor login page** (L32). `vendor_notified_on` / `vendor_reference` record
+      that we told the supplier; the outbound transport is integration/later.
+- [ ] Writing a **DRAFT** `scm.GoodsReceiptNote` from the console **is allowed** and is the 6.1
+      precedent (Quick Requisition Entry writes into `scm.PurchaseRequisition` - see
+      `apps/procurement/models/_base.py:11-17`). The **stock effect** stays SCM's admin-gated
+      `scm:goodsreceipt_receive`. One writer for the ledger.
+
+## Models (3 tables + 1 child, in 3 entity files - from research, scope frozen)
+
+- [ ] **`ReceiptTolerancePolicy`** (`TenantOwned`, **NO number prefix** - the `QcRoutingRule` /
+      `ApprovalRoutingRule` / `EscalationPolicy` rule-master precedent).
+      File `models/GoodsReceiptInspection/ReceiptTolerances.py`.
+      Drivers: SAP under/over-delivery tolerance + unlimited-overdelivery flag; Oracle receiving
+      parameters (over-receipt tolerance, days early/late receipt allowed, **action per
+      tolerance**); Ariba tolerances by quantity/percentage/value; Ivalua/Precoro tolerance limits.
+      - Identity + scope: `name` CharField(100); `item` FK `"scm.Item"` CASCADE null/blank
+        `related_name="procurement_receipt_tolerances"`; `category` FK `"scm.ItemCategory"`
+        CASCADE null/blank same related_name; `vendor` FK `"core.Party"` SET_NULL null/blank same
+        related_name (blank = any vendor).
+      - Quantity band (driver: Ariba's "percentage OR absolute quantity"): `over_receipt_pct`
+        Decimal(6,2) null/blank MinValue(0); `under_receipt_pct` Decimal(6,2) null/blank
+        MinValue(0)+MaxValue(100); `over_receipt_qty` Decimal(14,4) null/blank MinValue(0)
+        (absolute alternative - when both are set the **more restrictive** wins; document it).
+      - `allow_unlimited_over_receipt` BooleanField default False (driver: SAP's escape flag -
+        when True the two over-* fields are ignored; say so in `help_text` AND in `clean()`).
+      - Date band (driver: Oracle "days early/late receipt allowed"): `early_receipt_days`
+        PositiveIntegerField null/blank; `late_receipt_days` PositiveIntegerField null/blank -
+        compared against the PO line's expected/promised date, never stored.
+      - `ACTION_CHOICES` = `none | warn | block_flag`, `action` CharField(11) default `warn`
+        (driver: Oracle's explicit per-tolerance action; `block_flag` **flags, it does not
+        block** - the docstring must say why).
+      - `price_variance_pct` Decimal(6,2) null/blank - **advisory mirror** of the hardcoded
+        `GoodsReceiptNote.PRICE_TOLERANCE_PCT = 2`. Wiring it into `recompute_match()` is an SCM
+        write -> parked for 6.13. Say that in the `help_text`.
+      - `priority` PositiveIntegerField default 10 (tie-break, lower wins); `is_active`
+        BooleanField default True; `notes` CharField(255) blank.
+      - `Meta`: `ordering=["priority","id"]`; indexes `(tenant,is_active,priority)` name
+        `prc_rtp_tnt_act_pri_idx` and `(tenant,action)` name `prc_rtp_tnt_action_idx` (<=30 chars).
+        **No `unique_together`** - overlapping rules are LEGAL, the resolver decides
+        (the `QcRoutingRule` comment at `QcRoutingRules.py:14-15`).
+      - `clean()`: cross-tenant guards on `item` / `category` / `vendor` (the
+        `QcRoutingRule.clean()` shape at `QcRoutingRules.py:66-86`, errors keyed on the rendered
+        field); refuse a rule that sets **no** band at all unless
+        `allow_unlimited_over_receipt` is True; refuse `item` AND `category` both set.
+      - **Form excludes:** `tenant`, `created_at`, `updated_at`. Everything else is editable -
+        this is a configuration master, not a workflow document.
+      - [ ] **Module-level resolver, a structural clone of `resolve_qc_routing()`
+        (`apps/inventory/models/QualityControl/QcRoutingRules.py:89-146` - READ IT FIRST):**
+        `resolve_receipt_tolerance(item=None, vendor=None, *, tenant=None, category=None, rules=None)`
+        -> `(rule|None, reason)`. Same hierarchy: item tier 3 > category tier 2 > catch-all 1;
+        a **vendor-pinned rule never fires for an unknown/other supplier**; then `priority` ASC,
+        `id` ASC. A caller-supplied `rules` list is trusted for ORDER, never for TENANCY (re-filter
+        it - `QcRoutingRules.py:113-116`). Every refusal string starts `"No Rule Matched"`.
+      - [ ] **Second, separate function** `evaluate_receipt_tolerance(rule, *, ordered_quantity,
+        received_quantity, expected_date=None, receipt_date=None)` -> `(verdict, reason)` with
+        verdict in `ok | over | short | early | late | no_rule`. Split from the resolver on
+        purpose: selection and judgement are independently testable, and the exceptions board
+        needs the verdict for lines the resolver already picked a rule for.
+      - [ ] **Item resolution helper** `resolve_line_item(tenant, po_line)` -> `scm.Item | None`,
+        matching `Item.objects.filter(tenant=tenant, sku__iexact=po_line.sku_hint).first()`.
+        This **MIRRORS** `apps/scm/views/_helpers.py:279 _resolve_grn_item` rather than importing
+        a private cross-app symbol. GRN/PO lines are free text - there is no item FK to read.
+
+- [ ] **`ReceiptDiscrepancy`** [`RDS-`] (`TenantNumbered`).
+      File `models/GoodsReceiptInspection/ReceiptDiscrepancies.py`.
+      Drivers: Ariba's accepted-vs-rejected with a mandatory replace-or-credit answer and a
+      goods-return tracking number; Oracle's inspection reasons/comments/attachments; Procurify's
+      per-line pass/fail with packing-slip upload; Odoo's photo check; D365's **Vendor**-type
+      nonconformance sourced from the PO/receipt/lot; Ivalua's instant discrepancy detection.
+      - Anchor: `goods_receipt` FK `"scm.GoodsReceiptNote"` **PROTECT**
+        `related_name="procurement_discrepancies"`; `goods_receipt_line` FK
+        `"scm.GoodsReceiptLine"` **PROTECT null/blank** same related_name (a header-level
+        discrepancy - "the paperwork was missing" - is legal).
+      - `KIND_CHOICES` = `over_shipment | short_shipment | damaged | wrong_item |
+        quality_failure | documentation | late_delivery` (driver: D365's problem types + Ariba's
+        rejection reasons). `SEVERITY_CHOICES` = `minor | major | critical`, default `minor`.
+      - `quantity_affected` Decimal(14,4) default 0 MinValue(0).
+      - Free-text item mirror (**there is no item FK on a GRN line** - the `AsnLine` rule):
+        `item_description` CharField(255) blank (auto-copied from `goods_receipt_line.po_line` on
+        save when blank), `sku_hint` CharField(64) blank.
+      - Traceability text (partially serves bullet 5 WITHOUT a 4th table): `lot_number`
+        CharField(64) blank, `serial_number` CharField(64) blank, `expiry_date` DateField
+        null/blank.
+      - `description` TextField.
+      - **Evidence (driver: Odoo photo check / Procurify packing-slip upload / Oracle
+        attachments):** `evidence` FileField(`upload_to="procurement/receipt_evidence/%Y/%m/"`,
+        null/blank) + `evidence_url` URLField(blank) fallback - the
+        `inventory.DefectReport.photo`/`photo_url` pattern. **Validation MUST reuse the existing
+        guards, not invent new ones:** `from apps.core.forms._common import
+        ALLOWED_DOC_EXTENSIONS, MAX_UPLOAD_BYTES` (`apps/core/forms/_common.py:16` - the
+        allowlist incl. `.pdf .png .jpg .jpeg .gif .webp`; `:22` - 20 MB). **Do NOT re-export
+        either constant from `apps/procurement/forms/__init__.py`**: this app already has a
+        *different* local `MAX_UPLOAD_BYTES = 2 * 1024 * 1024` at
+        `forms/CatalogManagement/UploadBatches.py:13`, and a package-level re-export would make
+        which 2 MB / 20 MB applies depend on import order. Keep the import local to the form module.
+      - `REMEDY_CHOICES` = `pending | replacement | credit | rtv | accept_as_is | scrap`,
+        default `pending` (driver: Ariba *requires* saying replace-or-credit when rejecting).
+      - `STATUS_CHOICES` = `open | vendor_notified | resolved | cancelled`, default `open`,
+        **`editable=False`** - moved ONLY by the verbs (L22).
+      - Vendor-notification block (data now, transmission later - L32): `vendor_notified_on`
+        DateField null/blank `editable=False`, `vendor_reference` CharField(64) blank.
+      - Resolution block, all `editable=False`: `resolved_at` DateTimeField null/blank,
+        `resolved_by` FK user SET_NULL null/blank
+        `related_name="procurement_discrepancies_resolved"`, `resolution_notes` TextField blank.
+      - Escalation **pointers** (nullable - 6.12 points, it never raises the other module's row):
+        `nonconformance` FK `"scm.NonConformance"` SET_NULL null/blank
+        `related_name="procurement_discrepancies"` (the `inventory.DefectReport.ncr` precedent -
+        the NCR is still raised in SCM); `quarantine_order` FK `"inventory.QuarantineOrder"`
+        SET_NULL null/blank same related_name (**the typed link the free-text
+        `QuarantineOrder.reference` cannot give**); `return_to_vendor` FK to the RTV below
+        SET_NULL null/blank `related_name="source_discrepancies"`.
+      - `created_by` FK user SET_NULL null/blank `editable=False`
+        `related_name="procurement_discrepancies_created"`.
+      - `Meta`: `ordering=["-created_at","-id"]`, `unique_together=("tenant","number")`, indexes
+        `(tenant,status)` `prc_rds_tnt_status_idx`, `(tenant,kind)` `prc_rds_tnt_kind_idx`,
+        `(tenant,goods_receipt)` `prc_rds_tnt_grn_idx`.
+      - `clean()`: `goods_receipt_line.goods_receipt_id` must equal `goods_receipt_id` (a crafted
+        POST must not staple another receipt's line on); `goods_receipt` must be this tenant's;
+        `nonconformance` / `quarantine_order` / `return_to_vendor` (when set) must be this
+        tenant's; `quantity_affected > 0` required for the quantity kinds
+        (`over_shipment`/`short_shipment`/`damaged`/`wrong_item`).
+      - **Derived, NEVER stored:** `vendor` (walk `goods_receipt.purchase_order.vendor` - do not
+        duplicate it as a column), `tolerance_verdict` (resolve the policy for this line, compare
+        `purchase_order.received_by_line()[po_line_id]` against `po_line.quantity`),
+        `status_css` / `severity_css` / `kind_css` badge maps.
+      - **Form excludes:** `tenant`, `number`, `status`, `vendor_notified_on`, `resolved_at`,
+        `resolved_by`, `resolution_notes`, `created_by`, `created_at`, `updated_at`.
+        `goods_receipt` is on the CREATE form only (popped on edit - changing it would orphan the
+        line FK).
+      - **Posts nothing to stock and nothing to the ledger.**
+
+- [ ] **`ReturnToVendor`** [`RTV-`] (`TenantNumbered`) **+ `ReturnToVendorLine`** (tenant-less
+      child in the SAME entity file - the `AsnLine` / `PurchaseOrderChangeLine` precedent).
+      File `models/GoodsReceiptInspection/ReturnsToVendor.py`.
+      **Genuinely absent from the repo:** `scm.ReturnAuthorization` (`ReturnAuthorizations.py:48`)
+      is the **CUSTOMER** RMA (`customer` + `sales_order` FKs); `scm.WarrantyClaim`
+      (`WarrantyClaims.py:34`) is a post-sale failure claim. `return_to_vendor` exists elsewhere
+      only as a *disposition choice* whose comment says the document belongs somewhere else.
+      Drivers: NetSuite's Vendor Return Authorization created from a failed inspection; Oracle's
+      RTV transaction (+ 25D WMS integration); SAP's return delivery / supplier complaint;
+      Ariba's replace-or-credit + goods-return tracking number; Fishbowl's vendor return
+      reconciliation.
+      - Header - parties and origin: `vendor` FK `"core.Party"` **PROTECT**
+        `related_name="procurement_rtvs"` (the supplier role - never a second vendor master);
+        `purchase_order` FK `"scm.PurchaseOrder"` SET_NULL null/blank same related_name;
+        `goods_receipt` FK `"scm.GoodsReceiptNote"` SET_NULL null/blank same related_name;
+        `discrepancy` FK `ReceiptDiscrepancy` SET_NULL null/blank `related_name="rtvs"` (the
+        usual origin - the discrepancy's "raise RTV" action).
+      - `REASON_CHOICES` = `damaged | defective | wrong_item | over_shipment | expired |
+        not_to_spec | other`; `reason_note` CharField(255) blank (required when `other`).
+      - `REMEDY_CHOICES` = `credit | replacement | repair | none`, default `credit` (driver:
+        NetSuite - the disposition drives which downstream document is expected).
+      - `STATUS_CHOICES` = `draft | authorized | shipped | closed | cancelled`, default `draft`,
+        **`editable=False`**. Flow `draft -> authorized -> shipped -> closed`, with `cancelled`
+        reachable from anything **not yet shipped**. Each transition is a **verb method that
+        re-checks its own guard INSIDE itself** (the 6.9 C1 / 6.11 lesson: hiding a button does
+        not stop a direct POST, and a double-submit must not re-stamp a timestamp).
+      - `supplier_rma_number` CharField(64) blank + an **advisory duplicate badge** (the
+        `scm.WarrantyClaim.supplier_rma_number` pattern - warn, never hard-block).
+      - Return shipment, free text this pass (SCM 4.6 owns freight, L36 - a real
+        `scm.Shipment(direction="outbound")` link is a later refinement): `carrier_name`
+        CharField(120) blank, `tracking_number` CharField(64) blank, `shipped_on` DateField
+        null/blank `editable=False` (stamped by the ship verb), `expected_return_date` DateField
+        null/blank.
+      - `credit_note_ref` CharField(64) blank - **FREE TEXT, NO LEDGER WRITE**; `help_text` must
+        say the AP credit is blocked on the `Bill.kind` gap (L29).
+      - Stamps, all `editable=False`: `authorized_by` FK user SET_NULL
+        `related_name="procurement_rtvs_authorized"`, `authorized_at` DateTimeField null/blank,
+        `closed_at` DateTimeField null/blank, `cancelled_at` DateTimeField null/blank,
+        `cancellation_reason` TextField blank, `created_by` FK user SET_NULL
+        `related_name="procurement_rtvs_created"`. Plus editable `notes` TextField blank.
+      - `Meta`: `ordering=["-created_at","-id"]`, `unique_together=("tenant","number")`, indexes
+        `(tenant,status)` `prc_rtv_tnt_status_idx`, `(tenant,vendor)` `prc_rtv_tnt_vendor_idx`,
+        `(tenant,reason)` `prc_rtv_tnt_reason_idx`.
+      - `clean()`: `purchase_order.vendor_id` must equal `vendor_id` when both are set;
+        `goods_receipt.purchase_order_id` must equal `purchase_order_id` when both are set;
+        `discrepancy`/`goods_receipt`/`purchase_order` must be this tenant's; `reason_note`
+        required when `reason == "other"`.
+      - **Derived, NEVER stored:** `expected_credit_value` = SUM(`quantity_returned` x
+        `po_line.unit_price`) computed at read time; `is_editable` (`status == "draft"`);
+        `status_css` / `reason_css`.
+      - **Form excludes:** `tenant`, `number`, `status`, `shipped_on`, `authorized_by`,
+        `authorized_at`, `closed_at`, `cancelled_at`, `cancellation_reason`, `created_by`,
+        `created_at`, `updated_at`.
+      - **`ReturnToVendorLine`** (tenant-less, scoped through its parent):
+        `return_to_vendor` FK CASCADE `related_name="lines"`; `goods_receipt_line` FK
+        `"scm.GoodsReceiptLine"` **PROTECT null/blank** `related_name="procurement_rtv_lines"`;
+        `po_line` FK `"scm.PurchaseOrderLine"` **PROTECT null/blank**
+        `related_name="procurement_rtv_lines"` (sizes the credit via its `unit_price`);
+        free-text `item_description` CharField(255) blank / `sku_hint` CharField(64) blank /
+        `uom_hint` CharField(32) blank **auto-copied from the source line in `save()` when blank**
+        (the `AsnLine.save()` shape at `AdvancedShipmentNotice.py:487-496`);
+        `quantity_returned` Decimal(14,4) MinValue(0.0001); `lot_number` CharField(64) blank,
+        `serial_number` CharField(64) blank; `condition_note` CharField(255) blank.
+        `Meta`: `ordering=["id"]`. `clean()`: quantity > 0; when both are set,
+        `goods_receipt_line.po_line_id` must equal `po_line_id`; the line's receipt must be the
+        header's `goods_receipt` when the header names one.
+        **Form excludes:** none extra - it is an `inlineformset_factory`; `return_to_vendor` comes
+        from the parent instance and `goods_receipt_line`'s queryset is narrowed to the header's
+        receipt lines.
+      - **DELIBERATE NON-POSTING - defend it in the docstring AND on the detail page:** an RTV
+        posts **no `StockMove` and no `JournalEntry`**. Verified reason:
+        `_post_grn_receipt` (`apps/scm/views/_helpers.py:299`, line 319) posts **only
+        `quantity_received`**, so dock-rejected quantity never entered the ledger and there is
+        nothing to remove; accepted stock that later fails QC is removed by
+        `inventory.QuarantineOrder.scrap()` or `scm:stockadjustment`. Same posture
+        `scm.NonConformance` already takes for its `return_to_vendor` disposition. 6.12's RTV is
+        the **authorisation + tracking document**, not a second ledger writer.
+
+- [ ] **Three computed pages - ZERO new state** (the 6.10 `po_line_tracking` / 6.11
+      `inbound_tracking` precedent): `receiving_console`, `tolerance_exceptions`, `receipt_audit`.
+      No models of their own; the console's booking action writes a **draft** GRN through SCM's
+      own models, and the audit page reads `procurement_activity_qs()`.
+
+## Backend (apps/procurement/{models,forms,views,urls}/GoodsReceiptInspection/)
+
+Absolute imports only (`from apps.procurement.models._base import *`, `from
+apps.procurement.views._common import *`, `from apps.procurement.forms._common import *`).
+Each new folder needs its own `__init__.py` in each of the four layers (own commit, even when it
+only re-exports).
+
+### models/GoodsReceiptInspection/
+- [ ] `__init__.py` - sub-package re-exports
+- [ ] `ReceiptTolerances.py` - `ReceiptTolerancePolicy` + `resolve_receipt_tolerance()` +
+      `evaluate_receipt_tolerance()` + `resolve_line_item()`
+- [ ] `ReceiptDiscrepancies.py` - `ReceiptDiscrepancy` + verb methods `notify_vendor(user, ref)`,
+      `resolve(user, notes)`, `cancel(user)` - each re-checking its own status guard inside itself
+- [ ] `ReturnsToVendor.py` - `ReturnToVendor` **+ `ReturnToVendorLine`** (one entity file owns its
+      children) + verb methods `authorize(user)`, `mark_shipped(user, carrier, tracking, date)`,
+      `close(user, credit_note_ref)`, `cancel(user, reason)` - guards re-checked inside
+
+### forms/GoodsReceiptInspection/
+- [ ] `__init__.py`
+- [ ] `ReceiptTolerances.py` - `ReceiptTolerancePolicyForm` (`TenantModelForm`; `item` /
+      `category` / `vendor` querysets tenant-scoped, `vendor` narrowed to supplier-role parties
+      via the existing `_supplier_parties`-style helper)
+- [ ] `ReceiptDiscrepancies.py` - `ReceiptDiscrepancyForm` (`goods_receipt` queryset = tenant
+      GRNs not `cancelled`, popped on edit; `goods_receipt_line` queryset narrowed to that
+      receipt's lines; `nonconformance` / `quarantine_order` / `return_to_vendor` querysets
+      tenant-scoped; accepts `?goods_receipt=` / `?goods_receipt_line=` / `?kind=` /
+      `?quantity_affected=` GET prefill from the tolerance-exceptions board) with
+      `clean_evidence()` enforcing `ALLOWED_DOC_EXTENSIONS` + `MAX_UPLOAD_BYTES` imported from
+      `apps.core.forms._common`; plus `DiscrepancyNotifyForm` (`vendor_reference`,
+      `vendor_notified_on`) and `DiscrepancyResolveForm` (`remedy` required, `resolution_notes`
+      required)
+- [ ] `ReturnsToVendor.py` - `ReturnToVendorForm` (tenant-scoped `vendor` / `purchase_order` /
+      `goods_receipt` / `discrepancy`; accepts `?discrepancy=` GET prefill), `ReturnToVendorLineForm`
+      + `ReturnToVendorLineFormSet` (`inlineformset_factory`, `goods_receipt_line` queryset
+      narrowed to the header's receipt), `RtvShipForm` (`carrier_name`, `tracking_number`,
+      `shipped_on`), `RtvCloseForm` (`credit_note_ref`), `RtvCancelForm` (reason required)
+- [ ] `ReceivingConsole.py` - `ReceivingConsoleBookForm` (plain `forms.Form`: `receipt_date`,
+      `location` tenant-scoped, per-line `quantity_received` - NOT a ModelForm over an SCM model)
+
+### views/GoodsReceiptInspection/ (function-based, `@login_required`, tenant-scoped on EVERY query)
+- [ ] `__init__.py`
+- [ ] `ReceiptTolerances.py` - `tolerancepolicy_list` (search `name`/`notes`/`item__sku`/
+      `vendor__name`; filters `action`, `active`, `item`, `vendor`, `scope`
+      (item/category/catch-all); pagination; `select_related("item","category","vendor")`),
+      `tolerancepolicy_detail` (shows which receipts the rule currently governs + a worked
+      example of the band), `_create`, `_edit`, `_delete` (POST-only + confirm).
+      **`@tenant_admin_required` on create/edit/delete** - a rule master changes what the whole
+      workspace flags (the `QcRoutingRule` gating precedent).
+- [ ] `ReceiptDiscrepancies.py` - `discrepancy_list` (search `number`/`description`/
+      `item_description`/`sku_hint`/`goods_receipt__number`/`vendor_reference`; filters `status`,
+      `kind`, `severity`, `remedy`, `grn`, `vendor` (via
+      `goods_receipt__purchase_order__vendor_id`); pagination;
+      `select_related("goods_receipt","goods_receipt__purchase_order",
+      "goods_receipt__purchase_order__vendor","goods_receipt_line","nonconformance",
+      "quarantine_order","return_to_vendor")` - without it a page of rows costs N queries),
+      `discrepancy_detail` (evidence panel, the derived tolerance verdict, links out to the NCR /
+      quarantine order / RTV, and a "Raise RTV from this finding" prefilled link),
+      `_create`, `_edit`, `_delete` (POST-only, `@tenant_admin_required`), verbs
+      `discrepancy_notify_vendor`, `discrepancy_resolve`, `discrepancy_cancel` - all
+      `@require_POST` + `transaction.atomic()` + `select_for_update()` so a double-submit cannot
+      re-stamp `vendor_notified_on` / `resolved_at`
+- [ ] `ReturnsToVendor.py` - `rtv_list` (search `number`/`supplier_rma_number`/`tracking_number`/
+      `vendor__name`/`purchase_order__number`; filters `status`, `reason`, `remedy`, `vendor`,
+      `po`; pagination; `select_related("vendor","purchase_order","goods_receipt","discrepancy")`),
+      `rtv_detail` (lines + derived expected credit + the duplicate-RMA advisory badge + the
+      **"posts no stock and no journal, and why"** panel), `rtv_create` (header; accepts
+      `?discrepancy=`), `rtv_edit` (header + `ReturnToVendorLineFormSet`, drafts only),
+      `rtv_delete` (POST-only, drafts only, `@tenant_admin_required`), verbs `rtv_authorize`
+      (`@tenant_admin_required`), `rtv_ship`, `rtv_close`, `rtv_cancel` - all `@require_POST` +
+      atomic + row-locked
+- [ ] `ReceivingConsole.py` - `receiving_console` (the ASN->GRN booking desk; the hand-off 6.11
+      deferred). Lists tenant ASNs in `IN_FLIGHT_STATUSES` / `delivered` with **no GRN yet**,
+      matched on `AdvancedShipmentNotice.supplier_reference` ==
+      `GoodsReceiptNote.delivery_note_ref` (6.11 enforces uniqueness of `supplier_reference`
+      across live ASNs precisely so this match is unambiguous). Filters: `q`, `status`, `vendor`,
+      `po`, `arrival` (today/overdue/awaiting). Context keys pinned: `rows`, `page_obj`,
+      `status_choices`, `vendors`, `stats` (`awaiting`/`arrived_today`/`overdue`/`booked_7d`),
+      echoed GET params.
+      `receiving_console_book` (`@require_POST`, `@login_required`, atomic + `select_for_update()`
+      on the ASN) - creates a **DRAFT** `scm.GoodsReceiptNote` + `GoodsReceiptLine` rows from the
+      ASN lines, copying `supplier_reference -> delivery_note_ref`; **idempotent** (returns the
+      existing receipt if one already carries that `delivery_note_ref`); calls `write_audit_log`
+      itself (hand-rolled save path); redirects to `scm:goodsreceipt_detail`. It does NOT receive
+      the goods - `scm:goodsreceipt_receive` stays the single stock writer.
+      `receiving_console_mint_lots` (`@require_POST`, `@tenant_admin_required`) - mints the ASN's
+      declared lot/serial text into `scm.LotSerial` for lines whose `sku_hint` resolves to a
+      `scm.Item`, `get_or_create` keyed on **`(tenant, item, number)`** (verified
+      `unique_together` at `LotSerials.py:25`) with `kind`/`expiry_date` as defaults; reports
+      unresolved SKUs as warnings rather than failing (the `_post_grn_receipt` posture).
+- [ ] `ToleranceExceptions.py` - `tolerance_exceptions` board. Every non-cancelled receipt line
+      whose received quantity or receipt date breaches the resolved policy, bucketed
+      `over / short / early / late`. **Filter in the ORM BEFORE pagination** (the 6.11
+      backorder-risk lesson - a Python-side filter makes the page counts lie): narrow to
+      candidate GRN lines with ORM predicates and date arithmetic first, resolve the policy over
+      the pre-fetched rule list (one query, passed as `rules=`) second. Each row carries a
+      one-click **"Raise discrepancy"** link that prefills
+      `procurement:discrepancy_create?goods_receipt=&goods_receipt_line=&kind=&quantity_affected=`.
+      Context keys pinned: `rows`, `page_obj`, `bucket`, `bucket_choices`, `vendors`, `stats`
+      (`over`/`short`/`early`/`late`/`no_policy`), echoed GET params.
+- [ ] `ReceiptAudit.py` - `receipt_audit` trail. Reads `procurement_activity_qs(request.tenant)`
+      (`apps/procurement/views/_helpers.py:51`) narrowed to `goodsreceiptnote` **plus this
+      sub-module's own content types**, optionally scoped to one receipt via `?grn=<pk>`. Shows
+      booking, reversal, re-match, discrepancies and RTVs on one page. Context keys pinned:
+      `entries`, `page_obj`, `grn`, `receipts`, `action_choices`, `stats`, `ACTIVITY_FEED_NOTE`.
+- [ ] `write_audit_log` (`apps/core/utils.py`) on **every hand-rolled save path** - the verbs, the
+      console booking action and the lot-minting action. The `crud_*` helpers
+      (`apps/core/crud.py`) already call it for list/create/edit/delete.
+
+### urls/GoodsReceiptInspection/ (literal routes BEFORE `<int:pk>`, first-match-wins)
+- [ ] `__init__.py` concatenating the six modules' `urlpatterns`
+- [ ] `ReceiptTolerances.py` - `receipt-tolerances/` -> `tolerancepolicy_list`;
+      `receipt-tolerances/add/` -> `tolerancepolicy_create`; then
+      `receipt-tolerances/<int:pk>/` `/edit/` `/delete/`
+- [ ] `ReceiptDiscrepancies.py` - `receipt-discrepancies/` `-/add/` (literal, BEFORE pk),
+      `-/<int:pk>/` `/edit/` `/delete/` `/notify-vendor/` `/resolve/` `/cancel/`
+- [ ] `ReturnsToVendor.py` - `returns-to-vendor/` `-/add/` `-/<int:pk>/` `/edit/` `/delete/`
+      `/authorize/` `/ship/` `/close/` `/cancel/`
+- [ ] `ReceivingConsole.py` - `receiving-console/` -> `receiving_console`;
+      `receiving-console/<int:pk>/book/` -> `receiving_console_book`;
+      `receiving-console/<int:pk>/mint-lots/` -> `receiving_console_mint_lots`
+- [ ] `ToleranceExceptions.py` - `tolerance-exceptions/` -> `tolerance_exceptions`
+- [ ] `ReceiptAudit.py` - `receipt-audit/` -> `receipt_audit`
+- [ ] Collision check: the six new first segments (`receipt-tolerances/`,
+      `receipt-discrepancies/`, `returns-to-vendor/`, `receiving-console/`,
+      `tolerance-exceptions/`, `receipt-audit/`) are distinct whole components against the
+      inventory in `apps/procurement/urls/__init__.py:7-15`, and the app still has **no greedy
+      `<str:...>` converter**, so there is no cross-module shadowing surface.
+
+### Shared files - SOLO integrate step only, surgical `Edit` (a concurrent session may be in this tree, L43)
+- [ ] `models/__init__.py` - re-export `ReceiptTolerancePolicy, ReceiptDiscrepancy,
+      ReturnToVendor, ReturnToVendorLine, resolve_receipt_tolerance, evaluate_receipt_tolerance,
+      resolve_line_item` and add every name to `__all__`
+- [ ] `forms/__init__.py` - re-export the form/formset names. **Do NOT re-export
+      `MAX_UPLOAD_BYTES` / `ALLOWED_DOC_EXTENSIONS`** (collides with the 2 MB catalog constant).
+- [ ] `views/__init__.py` - re-export EVERY new view function (a missing one is an
+      `AttributeError` at URLconf import, not at request time)
+- [ ] `urls/__init__.py` - `from .GoodsReceiptInspection import urlpatterns as
+      _gri_goodsreceiptinspection`, splat it LAST; extend the module docstring's segment inventory
+      with the six new segments
+- [ ] `views/_helpers.py` - append `"receipttolerancepolicy"`, `"receiptdiscrepancy"`,
+      `"returntovendor"` to `PROCUREMENT_CONTENT_MODELS`? **NO** - that tuple is the *scm*-app
+      whitelist (`:60-62` already includes every `app_label="procurement"` row). Leave it
+      untouched; `goodsreceiptnote` is already listed (`:29`).
+- [ ] `admin.py` - register `ReceiptTolerancePolicy`, `ReceiptDiscrepancy`, `ReturnToVendor`
+      (with a `ReturnToVendorLine` inline); `list_display` / `list_filter` / `search_fields` /
+      `readonly_fields` covering every `editable=False` stamp
+- [ ] `management/commands/seed_procurement.py` - add `self._seed_goods_receipt(tenant)` after
+      `self._seed_order_fulfillment(tenant)` (`:205`) and the method itself. Idempotent, reusing
+      EXISTING rows: find a seeded `scm.GoodsReceiptNote` (friendly skip + return when the tenant
+      has none), then create (a) two `ReceiptTolerancePolicy` rows - one catch-all
+      (`over_receipt_pct=5`, `under_receipt_pct=10`, `action="warn"`) and one vendor-pinned
+      stricter rule - keyed on `(tenant, name)` via `get_or_create`; (b) one `open`
+      `ReceiptDiscrepancy` of kind `damaged` and one `resolved` of kind `short_shipment`, keyed
+      on `(tenant, goods_receipt, kind)` existence-check (**never bare `.create()` on a numbered
+      model**); (c) one `authorized` `ReturnToVendor` with 2 lines and one `draft`, keyed on
+      `(tenant, vendor, supplier_rma_number)` existence-check. No file is written for `evidence`
+      (seeders must not create media).
+- [ ] **`makemigrations procurement` LAST** -> must produce exactly **`0017_*`**
+      (rename the generated file if Django picks a different suffix - the NUMBER 0017 is the
+      claim). Do not touch 0016.
+
+## Wire-up
+- [ ] `apps/core/navigation.py` - **ONE** new `LIVE_LINKS["6.12"]` entry inserted AFTER the
+      `"6.11"` dict (which ends at `:1566`), bullet text copied EXACTLY from NavERP.md
+      lines 1069-1078. **Six of the ten keys are MAPS to pages that already exist** - each url
+      name below was resolved by grep this session:
+      ```
+      "Goods Receipt Note (GRN) Creation": "procurement:receiving_console",      # NEW page
+      "Receipt Tolerances":                "procurement:tolerancepolicy_list",   # NEW table
+      "Quality Inspection Checklists":     "inventory:qcchecklist_list",         # MAP 5.15 (QcChecklists.py:10)
+      "Quarantine & Inspection Hold":      "inventory:quarantineorder_list",     # MAP 5.15 (QuarantineOrders.py:12)
+      "Lot, Batch & Serial Capture":       "scm:lotserial_list",                 # MAP 4.3 (LotSerials.py:8)
+      "Discrepancy Reporting":             "procurement:discrepancy_list",       # NEW table
+      "Return to Vendor (RTV) Processing": "procurement:rtv_list",               # NEW table
+      "Item Tagging & Barcoding":          "inventory:barcodelabel_list",        # MAP 5.14 (BarcodeLabels.py:7)
+      "Inventory Posting":                 "scm:goodsreceipt_list?status=received",  # MAP 4.1
+      "Receipt Reversal & Audit Trail":    "procurement:receipt_audit",          # NEW page
+      ```
+      The `?status=received` query string is **verified safe**: `scm:goodsreceipt_list`
+      (`apps/scm/views/ProcurementManagement/GoodsReceiptNotes.py:17-35`) passes
+      `("status", "status", False)` to `crud_list` and `status_choices` to the template.
+      Add a comment block above the dict recording (a) that six bullets map to existing pages and
+      WHY (L36 - a second quality register / a second tolerance / a second barcode label would
+      give the workspace two answers), and (b) the RTV non-posting rule.
+- [ ] `config/settings.py` / `config/urls.py` - **NO CHANGE** (existing app).
+
+## Templates (templates/procurement/goodsreceiptinspection/)
+Every list page: filter bar reflecting `request.GET` (string fields `==` compare, FK/pk via
+`|stringformat:"d"` - **never** `|slugify`), an Actions column (view / edit / delete-POST with
+`{% csrf_token %}` + `onclick="return confirm(...)"`), pagination guarded by
+`{% if page_obj.has_previous %}` / `has_next` (L9), and an empty state. Badges use ONLY
+`badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate` (L33 - the
+semantic `-success` / `-danger` names do NOT exist in theme.css and render unstyled) with an
+`{% else %}` `{{ obj.get_*_display }}` fallback.
+- [ ] `tolerancepolicy/list.html` - filters q / action / active / scope / vendor; columns name /
+      scope (item|category|catch-all + vendor pin) / over band (% or qty or "unlimited") / under %
+      / early-late days / action badge / priority / active
+- [ ] `tolerancepolicy/detail.html` - the resolved band explained in words ("accepts up to 5%
+      over on 100 ordered = 105"), the specificity tier this rule sits at, an **advisory** notice
+      that it never blocks `scm:goodsreceipt_receive`, Actions sidebar (Edit / Delete / Back)
+- [ ] `tolerancepolicy/form.html` - scope fieldset (item XOR category, optional vendor pin),
+      band fieldset, action + priority
+- [ ] `discrepancy/list.html` - filters q / status / kind / severity / remedy / grn / vendor;
+      columns number / GRN + line / kind + severity badges / qty affected / remedy / vendor /
+      evidence indicator / status badge
+- [ ] `discrepancy/detail.html` - finding block, **evidence panel** (inline `<img>` for image
+      extensions, download link otherwise, `evidence_url` fallback), the derived tolerance
+      verdict, escalation panel linking out to `scm:nonconformance_detail` /
+      `inventory:quarantineorder_detail` / the RTV, Actions sidebar (Notify vendor form / Resolve
+      form / Raise RTV / Cancel / Edit / Delete / Back), each gated on the current status
+- [ ] `discrepancy/form.html` - GRN + line selectors (line narrowed to the chosen receipt),
+      kind/severity/quantity, evidence upload with the allowed extensions + 20 MB stated in the
+      help text, remedy
+- [ ] `rtv/list.html` - filters q / status / reason / remedy / vendor / po; columns number /
+      vendor / origin (GRN or discrepancy) / reason / remedy / supplier RMA (duplicate badge) /
+      expected credit / status badge
+- [ ] `rtv/detail.html` - header + line table with per-line expected credit, the running
+      `expected_credit_value`, shipment block (carrier / tracking / shipped on), **a standing
+      note explaining that an RTV posts no StockMove and no JournalEntry and where the physical
+      removal actually happens**, Actions sidebar (Authorize / Ship form / Close form / Cancel
+      form / Edit / Delete / Back), each gated on status
+- [ ] `rtv/form.html` - header form; on edit also renders `ReturnToVendorLineFormSet` with the
+      source receipt shown read-only
+- [ ] `receiving_console.html` - **standalone page at the sub-module root** (the 6.11
+      `inbound_tracking.html` / 6.10 `linetracking.html` precedent): stat tiles + filter bar +
+      one row per unbooked ASN showing declared vs outstanding vs already-received per line, the
+      resolved tolerance verdict, the resolved `QcRoutingRule` verdict + reason, and the
+      **Book receipt** POST form (+ the secondary **Mint declared lots** form)
+- [ ] `tolerance_exceptions.html` - standalone board: over / short / early / late buckets, each
+      row with ordered vs received vs band and a one-click **Raise discrepancy** prefill link;
+      a `no_policy` tile counts lines no rule covers (so a silent gap is visible)
+- [ ] `receipt_audit.html` - standalone trail: `?grn=` scope selector, action filter, one row per
+      audit entry (who / what / when), the `ACTIVITY_FEED_NOTE` explanation, pagination
+
+## Verify
+- [ ] `makemigrations procurement` (**0017**) then `migrate`
+- [ ] `seed_procurement` run **TWICE** - the second run creates nothing new and does not crash
+- [ ] `manage.py check` clean
+- [ ] `temp/` smoke script as **`admin_acme` / `password`**: every new `procurement:*` url renders
+      200/302; content assertions (page titles, a seeded `RDS-` number, an `RTV-` number, a
+      tolerance policy name, the receiving console's stat tiles); **no `{#` or `{% comment`
+      leaking into the HTML**; junk filter params (`?status=nope&kind=zzz&vendor=abc`) still 200;
+      `?page=2` guarded; **cross-tenant IDOR** - an `admin_globex`-owned discrepancy / RTV /
+      policy pk returns **404** on detail/edit/delete and on every verb; verbs reject GET (405);
+      a non-admin user is refused on the admin-gated routes (policy write, RTV authorize,
+      discrepancy delete, mint-lots)
+- [ ] Extra assertions specific to this sub-module: booking the console twice for the same ASN
+      creates **one** GRN (idempotence); minting lots twice creates **one** `LotSerial` per
+      `(tenant,item,number)`; an authorized RTV produces **zero** new `StockMove` and **zero** new
+      `JournalEntry` rows (assert the counts - this is the rule most likely to be "fixed" wrongly)
+- [ ] Sidebar shows **6.12 as Live with all ten bullets resolving** - the four
+      `inventory:*`/`scm:*` maps must not `NoReverseMatch`
+
+## Close-out (the mandatory Module Creation Sequence, phases 4-7)
+- [ ] Phase 4 review wave - `.claude/workflows/module-review.js` with the six lanes in PARALLEL
+      (code-reviewer, explorer, frontend-reviewer, performance-reviewer, qa-smoke-tester,
+      security-reviewer) -> write findings to `.claude/tasks/review-procurement-6.12.md` and
+      commit that file; re-run any lane reporting NO RESULT
+- [ ] Phase 5 `code-fixer` agent burns the findings down in ID order, one commit per file; no
+      finding left `[ ] open`. **Brief it that the RTV non-posting and the advisory-only tolerance
+      are DELIBERATE** so they are not "fixed" into ledger writes or a receive-time block.
+- [ ] Phase 6 test wave - `.claude/workflows/module-tests.js` with **`subslug: 'receipt'`** ->
+      `test_receipt_{models,forms,views,security}.py`, every function `test_receipt_*` and every
+      module-level helper `_receipt_*`; the solo contract step owns
+      `apps/procurement/tests/conftest.py` (which already holds the `fulfillment_*` fixtures -
+      append `receipt_*` fixtures, never rename existing ones); the final run is the **FULL
+      unfiltered** procurement suite (L47)
+- [ ] Phase 7 - update `.claude/skills/procurement/SKILL.md` with the 6.12 models / routes /
+      templates / seeder rows / LIVE_LINKS block **and the six mapped bullets** (a future session
+      must not rebuild them); mark 6.12 complete in `README.md` (**12 of 19**)
+- [ ] Mark each phase in `build_state.py`; append a Close-out review section here
+- [ ] One file per commit throughout, PowerShell `;` separators, **never `git push`**
+
+## Later passes / deferred (carried from research - nothing lost)
+- **`ReceiptLotCapture` as its own table** - deferred. The bullet is served by `scm:lotserial_list`
+  (master + CRUD + expiry), by `AsnLine`'s declared lot/serial/expiry/country-of-origin text, by
+  the lot fields on `ReceiptDiscrepancy` / `ReturnToVendorLine`, and by the console's mint verb.
+  Revisit when `scm.GoodsReceiptLine` gains an item FK.
+- **Hard-blocking a receipt** that breaches tolerance or has open mandatory checks -
+  `goodsreceipt_receive` is SCM's verb (L36). 6.12 flags and reports.
+- **GR/IR accrual journal at receipt; vendor debit memo / credit note** - `apps/accounting` owns
+  the ledger (L29); `accounting.Bill` has no `kind`. Already flagged to Modules 2/6 by
+  `scm.WarrantyClaim`. 6.12 records `credit_note_ref` and posts nothing.
+- **Stock removal on RTV** - deliberate non-posting (see the model note). Physical removal stays
+  with `inventory.QuarantineOrder.scrap()` / `scm:stockadjustment`.
+- **Unordered / non-PO receipts** - `GoodsReceiptNote.purchase_order` is a non-null PROTECT FK.
+- **Auto-receipt on thresholds / due date / invoice reconciliation** (Ariba, Procurify) - needs a
+  scheduler. **Blind receiving**, quarantine/NCR **tag printing**, **license-plate (LPN)
+  receiving** - WMS-grade; nearest homes are `inventory.BarcodeLabel` and SCM 4.4.
+- **Sampling-plan master** (fixed / percentage / skip-lot / AQL) and any new inspection execution
+  record -> **SCM 4.9 / future Module 12 QMS**, never a third quality register in procurement.
+- **Parked for sibling sub-modules:** delivery-completed / close-short indicator -> **6.10**;
+  invoice price-tolerance holds, wiring `price_variance_pct` into `recompute_match()`, the
+  four-way match column, invoice disputes, delivery-note **OCR** -> **6.13**; discrepancy and
+  rejection rates as supplier KPIs -> **6.16** (`scm.SupplierScorecard` already derives GRN
+  signals); supplier self-service filing of inspection results -> **6.4** `VendorPortalAccess`
+  (stays behind a login - a staff sidebar bullet must never point at it, L32); on-hand
+  visibility, bin mapping, cycle counts -> **6.18**; evidence/document repository with versioning
+  and full-text search -> **6.19**.
+- **Deferred integrations:** EDI 861 receiving advice, carrier APIs, supplier quality
+  notifications (SAP Ariba SCC), native handheld app - the provenance columns already exist
+  (`AdvancedShipmentNotice.source` includes `edi`).
+
+## Review notes
+(filled in at close-out)
