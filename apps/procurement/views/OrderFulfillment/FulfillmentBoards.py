@@ -116,7 +116,12 @@ def inbound_tracking(request):
             ("carrier", "carrier_id", True),
         ],
         extra_context={
-            "status_choices": AdvancedShipmentNotice.STATUS_CHOICES,
+            # Only the statuses this board can actually show: the queryset above is hard-limited
+            # to IN_FLIGHT_STATUSES, so offering Draft / Delivered / Cancelled in the dropdown
+            # would be three options that silently return an empty board.
+            "status_choices": [(value, label)
+                               for value, label in AdvancedShipmentNotice.STATUS_CHOICES
+                               if value in AdvancedShipmentNotice.IN_FLIGHT_STATUSES],
             "carriers": _carrier_choices(request.tenant),
             "stats": {
                 "in_flight": totals["in_flight"],
