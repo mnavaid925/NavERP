@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Request change order · {{ order.number }}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Request change or cancellation</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'scm:purchaseorder_list' %}">Purchase orders</a><span class="sep">›</span><a href="{% url 'scm:purchaseorder_detail' order.pk %}">{{ order.number }}</a><span class="sep">›</span><span>Change order</span></div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <p><span class="fw-600">{{ order.number }} · {{ order.vendor.name }}</span>
+       <span class="badge badge-slate">{{ order.get_status_display }}</span>
+       · total {{ order.total|floatformat:2 }} {{ order.currency.code|default:"" }}
+       · expected {{ order.expected_date|date:"M d, Y"|default:"—" }}
+       · version v{{ order.version }}</p>
+    <p class="text-muted">A workspace admin must approve before anything changes. While this change order is pending, no second one can be filed against the same purchase order.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            {% if field.name == 'change_type' %}<div class="form-help">The two proposed-change fields and the line changes below apply only when the type is "Change details".</div>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Proposed line changes</h2><span class="text-muted">ignored on cancellations</span></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Action</th><th>Existing line</th><th>Description (new lines)</th><th>SKU</th><th>UOM</th><th>Proposed qty</th><th>Proposed price</th><th>Proposed tax %</th><th>Remove row</th></tr></thead>
+          <tbody>
+            {% for lf in formset %}
+              <tr>
+                <td>{% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.action }}{% for e in lf.action.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.target_line }}{% for e in lf.target_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.item_description }}{% for e in lf.item_description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.sku_hint }}</td>
+                <td>{{ lf.uom_hint }}</td>
+                <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_price }}{% for e in lf.unit_price.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.tax_rate_pct }}{% for e in lf.tax_rate_pct.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Update: pick the line and fill ONLY the fields that change (blank = keep).
+        Add: leave "Existing line" empty and describe the new line.
+        Remove: pick the line, choose Remove — its quantity/price/tax are ignored.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> File change order</button>
+      <a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
