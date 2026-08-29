@@ -158,6 +158,15 @@ def backorder_create(request):
                   {"form": form, "is_edit": False, "obj": None})
 
 
+# Largest magnitude ``Backorder.quantity_backordered`` can physically hold, derived from the field
+# so it cannot drift if max_digits/decimal_places ever change: max_digits 14 with 4 decimal places
+# leaves 10 integer digits, i.e. everything strictly below 10**10.
+_QTY_PREFILL_CEILING = Decimal(10) ** (
+    Backorder._meta.get_field("quantity_backordered").max_digits
+    - Backorder._meta.get_field("quantity_backordered").decimal_places
+)
+
+
 def _create_initial(request):
     """Tenant-checked ``?po_line=&asn=&quantity=`` prefill for the create form.
 
@@ -184,9 +193,13 @@ def _create_initial(request):
             # COMPARISON that then raises (NaN) or the save that dies (Infinity). is_finite()
             # covers both, and the whole thing sits inside the try because `> 0` is itself the
             # operation that throws — a hand-typed ?quantity=nan must not 500 the add page.
-            if quantity.is_finite() and quantity > 0:
+            if quantity.is_finite() and 0 < quantity < _QTY_PREFILL_CEILING:
                 # A zero/negative shortfall is not a backorder — leave the field blank rather
-                # than prefilling a value the model validator will immediately reject.
+                # than prefilling a value the model validator will immediately reject. The
+                # ceiling is the same rejection for the other end: "1e400" and a 32-digit
+                # integer are both FINITE and positive, so is_finite() waves them through, but
+                # neither fits max_digits and the prefilled form would die on save rather than
+                # on the field. Bounding here keeps the add page a 200 for any hand-typed value.
                 initial["quantity_backordered"] = quantity
         except (InvalidOperation, ValueError, ArithmeticError):
             pass
