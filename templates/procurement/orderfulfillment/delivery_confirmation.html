@@ -81,7 +81,7 @@
               </td>
               <td>{% if row.carrier_display %}{{ row.carrier_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>
-                {% if row.expected_delivery_date %}{{ row.expected_delivery_date }}{% else %}<span class="text-muted">No date promised</span>{% endif %}
+                {% if row.expected_delivery_date %}{{ row.expected_delivery_date|date:"M d, Y" }}{% else %}<span class="text-muted">No date promised</span>{% endif %}
                 {% if row.eta_display %}<div class="text-muted">ETA {{ row.eta_display }}</div>{% endif %}
               </td>
               <td>
@@ -91,7 +91,7 @@
               <td>
                 {% if bucket == 'confirmed' %}
                   {% comment %}Confirmed rows are a record, not an action — show the stamped POD block.{% endcomment %}
-                  <div>{% if row.delivered_at %}{{ row.delivered_at }}{% else %}<span class="text-muted">—</span>{% endif %}</div>
+                  <div>{% if row.delivered_at %}{{ row.delivered_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</div>
                   {% if row.arrival_condition %}
                     <div><span class="badge {{ row.condition_css|default:'badge-slate' }}">{{ row.get_arrival_condition_display }}</span></div>
                   {% endif %}
