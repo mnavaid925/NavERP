@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} · Receipt Tolerance{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Receipt Tolerance Policy detail.
+
+    Context contract, and nothing else exists on this page:
+      obj, example{ordered, max_accept, min_accept, over_text, under_text, date_text, unlimited},
+      scope_label, specificity_tier, advisory_note, can_edit, can_delete,
+      governed_lines[] = {receipt, receipt_line, po_line, order, description,
+                          ordered, received, verdict, verdict_css}
+
+    This page carries NO verbs — a tolerance policy is configuration, not a workflow
+    document, so the sidebar is Edit / Delete / Back to list only. Both buttons gate on
+    the contracted can_* booleans rather than on a raw role test, so the template and the
+    view's @tenant_admin_required can never drift apart; the view re-checks regardless.
+
+    Every nullable FK (item / category / vendor, and the per-row receipt / order) is
+    guarded before it is dereferenced — a None FK passed into a filter argument raises and
+    500s even where a bare lookup would have rendered an empty string (L10).
+
+    governed_lines rows carry a raw `verdict` key with no get_FOO_display behind it (they
+    are plain dicts), so the label chain below spells out the VERDICT_CHOICES keys and
+    ends on an {% else %} that prints the raw token rather than a blank cell.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        <span class="badge {{ obj.action_css|default:"badge-muted" }}">{{ obj.get_action_display }}</span>
+        <span class="badge {{ obj.scope_css|default:"badge-muted" }}">{{ scope_label }}</span>
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a>
+        <span class="sep">›</span>
+        <a href="{% url 'procurement:tolerancepolicy_list' %}">Receipt Tolerances</a>
+        <span class="sep">›</span>
+        <span>{{ obj.name }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:tolerance_exceptions' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Tolerance exceptions</a>
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Rule</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Name</dt><dd class="fw-600">{{ obj.name }}</dd></div>
+            <div class="detail-item"><dt>Scope</dt><dd><span class="badge {{ obj.scope_css|default:"badge-muted" }}">{{ scope_label }}</span> <span class="text-muted">specificity tier {{ specificity_tier }} of 3</span></dd></div>
+            <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}" class="mono fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Category</dt><dd>{% if obj.category %}{{ obj.category.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Vendor filter</dt><dd>{% if obj.vendor %}<a href="{% url 'core:party_detail' obj.vendor.pk %}">{{ obj.vendor.name }}</a>{% else %}<span class="text-muted">Any vendor</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }} <span class="text-muted">· lower numbers win a tie</span></dd></div>
+            <div class="detail-item"><dt>Breach action</dt><dd><span class="badge {{ obj.action_css|default:"badge-muted" }}">{{ obj.get_action_display }}</span></dd></div>
+            <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Bands</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Over-receipt %</dt><dd>{% if obj.over_receipt_pct is not None %}{{ obj.over_receipt_pct|floatformat:"-2" }}%{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Over-receipt quantity</dt><dd>{% if obj.over_receipt_qty is not None %}{{ obj.over_receipt_qty|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Under-receipt %</dt><dd>{% if obj.under_receipt_pct is not None %}{{ obj.under_receipt_pct|floatformat:"-2" }}%{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Unlimited over-receipt</dt><dd>{% if obj.allow_unlimited_over_receipt %}<span class="badge badge-amber">On — the percentage and quantity caps are ignored</span>{% else %}<span class="badge badge-muted">Off</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Early receipt window</dt><dd>{% if obj.early_receipt_days is not None %}{{ obj.early_receipt_days }} day{{ obj.early_receipt_days|pluralize }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Late receipt window</dt><dd>{% if obj.late_receipt_days is not None %}{{ obj.late_receipt_days }} day{{ obj.late_receipt_days|pluralize }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Over band</dt><dd>{{ obj.over_band_text|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Under band</dt><dd>{{ obj.under_band_text|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Date band</dt><dd>{{ obj.date_band_text|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Price variance</dt><dd>{% if obj.price_variance_pct is not None %}{{ obj.price_variance_pct|floatformat:"-2" }}% <span class="text-muted">· advisory only this pass</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Worked example</h2></div>
+        <div class="card-body">
+          <p class="text-muted">What this policy would allow against an order of <span class="fw-600">{{ example.ordered|floatformat:"-4" }}</span> units.</p>
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Ordered</dt><dd class="fw-600">{{ example.ordered|floatformat:"-4" }}</dd></div>
+            <div class="detail-item"><dt>Most that may be received</dt><dd>{% if example.unlimited %}<span class="badge badge-slate">Unlimited</span>{% else %}<span class="fw-600">{{ example.max_accept|default_if_none:"—" }}</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Least that still counts as complete</dt><dd class="fw-600">{{ example.min_accept|default_if_none:"—" }}</dd></div>
+            <div class="detail-item"><dt>Over-receipt</dt><dd>{{ example.over_text|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Under-receipt</dt><dd>{{ example.under_text|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Timing</dt><dd>{{ example.date_text|default:"—" }}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Receipt lines this policy governs</h2></div>
+        <div class="card-body">
+          <p class="text-muted">The most recent lines the resolver hands to this rule, judged as the exceptions board would judge them. Capped at twenty — the full picture lives on <a href="{% url 'procurement:tolerance_exceptions' %}">Tolerance exceptions</a>.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Receipt</th>
+                <th>Order</th>
+                <th>Description</th>
+                <th class="text-right">Ordered</th>
+                <th class="text-right">Received</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in governed_lines %}
+                <tr>
+                  <td>{% if row.receipt %}<a href="{% url 'scm:goodsreceipt_detail' row.receipt.pk %}" class="fw-600">{{ row.receipt.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>{% if row.order %}<a href="{% url 'scm:purchaseorder_detail' row.order.pk %}">{{ row.order.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>{{ row.description|default:"—" }}</td>
+                  <td class="text-right">{{ row.ordered|floatformat:"-4" }}</td>
+                  <td class="text-right fw-600">{{ row.received|floatformat:"-4" }}</td>
+                  <td>
+                    <span class="badge {{ row.verdict_css|default:"badge-muted" }}">
+                      {% if row.verdict == 'ok' %}Within tolerance
+                      {% elif row.verdict == 'over' %}Over-receipt
+                      {% elif row.verdict == 'short' %}Under-receipt
+                      {% elif row.verdict == 'early' %}Early
+                      {% elif row.verdict == 'late' %}Late
+                      {% elif row.verdict == 'no_rule' %}No policy
+                      {% else %}{{ row.verdict }}{% endif %}
+                    </span>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6">
+                    <div class="empty-state">
+                      <i data-lucide="package-search"></i>
+                      <h3>No receipt lines resolve to this policy yet</h3>
+                      <p>Either nothing has been received in this policy's scope, or a more specific rule is winning every line. Priority and scope decide — item beats category beats catch-all.</p>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+          {% if can_edit %}
+            <a href="{% url 'procurement:tolerancepolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% endif %}
+          {% if can_delete %}
+            {% comment %}
+              L42 — only \' escapes an apostrophe inside a confirm() attribute, and the policy
+              name is user-typed, so it is deliberately not interpolated into this string.
+            {% endcomment %}
+            <form method="post" action="{% url 'procurement:tolerancepolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this tolerance policy? Receipts stop being measured against it immediately, and the next most general rule takes over.');">
+              {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+          <a href="{% url 'procurement:tolerancepolicy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to receipt tolerances</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Advisory only</h2></div>
+        <div class="card-body">
+          <p class="text-muted">{{ advisory_note }}</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Record</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+            <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
