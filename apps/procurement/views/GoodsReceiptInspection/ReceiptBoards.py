@@ -60,6 +60,7 @@ from apps.procurement.views._common import *  # noqa: F401,F403
 from apps.procurement.views._helpers import ACTIVITY_FEED_NOTE, procurement_activity_qs
 from apps.scm.models import (
     GoodsReceiptLine, GoodsReceiptNote, Item, Location, LotSerial, PurchaseOrder,
+    PurchaseOrderLine,
 )
 
 ZERO = Decimal("0")
@@ -222,6 +223,29 @@ def _item_map(tenant, skus):
     return found
 
 
+def _received_by_po_line(tenant, po_line_ids):
+    """``{po_line_id: accepted quantity}`` for the ordered lines on ONE page — one grouped query.
+
+    ``PurchaseOrder.received_by_line()`` answers this for a SINGLE order, so calling it inside the
+    per-shipment loop meant a console page of 30 shipments from 30 different orders issued 30
+    separate GROUP BY aggregates — the dominant cost of the page, and one that grew with the page.
+    Keying on the PO line pk (globally unique) rather than nesting under the order keeps the
+    lookup in the loop a plain dict hit.
+
+    Same rule as the model's version, deliberately: a cancelled receipt never counts, and a line
+    with no receipts at all sums to NULL and falls back to ZERO.
+    """
+    if not po_line_ids:
+        return {}
+    rows = (PurchaseOrderLine.objects
+            .filter(id__in=po_line_ids, purchase_order__tenant=tenant)
+            .annotate(received=Sum(
+                "receipt_lines__quantity_received",
+                filter=~Q(receipt_lines__goods_receipt__status="cancelled")))
+            .values_list("id", "received"))
+    return {pk: (received or ZERO) for pk, received in rows}
+
+
 def _receipt_by_delivery_ref(tenant, asn_qs):
     """``{normalised delivery-note ref: GoodsReceiptNote}`` for the ASNs on this board.
 
@@ -372,10 +396,11 @@ def receiving_console(request):
 def _console_rows(tenant, shipments, receipt_by_ref):
     """One derived row per shipment on the page, with its lines already judged.
 
-    Fixed query cost regardless of page size: the tolerance rules, the QC rules and the SKU map
-    are each fetched ONCE, and ``PurchaseOrder.received_by_line()`` is called once per DISTINCT
-    order and cached — never ``po_line.received_quantity()`` inside the loop, which is one
-    aggregate per line.
+    Fixed query cost regardless of page size: the tolerance rules, the QC rules, the SKU map and
+    the received-per-ordered-line aggregate are each fetched ONCE for the whole page — never
+    ``po_line.received_quantity()`` inside the loop (one aggregate per line), and no longer
+    ``PurchaseOrder.received_by_line()`` per distinct order either, which on a page of 30
+    shipments from 30 orders was 30 GROUP BYs.
     """
     if not shipments:
         return []
@@ -389,15 +414,17 @@ def _console_rows(tenant, shipments, receipt_by_ref):
         {_norm(line.sku_hint or (line.po_line.sku_hint if line.po_line_id else ""))
          for lines in lines_by_asn.values() for line in lines},
     )
+    # ONE aggregate for the whole page, not one per distinct order.
+    received_map = _received_by_po_line(
+        tenant,
+        {line.po_line_id for lines in lines_by_asn.values() for line in lines
+         if line.po_line_id},
+    )
 
-    received_maps = {}
     rows = []
     for asn in shipments:
         order = asn.purchase_order
         vendor = getattr(order, "vendor", None)
-        if order.pk not in received_maps:
-            received_maps[order.pk] = order.received_by_line()
-        received_map = received_maps[order.pk]
 
         line_rows, verdicts, qc_verdicts = [], set(), []
         headline_reason, qc_reason, qc_location = "", "", None
