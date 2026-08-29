@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Receipt Discrepancy{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Goods Receipt & Inspection — Discrepancy Reporting detail.
+    Context contract: obj, receipt, receipt_line, order, vendor, notify_form,
+    resolve_form, cancel_form, tolerance_rule, tolerance_verdict, tolerance_reason,
+    tolerance_css, evidence_is_image, rtv_prefill_url, can_edit, can_notify,
+    can_resolve, can_cancel, can_raise_rtv, can_delete. Nothing else exists here.
+    Every nullable FK is guarded before it is dereferenced — a None FK inside a filter
+    argument raises even where a bare lookup would quietly render nothing (L10).
+    scm.NonConformance and inventory.QuarantineOrder are rendered as text, not links:
+    the contract pins only their list routes, and inventing a detail url name is the
+    fastest way to a NoReverseMatch on a page that otherwise works (L7).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {% if obj.status == 'open' %}badge-amber{% elif obj.status == 'vendor_notified' %}badge-info{% elif obj.status == 'resolved' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge {% if obj.severity == 'minor' %}badge-muted{% elif obj.severity == 'major' %}badge-amber{% elif obj.severity == 'critical' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_severity_display }}</span>
+        <span class="badge {% if obj.kind == 'over_shipment' %}badge-amber{% elif obj.kind == 'short_shipment' %}badge-amber{% elif obj.kind == 'damaged' %}badge-red{% elif obj.kind == 'wrong_item' %}badge-red{% elif obj.kind == 'quality_failure' %}badge-red{% elif obj.kind == 'documentation' %}badge-slate{% elif obj.kind == 'late_delivery' %}badge-info{% else %}badge-muted{% endif %}">{{ obj.get_kind_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:discrepancy_list' %}">Discrepancies</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if receipt %}<a href="{% url 'scm:goodsreceipt_detail' receipt.pk %}" class="btn btn-outline"><i data-lucide="package-check"></i> Goods receipt</a>{% endif %}
+      {% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase order</a>{% endif %}
+      {% if can_edit %}<a href="{% url 'procurement:discrepancy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Goods receipt</dt>
+        <dd>{% if receipt %}<a href="{% url 'scm:goodsreceipt_detail' receipt.pk %}" class="fw-600">{{ receipt.number }}</a> <span class="badge badge-slate">{{ receipt.get_status_display }}</span>{% if receipt.receipt_date %} · {{ receipt.receipt_date|date:"M d, Y" }}{% endif %}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Receipt line</dt>
+        <dd>{% if receipt_line %}
+              {{ obj.item_description|default:"Receipt line" }}
+              <div class="text-muted">Received {{ receipt_line.quantity_received|floatformat:"-4" }}{% if receipt_line.quantity_rejected %} · rejected {{ receipt_line.quantity_rejected|floatformat:"-4" }}{% endif %}</div>
+            {% else %}<span class="text-muted">Header-level finding — this applies to the delivery as a whole, not one line.</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Purchase order</dt>
+        <dd>{% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a> <span class="badge badge-slate">{{ order.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Vendor</dt>
+        <dd>{% if vendor %}{{ vendor.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Kind</dt>
+        <dd><span class="badge {% if obj.kind == 'over_shipment' %}badge-amber{% elif obj.kind == 'short_shipment' %}badge-amber{% elif obj.kind == 'damaged' %}badge-red{% elif obj.kind == 'wrong_item' %}badge-red{% elif obj.kind == 'quality_failure' %}badge-red{% elif obj.kind == 'documentation' %}badge-slate{% elif obj.kind == 'late_delivery' %}badge-info{% else %}badge-muted{% endif %}">{{ obj.get_kind_display }}</span></dd></div>
+      <div class="detail-item"><dt>Severity</dt>
+        <dd><span class="badge {% if obj.severity == 'minor' %}badge-muted{% elif obj.severity == 'major' %}badge-amber{% elif obj.severity == 'critical' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_severity_display }}</span></dd></div>
+      <div class="detail-item"><dt>Quantity affected</dt><dd class="fw-600">{{ obj.quantity_affected|floatformat:"-4" }}</dd></div>
+      <div class="detail-item"><dt>Item</dt>
+        <dd>{{ obj.item_description|default:"—" }}{% if obj.sku_hint %}<div class="text-muted">SKU {{ obj.sku_hint }}</div>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Lot / serial</dt>
+        <dd>{{ obj.lot_number|default:"—" }}{% if obj.serial_number %}<div class="text-muted">Serial {{ obj.serial_number }}</div>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Expiry</dt><dd>{{ obj.expiry_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Remedy</dt>
+        <dd><span class="badge {% if obj.remedy == 'pending' %}badge-muted{% elif obj.remedy == 'replacement' %}badge-info{% elif obj.remedy == 'credit' %}badge-info{% elif obj.remedy == 'rtv' %}badge-amber{% elif obj.remedy == 'accept_as_is' %}badge-slate{% elif obj.remedy == 'scrap' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_remedy_display }}</span></dd></div>
+      <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—"|linebreaksbr }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tolerance</h2><span class="text-muted">advisory — a policy flags a line, it never blocks the receipt</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Verdict</dt>
+          <dd><span class="badge {{ tolerance_css }}">{% if tolerance_verdict == 'ok' %}Within tolerance{% elif tolerance_verdict == 'over' %}Over-receipt{% elif tolerance_verdict == 'short' %}Under-receipt{% elif tolerance_verdict == 'early' %}Early{% elif tolerance_verdict == 'late' %}Late{% elif tolerance_verdict == 'no_rule' %}No policy{% else %}{{ tolerance_verdict }}{% endif %}</span></dd></div>
+        <div class="detail-item"><dt>Policy</dt>
+          <dd>{% if tolerance_rule %}<a href="{% url 'procurement:tolerancepolicy_detail' tolerance_rule.pk %}" class="fw-600">{{ tolerance_rule.name }}</a>{% else %}<span class="text-muted">No policy covers this line — configure one so the exception board can see it.</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reason</dt><dd>{{ tolerance_reason|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Evidence</h2></div>
+    <div class="card-body">
+      {% if obj.has_evidence %}
+        {% if obj.evidence %}
+          {% if evidence_is_image %}
+            <p><img src="{{ obj.evidence.url }}" alt="Evidence for {{ obj.number }}" style="max-width:100%; height:auto; border-radius:6px;"></p>
+          {% endif %}
+          <p><a href="{{ obj.evidence.url }}" class="btn btn-outline"><i data-lucide="download"></i> {{ obj.evidence.name }}</a></p>
+        {% endif %}
+        {% if obj.evidence_url %}
+          <p><a href="{{ obj.evidence_url }}" class="btn btn-outline" rel="noopener noreferrer" target="_blank"><i data-lucide="external-link"></i> Evidence held elsewhere</a></p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">No photo, document or link attached. Vendors settle claims faster when the dock photographs the damage before the pallet moves.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Linked records</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Non-conformance</dt>
+          <dd>{% if obj.nonconformance %}{{ obj.nonconformance }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quarantine order</dt>
+          <dd>{% if obj.quarantine_order %}{{ obj.quarantine_order }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Return to vendor</dt>
+          <dd>{% if obj.return_to_vendor %}<a href="{% url 'procurement:rtv_detail' obj.return_to_vendor.pk %}" class="fw-600">{{ obj.return_to_vendor.number }}</a> <span class="badge badge-slate">{{ obj.return_to_vendor.get_status_display }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Vendor reference</dt><dd>{{ obj.vendor_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Vendor notified</dt><dd>{{ obj.vendor_notified_on|date:"M d, Y"|default:"—" }}</dd></div>
+      </dl>
+      {% if can_raise_rtv %}
+        <p><a href="{{ rtv_prefill_url }}" class="btn btn-outline"><i data-lucide="corner-up-left"></i> Raise return to vendor</a></p>
+        <p class="text-muted">A return to vendor is a commercial document: it posts no stock movement and no journal entry. Dock-rejected quantity never entered the ledger, and accepted stock that later fails inspection is removed by a quarantine scrap or a stock adjustment.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.status == 'resolved' or obj.status == 'cancelled' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">{% if obj.status == 'resolved' %}Resolution{% else %}Cancellation{% endif %}</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>{% if obj.status == 'resolved' %}Resolved{% else %}Cancelled{% endif %} at</dt><dd>{{ obj.resolved_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>By</dt>
+            <dd>{% if obj.resolved_by %}{{ obj.resolved_by.get_full_name|default:obj.resolved_by.username }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Notes</dt><dd>{{ obj.resolution_notes|default:"—"|linebreaksbr }}</dd></div>
+        </dl>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if can_notify %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notify vendor</h2><span class="text-muted">records that we told the supplier — there is no vendor login</span></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:discrepancy_notify_vendor' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} as notified to the vendor? The notification date is stamped once.');">
+          {% csrf_token %}
+          {% for e in notify_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in notify_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Notify vendor</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if can_resolve %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Resolve</h2><span class="text-muted">say replace-or-credit — a remedy and a note are both required</span></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:discrepancy_resolve' obj.pk %}" onsubmit="return confirm('Resolve {{ obj.number }}? A resolved finding becomes a record and can no longer be edited.');">
+          {% csrf_token %}
+          {% for e in resolve_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in resolve_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Resolve</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% if can_edit %}
+          <a href="{% url 'procurement:discrepancy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_delete %}
+          {% comment %}
+            Delete mirrors @tenant_admin_required exactly, and the apostrophe is escaped
+            as \' because &#39; does not escape inside an event-handler attribute (L42).
+          {% endcomment %}
+          <form method="post" action="{% url 'procurement:discrepancy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? The finding\'s evidence and vendor correspondence go with it.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'procurement:discrepancy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to discrepancies</a>
+      </div>
+
+      {% if can_cancel %}
+        <hr>
+        <form method="post" action="{% url 'procurement:discrepancy_cancel' obj.pk %}" onsubmit="return confirm('Cancel {{ obj.number }}? Use this when the finding was raised in error — a genuine finding should be resolved instead.');">
+          {% csrf_token %}
+          {% for e in cancel_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          {% for field in cancel_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Cancel discrepancy</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Raised by</dt>
+        <dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    <p class="text-muted">A discrepancy is a commercial record. It posts nothing to stock and nothing to the ledger — receiving and inspection own those effects.</p>
+  </div></div>
+{% endblock %}
