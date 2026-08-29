@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Real-time Freight Tracking{% endblock %}
+{% block content %}
+  {% comment %}
+    6.11 Real-time Freight Tracking — a COMPUTED, READ-ONLY board over in-flight
+    AdvancedShipmentNotice rows. It owns no state: SCM 4.6 (scm.Shipment +
+    TrackingEvent) is the system of record for milestones, ETA and last-known
+    location, and every value below is either a stored ASN field or one of the
+    ASN's derived projections (tracking_status_text / eta_display /
+    location_display / carrier_display), which read straight through to the
+    linked shipment when one exists. Nothing on this page writes — the only row
+    action is View. Same shape as purchaseordermanagement/linetracking.html.
+    Context: object_list, page_obj, q, status_choices, carriers, stats.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Real-time Freight Tracking</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Order Fulfillment &amp; Tracking</span><span class="sep">›</span><span>Freight Tracking</span></div>
+      <p class="text-muted">Every advance shipping notice still in flight, newest promise first. Live status, ETA and location are read through to the linked SCM shipment when there is one — this board stores nothing and changes nothing.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:delivery_confirmation' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Delivery confirmation</a>
+      <a href="{% url 'procurement:asn_list' %}" class="btn btn-primary"><i data-lucide="truck"></i> All ASNs</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="truck"></i></div><div class="stat-value">{{ stats.in_flight }}</div><div class="stat-label">In flight</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.late }}</div><div class="stat-label">Past expected date</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="unlink"></i></div><div class="stat-value">{{ stats.unlinked }}</div><div class="stat-label">No TMS shipment</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ stats.arriving_today }}</div><div class="stat-label">Arriving today</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="tracking_q">Search</label>
+          <input type="text" id="tracking_q" name="q" value="{{ q }}" class="form-input" placeholder="ASN number, supplier ref, tracking no or PO number…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tracking_status">Status</label>
+          <select id="tracking_status" name="status" class="form-select">
+            <option value="">All in-flight statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tracking_carrier">Carrier</label>
+          <select id="tracking_carrier" name="carrier" class="form-select">
+            <option value="">All carriers</option>
+            {% for c in carriers %}
+              <option value="{{ c.pk|stringformat:"d" }}" {% if request.GET.carrier == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tracking_late">Overdue</label>
+          <div><input type="checkbox" id="tracking_late" name="late" value="1" {% if request.GET.late == '1' %}checked{% endif %}> <label for="tracking_late">Past expected date only</label></div>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:inbound_tracking' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ASN</th>
+            <th>Purchase order</th>
+            <th>Carrier / tracking</th>
+            <th>Live status</th>
+            <th>ETA</th>
+            <th>Last known location</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'procurement:asn_detail' row.pk %}" class="fw-600">{{ row.number }}</a>
+                {% if row.supplier_reference %}<div class="text-muted">Supplier ref {{ row.supplier_reference }}</div>{% endif %}
+              </td>
+              <td>
+                {% if row.purchase_order %}
+                  <span class="fw-600">{{ row.purchase_order.number }}</span>
+                  <div class="text-muted">{% if row.purchase_order.vendor %}{{ row.purchase_order.vendor.name }}{% else %}—{% endif %}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.carrier_display %}{{ row.carrier_display }}{% else %}<span class="text-muted">Carrier not named</span>{% endif %}
+                {% if row.tracking_number %}<div class="text-muted">{{ row.tracking_number }}</div>{% endif %}
+              </td>
+              <td>
+                <span class="badge {{ row.status_css|default:'badge-slate' }}">{{ row.get_status_display }}</span>
+                <div class="text-muted">{{ row.tracking_status_text|default:"—" }}</div>
+                {% if row.shipment %}
+                  <div class="text-muted"><i data-lucide="link"></i> {{ row.shipment.number }}</div>
+                {% else %}
+                  <div class="text-muted">Not linked to a TMS shipment</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.eta_display %}{{ row.eta_display }}{% else %}<span class="text-muted">No ETA</span>{% endif %}
+                {% if row.is_late %}<div><span class="badge badge-red">{{ row.days_late }} day{{ row.days_late|pluralize }} late</span></div>{% endif %}
+              </td>
+              <td>{% if row.location_display %}{{ row.location_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:asn_detail' row.pk %}" class="btn-icon" title="View ASN" aria-label="View ASN"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="truck"></i>
+                <h3>Nothing in flight</h3>
+                <p>Advance shipping notices appear here once they are submitted or marked in transit. Record one from the ASN register and its carrier, tracking number and ETA show up on this board.</p>
+                <a href="{% url 'procurement:asn_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record an ASN</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
