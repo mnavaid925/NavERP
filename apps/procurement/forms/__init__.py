@@ -79,6 +79,24 @@ from .PurchaseOrderManagement.PurchaseOrderChanges import (
     PurchaseOrderChangeForm,
     PurchaseOrderChangeLineFormSet,
 )
+# 6.12 Goods Receipt & Inspection. NOTE: ALLOWED_DOC_EXTENSIONS / MAX_UPLOAD_BYTES are
+# deliberately NOT re-exported from this sub-package — CatalogManagement.UploadBatches carries a
+# different local MAX_UPLOAD_BYTES (2 MB vs core's 20 MB) and a package-level re-export would make
+# which cap applies depend on import order.
+from .GoodsReceiptInspection import (
+    DiscrepancyCancelForm,
+    DiscrepancyNotifyForm,
+    DiscrepancyResolveForm,
+    ReceiptDiscrepancyForm,
+    ReceiptTolerancePolicyForm,
+    ReceivingConsoleBookForm,
+    ReturnToVendorForm,
+    ReturnToVendorLineForm,
+    ReturnToVendorLineFormSet,
+    RtvCancelForm,
+    RtvCloseForm,
+    RtvShipForm,
+)
 
 __all__ = [
     "EaucBidForm",
@@ -137,4 +155,16 @@ __all__ = [
     "PurchaseOrderChangeLineFormSet",
     "ChangeOrderDecisionForm",
     "GeneratePOForm",
+    "ReceiptTolerancePolicyForm",
+    "ReceiptDiscrepancyForm",
+    "DiscrepancyNotifyForm",
+    "DiscrepancyResolveForm",
+    "DiscrepancyCancelForm",
+    "ReturnToVendorForm",
+    "ReturnToVendorLineForm",
+    "ReturnToVendorLineFormSet",
+    "RtvShipForm",
+    "RtvCloseForm",
+    "RtvCancelForm",
+    "ReceivingConsoleBookForm",
 ]
