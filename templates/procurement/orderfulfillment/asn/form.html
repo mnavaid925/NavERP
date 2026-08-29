@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Advanced Shipping Notice{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Advanced Shipping Notice{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:asn_list' %}">ASNs</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    <p class="text-muted">A shipping notice records what the supplier says is on the way. It never changes the purchase order — quantities, prices and dates on the order stay exactly as approved.</p>
+  </div></div>
+
+  {% if is_edit and order %}
+    <div class="card"><div class="card-body">
+      <p><span class="fw-600">Purchase order:</span>
+        <a href="{% url 'scm:purchaseorder_detail' order.pk %}">{{ order.number }}</a>
+        {% if order.vendor %} · {{ order.vendor.name }}{% endif %}
+        <span class="badge badge-slate">{{ order.get_status_display }}</span></p>
+      <p class="text-muted">The purchase order is fixed once the notice exists — changing it would orphan the declared lines below. Delete this draft and start again if the wrong order was picked.</p>
+    </div></div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == 'carrier' %}<div class="form-help">Pick a transportation carrier profile, or leave blank and type the supplier courier below.</div>
+            {% elif field.name == 'shipment' %}<div class="form-help">Optional. Linking an inbound shipment lets this notice show live status, ETA and last known location from transportation.</div>
+            {% elif field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    {% if formset %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Declared lines</h2><span class="text-muted">one row per purchase-order line the supplier is shipping</span></div>
+        <div class="table-wrap">
+          {{ formset.management_form }}
+          {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <table class="table">
+            <thead><tr><th>PO line</th><th>Description</th><th>SKU</th><th>UOM</th><th>Qty shipped</th><th>Package ref</th><th>Lot</th><th>Serial</th><th>Expiry</th><th>Origin</th><th>Notes</th><th>Remove</th></tr></thead>
+            <tbody>
+              {% for f in formset %}
+                <tr>
+                  <td>
+                    {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                    {% for e in f.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                    {{ f.po_line }}{% for e in f.po_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                  </td>
+                  <td>{{ f.item_description }}{% for e in f.item_description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.sku_hint }}{% for e in f.sku_hint.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.uom_hint }}{% for e in f.uom_hint.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.quantity_shipped }}{% for e in f.quantity_shipped.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.package_ref }}{% for e in f.package_ref.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.lot_number }}{% for e in f.lot_number.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.serial_number }}{% for e in f.serial_number.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.expiry_date }}{% for e in f.expiry_date.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.country_of_origin }}{% for e in f.country_of_origin.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ f.notes }}{% for e in f.notes.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body text-muted">
+          Description, SKU and UOM copy themselves from the chosen purchase-order line when left blank. Lot, serial, expiry and country of origin are the supplier declaration only — the real traceability record is created at receipt.
+          Declaring more than the outstanding quantity is allowed and flagged as an over-shipment on the notice; declaring less leaves a shortfall you can turn into a backorder from the notice page.
+        </div>
+      </div>
+    {% else %}
+      <div class="card"><div class="card-body text-muted">
+        Save the notice first — the declared lines are added on the next screen, once the purchase order is known and its lines can be offered.
+      </div></div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Update notice{% else %}Create notice{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:asn_detail' obj.pk %}{% else %}{% url 'procurement:asn_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
