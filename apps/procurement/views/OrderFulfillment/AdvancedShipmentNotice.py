@@ -18,6 +18,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Count, Q
 
+from apps.core.crud import _changed
 from apps.procurement.forms import (
     AdvancedShipmentNoticeForm,
     AsnCancelForm,
@@ -204,8 +205,13 @@ def asn_edit(request, pk):
                 obj = form.save()
                 formset.instance = obj
                 formset.save()
-            write_audit_log(request.user, obj, "update",
-                            {"action": "edit", "lines": obj.lines.count()})
+            # WHICH header fields moved, not just "the header moved" — a disputed inbound
+            # delivery is later argued over carrier / tracking_number / expected_delivery_date.
+            # The shared helper keeps the redaction policy in one place rather than duplicating
+            # a sensitive-field list here.
+            changes = _changed(form)
+            changes["lines"] = obj.lines.count()
+            write_audit_log(request.user, obj, "update", changes)
             messages.success(request, f"ASN {obj.number} updated.")
             return redirect("procurement:asn_detail", pk=obj.pk)
     else:
