@@ -51,6 +51,12 @@ from .OrderFulfillment import (
     DeliverySchedule,
     split_po_line,
 )
+from .PurchaseOrderManagement import (
+    PurchaseOrderChange,
+    PurchaseOrderChangeLine,
+    convertible_requisitions,
+    generate_po_from_requisition,
+)
 
 __all__ = [
     "EaucBid",
@@ -99,4 +105,8 @@ __all__ = [
     "DeliverySchedule",
     "split_po_line",
     "Backorder",
+    "PurchaseOrderChange",
+    "PurchaseOrderChangeLine",
+    "convertible_requisitions",
+    "generate_po_from_requisition",
 ]
