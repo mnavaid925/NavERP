@@ -198,6 +198,10 @@ def discrepancy_detail(request, pk):
         "tolerance_verdict": verdict,
         "tolerance_reason": reason,
         "tolerance_css": verdict_css,
+        # The label comes from VERDICT_CHOICES, the single source for it — hand-copying the six
+        # labels into a template {% if %} chain is how three of them drifted into rendering an
+        # unrecognised verdict as "No policy".
+        "tolerance_label": dict(ReceiptTolerancePolicy.VERDICT_CHOICES).get(verdict, verdict),
         "evidence_is_image": obj.evidence_is_image,
         # One-click hand-off into the RTV lane, carrying this finding so the return does not have
         # to be re-typed. The target re-validates the pk against the tenant regardless.
