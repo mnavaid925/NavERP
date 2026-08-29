@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}PO Change Orders{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Purchase Order Change Orders</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'scm:purchaseorder_list' %}">Purchase orders</a><span class="sep">›</span><span>Change orders</span></div>
+      <p class="text-muted">Changes to dispatched purchase orders — any member files, an admin decides, and only approval touches the order (bumping its version for the vendor's paper trail).</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Find an order</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, order or reason…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:poc_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Purchase order</th><th>Type</th><th>Status</th><th>Requested by</th><th>Filed</th><th>Decided</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a> · {{ obj.purchase_order.vendor.name }}{% else %}—{% endif %}</td>
+              <td><span class="badge {% if obj.change_type == 'cancel' %}badge-red{% else %}badge-info{% endif %}">{{ obj.get_change_type_display }}</span></td>
+              <td><span class="badge {% if obj.status == 'approved' %}badge-green{% elif obj.status == 'rejected' %}badge-red{% else %}badge-amber{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.username }}{% else %}—{% endif %}</td>
+              <td>{{ obj.created_at|date:"M d, Y H:i" }}</td>
+              <td>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y H:i" }}{% else %}<span class="badge badge-amber">Waiting</span>{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'procurement:poc_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="file-diff"></i><h3>No change orders</h3><p>Open a sent, acknowledged or partially received purchase order to request a change or cancellation.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
