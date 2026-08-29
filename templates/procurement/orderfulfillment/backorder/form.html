@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Backorder{% endblock %}
+{% block content %}
+  {% comment %}
+    6.11 Backorder create + edit — ONE template, driven by the contracted `is_edit` flag.
+    Context contract: form, is_edit, obj (obj is None on create, so every reference to it
+    sits inside an {% if is_edit %} branch).
+    Fields rendered in the form's own Meta order: po_line, delivery_schedule, asn,
+    quantity_backordered, reason, reason_note, original_promise_date, revised_promise_date,
+    notes. status / reschedule_count / closed_at / closure_note / alert are NOT on this
+    form — they move only through the guarded verbs on the detail page.
+  {% endcomment %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Backorder{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:backorder_list' %}">Backorders</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    <p class="text-muted">Log the quantity a supplier still owes on a purchase-order line. Quantities may not exceed the line, and choosing <em>Other</em> as the reason requires a note.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == "reason_note" %}
+              <div class="form-help">Required when the reason is <em>Other</em>; a re-promise overwrites this note with its own reason.</div>
+            {% elif field.name == "original_promise_date" %}
+              <div class="form-help">The date first committed. Leave blank when the supplier never gave one — the row then reads as <em>No commitment</em> on the risk board.</div>
+            {% elif field.name == "revised_promise_date" %}
+              <div class="form-help">Later moves should go through Re-promise on the detail page so the slip is counted.</div>
+            {% elif field.help_text %}
+              <div class="form-help">{{ field.help_text }}</div>
+            {% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      Status, re-promise count and closure are not editable here — they are stamped only by Re-promise, Mark fulfilled and Cancel on the backorder page, so the chase history stays trustworthy.
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Update{% else %}Create{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:backorder_detail' obj.pk %}{% else %}{% url 'procurement:backorder_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
