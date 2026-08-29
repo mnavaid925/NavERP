@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Receipt Tolerances · Procurement{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Goods Receipt & Inspection — Receipt Tolerance Policy register.
+
+    Context contract, and nothing else exists on this page:
+      crud_list      → object_list (ITERATE THIS), page_obj, q
+      extra_context  → action_choices, scope_choices, items, vendors, scope,
+                       stats.total / stats.active / stats.flagging / stats.catch_all
+
+    ?action / ?active / ?item / ?vendor are crud_list filter tuples, so they are echoed
+    straight from request.GET. ?scope is applied in the VIEW as an ORM Q before
+    pagination and echoed back sanitized as `scope` — an unknown token comes back as ''
+    and the widget falls to "All scopes" rather than pretending a filter is live.
+
+    Badge COLOUR comes from the model's own action_css / scope_css properties, never from
+    a second inline map: the duplicated chain on the 6.11 backorder pages had already
+    drifted from the model, so the same value rendered two colours depending on the
+    surface. Only colour-named theme.css modifiers exist (badge-green/red/amber/info/
+    muted/slate) — a semantic badge-success would render unstyled (L33).
+
+    Create / edit / delete are @tenant_admin_required in the view; the guard below mirrors
+    that check exactly, and the view re-checks it regardless of what this template shows.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Receipt Tolerances</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a>
+        <span class="sep">›</span>
+        <span>Goods Receipt &amp; Inspection</span>
+        <span class="sep">›</span>
+        <span>Receipt Tolerances</span>
+      </div>
+      <p class="text-muted">How much over, under, early or late a delivery may run before receiving calls it an exception. Most specific rule wins: item, then category, then workspace-wide. These policies are <strong>advisory</strong> — they colour the receiving console and raise exceptions, they never block a receipt.</p>
+    </div>
+    <div class="page-actions">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'procurement:tolerancepolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Tolerance Policy</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scale"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Policies</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.flagging }}</div><div class="stat-label">Flagging breaches</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.catch_all }}</div><div class="stat-label">Catch-all rules</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, notes, SKU or vendor…">
+        </div>
+        <div class="form-group">
+          <select name="action" aria-label="Action" class="form-select">
+            <option value="">All actions</option>
+            {% for val, label in action_choices %}
+              <option value="{{ val }}" {% if request.GET.action == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="scope" aria-label="Scope" class="form-select">
+            <option value="">All scopes</option>
+            {% for val, label in scope_choices %}
+              <option value="{{ val }}" {% if scope == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}crud_list maps the literal strings "True"/"False" onto the BooleanField, so the option values must be exactly those two words.{% endcomment %}
+          <select name="active" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for it in items %}
+              <option value="{{ it.pk|stringformat:"d" }}" {% if request.GET.item == it.pk|stringformat:"d" %}selected{% endif %}>{{ it.sku }} — {{ it.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:tolerancepolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="text-right">Priority</th>
+            <th>Policy</th>
+            <th>Applies to</th>
+            <th>Vendor</th>
+            <th>Over-receipt</th>
+            <th>Under-receipt</th>
+            <th>Date window</th>
+            <th>Action</th>
+            <th>Status</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="text-right mono fw-600">{{ obj.priority }}</td>
+              <td>
+                <a href="{% url 'procurement:tolerancepolicy_detail' obj.pk %}" class="fw-600 text-brand">{{ obj.name }}</a>
+                {% if obj.notes %}<div class="text-muted">{{ obj.notes|truncatechars:70 }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="badge-group">
+                  <span class="badge {{ obj.scope_css|default:"badge-muted" }}">{{ obj.scope_label }}</span>
+                </div>
+                {% if obj.item %}
+                  <div class="mono fw-600">{{ obj.item.sku }}</div>
+                  <div class="text-muted">{{ obj.item.name }}</div>
+                {% elif obj.category %}
+                  <div class="text-muted">{{ obj.category.name }}</div>
+                {% else %}
+                  <div class="text-muted">Every item in the workspace</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.vendor %}
+                  {{ obj.vendor.name }}
+                {% else %}
+                  <span class="text-muted">Any vendor</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.allow_unlimited_over_receipt %}
+                  <span class="badge badge-slate">Unlimited</span>
+                {% else %}
+                  {{ obj.over_band_text|default:"—" }}
+                {% endif %}
+              </td>
+              <td>{{ obj.under_band_text|default:"—" }}</td>
+              <td>{{ obj.date_band_text|default:"—" }}</td>
+              <td>
+                {% comment %}Colour from ReceiptTolerancePolicy.action_css (the single source of truth); label always from get_action_display, so a choices key added later still reads correctly here.{% endcomment %}
+                <span class="badge {{ obj.action_css|default:"badge-muted" }}">{{ obj.get_action_display }}</span>
+              </td>
+              <td>
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:tolerancepolicy_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <a href="{% url 'procurement:tolerancepolicy_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% comment %}
+                      L42 — inside an onsubmit attribute only \' escapes an apostrophe; &#39; does not.
+                      The policy NAME is user-typed and may well contain one, so it is deliberately
+                      NOT interpolated into the confirm string (the backorder pages get away with it
+                      only because BKO- numbers are system-assigned).
+                    {% endcomment %}
+                    <form method="post" action="{% url 'procurement:tolerancepolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this tolerance policy? Receipts stop being measured against it immediately, and the next most general rule takes over.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="scale"></i>
+                  <h3>No receipt tolerance policies</h3>
+                  <p>Nothing matches these filters. Without a policy every receipt resolves to <em>No policy</em> on the exceptions board — add a catch-all rule first, then override it per category or item.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
