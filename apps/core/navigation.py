@@ -1532,6 +1532,23 @@ LIVE_LINKS = {
         "Punch-out Catalog Integration": "procurement:punchout_endpoint_list",
         "Supplier Catalog Hosting":      "procurement:catalog_upload_list",
     },
+    # 6.11 Order Fulfillment & Tracking. Three tables + two COMPUTED boards. The ASN [ASN-]
+    # (+ AsnLine) is the supplier's declaration of what is on the truck, DeliverySchedule [DSC-]
+    # is the split-delivery instalment ladder under a PO line, and Backorder [BKO-] is the
+    # recorded shortfall with its revised promise. "Real-time Freight Tracking" is deliberately
+    # a BOARD over those ASNs joined to scm.Shipment rather than a new tracking table: SCM 4.6
+    # (scm.Shipment + scm.TrackingEvent) owns freight milestones, ETA and last-known-location
+    # (L36), and a second log inside procurement would give the buyer two ETAs that disagree.
+    # "Delivery Confirmation" is likewise the arrivals QUEUE over the same rows - its inline
+    # confirm form posts to the ASN's own asn_confirm_delivery verb, so there is exactly one
+    # place that stamps the POD block and keeps the double-submit guard.
+    "6.11": {
+        "Advanced Shipping Notice (ASN)": "procurement:asn_list",
+        "Real-time Freight Tracking":     "procurement:inbound_tracking",
+        "Delivery Confirmation":          "procurement:delivery_confirmation",
+        "Backorder Management":           "procurement:backorder_list",
+        "Split Delivery Management":      "procurement:deliveryschedule_list",
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
