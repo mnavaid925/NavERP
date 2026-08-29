@@ -225,10 +225,16 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._share_choices()
+        #: Rendered ``<option>`` lists, keyed on the SQL that produced them. Populated row by row
+        #: in ``_construct_form`` — NEVER eagerly here: ``BaseFormSet.forms`` is a
+        #: ``cached_property``, and ``rtv_edit`` relies on it staying lazy so the rows are built
+        #: only after ``form.is_valid()`` has stamped this same submit's header onto
+        #: ``self.instance``. Touching ``self.forms`` in ``__init__`` would freeze every dropdown
+        #: against the header as it was BEFORE the edit.
+        self._rendered_choices = {}
 
-    def _share_choices(self):
-        """Render each FK ``<select>``'s options ONCE for the whole formset.
+    def _construct_form(self, i, **kwargs):
+        """Build a row, then render its FK ``<select>``s from options the formset already has.
 
         ``ModelChoiceIterator.__iter__`` calls ``queryset.iterator()``, which deliberately
         bypasses the result cache — so a 10-line draft plus ``extra=2`` re-executes the SAME two
@@ -241,19 +247,20 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
         stored value offerable" escapes above mean two rows can legitimately carry different
         querysets, and pasting row 1's options onto row 2 would hide row 2's own stored line.
         """
-        rendered = {}
-        for form in self.forms:
-            for name in ("goods_receipt_line", "po_line"):
-                field = form.fields.get(name)
-                if field is None:
-                    continue
-                key = (name, str(field.queryset.query))
-                if key not in rendered:
-                    options = [(obj.pk, str(obj)) for obj in field.queryset]
-                    if field.empty_label is not None:
-                        options.insert(0, ("", field.empty_label))
-                    rendered[key] = options
-                field.choices = rendered[key]
+        form = super()._construct_form(i, **kwargs)
+        for name in ("goods_receipt_line", "po_line"):
+            field = form.fields.get(name)
+            if field is None:
+                continue
+            key = (name, str(field.queryset.query))
+            options = self._rendered_choices.get(key)
+            if options is None:
+                options = [(obj.pk, str(obj)) for obj in field.queryset]
+                if field.empty_label is not None:
+                    options.insert(0, ("", field.empty_label))
+                self._rendered_choices[key] = options
+            field.choices = options
+        return form
 
     def get_form_kwargs(self, index):
         kwargs = super().get_form_kwargs(index)
