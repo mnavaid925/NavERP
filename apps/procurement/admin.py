@@ -36,6 +36,10 @@ from .models import (
     PunchOutEndpoint,
     PurchaseOrderChange,
     PurchaseOrderChangeLine,
+    ReceiptDiscrepancy,
+    ReceiptTolerancePolicy,
+    ReturnToVendor,
+    ReturnToVendorLine,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -534,3 +538,63 @@ class BackorderAdmin(admin.ModelAdmin):
     # closure stamps and the raised-alert link — each re-checking its guard inside itself.
     readonly_fields = ("number", "status", "reschedule_count", "closed_at", "closure_note",
                        "alert", "created_by", "created_at", "updated_at")
+
+
+@admin.register(ReceiptTolerancePolicy)
+class ReceiptTolerancePolicyAdmin(admin.ModelAdmin):
+    list_display = ("name", "item", "category", "vendor", "over_receipt_pct",
+                    "under_receipt_pct", "over_receipt_qty", "allow_unlimited_over_receipt",
+                    "early_receipt_days", "late_receipt_days", "action", "priority",
+                    "is_active")
+    list_filter = ("tenant", "action", "is_active", "allow_unlimited_over_receipt")
+    search_fields = ("name", "notes", "item__sku", "item__name", "category__name",
+                     "vendor__name")
+    raw_id_fields = ("item", "category", "vendor")
+    # A configuration master, not a workflow document: everything except the audit stamps is
+    # meant to be edited. The policy is ADVISORY — it colours the console and drives the
+    # exceptions board; it never blocks scm:goodsreceipt_receive.
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ReceiptDiscrepancy)
+class ReceiptDiscrepancyAdmin(admin.ModelAdmin):
+    list_display = ("number", "goods_receipt", "goods_receipt_line", "kind", "severity",
+                    "quantity_affected", "remedy", "status", "vendor_notified_on",
+                    "resolved_at")
+    list_filter = ("tenant", "status", "kind", "severity", "remedy")
+    search_fields = ("number", "description", "item_description", "sku_hint", "lot_number",
+                     "serial_number", "vendor_reference", "goods_receipt__number")
+    raw_id_fields = ("goods_receipt", "goods_receipt_line", "nonconformance",
+                     "quarantine_order", "return_to_vendor")
+    # notify_vendor / resolve / cancel own status and every stamp hanging off it, each
+    # re-checking its guard inside itself so a double-submit cannot re-stamp. The admin looks;
+    # it never resolves a claim. Nothing here posts stock or a journal entry.
+    readonly_fields = ("number", "status", "vendor_notified_on", "resolved_at", "resolved_by",
+                       "resolution_notes", "created_by", "created_at", "updated_at")
+
+
+class ReturnToVendorLineInline(admin.TabularInline):
+    model = ReturnToVendorLine
+    extra = 0
+    fields = ("goods_receipt_line", "po_line", "item_description", "sku_hint", "uom_hint",
+              "quantity_returned", "lot_number", "serial_number", "condition_note")
+    raw_id_fields = ("goods_receipt_line", "po_line")
+
+
+@admin.register(ReturnToVendor)
+class ReturnToVendorAdmin(admin.ModelAdmin):
+    list_display = ("number", "vendor", "purchase_order", "goods_receipt", "reason", "remedy",
+                    "status", "supplier_rma_number", "shipped_on", "credit_note_ref")
+    list_filter = ("tenant", "status", "reason", "remedy")
+    search_fields = ("number", "reason_note", "supplier_rma_number", "tracking_number",
+                     "credit_note_ref", "notes", "vendor__name", "purchase_order__number",
+                     "goods_receipt__number")
+    raw_id_fields = ("vendor", "purchase_order", "goods_receipt", "discrepancy")
+    inlines = (ReturnToVendorLineInline,)
+    # authorize / ship / close / cancel own status and every stamp, each re-checking its own
+    # guard. credit_note_ref is FREE TEXT and posts nothing: apps/accounting owns the ledger
+    # (L29) and accounting.Bill has no vendor-credit kind yet, so the AP credit is recorded
+    # here as a reference only. The physical stock removal is SCM's/inventory's, never this.
+    readonly_fields = ("number", "status", "shipped_on", "authorized_by", "authorized_at",
+                       "closed_at", "cancelled_at", "cancellation_reason", "created_by",
+                       "created_at", "updated_at")
