@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Delivery Confirmation{% endblock %}
+{% block content %}
+  {% comment %}
+    6.11 Delivery Confirmation — a COMPUTED, READ-ONLY arrivals queue over
+    AdvancedShipmentNotice, bucketed by ?due= into today / overdue / awaiting /
+    confirmed. It defines NO state and NO second confirm path: the inline form
+    below posts to the ASN entity's own procurement:asn_confirm_delivery with a
+    hidden next=confirmation so the verb returns the buyer to this board. The
+    input names (delivered_at / arrival_condition / pod_reference /
+    received_signature_name) mirror AsnDeliveryConfirmForm exactly — renaming
+    one silently drops that value on the floor.
+    Context: object_list, page_obj, q, bucket, bucket_choices, condition_choices, stats.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Delivery Confirmation</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Order Fulfillment &amp; Tracking</span><span class="sep">›</span><span>Delivery Confirmation</span></div>
+      <p class="text-muted">The arrivals queue. Confirm a delivery inline to stamp the proof-of-delivery block — condition, POD reference and who signed — straight onto the ASN. Goods receipt and inspection stay with receiving.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:inbound_tracking' %}" class="btn btn-outline"><i data-lucide="truck"></i> Freight tracking</a>
+      <a href="{% url 'procurement:asn_list' %}" class="btn btn-primary"><i data-lucide="file-text"></i> All ASNs</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.due_today }}</div><div class="stat-label">Due today</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="hourglass"></i></div><div class="stat-value">{{ stats.awaiting }}</div><div class="stat-label">Awaiting arrival</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.confirmed_7d }}</div><div class="stat-label">Confirmed (7 days)</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group" style="margin-bottom:.8rem;">
+        {% for val, label in bucket_choices %}
+          <a class="btn btn-sm {% if bucket == val %}btn-primary{% else %}btn-outline{% endif %}"
+             href="?due={{ val }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </div>
+
+      <form method="get" class="filter-bar">
+        <input type="hidden" name="due" value="{{ bucket }}">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="confirm_q">Search</label>
+          <input type="text" id="confirm_q" name="q" value="{{ q }}" class="form-input" placeholder="ASN number, supplier ref or PO number…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:delivery_confirmation' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ASN</th>
+            <th>Purchase order</th>
+            <th>Carrier</th>
+            <th>Expected / ETA</th>
+            <th>Status</th>
+            <th>{% if bucket == 'confirmed' %}Proof of delivery{% else %}Confirm delivery{% endif %}</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'procurement:asn_detail' row.pk %}" class="fw-600">{{ row.number }}</a>
+                {% if row.supplier_reference %}<div class="text-muted">Supplier ref {{ row.supplier_reference }}</div>{% endif %}
+              </td>
+              <td>
+                {% if row.purchase_order %}
+                  <span class="fw-600">{{ row.purchase_order.number }}</span>
+                  <div class="text-muted">{% if row.purchase_order.vendor %}{{ row.purchase_order.vendor.name }}{% else %}—{% endif %}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{% if row.carrier_display %}{{ row.carrier_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.expected_delivery_date %}{{ row.expected_delivery_date }}{% else %}<span class="text-muted">No date promised</span>{% endif %}
+                {% if row.eta_display %}<div class="text-muted">ETA {{ row.eta_display }}</div>{% endif %}
+              </td>
+              <td>
+                <span class="badge {{ row.status_css|default:'badge-slate' }}">{{ row.get_status_display }}</span>
+                {% if row.is_late %}<div><span class="badge badge-red">{{ row.days_late }} day{{ row.days_late|pluralize }} late</span></div>{% endif %}
+              </td>
+              <td>
+                {% if bucket == 'confirmed' %}
+                  {% comment %}Confirmed rows are a record, not an action — show the stamped POD block.{% endcomment %}
+                  <div>{% if row.delivered_at %}{{ row.delivered_at }}{% else %}<span class="text-muted">—</span>{% endif %}</div>
+                  {% if row.arrival_condition %}
+                    <div><span class="badge {{ row.condition_css|default:'badge-slate' }}">{{ row.get_arrival_condition_display }}</span></div>
+                  {% endif %}
+                  {% if row.pod_reference %}<div class="text-muted">POD {{ row.pod_reference }}</div>{% endif %}
+                  {% if row.received_signature_name %}<div class="text-muted">Signed {{ row.received_signature_name }}</div>{% endif %}
+                  <div class="text-muted">Confirmed by {% if row.confirmed_by %}{{ row.confirmed_by.get_full_name|default:row.confirmed_by.username }}{% else %}—{% endif %}</div>
+                {% elif row.is_in_flight %}
+                  <form method="post" action="{% url 'procurement:asn_confirm_delivery' row.pk %}"
+                        onsubmit="return confirm('Confirm delivery of {{ row.number }}? This stamps the proof-of-delivery block and cannot be undone.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="confirmation">
+                    <div class="filter-bar">
+                      <div class="form-group">
+                        <label class="form-label" for="delivered_at_{{ row.pk }}">Delivered at</label>
+                        <input type="datetime-local" id="delivered_at_{{ row.pk }}" name="delivered_at" class="form-input" style="min-width:190px;">
+                        <div class="text-muted">Blank = now</div>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="arrival_condition_{{ row.pk }}">Condition</label>
+                        <select id="arrival_condition_{{ row.pk }}" name="arrival_condition" class="form-select">
+                          {% for val, label in condition_choices %}
+                            <option value="{{ val }}" {% if val == 'good' %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="pod_reference_{{ row.pk }}">POD reference</label>
+                        <input type="text" id="pod_reference_{{ row.pk }}" name="pod_reference" maxlength="64" class="form-input" style="min-width:150px;">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="received_signature_name_{{ row.pk }}">Signed by</label>
+                        <input type="text" id="received_signature_name_{{ row.pk }}" name="received_signature_name" maxlength="120" class="form-input" style="min-width:150px;">
+                      </div>
+                      <button class="btn btn-primary btn-sm" type="submit"><i data-lucide="check"></i> Confirm</button>
+                    </div>
+                  </form>
+                {% else %}
+                  <span class="text-muted">Not confirmable in this status</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:asn_detail' row.pk %}" class="btn-icon" title="View ASN" aria-label="View ASN"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="clipboard-check"></i>
+                {% if bucket == 'confirmed' %}
+                  <h3>Nothing confirmed in the last seven days</h3>
+                  <p>Deliveries you confirm from this board land here with their condition, POD reference and signatory for a week.</p>
+                {% elif bucket == 'overdue' %}
+                  <h3>Nothing overdue</h3>
+                  <p>Every in-flight shipment is still inside its promised date. Check the other buckets for what is due today or on its way.</p>
+                {% elif bucket == 'awaiting' %}
+                  <h3>Nothing awaiting arrival</h3>
+                  <p>No in-flight ASN is dated beyond today. Shipments with no promised date at all also land in this bucket.</p>
+                {% else %}
+                  <h3>Nothing due today</h3>
+                  <p>No in-flight shipment is expected today. Try the Overdue or Awaiting arrival buckets, or record a new advance shipping notice.</p>
+                {% endif %}
+                <a href="{% url 'procurement:asn_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Go to the ASN register</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
