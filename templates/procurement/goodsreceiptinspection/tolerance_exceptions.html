@@ -130,12 +130,7 @@
               </td>
               <td>
                 <span class="badge {{ row.verdict_css|default:'badge-slate' }}">
-                  {% if row.verdict == 'ok' %}Within tolerance
-                  {% elif row.verdict == 'over' %}Over-receipt
-                  {% elif row.verdict == 'short' %}Under-receipt
-                  {% elif row.verdict == 'early' %}Early
-                  {% elif row.verdict == 'late' %}Late
-                  {% else %}No policy{% endif %}
+                  {{ row.verdict_label }}
                 </span>
                 {% if row.reason %}<div class="text-muted">{{ row.reason }}</div>{% endif %}
               </td>
