@@ -63,7 +63,7 @@
     <div class="card-body">
       <dl class="detail-grid">
         <div class="detail-item"><dt>Verdict</dt>
-          <dd><span class="badge {{ tolerance_css }}">{% if tolerance_verdict == 'ok' %}Within tolerance{% elif tolerance_verdict == 'over' %}Over-receipt{% elif tolerance_verdict == 'short' %}Under-receipt{% elif tolerance_verdict == 'early' %}Early{% elif tolerance_verdict == 'late' %}Late{% elif tolerance_verdict == 'no_rule' %}No policy{% else %}{{ tolerance_verdict }}{% endif %}</span></dd></div>
+          <dd><span class="badge {{ tolerance_css }}">{{ tolerance_label }}</span></dd></div>
         <div class="detail-item"><dt>Policy</dt>
           <dd>{% if tolerance_rule %}<a href="{% url 'procurement:tolerancepolicy_detail' tolerance_rule.pk %}" class="fw-600">{{ tolerance_rule.name }}</a>{% else %}<span class="text-muted">No policy covers this line — configure one so the exception board can see it.</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Reason</dt><dd>{{ tolerance_reason|default:"—" }}</dd></div>
