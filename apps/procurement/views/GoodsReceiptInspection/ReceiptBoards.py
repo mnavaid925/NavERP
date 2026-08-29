@@ -126,6 +126,15 @@ _VERDICT_KIND = {
 
 # -- shared helpers --------------------------------------------------------------------------
 
+def _is_admin(request):
+    """Mirrors @tenant_admin_required exactly, so a hidden button and a refused POST agree.
+
+    The local-copy convention every 6.12 lane follows (``ReceiptTolerances`` and
+    ``ReturnsToVendor`` each carry the same three lines).
+    """
+    return bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+
+
 def _tenant_guard(request, what):
     """The superuser has no workspace by design; say so instead of rendering an empty board."""
     if request.tenant is None:
@@ -407,6 +416,11 @@ def receiving_console(request):
         "locations": _locations(tenant),
         "arrival": arrival,
         "arrival_choices": ARRIVAL_CHOICES,
+        # ``receiving_console_mint_lots`` is @tenant_admin_required, so a member must not be
+        # offered the button — the decorator raises PermissionDenied and the click dead-ends on a
+        # hard 403 page. The BOOK form is deliberately NOT gated on this: that verb is
+        # @login_required only and must stay member-visible.
+        "can_mint": _is_admin(request),
         "stats": {
             "awaiting": totals["awaiting"],
             "arrived_today": totals["arrived_today"],
