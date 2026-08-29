@@ -183,6 +183,9 @@ def _governed_lines(request, obj):
             "received": received,
             "verdict": verdict,
             "verdict_css": ReceiptTolerancePolicy.VERDICT_CSS.get(verdict, "badge-muted"),
+            # Label from VERDICT_CHOICES rather than a hand-copied template chain — one source
+            # for the six verdict labels, so a seventh verdict needs no template edit.
+            "verdict_label": dict(ReceiptTolerancePolicy.VERDICT_CHOICES).get(verdict, verdict),
         })
         if len(rows) >= _GOVERNED_SHOWN:
             break
