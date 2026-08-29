@@ -315,6 +315,21 @@ def _verdict_css(verdict):
     return ReceiptTolerancePolicy.VERDICT_CSS.get(verdict, "badge-muted")
 
 
+#: The verdict vocabulary as a lookup. ``VERDICT_CHOICES`` is the single source of these labels —
+#: they used to be hand-copied into five separate ``{% if %}`` chains, three of which had already
+#: drifted into mislabelling an unrecognised token as "No policy".
+_VERDICT_LABELS = dict(ReceiptTolerancePolicy.VERDICT_CHOICES)
+
+
+def _verdict_label(verdict):
+    """The human label for a verdict, falling back to the raw token.
+
+    Falling back to the token rather than to a fixed word matters: an unrecognised verdict is a
+    bug worth SEEING, and rendering it as "No policy" is how one silently hid.
+    """
+    return _VERDICT_LABELS.get(verdict, verdict or "")
+
+
 # -- Receiving console ------------------------------------------------------------------------
 
 @login_required
@@ -518,6 +533,7 @@ def _console_rows(tenant, shipments, receipt_by_ref):
                 "verdict": verdict,
                 "verdict_reason": verdict_reason,
                 "verdict_css": _verdict_css(verdict),
+                "verdict_label": _verdict_label(verdict),
                 "lot_number": line.lot_number,
                 "serial_number": line.serial_number,
                 "expiry_date": line.expiry_date,
@@ -546,6 +562,7 @@ def _console_rows(tenant, shipments, receipt_by_ref):
             "tolerance_verdict": headline,
             "tolerance_reason": headline_reason,
             "tolerance_css": _verdict_css(headline),
+            "tolerance_label": _verdict_label(headline),
             "qc_verdict": qc_verdict,
             "qc_reason": qc_reason,
             "qc_location": qc_location,
@@ -916,6 +933,7 @@ def _exception_rows(tenant, lines):
             "verdict": verdict,
             "reason": reason if rule is not None else resolve_reason,
             "verdict_css": _verdict_css(verdict),
+            "verdict_label": _verdict_label(verdict),
             "receipt_date": receipt.receipt_date,
             "expected_date": getattr(order, "expected_date", None),
             "prefill_url": f"{create_url}?{urlencode(params)}",
