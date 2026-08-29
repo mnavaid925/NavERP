@@ -152,7 +152,8 @@ class ReturnToVendorLineForm(forms.ModelForm):
             "condition_note": forms.TextInput(attrs={"class": "form-input"}),
         }
 
-    def __init__(self, *args, receipt=None, tenant=None, order=None, **kwargs):
+    def __init__(self, *args, receipt=None, tenant=None, order=None, vendor_id=None,
+                 **kwargs):
         super().__init__(*args, **kwargs)
 
         # Blank copies the source line's text in ReturnToVendorLine.save() — don't demand it.
@@ -200,6 +201,11 @@ class ReturnToVendorLineForm(forms.ModelForm):
             po_lines = PurchaseOrderLine.objects.filter(purchase_order__tenant=tenant)
             if order is not None:
                 po_lines = po_lines.filter(purchase_order=order)
+            elif vendor_id:
+                # No order named, but the supplier is. Offering another supplier's ordered lines
+                # here is how a return to A gets priced off B's unit price — the widget and
+                # ``BaseReturnToVendorLineFormSet.clean()`` refuse the same set.
+                po_lines = po_lines.filter(purchase_order__vendor_id=vendor_id)
             self.fields["po_line"].queryset = (
                 po_lines.select_related("purchase_order").order_by("-purchase_order_id", "id")
             )
@@ -254,6 +260,7 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
         kwargs["tenant"] = getattr(self.instance, "tenant", None)
         kwargs["receipt"] = getattr(self.instance, "goods_receipt", None)
         kwargs["order"] = getattr(self.instance, "purchase_order", None)
+        kwargs["vendor_id"] = getattr(self.instance, "vendor_id", None)
         return kwargs
 
     def clean(self):
@@ -262,6 +269,8 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
         if tenant_id is None:
             return
         header_receipt_id = getattr(self.instance, "goods_receipt_id", None)
+        header_order_id = getattr(self.instance, "purchase_order_id", None)
+        vendor_id = getattr(self.instance, "vendor_id", None)
 
         for form in self.forms:
             if not hasattr(form, "cleaned_data"):
@@ -279,9 +288,20 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
                     form.add_error("goods_receipt_line",
                                    "That line belongs to a different goods receipt.")
 
+            # Tenancy is not enough here. ``po_line.unit_price`` is what SIZES the expected
+            # credit, so a line belonging to a different order — or worse, to a different
+            # supplier — quotes this supplier a credit off somebody else's price. Both
+            # counterparty legs are checked, not just the workspace.
             po_line = form.cleaned_data.get("po_line")
-            if po_line is not None and po_line.purchase_order.tenant_id != tenant_id:
-                form.add_error("po_line", "That record belongs to another workspace.")
+            if po_line is not None:
+                if po_line.purchase_order.tenant_id != tenant_id:
+                    form.add_error("po_line", "That record belongs to another workspace.")
+                elif header_order_id and po_line.purchase_order_id != header_order_id:
+                    form.add_error("po_line",
+                                   "That line belongs to a different purchase order.")
+                elif vendor_id and po_line.purchase_order.vendor_id != vendor_id:
+                    form.add_error("po_line",
+                                   "That order was placed with a different supplier.")
 
 
 #: ``max_num`` caps a crafted management form at a sane row count — every accepted row is a write.
