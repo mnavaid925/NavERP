@@ -44,7 +44,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum, Value
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Lower, Trim
 from django.urls import reverse
 from django.utils.http import urlencode
 
@@ -189,11 +189,21 @@ def _qc_rules(tenant):
 
 
 def _item_map(tenant, skus):
-    """``{normalised sku: Item}`` for the SKU hints on one page — ONE query.
+    """``{normalised sku: Item}`` for the SKU hints on one page — ONE **bounded** query.
 
     GRN and PO lines are FREE TEXT (no item FK anywhere on the receiving spine), so every
     item-level feature in 6.12 goes through ``sku_hint``. Batched here rather than calling
     ``resolve_line_item`` per row, which is an N+1 on exactly the pages this module is about.
+
+    The match is made in SQL — ``Lower(Trim(sku))`` against the page's ~30 keys, the shape
+    ``_governed_lines`` already uses (ReceiptTolerances.py) — not by reading the whole item master
+    into Python: ``tolerance_exceptions`` calls this helper twice per render, and a 20k-item
+    catalogue meant 40k rows materialised for a page that needs thirty of them.
+
+    The returned rows are still re-keyed through ``_norm``, so the dict's whitespace-collapsing
+    semantics are unchanged. The one case SQL cannot reproduce is a sku with *internal* repeated
+    whitespace (``"AB  C"``), which no longer matches ``"ab c"`` — that is strictly CLOSER to
+    ``resolve_line_item``'s canonical ``sku__iexact``, which never collapsed it either.
 
     ``tenant`` is joined in because ``resolve_qc_routing`` reads ``item.tenant`` on every call —
     without it, a page of distinct SKUs costs one extra query per item.
@@ -202,7 +212,10 @@ def _item_map(tenant, skus):
     if tenant is None or not skus:
         return {}
     found = {}
-    for item in Item.objects.filter(tenant=tenant).select_related("category", "tenant"):
+    for item in (Item.objects.filter(tenant=tenant)
+                 .select_related("category", "tenant")
+                 .annotate(lower_sku=Lower(Trim("sku")))
+                 .filter(lower_sku__in=skus)):
         key = _norm(item.sku)
         if key in skus and key not in found:
             found[key] = item
