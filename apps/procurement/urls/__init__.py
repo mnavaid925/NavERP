@@ -10,7 +10,9 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 `submissions/`, `vendor-portal/`, `auctions/`, `clauses/`, `contracts/`, `contract-sign/`,
 `contract-amendments/`, `milestones/`, `renewals/`, `catalog-items/`, `catalog-tiers/`,
 `punchout/`, `catalog-uploads/`, `asn/`, `delivery-schedules/`,
-`backorders/`, `inbound-tracking/`, `delivery-confirmation/`) is a distinct whole component — no greedy
+`backorders/`, `inbound-tracking/`, `delivery-confirmation/`, `receipt-tolerances/`,
+`receipt-discrepancies/`, `returns-to-vendor/`, `receiving-console/`, `tolerance-exceptions/`,
+`receipt-audit/`) is a distinct whole component — no greedy
 ``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
 about.
 """
@@ -23,6 +25,7 @@ from .DashboardPortal.ProcurementAlerts import urlpatterns as _dp_alerts
 from .DashboardPortal.QuickRequisitions import urlpatterns as _dp_quickreq
 from .DashboardPortal.SelfServiceReports import urlpatterns as _dp_reports
 from .EAuctionManagement import urlpatterns as _eauc_eauctionmanagement
+from .GoodsReceiptInspection import urlpatterns as _gri_goodsreceiptinspection
 from .RequisitionManagement.Amendments import urlpatterns as _rm_amendments
 from .RequisitionManagement.Requisitions import urlpatterns as _rm_requisitions
 from .RequisitionManagement.Templates import urlpatterns as _rm_templates
@@ -57,4 +60,7 @@ urlpatterns = [
     *_of_orderfulfillment,  # 6.11 ASN register + lifecycle verbs, split-delivery instalments
                             #      (+ split console), backorders, and the two computed boards:
                             #      inbound freight tracking and delivery confirmation
+    *_gri_goodsreceiptinspection,  # 6.12 receipt tolerance policies, discrepancy register,
+                                   #      returns to vendor, and the three computed pages:
+                                   #      receiving console, tolerance exceptions, receipt audit
 ]
