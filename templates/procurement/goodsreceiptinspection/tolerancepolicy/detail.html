@@ -19,9 +19,10 @@
     guarded before it is dereferenced — a None FK passed into a filter argument raises and
     500s even where a bare lookup would have rendered an empty string (L10).
 
-    governed_lines rows carry a raw `verdict` key with no get_FOO_display behind it (they
-    are plain dicts), so the label chain below spells out the VERDICT_CHOICES keys and
-    ends on an {% else %} that prints the raw token rather than a blank cell.
+    governed_lines rows are plain dicts, so there is no get_FOO_display behind `verdict`.
+    The view resolves the label from ReceiptTolerancePolicy.VERDICT_CHOICES and hands it
+    down as `verdict_label` (falling back to the raw token, so an unrecognised verdict is
+    visible rather than silently relabelled) — never a hand-copied {% if %} chain here.
   {% endcomment %}
   <div class="page-header">
     <div>
@@ -122,13 +123,7 @@
                   <td class="text-right fw-600">{{ row.received|floatformat:"-4" }}</td>
                   <td>
                     <span class="badge {{ row.verdict_css|default:"badge-muted" }}">
-                      {% if row.verdict == 'ok' %}Within tolerance
-                      {% elif row.verdict == 'over' %}Over-receipt
-                      {% elif row.verdict == 'short' %}Under-receipt
-                      {% elif row.verdict == 'early' %}Early
-                      {% elif row.verdict == 'late' %}Late
-                      {% elif row.verdict == 'no_rule' %}No policy
-                      {% else %}{{ row.verdict }}{% endif %}
+                      {{ row.verdict_label }}
                     </span>
                   </td>
                 </tr>
