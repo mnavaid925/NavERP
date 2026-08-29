@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Receipt Discrepancy{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Goods Receipt & Inspection — Discrepancy create + edit, ONE template driven by
+    the contracted `is_edit` flag.
+    Context contract: form, is_edit, obj (None on create, so every reference sits inside
+    an {% if is_edit %} branch), receipts, allowed_extensions, max_upload_mb.
+    enctype is multipart because `evidence` is a FileField — without it the file silently
+    never reaches the view and the upload appears to succeed.
+    On EDIT the form no longer carries `goods_receipt` (the view pops it so the line FK
+    cannot be orphaned), so the receipt is shown read-only from obj instead. Do NOT add a
+    disabled <select> for it — a disabled field posts nothing and reads as a lost value.
+    status, number, vendor_notified_on, resolved_at/by, resolution_notes and created_by
+    are not on this form: they move only through Notify vendor / Resolve / Cancel.
+  {% endcomment %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Receipt Discrepancy{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:discrepancy_list' %}">Discrepancies</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    <p class="text-muted">Record what the dock found wrong with a delivery. Pick the goods receipt first — the line list narrows to that receipt&rsquo;s lines. Leave the line blank for a finding about the delivery as a whole, such as missing paperwork.</p>
+  </div></div>
+
+  {% if not is_edit and not receipts %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="package-x"></i>
+        <h3>No goods receipts to raise a discrepancy against</h3>
+        <p>A discrepancy is always raised against a receipt. Book one from the receiving console first, then come back.</p>
+        <a href="{% url 'procurement:receiving_console' %}" class="btn btn-outline"><i data-lucide="scan-line"></i> Receiving console</a>
+      </div>
+    </div></div>
+  {% endif %}
+
+  <form method="post" novalidate enctype="multipart/form-data">
+    {% csrf_token %}
+
+    {% if is_edit %}
+      <div class="card"><div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Goods receipt</dt>
+            <dd>{% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="fw-600">{{ obj.goods_receipt.number }}</a> <span class="badge badge-slate">{{ obj.goods_receipt.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Purchase order</dt>
+            <dd>{% if obj.order %}<a href="{% url 'scm:purchaseorder_detail' obj.order.pk %}" class="fw-600">{{ obj.order.number }}</a>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Vendor</dt>
+            <dd>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}—{% endif %}</dd></div>
+        </dl>
+        <p class="text-muted">The receipt is fixed once the finding exists — changing it would orphan the receipt line this discrepancy points at. Cancel this one and raise a new finding if it was filed against the wrong delivery.</p>
+      </div></div>
+    {% endif %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == "goods_receipt_line" %}
+              <div class="form-help">Optional. Leave blank for a header-level finding about the whole delivery — a missing packing list, for example.</div>
+            {% elif field.name == "quantity_affected" %}
+              <div class="form-help">Required above zero for over-shipment, short shipment, damage and wrong-item findings. Leave it at zero for documentation or late-delivery findings.</div>
+            {% elif field.name == "item_description" %}
+              <div class="form-help">Copied from the receipt line when left blank — purchase-order lines are free text, so there is no item master to read this from.</div>
+            {% elif field.name == "evidence" %}
+              <div class="form-help">Allowed: {{ allowed_extensions }} · up to {{ max_upload_mb }}&nbsp;MB. Photograph damage on the dock before the pallet moves — vendors settle documented claims faster.</div>
+            {% elif field.name == "evidence_url" %}
+              <div class="form-help">Use this when the photo or report already lives somewhere else and there is no file to upload.</div>
+            {% elif field.name == "remedy" %}
+              <div class="form-help">Leave as <em>Pending decision</em> until the supplier answers — Resolve on the discrepancy page records the remedy that was actually agreed.</div>
+            {% elif field.name == "return_to_vendor" %}
+              <div class="form-help">Link an existing return, or leave blank and raise one from the discrepancy page once the finding is filed.</div>
+            {% elif field.help_text %}
+              <div class="form-help">{{ field.help_text }}</div>
+            {% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      Status, vendor-notification date and the resolution stamps are not editable here — they are set only by Notify vendor, Resolve and Cancel on the discrepancy page, so the claim history stays trustworthy. Raising a finding posts nothing to stock and nothing to the ledger.
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Update{% else %}Create{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:discrepancy_detail' obj.pk %}{% else %}{% url 'procurement:discrepancy_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
