@@ -35,7 +35,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L18
 - **Problem:** The ASN create page's `purchase_order` dropdown renders `str(PurchaseOrder)`, which is `f"{self.number} · {self.vendor}"` (apps/scm/models/ProcurementManagement/PurchaseOrders.py:169) — a second FK hop to `core.Party`. The queryset has no `select_related("vendor")` and is unbounded, so `GET /procurement/asns/new/` costs 1 + P queries where P is every receivable PO in the workspace.
 - **Fix:** Line 73: `self.fields["purchase_order"].queryset = receivable.select_related("vendor").order_by("-order_date", "-id")`. This is the chained-`__str__` case: `select_related("vendor")` on the FORM queryset, not just on the list view. Add a `django_assert_max_num_queries` test around the ASN create GET with ~20 receivable POs seeded.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): select_related the vendor on the ASN purchase_order dropdown queryset
 
 ### I2 — `apps/procurement/management/commands/seed_procurement.py:1186`
 
@@ -43,7 +43,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L39
 - **Problem:** The seeder picks the first RECEIVABLE purchase order and its `lines[0]` without checking that the line still has an outstanding balance; on both seeded tenants that is PO-00001 whose first lines are already fully received (ordered 5.0000 / received 5.0000 / outstanding 0.0000), so `AsnLine.outstanding_at_declare` is 0 and the "deliberately short" line (shipped 1.0000 of 5.0000) renders as OVER-shipped with `shortfall == 0` — the ASN detail page's `{% if line.is_short %}` "Record backorder" hand-off link never renders and the whole ASN-shortfall -> backorder prefill path (`_create_initial` in views/OrderFulfillment/Backorder.py) is unreachable from the demo data.
 - **Fix:** In `_seed_order_fulfillment`, replace the order/line pick at lines 1186-1207 so the demo lands on a line that still has headroom. (1) Select the order as the first receivable one that has a line with a live balance, e.g. `order = next((o for o in _PO.objects.filter(tenant=tenant, status__in=_PO.RECEIVABLE_STATUSES).order_by("id") if any(l.outstanding_quantity() > 0 for l in o.lines.all())), None)` and keep the existing None warning/return. (2) At line 1198 pick `first = next((l for l in lines if l.outstanding_quantity() > 0), lines[0])` and `second = next((l for l in lines if l is not first and l.outstanding_quantity() > 0), first)`. (3) At lines 1202-1207 size the shortfall against the OUTSTANDING balance, not the ordered quantity: `first_qty = first.outstanding_quantity() or Decimal("1")` (leave the `gap`/`short_qty` arithmetic below unchanged). Verified this is satisfiable for both tenants: acme PO-00001 line 584 has outstanding 1.0000 and PO-00002 line 591 has 40.0000; globex PO-00001 line 587 has outstanding 1.0000. After the change re-run `seed_procurement --flush` and confirm the ASN detail shows an amber variance badge plus the "Record backorder (N)" button.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): seed order fulfillment against a PO line that still has an outstanding balance so the ASN shortfall path has demo data (verified in a rolled-back transaction on both tenants: verdict now `short`, shortfall 0.5000, `is_short` True — no `--flush` run, the seeder block is guarded and the concurrent 6.10 session is using the DB)
 
 ### I3 — `apps/procurement/migrations/0016_advancedshipmentnotice_asnline_deliveryschedule_and_more.py:13`
 
@@ -51,7 +51,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L43
 - **Problem:** 0016 (committed) declares `('procurement', '0015_purchaseorderchange_purchaseorderchangeline_and_more')` as a dependency, but 0015 is still UNTRACKED in git (it belongs to the concurrent 6.10 session), so at HEAD any fresh checkout / CI run dies with NodeNotFoundError before a single migration applies.
 - **Fix:** Do NOT `git add` 0015 from this session (L45 — that tree is not yours). Confirm with the concurrent 6.10 session that `apps/procurement/migrations/0015_purchaseorderchange_purchaseorderchangeline_and_more.py` is committed before this branch is pushed. If 6.10 is abandoned/renumbered, regenerate 0016 with `dependencies = [... ('procurement', '0014_alter_cataloguploadbatch_party_and_more')]` and rerun makemigrations --check.
-- **Status:** [ ] open
+- **Status:** [~] skipped — cross-session; 0015 belongs to the concurrent 6.10 build (L45). Re-pointing to 0014 would split the migration graph locally. Resolution is that 6.10 commits 0015 before push; flagged to the user.
 
 ### I4 — `apps/procurement/migrations/0016_advancedshipmentnotice_asnline_deliveryschedule_and_more.py:14`
 
@@ -59,21 +59,21 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L43
 - **Problem:** 0016 declares `('procurement', '0015_purchaseorderchange_purchaseorderchangeline_and_more')` as a dependency, but 0015 is NOT committed at HEAD (it is an untracked file belonging to the concurrent 6.10 session), so a fresh checkout of this range raises `NodeNotFoundError` on any `migrate`/`makemigrations` — i.e. every management command that builds the migration graph fails.
 - **Fix:** Do not push/merge this range until the concurrent 6.10 session has committed `apps/procurement/migrations/0015_purchaseorderchange_purchaseorderchangeline_and_more.py`. If 6.10 is abandoned or lands later, re-point this file's dependency to `('procurement', '0014_alter_cataloguploadbatch_party_and_more')` and rename it to `0015_...`.
-- **Status:** [ ] open
+- **Status:** [~] skipped — cross-session; 0015 belongs to the concurrent 6.10 build (L45). Re-pointing to 0014 would split the migration graph locally. Resolution is that 6.10 commits 0015 before push; flagged to the user.
 
 ### I5 — `apps/procurement/views/OrderFulfillment/AdvancedShipmentNotice.py:118`
 
 - **Found by:** performance-reviewer
 - **Problem:** `asn_detail` hands `obj.line_rows()` to the template; every row's `outstanding_at_declare` / `variance` / `shortfall` calls `po_line.outstanding_quantity()` -> `received_quantity()`, which issues one GRN-line `Sum()` aggregate per `PurchaseOrderLine` instance (apps/scm/models/ProcurementManagement/PurchaseOrders.py:200-211). The header's `{{ obj.discrepancy_verdict }}` walks the same rows. Result: 1 + N aggregate queries for an N-line notice (the formset allows up to 50).
 - **Fix:** In `asn_detail`, after `lines = obj.line_rows()`, seed the per-instance cache from the spine's one-query helper: `received = obj.purchase_order.received_by_line()` then `for row in lines:` / `if row.po_line_id: row.po_line._received_qty_cache = received.get(row.po_line_id) or Decimal("0")`. Add `from decimal import Decimal` to the module imports (it is not in `views/_common.py`). Pass `lines` (the seeded list) as the `lines` context key. This turns N aggregates into 1, and `PurchaseOrder.received_by_line()`'s own docstring names this as the intended caller pattern.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): seed the ASN detail line memos from received_by_line so N receipt aggregates become 1
 
 ### I6 — `apps/procurement/views/OrderFulfillment/FulfillmentBoards.py:174`
 
 - **Found by:** performance-reviewer
 - **Problem:** The delivery-confirmation board's `?due=confirmed` tab renders `row.confirmed_by.get_full_name` for every row (templates/procurement/orderfulfillment/delivery_confirmation.html:100) but `confirmed_by` is not in `_BOARD_SELECT_RELATED`, so a 15-row Confirmed page costs 1 + 15 queries (one User fetch per row).
 - **Fix:** In `delivery_confirmation`, change `.select_related(*_BOARD_SELECT_RELATED)` (line 174) to `.select_related(*_BOARD_SELECT_RELATED, "confirmed_by")`. Do NOT add it to `_BOARD_SELECT_RELATED` itself — `inbound_tracking` never renders `confirmed_by` and would gain a pointless LEFT JOIN. Worth a `django_assert_max_num_queries` test on `GET /procurement/order-fulfillment/delivery-confirmation/?due=confirmed` with 15 delivered ASNs seeded, each with a distinct `confirmed_by` user.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): select_related confirmed_by on the delivery-confirmation board queryset only
 
 ### I7 — `templates/procurement/orderfulfillment/asn/list.html:101`
 
@@ -81,21 +81,21 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L32
 - **Problem:** The Actions-column delete form is rendered for every logged-in member whenever `obj.status == 'draft'`, but `asn_delete` is `@tenant_admin_required` and raises `PermissionDenied` — a non-admin who clicks the bin gets a hard 403, and the sibling detail page already gates the same button on `can_delete`.
 - **Fix:** Wrap the `{% if obj.status == 'draft' %}` delete block in an admin test exactly as `templates/procurement/orderfulfillment/backorder/list.html:119` does — `{% if obj.status == 'draft' and request.user.is_superuser or ... %}` is fragile, so use a nested guard: `{% if obj.status == 'draft' %}{% if request.user.is_superuser or request.user.is_tenant_admin %}<form …>{% endif %}{% endif %}`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): gate the ASN register delete button on tenant-admin as well as draft status
 
 ### I8 — `templates/procurement/orderfulfillment/asn/list.html:101`
 
 - **Found by:** explorer
 - **Problem:** The row Delete form is gated only on `{% if obj.status == 'draft' %}`, but `asn_delete` is `@tenant_admin_required` (apps/procurement/views/OrderFulfillment/AdvancedShipmentNotice.py:212), so any non-admin workspace member sees a Delete button that raises PermissionDenied (403 error page) when clicked.
 - **Fix:** Change line 101 to `{% if obj.status == 'draft' and request.user.is_superuser or obj.status == 'draft' and request.user.is_tenant_admin %}` — or more cleanly nest: `{% if obj.status == 'draft' %}{% if request.user.is_superuser or request.user.is_tenant_admin %} …delete form… {% endif %}{% endif %}`, matching the sibling pattern already used at templates/procurement/orderfulfillment/backorder/list.html:119 and the ASN detail page's own `can_delete` (admin AND draft).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): gate the ASN register delete button on tenant-admin as well as draft status (same one-line gate as I7/M8/M9)
 
 ### I9 — `templates/procurement/orderfulfillment/inbound_tracking.html:45`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The Status filter is populated from the full `AdvancedShipmentNotice.STATUS_CHOICES` (5 values) but the board queryset is hard-restricted to `IN_FLIGHT_STATUSES = ("submitted", "in_transit")` (view line 100), so selecting Draft, Delivered or Cancelled silently returns an always-empty board with no explanation — three of the five options can never match.
 - **Fix:** Restrict the choice list at the source: in `apps/procurement/views/OrderFulfillment/FulfillmentBoards.py:119` change `"status_choices": AdvancedShipmentNotice.STATUS_CHOICES,` to `"status_choices": [c for c in AdvancedShipmentNotice.STATUS_CHOICES if c[0] in AdvancedShipmentNotice.IN_FLIGHT_STATUSES],`. The template loop at line 45 then needs no change and matches its own "All in-flight statuses" blank option.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): offer only the in-flight statuses in the inbound-tracking status filter
 
 ## Minor
 
@@ -104,7 +104,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Found by:** code-reviewer
 - **Problem:** `revised_promise_date` stays on the form for EDIT as well as CREATE, so any member can move the promised date through `backorder_edit` without `reschedule()` running — `reschedule_count` is not incremented and `original_promise_date` is not backfilled, silently under-reporting the slip count this register is built around (the form template at backorder/form.html:33 asks users not to, but nothing enforces it).
 - **Fix:** In `BackorderForm.__init__`, after the queryset narrowing, add `if self.instance.pk: self.fields.pop("revised_promise_date", None)` — the same drop-the-field-on-edit pattern `AdvancedShipmentNoticeForm.__init__` already uses for `purchase_order` — so post-create moves can only go through the counted `backorder_reschedule` verb.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): drop revised_promise_date from the backorder edit form so a slip can only move through the counted reschedule verb
 
 ### M2 — `apps/procurement/views/OrderFulfillment/AdvancedShipmentNotice.py:196`
 
@@ -122,21 +122,21 @@ from apps.core.crud import _changed  # top of file, next to the existing imports
 ```
 
 `_changed(form)` already routes anything in `_SENSITIVE_AUDIT_FIELDS` through `***redacted***`, so this keeps the sensitive-field policy in one place rather than duplicating a list. Note `_changed(form)` must be read BEFORE `form.save()` is not required (it reads `form.changed_data` / `form.cleaned_data`, both populated by `is_valid()`), so the placement above is safe. Family sweep (L28): `rg -n "def \w+_(edit|create)\(" apps/procurement/views -A 25 | rg "write_audit_log\(request\.user, obj, .update."` finds the other hand-rolled save paths in this app that log an action label instead of a field diff (`RfxManagement/Responses.py:116` logs no changes at all).
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(procurement): record the changed ASN header fields in the edit audit log via the shared redaction-aware diff (verified: audit payload is now {'tracking_number': 'MF-CHANGED-0001', 'lines': 2})
 
 ### M3 — `apps/procurement/views/OrderFulfillment/AdvancedShipmentNotice.py:277`
 
 - **Found by:** code-reviewer
 - **Problem:** When the delivery-confirmation board's inline form posts with `next=confirmation`, `_back()` redirects to `procurement:delivery_confirmation` with no query string, so a buyer working the Overdue or Awaiting tab is silently dropped back onto the default "Due today" tab after every confirmation.
 - **Fix:** Read `due = request.POST.get("due", "").strip()` alongside `next`, keep it only if it is in `FulfillmentBoards._BUCKET_KEYS`, and return `redirect(f"{reverse('procurement:delivery_confirmation')}?due={due}")` when set; add `<input type="hidden" name="due" value="{{ bucket }}">` next to the existing `next` hidden input at templates/procurement/orderfulfillment/delivery_confirmation.html:105.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): keep the delivery-confirmation tab on the post-confirm redirect + fix(procurement): post the current arrivals tab back with the inline confirm form
 
 ### M4 — `apps/procurement/views/OrderFulfillment/Backorder.py:61`
 
 - **Found by:** performance-reviewer
 - **Problem:** `backorder_list`'s base queryset select_relates `delivery_schedule`, `asn` and `alert`, but templates/procurement/orderfulfillment/backorder/list.html renders none of them — three unnecessary LEFT JOINs on every list page, each dragging an unused TextField (`asn.notes`, `asn.cancellation_reason`, `delivery_schedule.notes`, `alert.message`) into every row.
 - **Fix:** Narrow line 60-61 to `.select_related("po_line", "po_line__purchase_order")` — that is exactly what the list template and `Backorder.__str__` touch. Leave `backorder_detail`'s wider `select_related` (line 99-101) alone; that page does render all three.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): drop three unrendered joins from the backorder register queryset
 
 ### M5 — `apps/procurement/views/OrderFulfillment/FulfillmentBoards.py:119`
 
@@ -145,21 +145,21 @@ from apps.core.crud import _changed  # top of file, next to the existing imports
 - **Problem:** `inbound_tracking` passes the full `AdvancedShipmentNotice.STATUS_CHOICES` to a board whose queryset is hard-filtered to `IN_FLIGHT_STATUSES`, so picking Draft / Delivered / Cancelled in the ?status= dropdown always renders an empty board with no explanation.
 - **Fix:** Pass only the reachable pairs, e.g. `"status_choices": [(v, l) for v, l in AdvancedShipmentNotice.STATUS_CHOICES if v in AdvancedShipmentNotice.IN_FLIGHT_STATUSES],` — the template's "All in-flight statuses" blank option then tells the truth.
 - **Also suggested:** Replace line 119 with `"status_choices": [(v, l) for v, l in AdvancedShipmentNotice.STATUS_CHOICES if v in AdvancedShipmentNotice.IN_FLIGHT_STATUSES],` so the widget only offers Submitted and In Transit.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): offer only the in-flight statuses in the inbound-tracking status filter (same change as I9)
 
 ### M6 — `templates/procurement/orderfulfillment/asn/detail.html:9`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The discrepancy badge prints the raw property value as its label — it reads "Declared vs outstanding: ok" / "short" / "over" / "mixed" instead of prose — and the `|default:"—"` is dead code because `discrepancy_verdict` never returns a falsy value (it returns the string `"ok"` even for an ASN with zero lines).
 - **Fix:** Use the model's badge map for the class and an explicit label chain, the way the risk badge does at backorder/detail.html:18: `<span class="badge {{ obj.discrepancy_css }}">{% if obj.discrepancy_verdict == 'ok' %}Declared matches outstanding{% elif obj.discrepancy_verdict == 'short' %}Short vs outstanding{% elif obj.discrepancy_verdict == 'over' %}Over-shipped{% else %}Mixed over/short{% endif %}</span>`, and wrap the whole span in `{% if obj.line_count %}...{% endif %}` so a line-less draft does not claim it matches.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): render the ASN discrepancy badge as prose off the model css map and hide it on a line-less draft
 
 ### M7 — `templates/procurement/orderfulfillment/asn/detail.html:9`
 
 - **Found by:** explorer
 - **Problem:** The header badge prints the raw enum token — `Declared vs outstanding: {{ obj.discrepancy_verdict|default:"—" }}` renders literally "ok" / "short" / "over" / "mixed" to the user, and the `|default:"—"` is dead because the property always returns at least "ok".
 - **Fix:** Render a human label, e.g. `{% if obj.discrepancy_verdict == 'ok' %}Matches outstanding{% elif obj.discrepancy_verdict == 'short' %}Short-shipped{% elif obj.discrepancy_verdict == 'over' %}Over-shipped{% else %}Mixed variance{% endif %}` and drop the `|default` filter.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): render the ASN discrepancy badge as prose off the model css map and hide it on a line-less draft (same change as M6)
 
 ### M8 — `templates/procurement/orderfulfillment/asn/list.html:101`
 
@@ -185,14 +185,14 @@ or, clearer and matching the sibling exactly, nest the two conditions:
 ```
 
 The view stays as-is — this only stops offering a button that is already correctly refused server-side. Family sweep (L28): the admin-gated delete views in this app are `asn_delete backorder_delete clause_delete delegation_delete routingrule_delete vis_delete vpa_delete vsu_delete`; run `rg -l "procurement:(asn|backorder|clause|delegation|routingrule|vis|vpa|vsu)_delete" templates/procurement` and check each hit for `is_tenant_admin|can_delete` — `orderfulfillment/asn/list.html` is the only in-scope miss.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): gate the ASN register delete button on tenant-admin as well as draft status (same change as I7/I8/M9)
 
 ### M9 — `templates/procurement/orderfulfillment/asn/list.html:101`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The row Delete button is gated only on `obj.status == 'draft'`, while the detail page hides it from non-admins via `can_delete = is_admin and obj.status == 'draft'` (views/OrderFulfillment/AdvancedShipmentNotice.py:130) and the sibling backorder register gates on the user at backorder/list.html:119 — so a non-admin sees a Delete action on the list that the detail page denies.
 - **Fix:** Nest the existing user gate inside the status gate (Django's `and` binds tighter than `or`, so use two tags rather than one mixed expression): change line 101 to `{% if obj.status == 'draft' %}{% if request.user.is_superuser or request.user.is_tenant_admin %}` and add the matching second `{% endif %}` after line 104's `</form>`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): gate the ASN register delete button on tenant-admin as well as draft status (same change as I7/I8/M8)
 
 ### M10 — `templates/procurement/orderfulfillment/backorder/list.html:100`
 
@@ -200,28 +200,28 @@ The view stays as-is — this only stops offering a button that is already corre
 - **Lesson:** L33
 - **Problem:** The hand-rolled reason badge chain has already diverged from the model's own `Backorder.reason_css` map: `material_shortage` renders `badge-amber` here but `badge-red` in `apps/procurement/models/OrderFulfillment/Backorder.py:335`, so the same reason is two different colours depending on which surface reads it.
 - **Fix:** Replace the whole `{% if obj.reason == ... %}` chain with the model helper: `<span class="badge {{ obj.reason_css }}">{{ obj.get_reason_display }}</span>`. Apply the identical replacement to the duplicated chain at `templates/procurement/orderfulfillment/backorder/detail.html:37`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): render the backorder register reason badge from Backorder.reason_css + the same on the detail page
 
 ### M11 — `templates/procurement/orderfulfillment/backorder/list.html:100`
 
 - **Found by:** explorer
 - **Problem:** The reason badge re-implements the colour map inline and already disagrees with the model's own `Backorder.reason_css` (apps/procurement/models/OrderFulfillment/Backorder.py:333) — the template renders `material_shortage` as `badge-amber` while the model says `badge-red`, so the same row is a different colour depending on which layer renders it.
 - **Fix:** Replace the inline `{% if obj.reason == … %}` chain on line 100 with `<span class="badge {{ obj.reason_css }}">{{ obj.get_reason_display }}</span>`, and do the same at templates/procurement/orderfulfillment/backorder/detail.html:37, so the model's presentation helper is the single source of truth.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): render the backorder detail reason badge from Backorder.reason_css (same change as M10)
 
 ### M12 — `templates/procurement/orderfulfillment/delivery_confirmation.html:84`
 
 - **Found by:** frontend-reviewer
 - **Problem:** `{{ row.expected_delivery_date }}` renders with Django's default DATE_FORMAT ("Aug. 29, 2026") while every other date in the sub-module uses `|date:"M d, Y"`, so the arrivals queue formats dates differently from the ASN register and detail pages it links to.
 - **Fix:** Add the filter: `{{ row.expected_delivery_date|date:"M d, Y" }}` on line 84, and the matching `{{ row.delivered_at|date:"M d, Y H:i" }}` on line 94 (the POD timestamp, which asn/detail.html:58 already renders with that exact format).
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(procurement): format the arrivals-board expected date and POD timestamp like the rest of the sub-module
 
 ### M13 — `templates/procurement/orderfulfillment/deliveryschedule/detail.html:42`
 
 - **Found by:** code-reviewer
 - **Problem:** The "{{ obj.slip_days }} day(s) earlier" branch is unreachable dead code: it is nested inside `{% if obj.has_slip %}`, and `DeliverySchedule.has_slip` is defined as `slip_days > 0`, so a supplier who promises EARLIER than the need-by date renders as "—" even though the model docstring says the negative case is meaningful.
 - **Fix:** Gate on the value instead of the flag: replace `{% if obj.has_slip %}` with `{% if obj.promised_date %}` on this row so the `{% if obj.slip_days > 0 %}…{% else %}…earlier…{% endif %}` split can actually fire; the same dead `{% else %}` sits at templates/procurement/orderfulfillment/deliveryschedule/list.html:104.
-- **Status:** [ ] open
+- **Status:** [~] skipped — superseded by M14: gating on `obj.promised_date` would render a promise made EXACTLY on the need-by date as "0 day(s) earlier". The reachable-and-correct guard is non-zero `slip_days`, which M14 asks for and which is what landed.
 
 ### M14 — `templates/procurement/orderfulfillment/deliveryschedule/detail.html:42`
 
@@ -229,7 +229,7 @@ The view stays as-is — this only stops offering a button that is already corre
 - **Lesson:** L39
 - **Problem:** The slip cell is wrapped in `{% if obj.has_slip %}` and then branches on `{% if obj.slip_days > 0 %}` … `{% else %}<span class="badge badge-info">{{ obj.slip_days }} day(s) earlier</span>`; since `has_slip` is defined as `slip_days > 0` (apps/procurement/models/OrderFulfillment/DeliverySchedule.py:195) the "earlier" branch is unreachable, so a supplier promising EARLIER than the need-by date renders a bare "—".
 - **Fix:** Change the outer guard on line 42 from `{% if obj.has_slip %}` to `{% if obj.slip_days %}` (non-zero) so the negative branch can render; apply the identical change to the sibling block at templates/procurement/orderfulfillment/deliveryschedule/list.html:101.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): make the early-promise slip branch reachable on the delivery-schedule detail page + the same on the register (detail also drops the minus sign via widthratio so it no longer reads "-2 day(s) earlier")
 
 ### M15 — `templates/procurement/orderfulfillment/deliveryschedule/list.html:54`
 
@@ -237,7 +237,7 @@ The view stays as-is — this only stops offering a button that is already corre
 - **Lesson:** L33
 - **Problem:** `.form-check` is defined in static/css/theme.css:318 as a checkbox-INPUT style (`width: 1rem; height: 1rem; accent-color: var(--brand-600); vertical-align: middle`) but is applied to the wrapping `<label>`; width/height are ignored on an inline `<label>`, so the checkbox on line 55 never receives the design-system sizing the class exists to give it.
 - **Fix:** Move the class onto the control and label the wrapper: line 54 becomes `<label class="form-label" for="filter-late" style="margin:0;">` and line 55 becomes `<input type="checkbox" class="form-check" id="filter-late" name="late" value="1" {% if request.GET.late == '1' %}checked{% endif %}>` (this is the shape asn/list.html:61-63 already uses for the same filter).
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(procurement): move .form-check onto the late-only checkbox where theme.css can size it
 
 ### M16 — `templates/procurement/orderfulfillment/deliveryschedule/split.html:71`
 
@@ -245,14 +245,14 @@ The view stays as-is — this only stops offering a button that is already corre
 - **Lesson:** L13
 - **Problem:** `class="text-muted small"` — `small` exists in neither static/css/theme.css nor Tailwind, so it is a dead no-op class (the sibling `text-center` on line 86 is fine, it is a real Tailwind utility).
 - **Fix:** Drop the invented token: `<div class="text-muted">{{ line.sku_hint }}</div>`, or use Tailwind's `text-xs` if a smaller size is actually wanted.
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(procurement): drop the invented small class from the split console sku hint
 
 ### M17 — `templates/procurement/orderfulfillment/inbound_tracking.html:61`
 
 - **Found by:** frontend-reviewer
 - **Problem:** A second `<label for="tracking_late">Past expected date only</label>` points at the same input already labelled on line 60, so the checkbox's accessible name concatenates to "Overdue Past expected date only" for screen-reader users.
 - **Fix:** Keep one label. Change line 60 to a non-labelling caption — `<span class="form-label">Overdue</span>` — and leave the inline `<label for="tracking_late">Past expected date only</label>` on line 61 as the control's single label.
-- **Status:** [ ] open
+- **Status:** [x] fixed — a11y(procurement): one label per overdue checkbox on the tracking board (caption span + form-check on the control)
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
 
@@ -310,6 +310,14 @@ Tests: `apps/procurement/tests/` has suites for portal/awe/eauction/contracts/ca
 5. `temp/` holds several hundred leftover scripts and logs from previous sessions (L46). I added and removed only my own; the rest were left untouched.
 
 6. `manage.py migrate` emits `mysql.W002` (MariaDB strict mode off) and the seeders emit `RuntimeWarning: naive datetime` for `PurchaseRequisition.created_at` — both app-wide and pre-existing, unrelated to 6.11.
+
+### Notes added by the code-fixer pass (2026-08-29)
+
+- **Cross-session (I3/I4, open):** migration `0016` still depends on `0015_purchaseorderchange_purchaseorderchangeline_and_more`, which is UNTRACKED and belongs to the concurrent 6.10 build. Nothing was re-pointed: `0015` exists on disk here, so pointing `0016` at `0014` would create two leaf nodes and break `migrate` for both sessions immediately. **This range must not be pushed until the 6.10 session commits `0015`.**
+- **Shared file, partial commit (I2):** `apps/procurement/management/commands/seed_procurement.py` carries the 6.10 session's uncommitted `_seed_po_management` block plus one earlier uncommitted 6.11 tweak (`expected_delivery_date=today` on the in-flight ASN) that is not this pass's work. Only the two `_seed_order_fulfillment` hunks were staged (`git apply --cached` of an extracted patch) and committed; the rest of the file is left dirty and untouched. The committed blob was compile-checked on its own.
+- **App-wide, do NOT fork here (M2 family, L18):** other hand-rolled save paths in this app still write an action label instead of a field diff — `apps/procurement/views/RfxManagement/Responses.py:116` logs no `changes` at all. Recommend one app-wide pass moving them onto `apps.core.crud._changed(form)`; only the 6.11 instance (`asn_edit`) was changed.
+- **Pre-existing, out of scope (M8 family):** `templates/procurement/contractsmanagement/clauses/list.html` and `.../clauses/detail.html` offer `procurement:clause_delete` with no `is_tenant_admin` guard while the view is `@tenant_admin_required` — exactly the shape fixed here for the ASN register. Worth its own follow-up commit against 6.7.
+- **Seeder demo data:** the I2 fix was verified inside a rolled-back transaction rather than with `seed_procurement --flush`, because the concurrent 6.10 session is using the same database. To see the new short-shipped ASN in the demo data, someone must re-seed (the block is guarded on `AdvancedShipmentNotice.objects.filter(tenant=...).exists()`, so an idempotent re-run will NOT rewrite the existing rows — a `--flush` is required, and it will also clear 6.10's rows).
 
 ## Done well
 
