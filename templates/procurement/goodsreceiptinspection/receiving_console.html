@@ -134,12 +134,7 @@
             <dt>Receipt tolerance</dt>
             <dd>
               <span class="badge {{ row.tolerance_css|default:'badge-slate' }}">
-                {% if row.tolerance_verdict == 'ok' %}Within tolerance
-                {% elif row.tolerance_verdict == 'over' %}Over-receipt
-                {% elif row.tolerance_verdict == 'short' %}Under-receipt
-                {% elif row.tolerance_verdict == 'early' %}Early
-                {% elif row.tolerance_verdict == 'late' %}Late
-                {% else %}No policy{% endif %}
+                {{ row.tolerance_label }}
               </span>
               <div class="text-muted">{{ row.tolerance_reason|default:"—" }}</div>
             </dd>
@@ -230,12 +225,7 @@
                   </td>
                   <td>
                     <span class="badge {{ line.verdict_css|default:'badge-slate' }}">
-                      {% if line.verdict == 'ok' %}Within tolerance
-                      {% elif line.verdict == 'over' %}Over-receipt
-                      {% elif line.verdict == 'short' %}Under-receipt
-                      {% elif line.verdict == 'early' %}Early
-                      {% elif line.verdict == 'late' %}Late
-                      {% else %}No policy{% endif %}
+                      {{ line.verdict_label }}
                     </span>
                     {% if line.verdict_reason %}<div class="text-muted">{{ line.verdict_reason }}</div>{% endif %}
                   </td>
