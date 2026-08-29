@@ -74,6 +74,9 @@ from apps.procurement.models import (
     EventCriterion,
     ProcurementAlert,
     PunchOutEndpoint,
+    PurchaseOrderChange,
+    PurchaseOrderChangeLine,
+    generate_po_from_requisition,
     RequisitionAmendment,
     RequisitionAmendmentLine,
     RequisitionApproval,
@@ -175,6 +178,10 @@ class Command(BaseCommand):
             CatalogItem.objects.all().delete()
             CatalogUploadBatch.objects.all().delete()
             PunchOutEndpoint.objects.all().delete()
+            # 6.10 change orders: lines are change children (cascade) but go first so the
+            # register clears in one pass.
+            PurchaseOrderChangeLine.objects.all().delete()
+            PurchaseOrderChange.objects.all().delete()
             # 6.11 fulfillment rows: backorders point at schedules/ASNs (SET_NULL) so they
             # go first, then the ladder, then the ASN lines and their notices.
             Backorder.objects.all().delete()
@@ -194,6 +201,7 @@ class Command(BaseCommand):
             self._seed_eauction(tenant)
             self._seed_contracts(tenant)
             self._seed_catalog(tenant)
+            self._seed_po_management(tenant)
             self._seed_order_fulfillment(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -1053,12 +1061,109 @@ class Command(BaseCommand):
             f"  {tenant.name}: catalog ready ({made} items/tiers, 2 punch-out endpoints, "
             f"1 validated upload batch)."))
 
+    # -- 6.10 Purchase Order Management ----------------------------------------------------------
+
+    def _seed_po_management(self, tenant):
+        """6.10 Purchase Order Management - one PENDING change order (amend) over a dispatched
+        purchase order, one REJECTED cancellation for the decision trail, and one generated PO
+        from an approved requisition. The generation runs through the REAL
+        generate_po_from_requisition() service under a lock, exactly as the view does, so the
+        seeded order has honest derived totals. Guarded per tenant like every other block."""
+        if PurchaseOrderChange.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: PO change orders already present, skipping.")
+            return
+        from django.db import transaction
+
+        from apps.scm.models import (  # local: spine touch, peer-app models
+            PurchaseOrder as _PO,
+            PurchaseOrderLine as _POLine,
+            PurchaseRequisitionLine as _PRLine,
+        )
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        filer = members[0] if members else None
+        suppliers = list(Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor"))
+                         .distinct().order_by("id"))
+        if not suppliers:
+            suppliers = [Party.objects.filter(tenant=tenant).order_by("id").first()]
+        supplier = suppliers[0]
+        currency = Currency.objects.order_by("id").first()
+
+        # A dispatched order to hang the change on — reuse a seeded one, else draft a small one.
+        order = _PO.objects.filter(
+            tenant=tenant, status__in=PurchaseOrderChange.CHANGEABLE_STATUSES).first()
+        if order is None:
+            order = _PO.objects.create(
+                tenant=tenant, vendor=supplier, currency=currency,
+                order_date=(NOW - timedelta(days=7)).date(),
+                expected_date=(NOW + timedelta(days=14)).date(),
+                status="sent",
+                notes="Standing monthly stationery order.")
+            for desc, sku, qty, price in (
+                    ("A4 printer paper (boxes of 5 reams)", "OF-PAP-A4", "12", "22.50"),
+                    ("Ballpoint pens blue", "OF-PEN-BLU", "6", "6.80")):
+                _POLine.objects.create(
+                    purchase_order=order, item_description=desc, sku_hint=sku,
+                    quantity=Decimal(qty), unit_price=Decimal(price))
+            order.recalc_totals()
+        first_line = order.lines.order_by("id").first()
+
+        pending = PurchaseOrderChange.objects.create(
+            tenant=tenant, purchase_order=order, change_type="amend", status="pending",
+            requested_by=filer, reason="Delivery window moved after the supplier's schedule "
+            "call — asking to push the expected date and top up the paper quantity.",
+            new_expected_date=(NOW + timedelta(days=21)).date())
+        if first_line is not None:
+            PurchaseOrderChangeLine.objects.create(
+                change=pending, action="update", target_line=first_line,
+                quantity=first_line.quantity + Decimal("4"))
+        write_audit_log(None, pending, "create")
+
+        rejected = PurchaseOrderChange.objects.create(
+            tenant=tenant, purchase_order=order, change_type="cancel", status="rejected",
+            requested_by=filer, reason="Tried to cancel when the reorder seemed delayed.",
+            decided_by=filer, decided_at=NOW - timedelta(hours=20),
+            decision_note="Not rejected as a request — the delay resolved; order proceeds.")
+        write_audit_log(None, rejected, "create")
+
+        # A generated PO from an approved requisition — reuse one, else seed a small approved PR.
+        requisition = PurchaseRequisition.objects.filter(
+            tenant=tenant, status="approved").order_by("created_at").first()
+        if requisition is None:
+            requisition = PurchaseRequisition.objects.create(
+                tenant=tenant, title="Lab consumables restock", requester=filer,
+                currency=currency, status="approved", approved_at=NOW,
+                required_by=(NOW + timedelta(days=30)).date(),
+                justification="Quarterly laboratory consumables top-up; approved offline.")
+            for desc, sku, uom, qty, price in (
+                    ("Nitrile gloves medium", "LB-GLV-M", "box", "10", "8.40"),
+                    ("Pipette tips 1000uL", "LB-TIP-1K", "rack", "6", "31.00")):
+                _PRLine.objects.create(
+                    requisition=requisition, item_description=desc, sku_hint=sku,
+                    uom_hint=uom, quantity=Decimal(qty), estimated_unit_price=Decimal(price),
+                    needed_by=(NOW + timedelta(days=30)).date())
+            requisition.recalc_totals()
+        generated = None
+        with transaction.atomic():
+            locked = PurchaseRequisition.objects.select_for_update().get(pk=requisition.pk)
+            if (locked.status == "approved"
+                    and not locked.purchase_orders.exists()):
+                generated = generate_po_from_requisition(locked, vendor=supplier)
+
+        note = (f"  {tenant.name}: PO management ready "
+                f"(1 pending amend + 1 rejected cancel over {order.number}")
+        if generated is not None:
+            note += f"; generated {generated.number} from {requisition.number}"
+        note += ")."
+        self.stdout.write(self.style.SUCCESS(note))
+
     def _seed_order_fulfillment(self, tenant):
         """6.11 Order Fulfillment & Tracking - one IN-FLIGHT advance shipping notice whose first
         line is deliberately short of the ordered quantity (so the discrepancy fold, the variance
         badges and the "record the shortfall" hand-off all have something real to show), one
         DELIVERED notice carrying a proof-of-delivery block for the arrivals board's Confirmed
-        tab, a three-instalment delivery ladder over one order line, and two backorders - one
+        tab (the in-flight one is due TODAY so the arrivals board's DEFAULT tab has a row to
+        confirm), a three-instalment delivery ladder over one order line, and two backorders - one
         rescheduled with its promise still ahead and one already past due, so the risk buckets
         are not all the same colour.
 
@@ -1123,7 +1228,11 @@ class Command(BaseCommand):
                 tenant=tenant, purchase_order=order, supplier_reference="DN-88412",
                 source="email", status="submitted", submitted_at=NOW - timedelta(days=2),
                 ship_date=today - timedelta(days=2),
-                expected_delivery_date=today + timedelta(days=1),
+                # Due TODAY, not tomorrow: the arrivals board defaults to its "Due today" tab,
+                # so a notice landing tomorrow left the flagship Delivery Confirmation page
+                # showing an empty state (and its inline confirm form unrendered) on a freshly
+                # seeded system.
+                expected_delivery_date=today,
                 carrier_name="Meridian Freight", tracking_number="MF7741903221",
                 bill_of_lading_ref="BOL-2291-A", container_ref="MSKU7741903",
                 freight_terms="prepaid", package_count=14, pallet_count=2,
