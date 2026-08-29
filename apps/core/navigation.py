@@ -1532,6 +1532,21 @@ LIVE_LINKS = {
         "Punch-out Catalog Integration": "procurement:punchout_endpoint_list",
         "Supplier Catalog Hosting":      "procurement:catalog_upload_list",
     },
+    # 6.10 Purchase Order (PO) Management. The spine (scm.PurchaseOrder, L28) already owns the
+    # order lifecycle, so this dict maps MOSTLY to existing pages: dispatch logging is inventory
+    # 5.3's PurchaseOrderDispatch register (first dispatch flips the order to `sent`), and
+    # cancel/close verbs live on the order detail page (admin-gated, reason-required). The two
+    # NEW pages: requisition->PO generation (before this, an approved PR became an order only
+    # through RFQ award) and the change-order workflow (file -> admin decide -> atomic apply
+    # under a row lock, mirroring 6.2's amendments for dispatched commitments), plus the
+    # computed per-line delivery board (received quantities derived from GRNs, never stored).
+    "6.10": {
+        "PO Generation":                  "procurement:po_generation",
+        "PO Dispatch & Acknowledgment":   "inventory:dispatch_list",
+        "PO Change Order Management":     "procurement:poc_list",
+        "PO Cancellation & Close-out":    "scm:purchaseorder_list",
+        "PO Line Item Tracking":          "procurement:po_line_tracking",
+    },
     # 6.11 Order Fulfillment & Tracking. Three tables + two COMPUTED boards. The ASN [ASN-]
     # (+ AsnLine) is the supplier's declaration of what is on the truck, DeliverySchedule [DSC-]
     # is the split-delivery instalment ladder under a PO line, and Backorder [BKO-] is the
