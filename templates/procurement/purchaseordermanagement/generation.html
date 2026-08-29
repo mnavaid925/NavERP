@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}PO Generation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PO Generation</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Purchase orders</span><span class="sep">›</span><span>Generation</span></div>
+      <p class="text-muted">Approved requisitions waiting to become purchase orders. Generating drafts a DRAFT order for one supplier — the order still goes through submit, approve and send before the vendor sees it. Manual entry lives on the purchase order register.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:purchaseorder_create' %}" class="btn btn-outline"><i data-lucide="pen-line"></i> Manual order</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or title…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Search</button>
+        <a href="{% url 'procurement:po_generation' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Requisition</th><th>Requested by</th><th>Lines</th><th>Estimated total</th><th>Required by</th><th>Orders already drafted</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for pr in object_list %}
+            <tr>
+              <td class="fw-600">{{ pr.number }}</td>
+              <td>{{ pr.title }} <span class="badge badge-green">approved</span></td>
+              <td>{% if pr.requester %}{{ pr.requester.get_full_name|default:pr.requester.username }}{% else %}—{% endif %}</td>
+              <td>{{ pr.lines.count }}</td>
+              <td>{{ pr.estimated_total|floatformat:2 }} {{ pr.currency.code|default:"" }}</td>
+              <td>{{ pr.required_by|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                {% if pr.purchase_orders.all %}
+                  {% for po in pr.purchase_orders.all %}<a href="{% url 'scm:purchaseorder_detail' po.pk %}" class="badge badge-slate">{{ po.number }}</a> {% endfor %}
+                {% else %}<span class="text-muted">none yet</span>{% endif %}
+              </td>
+              <td><div class="table-actions"><a href="{% url 'procurement:po_generate' pr.pk %}" class="btn btn-primary btn-sm"><i data-lucide="sparkles"></i> Generate</a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="package-check"></i><h3>Nothing waiting</h3><p>Every approved requisition has been handled. New approvals appear here automatically.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
