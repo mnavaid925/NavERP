@@ -73,6 +73,12 @@ from .OrderFulfillment import (
     DeliveryScheduleForm,
     DeliveryScheduleSplitForm,
 )
+from .PurchaseOrderManagement.PurchaseOrderChanges import (
+    ChangeOrderDecisionForm,
+    GeneratePOForm,
+    PurchaseOrderChangeForm,
+    PurchaseOrderChangeLineFormSet,
+)
 
 __all__ = [
     "EaucBidForm",
@@ -127,4 +133,8 @@ __all__ = [
     "BackorderForm",
     "BackorderRescheduleForm",
     "BackorderCloseForm",
+    "PurchaseOrderChangeForm",
+    "PurchaseOrderChangeLineFormSet",
+    "ChangeOrderDecisionForm",
+    "GeneratePOForm",
 ]
