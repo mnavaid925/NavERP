@@ -6,7 +6,8 @@
       <h1 class="page-title">{{ obj.number }}
         <span class="badge {% if obj.status == 'draft' %}badge-slate{% elif obj.status == 'submitted' %}badge-info{% elif obj.status == 'in_transit' %}badge-amber{% elif obj.status == 'delivered' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
         {% if obj.is_late %}<span class="badge badge-red">{{ obj.days_late }} days late</span>{% endif %}
-        <span class="badge {% if obj.discrepancy_verdict == 'ok' %}badge-green{% elif obj.discrepancy_verdict == 'short' %}badge-amber{% elif obj.discrepancy_verdict == 'over' %}badge-info{% elif obj.discrepancy_verdict == 'mixed' %}badge-red{% else %}badge-muted{% endif %}">Declared vs outstanding: {{ obj.discrepancy_verdict|default:"—" }}</span>
+        {% comment %}Colour from the model's own DISCREPANCY_CSS map so this badge cannot drift from the one the register renders; label spelled out because the raw property is an enum token ("ok" / "short"), not prose. Hidden entirely on a line-less draft — with no lines the verdict folds to "ok", which would claim a match that has not been declared yet.{% endcomment %}
+        {% if obj.line_count %}<span class="badge {{ obj.discrepancy_css }}">{% if obj.discrepancy_verdict == 'ok' %}Declared matches outstanding{% elif obj.discrepancy_verdict == 'short' %}Short vs outstanding{% elif obj.discrepancy_verdict == 'over' %}Over-shipped{% else %}Mixed over/short{% endif %}</span>{% endif %}
       </h1>
       <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:asn_list' %}">ASNs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
