@@ -51,8 +51,9 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-check" for="filter-late">
-            <input type="checkbox" id="filter-late" name="late" value="1" {% if request.GET.late == '1' %}checked{% endif %}>
+          {% comment %}.form-check is a checkbox-INPUT style in theme.css (width/height/accent-color), so it has to sit on the control — on the wrapping inline <label> the sizing is simply ignored. Same shape the ASN register uses for this filter.{% endcomment %}
+          <label class="form-label" for="filter-late" style="margin:0;">
+            <input type="checkbox" class="form-check" id="filter-late" name="late" value="1" {% if request.GET.late == '1' %}checked{% endif %}>
             <span>Late only</span>
           </label>
         </div>
