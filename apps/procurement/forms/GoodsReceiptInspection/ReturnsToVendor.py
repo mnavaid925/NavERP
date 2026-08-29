@@ -182,8 +182,17 @@ class ReturnToVendorLineForm(forms.ModelForm):
             # value into an "invalid choice" the user cannot fix (the ASN precedent for a PO that
             # has since moved on).
             offerable = ~Q(goods_receipt__status="cancelled")
+            if vendor_id:
+                # The supplier is known even though the receipt is not, and a receipt line prices
+                # itself through ``goods_receipt_line.po_line.unit_price`` — so offering another
+                # supplier's line here is the same mis-pricing as the ``po_line`` leg, just
+                # reached through the other field.
+                offerable &= Q(goods_receipt__purchase_order__vendor_id=vendor_id)
             current_id = getattr(self.instance, "goods_receipt_line_id", None)
             if current_id:
+                # A stored value stays offerable whatever the rules above say — dropping it would
+                # turn it into an "invalid choice" the user cannot fix (the ASN precedent for a PO
+                # that has since moved on).
                 offerable |= Q(pk=current_id)
             self.fields["goods_receipt_line"].queryset = (
                 GoodsReceiptLine.objects.filter(goods_receipt__tenant=tenant)
@@ -291,9 +300,17 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
                 if receipt_line.goods_receipt.tenant_id != tenant_id:
                     form.add_error("goods_receipt_line",
                                    "That record belongs to another workspace.")
-                elif header_receipt_id and receipt_line.goods_receipt_id != header_receipt_id:
+                elif header_receipt_id:
+                    if receipt_line.goods_receipt_id != header_receipt_id:
+                        form.add_error("goods_receipt_line",
+                                       "That line belongs to a different goods receipt.")
+                # No header receipt to pin it to, but the supplier still has to match: this line
+                # prices itself through its own po_line, so a foreign receipt quotes the credit
+                # off the wrong supplier exactly as a foreign po_line would.
+                elif vendor_id and getattr(receipt_line.goods_receipt.purchase_order,
+                                           "vendor_id", None) != vendor_id:
                     form.add_error("goods_receipt_line",
-                                   "That line belongs to a different goods receipt.")
+                                   "That receipt is from a different supplier.")
 
             # Tenancy is not enough here. ``po_line.unit_price`` is what SIZES the expected
             # credit, so a line belonging to a different order — or worse, to a different
