@@ -71,6 +71,15 @@ class BackorderForm(TenantUniqueMixin, TenantModelForm):
             self.fields["delivery_schedule"].queryset = DeliverySchedule.objects.none()
             self.fields["asn"].queryset = AdvancedShipmentNotice.objects.none()
 
+        if self.instance.pk:
+            # On EDIT the promise can only move through reschedule(), which backfills
+            # original_promise_date and increments reschedule_count under a row lock. Left on the
+            # form it is an uncounted back door that silently under-reports the slip this whole
+            # register exists to make visible — so drop it, the same way
+            # AdvancedShipmentNoticeForm drops purchase_order on edit. No model-level error is
+            # ever keyed on this field, so nothing can land on a field the form no longer has.
+            self.fields.pop("revised_promise_date", None)
+
         # Date widgets: TenantModelForm already swaps every DateField to
         # DateInput(type="date", class="form-input") AND sets the matching input_formats — replacing
         # the widget here would keep the look and silently drop the parse formats (L22).
