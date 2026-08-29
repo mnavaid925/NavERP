@@ -98,7 +98,8 @@
                 <div class="text-muted">{% if obj.promised_date %}{{ obj.promised_date|date:"M d, Y" }}{% else %}no promise{% endif %}</div>
               </td>
               <td>
-                {% if obj.has_slip %}
+                {% comment %}Guarded on slip_days (non-zero), NOT on has_slip — has_slip IS slip_days > 0, so gating on it made the negative branch unreachable and an early promise showed a bare "—". Zero still reads "—".{% endcomment %}
+                {% if obj.slip_days %}
                   {% if obj.slip_days > 0 %}
                     <span class="badge badge-amber">+{{ obj.slip_days }}d</span>
                   {% else %}
