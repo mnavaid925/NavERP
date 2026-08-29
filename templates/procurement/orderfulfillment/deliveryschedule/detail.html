@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Delivery Schedule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — instalment #{{ obj.sequence }}
+        <span class="badge {% if obj.status == 'planned' %}badge-slate{% elif obj.status == 'confirmed' %}badge-info{% elif obj.status == 'shipped' %}badge-amber{% elif obj.status == 'received' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.is_late %}<span class="badge badge-red">{{ obj.days_late }} day(s) past need-by</span>{% endif %}
+        {% if obj.has_slip %}<span class="badge badge-amber">Promise slips {{ obj.slip_days }} day(s)</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Order Fulfillment &amp; Tracking</span><span class="sep">›</span><a href="{% url 'procurement:deliveryschedule_list' %}">Delivery Schedules</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:deliveryschedule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'procurement:deliveryschedule_delete' obj.pk %}">
+        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete instalment {{ obj.number }}? Cancel it instead when the supplier has already been told.');"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% if is_under_covered %}
+    <div class="card"><div class="card-body">
+      <p><span class="badge badge-amber">Under-covered</span>
+         Only {{ coverage_pct }}% of this purchase order line is laid out in instalments —
+         <span class="fw-600">{{ remaining_quantity|floatformat:"-4" }}</span> of the ordered quantity is still uncommitted.
+         This is a warning, never a block: add another instalment when the balance is genuinely scheduled.</p>
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Instalment</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Purchase order</dt><dd>{% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a>{% if order.vendor %} · {{ order.vendor.name }}{% endif %}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>PO line</dt><dd>{% if po_line %}{{ po_line.item_description|default:"—" }}{% if po_line.sku_hint %} <span class="text-muted">({{ po_line.sku_hint }})</span>{% endif %}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Line quantity ordered</dt><dd>{% if po_line %}{{ po_line.quantity|floatformat:"-4" }}{% if po_line.uom_hint %} {{ po_line.uom_hint }}{% endif %}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Sequence</dt><dd>#{{ obj.sequence }}</dd></div>
+        <div class="detail-item"><dt>Scheduled quantity</dt><dd class="fw-600">{{ obj.scheduled_quantity|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Need-by date</dt><dd>{{ obj.need_by_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Promised quantity</dt><dd>{% if obj.promised_quantity is not None %}{{ obj.promised_quantity|floatformat:"-4" }}{% else %}<span class="text-muted">— (no supplier commitment)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Promised date</dt><dd>{% if obj.promised_date %}{{ obj.promised_date|date:"M d, Y" }}{% else %}<span class="text-muted">— (no supplier commitment)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Slip against need-by</dt><dd>{% if obj.has_slip %}{% if obj.slip_days > 0 %}<span class="badge badge-amber">+{{ obj.slip_days }} day(s) later</span>{% else %}<span class="badge badge-info">{{ obj.slip_days }} day(s) earlier</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Ship to</dt><dd>{% if obj.ship_to %}{{ obj.ship_to.name }}{% else %}<span class="text-muted">— (order default)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Delivery mode</dt><dd>{% if obj.delivery_mode %}{{ obj.get_delivery_mode_display }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Advance shipping notice</dt><dd>{% if obj.asn %}<a href="{% url 'procurement:asn_detail' obj.asn.pk %}" class="fw-600">{{ obj.asn.number }}</a>{% else %}<span class="text-muted">— (not declared yet)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Change reason</dt><dd>{% if obj.change_reason %}{{ obj.change_reason }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <p class="text-muted" style="margin-top:1rem;"><span class="fw-600">Notes:</span> {{ obj.notes|linebreaksbr }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Line coverage</h2>
+      <span class="text-muted">non-cancelled instalments against the ordered quantity</span>
+    </div>
+    <div class="card-body">
+      <div class="progress" title="{{ coverage_pct }}% scheduled"><div class="progress-bar" style="width: {{ coverage_pct }}%;"></div></div>
+      <dl class="detail-grid" style="margin-top:1rem;">
+        <div class="detail-item"><dt>Ordered on the line</dt><dd>{% if po_line %}{{ po_line.quantity|floatformat:"-4" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scheduled total</dt><dd class="fw-600">{{ scheduled_total|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Still uncommitted</dt><dd>{{ remaining_quantity|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Coverage</dt><dd>{{ coverage_pct }}% {% if is_under_covered %}<span class="badge badge-amber">Under-covered</span>{% else %}<span class="badge badge-green">Fully laid out</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Instalment ladder on this PO line ({{ siblings|length }})</h2>
+      <a href="{% url 'procurement:deliveryschedule_split' %}" class="btn btn-outline btn-sm"><i data-lucide="split"></i> Split this line further</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Number</th><th>Scheduled</th><th>Need by</th><th>Promised</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in siblings %}
+            <tr>
+              <td class="fw-600">#{{ s.sequence }}{% if s.pk == obj.pk %} <span class="badge badge-info">This one</span>{% endif %}</td>
+              <td class="mono">{{ s.number }}</td>
+              <td>{{ s.scheduled_quantity|floatformat:"-4" }}</td>
+              <td>{{ s.need_by_date|date:"M d, Y" }}{% if s.is_late %} <span class="badge badge-red">{{ s.days_late }}d</span>{% endif %}</td>
+              <td>{% if s.promised_date %}{{ s.promised_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {% if s.status == 'planned' %}badge-slate{% elif s.status == 'confirmed' %}badge-info{% elif s.status == 'shipped' %}badge-amber{% elif s.status == 'received' %}badge-green{% elif s.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ s.get_status_display }}</span></td>
+              <td><div class="table-actions"><a href="{% url 'procurement:deliveryschedule_detail' s.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="calendar-days"></i><p>No instalments on this line.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:deliveryschedule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to delivery schedules</a>
+  </div>
+{% endblock %}
