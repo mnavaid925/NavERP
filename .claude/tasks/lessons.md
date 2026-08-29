@@ -1085,3 +1085,47 @@ in the contract schema, and the Smoke phase arbitrates against it.
    prompt prose — in the contract the workflow validates, so an agent cannot return without having pinned it.
 4. Parallelising the phases someone *names* and stopping there is the shallow fix. Ask which slot is biggest and
    whether it is genuinely serial — Phase 3 was 2× the review and test phases combined.
+
+---
+
+## L49 — `--reuse-db` is a silent no-op against `:memory:`, and it cost a whole session
+
+**Context (2026-08-29, procurement 6.11).** The test wave wrote 420 tests, then the phase ran out
+of window twice trying to get them green. The proximate cause was not the tests: every `pytest`
+invocation took **5–7 minutes before the first assertion ran**. A single-test run timed out at 300s.
+Iterating on 11 failures was therefore impossible inside one window, and two agents were cut off
+mid-fix.
+
+`pytest.ini` sets `addopts = -q --reuse-db`, which reads as "the DB is created once and kept". It
+is not. `config/settings_test.py` sets:
+
+```python
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+```
+
+An in-memory SQLite database **cannot outlive the process**, so there is nothing for `--reuse-db`
+to reuse. Every run rebuilds the schema by replaying **every migration in every installed app** —
+and this repo now has 13 apps with 100+ migrations. The flag is not wrong, it is inert, and its
+presence actively misleads: it reads as though the slowness must be the tests themselves.
+
+The fix for iteration is `--nomigrations`, which builds the schema directly from the models:
+
+| run | with migrations | `--nomigrations` |
+|---|---|---|
+| `test_fulfillment_forms.py` | ~5–7 min | **7.6 s** |
+| whole `apps/procurement/tests` (1081 tests) | 675 s | **74 s** |
+
+**Rules:**
+1. **When a test run is slow enough to change how you work, measure the setup, not the tests.**
+   `-q` hides it; the tell is that a *single* test costs the same as the whole file.
+2. **Iterate with `--nomigrations`.** Fixing 11 failures went from impossible-in-a-window to a
+   few minutes.
+3. **Do NOT put `--nomigrations` in `pytest.ini`.** It bypasses the migration path, so it cannot
+   catch a migration that does not reproduce the models — exactly the bug class L43 is about. It
+   is an iteration tool.
+4. **The FINAL proof run keeps migrations on** (and stays unfiltered, L47). Both properties matter
+   and they are independent: `-k` hides collisions, `--nomigrations` hides migration drift.
+5. A flag that cannot do anything is worse than no flag, because it answers the question you would
+   otherwise have asked. Read the settings it depends on before trusting what it says.
+
+Related: L47 (never `-k` the final run), L43 (migrations are where concurrent sessions collide).
