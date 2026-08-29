@@ -246,6 +246,20 @@ def _received_by_po_line(tenant, po_line_ids):
     return {pk: (received or ZERO) for pk, received in rows}
 
 
+def _console_reference(asn):
+    """The delivery-note key ONE shipment books under — the single definition of that key.
+
+    ``supplier_reference`` is ``blank=True`` on the ASN and optional on the 6.11 form, so it
+    cannot be the sole key. When it was blank the book verb skipped its existing-receipt check
+    entirely, wrote ``delivery_note_ref=""``, and the Booked marker (which drops blank keys) could
+    never light up — so the row read "Not booked yet" for ever and every re-click minted another
+    draft receipt, burning another GRN number against the same order. Falling back to the ASN
+    number gives every shipment a stable key, and the verb and the marker share this one helper
+    so they cannot disagree about what it is.
+    """
+    return (asn.supplier_reference or "").strip() or asn.number
+
+
 def _receipt_by_delivery_ref(tenant, asn_qs):
     """``{normalised delivery-note ref: GoodsReceiptNote}`` for the ASNs on this board.
 
@@ -254,9 +268,18 @@ def _receipt_by_delivery_ref(tenant, asn_qs):
     purpose. Two queries total (the refs, then the receipts carrying them), regardless of how many
     shipments are on the board. A cancelled receipt does not count: its delivery note is free
     again, and the console must offer to re-book it.
+
+    BOTH keys a shipment can be booked under are looked up — its supplier reference and its own
+    number (see ``_console_reference``) — so a receipt booked while the reference was blank is
+    still recognised if the reference is filled in afterwards.
     """
-    refs = list(asn_qs.exclude(supplier_reference="")
-                .values_list("supplier_reference", flat=True).distinct())
+    refs = []
+    for supplier_reference, number in asn_qs.values_list("supplier_reference", "number"):
+        supplier_reference = (supplier_reference or "").strip()
+        if supplier_reference:
+            refs.append(supplier_reference)
+        if number:
+            refs.append(number)
     if not refs:
         return {}
     found = {}
@@ -497,7 +520,10 @@ def _console_rows(tenant, shipments, receipt_by_ref):
         qc_verdict = ("inspect" if "inspect" in qc_verdicts
                       else ("bypass" if qc_verdicts else None))
 
-        existing_receipt = receipt_by_ref.get(_norm(asn.supplier_reference))
+        # Either key: the supplier's own reference, or — for a shipment that declared none — the
+        # ASN number the book verb falls back to.
+        existing_receipt = (receipt_by_ref.get(_norm(asn.supplier_reference))
+                            or receipt_by_ref.get(_norm(asn.number)))
         rows.append({
             "asn": asn,
             "order": order,
@@ -521,9 +547,10 @@ def receiving_console_book(request, pk):
     """Draft a ``scm.GoodsReceiptNote`` from one ASN's declaration. IDEMPOTENT.
 
     Idempotency is keyed on the delivery-note reference, not on a flag we keep: if a live receipt
-    already carries this shipment's ``supplier_reference``, the verb returns THAT receipt instead
-    of minting a second one. A double-submitted console row therefore lands on the same document
-    twice rather than creating two receipts against one delivery note.
+    already carries this shipment's key — its ``supplier_reference``, or its own number when it
+    declared none (``_console_reference``) — the verb returns THAT receipt instead of minting a
+    second one. A double-submitted console row therefore lands on the same document twice rather
+    than creating two receipts against one delivery note.
 
     The receipt is created as a **draft**. Booking the stock (and everything that hangs off it) is
     ``scm:goodsreceipt_receive`` — one writer for the inventory ledger, and it is not this one.
@@ -553,16 +580,19 @@ def receiving_console_book(request, pk):
                 "SCM before booking a receipt against it.")
             return redirect("procurement:receiving_console")
 
-        reference = (asn.supplier_reference or "").strip()
-        if reference:
-            existing = (GoodsReceiptNote.objects
-                        .filter(tenant=request.tenant, delivery_note_ref__iexact=reference)
-                        .exclude(status="cancelled").order_by("id").first())
-            if existing is not None:
-                messages.info(
-                    request,
-                    f"Receipt {existing.number} already covers delivery note {reference}.")
-                return redirect("scm:goodsreceipt_detail", pk=existing.pk)
+        # ALWAYS keyed, never skipped: a shipment that declared no supplier reference falls back
+        # to its own number, so the check below runs for every ASN. Guarding this on a non-blank
+        # supplier_reference is what let a re-click mint a second draft receipt (and burn a second
+        # GRN number) for the same delivery.
+        reference = _console_reference(asn)
+        existing = (GoodsReceiptNote.objects
+                    .filter(tenant=request.tenant, delivery_note_ref__iexact=reference)
+                    .exclude(status="cancelled").order_by("id").first())
+        if existing is not None:
+            messages.info(
+                request,
+                f"Receipt {existing.number} already covers delivery note {reference}.")
+            return redirect("scm:goodsreceipt_detail", pk=existing.pk)
 
         form = ReceivingConsoleBookForm(request.POST, asn=asn, tenant=request.tenant)
         if not form.is_valid():
