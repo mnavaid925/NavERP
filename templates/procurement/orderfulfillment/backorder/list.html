@@ -97,7 +97,8 @@
               </td>
               <td class="text-right fw-600">{{ obj.quantity_backordered|floatformat:"-4" }}{% if obj.po_line.uom_hint %} <span class="text-muted">{{ obj.po_line.uom_hint }}</span>{% endif %}</td>
               <td>
-                <span class="badge {% if obj.reason == 'out_of_stock' %}badge-red{% elif obj.reason == 'production_delay' %}badge-amber{% elif obj.reason == 'allocation' %}badge-amber{% elif obj.reason == 'material_shortage' %}badge-amber{% elif obj.reason == 'supplier_capacity' %}badge-info{% elif obj.reason == 'logistics' %}badge-info{% elif obj.reason == 'other' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span>
+                {% comment %}Colour from Backorder.reason_css, not a second inline map — the hand-rolled chain had already drifted (material_shortage amber here, red in the model), so the same reason rendered two colours depending on the surface.{% endcomment %}
+                <span class="badge {{ obj.reason_css }}">{{ obj.get_reason_display }}</span>
               </td>
               <td>
                 {% if obj.original_promise_date %}<span class="text-muted">{{ obj.original_promise_date|date:"M d, Y" }}</span>{% else %}<span class="text-muted">no original</span>{% endif %}
