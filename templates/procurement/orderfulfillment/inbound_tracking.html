@@ -57,8 +57,9 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="tracking_late">Overdue</label>
-          <div><input type="checkbox" id="tracking_late" name="late" value="1" {% if request.GET.late == '1' %}checked{% endif %}> <label for="tracking_late">Past expected date only</label></div>
+          {% comment %}A caption <span>, not a second <label for="tracking_late"> — two labels on one control concatenate into the accessible name ("Overdue Past expected date only"). The inline label below is the control's single label.{% endcomment %}
+          <span class="form-label">Overdue</span>
+          <div><input type="checkbox" class="form-check" id="tracking_late" name="late" value="1" {% if request.GET.late == '1' %}checked{% endif %}> <label for="tracking_late">Past expected date only</label></div>
         </div>
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
         <a href="{% url 'procurement:inbound_tracking' %}" class="btn btn-outline">Reset</a>
