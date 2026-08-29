@@ -30,6 +30,7 @@ from .RfxManagement import urlpatterns as _rfx_management
 from .SourcingTendering import urlpatterns as _st_sourcingtendering
 from .VendorManagement import urlpatterns as _vm_vendormanagement
 from .ContractsManagement import urlpatterns as _cm_contractsmanagement
+from .PurchaseOrderManagement import urlpatterns as _pom_purchaseordermanagement
 
 
 app_name = "procurement"
@@ -52,6 +53,7 @@ urlpatterns = [
                                #    amendments, milestones, renewal board
     *_cat_catalogmanagement,  # 6.9 catalog items + approval, price tiers, punch-out endpoints,
                               #    supplier upload batches
+    *_pom_purchaseordermanagement,  # 6.10 change orders, requisition->PO generation, line tracking
     *_of_orderfulfillment,  # 6.11 ASN register + lifecycle verbs, split-delivery instalments
                             #      (+ split console), backorders, and the two computed boards:
                             #      inbound freight tracking and delivery confirmation
