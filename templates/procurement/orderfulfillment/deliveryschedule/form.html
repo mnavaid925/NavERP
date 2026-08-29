@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Delivery Schedule{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Update instalment {{ obj.number }} — #{{ obj.sequence }}{% else %}Schedule a delivery instalment{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Order Fulfillment &amp; Tracking</span><span class="sep">›</span><a href="{% url 'procurement:deliveryschedule_list' %}">Delivery Schedules</a><span class="sep">›</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">One row is one instalment of a purchase order line: how much lands, when it is needed, and what the supplier promised back.</p>
+  </div></div>
+
+  {% if is_edit and obj %}
+    <div class="card"><div class="card-body">
+      <p>
+        {% if obj.po_line and obj.po_line.purchase_order %}
+          <a href="{% url 'scm:purchaseorder_detail' obj.po_line.purchase_order.pk %}" class="fw-600">{{ obj.po_line.purchase_order.number }}</a> ·
+        {% endif %}
+        {% if obj.po_line %}{{ obj.po_line.item_description|default:"—" }} · line quantity {{ obj.po_line.quantity|floatformat:"-4" }}{% else %}<span class="text-muted">PO line unavailable</span>{% endif %}
+        <span class="badge {% if obj.status == 'planned' %}badge-slate{% elif obj.status == 'confirmed' %}badge-info{% elif obj.status == 'shipped' %}badge-amber{% elif obj.status == 'received' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        · currently {{ obj.coverage_pct }}% of the line is laid out in instalments
+      </p>
+    </div></div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            {% if field.name == 'sequence' %}<div class="form-help">Position in the ladder for this PO line. Two live instalments may not share a sequence on the same line.</div>{% endif %}
+            {% if field.name == 'promised_quantity' %}<div class="form-help">What the supplier committed back. Leave blank until there is a real commitment — a blank promise is reported as "no commitment", never as agreement.</div>{% endif %}
+            {% if field.name == 'status' %}<div class="form-help">Editable here by design: this ladder hangs no timestamps and no who-stamps off its status, so it needs no approval verbs.</div>{% endif %}
+            {% if field.name == 'asn' %}<div class="form-help">Optional. Only an advance shipping notice raised against the same purchase order can be linked.</div>{% endif %}
+            {% if field.name == 'change_reason' %}<div class="form-help">Record why a date or quantity moved — the buyer reading the ladder later has no other trail.</div>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      {% comment %}
+        Two rules a buyer keeps hitting, spelled out so the validation error is never a surprise:
+        over-commitment is a hard block (the instalments may not sum past the PO line quantity),
+        while under-coverage is only the amber warning on the detail page.
+      {% endcomment %}
+      Instalments may not <strong>over-commit</strong> the PO line — the non-cancelled rows on a line must sum to at
+      most the ordered quantity, and a row that would push the total past it is rejected. A total that falls
+      <em>short</em> is never an error: the line simply shows as <span class="badge badge-amber">Under-covered</span>
+      until the balance is scheduled. To lay out an evenly spaced ladder in one step, use
+      <a href="{% url 'procurement:deliveryschedule_split' %}">Split a PO line</a> instead of keying rows by hand.
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Update instalment{% else %}Create instalment{% endif %}</button>
+      <a href="{% url 'procurement:deliveryschedule_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
