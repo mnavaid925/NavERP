@@ -57,6 +57,10 @@ from django.utils import timezone
 from apps.core.models import OrgUnit, Party, PartyRole, Tenant
 from apps.core.utils import write_audit_log
 from apps.procurement.models import (
+    AdvancedShipmentNotice,
+    AsnLine,
+    Backorder,
+    DeliverySchedule,
     ApprovalDelegation,
     ApprovalRoutingRule,
     BidScore,
@@ -171,6 +175,12 @@ class Command(BaseCommand):
             CatalogItem.objects.all().delete()
             CatalogUploadBatch.objects.all().delete()
             PunchOutEndpoint.objects.all().delete()
+            # 6.11 fulfillment rows: backorders point at schedules/ASNs (SET_NULL) so they
+            # go first, then the ladder, then the ASN lines and their notices.
+            Backorder.objects.all().delete()
+            DeliverySchedule.objects.all().delete()
+            AsnLine.objects.all().delete()
+            AdvancedShipmentNotice.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -184,6 +194,7 @@ class Command(BaseCommand):
             self._seed_eauction(tenant)
             self._seed_contracts(tenant)
             self._seed_catalog(tenant)
+            self._seed_order_fulfillment(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -1041,3 +1052,163 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: catalog ready ({made} items/tiers, 2 punch-out endpoints, "
             f"1 validated upload batch)."))
+
+    def _seed_order_fulfillment(self, tenant):
+        """6.11 Order Fulfillment & Tracking - one IN-FLIGHT advance shipping notice whose first
+        line is deliberately short of the ordered quantity (so the discrepancy fold, the variance
+        badges and the "record the shortfall" hand-off all have something real to show), one
+        DELIVERED notice carrying a proof-of-delivery block for the arrivals board's Confirmed
+        tab, a three-instalment delivery ladder over one order line, and two backorders - one
+        rescheduled with its promise still ahead and one already past due, so the risk buckets
+        are not all the same colour.
+
+        Idempotent like every other block: guarded per tenant, and every numbered row is reached
+        through get_or_create or an existence check keyed on a natural business key. A bare
+        .create() on a TenantNumbered model would mint ASN-00003 on the second run.
+        """
+        if AdvancedShipmentNotice.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"  {tenant.name}: advance shipping notices already present, skipping.")
+            return
+
+        from apps.scm.models import PurchaseOrder as _PO  # local: spine touch, peer-app model
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        filer = members[0] if members else None
+
+        # Reuse a real receivable order rather than inventing one - _seed_po_management has
+        # already guaranteed one exists for any tenant with parties.
+        order = (_PO.objects.filter(tenant=tenant, status__in=_PO.RECEIVABLE_STATUSES)
+                 .order_by("id").first())
+        if order is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no receivable purchase order - skipping order fulfillment."))
+            return
+        lines = list(order.lines.order_by("id"))
+        if not lines:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: {order.number} has no lines - skipping order fulfillment."))
+            return
+
+        first = lines[0]
+        second = lines[1] if len(lines) > 1 else first
+        today = NOW.date()
+
+        first_qty = first.quantity or Decimal("1")
+        # Short-ship the first line by 4 where the ordered quantity allows it, else by half -
+        # a seeded order from another module may carry a much smaller line.
+        gap = Decimal("4") if first_qty > Decimal("4") else (first_qty / 2)
+        gap = gap.quantize(Decimal("0.0001"))
+        short_qty = (first_qty - gap).quantize(Decimal("0.0001"))
+
+        # (a) The in-flight notice: submitted, on the road, one line short.
+        asn = AdvancedShipmentNotice.objects.filter(
+            tenant=tenant, supplier_reference="DN-88412").first()
+        if asn is None:
+            asn = AdvancedShipmentNotice.objects.create(
+                tenant=tenant, purchase_order=order, supplier_reference="DN-88412",
+                source="email", status="submitted", submitted_at=NOW - timedelta(days=2),
+                ship_date=today - timedelta(days=2),
+                expected_delivery_date=today + timedelta(days=1),
+                carrier_name="Meridian Freight", tracking_number="MF7741903221",
+                bill_of_lading_ref="BOL-2291-A", container_ref="MSKU7741903",
+                freight_terms="prepaid", package_count=14, pallet_count=2,
+                gross_weight_kg=Decimal("318.40"), volume_cbm=Decimal("1.860"),
+                created_by=filer,
+                notes="Supplier confirmed dispatch by email; first line short-shipped, "
+                      "balance to follow on the next production run.")
+            AsnLine.objects.create(
+                asn=asn, po_line=first, quantity_shipped=short_qty,
+                package_ref="PAL-01", lot_number="LOT-2291", country_of_origin="DE",
+                notes=f"Short by {gap} - balance backordered.")
+            if second is not first:
+                AsnLine.objects.create(
+                    asn=asn, po_line=second, quantity_shipped=second.quantity or Decimal("1"),
+                    package_ref="PAL-02", country_of_origin="DE")
+            write_audit_log(None, asn, "create")
+
+        # (b) Last cycle's notice, taken all the way to delivered through the REAL verb so the
+        # POD block is stamped exactly the way the confirm view stamps it.
+        delivered = AdvancedShipmentNotice.objects.filter(
+            tenant=tenant, supplier_reference="DN-88109").first()
+        if delivered is None:
+            delivered = AdvancedShipmentNotice.objects.create(
+                tenant=tenant, purchase_order=order, supplier_reference="DN-88109",
+                source="portal", status="in_transit", submitted_at=NOW - timedelta(days=9),
+                ship_date=today - timedelta(days=9),
+                expected_delivery_date=today - timedelta(days=4),
+                carrier_name="Meridian Freight", tracking_number="MF7741881004",
+                freight_terms="prepaid", package_count=6, pallet_count=1,
+                gross_weight_kg=Decimal("96.20"), created_by=filer,
+                notes="Previous cycle's consignment - arrived, checked and signed for.")
+            AsnLine.objects.create(
+                asn=delivered, po_line=first,
+                quantity_shipped=(first_qty / 2).quantize(Decimal("0.0001")),
+                package_ref="PAL-A", country_of_origin="DE")
+            delivered.confirm_delivery(
+                filer, delivered_at=NOW - timedelta(days=4), arrival_condition="good",
+                pod_reference="POD-55120", received_signature_name="R. Whitfield")
+            write_audit_log(None, delivered, "create")
+
+        # (c) A three-instalment ladder over the first line. Keyed on (po_line, sequence) -
+        # the unique_together - so a re-run finds the rows instead of over-committing the line.
+        per = (first_qty / 3).quantize(Decimal("0.0001"))
+        final = (first_qty - per * 2).quantize(Decimal("0.0001"))
+        schedules = []
+        for index in range(3):
+            need_by = today + timedelta(days=7 * (index + 1))
+            row, _created = DeliverySchedule.objects.get_or_create(
+                tenant=tenant, po_line=first, sequence=index + 1,
+                defaults={
+                    "scheduled_quantity": final if index == 2 else per,
+                    "need_by_date": need_by,
+                    "promised_quantity": final if index == 2 else per,
+                    "promised_date": need_by + timedelta(days=2 if index else 0),
+                    "status": "confirmed" if index == 0 else "planned",
+                    "ship_to": order.ship_to,
+                    "delivery_mode": "standard",
+                    "asn": delivered if index == 0 else None,
+                    "change_reason": "Split into three instalments at order confirmation.",
+                    "created_by": filer,
+                })
+            schedules.append(row)
+
+        # (d) Two backorders with different risk shapes. Keyed on
+        # (po_line, reason, quantity_backordered) - no number is guessed.
+        backorder_specs = [
+            dict(po_line=first, reason="out_of_stock", quantity=gap,
+                 delivery_schedule=schedules[2] if len(schedules) > 2 else None, asn=asn,
+                 reason_note="Mill stock ran out mid-pick; balance promised from the next run.",
+                 original=today + timedelta(days=1), revised=today + timedelta(days=5),
+                 status="rescheduled", count=1,
+                 note="Balance of the short-shipped line on DN-88412."),
+            dict(po_line=second, reason="production_delay",
+                 quantity=(min(Decimal("2"), second.quantity or Decimal("1"))
+                           ).quantize(Decimal("0.0001")),
+                 delivery_schedule=None, asn=None,
+                 reason_note="Supplier's line stopped for a tooling change.",
+                 original=today - timedelta(days=8), revised=today - timedelta(days=2),
+                 status="open", count=0,
+                 note="Promise date already blown - chase the supplier."),
+        ]
+        made = 0
+        for spec in backorder_specs:
+            exists = Backorder.objects.filter(
+                tenant=tenant, po_line=spec["po_line"], reason=spec["reason"],
+                quantity_backordered=spec["quantity"]).first()
+            if exists is not None:
+                continue
+            row = Backorder.objects.create(
+                tenant=tenant, po_line=spec["po_line"],
+                delivery_schedule=spec["delivery_schedule"], asn=spec["asn"],
+                quantity_backordered=spec["quantity"], reason=spec["reason"],
+                reason_note=spec["reason_note"], original_promise_date=spec["original"],
+                revised_promise_date=spec["revised"], status=spec["status"],
+                reschedule_count=spec["count"], created_by=filer, notes=spec["note"])
+            write_audit_log(None, row, "create")
+            made += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: order fulfillment ready ({asn.number} in flight, "
+            f"{delivered.number} delivered, {len(schedules)} instalments, "
+            f"{made} backorders on {order.number})."))
