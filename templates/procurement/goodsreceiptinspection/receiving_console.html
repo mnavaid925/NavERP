@@ -15,12 +15,15 @@
     TEMPLATE ↔ BACKEND INPUT-NAME CONTRACT (the one place the two must agree
     byte-for-byte — renaming any of these silently drops the value):
       receipt_date, location, notes, and one qty_<asn_line.pk> per line.
-    The mint-lots form is a SEPARATE POST carrying only the CSRF token.
+    The mint-lots form is a SEPARATE POST carrying only the CSRF token, and it
+    is rendered only when `can_mint` — that verb is @tenant_admin_required, so
+    showing it to a member would offer a button that dead-ends on a 403. The
+    book form is NOT gated: its verb is @login_required only.
 
     Context consumed: object_list (the paginated ASN page — NOT iterated; `rows`
     is built from it and is what this template loops), page_obj, q,
     status_choices, vendors, purchase_orders, locations, arrival,
-    arrival_choices, stats.
+    arrival_choices, can_mint, stats.
   {% endcomment %}
   <div class="page-header">
     <div>
@@ -280,17 +283,19 @@
         </div>
       </form>
 
-      <div class="card-body" style="border-top:1px solid var(--border);">
-        <form method="post" action="{% url 'procurement:receiving_console_mint_lots' row.asn.pk %}"
-              onsubmit="return confirm('Create lot and serial records from what {{ row.asn.number }} declared? Lines whose SKU cannot be matched to an item are skipped and reported.');">
-          {% csrf_token %}
-          <div class="filter-bar">
-            <span class="text-muted" style="flex:1; min-width:220px;">Mint the declared lot, serial and expiry text into the item master so the numbers exist before the goods are received. Existing records are reused, never duplicated.</span>
-            <a href="{% url 'scm:lotserial_list' %}" class="btn btn-outline btn-sm"><i data-lucide="tags"></i> Lots &amp; serials</a>
-            <button class="btn btn-outline btn-sm" type="submit"><i data-lucide="plus"></i> Mint lots &amp; serials</button>
-          </div>
-        </form>
-      </div>
+      {% if can_mint %}
+        <div class="card-body" style="border-top:1px solid var(--border);">
+          <form method="post" action="{% url 'procurement:receiving_console_mint_lots' row.asn.pk %}"
+                onsubmit="return confirm('Create lot and serial records from what {{ row.asn.number }} declared? Lines whose SKU cannot be matched to an item are skipped and reported.');">
+            {% csrf_token %}
+            <div class="filter-bar">
+              <span class="text-muted" style="flex:1; min-width:220px;">Mint the declared lot, serial and expiry text into the item master so the numbers exist before the goods are received. Existing records are reused, never duplicated.</span>
+              <a href="{% url 'scm:lotserial_list' %}" class="btn btn-outline btn-sm"><i data-lucide="tags"></i> Lots &amp; serials</a>
+              <button class="btn btn-outline btn-sm" type="submit"><i data-lucide="plus"></i> Mint lots &amp; serials</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
     </div>
   {% empty %}
     <div class="card">
