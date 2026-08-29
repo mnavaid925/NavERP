@@ -415,3 +415,266 @@ def upload_batch_received_a(db, tenant_a, supplier_a):
     return CatalogUploadBatch.objects.create(
         tenant=tenant_a, party=party, original_filename="northwind.csv",
         status="received")
+
+
+# ------------------------------------------------------------------ 6.11 Order Fulfillment & Tracking
+# Every fixture below is prefixed ``fulfillment_`` so the four 6.11 test lanes can share them
+# without shadowing any earlier sub-module's fixture. Dates derive from timezone.localdate()
+# (never date.today()) so exact-date assertions stay stable after local midnight (L16).
+
+def _fulfillment_party(tenant, name):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant, name=name, kind="organization")
+
+
+def _fulfillment_po(tenant, vendor, **overrides):
+    """A receivable (approved) spine purchase order - the document an ASN declares against."""
+    from apps.scm.models import PurchaseOrder
+    fields = dict(tenant=tenant, vendor=vendor, status="approved",
+                  order_date=timezone.localdate())
+    fields.update(overrides)
+    return PurchaseOrder.objects.create(**fields)
+
+
+def _fulfillment_po_line(po, description="Bearing housing 40mm", qty="10", price="25.00",
+                         **overrides):
+    from apps.scm.models import PurchaseOrderLine
+    fields = dict(purchase_order=po, item_description=description,
+                  quantity=Decimal(qty), unit_price=Decimal(price),
+                  sku_hint="BRG-40", uom_hint="EA")
+    fields.update(overrides)
+    return PurchaseOrderLine.objects.create(**fields)
+
+
+def _fulfillment_asn(tenant, po, **overrides):
+    from apps.procurement.models import AdvancedShipmentNotice
+    fields = dict(tenant=tenant, purchase_order=po, source="manual", status="draft",
+                  supplier_reference="", carrier_name="Northwind Express",
+                  tracking_number="TRK-1001",
+                  ship_date=timezone.localdate() - datetime.timedelta(days=2),
+                  expected_delivery_date=timezone.localdate() + datetime.timedelta(days=3),
+                  package_count=4, pallet_count=1,
+                  gross_weight_kg=Decimal("120.50"), volume_cbm=Decimal("1.250"))
+    fields.update(overrides)
+    return AdvancedShipmentNotice.objects.create(**fields)
+
+
+def _fulfillment_schedule(tenant, po_line, **overrides):
+    from apps.procurement.models import DeliverySchedule
+    fields = dict(tenant=tenant, po_line=po_line, sequence=1,
+                  scheduled_quantity=Decimal("4"),
+                  need_by_date=timezone.localdate() + datetime.timedelta(days=7),
+                  status="planned", delivery_mode="standard")
+    fields.update(overrides)
+    return DeliverySchedule.objects.create(**fields)
+
+
+def _fulfillment_backorder(tenant, po_line, **overrides):
+    from apps.procurement.models import Backorder
+    fields = dict(tenant=tenant, po_line=po_line,
+                  quantity_backordered=Decimal("3"), reason="out_of_stock",
+                  status="open",
+                  revised_promise_date=timezone.localdate() + datetime.timedelta(days=3))
+    fields.update(overrides)
+    return Backorder.objects.create(**fields)
+
+
+# -- spine documents ------------------------------------------------------------------------
+
+@pytest.fixture
+def fulfillment_vendor_a(db, tenant_a):
+    return _fulfillment_party(tenant_a, "Northwind Forge Ltd")
+
+
+@pytest.fixture
+def fulfillment_vendor_b(db, tenant_b):
+    return _fulfillment_party(tenant_b, "Globex Freight Partners")
+
+
+@pytest.fixture
+def fulfillment_po_a(db, tenant_a, fulfillment_vendor_a):
+    """Approved tenant-A PO with TWO lines (10 bearings, 4 belts); totals recalculated."""
+    po = _fulfillment_po(tenant_a, fulfillment_vendor_a)
+    _fulfillment_po_line(po)
+    _fulfillment_po_line(po, description="Drive belt 1200mm", qty="4", price="60.00",
+                         sku_hint="BLT-1200")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def fulfillment_po_line_a(fulfillment_po_a):
+    """First line of ``fulfillment_po_a`` - quantity 10."""
+    return fulfillment_po_a.lines.order_by("id").first()
+
+
+@pytest.fixture
+def fulfillment_po_line2_a(fulfillment_po_a):
+    """Second line of ``fulfillment_po_a`` - quantity 4."""
+    return fulfillment_po_a.lines.order_by("id").last()
+
+
+@pytest.fixture
+def fulfillment_po_b(db, tenant_b, fulfillment_vendor_b):
+    """Tenant-B PO with one line - the cross-tenant target for crafted-POST tests."""
+    po = _fulfillment_po(tenant_b, fulfillment_vendor_b)
+    _fulfillment_po_line(po, description="Globex-only spindle", qty="6", price="80.00",
+                         sku_hint="GBX-SPN")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def fulfillment_po_line_b(fulfillment_po_b):
+    return fulfillment_po_b.lines.order_by("id").first()
+
+
+@pytest.fixture
+def fulfillment_carrier_a(db, tenant_a):
+    from apps.scm.models import Carrier
+    party = _fulfillment_party(tenant_a, "Acme Road Freight")
+    return Carrier.objects.create(tenant=tenant_a, party=party, carrier_type="asset_based",
+                                  primary_mode="truckload", status="active")
+
+
+@pytest.fixture
+def fulfillment_carrier_b(db, tenant_b):
+    from apps.scm.models import Carrier
+    party = _fulfillment_party(tenant_b, "Globex Haulage")
+    return Carrier.objects.create(tenant=tenant_b, party=party, status="active")
+
+
+@pytest.fixture
+def fulfillment_shipment_inbound_a(db, tenant_a, fulfillment_po_a, fulfillment_carrier_a):
+    """An INBOUND SCM 4.6 shipment carrying the live tracking projections an ASN reads."""
+    from apps.scm.models import Shipment
+    return Shipment.objects.create(
+        tenant=tenant_a, direction="inbound", carrier=fulfillment_carrier_a,
+        purchase_order=fulfillment_po_a, mode="truckload",
+        current_status_text="In Transit", last_known_location="Rotterdam hub",
+        eta=timezone.now() + datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def fulfillment_shipment_outbound_a(db, tenant_a):
+    """OUTBOUND - an ASN must refuse it (``AdvancedShipmentNotice.clean()``)."""
+    from apps.scm.models import Shipment
+    return Shipment.objects.create(tenant=tenant_a, direction="outbound")
+
+
+@pytest.fixture
+def fulfillment_shipment_inbound_b(db, tenant_b):
+    from apps.scm.models import Shipment
+    return Shipment.objects.create(tenant=tenant_b, direction="inbound")
+
+
+# -- advance shipping notices ---------------------------------------------------------------
+
+@pytest.fixture
+def fulfillment_asn_draft_a(db, tenant_a, admin_user, fulfillment_po_a):
+    return _fulfillment_asn(tenant_a, fulfillment_po_a, supplier_reference="NW-DN-1001",
+                            created_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_asn_line_a(db, fulfillment_asn_draft_a, fulfillment_po_line_a):
+    """Exactly-on-the-balance declaration (10 shipped against 10 outstanding)."""
+    from apps.procurement.models import AsnLine
+    return AsnLine.objects.create(asn=fulfillment_asn_draft_a, po_line=fulfillment_po_line_a,
+                                  quantity_shipped=Decimal("10"), package_ref="PLT-1",
+                                  lot_number="LOT-77", country_of_origin="DE")
+
+
+@pytest.fixture
+def fulfillment_asn_in_transit_a(db, tenant_a, admin_user, fulfillment_po_a):
+    """In flight and due TOMORROW - the delivery-confirmation board's 'awaiting' row."""
+    return _fulfillment_asn(
+        tenant_a, fulfillment_po_a, status="in_transit", supplier_reference="NW-DN-2002",
+        submitted_at=timezone.now(), created_by=admin_user,
+        expected_delivery_date=timezone.localdate() + datetime.timedelta(days=1))
+
+
+@pytest.fixture
+def fulfillment_asn_late_a(db, tenant_a, admin_user, fulfillment_po_a):
+    """In flight and THREE DAYS overdue - drives is_late / days_late / ?late=1 / the overdue tab."""
+    return _fulfillment_asn(
+        tenant_a, fulfillment_po_a, status="in_transit", supplier_reference="NW-DN-2003",
+        submitted_at=timezone.now(), created_by=admin_user, tracking_number="TRK-2003",
+        expected_delivery_date=timezone.localdate() - datetime.timedelta(days=3))
+
+
+@pytest.fixture
+def fulfillment_asn_delivered_a(db, tenant_a, admin_user, fulfillment_po_a):
+    """Closed record with its proof-of-delivery block already stamped."""
+    return _fulfillment_asn(
+        tenant_a, fulfillment_po_a, status="delivered", supplier_reference="NW-DN-3004",
+        submitted_at=timezone.now(), created_by=admin_user,
+        expected_delivery_date=timezone.localdate() - datetime.timedelta(days=1),
+        delivered_at=timezone.now(), arrival_condition="good", pod_reference="POD-3004",
+        received_signature_name="R. Keeper", confirmed_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_asn_b(db, tenant_b, admin_b, fulfillment_po_b):
+    """Tenant B's own ASN - the IDOR target for detail/edit/delete/verb probes."""
+    return _fulfillment_asn(tenant_b, fulfillment_po_b, supplier_reference="GBX-DN-9001",
+                            carrier_name="Globex Haulage", created_by=admin_b)
+
+
+# -- split-delivery instalments -------------------------------------------------------------
+
+@pytest.fixture
+def fulfillment_schedule_a(db, tenant_a, admin_user, fulfillment_po_line_a):
+    """Instalment 1 of 10 ordered - 4 units due in a week (the line stays under-covered)."""
+    return _fulfillment_schedule(tenant_a, fulfillment_po_line_a, created_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_schedule_late_a(db, tenant_a, admin_user, fulfillment_po_line_a):
+    """Instalment 2 - 3 units whose need-by date has already passed (is_late)."""
+    return _fulfillment_schedule(
+        tenant_a, fulfillment_po_line_a, sequence=2, scheduled_quantity=Decimal("3"),
+        need_by_date=timezone.localdate() - datetime.timedelta(days=2),
+        promised_date=timezone.localdate() + datetime.timedelta(days=4),
+        delivery_mode="express", created_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_schedule_b(db, tenant_b, fulfillment_po_line_b):
+    return _fulfillment_schedule(tenant_b, fulfillment_po_line_b,
+                                 scheduled_quantity=Decimal("2"))
+
+
+# -- backorders -----------------------------------------------------------------------------
+
+@pytest.fixture
+def fulfillment_backorder_open_a(db, tenant_a, admin_user, fulfillment_po_line_a):
+    """Open, promised in three days -> risk bucket ``at_risk``."""
+    return _fulfillment_backorder(tenant_a, fulfillment_po_line_a, created_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_backorder_past_due_a(db, tenant_a, admin_user, fulfillment_po_line2_a):
+    """Open with a promise two days in the past -> risk bucket ``past_due``."""
+    return _fulfillment_backorder(
+        tenant_a, fulfillment_po_line2_a, quantity_backordered=Decimal("2"),
+        reason="production_delay", created_by=admin_user,
+        original_promise_date=timezone.localdate() - datetime.timedelta(days=9),
+        revised_promise_date=timezone.localdate() - datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def fulfillment_backorder_closed_a(db, tenant_a, admin_user, fulfillment_po_line_a):
+    """Fulfilled - frozen: edit is refused and every verb no-ops."""
+    return _fulfillment_backorder(
+        tenant_a, fulfillment_po_line_a, quantity_backordered=Decimal("1"),
+        status="fulfilled", closed_at=timezone.now(), closure_note="Arrived on the 14th.",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_backorder_b(db, tenant_b, fulfillment_po_line_b):
+    """Tenant B's shortfall - the IDOR target."""
+    return _fulfillment_backorder(tenant_b, fulfillment_po_line_b,
+                                  quantity_backordered=Decimal("2"),
+                                  reason="logistics")
