@@ -192,6 +192,10 @@ class ReturnToVendor(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="prc_rtv_tnt_status_idx"),
             models.Index(fields=["tenant", "vendor"], name="prc_rtv_tnt_vendor_idx"),
             models.Index(fields=["tenant", "reason"], name="prc_rtv_tnt_reason_idx"),
+            # The duplicate-RMA badge is an Exists() correlated subquery keyed on exactly this
+            # pair (see ReturnsToVendor._scoped), so without it the database re-scans the whole
+            # RTV table once per row of every list page.
+            models.Index(fields=["tenant", "supplier_rma_number"], name="prc_rtv_tnt_rma_idx"),
         ]
 
     def __init__(self, *args, **kwargs):
