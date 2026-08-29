@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Receipt Audit Trail{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Receipt Reversal & Audit Trail — the receiving audit board.
+
+    A COMPUTED, READ-ONLY view over the append-only core.AuditLog, narrowed to
+    the four record types receiving touches: goods receipt notes, tolerance
+    policies, discrepancies and returns to vendor. It defines no state, writes
+    nothing and offers no row actions beyond opening the entry.
+
+    There is no "reverse" button here on purpose. Reversing a receipt is an SCM
+    write against the receipt itself — this page is the record of what happened,
+    including the reversal, and a second reversal path would give the workspace
+    two answers.
+
+    Context consumed: object_list (the paginated audit page — NOT iterated;
+    `entries` is its alias and is what this template loops), page_obj, q, grn,
+    receipts, action, action_choices, stats, feed_note.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Receipt Audit Trail</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Goods Receipt &amp; Inspection</span><span class="sep">›</span><span>Receipt Audit</span></div>
+      <p class="text-muted">{{ feed_note }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:receiving_console' %}" class="btn btn-outline"><i data-lucide="package-search"></i> Receiving console</a>
+      <a href="{% url 'procurement:discrepancy_list' %}" class="btn btn-outline"><i data-lucide="triangle-alert"></i> Discrepancies</a>
+      <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-primary"><i data-lucide="package-check"></i> All receipts</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="history"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Entries in view</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="file-plus"></i></div><div class="stat-value">{{ stats.creates }}</div><div class="stat-label">Creates</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-pen"></i></div><div class="stat-value">{{ stats.updates }}</div><div class="stat-label">Updates</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="file-x"></i></div><div class="stat-value">{{ stats.deletes }}</div><div class="stat-label">Deletes</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      {% if grn %}
+        <p class="text-muted">
+          Scoped to receipt <a href="{% url 'scm:goodsreceipt_detail' grn.pk %}" class="fw-600">{{ grn.number }}</a>
+          {% if grn.purchase_order %} against order {{ grn.purchase_order.number }}{% endif %}.
+          <a href="{% url 'procurement:receipt_audit' %}">Show every receiving record</a>
+        </p>
+      {% endif %}
+
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="audit_q">Search</label>
+          <input type="text" id="audit_q" name="q" value="{{ q }}" class="form-input" placeholder="What changed — document number or label…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="audit_grn">Goods receipt</label>
+          <select id="audit_grn" name="grn" class="form-select">
+            <option value="">Every receiving record</option>
+            {% for r in receipts %}
+              <option value="{{ r.pk|stringformat:"d" }}" {% if request.GET.grn == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }}{% if r.purchase_order %} — {{ r.purchase_order.number }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="audit_action">Action</label>
+          <select id="audit_action" name="action" class="form-select">
+            <option value="">All actions</option>
+            {% for val, label in action_choices %}
+              <option value="{{ val }}" {% if action == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:receipt_audit' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Who</th>
+            <th>Action</th>
+            <th>Record</th>
+            <th>What changed</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <td class="nowrap">{{ entry.at|date:"M d, Y H:i" }}</td>
+              <td>{% if entry.user %}{{ entry.user.get_full_name|default:entry.user.username }}{% else %}<span class="text-muted">System</span>{% endif %}</td>
+              <td>
+                <span class="badge {% if entry.action == 'create' %}badge-green{% elif entry.action == 'delete' %}badge-red{% elif entry.action == 'update' %}badge-info{% else %}badge-slate{% endif %}">{{ entry.get_action_display }}</span>
+              </td>
+              <td>
+                {% if entry.content_type %}
+                  {% if entry.content_type.model == 'goodsreceiptnote' %}Goods receipt
+                  {% elif entry.content_type.model == 'receipttolerancepolicy' %}Tolerance policy
+                  {% elif entry.content_type.model == 'receiptdiscrepancy' %}Discrepancy
+                  {% elif entry.content_type.model == 'returntovendor' %}Return to vendor
+                  {% else %}{{ entry.content_type.name|capfirst }}{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="fw-600">{{ entry.target|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:activity_detail' entry.pk %}" class="btn-icon" title="View the recorded change" aria-label="View the recorded change"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="history"></i>
+                {% if grn %}
+                  <h3>Nothing recorded against this receipt</h3>
+                  <p>This receipt has no audit entries matching the current filters. Clear the action filter, or widen the scope to every receiving record.</p>
+                {% else %}
+                  <h3>No receiving activity yet</h3>
+                  <p>Booking a goods receipt, editing a tolerance policy, raising a discrepancy or authorising a return to vendor each writes one entry here. Entries are never edited or deleted — a correction appears as a new row.</p>
+                {% endif %}
+                <a href="{% url 'procurement:receiving_console' %}" class="btn btn-primary"><i data-lucide="package-search"></i> Go to the receiving console</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
