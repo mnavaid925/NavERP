@@ -255,6 +255,33 @@ def _received_by_po_line(tenant, po_line_ids):
     return {pk: (received or ZERO) for pk, received in rows}
 
 
+def _ref_key(value):
+    """The comparison key for a delivery-note reference — EXACTLY what SQL can reproduce.
+
+    Deliberately ``strip().lower()`` and not ``_norm``: the matching below happens in the database
+    as ``Lower(Trim(delivery_note_ref))``, and a Python key that ALSO collapsed internal
+    whitespace would silently stop agreeing with it. One key function, one SQL expression, no
+    asymmetry between the board's Booked marker and the book verb's idempotency check.
+    """
+    return (value or "").strip().lower()
+
+
+def _live_receipts_for_refs(tenant, ref_keys):
+    """Live receipts of this workspace whose delivery note matches any of ``ref_keys``.
+
+    The ONE definition of "same delivery note", shared by the console's Booked marker and
+    ``receiving_console_book``. They used to disagree — the marker matched case-SENSITIVELY
+    (``delivery_note_ref__in``) while the verb matched ``__iexact`` — so a receipt whose reference
+    differed only in case rendered as "Not booked yet" on a row whose Book button would then
+    refuse and redirect to it.
+    """
+    return (GoodsReceiptNote.objects
+            .filter(tenant=tenant)
+            .annotate(norm_delivery_ref=Lower(Trim("delivery_note_ref")))
+            .filter(norm_delivery_ref__in=ref_keys)
+            .exclude(status="cancelled"))
+
+
 def _console_reference(asn):
     """The delivery-note key ONE shipment books under — the single definition of that key.
 
@@ -282,21 +309,17 @@ def _receipt_by_delivery_ref(tenant, asn_qs):
     number (see ``_console_reference``) — so a receipt booked while the reference was blank is
     still recognised if the reference is filled in afterwards.
     """
-    refs = []
+    refs = set()
     for supplier_reference, number in asn_qs.values_list("supplier_reference", "number"):
-        supplier_reference = (supplier_reference or "").strip()
-        if supplier_reference:
-            refs.append(supplier_reference)
-        if number:
-            refs.append(number)
+        refs.add(_ref_key(supplier_reference))
+        refs.add(_ref_key(number))
+    refs.discard("")
     if not refs:
         return {}
     found = {}
-    for receipt in (GoodsReceiptNote.objects
-                    .filter(tenant=tenant, delivery_note_ref__in=refs)
-                    .exclude(status="cancelled")
+    for receipt in (_live_receipts_for_refs(tenant, refs)
                     .select_related("purchase_order").order_by("id")):
-        key = _norm(receipt.delivery_note_ref)
+        key = _ref_key(receipt.delivery_note_ref)
         # Earliest wins: that is the row the idempotent book verb would hand back.
         if key and key not in found:
             found[key] = receipt
@@ -552,8 +575,8 @@ def _console_rows(tenant, shipments, receipt_by_ref):
 
         # Either key: the supplier's own reference, or — for a shipment that declared none — the
         # ASN number the book verb falls back to.
-        existing_receipt = (receipt_by_ref.get(_norm(asn.supplier_reference))
-                            or receipt_by_ref.get(_norm(asn.number)))
+        existing_receipt = (receipt_by_ref.get(_ref_key(asn.supplier_reference))
+                            or receipt_by_ref.get(_ref_key(asn.number)))
         rows.append({
             "asn": asn,
             "order": order,
@@ -616,9 +639,8 @@ def receiving_console_book(request, pk):
         # supplier_reference is what let a re-click mint a second draft receipt (and burn a second
         # GRN number) for the same delivery.
         reference = _console_reference(asn)
-        existing = (GoodsReceiptNote.objects
-                    .filter(tenant=request.tenant, delivery_note_ref__iexact=reference)
-                    .exclude(status="cancelled").order_by("id").first())
+        existing = (_live_receipts_for_refs(request.tenant, [_ref_key(reference)])
+                    .order_by("id").first())
         if existing is not None:
             messages.info(
                 request,
