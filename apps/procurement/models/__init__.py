@@ -44,6 +44,13 @@ from .CatalogManagement.CatalogItems import CatalogItem
 from .CatalogManagement.Tiers import CatalogPriceTier
 from .CatalogManagement.PunchOutEndpoints import PunchOutEndpoint
 from .CatalogManagement.UploadBatches import CatalogUploadBatch
+from .OrderFulfillment import (
+    AdvancedShipmentNotice,
+    AsnLine,
+    Backorder,
+    DeliverySchedule,
+    split_po_line,
+)
 
 __all__ = [
     "EaucBid",
@@ -87,4 +94,9 @@ __all__ = [
     "CatalogPriceTier",
     "PunchOutEndpoint",
     "CatalogUploadBatch",
+    "AdvancedShipmentNotice",
+    "AsnLine",
+    "DeliverySchedule",
+    "split_po_line",
+    "Backorder",
 ]
