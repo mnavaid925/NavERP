@@ -70,7 +70,12 @@ class AdvancedShipmentNoticeForm(TenantUniqueMixin, TenantModelForm):
             receivable = orders.filter(
                 Q(status__in=PurchaseOrder.RECEIVABLE_STATUSES) | Q(pk=current_id)
             )
-        self.fields["purchase_order"].queryset = receivable.order_by("-order_date", "-id")
+        # ``PurchaseOrder.__str__`` is ``f"{number} · {vendor}"`` — every rendered <option> hops
+        # to core.Party for the vendor name, so an unbounded dropdown costs 1 + P queries without
+        # this select_related. The chained-__str__ case belongs on the FORM queryset, not just on
+        # the list view's.
+        self.fields["purchase_order"].queryset = (receivable.select_related("vendor")
+                                                  .order_by("-order_date", "-id"))
 
         self.fields["carrier"].queryset = (Carrier.objects.filter(tenant=tenant)
                                            .select_related("party").order_by("party__name"))
