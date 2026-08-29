@@ -1,6 +1,7 @@
 """Procurement 6.3 Approval Workflow Engine — model tests."""
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 from django.core.exceptions import ValidationError
@@ -165,3 +166,25 @@ def test_zero_hours_rule_escalates_immediately(tenant_a, admin_user, member_user
     rows = escalation_candidates(tenant_a, policy)
     row = next(r for r in rows if r["requisition"].pk == req.pk)
     assert row["idle_hours_effective"] == 0 and row["is_idle"]
+
+
+def test_zero_hours_rule_fires_on_an_exact_clock_tie(tenant_a, member_user):
+    """The tie the wall clock keeps handing us, pinned deterministically.
+
+    ``timezone.now()`` on Windows advances in ~15.6ms ticks, so a chain created inside the
+    current tick reads an idle time of EXACTLY zero — which is why the test above used to fail
+    only in a full run (a warm suite gets from the INSERT to the engine inside one tick). A
+    window of 0 means "escalate immediately", so that tie has to count as idle; freezing the
+    clock on the requisition's own created_at reproduces it every time instead of by luck.
+    """
+    policy = EscalationPolicy.for_tenant(tenant_a)
+    req = _pending(tenant_a, member_user, title="Clock tie", total="20")
+    _rule(tenant_a, commodity="goggles", escalation_hours=0)
+    stamped = PurchaseRequisition.objects.get(pk=req.pk).created_at
+
+    with mock.patch("django.utils.timezone.now", return_value=stamped):
+        row = next(r for r in escalation_candidates(tenant_a, policy)
+                   if r["requisition"].pk == req.pk)
+
+    assert row["idle_for"] == timedelta(0)
+    assert row["is_idle"] is True
