@@ -96,8 +96,12 @@ class ReceiptTolerancePolicy(TenantOwned):
         "scm.ItemCategory", on_delete=models.CASCADE, null=True, blank=True,
         related_name="procurement_receipt_tolerances",
         help_text="Item category this rule applies to (blank if item-pinned or workspace-wide)")
+    #: CASCADE, matching ``item`` and ``category`` above — deliberately NOT ``SET_NULL``.
+    #: ``resolve_receipt_tolerance`` reads a NULL ``vendor_id`` as "any vendor", so nulling this
+    #: on delete would silently PROMOTE one supplier's tight band into a workspace-wide catch-all
+    #: governing every other supplier's receipts. A deleted supplier takes its pinned rule with it.
     vendor = models.ForeignKey(
-        "core.Party", on_delete=models.SET_NULL, null=True, blank=True,
+        "core.Party", on_delete=models.CASCADE, null=True, blank=True,
         related_name="procurement_receipt_tolerances",
         help_text="Only receipts from this supplier match; blank = any vendor")
     over_receipt_pct = models.DecimalField(
