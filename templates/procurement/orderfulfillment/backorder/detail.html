@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Backorder{% endblock %}
+{% block content %}
+  {% comment %}
+    6.11 Backorder detail.
+    Context contract: obj, po_line, order, reschedule_form, close_form, alert,
+    can_edit, can_reschedule, can_fulfil, can_cancel, can_raise_alert, can_delete.
+    The Actions sidebar gates on the can_* booleans, never on raw status strings, so the
+    template and the view's own guards can never drift apart.
+    close_form is ONE unbound form shared by the Fulfil and Cancel POSTs; it is rendered
+    once (Fulfil) and the Cancel textarea is hand-written with the same field NAME but a
+    distinct id, so the page carries no duplicate DOM ids.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {% if obj.status == 'open' %}badge-red{% elif obj.status == 'rescheduled' %}badge-amber{% elif obj.status == 'fulfilled' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge {% if obj.risk_bucket == 'past_due' %}badge-red{% elif obj.risk_bucket == 'at_risk' %}badge-amber{% elif obj.risk_bucket == 'no_commitment' %}badge-slate{% elif obj.risk_bucket == 'on_track' %}badge-green{% else %}badge-muted{% endif %}">{% if obj.risk_bucket == 'past_due' %}Past due{% elif obj.risk_bucket == 'at_risk' %}At risk{% elif obj.risk_bucket == 'no_commitment' %}No commitment{% elif obj.risk_bucket == 'on_track' %}On track{% else %}{{ obj.risk_bucket }}{% endif %}</span>
+        {% if obj.is_late %}<span class="badge badge-red">{{ obj.days_late }} days late</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:backorder_list' %}">Backorders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase order</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="layout-2col">
+    <div>
+      <div class="card"><div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Purchase order</dt><dd>{% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a>{% if order.vendor %} · {{ order.vendor.name }}{% endif %}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>PO line</dt><dd>{% if po_line %}{{ po_line.item_description|default:"—" }}{% if po_line.sku_hint %} <span class="text-muted">· {{ po_line.sku_hint }}</span>{% endif %}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Line ordered qty</dt><dd>{% if po_line %}{{ po_line.quantity|floatformat:"-4" }}{% if po_line.uom_hint %} {{ po_line.uom_hint }}{% endif %}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Quantity backordered</dt><dd class="fw-600">{{ obj.quantity_backordered|floatformat:"-4" }}{% if po_line.uom_hint %} {{ po_line.uom_hint }}{% endif %}</dd></div>
+          <div class="detail-item"><dt>Reason</dt><dd><span class="badge {% if obj.reason == 'out_of_stock' %}badge-red{% elif obj.reason == 'production_delay' %}badge-amber{% elif obj.reason == 'allocation' %}badge-amber{% elif obj.reason == 'material_shortage' %}badge-amber{% elif obj.reason == 'supplier_capacity' %}badge-info{% elif obj.reason == 'logistics' %}badge-info{% elif obj.reason == 'other' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span></dd></div>
+          <div class="detail-item"><dt>Reason note</dt><dd>{{ obj.reason_note|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Original promise</dt><dd>{% if obj.original_promise_date %}{{ obj.original_promise_date|date:"M d, Y" }}{% else %}<span class="text-muted">never promised</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Revised promise</dt><dd>{% if obj.revised_promise_date %}<span class="fw-600">{{ obj.revised_promise_date|date:"M d, Y" }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Effective promise</dt><dd>{% if obj.effective_promise_date %}{{ obj.effective_promise_date|date:"M d, Y" }}{% else %}<span class="badge badge-slate">No commitment</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Re-promises</dt><dd>{{ obj.reschedule_count }}</dd></div>
+          <div class="detail-item"><dt>Days open</dt><dd>{{ obj.days_open }}{% if obj.is_late %} · <span class="badge badge-red">{{ obj.days_late }} days late</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+        </dl>
+      </div></div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Linked fulfilment records</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Delivery schedule</dt><dd>{% if obj.delivery_schedule %}<a href="{% url 'procurement:deliveryschedule_detail' obj.delivery_schedule.pk %}">{{ obj.delivery_schedule.number }}</a> · seq {{ obj.delivery_schedule.sequence }}{% else %}<span class="text-muted">not linked to an instalment</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Advance shipping notice</dt><dd>{% if obj.asn %}<a href="{% url 'procurement:asn_detail' obj.asn.pk %}">{{ obj.asn.number }}</a>{% if obj.asn.supplier_reference %} · {{ obj.asn.supplier_reference }}{% endif %}{% else %}<span class="text-muted">not raised from an ASN shortfall</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      {% if alert %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Escalation alert</h2></div>
+          <div class="card-body">
+            <p class="fw-600">{{ alert.title }}
+              <span class="badge {{ alert.severity_css }}">{{ alert.get_severity_display }}</span>
+              <span class="badge {{ alert.status_css }}">{{ alert.get_status_display }}</span>
+            </p>
+            {% if alert.message %}<p class="text-muted">{{ alert.message }}</p>{% endif %}
+            {% if alert.link_url %}<a href="{{ alert.link_url }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the alert target</a>{% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if obj.closed_at %}
+        <div class="card"><div class="card-body">
+          <p><span class="fw-600">Closed:</span>
+            <span class="badge {% if obj.status == 'fulfilled' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-slate{% endif %}">{{ obj.get_status_display }}</span>
+            on {{ obj.closed_at|date:"M d, Y H:i" }}</p>
+          {% if obj.closure_note %}<p class="text-muted">{{ obj.closure_note }}</p>{% endif %}
+        </div></div>
+      {% endif %}
+
+      {% if can_reschedule %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Re-promise this backorder</h2></div>
+          <div class="card-body">
+            <form method="post" action="{% url 'procurement:backorder_reschedule' obj.pk %}" onsubmit="return confirm('Move the promise date on {{ obj.number }}? The first promise is kept as the original for slip reporting.');">
+              {% csrf_token %}
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label" for="{{ reschedule_form.revised_promise_date.id_for_label }}">{{ reschedule_form.revised_promise_date.label }} <span class="req">*</span></label>
+                  {{ reschedule_form.revised_promise_date }}
+                  {% for e in reschedule_form.revised_promise_date.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="{{ reschedule_form.reason_note.id_for_label }}">{{ reschedule_form.reason_note.label }} <span class="req">*</span></label>
+                  {{ reschedule_form.reason_note }}
+                  <div class="form-help">Required — the note replaces the reason text so the chase history reads as one thread.</div>
+                  {% for e in reschedule_form.reason_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                </div>
+              </div>
+              <button class="btn btn-primary" type="submit"><i data-lucide="calendar-clock"></i> Re-promise</button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if can_fulfil or can_cancel %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Close this backorder</h2></div>
+          <div class="card-body">
+            {% if can_fulfil %}
+              <form method="post" action="{% url 'procurement:backorder_fulfil' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} fulfilled? The shortfall closes and the row leaves the open chase list.');">
+                {% csrf_token %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ close_form.closure_note.id_for_label }}">{{ close_form.closure_note.label }}</label>
+                  {{ close_form.closure_note }}
+                  <div class="form-help">Optional — what finally arrived, and against which receipt.</div>
+                  {% for e in close_form.closure_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                </div>
+                <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Mark fulfilled</button>
+              </form>
+            {% endif %}
+            {% if can_fulfil and can_cancel %}<hr>{% endif %}
+            {% if can_cancel %}
+              {% comment %}
+                Hand-rendered so the second copy of close_form.closure_note does not duplicate
+                id_closure_note. The NAME is what the view's BackorderCloseForm binds against.
+              {% endcomment %}
+              <form method="post" action="{% url 'procurement:backorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel {{ obj.number }}? Use this when the quantity will never be delivered — it is not the same as fulfilment.');">
+                {% csrf_token %}
+                <div class="form-group">
+                  <label class="form-label" for="cancel_closure_note">Cancellation note</label>
+                  <textarea name="closure_note" id="cancel_closure_note" class="form-textarea" rows="2" maxlength="255"></textarea>
+                  <div class="form-help">Optional — why the outstanding quantity was written off rather than chased.</div>
+                </div>
+                <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Cancel backorder</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Actions</h2></div>
+        <div class="card-body" style="display:flex; flex-direction:column; gap:.6rem;">
+          {% if can_edit %}
+            <a href="{% url 'procurement:backorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% endif %}
+          {% if can_raise_alert %}
+            <form method="post" action="{% url 'procurement:backorder_raise_alert' obj.pk %}" onsubmit="return confirm('Raise a delivery alert for {{ obj.number }} in the Task &amp; Alert Center?');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit" style="width:100%;"><i data-lucide="bell"></i> Raise alert</button>
+            </form>
+          {% endif %}
+          {% if can_delete %}
+            {% comment %}L42 — no raw apostrophe inside the confirm string, and the only interpolation is the system-assigned BKO- number, never user-typed text.{% endcomment %}
+            <form method="post" action="{% url 'procurement:backorder_delete' obj.pk %}" onsubmit="return confirm('Delete backorder {{ obj.number }}? The shortfall record and its chase history go with it.');">
+              {% csrf_token %}<button class="btn btn-danger" type="submit" style="width:100%;"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+          <a href="{% url 'procurement:backorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to backorders</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Record</h2></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Raised by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %}</dd></div>
+            <div class="detail-item"><dt>Raised</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+            <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+            <div class="detail-item"><dt>Closed</dt><dd>{% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">still open</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
