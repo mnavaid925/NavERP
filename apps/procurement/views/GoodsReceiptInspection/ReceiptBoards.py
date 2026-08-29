@@ -294,12 +294,18 @@ def receiving_console(request):
         overdue=Count("id", filter=arrival_q["overdue"]),
     )
 
-    # The ASN -> receipt map does double duty: the "booked" tile below and the per-row
-    # ``existing_receipt`` marker further down both read it, so it is fetched once.
-    receipt_by_ref = _receipt_by_delivery_ref(tenant, base)
+    # A workspace-level COUNT, exactly like the three tiles above it — NOT a Python fold over a
+    # dict of every receipt the whole board could possibly match. The old shape built that dict
+    # from the unfiltered, unpaginated queryset on every page load (an unbounded IN list) purely
+    # to `sum()` over it; the row marker below now builds its own map from the PAGE instead.
     booked_cutoff = timezone.now() - timedelta(days=BOOKED_WINDOW_DAYS)
-    booked_7d = sum(1 for receipt in receipt_by_ref.values()
-                    if receipt.created_at and receipt.created_at >= booked_cutoff)
+    booked_7d = (GoodsReceiptNote.objects
+                 .filter(tenant=tenant, created_at__gte=booked_cutoff)
+                 .exclude(status="cancelled")
+                 .filter(delivery_note_ref__in=Subquery(
+                     base.exclude(supplier_reference="")
+                         .order_by().values("supplier_reference")))
+                 .count())
 
     qs = base.select_related("purchase_order", "purchase_order__vendor")
 
@@ -331,12 +337,18 @@ def receiving_console(request):
         qs.prefetch_related("lines", "lines__po_line").order_by("expected_delivery_date", "-id"),
         per_page=BOARD_PER_PAGE,
     )
+    shipments = list(page_obj.object_list)
+
+    # Built from the PAGE, so both queries carry an IN list of at most BOARD_PER_PAGE refs.
+    # Earliest-wins keying is preserved — the map is still assembled in ``id`` order.
+    receipt_by_ref = _receipt_by_delivery_ref(
+        tenant, base.filter(pk__in=[asn.pk for asn in shipments]))
 
     return render(request, "procurement/goodsreceiptinspection/receiving_console.html", {
-        "object_list": page_obj.object_list,
+        "object_list": shipments,
         "page_obj": page_obj,
         "q": q,
-        "rows": _console_rows(tenant, list(page_obj.object_list), receipt_by_ref),
+        "rows": _console_rows(tenant, shipments, receipt_by_ref),
         # Only the statuses this board can actually show: the queryset is hard-limited to
         # CONSOLE_STATUSES, so offering Draft / Cancelled would be two options that silently
         # return an empty board.
