@@ -151,6 +151,40 @@ class AsnLineForm(forms.ModelForm):
         self.fields["expiry_date"].input_formats = ["%Y-%m-%d"]
         # Blank copies the PO line's text in AsnLine.save() — don't demand it up front.
         self.fields["item_description"].required = False
+        # ``AsnLine.quantity_shipped`` carries ``default=1`` for programmatic creation, and
+        # ``Field.formfield()`` copies a model default onto the FORM field's ``initial``. On an
+        # EXTRA row that default is poison: ``has_changed()`` compares initial ``1`` against the
+        # blank the browser posts, decides the untouched trailing row WAS edited, and Django then
+        # validates it — so the add form answers a row nobody filled in with "This field is
+        # required" on po_line AND quantity_shipped. A blank trailing row must stay blank, and a
+        # declared quantity is a fact to type, never a silent 1. Existing rows are unaffected:
+        # their initial comes from ``self.initial`` (model_to_dict), which wins over this.
+        self.fields["quantity_shipped"].initial = None
+
+    def _get_validation_exclusions(self):
+        """Hand ``(asn, po_line)`` uniqueness to the FORMSET — it is the only layer that can see
+        a row being DELETED in this same submit.
+
+        Django checks that ``unique_together`` twice, and BOTH copies are wrong here:
+
+        * ``ModelForm._post_clean`` -> ``instance.validate_unique()`` hits the DB, so deleting a
+          line and re-declaring the same PO line in ONE submit fails with "Asn line with this Asn
+          and Po line already exists." — the row it collides with is the one being dropped.
+        * ``BaseModelFormSet.validate_unique`` DELETES the offending fields from
+          ``form.cleaned_data`` and keys a bare ``__all__`` message, which both hides the row's
+          real problem and made this formset's own field-anchored message unreachable.
+
+        Excluding ``po_line`` from the validation exclusions turns off exactly those two checks
+        (it is AsnLine's ONLY unique check) at exactly one place. Nothing else is lost: the model
+        field is non-null and ``required`` on the form, ``ModelChoiceField`` has already proved
+        the pk exists in the narrowed queryset, and ``AsnLine.clean()``'s own "different purchase
+        order" rule still runs — ``Model.full_clean()`` never filters ``clean()`` by ``exclude``.
+        ``BaseAsnLineFormSet.clean()`` re-implements the uniqueness rule DELETE-aware, against
+        both the other rows in this submit and the rows already stored.
+        """
+        exclude = super()._get_validation_exclusions()
+        exclude.add("po_line")
+        return exclude
 
 
 class BaseAsnLineFormSet(forms.BaseInlineFormSet):
@@ -172,28 +206,62 @@ class BaseAsnLineFormSet(forms.BaseInlineFormSet):
                     form.fields["po_line"].queryset = order_lines
 
     def clean(self):
+        """Own ``(asn, po_line)`` uniqueness outright — see ``AsnLineForm``'s exclusion.
+
+        Three rules, all field-anchored on the row that broke them, because a message keyed on
+        ``__all__`` above a twelve-column table tells the user nothing about WHICH row to fix:
+
+        1. a line from another order (a crafted POST — the ``<select>`` is UX, not a boundary);
+        2. the same line declared twice in this submit;
+        3. a line this notice ALREADY stores and that this submit is not deleting — the case
+           Django's model-level check used to cover. Without it the UNIQUE index would surface
+           as an IntegrityError at save, which is a 500.
+
+        Rows marked DELETE declare nothing, so they neither collide nor block: dropping a line
+        and re-declaring it in one submit is legitimate, and ``save_existing_objects()`` runs the
+        deletions before the inserts, so the constraint is never actually breached.
+        """
         super().clean()
         order_id = getattr(self.instance, "purchase_order_id", None)
         if not order_id:
             return
-        seen = set()
+
+        dropped_pks, live_forms = set(), []
         for form in self.forms:
             if not hasattr(form, "cleaned_data"):
                 continue
-            data = form.cleaned_data
-            if data.get("DELETE"):
-                # A row being dropped declares nothing — it must not block its replacement.
+            if self.can_delete and self._should_delete_form(form):
+                if form.instance.pk:
+                    dropped_pks.add(form.instance.pk)
                 continue
-            chosen = data.get("po_line")
+            live_forms.append(form)
+
+        # What this notice already stores, minus whatever this submit is dropping. One query,
+        # only when the parent exists (a create posts its lines against an unsaved ASN).
+        stored = {}
+        if self.instance.pk:
+            rows = AsnLine.objects.filter(asn=self.instance)
+            if dropped_pks:
+                rows = rows.exclude(pk__in=dropped_pks)
+            stored = dict(rows.values_list("po_line_id", "pk"))
+
+        seen = set()
+        for form in live_forms:
+            chosen = form.cleaned_data.get("po_line")
             if chosen is None:
                 continue
             if chosen.purchase_order_id != order_id:
                 form.add_error("po_line", "That line belongs to a different purchase order.")
-            elif chosen.pk in seen:
+                continue
+            if chosen.pk in seen:
                 # Two live rows against one line would double-count the shipped quantity and
                 # make the short/over verdict meaningless — refuse the ambiguity.
                 form.add_error("po_line", "This PO line is declared by more than one row.")
+                continue
             seen.add(chosen.pk)
+            existing_pk = stored.get(chosen.pk)
+            if existing_pk is not None and existing_pk != form.instance.pk:
+                form.add_error("po_line", "This notice already declares that PO line.")
 
 
 #: ``max_num`` caps a crafted management form at a sane row count — every accepted row is a write.
