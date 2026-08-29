@@ -9,12 +9,14 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 `rfx/`, `events/`, `bids/`, `awards/`, `analytics/`, `portal-access/`, `suspensions/`,
 `submissions/`, `vendor-portal/`, `auctions/`, `clauses/`, `contracts/`, `contract-sign/`,
 `contract-amendments/`, `milestones/`, `renewals/`, `catalog-items/`, `catalog-tiers/`,
-`punchout/`, `catalog-uploads/`) is a distinct whole component — no greedy
+`punchout/`, `catalog-uploads/`, `asn/`, `delivery-schedules/`,
+`backorders/`, `inbound-tracking/`, `delivery-confirmation/`) is a distinct whole component — no greedy
 ``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
 about.
 """
 from .ApprovalWorkflowEngine import urlpatterns as _awe_approvalengine
 from .CatalogManagement import urlpatterns as _cat_catalogmanagement
+from .OrderFulfillment import urlpatterns as _of_orderfulfillment
 from .DashboardPortal.ActivityFeed import urlpatterns as _dp_activity
 from .DashboardPortal.Overview import urlpatterns as _dp_overview
 from .DashboardPortal.ProcurementAlerts import urlpatterns as _dp_alerts
@@ -50,4 +52,7 @@ urlpatterns = [
                                #    amendments, milestones, renewal board
     *_cat_catalogmanagement,  # 6.9 catalog items + approval, price tiers, punch-out endpoints,
                               #    supplier upload batches
+    *_of_orderfulfillment,  # 6.11 ASN register + lifecycle verbs, split-delivery instalments
+                            #      (+ split console), backorders, and the two computed boards:
+                            #      inbound freight tracking and delivery confirmation
 ]
