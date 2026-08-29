@@ -13,6 +13,8 @@ double-submitted confirmation cannot re-stamp a delivery.
 READ-ONLY against the spine (L36): nothing in this module writes ``scm.PurchaseOrder`` or
 ``scm.PurchaseOrderLine``.
 """
+from decimal import Decimal
+
 from django.db import transaction
 from django.db.models import Count, Q
 
@@ -110,12 +112,21 @@ def asn_detail(request, pk):
     )
     is_admin = bool(request.user.is_superuser
                     or getattr(request.user, "is_tenant_admin", False))
+    # The model's memoized fetch — the same rows (and the same memoized PurchaseOrderLine
+    # instances) the discrepancy fold already walked, so the template's per-row
+    # outstanding/variance reads cost nothing extra.
+    lines = obj.line_rows()
+    # ...but each of those PurchaseOrderLine instances would still fire its OWN receipt
+    # aggregate the first time `outstanding_at_declare` asks. Seed every memo from the spine's
+    # one-query map instead: N aggregates become 1, which is exactly the caller pattern
+    # PurchaseOrder.received_by_line() documents.
+    received = obj.purchase_order.received_by_line()
+    for row in lines:
+        if row.po_line_id:
+            row.po_line._received_qty_cache = received.get(row.po_line_id) or Decimal("0")
     return render(request, "procurement/orderfulfillment/asn/detail.html", {
         "obj": obj,
-        # The model's memoized fetch — the same rows (and the same memoized PurchaseOrderLine
-        # instances) the discrepancy fold already walked, so the template's per-row
-        # outstanding/variance reads cost nothing extra.
-        "lines": obj.line_rows(),
+        "lines": lines,
         "order": obj.purchase_order,
         "confirm_form": AsnDeliveryConfirmForm(),
         "cancel_form": AsnCancelForm(),
