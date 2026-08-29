@@ -1076,13 +1076,21 @@ class Command(BaseCommand):
         members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
         filer = members[0] if members else None
 
-        # Reuse a real receivable order rather than inventing one - _seed_po_management has
-        # already guaranteed one exists for any tenant with parties.
-        order = (_PO.objects.filter(tenant=tenant, status__in=_PO.RECEIVABLE_STATUSES)
-                 .order_by("id").first())
+        # Reuse a real receivable order rather than inventing one - the spine's seed_scm leaves
+        # several behind. It has to be one that still has HEADROOM on a line: an order whose
+        # lines are already fully received gives every AsnLine an outstanding_at_declare of 0,
+        # so the deliberately short line below reads as OVER-shipped, shortfall stays 0, and the
+        # whole ASN-shortfall -> backorder hand-off is unreachable from the demo data.
+        order = next(
+            (candidate
+             for candidate in _PO.objects.filter(
+                 tenant=tenant, status__in=_PO.RECEIVABLE_STATUSES).order_by("id")
+             if any(line.outstanding_quantity() > 0 for line in candidate.lines.all())),
+            None)
         if order is None:
             self.stdout.write(self.style.WARNING(
-                f"  {tenant.name}: no receivable purchase order - skipping order fulfillment."))
+                f"  {tenant.name}: no receivable purchase order with an outstanding line - "
+                f"skipping order fulfillment."))
             return
         lines = list(order.lines.order_by("id"))
         if not lines:
@@ -1090,12 +1098,18 @@ class Command(BaseCommand):
                 f"  {tenant.name}: {order.number} has no lines - skipping order fulfillment."))
             return
 
-        first = lines[0]
-        second = lines[1] if len(lines) > 1 else first
+        # Land on lines that still have a live balance; lines[0] stays the fallback so the block
+        # degrades to its old shape rather than skipping if nothing is outstanding.
+        first = next((line for line in lines if line.outstanding_quantity() > 0), lines[0])
+        second = next((line for line in lines
+                       if line is not first and line.outstanding_quantity() > 0), first)
         today = NOW.date()
 
-        first_qty = first.quantity or Decimal("1")
-        # Short-ship the first line by 4 where the ordered quantity allows it, else by half -
+        # Size the shortfall against what is still OUTSTANDING, not against the ordered quantity:
+        # an ASN's variance is declared-vs-outstanding, so a line whose balance was already
+        # received renders every declaration as an over-shipment.
+        first_qty = first.outstanding_quantity() or Decimal("1")
+        # Short-ship the first line by 4 where the outstanding balance allows it, else by half -
         # a seeded order from another module may carry a much smaller line.
         gap = Decimal("4") if first_qty > Decimal("4") else (first_qty / 2)
         gap = gap.quantize(Decimal("0.0001"))
