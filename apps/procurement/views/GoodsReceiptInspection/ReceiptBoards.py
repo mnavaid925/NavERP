@@ -416,9 +416,14 @@ def receiving_console(request):
     q = request.GET.get("q", "").strip()
     qs = apply_search(qs, q, ["number", "supplier_reference", "purchase_order__number"])
 
+    # Sanitized against the board's own vocabulary and echoed back, like ?arrival= / ?bucket= /
+    # ?action=. Unvalidated, `?status=zzz` — or `?status=draft`, which this board can never show —
+    # returned a silently empty board while the <select> still read "All open statuses".
     status = request.GET.get("status", "").strip()
-    if status:
+    if status in CONSOLE_STATUSES:
         qs = qs.filter(status=status)
+    else:
+        status = ""
     vendor_pk = as_db_int(request.GET.get("vendor", ""))
     if vendor_pk is not None:
         qs = qs.filter(purchase_order__vendor_id=vendor_pk)
@@ -454,6 +459,7 @@ def receiving_console(request):
         "locations": _locations(tenant),
         "arrival": arrival,
         "arrival_choices": ARRIVAL_CHOICES,
+        "status": status,
         # ``receiving_console_mint_lots`` is @tenant_admin_required, so a member must not be
         # offered the button — the decorator raises PermissionDenied and the click dead-ends on a
         # hard 403 page. The BOOK form is deliberately NOT gated on this: that verb is
