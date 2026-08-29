@@ -152,7 +152,7 @@ class ReturnToVendorLineForm(forms.ModelForm):
             "condition_note": forms.TextInput(attrs={"class": "form-input"}),
         }
 
-    def __init__(self, *args, receipt=None, tenant=None, **kwargs):
+    def __init__(self, *args, receipt=None, tenant=None, order=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Blank copies the source line's text in ReturnToVendorLine.save() — don't demand it.
@@ -194,9 +194,14 @@ class ReturnToVendorLineForm(forms.ModelForm):
             self.fields["goods_receipt_line"].queryset = GoodsReceiptLine.objects.none()
 
         if tenant is not None:
+            # The header names an order, so only ITS lines can be returned against it — the
+            # ``BaseAsnLineFormSet`` narrowing, and the difference between a dropdown of ~8
+            # relevant lines and one listing every ordered line in the workspace.
+            po_lines = PurchaseOrderLine.objects.filter(purchase_order__tenant=tenant)
+            if order is not None:
+                po_lines = po_lines.filter(purchase_order=order)
             self.fields["po_line"].queryset = (
-                PurchaseOrderLine.objects.filter(purchase_order__tenant=tenant)
-                .select_related("purchase_order").order_by("-purchase_order_id", "id")
+                po_lines.select_related("purchase_order").order_by("-purchase_order_id", "id")
             )
         else:
             self.fields["po_line"].queryset = PurchaseOrderLine.objects.none()
@@ -212,10 +217,43 @@ class BaseReturnToVendorLineFormSet(forms.BaseInlineFormSet):
     that carries it, never as a saved row.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._share_choices()
+
+    def _share_choices(self):
+        """Render each FK ``<select>``'s options ONCE for the whole formset.
+
+        ``ModelChoiceIterator.__iter__`` calls ``queryset.iterator()``, which deliberately
+        bypasses the result cache — so a 10-line draft plus ``extra=2`` re-executes the SAME two
+        queries 24 times, once per rendered ``<select>``. Assigning ``.choices`` sets ``_choices``
+        and short-circuits the iterator; ``.queryset`` is left in place, so ``to_python()`` and
+        ``validate()`` keep enforcing the tenancy/counterparty narrowing on POST — this is a
+        rendering optimisation, never a relaxation of the boundary.
+
+        Keyed on the queryset's SQL rather than shared blindly across every row: the "keep the
+        stored value offerable" escapes above mean two rows can legitimately carry different
+        querysets, and pasting row 1's options onto row 2 would hide row 2's own stored line.
+        """
+        rendered = {}
+        for form in self.forms:
+            for name in ("goods_receipt_line", "po_line"):
+                field = form.fields.get(name)
+                if field is None:
+                    continue
+                key = (name, str(field.queryset.query))
+                if key not in rendered:
+                    options = [(obj.pk, str(obj)) for obj in field.queryset]
+                    if field.empty_label is not None:
+                        options.insert(0, ("", field.empty_label))
+                    rendered[key] = options
+                field.choices = rendered[key]
+
     def get_form_kwargs(self, index):
         kwargs = super().get_form_kwargs(index)
         kwargs["tenant"] = getattr(self.instance, "tenant", None)
         kwargs["receipt"] = getattr(self.instance, "goods_receipt", None)
+        kwargs["order"] = getattr(self.instance, "purchase_order", None)
         return kwargs
 
     def clean(self):
