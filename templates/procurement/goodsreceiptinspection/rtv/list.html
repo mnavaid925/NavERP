@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Returns to Vendor{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Returns to Vendor</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Goods Receipt &amp; Inspection</span><span class="sep">›</span><span>Returns to vendor</span></div>
+      <p class="text-muted">The commercial paperwork for sending rejected goods back to a supplier — what is going back, why, what remedy was agreed and which credit note it landed against. An RTV posts nothing to stock and nothing to the ledger; dock-rejected quantity never entered either, and accepted stock that later fails inspection is removed by quarantine or a stock adjustment.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:rtv_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add return</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="shield-check"></i></div><div class="stat-value">{{ stats.authorized }}</div><div class="stat-label">Authorized</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="truck"></i></div><div class="stat-value">{{ stats.shipped }}</div><div class="stat-label">Shipped back</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.closed }}</div><div class="stat-label">Closed</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search RTV, supplier RMA, tracking, vendor or order…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reason" aria-label="Reason" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.reason == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="remedy" aria-label="Remedy" class="form-select">
+            <option value="">All remedies</option>
+            {% for val, label in remedy_choices %}
+              <option value="{{ val }}" {% if request.GET.remedy == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="po" aria-label="Purchase order" class="form-select">
+            <option value="">All purchase orders</option>
+            {% for p in purchase_orders %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if request.GET.po == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:rtv_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Vendor</th><th>Origin</th><th>Reason</th><th>Remedy</th><th>Supplier RMA</th><th class="text-right">Expected credit</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:rtv_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.created_at|date:"M d, Y" }}</div>
+              </td>
+              <td>
+                {% if obj.vendor %}{{ obj.vendor.name }}{% else %}—{% endif %}
+                {% if obj.purchase_order %}<div class="text-muted">{{ obj.purchase_order.number }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.goods_receipt %}
+                  <a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}">{{ obj.goods_receipt.number }}</a>
+                {% elif obj.discrepancy %}
+                  <a href="{% url 'procurement:discrepancy_detail' obj.discrepancy.pk %}">{{ obj.discrepancy.number }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                {% if obj.goods_receipt and obj.discrepancy %}
+                  <div class="text-muted"><a href="{% url 'procurement:discrepancy_detail' obj.discrepancy.pk %}">{{ obj.discrepancy.number }}</a></div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {% if obj.reason == 'damaged' %}badge-red{% elif obj.reason == 'defective' %}badge-red{% elif obj.reason == 'expired' %}badge-red{% elif obj.reason == 'wrong_item' %}badge-amber{% elif obj.reason == 'over_shipment' %}badge-amber{% elif obj.reason == 'not_to_spec' %}badge-amber{% elif obj.reason == 'other' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_reason_display }}</span>
+                {% if obj.reason_note %}<div class="text-muted">{{ obj.reason_note }}</div>{% endif %}
+              </td>
+              <td>
+                <span class="badge {% if obj.remedy == 'credit' %}badge-info{% elif obj.remedy == 'replacement' %}badge-slate{% elif obj.remedy == 'repair' %}badge-amber{% elif obj.remedy == 'none' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_remedy_display }}</span>
+              </td>
+              <td>
+                {{ obj.supplier_rma_number|default:"—" }}
+                {% comment %}
+                  Advisory only. A repeated supplier RMA is usually a duplicate raise, but suppliers do legitimately
+                  reuse a single authorisation across shipments, so this warns and never blocks — the same posture
+                  scm.WarrantyClaim takes on its own supplier_rma_number.
+                {% endcomment %}
+                {% if obj.has_duplicate_rma %}<div><span class="badge badge-amber">Duplicate RMA</span></div>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ obj.expected_credit_value|floatformat:2 }}
+                <div class="text-muted">{{ obj.line_count }} line{{ obj.line_count|pluralize }}</div>
+              </td>
+              <td>
+                <span class="badge {% if obj.status == 'draft' %}badge-muted{% elif obj.status == 'authorized' %}badge-info{% elif obj.status == 'shipped' %}badge-amber{% elif obj.status == 'closed' %}badge-green{% elif obj.status == 'cancelled' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:rtv_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'procurement:rtv_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% comment %}
+                      rtv_delete is @tenant_admin_required AND drafts-only, so both halves of the gate belong here —
+                      offering the bin to a non-admin only buys them a 403. Nested rather than one mixed expression
+                      because Django's `and` binds tighter than `or`. Same shape as the detail page's can_delete
+                      and the sibling ASN register.
+                    {% endcomment %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'procurement:rtv_delete' obj.pk %}" onsubmit="return confirm('Delete draft return {{ obj.number }} and its return lines?');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="undo-2"></i><h3>No returns to vendor yet</h3><p>Raise a return when rejected, damaged or wrongly shipped goods are going back to the supplier. Start from a receipt discrepancy to carry its receipt, line and quantity across.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
