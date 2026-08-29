@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Advanced Shipping Notice{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {% if obj.status == 'draft' %}badge-slate{% elif obj.status == 'submitted' %}badge-info{% elif obj.status == 'in_transit' %}badge-amber{% elif obj.status == 'delivered' %}badge-green{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.is_late %}<span class="badge badge-red">{{ obj.days_late }} days late</span>{% endif %}
+        <span class="badge {% if obj.discrepancy_verdict == 'ok' %}badge-green{% elif obj.discrepancy_verdict == 'short' %}badge-amber{% elif obj.discrepancy_verdict == 'over' %}badge-info{% elif obj.discrepancy_verdict == 'mixed' %}badge-red{% else %}badge-muted{% endif %}">Declared vs outstanding: {{ obj.discrepancy_verdict|default:"—" }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:asn_list' %}">ASNs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase order</a>{% endif %}
+      {% if can_edit %}<a href="{% url 'procurement:asn_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Purchase order</dt>
+        <dd>{% if order %}<a href="{% url 'scm:purchaseorder_detail' order.pk %}" class="fw-600">{{ order.number }}</a>{% if order.vendor %} · {{ order.vendor.name }}{% endif %} <span class="badge badge-slate">{{ order.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Supplier reference</dt><dd>{{ obj.supplier_reference|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Source</dt><dd><span class="badge badge-slate">{{ obj.get_source_display }}</span></dd></div>
+      <div class="detail-item"><dt>Ship date</dt><dd>{{ obj.ship_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Expected delivery</dt><dd>{{ obj.expected_delivery_date|date:"M d, Y"|default:"—" }}{% if obj.is_late %} <span class="badge badge-red">{{ obj.days_late }}d late</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Declared lines</dt><dd>{{ obj.line_count }} · {{ obj.total_quantity_shipped|floatformat:"-4" }} units</dd></div>
+      <div class="detail-item"><dt>Freight terms</dt><dd>{% if obj.freight_terms %}{{ obj.get_freight_terms_display }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Bill of lading</dt><dd>{{ obj.bill_of_lading_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Container</dt><dd>{{ obj.container_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Packages / pallets</dt><dd>{{ obj.package_count|default:"—" }} / {{ obj.pallet_count|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Gross weight</dt><dd>{% if obj.gross_weight_kg is not None %}{{ obj.gross_weight_kg|floatformat:2 }} kg{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Volume</dt><dd>{% if obj.volume_cbm is not None %}{{ obj.volume_cbm|floatformat:3 }} cbm{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tracking</h2><span class="text-muted">freight milestones are owned by SCM transportation — this panel reads them</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Carrier</dt><dd>{{ obj.carrier_display|default:"—" }}{% if obj.carrier %} <span class="badge badge-info">TMS profile</span>{% elif obj.carrier_name %} <span class="badge badge-slate">Supplier courier</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Tracking number</dt><dd>{{ obj.tracking_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Current status</dt><dd>{{ obj.tracking_status_text|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>ETA</dt><dd>{% if obj.eta_display %}{{ obj.eta_display }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last known location</dt><dd>{{ obj.location_display|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Linked shipment</dt>
+          <dd>{% if obj.shipment %}{{ obj.shipment.number }} · {{ obj.shipment.current_status_text|default:"—" }}{% else %}<span class="text-muted">Not linked to a transportation shipment</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if obj.status == 'delivered' %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Proof of delivery</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Delivered at</dt><dd>{{ obj.delivered_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Arrival condition</dt>
+            <dd>{% if obj.arrival_condition %}<span class="badge {% if obj.arrival_condition == 'good' %}badge-green{% elif obj.arrival_condition == 'damaged' %}badge-red{% elif obj.arrival_condition == 'partial' %}badge-amber{% elif obj.arrival_condition == 'refused' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_arrival_condition_display }}</span>{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>POD reference</dt><dd>{{ obj.pod_reference|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Signed for by</dt><dd>{{ obj.received_signature_name|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Confirmed by</dt><dd>{% if obj.confirmed_by %}{{ obj.confirmed_by.get_full_name|default:obj.confirmed_by.username }}{% else %}—{% endif %}</dd></div>
+        </dl>
+        <p class="text-muted">Goods receipt, inspection and stock posting happen in receiving — this record only states that the delivery arrived and in what condition.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'cancelled' %}
+    <div class="card"><div class="card-body">
+      <p><span class="badge badge-muted">Cancelled</span> {% if obj.cancelled_at %}on {{ obj.cancelled_at|date:"M d, Y H:i" }}{% endif %}</p>
+      {% if obj.cancellation_reason %}<p class="text-muted">{{ obj.cancellation_reason }}</p>{% endif %}
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Declared lines ({{ obj.line_count }})</h2><span class="text-muted">over-shipping is a warning, never a block</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Description</th><th>SKU / UOM</th><th class="text-right">Shipped</th><th class="text-right">Outstanding</th><th class="text-right">Variance</th><th>Package</th><th>Lot / serial</th><th>Expiry / origin</th><th class="table-actions">Shortfall</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600">{{ line.item_description|default:"—" }}
+                {% if line.notes %}<div class="text-muted">{{ line.notes }}</div>{% endif %}
+              </td>
+              <td>{{ line.sku_hint|default:"—" }}{% if line.uom_hint %} <span class="text-muted">/ {{ line.uom_hint }}</span>{% endif %}</td>
+              <td class="text-right fw-600">{{ line.quantity_shipped|floatformat:"-4" }}</td>
+              <td class="text-right">{{ line.outstanding_at_declare|floatformat:"-4" }}</td>
+              <td class="text-right">
+                <span class="badge {% if line.is_over %}badge-info{% elif line.is_short %}badge-amber{% else %}badge-green{% endif %}">{{ line.variance|floatformat:"-4" }}</span>
+              </td>
+              <td>{{ line.package_ref|default:"—" }}</td>
+              <td>{{ line.lot_number|default:"—" }}{% if line.serial_number %}<div class="text-muted">{{ line.serial_number }}</div>{% endif %}</td>
+              <td>{{ line.expiry_date|date:"M d, Y"|default:"—" }}{% if line.country_of_origin %}<div class="text-muted">{{ line.country_of_origin }}</div>{% endif %}</td>
+              <td>
+                {% if line.is_short %}
+                  <a class="btn btn-outline btn-sm" href="{% url 'procurement:backorder_create' %}?po_line={{ line.po_line_id }}&amp;asn={{ obj.pk }}&amp;quantity={{ line.shortfall }}"><i data-lucide="alert-triangle"></i> Record backorder ({{ line.shortfall|floatformat:"-4" }})</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-x"></i><p>No lines declared yet. Edit this notice to add the purchase-order lines the supplier says are on the way.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if can_confirm %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Confirm delivery</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:asn_confirm_delivery' obj.pk %}" onsubmit="return confirm('Confirm this delivery? The proof-of-delivery block is stamped once and cannot be re-stamped.');">
+          {% csrf_token %}
+          {% for e in confirm_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in confirm_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Confirm delivery</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% if can_edit %}
+          <a href="{% url 'procurement:asn_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_submit %}
+          <form method="post" action="{% url 'procurement:asn_submit' obj.pk %}" onsubmit="return confirm('Submit this shipping notice? It moves out of draft.');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+          </form>
+        {% endif %}
+        {% if can_mark_in_transit %}
+          <form method="post" action="{% url 'procurement:asn_mark_in_transit' obj.pk %}" onsubmit="return confirm('Mark this shipment in transit?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="navigation"></i> Mark in transit</button>
+          </form>
+        {% endif %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'procurement:asn_delete' obj.pk %}" onsubmit="return confirm('Delete draft ASN {{ obj.number }} and its declared lines?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'procurement:asn_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to ASNs</a>
+      </div>
+
+      {% if can_cancel %}
+        <hr>
+        <form method="post" action="{% url 'procurement:asn_cancel' obj.pk %}" onsubmit="return confirm('Cancel this shipping notice? A delivered notice can never be cancelled.');">
+          {% csrf_token %}
+          {% for e in cancel_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          {% for field in cancel_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Cancel notice</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Submitted</dt><dd>{{ obj.submitted_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+  </div></div>
+{% endblock %}
