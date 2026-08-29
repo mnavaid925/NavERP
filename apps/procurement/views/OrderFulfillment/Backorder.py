@@ -55,10 +55,13 @@ def backorder_list(request):
     """The shortfall register. ``?risk=`` narrows the QUERYSET (never the page); an unknown value is
     ignored so a hand-edited ``?risk=zzz`` still renders a 200 rather than an empty-looking lie."""
     base = (Backorder.objects.filter(tenant=request.tenant)
-            # Every FK a row (or a row's __str__, which walks po_line -> item_description) touches,
-            # including the chained hop to the order that the PO column and the search both use.
-            .select_related("po_line", "po_line__purchase_order",
-                            "delivery_schedule", "asn", "alert"))
+            # Exactly what a row (and a row's __str__, which walks po_line -> item_description)
+            # touches, plus the chained hop to the order the PO column and the search both use.
+            # `delivery_schedule`, `asn` and `alert` are deliberately NOT here: the register
+            # renders none of them, so each would only add a LEFT JOIN that drags an unused
+            # TextField into every row. backorder_detail keeps its wider select_related — that
+            # page does show all three.
+            .select_related("po_line", "po_line__purchase_order"))
 
     conditions = _risk_conditions(timezone.localdate())
     qs = base
