@@ -76,6 +76,10 @@ from apps.procurement.models import (
     PunchOutEndpoint,
     PurchaseOrderChange,
     PurchaseOrderChangeLine,
+    ReceiptDiscrepancy,
+    ReceiptTolerancePolicy,
+    ReturnToVendor,
+    ReturnToVendorLine,
     generate_po_from_requisition,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -188,6 +192,14 @@ class Command(BaseCommand):
             DeliverySchedule.objects.all().delete()
             AsnLine.objects.all().delete()
             AdvancedShipmentNotice.objects.all().delete()
+            # 6.12 receipt rows: a discrepancy may point at an RTV (SET_NULL) and an RTV may
+            # point back at the discrepancy that raised it, so the claims go first, then the
+            # return lines (cascade children, deleted explicitly so the register clears in one
+            # pass), then the returns themselves. Tolerance policies are standalone config.
+            ReceiptDiscrepancy.objects.all().delete()
+            ReturnToVendorLine.objects.all().delete()
+            ReturnToVendor.objects.all().delete()
+            ReceiptTolerancePolicy.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -203,6 +215,7 @@ class Command(BaseCommand):
             self._seed_catalog(tenant)
             self._seed_po_management(tenant)
             self._seed_order_fulfillment(tenant)
+            self._seed_goods_receipt(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -1335,3 +1348,154 @@ class Command(BaseCommand):
             f"  {tenant.name}: order fulfillment ready ({asn.number} in flight, "
             f"{delivered.number} delivered, {len(schedules)} instalments, "
             f"{made} backorders on {order.number})."))
+
+    def _seed_goods_receipt(self, tenant):
+        """6.12 Goods Receipt & Inspection - the advisory tolerance band, two receipt
+        discrepancies (one still open, one taken all the way to resolved through the real verbs)
+        and two returns to vendor (one authorized with lines, one still draft), all hung off a
+        receipt seed_scm already booked.
+
+        Nothing here posts stock and nothing posts to the ledger: ``_post_grn_receipt``
+        (apps/scm/views/_helpers.py) already moved the ACCEPTED quantity, a quantity rejected at
+        the dock never entered stock, and ``accounting.Bill`` has no vendor-credit kind yet - so
+        an RTV's ``credit_note_ref`` is a reference, not a posting (L29/L36).
+
+        Idempotent in three independent blocks rather than behind one big guard, so a workspace
+        that had no goods receipt on the first run still gets its discrepancies on the next:
+        policies go through get_or_create keyed on (tenant, name), and every numbered row is
+        reached through an existence check on a natural business key. A bare .create() on a
+        TenantNumbered model would mint RDS-00003 / RTV-00003 on the second run.
+        """
+        from apps.scm.models import GoodsReceiptNote as _GRN  # local: spine touch, peer-app model
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        filer = members[0] if members else None
+        today = NOW.date()
+
+        # (a) The advisory band. Two rules on purpose: a catch-all every line resolves to, and a
+        # stricter vendor-pinned one carrying a lower ``priority``, so the resolver's
+        # specificity-then-priority tie-break is visible on a fresh workspace.
+        catch_all, _created = ReceiptTolerancePolicy.objects.get_or_create(
+            tenant=tenant, name="Standard receiving tolerance",
+            defaults={
+                "over_receipt_pct": Decimal("5.00"),
+                "under_receipt_pct": Decimal("10.00"),
+                "early_receipt_days": 3,
+                "late_receipt_days": 2,
+                "action": "warn",
+                "priority": 10,
+                "notes": "Applies to every line no more specific rule covers.",
+            })
+        policies = [catch_all]
+
+        receipt = (_GRN.objects.filter(tenant=tenant)
+                   .select_related("purchase_order", "purchase_order__vendor")
+                   .order_by("-id").first())
+        if receipt is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no goods receipt on file - seeded the catch-all tolerance "
+                f"only (run seed_scm for discrepancies and returns)."))
+            return
+
+        order = receipt.purchase_order
+        vendor = order.vendor
+        strict, _created = ReceiptTolerancePolicy.objects.get_or_create(
+            tenant=tenant, name=f"{vendor.name} - tight band",
+            defaults={
+                "vendor": vendor,
+                "over_receipt_pct": Decimal("2.00"),
+                "under_receipt_pct": Decimal("5.00"),
+                "over_receipt_qty": Decimal("5.0000"),
+                "early_receipt_days": 1,
+                "late_receipt_days": 1,
+                "action": "block_flag",
+                "priority": 5,
+                "notes": ("Repeated short shipments - flag every exception for review. "
+                          "block_flag FLAGS the line; it never blocks scm:goodsreceipt_receive."),
+            })
+        policies.append(strict)
+
+        lines = list(receipt.lines.select_related("po_line").order_by("id"))
+        first_line = lines[0] if lines else None
+
+        # (b) Two claims against that receipt. Keyed on (tenant, goods_receipt, kind) so a re-run
+        # finds them rather than minting a third number.
+        discrepancy_specs = [
+            dict(kind="damaged", severity="major", quantity=Decimal("3.0000"),
+                 remedy="rtv", lot="LOT-2291",
+                 description=("Three units arrived with crushed corners - the outer carton was "
+                              "wet on the pallet base. Photographed on the dock before "
+                              "unwrapping.")),
+            dict(kind="short_shipment", severity="minor", quantity=Decimal("4.0000"),
+                 remedy="replacement", lot="",
+                 description=("Delivery note declared the full quantity but the pallet was four "
+                              "short on the count. Supplier acknowledged by phone.")),
+        ]
+        made = []
+        for spec in discrepancy_specs:
+            existing = ReceiptDiscrepancy.objects.filter(
+                tenant=tenant, goods_receipt=receipt, kind=spec["kind"]).first()
+            if existing is not None:
+                made.append(existing)
+                continue
+            row = ReceiptDiscrepancy.objects.create(
+                tenant=tenant, goods_receipt=receipt, goods_receipt_line=first_line,
+                kind=spec["kind"], severity=spec["severity"],
+                quantity_affected=spec["quantity"], remedy=spec["remedy"],
+                lot_number=spec["lot"], description=spec["description"], created_by=filer)
+            write_audit_log(None, row, "create")
+            made.append(row)
+
+        # Drive the SECOND claim to resolved through the real verbs rather than writing the
+        # status column: notify_vendor and resolve stamp the dates, the actor and the notes
+        # together, which is exactly what the detail page's timeline reads back.
+        if len(made) > 1 and made[1].status == "open":
+            made[1].notify_vendor(filer, reference="CLM-40218",
+                                  notified_on=today - timedelta(days=6))
+            made[1].resolve(filer, "replacement",
+                            "Supplier shipped the balance on the next consignment; count agreed.")
+
+        # (c) Two returns. Keyed on (tenant, vendor, supplier_rma_number) - no number is guessed.
+        rtv_specs = [
+            dict(rma="RMA-77341", reason="damaged", remedy="credit", authorize=True,
+                 note="Crushed units off the damaged-goods claim - collected by the supplier.",
+                 source=made[0] if made else None),
+            dict(rma="", reason="not_to_spec", remedy="replacement", authorize=False,
+                 note="Finish does not match the approved sample - awaiting the buyer sign-off.",
+                 source=None),
+        ]
+        returns = []
+        for spec in rtv_specs:
+            existing = ReturnToVendor.objects.filter(
+                tenant=tenant, vendor=vendor, supplier_rma_number=spec["rma"]).first()
+            if existing is not None:
+                returns.append(existing)
+                continue
+            row = ReturnToVendor.objects.create(
+                tenant=tenant, vendor=vendor, purchase_order=order, goods_receipt=receipt,
+                discrepancy=spec["source"], reason=spec["reason"], remedy=spec["remedy"],
+                supplier_rma_number=spec["rma"],
+                expected_return_date=today + timedelta(days=10),
+                created_by=filer, notes=spec["note"])
+            for index, line in enumerate(lines[:2]):
+                ReturnToVendorLine.objects.create(
+                    return_to_vendor=row, goods_receipt_line=line, po_line=line.po_line,
+                    quantity_returned=Decimal("2.0000") if index == 0 else Decimal("1.0000"),
+                    lot_number="LOT-2291" if index == 0 else "",
+                    condition_note=("Crushed on arrival" if spec["reason"] == "damaged"
+                                    else "Finish off-sample"))
+            if spec["authorize"]:
+                row.authorize(filer)
+            write_audit_log(None, row, "create")
+            returns.append(row)
+
+        # Point the damaged-goods claim at the return it produced, so the detail page's
+        # escalation panel has a live link instead of an empty slot.
+        if made and returns and made[0].return_to_vendor_id is None:
+            made[0].return_to_vendor = returns[0]
+            made[0].save(update_fields=["return_to_vendor", "updated_at"])
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: goods receipt & inspection ready ({len(policies)} tolerance "
+            f"policies, {len(made)} discrepancies, {len(returns)} returns on "
+            f"{receipt.number})."))
