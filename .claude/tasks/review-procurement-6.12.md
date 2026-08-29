@@ -34,7 +34,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Found by:** code-reviewer
 - **Problem:** `ReturnToVendorForm.goods_receipt` excludes cancelled receipts with no exemption for the instance's stored value, so editing a draft RTV whose receipt was cancelled after the fact renders a select with no matching option and — because the field is `null=True, blank=True` — silently saves `goods_receipt = NULL`, losing the origin link with no error.
 - **Fix:** Mirror the exemption `ReturnToVendorLineForm.__init__` already documents at lines 169-184: build `offerable = ~Q(status="cancelled")`, then `if self.instance.pk and self.instance.goods_receipt_id: offerable |= Q(pk=self.instance.goods_receipt_id)`, and apply `GoodsReceiptNote.objects.filter(tenant=tenant).filter(offerable).select_related("purchase_order").order_by("-receipt_date", "-id")`. `Q` is already imported at line 21.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): exempt an RTV stored goods receipt from the cancelled-receipt exclusion so editing a draft cannot silently NULL the origin link
 
 ### I2 — `apps/procurement/forms/GoodsReceiptInspection/ReturnsToVendor.py:189`
 
@@ -57,7 +57,7 @@ def __init__(self, *args, **kwargs):
 ```
 
 Assigning `.choices` sets `_choices` and short-circuits the iterator, while `.queryset` stays in place so `to_python`/`clean` keep enforcing the tenancy narrowing.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): narrow RTV line po_line to the header order and render each formset select once (plus a follow-up commit moving the sharing into `_construct_form` so `BaseFormSet.forms` stays lazy)
 
 ### I3 — `apps/procurement/forms/GoodsReceiptInspection/ReturnsToVendor.py:237`
 
@@ -87,7 +87,7 @@ if order is not None:
     po_lines = po_lines.filter(purchase_order=order)
 self.fields["po_line"].queryset = po_lines.select_related("purchase_order").order_by("-purchase_order_id", "id")
 ```
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(procurement): tie an RTV line ordered-line to the header order AND supplier
 
 ### I4 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:205`
 
@@ -108,7 +108,7 @@ return found
 ```
 
 Keep the `_norm`-based re-keying so the whitespace-collapsing semantics are unchanged for the rows that do come back.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): match receiving-board SKU hints in SQL instead of scanning the whole item master
 
 ### I5 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:286`
 
@@ -126,7 +126,7 @@ booked_7d = (GoodsReceiptNote.objects
 ```
 
 and build the row marker from the PAGE only — move `receipt_by_ref = _receipt_by_delivery_ref(tenant, base.filter(pk__in=[a.pk for a in page_obj.object_list]))` down to just before the `_console_rows(...)` call at line 326 (earliest-wins keying is preserved because the map is still built in `id` order).
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): count the console booked tile in SQL and build the row marker from the page
 
 ### I6 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:374`
 
@@ -149,21 +149,21 @@ def _received_by_line_bulk(order_ids):
 ```
 
 Call it once at the top of `_console_rows` (`received_maps = _received_by_line_bulk({a.purchase_order_id for a in shipments})`) and replace lines 372-375 with `received_map = received_maps.get(order.pk, {})`. Worth a `django_assert_max_num_queries` test on `procurement:receiving_console` asserting the count does not grow between a 1-ASN and a 20-ASN page.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): fold the console received-quantity lookup into one grouped query (keyed on the PO-line pk, which is globally unique, rather than the nested per-order dict the finding sketched)
 
 ### I7 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:504`
 
 - **Found by:** code-reviewer
 - **Problem:** The console's book verb keys idempotency solely on `asn.supplier_reference`, which is `blank=True` on the ASN model — for a shipment with no supplier reference the existing-receipt check at 505-513 is skipped entirely, `delivery_note_ref` is stored as `""`, `_receipt_by_delivery_ref` (which drops blank keys at line 221/232) can never mark the row Booked, so every re-click mints another draft GoodsReceiptNote and burns another GRN number against the same PO.
 - **Fix:** At line 504 use `reference = (asn.supplier_reference or "").strip() or asn.number` so the lookup, the `delivery_note_ref` written at line 527 and the Booked marker all share one key; and in `_receipt_by_delivery_ref` (line 221) build `refs` from both `supplier_reference` and `number` (`refs = [r for r in asn_qs.values_list("supplier_reference", flat=True) if r] + list(asn_qs.values_list("number", flat=True))`), with line 448 falling back to `receipt_by_ref.get(_norm(asn.supplier_reference)) or receipt_by_ref.get(_norm(asn.number))`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): give a blank-reference ASN a stable delivery-note key so booking stays idempotent
 
 ### I8 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:504`
 
 - **Found by:** explorer
 - **Problem:** `receiving_console_book`'s idempotency check is skipped entirely when `asn.supplier_reference` is blank (`if reference:`), and `_receipt_by_delivery_ref` excludes blank refs so the row's `is_booked` marker is permanently False — an ASN with no supplier reference (the field is `blank=True` and optional on the 6.11 ASN form) still shows "Not booked yet" after booking and each further click mints another draft GoodsReceiptNote, burning a GRN number each time.
 - **Fix:** Give a blank-reference ASN a stable key instead of no key: set `reference = (asn.supplier_reference or '').strip() or asn.number` at line 504 so the existing-receipt lookup and the `delivery_note_ref=reference[:64]` write both always run; correspondingly in `_receipt_by_delivery_ref` (line 221) build `refs` from `supplier_reference or number` per ASN and key `receipt_by_ref` the same way, and at line 448 look up `_norm(asn.supplier_reference or asn.number)`. Both the board marker and the verb then agree for every ASN.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same defect as I7, resolved by the same commit: fix(procurement): give a blank-reference ASN a stable delivery-note key so booking stays idempotent
 
 ### I9 — `templates/procurement/goodsreceiptinspection/receiving_console.html:284`
 
@@ -171,7 +171,7 @@ Call it once at the top of `_console_rows` (`received_maps = _received_by_line_b
 - **Lesson:** L32
 - **Problem:** The "Mint lots & serials" form and its submit button are rendered for every logged-in user, but `receiving_console_mint_lots` is `@tenant_admin_required` (ReceiptBoards.py:568) which raises `PermissionDenied` — a plain member is offered a button that only ever returns 403.
 - **Fix:** Wrap the whole mint block (lines 283-293) in `{% if request.user.is_superuser or request.user.is_tenant_admin %}...{% endif %}`, exactly as the tolerance-policy list (list.html:170) and discrepancy list (list.html:160) gate their admin-only verbs in this same changeset.
-- **Status:** [ ] open
+- **Status:** [x] fixed — one defect reported by four lanes; fixed via the can_mint context flag (I12 shape): feat(procurement): pass can_mint to the receiving console + a11y(procurement): gate the console mint-lots form on can_mint
 
 ### I10 — `templates/procurement/goodsreceiptinspection/receiving_console.html:284`
 
@@ -192,21 +192,21 @@ Call it once at the top of `_console_rows` (`received_maps = _received_by_line_b
 ```
 
 (Equivalently, add `"can_mint_lots": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))` to the `receiving_console` context in `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:322` and gate on that — the tolerance-policy detail page already uses that `can_*` style.)
-- **Status:** [ ] open
+- **Status:** [x] fixed — one defect reported by four lanes; fixed via the can_mint context flag (I12 shape): feat(procurement): pass can_mint to the receiving console + a11y(procurement): gate the console mint-lots form on can_mint
 
 ### I11 — `templates/procurement/goodsreceiptinspection/receiving_console.html:284`
 
 - **Found by:** explorer
 - **Problem:** The "Mint lots & serials" POST form is rendered for every console row with no permission guard, but `receiving_console_mint_lots` is `@tenant_admin_required` — a plain workspace member sees the button and gets a 403 PermissionDenied page when they click it.
 - **Fix:** Wrap the whole `<div class="card-body" style="border-top:...">` block (lines 283-293) in `{% if request.user.is_superuser or request.user.is_tenant_admin %} ... {% endif %}`, matching the guard already used on `tolerancepolicy/list.html:39` and `discrepancy/list.html:160`. No view change is needed — `receiving_console` already renders for members and the decorator re-checks the POST.
-- **Status:** [ ] open
+- **Status:** [x] fixed — one defect reported by four lanes; fixed via the can_mint context flag (I12 shape): feat(procurement): pass can_mint to the receiving console + a11y(procurement): gate the console mint-lots form on can_mint
 
 ### I12 — `templates/procurement/goodsreceiptinspection/receiving_console.html:284`
 
 - **Found by:** qa-smoke-tester
 - **Problem:** The "Mint lots & serials" POST form/button is rendered unconditionally for every console row, but `receiving_console_mint_lots` is `@tenant_admin_required` — a non-admin workspace member (verified with `ops_acme`: 2 mint-lots forms rendered, POST returns 403 PermissionDenied) is offered a button that dead-ends on a hard 403 error page.
 - **Fix:** Mirror the gate the rest of 6.12 already uses. In `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py::receiving_console` add `"can_mint": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),` to the render context at the dict starting on line 322 (next to `"stats": {...}`), extend the template's `Context consumed:` contract comment on line 20-23 with `can_mint`, and wrap lines 283-293 of `receiving_console.html` (the whole `<div class="card-body" style="border-top:...">` holding the mint-lots form) in `{% if can_mint %} ... {% endif %}`. Do NOT gate the book form on it — `receiving_console_book` is `@login_required` only and must stay member-visible.
-- **Status:** [ ] open
+- **Status:** [x] fixed — one defect reported by four lanes; fixed via the can_mint context flag (I12 shape): feat(procurement): pass can_mint to the receiving console + a11y(procurement): gate the console mint-lots form on can_mint
 
 ## Minor
 
@@ -228,49 +228,49 @@ if receipt_line is not None:
 ```
 
 (`vendor_id = getattr(self.instance, "vendor_id", None)` is the same local the `po_line` fix introduces.) Mirror it on the widget: in `ReturnToVendorLineForm.__init__`'s `elif tenant is not None:` branch (line 169), also `.filter(goods_receipt__purchase_order__vendor_id=vendor_id)` when the header names a vendor, keeping the existing `Q(pk=current_id)` escape so a stored value never becomes an unfixable "invalid choice".
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(procurement): pin an RTV receipt-line to the header supplier when no receipt is named
 
 ### M2 — `apps/procurement/models/GoodsReceiptInspection/ReceiptTolerances.py:68`
 
 - **Found by:** explorer
 - **Problem:** `ReceiptTolerancePolicy.VERDICT_CHOICES` is declared but never read by any view, form or template — the six verdict labels are instead hard-coded as `{% if %}` chains in five separate templates (tolerancepolicy/detail.html:125, discrepancy/detail.html:66, receiving_console.html:134 and :230, tolerance_exceptions.html:133), so adding a seventh verdict means editing five files and the constant drifts unnoticed.
 - **Fix:** Either pass `verdict_choices=ReceiptTolerancePolicy.VERDICT_CHOICES` into the five contexts and render the label from a lookup, or delete `VERDICT_CHOICES` (lines 66-75) and leave `VERDICT_CSS` as the single verdict vocabulary, updating the tolerancepolicy/detail.html:23 comment that references it.
-- **Status:** [ ] open
+- **Status:** [x] fixed — took the first option (render the label from a lookup), not the delete: the view now attaches `verdict_label`/`tolerance_label` off VERDICT_CHOICES and all FIVE hand-copied chains are gone. 3 view commits + 4 template commits. This also subsumes M13.
 
 ### M3 — `apps/procurement/models/GoodsReceiptInspection/ReceiptTolerances.py:100`
 
 - **Found by:** code-reviewer
 - **Problem:** `vendor` uses `on_delete=models.SET_NULL`, and `resolve_receipt_tolerance` treats a NULL `vendor_id` as vendor-agnostic (line 315), so deleting a supplier Party silently converts that supplier's tight band into a workspace-wide catch-all rather than retiring it.
 - **Fix:** Use `on_delete=models.CASCADE` for `vendor` (matching `item`/`category` on this same model) so a deleted supplier takes its pinned rule with it, and add the matching `AlterField` to migration 0017. Note this is a clone of the same shape in inventory 5.15 — `grep -rn "vendor = models.ForeignKey" -A 2 apps/*/models/ | grep -B1 SET_NULL` finds the sibling in `apps/inventory/models/QualityControl/QcRoutingRules.py:41`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): cascade a receipt tolerance policy with its pinned supplier + migrate(procurement): 0018 (claimed 0018; 0017 is applied and was NOT edited, per M4 guidance)
 
 ### M4 — `apps/procurement/models/GoodsReceiptInspection/ReturnsToVendor.py:194`
 
 - **Found by:** performance-reviewer
 - **Problem:** The register's duplicate-RMA badge is an `Exists` correlated subquery filtering on `(tenant_id, supplier_rma_number)` (apps/procurement/views/GoodsReceiptInspection/ReturnsToVendor.py:95-100), a combination this changeset introduced but did not index, so the database re-scans the RTV table once per row of every list page.
 - **Fix:** Add `models.Index(fields=["tenant", "supplier_rma_number"], name="prc_rtv_tnt_rma_idx")` to `ReturnToVendor.Meta.indexes` alongside the existing three, and generate the accompanying `AddIndex` migration (the 6.12 migration is 0017; add 0018 rather than editing the shipped one).
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): index (tenant, supplier_rma_number) on ReturnToVendor + migrate(procurement): 0019 add prc_rtv_tnt_rma_idx
 
 ### M5 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:227`
 
 - **Found by:** explorer
 - **Problem:** `_receipt_by_delivery_ref` matches with a case-SENSITIVE `delivery_note_ref__in=refs` while `receiving_console_book` matches with `delivery_note_ref__iexact` (line 507), so a receipt whose delivery-note reference differs only in case renders as "Not booked yet" on the console even though the book verb will refuse and redirect to it.
 - **Fix:** Make the map use the same case-insensitive rule as the verb: build `cond = Q(); for ref in refs: cond |= Q(delivery_note_ref__iexact=ref)` and filter `GoodsReceiptNote.objects.filter(tenant=tenant).filter(cond)` instead of `delivery_note_ref__in=refs` (`Q` is already imported in this module).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): give the Booked marker and the book verb one definition of same delivery note (`_ref_key` + `Lower(Trim())` in SQL, rather than the 60-term iexact OR-chain the finding sketched — same case-insensitivity, one sargable IN test)
 
 ### M6 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:306`
 
 - **Found by:** explorer
 - **Problem:** `receiving_console`'s `?status=` is applied straight to the queryset without being validated against `CONSOLE_STATUSES`, so `?status=zzz` (or `?status=draft`, which the board can never show) silently returns an empty board while the `<select>` still reads "All open statuses" — every other closed-vocabulary param in this lane (`?arrival=`, `?bucket=`, `?action=`) is sanitized and echoed back.
 - **Fix:** Replace lines 306-308 with `status = request.GET.get("status", "").strip()` / `if status in CONSOLE_STATUSES: qs = qs.filter(status=status)` / `else: status = ""`, and pass `"status": status` in the render context; change the template's echo at receiving_console.html:66 from `request.GET.status == val` to `status == val` so the widget reflects the sanitized value.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): sanitize the console ?status= against CONSOLE_STATUSES + echo the sanitized value in the select
 
 ### M7 — `apps/procurement/views/GoodsReceiptInspection/ReceiptBoards.py:751`
 
 - **Found by:** performance-reviewer
 - **Problem:** `_tolerance_rules(tenant)` is fetched twice per `tolerance_exceptions` request — once here inside `_uncovered_line_count` and again at line 776 inside `_exception_rows` — issuing the same `ReceiptTolerancePolicy` query with three joins twice for no benefit.
 - **Fix:** Hoist the fetch into `tolerance_exceptions` (before the `stats` block) as `rules = _tolerance_rules(tenant)`, add a `rules` parameter to `_uncovered_line_count(tenant, base, rules)` and `_exception_rows(tenant, lines, rules)`, and pass it in at lines 715 and 735.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): fetch the tolerance rules once per exceptions render
 
 ### M8 — `apps/procurement/views/GoodsReceiptInspection/ReceiptDiscrepancies.py:57`
 
@@ -278,7 +278,7 @@ if receipt_line is not None:
 - **Lesson:** L18
 - **Problem:** `_ROW_RELATIONS` joins `quarantine_order` but not `quarantine_order__item`, and `inventory.QuarantineOrder.__str__` reads `self.item.sku` (apps/inventory/models/QualityControl/QuarantineOrders.py:296-298); the discrepancy detail template renders `{{ obj.quarantine_order }}` at line 100, so every escalated finding pays an extra query through the related object's `__str__`.
 - **Fix:** Add `"quarantine_order__item"` to the `_ROW_RELATIONS` tuple (after `"quarantine_order"`). The list view shares the tuple and does not render that column, so this only widens the join by one already-cheap FK.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(procurement): join quarantine_order__item on the discrepancy row relations
 
 ### M9 — `templates/procurement/goodsreceiptinspection/discrepancy/list.html:125`
 
@@ -286,44 +286,75 @@ if receipt_line is not None:
 - **Lesson:** L33
 - **Problem:** The kind/severity/remedy/status badge colours are hand-written `{% if %}` chains that duplicate `ReceiptDiscrepancy.KIND_CSS`/`SEVERITY_CSS`/`REMEDY_CSS`/`STATUS_CSS`, while the tolerance-policy templates in this same sub-module deliberately read `obj.action_css`/`obj.scope_css` from the model — two contradictory conventions in one sub-module, and the duplicated chain is exactly the drift the 6.11 backorder pages already suffered.
 - **Fix:** Replace the inline chains with the model properties, which already fall back to `badge-slate` on an unknown value: line 125 → `<span class="badge {{ obj.kind_css }}">{{ obj.get_kind_display }}</span>`, line 126 → `{{ obj.severity_css }}`, line 130 → `{{ obj.remedy_css }}`, line 145 → `{{ obj.status_css }}`. Do the same for the four chains on `discrepancy/detail.html:19-21,46,48,56` and the three on `rtv/list.html:98,102,117` / `rtv/detail.html:7,8,42,45` using `status_css`/`reason_css`/`remedy_css`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(procurement): read the badges from the model *_css properties across all four templates (4 commits). Note: the RTV remedy chain had ALREADY drifted from REMEDY_CSS (replacement slate vs info, repair amber vs slate); the model map wins.
 
 ### M10 — `templates/procurement/goodsreceiptinspection/receipt_audit.html:35`
 
 - **Found by:** code-reviewer
 - **Problem:** The first stat tile is labelled "Entries in view" but `stats.total` is computed over the UNFILTERED trail (ReceiptBoards.py:854, whose comment says so explicitly), so the number does not change when `?grn=`/`?action=`/`?q=` narrow the table below it.
 - **Fix:** Rename the label to "Receiving entries" (or "All entries") so it matches the workspace-wide aggregate the view deliberately computes.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): label the audit total tile Receiving entries, not Entries in view
 
 ### M11 — `templates/procurement/goodsreceiptinspection/receipt_audit.html:87`
 
 - **Found by:** explorer
 - **Problem:** The column headers do not describe the cells beneath them: "Record" (line 86) renders the content-type label and "What changed" (line 87) renders `entry.target` — the document number — while the `AuditLog.changes` payload is never surfaced on this board at all.
 - **Fix:** Rename the headers to match the data: line 86 `<th>Type</th>` and line 87 `<th>Record</th>`, or keep the labels and move `{{ entry.target }}` into the "Record" cell (line 110 -> line 99-109's cell) and render a short summary of `entry.changes` under "What changed".
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): name the audit columns Type and Record for what they actually render (option (a)). qa-smoke-tester read this as the 6.1 house convention, but that precedent is a 4-column table with no separate type column; the 5-column 6.12 table genuinely mislabels its cells.
 
 ### M12 — `templates/procurement/goodsreceiptinspection/receiving_console.html:52`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The arrival quick-tab links only carry `q` forward, so clicking "Overdue"/"Today"/"Awaiting" silently discards an active status, vendor or purchase-order filter and widens the board without the user asking.
 - **Fix:** Append the other three params to both tab hrefs, the way the sibling exceptions board already does (`tolerance_exceptions.html:51` carries `vendor`). On line 52 use `href="?arrival={{ val }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.vendor %}&vendor={{ request.GET.vendor|urlencode }}{% endif %}{% if request.GET.po %}&po={{ request.GET.po|urlencode }}{% endif %}"`, and add the same three `{% if request.GET.* %}` clauses to the "All arrivals" href on line 49 (switching its leading `?` handling so the first param still emits `?`).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): carry status, vendor and purchase-order through the console arrival tabs
 
 ### M13 — `templates/procurement/goodsreceiptinspection/receiving_console.html:139`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The verdict label chain ends on a bare `{% else %}No policy{% endif %}`, so any verdict token that is not one of the five spelled-out keys is mislabelled "No policy" instead of showing what it actually was — the same chain on the policy detail page already handles this correctly.
 - **Fix:** Close the chain the way `tolerancepolicy/detail.html:130-131` does: `{% elif row.tolerance_verdict == 'no_rule' %}No policy{% else %}{{ row.tolerance_verdict }}{% endif %}`. Apply the identical change to the per-line chain at `receiving_console.html:235` (`line.verdict`) and to `tolerance_exceptions.html:138` (`row.verdict`).
-- **Status:** [ ] open
+- **Status:** [x] fixed — subsumed by the M2 fix: the chains no longer exist, so an unrecognised verdict renders its own token (via `_verdict_label`) instead of being mislabelled "No policy" — in all three places, not just the one M13 cites.
 
 ### M14 — `templates/procurement/goodsreceiptinspection/rtv/detail.html:162`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The Delete button in the Actions sidebar is rendered as `btn btn-outline`, so the one destructive action on the page looks identical to the neutral Edit/Back buttons beside it — the two sibling detail pages in this same sub-module use the danger variant.
 - **Fix:** Change line 162 to `<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>`, matching `discrepancy/detail.html:186` and `tolerancepolicy/detail.html:165`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(procurement): give the RTV detail Delete button the danger variant
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
+
+### Added by code-fixer while burning this file down
+
+- **Clone family — the 403 button (I9-I12).** Fixed **this sub-module's instance only** (`can_mint`
+  on the receiving console). The security-reviewer's lane already lists nine sibling templates with
+  the identical shape (`catalogmanagement/catalogitem/detail.html:49,52,62`,
+  `catalogmanagement/tier/detail.html:13,20`, `catalogmanagement/uploadbatch/detail.html:16,21,26`,
+  `contractsmanagement/clauses/{detail.html:11,list.html:54}`,
+  `contractsmanagement/contracts/renewals.html:10`, `sourcingtendering/events/detail.html:17,18,20`,
+  `vendormanagement/invoice-submission/detail.html:57`,
+  `vendormanagement/suspension/detail.html:83,84,88`). **Recommend one app-wide sweep commit** rather
+  than forking 6.12 further ahead of the rest (L18).
+- **Clone family — `vendor = SET_NULL` (M3).** Fixed procurement's instance. The sibling
+  `apps/inventory/models/QualityControl/QcRoutingRules.py:41` has the same shape and the same
+  "NULL vendor means any vendor" resolver semantics, so deleting a supplier there silently promotes
+  a pinned QC rule to a workspace-wide one. **Recommend the same `AlterField` for inventory 5.15**;
+  not done here because it is another module's migration lane.
+- **M2 was fixed the elegant way, and it subsumed M13.** Rather than deleting `VERDICT_CHOICES` or
+  passing it into five contexts, the three views now resolve the LABEL (`verdict_label` /
+  `tolerance_label`) and hand it down, so all five hand-copied `{% if %}` chains are gone and an
+  unrecognised verdict renders its own token instead of being mislabelled "No policy".
+- **One regression was introduced and fixed inside this run.** The I2 choice-sharing was first
+  written in `BaseReturnToVendorLineFormSet.__init__`, which forces `BaseFormSet.forms` (a
+  `cached_property`) to build eagerly and would have frozen every row's dropdown against the
+  PRE-edit header — breaking the ordering `rtv_edit` documents. Moved into `_construct_form` and
+  committed separately; verified by asserting that a submit which CHANGES `goods_receipt` still
+  accepts the new receipt's lines.
+- **Verification baseline for this run:** `manage.py check` clean, `makemigrations --check`
+  "No changes detected", and `apps/procurement/tests` green at **1081 passed** before and after.
+  Two migrations were claimed and committed: **0018** (M3 `AlterField`) and **0019** (M4 `AddIndex`).
+  Migration 0017 was NOT edited.
 
 - **code-reviewer:** Verified clean, no finding needed: every new model carries a tenant FK (ReturnToVendorLine is correctly tenant-less and reached only through its RTV header); every queryset and object lookup in the 27 new views is `tenant=request.tenant`-scoped; every tenant-scoped FK dropdown is narrowed in `__init__` AND re-checked on POST (`_reject_foreign` / `BaseReturnToVendorLineFormSet.clean`); migration 0017 matches the models field-for-field including both `unique_together` and all seven indexes; all four package `__init__.py` re-export blocks are complete (27 views, 12 forms, 7 model symbols); every `{% url %}` name in the six new templates resolves (I checked all 37 against `apps/*/urls/`); every template context key exists in its view's context dict; all list filters are applied before pagination and every filter widget's choices/querysets are passed; the three registers have the full CRUD set with POST-only, status-guarded, csrf'd delete in both the actions column and the detail sidebar; template paths follow `<app>/<submodule>/<entity>/<page>.html` with the three computed boards correctly at the sub-module root.
 
