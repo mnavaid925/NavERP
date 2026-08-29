@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}PO Line Item Tracking{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PO Line Item Tracking</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'scm:purchaseorder_list' %}">Purchase orders</a><span class="sep">›</span><span>Line tracking</span></div>
+      <p class="text-muted">Delivery status of every line on every order — received quantities are derived from goods receipts, never stored, so this board is always current.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:poc_list' %}" class="btn btn-outline"><i data-lucide="file-diff"></i> Change orders</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search item, SKU or order number…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Order status" class="form-select">
+            <option value="">All order statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:po_line_tracking' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Order</th><th>Vendor</th><th>Item</th><th>SKU</th><th>Ordered</th><th>Received</th><th>Outstanding</th><th>Progress</th><th>Order status</th></tr></thead>
+        <tbody>
+          {% for line in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:purchaseorder_detail' line.purchase_order.pk %}" class="fw-600">{{ line.purchase_order.number }}</a></td>
+              <td>{{ line.purchase_order.vendor.name }}</td>
+              <td>{{ line.item_description }}</td>
+              <td>{{ line.sku_hint|default:"—" }}</td>
+              <td>{{ line.quantity }}</td>
+              <td>{{ line.received_qty }}</td>
+              <td>{{ line.outstanding_qty }}</td>
+              <td style="min-width:120px;">
+                <div class="progress" style="background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden;">
+                  <div class="progress-bar {% if line.outstanding_qty <= 0 %}bg-green{% elif line.received_qty > 0 %}bg-amber{% endif %}"
+                       style="background:{% if line.outstanding_qty <= 0 %}#16a34a{% elif line.received_qty > 0 %}#d97706{% else %}#94a3b8{% endif %}; height:8px; width:{% widthratio line.received_qty line.quantity 100 %}%;"></div>
+                </div>
+                <span class="text-muted">{% widthratio line.received_qty line.quantity 100 %}%</span>
+              </td>
+              <td><span class="badge badge-slate">{{ line.purchase_order.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="package-search"></i><h3>No purchase order lines</h3><p>Draft, generate or receive orders and their lines appear here with live delivery status.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
