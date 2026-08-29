@@ -168,10 +168,13 @@ def delivery_confirmation(request):
         confirmed_7d=Count("id", filter=bucket_q["confirmed"]),
     )
 
+    # ``confirmed_by`` on top of the shared list, not inside it: the Confirmed tab renders
+    # ``row.confirmed_by.get_full_name`` for every row (one User fetch each without this), while
+    # inbound_tracking never touches the column and would only gain a pointless LEFT JOIN.
     qs = (AdvancedShipmentNotice.objects
           .filter(tenant=request.tenant)
           .filter(bucket_q[bucket])
-          .select_related(*_BOARD_SELECT_RELATED)
+          .select_related(*_BOARD_SELECT_RELATED, "confirmed_by")
           .order_by("expected_delivery_date", "-id"))
 
     return crud_list(
