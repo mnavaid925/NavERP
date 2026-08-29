@@ -34,6 +34,8 @@ from .models import (
     CatalogPriceTier,
     CatalogUploadBatch,
     PunchOutEndpoint,
+    PurchaseOrderChange,
+    PurchaseOrderChangeLine,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -456,6 +458,29 @@ class CatalogUploadBatchAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "status", "original_filename", "validated_by", "validated_at",
                        "rows_parsed", "rows_accepted", "rows_rejected", "error_log",
                        "created_at", "updated_at")
+
+
+class PurchaseOrderChangeLineInline(admin.TabularInline):
+    model = PurchaseOrderChangeLine
+    extra = 0
+    fields = ("action", "target_line", "item_description", "sku_hint", "uom_hint",
+              "quantity", "unit_price", "tax_rate_pct")
+    raw_id_fields = ("target_line",)
+
+
+@admin.register(PurchaseOrderChange)
+class PurchaseOrderChangeAdmin(admin.ModelAdmin):
+    list_display = ("number", "purchase_order", "change_type", "status",
+                    "requested_by", "decided_by", "decided_at")
+    list_filter = ("tenant", "status", "change_type")
+    search_fields = ("number", "reason", "purchase_order__number")
+    raw_id_fields = ("purchase_order",)
+    inlines = (PurchaseOrderChangeLineInline,)
+    # Filing happens through the procurement views (which pin the order and enforce the
+    # one-open-change rule); approve/reject/apply move state and stamps only there too —
+    # the admin looks, it never decides.
+    readonly_fields = ("number", "status", "requested_by", "decided_by", "decided_at",
+                       "decision_note", "applied_at", "created_at", "updated_at")
 
 
 class AsnLineInline(admin.TabularInline):
