@@ -56,6 +56,10 @@ _ROW_RELATIONS = (
     "goods_receipt_line__po_line",
     "nonconformance",
     "quarantine_order",
+    # ``QuarantineOrder.__str__`` reads ``self.item.sku``, and the detail page renders the
+    # quarantine order as text — without this the escalation row pays an extra query inside the
+    # related object's own __str__.
+    "quarantine_order__item",
     "return_to_vendor",
 )
 
