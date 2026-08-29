@@ -1564,6 +1564,33 @@ LIVE_LINKS = {
         "Backorder Management":           "procurement:backorder_list",
         "Split Delivery Management":      "procurement:deliveryschedule_list",
     },
+    # 6.12 Goods Receipt & Inspection. SIX of these ten bullets map to pages that already exist,
+    # and that is the point (L36): quality checklists, the quarantine hold, lot/serial capture and
+    # barcode labels are inventory 5.14/5.15 and scm 4.3, and inventory posting is scm 4.1's
+    # `_post_grn_receipt`. A second quality register, a second quarantine, a second lot table or a
+    # second barcode label inside procurement would give one workspace two answers to the same
+    # question - which of the two is the stock actually in? So 6.12 adds only what was genuinely
+    # missing: the ADVISORY tolerance band (ReceiptTolerancePolicy - it colours the console and
+    # drives the exceptions board; it never blocks scm:goodsreceipt_receive), the typed
+    # discrepancy claim [RDS-] with evidence and escalation pointers, and ReturnToVendor [RTV-],
+    # which the repo really did lack (scm.ReturnAuthorization is the CUSTOMER RMA). "GRN Creation"
+    # is the receiving console: it books a DRAFT scm.GoodsReceiptNote from an ASN declaration -
+    # the 6.1 quick-requisition precedent - while the stock effect stays on SCM's admin-gated
+    # receive verb. An RTV posts NO StockMove and NO JournalEntry: `_post_grn_receipt` only ever
+    # moved the ACCEPTED quantity, so a quantity rejected at the dock never entered stock, and
+    # accounting owns the ledger (L29) - `credit_note_ref` is a reference, not a posting.
+    "6.12": {
+        "Goods Receipt Note (GRN) Creation": "procurement:receiving_console",
+        "Receipt Tolerances":                "procurement:tolerancepolicy_list",
+        "Quality Inspection Checklists":     "inventory:qcchecklist_list",
+        "Quarantine & Inspection Hold":      "inventory:quarantineorder_list",
+        "Lot, Batch & Serial Capture":       "scm:lotserial_list",
+        "Discrepancy Reporting":             "procurement:discrepancy_list",
+        "Return to Vendor (RTV) Processing": "procurement:rtv_list",
+        "Item Tagging & Barcoding":          "inventory:barcodelabel_list",
+        "Inventory Posting":                 "scm:goodsreceipt_list?status=received",
+        "Receipt Reversal & Audit Trail":    "procurement:receipt_audit",
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
