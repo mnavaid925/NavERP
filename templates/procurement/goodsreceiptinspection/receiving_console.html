@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Receiving Console{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Goods Receipt Note (GRN) Creation — the receiving console.
+
+    A COMPUTED board. It owns NO state: every ASN below is a 6.11
+    procurement.AdvancedShipmentNotice, and booking one writes a DRAFT
+    scm.GoodsReceiptNote (the 6.1 precedent — procurement drafts INTO the SCM
+    spine). It does NOT receive the goods: scm:goodsreceipt_receive stays the
+    single stock writer, so nothing on this page posts a StockMove or a
+    JournalEntry. Rows disappear from the board once a receipt already carries
+    their supplier reference as its delivery-note reference.
+
+    TEMPLATE ↔ BACKEND INPUT-NAME CONTRACT (the one place the two must agree
+    byte-for-byte — renaming any of these silently drops the value):
+      receipt_date, location, notes, and one qty_<asn_line.pk> per line.
+    The mint-lots form is a SEPARATE POST carrying only the CSRF token.
+
+    Context consumed: object_list (the paginated ASN page — NOT iterated; `rows`
+    is built from it and is what this template loops), page_obj, q,
+    status_choices, vendors, purchase_orders, locations, arrival,
+    arrival_choices, stats.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Receiving Console</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Goods Receipt &amp; Inspection</span><span class="sep">›</span><span>Receiving Console</span></div>
+      <p class="text-muted">Every advance shipping notice still expected at the dock, with what the supplier declared set against what was ordered and what has already been received. Booking drafts a goods receipt note against the order — receiving the stock stays with the receipt itself.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:tolerance_exceptions' %}" class="btn btn-outline"><i data-lucide="scale"></i> Tolerance exceptions</a>
+      <a href="{% url 'procurement:receipt_audit' %}" class="btn btn-outline"><i data-lucide="history"></i> Receipt audit</a>
+      <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-primary"><i data-lucide="package-check"></i> All receipts</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="hourglass"></i></div><div class="stat-value">{{ stats.awaiting }}</div><div class="stat-label">Awaiting arrival</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.arrived_today }}</div><div class="stat-label">Arriving today</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue at the dock</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="clipboard-check"></i></div><div class="stat-value">{{ stats.booked_7d }}</div><div class="stat-label">Booked (7 days)</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group" style="margin-bottom:.8rem;">
+        <a class="btn btn-sm {% if not arrival %}btn-primary{% else %}btn-outline{% endif %}"
+           href="{% url 'procurement:receiving_console' %}{% if q %}?q={{ q|urlencode }}{% endif %}">All arrivals</a>
+        {% for val, label in arrival_choices %}
+          <a class="btn btn-sm {% if arrival == val %}btn-primary{% else %}btn-outline{% endif %}"
+             href="?arrival={{ val }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </div>
+
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="console_q">Search</label>
+          <input type="text" id="console_q" name="q" value="{{ q }}" class="form-input" placeholder="ASN number, supplier reference or PO number…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="console_status">Status</label>
+          <select id="console_status" name="status" class="form-select">
+            <option value="">All open statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="console_vendor">Vendor</label>
+          <select id="console_vendor" name="vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="console_po">Purchase order</label>
+          <select id="console_po" name="po" class="form-select">
+            <option value="">All orders</option>
+            {% for p in purchase_orders %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if request.GET.po == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="console_arrival">Arrival</label>
+          <select id="console_arrival" name="arrival" class="form-select">
+            <option value="">Any arrival window</option>
+            {% for val, label in arrival_choices %}
+              <option value="{{ val }}" {% if arrival == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:receiving_console' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  {% for row in rows %}
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div>
+          <h3>
+            <a href="{% url 'procurement:asn_detail' row.asn.pk %}">{{ row.asn.number }}</a>
+            <span class="badge {{ row.asn.status_css|default:'badge-slate' }}">{{ row.asn.get_status_display }}</span>
+            {% if row.is_booked %}<span class="badge badge-green">Booked</span>{% endif %}
+          </h3>
+          <div class="text-muted">
+            {% if row.order %}<a href="{% url 'scm:purchaseorder_detail' row.order.pk %}">{{ row.order.number }}</a>{% else %}No purchase order{% endif %}
+            ·
+            {% if row.vendor %}{{ row.vendor.name }}{% else %}—{% endif %}
+            {% if row.asn.supplier_reference %} · Supplier ref {{ row.asn.supplier_reference }}{% endif %}
+          </div>
+        </div>
+        <div>
+          {% if row.asn.expected_delivery_date %}
+            <span class="text-muted">Expected {{ row.asn.expected_delivery_date|date:"M d, Y" }}</span>
+          {% else %}
+            <span class="text-muted">No date promised</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <dt>Receipt tolerance</dt>
+            <dd>
+              <span class="badge {{ row.tolerance_css|default:'badge-slate' }}">
+                {% if row.tolerance_verdict == 'ok' %}Within tolerance
+                {% elif row.tolerance_verdict == 'over' %}Over-receipt
+                {% elif row.tolerance_verdict == 'short' %}Under-receipt
+                {% elif row.tolerance_verdict == 'early' %}Early
+                {% elif row.tolerance_verdict == 'late' %}Late
+                {% else %}No policy{% endif %}
+              </span>
+              <div class="text-muted">{{ row.tolerance_reason|default:"—" }}</div>
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Quality routing</dt>
+            <dd>
+              {% if row.qc_verdict == 'inspect' %}
+                <span class="badge badge-amber">Inspect on arrival</span>
+              {% elif row.qc_verdict == 'bypass' %}
+                <span class="badge badge-green">Bypass inspection</span>
+              {% else %}
+                <span class="badge badge-muted">No routing rule</span>
+              {% endif %}
+              <div class="text-muted">{{ row.qc_reason|default:"—" }}</div>
+              {% if row.qc_location %}<div class="text-muted">Route to {{ row.qc_location.code }} — {{ row.qc_location.name }}</div>{% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Goods receipt</dt>
+            <dd>
+              {% if row.existing_receipt %}
+                <a href="{% url 'scm:goodsreceipt_detail' row.existing_receipt.pk %}">{{ row.existing_receipt.number }}</a>
+                <span class="badge {% if row.existing_receipt.status == 'received' %}badge-green{% elif row.existing_receipt.status == 'cancelled' %}badge-muted{% elif row.existing_receipt.status == 'draft' %}badge-slate{% else %}badge-info{% endif %}">{{ row.existing_receipt.get_status_display }}</span>
+              {% else %}
+                <span class="text-muted">Not booked yet</span>
+              {% endif %}
+            </dd>
+          </div>
+        </div>
+      </div>
+
+      {% comment %}
+        The qty inputs live INSIDE this form on purpose — the whole lines table is
+        wrapped by it, so every qty_<asn_line.pk> posts with the header controls.
+        A booked row keeps the form element (harmless, and the book verb is
+        idempotent on delivery_note_ref anyway) but renders the quantities as
+        text and swaps the submit block for a link to the receipt.
+      {% endcomment %}
+      <form method="post" action="{% url 'procurement:receiving_console_book' row.asn.pk %}"
+            onsubmit="return confirm('Book a draft goods receipt for {{ row.asn.number }}? This creates the GRN in draft only — it does not receive the stock.');">
+        {% csrf_token %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th class="text-right">Ordered</th>
+                <th class="text-right">Already received</th>
+                <th class="text-right">Outstanding</th>
+                <th class="text-right">Declared</th>
+                <th class="text-right">Receive now</th>
+                <th>Lot / serial</th>
+                <th>Tolerance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in row.lines %}
+                <tr>
+                  <td>
+                    <span class="fw-600">{{ line.description|default:"—" }}</span>
+                    <div class="text-muted">
+                      {% if line.sku_hint %}SKU {{ line.sku_hint }}{% else %}No SKU declared{% endif %}
+                      {% if line.uom_hint %} · {{ line.uom_hint }}{% endif %}
+                    </div>
+                  </td>
+                  <td class="text-right">{{ line.ordered|floatformat:"-4" }}</td>
+                  <td class="text-right">{{ line.received|floatformat:"-4" }}</td>
+                  <td class="text-right">{{ line.outstanding|floatformat:"-4" }}</td>
+                  <td class="text-right">{{ line.declared|floatformat:"-4" }}</td>
+                  <td class="text-right">
+                    {% if row.is_booked %}
+                      <span class="text-muted">{{ line.declared|floatformat:"-4" }}</span>
+                    {% else %}
+                      <label class="sr-only" for="qty_{{ line.asn_line.pk }}">Quantity to receive for {{ line.description|default:line.asn_line.pk }}</label>
+                      <input type="number" step="0.0001" min="0"
+                             id="qty_{{ line.asn_line.pk }}"
+                             name="qty_{{ line.asn_line.pk }}"
+                             value="{{ line.declared }}"
+                             class="form-input" style="max-width:8rem; text-align:right;">
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if line.lot_number %}<div>Lot {{ line.lot_number }}</div>{% endif %}
+                    {% if line.serial_number %}<div>Serial {{ line.serial_number }}</div>{% endif %}
+                    {% if line.expiry_date %}<div class="text-muted">Expires {{ line.expiry_date|date:"M d, Y" }}</div>{% endif %}
+                    {% if not line.lot_number and not line.serial_number and not line.expiry_date %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    <span class="badge {{ line.verdict_css|default:'badge-slate' }}">
+                      {% if line.verdict == 'ok' %}Within tolerance
+                      {% elif line.verdict == 'over' %}Over-receipt
+                      {% elif line.verdict == 'short' %}Under-receipt
+                      {% elif line.verdict == 'early' %}Early
+                      {% elif line.verdict == 'late' %}Late
+                      {% else %}No policy{% endif %}
+                    </span>
+                    {% if line.verdict_reason %}<div class="text-muted">{{ line.verdict_reason }}</div>{% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="8"><span class="text-muted">This advance shipping notice declares no lines, so there is nothing to book.</span></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-body">
+          {% if row.is_booked %}
+            <p class="text-muted">
+              Already booked as
+              {% if row.existing_receipt %}
+                <a href="{% url 'scm:goodsreceipt_detail' row.existing_receipt.pk %}">{{ row.existing_receipt.number }}</a>,
+              {% else %}
+                a goods receipt,
+              {% endif %}
+              matched on the supplier reference. Receive the stock, record rejections and post the inbound move from the receipt itself.
+            </p>
+          {% else %}
+            <div class="filter-bar">
+              <div class="form-group">
+                <label class="form-label" for="receipt_date_{{ row.asn.pk }}">Receipt date</label>
+                <input type="date" id="receipt_date_{{ row.asn.pk }}" name="receipt_date" value="{% now 'Y-m-d' %}" class="form-input" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="location_{{ row.asn.pk }}">Receiving location</label>
+                <select id="location_{{ row.asn.pk }}" name="location" class="form-select">
+                  <option value="">No location</option>
+                  {% for loc in locations %}
+                    <option value="{{ loc.pk|stringformat:"d" }}" {% if row.qc_location and row.qc_location.pk == loc.pk %}selected{% endif %}>{{ loc.code }} — {{ loc.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group" style="flex:1; min-width:220px;">
+                <label class="form-label" for="notes_{{ row.asn.pk }}">Notes</label>
+                <textarea id="notes_{{ row.asn.pk }}" name="notes" rows="2" class="form-textarea" placeholder="Dock notes, pallet condition, driver…"></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit"><i data-lucide="clipboard-check"></i> Book draft receipt</button>
+            </div>
+          {% endif %}
+        </div>
+      </form>
+
+      <div class="card-body" style="border-top:1px solid var(--border);">
+        <form method="post" action="{% url 'procurement:receiving_console_mint_lots' row.asn.pk %}"
+              onsubmit="return confirm('Create lot and serial records from what {{ row.asn.number }} declared? Lines whose SKU cannot be matched to an item are skipped and reported.');">
+          {% csrf_token %}
+          <div class="filter-bar">
+            <span class="text-muted" style="flex:1; min-width:220px;">Mint the declared lot, serial and expiry text into the item master so the numbers exist before the goods are received. Existing records are reused, never duplicated.</span>
+            <a href="{% url 'scm:lotserial_list' %}" class="btn btn-outline btn-sm"><i data-lucide="tags"></i> Lots &amp; serials</a>
+            <button class="btn btn-outline btn-sm" type="submit"><i data-lucide="plus"></i> Mint lots &amp; serials</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="package-search"></i>
+          {% if arrival == 'overdue' %}
+            <h3>Nothing overdue at the dock</h3>
+            <p>Every expected shipment is still inside its promised date. Try another arrival window, or clear the filters to see the whole queue.</p>
+          {% elif arrival == 'today' %}
+            <h3>Nothing arriving today</h3>
+            <p>No advance shipping notice is expected today. Check the overdue and awaiting windows for what is still on its way.</p>
+          {% elif arrival == 'awaiting' %}
+            <h3>Nothing awaiting arrival</h3>
+            <p>No shipment is dated beyond today. Shipments with no promised date at all also land in this window.</p>
+          {% else %}
+            <h3>The dock is clear</h3>
+            <p>Advance shipping notices appear here while they are in flight and drop off once a goods receipt carries their supplier reference. Record an ASN against a purchase order and it shows up ready to book.</p>
+          {% endif %}
+          <a href="{% url 'procurement:asn_list' %}" class="btn btn-primary"><i data-lucide="truck"></i> Go to the ASN register</a>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
+  {% include "partials/pagination.html" %}
+{% endblock %}
