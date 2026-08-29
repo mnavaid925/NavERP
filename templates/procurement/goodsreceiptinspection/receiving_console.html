@@ -50,11 +50,18 @@
   <div class="card">
     <div class="card-body">
       <div class="badge-group" style="margin-bottom:.8rem;">
+        {% comment %}
+          Every tab carries the OTHER three filters forward — switching arrival window must not
+          silently widen the board by dropping an active status, vendor or purchase-order filter
+          (the shape tolerance_exceptions.html uses for its bucket tabs). "All arrivals" posts an
+          EMPTY ?arrival=, which the view sanitizes to "", so both hrefs share one leading-`?`
+          form instead of one of them needing {% templatetag openblock %} url {% templatetag closeblock %}.
+        {% endcomment %}
         <a class="btn btn-sm {% if not arrival %}btn-primary{% else %}btn-outline{% endif %}"
-           href="{% url 'procurement:receiving_console' %}{% if q %}?q={{ q|urlencode }}{% endif %}">All arrivals</a>
+           href="?arrival={% if q %}&q={{ q|urlencode }}{% endif %}{% if status %}&status={{ status|urlencode }}{% endif %}{% if request.GET.vendor %}&vendor={{ request.GET.vendor|urlencode }}{% endif %}{% if request.GET.po %}&po={{ request.GET.po|urlencode }}{% endif %}">All arrivals</a>
         {% for val, label in arrival_choices %}
           <a class="btn btn-sm {% if arrival == val %}btn-primary{% else %}btn-outline{% endif %}"
-             href="?arrival={{ val }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ label }}</a>
+             href="?arrival={{ val }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if status %}&status={{ status|urlencode }}{% endif %}{% if request.GET.vendor %}&vendor={{ request.GET.vendor|urlencode }}{% endif %}{% if request.GET.po %}&po={{ request.GET.po|urlencode }}{% endif %}">{{ label }}</a>
         {% endfor %}
       </div>
 
