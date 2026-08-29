@@ -103,6 +103,8 @@
                         onsubmit="return confirm('Confirm delivery of {{ row.number }}? This stamps the proof-of-delivery block and cannot be undone.');">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="confirmation">
+                    {% comment %}Carries the tab back with the redirect — the view whitelists it against the board's own bucket keys, so a hand-edited value just falls back to the default tab.{% endcomment %}
+                    <input type="hidden" name="due" value="{{ bucket }}">
                     <div class="filter-bar">
                       <div class="form-group">
                         <label class="form-label" for="delivered_at_{{ row.pk }}">Delivered at</label>
