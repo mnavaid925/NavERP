@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Receipt Tolerance{% else %}New Receipt Tolerance{% endif %} · Procurement{% endblock %}
+{% block content %}
+  {% comment %}
+    6.12 Receipt Tolerance Policy create + edit — ONE template, driven by the contracted
+    `is_edit` flag.
+
+    Context contract, and nothing else exists on this page: form, is_edit, obj.
+    crud_create puts only {form, is_edit} in the context, so `obj` is ABSENT on create —
+    every reference to it below sits inside an {% if is_edit %} / {% if obj %} branch.
+
+    Fields render in the form's own Meta order: name, item, category, vendor,
+    over_receipt_pct, under_receipt_pct, over_receipt_qty, allow_unlimited_over_receipt,
+    early_receipt_days, late_receipt_days, action, price_variance_pct, priority,
+    is_active, notes. tenant and the two system timestamps are excluded by the form —
+    there is no status, no number and no verb stamp on a configuration master to protect.
+
+    TenantModelForm already stamps form-input / form-select / form-textarea / form-check
+    onto every widget, so the loop below adds no widget classes of its own; each label's
+    for= is paired with the rendered control through field.id_for_label.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.name }}{% else %}New Receipt Tolerance{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a>
+        <span class="sep">›</span>
+        <a href="{% url 'procurement:tolerancepolicy_list' %}">Receipt Tolerances</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">Set how far a delivery may run over, under, early or late before receiving treats it as an exception. Pin the rule to an item <em>or</em> a category — never both — or leave both blank for a workspace-wide catch-all. A rule must define at least one band unless unlimited over-receipt is switched on.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "item" %}
+                <div class="form-help">Pin the rule to one item. Leave blank to widen it to a category, or to every item in the workspace. An item rule beats a category rule beats a catch-all.</div>
+              {% elif field.name == "category" %}
+                <div class="form-help">Applies to every item in the category. Setting a category <em>and</em> an item is rejected — the two scopes would contradict each other.</div>
+              {% elif field.name == "over_receipt_pct" %}
+                <div class="form-help">Percentage of the ordered quantity a receipt may exceed. When a quantity cap is also set, the more restrictive of the two wins.</div>
+              {% elif field.name == "under_receipt_pct" %}
+                <div class="form-help">How far short of the ordered quantity a delivery may fall and still count as complete. 0–100.</div>
+              {% elif field.name == "is_active" %}
+                <div class="form-help">Inactive policies are skipped by the resolver, so the next most general rule takes over.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Why this tolerance exists — the buyer reading the exceptions board sees this rule name, not the negotiation behind it.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body text-muted">
+        This policy is <strong>advisory</strong>. It colours the receiving console, buckets lines on the tolerance-exceptions board and pre-fills a discrepancy — it never blocks a goods receipt. Even <em>Flag as Blocking</em> only flags the line. The price-variance figure is recorded for reporting; the invoice three-way match still uses the receipt's own hardcoded 2% band this pass.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Update policy{% else %}Create policy{% endif %}</button>
+      <a href="{% url 'procurement:tolerancepolicy_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
