@@ -80,6 +80,10 @@ from apps.procurement.models import (
     ReceiptTolerancePolicy,
     ReturnToVendor,
     ReturnToVendorLine,
+    SupplierInvoice,
+    SupplierInvoiceLine,
+    InvoiceMatchVariance,
+    InvoiceDispute,
     generate_po_from_requisition,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -101,7 +105,7 @@ from apps.procurement.models import (
     VendorPortalAccess,
     VendorSuspension,
 )
-from apps.accounting.models import Currency
+from apps.accounting.models import Currency, GLAccount, PaymentTerm, TaxCode
 from apps.scm.models import Item, PurchaseRequisition, SupplierProfile, UOM
 
 User = get_user_model()
@@ -216,6 +220,7 @@ class Command(BaseCommand):
             self._seed_po_management(tenant)
             self._seed_order_fulfillment(tenant)
             self._seed_goods_receipt(tenant)
+            self._seed_invoice_vouchers(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -1499,3 +1504,438 @@ class Command(BaseCommand):
             f"  {tenant.name}: goods receipt & inspection ready ({len(policies)} tolerance "
             f"policies, {len(made)} discrepancies, {len(returns)} returns on "
             f"{receipt.number})."))
+
+    # -- 6.13 Invoice & Voucher Management -----------------------------------------------------
+
+    def _seed_invoice_vouchers(self, tenant):
+        """6.13 Invoice & Voucher Management - the supplier invoice register with one row in every
+        lifecycle status, the three-way match exceptions that hold some of them, and the dispute
+        register worked through its own verbs.
+
+        **Every date is derived from ``NOW``** (L16). The early-payment discount dashboard computes
+        "days to discount" and "still capturable" against TODAY, so a hardcoded invoice date reads
+        as zero opportunities the moment the demo ages - the offsets below are what keep the
+        discount panel, the payment schedule buckets and the dispute aging honest on any run.
+
+        **Status moves through the verbs, never by writing the column.** Two consequences shape
+        the code: ``run_match()`` SETS status itself (blocked / pending_approval), so it is called
+        only on the rows whose verdict the engine should own; and ``approve()`` is the one
+        transition that posts a Bill + a JournalEntry, so it runs only where the workspace has a
+        chart of accounts to post to (tenant "SMOKETEST Acme" has none - those rows stay at
+        pending_approval rather than being faked into "approved").
+
+        Idempotent in the file's own two-part idiom: the block is guarded per tenant, and each
+        numbered row is additionally keyed on ``(vendor, invoice_number_norm)`` - the natural
+        business key - because ``number`` (SIV-/DSP-) is regenerated every run and a get_or_create
+        on it would mint SIV-00016 on the second pass.
+        """
+        from apps.scm.models import GoodsReceiptNote as _GRN, PurchaseOrder as _PO
+
+        if SupplierInvoice.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: supplier invoices already present, skipping.")
+            return
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        filer = members[0] if members else None
+        assignee = members[1] if len(members) > 1 else filer
+        today = NOW.date()
+
+        currency = Currency.objects.order_by("id").first()
+        # The discount term is "2/10 Net 30": discount_days=10, discount_pct=2. Net 30 has no
+        # window at all, which is just as important a row - it is what an invoice with nothing to
+        # capture looks like.
+        discount_term = (PaymentTerm.objects.filter(tenant=tenant, discount_days__gt=0)
+                         .order_by("id").first())
+        net_term = (PaymentTerm.objects.filter(tenant=tenant, discount_days=0)
+                    .order_by("id").first() or discount_term)
+        if discount_term is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no payment terms on file (run seed_accounting first) - "
+                f"skipping invoice & voucher management."))
+            return
+
+        # Reuse real orders rather than inventing one: the vendor is taken FROM them, because
+        # SupplierInvoice.clean() refuses an invoice whose order belongs to a different party.
+        #
+        # The vendor with the MOST ordered lines wins, and every invoice below draws its own line:
+        # run_match() checks over-invoicing CUMULATIVELY per ordered line, so a register all
+        # hanging off one line would breach that check on the second row and every later verdict
+        # would read "over-invoiced" regardless of what was actually wrong.
+        orders = list(_PO.objects.filter(tenant=tenant).exclude(vendor=None)
+                      .prefetch_related("lines").order_by("id"))
+        if not orders:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no purchase order with a vendor - skipping invoice & voucher "
+                f"management."))
+            return
+        by_vendor = {}
+        for candidate in orders:
+            by_vendor.setdefault(candidate.vendor_id, []).append(candidate)
+        # Prefer a vendor who has actually been RECEIPTED against: the quantity basis - invoice
+        # versus what arrived - is the point of three-way matching, and a vendor with no goods
+        # receipt behind it can only ever be matched two-way.
+        received_orders = set(_GRN.objects.filter(tenant=tenant).exclude(purchase_order=None)
+                              .values_list("purchase_order_id", flat=True))
+        with_receipts = [key for key, rows in by_vendor.items()
+                         if any(p.pk in received_orders for p in rows)]
+        vendor_id = max(with_receipts or by_vendor,
+                        key=lambda key: sum(p.lines.count() for p in by_vendor[key]))
+        orders = by_vendor[vendor_id]
+        order = orders[0]
+        vendor = order.vendor
+        pool = [line for candidate in orders for line in candidate.lines.order_by("id")]
+        if not pool:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: {order.number} has no lines - skipping invoice & voucher "
+                f"management."))
+            return
+        # pool[0] is RESERVED for the price-breach invoice: nothing else may invoice against it,
+        # so its cumulative position stays inside the order and the price check is the one that
+        # speaks. Everything else cycles round-robin over the remainder.
+        price_line, shared_lines = pool[0], pool[1:] or pool
+        # A GRN is only usable if it belongs to the same vendor (same clean() rule), and only
+        # then does run_match() take the QUANTITY basis rather than the amount one.
+        grn = next((row for row in _GRN.objects.filter(tenant=tenant)
+                    .select_related("purchase_order").order_by("id")
+                    if row.purchase_order_id in {p.pk for p in orders}), None)
+        grn_line = grn.lines.order_by("id").first() if grn is not None else None
+
+        # approve() writes a Bill and a balanced JournalEntry, and raises when either leg's
+        # account cannot be resolved - so find out once, up front, rather than per row.
+        expense_gl = (GLAccount.objects.filter(
+            tenant=tenant, is_active=True,
+            code__in=("5000", "5100", "5200", "6000", "6100")).first()
+            or GLAccount.objects.filter(tenant=tenant, is_active=True, account_type="expense")
+            .order_by("code").first())
+        ap_gl = (GLAccount.objects.filter(
+            tenant=tenant, is_active=True, code__in=("2000", "2010", "2100")).first()
+            or GLAccount.objects.filter(tenant=tenant, is_active=True, account_type="liability")
+            .order_by("code").first())
+        postable = expense_gl is not None and ap_gl is not None
+        tax_code = TaxCode.objects.filter(tenant=tenant, is_active=True).order_by("id").first()
+
+        # (a) The register. One row per lifecycle status, plus the shapes the research plan calls
+        # out: a credit memo, a debit memo, PO-less service invoices, one PDF text-layer capture
+        # with a confidence score, and a duplicate pair.
+        #
+        # Quantities are NOT written into the spec - they are DERIVED from the ordered line, for a
+        # reason that matters: ``run_match()`` checks over-invoicing CUMULATIVELY, so several
+        # invoices sharing one ordered line at full quantity would breach it and mask every other
+        # check with an over-invoice block. Taking a quarter of the ordered quantity keeps the
+        # cumulative position inside the order and lets the intended variance surface instead.
+        #
+        # ``price_mult`` / ``qty_mult`` are the deliberate breaches; everything else is at 1.
+        specs = [
+            dict(key="draft", invoice_type="standard", days=1, discount=True, po=True, grn=False,
+                 number="INV-41021", lines=[("Corrugated cartons 400x300x200", "20")]),
+            dict(key="parked", invoice_type="standard", days=4, discount=True, po=True, grn=False,
+                 number="INV-41022", lines=[("Stretch wrap 500mm clear", "20")]),
+            dict(key="captured_pdf", invoice_type="standard", days=8, discount=True, po=True,
+                 grn=True, number="INV-41023", lines=[("Corrugated cartons 400x300x200", "20")],
+                 source="pdf_text_layer", confidence=Decimal("86.50")),
+            dict(key="credit_memo", invoice_type="credit_memo", days=6, discount=False, po=True,
+                 grn=False, number="CN-90041",
+                 # NEGATIVE quantity - a credit memo's lines must not carry positive value.
+                 lines=[("Credit: cartons returned crushed", "20", "negative")]),
+            dict(key="debit_memo", invoice_type="debit_memo", days=7, discount=False, po=True,
+                 grn=False, number="DM-90042",
+                 lines=[("Recharge: pallet hire surcharge", "20")]),
+            dict(key="service_1", invoice_type="service", days=3, discount=False, po=False,
+                 grn=False, number="SVC-70031",
+                 lines=[("Monthly forklift service call", "20", "fixed", "320.00")], gl=True),
+            dict(key="service_2", invoice_type="service", days=5, discount=False, po=False,
+                 grn=False, number="SVC-70032",
+                 lines=[("Ad-hoc dock repair - callout", "0", "fixed", "485.00")], gl=True),
+            # No GRN and no receipt line, so the match runs on the AMOUNT basis: the quantity
+            # ladder is skipped entirely and the price check is the one that speaks. 30% over the
+            # ordered price is far outside the 2% band.
+            dict(key="blocked", invoice_type="standard", days=10, discount=False, po=True,
+                 grn=False, number="INV-41024",
+                 lines=[("Corrugated cartons 400x300x200", "20", "po", "1.30")]),
+            # Two lines against the SAME receipt: the first is matched to what arrived, the second
+            # has no receipt line at all and is 2% over the ordered quantity. The 2% is deliberate
+            # - it is INSIDE the no-receipt band, so the quantity claim is recorded as a warning
+            # and the check falls through to the cumulative one, which then blocks on
+            # over-invoicing. One line, two different exception types, which is what an AP clerk
+            # actually sees. Either way it is the open variance the dispute points at.
+            dict(key="disputed", invoice_type="standard", days=12, discount=False, po=True,
+                 grn=True, number="INV-41025",
+                 lines=[("Corrugated cartons 400x300x200", "20"),
+                        ("Stretch wrap 500mm clear", "20", "ordered", None, "1.02")]),
+            dict(key="dup_original", invoice_type="standard", days=16, discount=False, po=True,
+                 grn=False, number="INV-41026", lines=[("Corrugated cartons 400x300x200", "20")]),
+            # Same supplier number, spaced differently - normalises to the SAME key, which is
+            # exactly the collision duplicate detection exists to catch.
+            dict(key="dup_suspect", invoice_type="standard", days=16, discount=False, po=True,
+                 grn=False, number="INV 41026",
+                 lines=[("Corrugated cartons 400x300x200", "20")]),
+            dict(key="approved", invoice_type="standard", days=25, discount=True, po=True,
+                 grn=False, number="INV-41027",
+                 lines=[("Corrugated cartons 400x300x200", "20")]),
+            dict(key="scheduled", invoice_type="standard", days=22, discount=False, po=True,
+                 grn=False, number="INV-41028", lines=[("Stretch wrap 500mm clear", "20")]),
+            dict(key="paid", invoice_type="standard", days=45, discount=False, po=True, grn=False,
+                 number="INV-41029", lines=[("Corrugated cartons 400x300x200", "20")]),
+            dict(key="void", invoice_type="standard", days=9, discount=False, po=True, grn=False,
+                 number="INV-41030", lines=[("Stretch wrap 500mm clear", "20")]),
+            dict(key="reversed", invoice_type="standard", days=50, discount=False, po=True,
+                 grn=False, number="INV-41031",
+                 lines=[("Corrugated cartons 400x300x200", "20")]),
+        ]
+
+        invoices = {}
+        shared_index = 0
+
+        def _alloc_line(reserved=None):
+            """Hand out the next ordered line, round-robin, so no two invoices share one
+            unless the workspace has fewer lines than the demo has rows."""
+            nonlocal shared_index
+            if reserved is not None:
+                return reserved
+            line = shared_lines[shared_index % len(shared_lines)]
+            shared_index += 1
+            return line
+
+        for spec in specs:
+            # Keyed on the supplier's number AS TYPED, not on invoice_number_norm: the duplicate
+            # pair above is two different strings that normalise to the same key, and keying on
+            # the norm would collapse them into one row and leave nothing to detect.
+            existing = SupplierInvoice.objects.filter(
+                tenant=tenant, vendor=vendor, invoice_number=spec["number"]).first()
+            if existing is not None:
+                invoices[spec["key"]] = existing
+                continue
+            # Allocate the ordered lines FIRST, because the header's own purchase_order has to be
+            # the order those lines belong to - an invoice pointing at one order while billing
+            # another's line is not a document anybody could reconcile.
+            reserved = price_line if spec["key"] == "blocked" else None
+            planned = []
+            for line_spec in spec["lines"]:
+                description, tax = line_spec[0], Decimal(line_spec[1])
+                mode = line_spec[2] if len(line_spec) > 2 else "po"
+                price_override = line_spec[3] if len(line_spec) > 3 else None
+                qty_mult = Decimal(line_spec[4]) if len(line_spec) > 4 else Decimal("1")
+                # The price-breach invoice owns its ordered line outright (see price_line above).
+                line = _alloc_line(reserved)
+                reserved = None
+                # A receipted line has to point at the ordered line the RECEIPT was booked
+                # against, or the "invoiced versus received" comparison compares two different
+                # things and the quantity variance means nothing.
+                if spec["grn"] and grn_line is not None and grn_line.po_line_id:
+                    line = grn_line.po_line
+                if mode == "fixed":
+                    quantity, price = Decimal("1"), Decimal(price_override)
+                else:
+                    ordered = line.quantity or Decimal("1")
+                    quantity = ordered if mode == "ordered" else max(
+                        Decimal("1"), (ordered / 4).quantize(Decimal("0.0001")))
+                    if mode == "negative":
+                        quantity = -quantity
+                    quantity = (quantity * qty_mult).quantize(Decimal("0.0001"))
+                    price = line.unit_price or Decimal("0")
+                    if price_override is not None:
+                        price = (price * Decimal(price_override)).quantize(Decimal("0.01"))
+                planned.append((line, description, quantity, price, tax))
+            # The header's order is the order its FIRST line belongs to.
+            invoice_order = (planned[0][0].purchase_order if (spec["po"] and planned)
+                             else None)
+            invoice = SupplierInvoice.objects.create(
+                tenant=tenant, vendor=vendor,
+                purchase_order=invoice_order,
+                goods_receipt=grn if spec["grn"] else None,
+                payment_term=discount_term if spec["discount"] else net_term,
+                currency=currency, tax_code=tax_code,
+                invoice_type=spec["invoice_type"],
+                invoice_number=spec["number"],
+                invoice_date=today - timedelta(days=spec["days"]),
+                posting_date=today - timedelta(days=max(0, spec["days"] - 1)),
+                source=spec.get("source", "manual"),
+                extraction_confidence=spec.get("confidence"),
+                notes=spec.get("notes", ""),
+            )
+            for index, (line, description, quantity, price, tax) in enumerate(planned):
+                # sku_hint / uom_hint are MIRRORED from the ordered line: scm.PurchaseOrderLine
+                # carries them as plain text (it has no item/uom FK), and the supplier's own
+                # wording is what an AP clerk matches against the paper.
+                SupplierInvoiceLine.objects.create(
+                    invoice=invoice,
+                    po_line=line if spec["po"] else None,
+                    # Only the FIRST line of a receipted invoice is tied to a receipt line - the
+                    # disputed invoice's second line is the one with nothing booked against it.
+                    receipt_line=grn_line if (spec["grn"] and index == 0) else None,
+                    gl_account=expense_gl if spec.get("gl") else None,
+                    tax_code=tax_code,
+                    description=description,
+                    sku_hint=line.sku_hint if spec["po"] else "",
+                    uom_hint=line.uom_hint if spec["po"] else "",
+                    quantity=quantity, unit_price=price, tax_rate_pct=tax)
+            invoice.recalc_totals()
+            write_audit_log(None, invoice, "create")
+            invoices[spec["key"]] = invoice
+
+        # (b) The duplicate pair is a SUSPICION, never an auto-rejection: the link preserves the
+        # evidence and leaves the decision to a person.
+        suspect, original = invoices.get("dup_suspect"), invoices.get("dup_original")
+        if suspect is not None and original is not None and suspect.duplicate_of_id is None:
+            suspect.duplicate_of = original
+            suspect.save(update_fields=["duplicate_of", "updated_at"])
+
+        # (c) Three-way matching. run_match() OWNS the verdict - it deletes the previous run's
+        # rows and writes status itself - so it is called only on the rows whose fate the engine
+        # should decide: the price-breach block, the disputed invoice, and the duplicate, whose
+        # suspicion is what holds it.
+        for key in ("blocked", "disputed", "dup_suspect"):
+            invoice = invoices.get(key)
+            if invoice is not None and not invoice.is_locked:
+                invoice.run_match(filer)
+
+        # The engine never emits these two on a well-formed invoice, and both are real states an
+        # AP clerk sees: a service line with no order behind it, and a claim for goods that were
+        # never receipted. Recorded on rows that are never re-matched, so they survive.
+        unmatched = invoices.get("service_2")
+        if unmatched is not None and not unmatched.variances.exists():
+            InvoiceMatchVariance.record(
+                invoice=unmatched, variance_type="missing_po", basis="header",
+                expected=Decimal("0.0000"), actual=unmatched.subtotal, outcome_override="block",
+                message="Service invoice - no purchase order to match against.")
+            InvoiceMatchVariance.record(
+                invoice=unmatched, variance_type="missing_receipt", basis="header",
+                expected=unmatched.subtotal, actual=Decimal("0.0000"), outcome_override="block",
+                message="No goods receipt has been posted for this claim.")
+        parked = invoices.get("parked")
+        if parked is not None and not parked.variances.exists():
+            InvoiceMatchVariance.record(
+                invoice=parked, variance_type="fx_rate", basis="header",
+                expected=parked.subtotal,
+                actual=(parked.subtotal * Decimal("1.0185")).quantize(Decimal("0.0001")),
+                pct_upper=SupplierInvoice.FX_TOL_PCT, pct_lower=SupplierInvoice.FX_TOL_PCT,
+                message="Billed in the supplier's currency at a rate 1.85% off the order rate.")
+
+        # (d) The lifecycle. Every step is a verb, each of which re-checks its own guard and
+        # returns False rather than raising when the move is not open.
+        def _walk(key, *verbs):
+            invoice = invoices.get(key)
+            if invoice is None:
+                return
+            for verb in verbs:
+                invoice.refresh_from_db()
+                if not verb(invoice):
+                    break
+
+        # park() only runs from draft - it is a SET-ASIDE, not a step past capture.
+        _walk("parked", lambda i: i.park())
+
+        # raise_dispute() needs at least one OPEN variance to point at - a dispute with nothing
+        # behind it cannot be answered - so the block is forced first if the engine matched clean.
+        def _dispute(invoice):
+            if invoice.status != "blocked":
+                invoice.block("Held pending a price check against the frame agreement.")
+            return invoice.raise_dispute()
+
+        _walk("disputed", _dispute)
+
+        # The two PO-less service invoices and the credit/debit memos are captured but never
+        # matched: a service invoice has no order to match, and a memo settles a claim rather
+        # than being three-way matched.
+        for key in ("credit_memo", "debit_memo", "service_1", "service_2", "dup_original"):
+            _walk(key, lambda i: i.capture())
+        # The PDF capture is the one sitting in the approval queue: it is complete, it matched
+        # clean, and it still has a discount window running - the row the dashboard is for.
+        _walk("captured_pdf", lambda i: i.capture(), lambda i: i.submit_for_approval())
+        _walk("void", lambda i: i.capture(),
+              lambda i: i.void(filer, "Superseded by a re-issued invoice from the supplier."))
+
+        # approve() is the ONE transition that touches the ledger. Without a chart of accounts it
+        # raises, so those rows stay at pending_approval - a workspace that cannot post cannot
+        # honestly show an approved invoice.
+        _walk("approved", lambda i: i.capture(), lambda i: i.submit_for_approval(),
+              lambda i: i.approve(filer) if postable else False)
+        _walk("scheduled", lambda i: i.capture(), lambda i: i.submit_for_approval(),
+              lambda i: i.approve(filer) if postable else False, lambda i: i.schedule())
+        _walk("paid", lambda i: i.capture(), lambda i: i.submit_for_approval(),
+              lambda i: i.approve(filer) if postable else False, lambda i: i.schedule(),
+              lambda i: i.mark_paid())
+        _walk("reversed", lambda i: i.capture(), lambda i: i.submit_for_approval(),
+              lambda i: i.approve(filer) if postable else False,
+              lambda i: i.reverse(filer) if postable else False)
+
+        # (e) The dispute register. Six claims across the workflow, two of them already past their
+        # SLA so the aging board has something late on it.
+        #
+        # due_date is armed once on create (today + SLA_DAYS), so the late ones are given their
+        # date explicitly - that is the only way a demo can show a breach, and it is what the
+        # is_overdue property reads.
+        def _dispute_row(key, invoice_key, reason, amount, description, due_in, *verbs):
+            invoice = invoices.get(invoice_key)
+            if invoice is None:
+                return None
+            number = f"DSP-DEMO-{key}"
+            existing = InvoiceDispute.objects.filter(tenant=tenant, number=number).first()
+            if existing is not None:
+                return existing
+            row = InvoiceDispute.objects.create(
+                tenant=tenant, invoice=invoice, reason_code=reason,
+                disputed_amount=Decimal(amount), description=description,
+                assigned_to=assignee, raised_by=filer,
+                due_date=today + timedelta(days=due_in),
+                supplier_contact="accounts@supplier.example",
+                number=number)
+            write_audit_log(None, row, "create")
+            for verb in verbs:
+                if not verb(row):
+                    break
+            return row
+
+        _dispute_row(
+            "PRICE", "disputed", "price", "86.00",
+            "Invoiced at 24.05 a roll against a frame price of 21.90. The supplier points at a "
+            "resin surcharge we never accepted in writing; we are holding the difference until "
+            "somebody produces the amendment.", -4)
+        _dispute_row(
+            "GOODS", "blocked", "goods_not_received", "312.00",
+            "Two pallets of cartons are on the invoice but never appeared on the dock. The "
+            "delivery note is signed for one pallet only and the CCTV does not show a second.",
+            -2)
+        _dispute_row(
+            "DUP", "dup_suspect", "duplicate", "172.80",
+            "Same supplier number as an invoice already on the register, spaced differently. "
+            "Either the supplier re-sent it or we keyed the same document twice.", 3,
+            lambda row: row.await_supplier(filer))
+        _dispute_row(
+            "FREIGHT", "service_2", "freight", "48.00",
+            "Carriage charge that was never on the order and nobody approved. Supplier says it "
+            "was a weekend callout; the rate card says callouts are included.", 6,
+            lambda row: row.escalate(filer))
+        _dispute_row(
+            "CREDIT", "credit_memo", "credit_not_processed", "34.56",
+            "The credit for the crushed cartons was raised six weeks ago and has never appeared "
+            "on a statement. Chasing their accounts team.", 8,
+            lambda row: row.await_internal(filer))
+        settled = _dispute_row(
+            "TAX", "dup_original", "tax", "28.80",
+            "VAT charged at the standard rate on a line the supplier has since confirmed is "
+            "zero-rated. They agreed to re-issue.", 1,
+            lambda row: row.resolve(filer, "reinvoice",
+                                   "Supplier re-issued the invoice at the correct tax rate."),
+            lambda row: row.close(filer))
+
+        # Link the settled claim to the credit memo that answered it, so the detail page's
+        # settlement panel has a live link rather than an empty slot.
+        if settled is not None and settled.credit_memo_invoice_id is None:
+            memo = invoices.get("credit_memo")
+            if memo is not None and memo.invoice_type == "credit_memo":
+                settled.link_credit_memo(memo)
+
+        # raised_at is auto_now_add, so the age bands are spread with a queryset update rather
+        # than by back-dating on create - without this every open dispute lands in the 0-7 bucket
+        # and the aging board has only two populated rows.
+        for key, days in (("PRICE", 19), ("GOODS", 33), ("FREIGHT", 9)):
+            InvoiceDispute.objects.filter(tenant=tenant, number=f"DSP-DEMO-{key}").update(
+                raised_at=NOW - timedelta(days=days))
+
+        variance_count = InvoiceMatchVariance.objects.filter(tenant=tenant).count()
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: invoice & voucher management ready "
+            f"({len(invoices)} invoices, {variance_count} match variances, "
+            f"{InvoiceDispute.objects.filter(tenant=tenant).count()} disputes"
+            f"{'' if postable else ' — no chart of accounts, so no invoice was posted'})."))
