@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Supplier Invoice Lines{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — SupplierInvoiceLine register (lane B).
+    Context contract (crud_list + extra_context): object_list, page_obj, q,
+    invoices, items, stats{lines, matched, unmatched, non_po}. Nothing else exists here.
+    The child has NO tenant column and NO number of its own: it is scoped through
+    invoice__tenant, and the only system-assigned number on this page is the HEADER's
+    ({{ obj.invoice.number }}, an SIV- string) — that and the integer pk are the only
+    values safe to interpolate into a confirm() string.
+    Badge colours are hardcoded against the frozen CHOICES keys so a backend rename
+    degrades to badge-slate instead of rendering an unstyled badge. Only badge-green /
+    -red / -amber / -info / -muted / -slate exist (theme.css:286-291).
+    Cumulative quantities are model PROPERTIES that each run an aggregate, so they are
+    only rendered for lines that actually have a PO line — a non-PO line has nothing to
+    accumulate against and the em-dash is the honest answer.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier Invoice Lines</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><span>Invoice Lines</span></div>
+      <p class="text-muted">Every line the supplier has billed us for, across every invoice — what they claim they delivered, at what price, against which ordered line and which receipt, and where it posts in the ledger. A line total is derived (quantity × unit price) and the header money follows it.</p>
+    </div>
+    <div class="page-actions">
+      {% if request.GET.invoice %}
+        {% comment %}
+          Create requires ?invoice=<pk> (the view validates it with as_db_int). The value
+          is echoed back from the current filter, so it is the one the register is already
+          showing rather than a guessed id.
+        {% endcomment %}
+        <a href="{% url 'procurement:supplierinvoiceline_create' %}?invoice={{ request.GET.invoice|urlencode }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Line</a>
+      {% endif %}
+      <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+      <a href="{% url 'procurement:paymentschedule_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Payment schedule</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.lines }}</div><div class="stat-label">Invoice lines</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.matched }}</div><div class="stat-label">Fully matched</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.unmatched }}</div><div class="stat-label">Unmatched / partial</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.non_po }}</div><div class="stat-label">Non-PO lines</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search description, SKU or invoice number…">
+        </div>
+        <div class="form-group">
+          <select name="invoice" aria-label="Invoice" class="form-select">
+            <option value="">All invoices</option>
+            {% for i in invoices %}
+              <option value="{{ i.pk|stringformat:"d" }}" {% if request.GET.invoice == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.number }} · {{ i.invoice_number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for it in items %}
+              <option value="{{ it.pk|stringformat:"d" }}" {% if request.GET.item == it.pk|stringformat:"d" %}selected{% endif %}>{{ it.sku }} · {{ it.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The parameter is named gl_missing after what it SELECTS, not after the column it
+          inspects: the lookup is gl_account__isnull, so the value that means "an account IS
+          set" is the string "False". crud_list maps the literal "True"/"False" strings to
+          booleans, which is why the option values read inverted against their labels.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="gl_missing" aria-label="GL account" class="form-select">
+            <option value="">Any GL account</option>
+            <option value="False" {% if request.GET.gl_missing == "False" %}selected{% endif %}>Has GL account</option>
+            <option value="True" {% if request.GET.gl_missing == "True" %}selected{% endif %}>Missing GL account</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplierinvoiceline_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Line</th>
+            <th>PO line</th>
+            <th>Receipt line</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Unit price</th>
+            <th class="text-right">Line total</th>
+            <th class="text-right">Cumulative invoiced / received</th>
+            <th>GL account</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:supplierinvoiceline_detail' obj.pk %}">{{ obj.description|default:obj.sku_hint|default:"Invoice line" }}</a>
+                <div class="text-muted">
+                  <a href="{% url 'procurement:supplierinvoice_detail' obj.invoice.pk %}">{{ obj.invoice.number }}</a>
+                  · {{ obj.invoice.invoice_number }}
+                  {% if obj.sku_hint %} · {{ obj.sku_hint }}{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if obj.po_line %}
+                  <a href="{% url 'scm:purchaseorder_detail' obj.po_line.purchase_order.pk %}" class="fw-600">{{ obj.po_line.purchase_order.number }}</a>
+                  <div class="text-muted">line {{ obj.po_line.pk }} · {{ obj.po_line.item_description|default:"Ordered item" }}</div>
+                {% else %}
+                  <span class="badge badge-muted">Non-PO</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.receipt_line %}
+                  <a href="{% url 'scm:goodsreceipt_detail' obj.receipt_line.goods_receipt.pk %}" class="fw-600">{{ obj.receipt_line.goods_receipt.number }}</a>
+                  <div class="text-muted">received {{ obj.receipt_line.quantity_received|floatformat:"-4" }}{% if obj.receipt_line.quantity_rejected %} · rejected {{ obj.receipt_line.quantity_rejected|floatformat:"-4" }}{% endif %}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ obj.quantity|floatformat:"-4" }}
+                <div class="text-muted">
+                  {% if obj.po_line %}
+                    {% if obj.is_matched %}<span class="badge badge-green">Matched</span>
+                    {% elif obj.matched_qty %}<span class="badge badge-amber">Partial</span>
+                    {% else %}<span class="badge badge-slate">Unmatched</span>{% endif %}
+                  {% else %}of {{ obj.matched_qty|floatformat:"-4" }}{% endif %}
+                </div>
+              </td>
+              <td class="text-right">{{ obj.unit_price|floatformat:2 }}{% if obj.invoice.currency %} <span class="text-muted">{{ obj.invoice.currency.code }}</span>{% endif %}</td>
+              <td class="text-right fw-600">{{ obj.line_total|floatformat:2 }}
+                <div class="text-muted">tax {{ obj.tax_rate_pct|floatformat:2 }}% → {{ obj.gross_total|floatformat:2 }}</div>
+              </td>
+              <td class="text-right">
+                {% if obj.po_line %}
+                  {{ obj.cumulative_invoiced_qty|floatformat:"-4" }} / {{ obj.cumulative_received_qty|floatformat:"-4" }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.gl_account %}
+                  <span class="badge badge-green">{{ obj.gl_account.code }}</span>
+                  <div class="text-muted">{{ obj.gl_account.name }}</div>
+                {% else %}
+                  <span class="badge badge-amber">Not set</span>
+                  <div class="text-muted">The header cannot post without one.</div>
+                {% endif %}
+                {% if obj.tax_code %}<div class="text-muted">Tax {{ obj.tax_code.code }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierinvoiceline_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:supplierinvoiceline_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    The confirm text interpolates ONLY the integer pk and the header's
+                    system-assigned SIV- number — never obj.description, which is typed by a
+                    human and whose apostrophe would break out of the attribute (&#39; does
+                    NOT escape inside an event handler, and a throwing handler does not
+                    preventDefault, so the delete would fire unconfirmed).
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:supplierinvoiceline_delete' obj.pk %}" onsubmit="return confirm('Delete line {{ obj.pk }} of invoice {{ obj.invoice.number }}? The invoice totals are re-derived from the lines that remain.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="layers"></i>
+                <h3>No invoice lines yet</h3>
+                <p>Lines belong to an invoice. Open a supplier invoice and add them there — the register fills itself as invoices are captured, and the header subtotal, tax and total are re-derived from these rows.</p>
+                <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
