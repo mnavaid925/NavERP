@@ -40,6 +40,10 @@ from .models import (
     ReceiptTolerancePolicy,
     ReturnToVendor,
     ReturnToVendorLine,
+    SupplierInvoice,
+    SupplierInvoiceLine,
+    InvoiceMatchVariance,
+    InvoiceDispute,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -597,4 +601,79 @@ class ReturnToVendorAdmin(admin.ModelAdmin):
     # here as a reference only. The physical stock removal is SCM's/inventory's, never this.
     readonly_fields = ("number", "status", "shipped_on", "authorized_by", "authorized_at",
                        "closed_at", "cancelled_at", "cancellation_reason", "created_by",
+                       "created_at", "updated_at")
+
+
+class SupplierInvoiceLineInline(admin.TabularInline):
+    model = SupplierInvoiceLine
+    extra = 0
+    fields = ("description", "sku_hint", "uom_hint", "quantity", "unit_price", "tax_rate_pct",
+              "line_total", "matched_qty", "po_line", "receipt_line", "gl_account")
+    raw_id_fields = ("po_line", "receipt_line", "item", "gl_account", "tax_code")
+    # line_total and matched_qty are DERIVED: save() computes the first, run_match() the second.
+    readonly_fields = ("line_total", "matched_qty")
+
+
+@admin.register(SupplierInvoice)
+class SupplierInvoiceAdmin(admin.ModelAdmin):
+    list_display = ("number", "invoice_number", "vendor", "invoice_type", "status",
+                    "match_status", "invoice_date", "due_date", "discount_date", "total",
+                    "currency")
+    list_filter = ("tenant", "status", "match_status", "invoice_type", "source")
+    search_fields = ("number", "invoice_number", "external_ref", "notes", "vendor__name",
+                     "purchase_order__number", "goods_receipt__number")
+    raw_id_fields = ("vendor", "purchase_order", "goods_receipt", "bill", "journal_entry",
+                     "payment_term", "tax_code", "document", "source_submission", "duplicate_of")
+    inlines = (SupplierInvoiceLineInline,)
+    # The money columns, the three derived dates and the match verdict are all computed in
+    # save()/recalc_totals()/run_match() — editing them here would desynchronise the header from
+    # its lines. approve() is the ONE transition that writes the ledger (a Bill + a
+    # JournalEntry), so this surface never posts; the verbs below are the only way status moves.
+    readonly_fields = ("number", "invoice_number_norm", "subtotal", "tax_total", "total",
+                       "amount_paid", "due_date", "discount_date", "discount_expiry_date",
+                       "match_status", "match_notes", "bill", "journal_entry", "approved_by",
+                       "approved_at", "created_at", "updated_at")
+
+
+@admin.register(SupplierInvoiceLine)
+class SupplierInvoiceLineAdmin(admin.ModelAdmin):
+    list_display = ("invoice", "description", "sku_hint", "quantity", "unit_price",
+                    "tax_rate_pct", "line_total", "matched_qty", "gl_account")
+    # NO tenant filter and NO tenant column: this is a PLAIN CHILD, scoped through invoice__tenant
+    # the way scm.GoodsReceiptLine is scoped through goods_receipt__tenant.
+    list_filter = ("invoice__tenant",)
+    search_fields = ("description", "sku_hint", "invoice__number", "invoice__invoice_number",
+                     "item__sku", "item__name")
+    raw_id_fields = ("invoice", "po_line", "receipt_line", "item", "gl_account", "tax_code")
+    readonly_fields = ("line_total", "matched_qty")
+
+
+@admin.register(InvoiceMatchVariance)
+class InvoiceMatchVarianceAdmin(admin.ModelAdmin):
+    list_display = ("invoice", "variance_type", "basis", "expected_value", "actual_value",
+                    "variance_abs", "variance_pct", "outcome", "resolution", "detected_at")
+    list_filter = ("tenant", "variance_type", "basis", "outcome", "resolution")
+    search_fields = ("message", "invoice__number", "invoice__invoice_number")
+    raw_id_fields = ("invoice", "invoice_line", "dispute")
+    # A variance is EVIDENCE written by run_match(): derived figures, the verdict and the bands
+    # in force cannot be retyped without forging the audit trail. resolution is the one field AP
+    # moves, and it moves through accept() and the dispute workflow, not through the admin.
+    readonly_fields = ("variance_abs", "variance_pct", "outcome", "detected_at", "created_at",
+                       "updated_at")
+
+
+@admin.register(InvoiceDispute)
+class InvoiceDisputeAdmin(admin.ModelAdmin):
+    list_display = ("number", "invoice", "supplier", "reason_code", "status",
+                    "disputed_amount", "assigned_to", "due_date", "resolved_at")
+    list_filter = ("tenant", "status", "reason_code", "resolution")
+    search_fields = ("number", "description", "resolution_note", "supplier_contact",
+                     "invoice__number", "supplier__name")
+    raw_id_fields = ("invoice", "invoice_line", "supplier", "assigned_to", "raised_by",
+                     "credit_memo_invoice")
+    # status is editable=False and moves only through the workflow verbs (await/escalate/resolve/
+    # close/withdraw), each of which re-checks its own guard; supplier is denormalised from
+    # invoice.vendor on save and due_date is armed once on create. The admin looks; it never
+    # settles a claim.
+    readonly_fields = ("number", "status", "supplier", "raised_by", "raised_at", "resolved_at",
                        "created_at", "updated_at")
