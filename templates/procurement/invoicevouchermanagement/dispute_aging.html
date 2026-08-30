@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Dispute Aging{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — Dispute aging (lane D, standalone view).
+    Context contract: buckets (list of dicts with keys key, label, rows, count, amount;
+    key is one of overdue / 0-7 / 8-14 / 15-30 / 31-60 / 60+ / none), page_obj, today,
+    stats{open, overdue, due_7d, resolved_30d}, bucket_choices, bucket. Nothing else exists.
+
+    Two things this page must NOT do:
+    1. Present `rows|length` as the bucket total. `rows` is ONLY the current page slice
+       while `count` and `amount` describe the WHOLE bucket — a filtered page of 15 rows
+       in a bucket of 40 would otherwise read "40 disputes" and silently lose 25.
+    2. Link to a withdraw() route. The model has the method, the urls module does not
+       have the route, so a {% url %} for it is a NoReverseMatch that kills the page.
+
+    `bucket_choices` is a CHOICES tuple list like the other *_choices on this lane, so it
+    unpacks as (value, label); the selected value comes from the `bucket` context key,
+    with request.GET.bucket as a belt-and-braces fallback.
+    Pagination uses the shared partial, which replays every GET param except `page` — so
+    the ?bucket= filter survives paging without hand-rolling a query string.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dispute Aging</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><a href="{% url 'procurement:invoicedispute_list' %}">Invoice Disputes</a><span class="sep">›</span><span>Aging</span></div>
+      <p class="text-muted">Open disputes bucketed by where their SLA due date falls, as at {{ today|date:"M d, Y"|default:"today" }}. The overdue bucket is the one that costs money — everything in it is past its promised resolution date and still blocking an invoice.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:invoicedispute_list' %}" class="btn btn-outline"><i data-lucide="message-square-warning"></i> All disputes</a>
+      <a href="{% url 'procurement:invoicedispute_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise dispute</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="message-square-warning"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open disputes</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.due_7d }}</div><div class="stat-label">Due in 7 days</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.resolved_30d }}</div><div class="stat-label">Resolved in 30 days</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="bucket" aria-label="Aging bucket" class="form-select">
+            <option value="">All buckets</option>
+            {% for val, label in bucket_choices %}
+              <option value="{{ val }}" {% if bucket == val or request.GET.bucket == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:invoicedispute_aging' %}" class="btn btn-outline">Reset</a>
+        <span class="text-muted">Bucketing counts days from the SLA due date: overdue is anything past it, the numbered bands are days still to run, and &ldquo;no SLA date&rdquo; collects disputes raised without one.</span>
+      </form>
+    </div>
+  </div>
+
+  {% for b in buckets %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          {% if b.key == "overdue" %}<span class="badge badge-red">{{ b.label }}</span>
+          {% elif b.key == "0-7" %}<span class="badge badge-green">{{ b.label }}</span>
+          {% elif b.key == "8-14" %}<span class="badge badge-amber">{{ b.label }}</span>
+          {% elif b.key == "15-30" %}<span class="badge badge-amber">{{ b.label }}</span>
+          {% elif b.key == "31-60" %}<span class="badge badge-red">{{ b.label }}</span>
+          {% elif b.key == "60+" %}<span class="badge badge-red">{{ b.label }}</span>
+          {% elif b.key == "none" %}<span class="badge badge-muted">{{ b.label }}</span>
+          {% else %}<span class="badge badge-slate">{{ b.label }}</span>{% endif %}
+        </h2>
+        {% comment %}
+          b.count / b.amount describe the WHOLE bucket; b.rows is only this page's slice.
+          Never substitute {{ b.rows|length }} here.
+        {% endcomment %}
+        <span class="text-muted">{{ b.count }} dispute(s) · {{ b.amount|floatformat:"2" }} disputed</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Number</th>
+              <th>Invoice</th>
+              <th>Supplier</th>
+              <th>Reason</th>
+              <th class="text-right">Disputed amount</th>
+              <th>Status</th>
+              <th>SLA due</th>
+              <th class="text-right">Days open</th>
+              <th>Assignee</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for obj in b.rows %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'procurement:invoicedispute_detail' obj.pk %}">{{ obj.number }}</a>
+                  <div class="text-muted">Raised {{ obj.raised_at|date:"M d, Y"|default:"—" }}</div>
+                </td>
+                <td>
+                  {% if obj.invoice %}
+                    <a href="{% url 'procurement:supplierinvoice_detail' obj.invoice.pk %}" class="fw-600">{{ obj.invoice.number }}</a>
+                    {% if obj.invoice.invoice_number %}<div class="text-muted">{{ obj.invoice.invoice_number }}</div>{% endif %}
+                  {% else %}
+                    <span class="text-muted">No invoice</span>
+                  {% endif %}
+                </td>
+                <td>{% if obj.supplier %}{{ obj.supplier.name }}{% else %}<span class="text-muted">No supplier</span>{% endif %}</td>
+                <td>
+                  {% if obj.reason_code == "price" %}<span class="badge badge-amber">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "quantity" %}<span class="badge badge-amber">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "goods_not_received" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "damaged" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "duplicate" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "credit_not_processed" %}<span class="badge badge-info">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "tax" %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "freight" %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "admin" %}<span class="badge badge-muted">{{ obj.get_reason_code_display }}</span>
+                  {% elif obj.reason_code == "other" %}<span class="badge badge-muted">{{ obj.get_reason_code_display }}</span>
+                  {% else %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>{% endif %}
+                </td>
+                <td class="text-right fw-600">{{ obj.disputed_amount|floatformat:"2" }}</td>
+                <td>
+                  {% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == "awaiting_supplier" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == "awaiting_internal" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == "escalated" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == "resolved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == "closed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                  {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+                  {% if obj.is_overdue %}<div><span class="badge badge-red">Overdue</span></div>{% endif %}
+                </td>
+                <td>{{ obj.due_date|date:"M d, Y"|default:"No SLA date" }}</td>
+                <td class="text-right">{{ obj.days_open|default:"0" }} d</td>
+                <td>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'procurement:invoicedispute_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'procurement:invoicedispute_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="10">
+                {% comment %}
+                  An empty `rows` slice is NOT an empty bucket — with a ?bucket= filter the
+                  other buckets legitimately carry no rows on this page, and paging past
+                  the last page of a bucket shows the same thing. Only the count in the
+                  card header says whether the bucket is genuinely empty.
+                {% endcomment %}
+                {% if b.count %}
+                  <div class="empty-state">
+                    <i data-lucide="calendar-clock"></i>
+                    <h3>Nothing from this bucket on this page</h3>
+                    <p>All {{ b.count }} dispute(s) in this bucket are on another page — use the paging controls at the foot of the report.</p>
+                  </div>
+                {% else %}
+                  <div class="empty-state">
+                    <i data-lucide="check-circle"></i>
+                    <h3>Nothing in this bucket</h3>
+                    <p>No open dispute currently falls in it.</p>
+                  </div>
+                {% endif %}
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card">
+      <div class="empty-state">
+        <i data-lucide="calendar-clock"></i>
+        <h3>Nothing to age</h3>
+        <p>Aging only reports open disputes. Raise one from an invoice when an amount is genuinely contested, and it appears here with its SLA clock running.</p>
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Supplier invoices</a>
+      </div>
+    </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="card-body">
+      {% comment %} The partial is itself wrapped in num_pages > 1, so a single page renders nothing. {% endcomment %}
+      {% include "partials/pagination.html" %}
+      <p class="text-muted">Paging walks the rows of the filtered bucket; clear the bucket filter to page through every open dispute at once.</p>
+    </div>
+  </div>
+{% endblock %}
