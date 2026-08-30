@@ -273,6 +273,52 @@ from .GoodsReceiptInspection import (
     tolerancepolicy_edit,
     tolerancepolicy_list,
 )
+# 6.13 Invoice & Voucher Management — from the entity MODULES, same reason as models/__init__.
+from .InvoiceVoucherManagement.SupplierInvoices import (
+    invoicevoucher_dashboard,
+    supplierinvoice_approve,
+    supplierinvoice_capture,
+    supplierinvoice_create,
+    supplierinvoice_delete,
+    supplierinvoice_detail,
+    supplierinvoice_duplicates,
+    supplierinvoice_edit,
+    supplierinvoice_list,
+    supplierinvoice_mark_paid,
+    supplierinvoice_match,
+    supplierinvoice_override,
+    supplierinvoice_revalidate,
+    supplierinvoice_reverse,
+    supplierinvoice_schedule,
+    supplierinvoice_void,
+)
+from .InvoiceVoucherManagement.SupplierInvoiceLines import (
+    paymentschedule_list,
+    supplierinvoiceline_create,
+    supplierinvoiceline_delete,
+    supplierinvoiceline_detail,
+    supplierinvoiceline_edit,
+    supplierinvoiceline_list,
+)
+from .InvoiceVoucherManagement.MatchVariances import (
+    invoice_match_board,
+    matchvariance_accept,
+    matchvariance_detail,
+    matchvariance_list,
+)
+from .InvoiceVoucherManagement.InvoiceDisputes import (
+    invoicedispute_aging,
+    invoicedispute_await_internal,
+    invoicedispute_await_supplier,
+    invoicedispute_close,
+    invoicedispute_create,
+    invoicedispute_delete,
+    invoicedispute_detail,
+    invoicedispute_edit,
+    invoicedispute_escalate,
+    invoicedispute_list,
+    invoicedispute_resolve,
+)
 
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
@@ -416,4 +462,19 @@ __all__ = [
     "rtv_authorize", "rtv_ship", "rtv_close", "rtv_cancel",
     "receiving_console", "receiving_console_book", "receiving_console_mint_lots",
     "tolerance_exceptions", "receipt_audit",
+    "supplierinvoice_list", "supplierinvoice_detail", "supplierinvoice_create",
+    "supplierinvoice_edit", "supplierinvoice_delete",
+    "supplierinvoice_capture", "supplierinvoice_duplicates", "supplierinvoice_match",
+    "supplierinvoice_revalidate",
+    "supplierinvoice_approve", "supplierinvoice_override", "supplierinvoice_void",
+    "supplierinvoice_reverse", "supplierinvoice_schedule", "supplierinvoice_mark_paid",
+    "invoicevoucher_dashboard",
+    "supplierinvoiceline_list", "supplierinvoiceline_detail", "supplierinvoiceline_create",
+    "supplierinvoiceline_edit", "supplierinvoiceline_delete", "paymentschedule_list",
+    "matchvariance_list", "matchvariance_detail", "matchvariance_accept",
+    "invoice_match_board",
+    "invoicedispute_list", "invoicedispute_detail", "invoicedispute_create",
+    "invoicedispute_edit", "invoicedispute_delete", "invoicedispute_resolve",
+    "invoicedispute_escalate", "invoicedispute_await_supplier",
+    "invoicedispute_await_internal", "invoicedispute_close", "invoicedispute_aging",
 ]
