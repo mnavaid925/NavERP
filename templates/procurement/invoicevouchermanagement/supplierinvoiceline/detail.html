@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.pk }} · Invoice Line · {{ obj.invoice.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — SupplierInvoiceLine detail (lane B).
+    Context contract (crud_detail + extra_context): obj, invoice, variances,
+    cumulative{invoiced, received, ordered, remaining}, can_edit. Nothing else exists here.
+    The child carries NO number of its own, so the page title and every breadcrumb leaf
+    use the header's system-assigned number instead — there is no {{ obj.number }} to fall
+    back on, and inventing one is how a template ships a blank heading.
+    Every nullable FK (po_line, receipt_line, item, gl_account, tax_code) is guarded before
+    it is dereferenced: a None FK inside a filter argument RAISES even where a bare lookup
+    would quietly render nothing.
+    Badge colours are hardcoded against the frozen CHOICES keys with a get_*_display
+    fallback and a badge-slate tail, so a backend rename degrades instead of rendering an
+    unstyled badge (only badge-green / -red / -amber / -info / -muted / -slate exist).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.description|default:obj.sku_hint|default:"Invoice line" }}
+        {% if obj.po_line %}<span class="badge badge-info">Against PO</span>{% else %}<span class="badge badge-muted">Non-PO</span>{% endif %}
+        {% if obj.is_matched %}<span class="badge badge-green">Matched</span>{% elif obj.matched_qty %}<span class="badge badge-amber">Partially matched</span>{% else %}<span class="badge badge-slate">Unmatched</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:supplierinvoiceline_list' %}">Invoice Lines</a><span class="sep">›</span><a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}">{{ invoice.number }}</a><span class="sep">›</span><span>Line {{ obj.pk }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="btn btn-outline"><i data-lucide="file-input"></i> Invoice {{ invoice.number }}</a>
+      {% if can_edit %}<a href="{% url 'procurement:supplierinvoiceline_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The claim</h2><span class="text-muted">what the supplier says they delivered and charged</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Invoice</dt>
+          <dd><a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="fw-600">{{ invoice.number }}</a>
+            {% if invoice.status == "draft" %}<span class="badge badge-muted">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "parked" %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "captured" %}<span class="badge badge-info">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "blocked" %}<span class="badge badge-red">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "disputed" %}<span class="badge badge-amber">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "pending_approval" %}<span class="badge badge-amber">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "approved" %}<span class="badge badge-green">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "scheduled" %}<span class="badge badge-info">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "paid" %}<span class="badge badge-green">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "void" %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+            {% elif invoice.status == "reversed" %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+            {% else %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>{% endif %}
+            <div class="text-muted">Supplier number {{ invoice.invoice_number }} · {{ invoice.invoice_date|date:"M d, Y" }}</div>
+          </dd></div>
+        <div class="detail-item"><dt>Vendor</dt>
+          <dd>{% if invoice.vendor %}{{ invoice.vendor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Description</dt>
+          <dd>{{ obj.description|default:"—" }}{% if obj.sku_hint %}<div class="text-muted">SKU {{ obj.sku_hint }}</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Unit of measure</dt><dd>{{ obj.uom_hint|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Item master</dt>
+          <dd>{% if obj.item %}{{ obj.item.sku }} · {{ obj.item.name }}{% else %}<span class="text-muted">Not linked to an item — purchase-order lines are free text.</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quantity</dt><dd class="fw-600">{{ obj.quantity|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Unit price</dt><dd>{{ obj.unit_price|floatformat:2 }}{% if invoice.currency %} <span class="text-muted">{{ invoice.currency.code }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Tax rate</dt><dd>{{ obj.tax_rate_pct|floatformat:2 }}%</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Money</h2><span class="text-muted">derived — quantity × unit price, recalculated on every save</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Line total (net)</dt><dd class="fw-600">{{ obj.line_total|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Tax amount</dt><dd>{{ obj.tax_amount|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Gross total</dt><dd class="fw-600">{{ obj.gross_total|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Matched quantity</dt><dd>{{ obj.matched_qty|floatformat:"-4" }} of {{ obj.quantity|floatformat:"-4" }} invoiced</dd></div>
+      </dl>
+      <p class="text-muted">The header subtotal, tax total and total are re-derived from the invoice lines — editing a line moves the claim the invoice makes, not just this row.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where it posts</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Expense / GL account</dt>
+          <dd>{% if obj.gl_account %}<span class="badge badge-green">{{ obj.gl_account.code }}</span> {{ obj.gl_account.name }}{% else %}<span class="badge badge-amber">Not set</span> <span class="text-muted">A line on a non-PO invoice cannot post without one.</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Tax code</dt>
+          <dd>{% if obj.tax_code %}<span class="badge badge-info">{{ obj.tax_code.code }}</span> {{ obj.tax_code.name|default:"" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Against the order and the receipt</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Purchase-order line</dt>
+          <dd>{% if obj.po_line %}
+                <a href="{% url 'scm:purchaseorder_detail' obj.po_line.purchase_order.pk %}" class="fw-600">{{ obj.po_line.purchase_order.number }}</a> line {{ obj.po_line.pk }}
+                <div class="text-muted">{{ obj.po_line.item_description|default:"Ordered item" }} · ordered {{ obj.po_line.quantity|floatformat:"-4" }} at {{ obj.po_line.unit_price|floatformat:2 }}</div>
+              {% else %}<span class="text-muted">No ordered line — this is a non-PO line, judged on its own and posted to the account named above.</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Goods-receipt line</dt>
+          <dd>{% if obj.receipt_line %}
+                <a href="{% url 'scm:goodsreceipt_detail' obj.receipt_line.goods_receipt.pk %}" class="fw-600">{{ obj.receipt_line.goods_receipt.number }}</a> line {{ obj.receipt_line.pk }}
+                <div class="text-muted">accepted {{ obj.receipt_line.quantity_received|floatformat:"-4" }}{% if obj.receipt_line.quantity_rejected %} · rejected {{ obj.receipt_line.quantity_rejected|floatformat:"-4" }}{% endif %}</div>
+              {% else %}<span class="text-muted">No receipt line — nothing has been booked against this ordered line yet.</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Cumulative position</h2><span class="text-muted">every live invoice and every live receipt against this ordered line</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Invoiced to date</dt><dd class="fw-600">{{ cumulative.invoiced|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Received to date</dt><dd class="fw-600">{{ cumulative.received|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Ordered</dt><dd>{{ cumulative.ordered|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Remaining orderable</dt><dd>{{ cumulative.remaining|floatformat:"-4" }}</dd></div>
+      </dl>
+      <p class="text-muted">Two invoices of 60 against an order of 100 is an over-invoice even though neither row breaches on its own — these figures are what the match engine compares, and they are derived, never stored, so a cancelled receipt or a reversed invoice corrects them immediately.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Match variances</h2><span class="text-muted">{{ variances|length }} row(s) recorded against this line</span></div>
+    <div class="card-body">
+      {% if variances %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>Basis</th>
+                <th class="text-right">Expected</th>
+                <th class="text-right">Actual</th>
+                <th class="text-right">Variance</th>
+                <th>Outcome</th>
+                <th>Resolution</th>
+                <th>Note</th>
+                <th>Detected</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in variances %}
+                <tr>
+                  <td class="fw-600">{{ v.get_variance_type_display }}
+                    {% if v.tolerance_pct_applied is not None or v.tolerance_abs_applied is not None %}
+                      <div class="text-muted">band {% if v.tolerance_pct_applied is not None %}±{{ v.tolerance_pct_applied|floatformat:2 }}%{% endif %}{% if v.tolerance_pct_applied is not None and v.tolerance_abs_applied is not None %} / {% endif %}{% if v.tolerance_abs_applied is not None %}±{{ v.tolerance_abs_applied|floatformat:2 }}{% endif %}</div>
+                    {% endif %}
+                  </td>
+                  <td>{{ v.get_basis_display }}</td>
+                  <td class="text-right">{{ v.expected_value|floatformat:"-4" }}</td>
+                  <td class="text-right">{{ v.actual_value|floatformat:"-4" }}</td>
+                  <td class="text-right fw-600">{{ v.variance_abs|floatformat:"-4" }}
+                    {% if v.variance_pct is not None %}<div class="text-muted">{{ v.variance_pct|floatformat:2 }}%</div>{% endif %}
+                  </td>
+                  <td>
+                    {% if v.outcome == "auto_accept" %}<span class="badge badge-green">{{ v.get_outcome_display }}</span>
+                    {% elif v.outcome == "warn" %}<span class="badge badge-amber">{{ v.get_outcome_display }}</span>
+                    {% elif v.outcome == "block" %}<span class="badge badge-red">{{ v.get_outcome_display }}</span>
+                    {% else %}<span class="badge badge-slate">{{ v.get_outcome_display }}</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if v.resolution == "open" %}<span class="badge badge-amber">{{ v.get_resolution_display }}</span>
+                    {% elif v.resolution == "accepted" %}<span class="badge badge-green">{{ v.get_resolution_display }}</span>
+                    {% elif v.resolution == "disputed" %}<span class="badge badge-red">{{ v.get_resolution_display }}</span>
+                    {% elif v.resolution == "credit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                    {% elif v.resolution == "debit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                    {% elif v.resolution == "short_paid" %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>
+                    {% elif v.resolution == "cancelled" %}<span class="badge badge-muted">{{ v.get_resolution_display }}</span>
+                    {% else %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>{% endif %}
+                  </td>
+                  <td>{{ v.message|default:"—" }}</td>
+                  <td>{{ v.detected_at|date:"M d, Y H:i" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted">A variance is evidence, not a record: the register is rebuilt from scratch by every match run, so the only thing a person moves is the resolution. Re-run the match from the invoice to refresh these rows after a correction.</p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="check-circle"></i>
+          <h3>No variances recorded against this line</h3>
+          <p>Either the match has not been run for this invoice, or the last run found nothing that disagreed. Run the match from the invoice page to populate this register.</p>
+          <a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="btn btn-outline"><i data-lucide="refresh-cw"></i> Open invoice {{ invoice.number }}</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% if can_edit %}
+          <a href="{% url 'procurement:supplierinvoiceline_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% comment %}
+          Delete interpolates ONLY the integer pk and the header's system-assigned SIV-
+          number. obj.description is typed by a human and its apostrophe would break out of
+          the attribute — &#39; does NOT escape inside an event handler, and a throwing
+          handler does not preventDefault, so the delete would fire unconfirmed.
+        {% endcomment %}
+        {% if can_edit %}
+          <form method="post" action="{% url 'procurement:supplierinvoiceline_delete' obj.pk %}" onsubmit="return confirm('Delete line {{ obj.pk }} of invoice {{ obj.invoice.number }}? The invoice totals are re-derived from the lines that remain.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'procurement:supplierinvoiceline_list' %}" class="btn btn-outline"><i data-lucide="layers"></i> Back to lines</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
