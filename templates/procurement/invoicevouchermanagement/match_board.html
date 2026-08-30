@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Match Board{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — Three-way match board (lane C, standalone view).
+    Context contract: groups (list of dicts with keys invoice, variances, blocking_count,
+    warn_count, oldest_at), page_obj, stats{invoices, blocking, warn, overdue},
+    outcome_choices, variance_type_choices, today, q. Nothing else exists here.
+
+    Four things this page must NOT do:
+    1. Count `g.variances|length` as the invoice's exception total. `variances` is the
+       slice the view put in the group while blocking_count / warn_count are computed
+       over the whole invoice — the two are not the same number.
+    2. Assume a row is acceptable. Each variance carries a `can_accept` flag (open or
+       disputed resolution AND a parent invoice that is not locked) and an `actions`
+       collection; both are rendered defensively, so a row without them simply shows
+       no button rather than offering a transition the view would reject.
+    3. Interpolate a variance message into a confirm() handler. `message` is matcher
+       text and can carry an apostrophe; &#39; does not escape inside an event-handler
+       attribute and a throwing confirm does not preventDefault, so the POST would fire
+       unconfirmed. Only the integer {{ v.pk }} is used.
+    4. Present variance_pct beyond 4 dp — it is a Decimal(9,4) column.
+
+    The board is ordered OLDEST EXCEPTION FIRST: the invoice whose exception has waited
+    longest heads the page, which is why `oldest_at` is shown in every card header.
+    stats.overdue counts variances past their due date that are NOT in a terminal
+    resolution — accepted / credit_memo / debit_memo / short_paid / cancelled are
+    terminal, so they never age into it.
+    Badges compare the frozen CHOICES keys and always end with a badge-slate fallback.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Match Board</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><span>Match Board</span></div>
+      <p class="text-muted">One card per invoice that failed its three-way match, oldest exception first — the queue an AP clerk works top-down. Blocking variances stop the invoice dead; warnings let it through but stay on the record; anything overdue has been waiting longer than it should and is not yet settled.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:matchvariance_list' %}" class="btn btn-primary"><i data-lucide="scale"></i> All variances</a>
+      <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="receipt"></i></div><div class="stat-value">{{ stats.invoices }}</div><div class="stat-label">Invoices with exceptions</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocking }}</div><div class="stat-label">Blocking variances</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.warn }}</div><div class="stat-label">Accepted with warning</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue &amp; unsettled</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search message or invoice number…">
+        </div>
+        <div class="form-group">
+          <select name="outcome" aria-label="Outcome" class="form-select">
+            <option value="">All outcomes</option>
+            {% for val, label in outcome_choices %}
+              <option value="{{ val }}" {% if request.GET.outcome == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="variance_type" aria-label="Variance type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in variance_type_choices %}
+              <option value="{{ val }}" {% if request.GET.variance_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:invoice_match_board' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="text-muted">As at {{ today|date:"M d, Y"|default:"today" }}. Filtering by outcome or type narrows the variances inside each invoice card — an invoice drops off the board entirely once nothing on it matches.</p>
+    </div>
+  </div>
+
+  {% for g in groups %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          {% if g.invoice %}
+            <a href="{% url 'procurement:supplierinvoice_detail' g.invoice.pk %}">{{ g.invoice.number }}</a>
+            {% if g.invoice.invoice_number %}<span class="text-muted">· {{ g.invoice.invoice_number }}</span>{% endif %}
+          {% else %}
+            No invoice
+          {% endif %}
+        </h2>
+        <span class="text-muted">
+          {% if g.invoice.vendor %}{{ g.invoice.vendor.name }} · {% endif %}
+          {% if g.invoice %}{{ g.invoice.total|floatformat:"2" }}{% if g.invoice.currency %} {{ g.invoice.currency.code }}{% endif %}{% endif %}
+          · <span class="badge badge-red">{{ g.blocking_count }} blocking</span>
+          · <span class="badge badge-amber">{{ g.warn_count }} warning</span>
+          · oldest {{ g.oldest_at|date:"M d, Y"|default:"—" }}
+        </span>
+      </div>
+      <div class="card-body">
+        {% if g.variances %}
+          {% comment %}
+            One <details> per variance: the summary carries everything needed to triage,
+            the body carries the band, the message and the actions. The first card on the
+            page opens so the board is never a wall of collapsed rows.
+          {% endcomment %}
+          {% for v in g.variances %}
+            <details {% if forloop.first and forloop.parentloop.first %}open{% endif %}>
+              <summary>
+                {% if v.variance_type == "price" %}<span class="badge badge-amber">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "quantity" %}<span class="badge badge-amber">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "quantity_no_receipt" %}<span class="badge badge-amber">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "over_invoice" %}<span class="badge badge-red">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "total_amount" %}<span class="badge badge-amber">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "fx_rate" %}<span class="badge badge-info">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "tax" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "duplicate" %}<span class="badge badge-red">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "missing_po" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "missing_receipt" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>{% endif %}
+                <span class="fw-600">{{ v.expected_value|floatformat:"-4" }} → {{ v.actual_value|floatformat:"-4" }}</span>
+                <span class="text-muted">({{ v.variance_abs|floatformat:"-4" }}{% if v.variance_pct != None %} · {{ v.variance_pct|floatformat:"4" }}%{% endif %})</span>
+                {% if v.outcome == "auto_accept" %}<span class="badge badge-green">{{ v.get_outcome_display }}</span>
+                {% elif v.outcome == "warn" %}<span class="badge badge-amber">{{ v.get_outcome_display }}</span>
+                {% elif v.outcome == "block" %}<span class="badge badge-red">{{ v.get_outcome_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_outcome_display }}</span>{% endif %}
+                {% if v.resolution == "open" %}<span class="badge badge-amber">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "accepted" %}<span class="badge badge-green">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "disputed" %}<span class="badge badge-red">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "credit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "debit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "short_paid" %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "cancelled" %}<span class="badge badge-muted">{{ v.get_resolution_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>{% endif %}
+                <span class="text-muted">{{ v.detected_at|date:"M d, Y"|default:"—" }}</span>
+              </summary>
+              <p class="text-muted">
+                Basis {{ v.get_basis_display }} · band
+                {% if v.tolerance_abs_applied != None %}±{{ v.tolerance_abs_applied|floatformat:"-4" }}{% else %}no abs band{% endif %} /
+                {% if v.tolerance_pct_applied != None %}±{{ v.tolerance_pct_applied|floatformat:"4" }}%{% else %}no % band{% endif %}
+                · detected {{ v.detected_at|date:"M d, Y H:i"|default:"—" }}
+              </p>
+              {% if v.message %}<p>{{ v.message }}</p>{% endif %}
+              <div class="table-actions">
+                <a href="{% url 'procurement:matchvariance_detail' v.pk %}" class="btn-icon" title="View variance" aria-label="View variance"><i data-lucide="eye"></i></a>
+                {% comment %}
+                  `actions` is a per-row collection of dicts (url / label / verb / css) the
+                  view builds for the row — accept and view-invoice today. Rendered as
+                  given: a POST action gets its own CSRF form, anything else stays a link.
+                {% endcomment %}
+                {% for action in v.actions %}
+                  {% if action.verb == "post" %}
+                    <form method="post" action="{{ action.url }}">
+                      {% csrf_token %}<button class="btn {{ action.css|default:"btn-outline" }}" type="submit">{{ action.label }}</button>
+                    </form>
+                  {% else %}
+                    <a href="{{ action.url }}" class="btn {{ action.css|default:"btn-outline" }}">{{ action.label }}</a>
+                  {% endif %}
+                {% empty %}
+                  {% if v.can_accept %}
+                    {% comment %} Fallback in case the view ships `can_accept` without `actions`: same route, POST + CSRF. {% endcomment %}
+                    <form method="post" action="{% url 'procurement:matchvariance_accept' v.pk %}" onsubmit="return confirm('Accept variance #{{ v.pk }}? It stops counting against this invoice.');">
+                      {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle"></i> Accept</button>
+                    </form>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </details>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted">No variance on this invoice matches the current filter — clear the filter to see what the match actually raised.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% empty %}
+    <div class="card">
+      <div class="empty-state">
+        <i data-lucide="git-merge"></i>
+        <h3>Nothing to match</h3>
+        <p>Every invoice that has run the three-way match came back clean, or nothing matches these filters. The board fills up the moment an invoice differs from its order or its goods receipt by more than the tolerance band allows.</p>
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+        <a href="{% url 'procurement:invoice_match_board' %}" class="btn btn-outline">Clear filters</a>
+      </div>
+    </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="card-body">
+      {% comment %} The partial is itself wrapped in num_pages > 1, so a single page renders nothing. {% endcomment %}
+      {% include "partials/pagination.html" %}
+      <p class="text-muted">Paging walks invoices, not variances — one page of cards at a time, still oldest exception first.</p>
+    </div>
+  </div>
+{% endblock %}
