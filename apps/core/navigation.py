@@ -1591,6 +1591,19 @@ LIVE_LINKS = {
         "Inventory Posting":                 "scm:goodsreceipt_list?status=received",
         "Receipt Reversal & Audit Trail":    "procurement:receipt_audit",
     },
+    # 6.13 maps all five of its NavERP.md bullets, and deliberately no more. The register pages
+    # every bullet here runs on are STAFF-reachable: only the two write-only verbs that need a
+    # tenant admin (``supplierinvoice_override``, ``supplierinvoice_reverse``) are left out, and
+    # both are reached from the invoice detail page they act on. "Early Payment Discount Tracking"
+    # has no page of its own — it is a computed panel, so it deep-links the dashboard card that
+    # IS that panel (``#discount``, anchored with scroll-margin-top in the template).
+    "6.13": {
+        "Invoice Capture (OCR)":               "procurement:supplierinvoice_capture",
+        "Three-Way Matching":                  "procurement:invoice_match_board",
+        "Dispute Resolution Workflow":         "procurement:invoicedispute_list",
+        "Payment Schedule/Terms Management":   "procurement:paymentschedule_list",
+        "Early Payment Discount Tracking":     "procurement:invoicevoucher_dashboard#discount",
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
