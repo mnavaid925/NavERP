@@ -26,6 +26,10 @@ from .DashboardPortal.QuickRequisitions import urlpatterns as _dp_quickreq
 from .DashboardPortal.SelfServiceReports import urlpatterns as _dp_reports
 from .EAuctionManagement import urlpatterns as _eauc_eauctionmanagement
 from .GoodsReceiptInspection import urlpatterns as _gri_goodsreceiptinspection
+from .InvoiceVoucherManagement.SupplierInvoices import urlpatterns as _ivm_supplierinvoices
+from .InvoiceVoucherManagement.SupplierInvoiceLines import urlpatterns as _ivm_supplierinvoicelines
+from .InvoiceVoucherManagement.MatchVariances import urlpatterns as _ivm_matchvariances
+from .InvoiceVoucherManagement.InvoiceDisputes import urlpatterns as _ivm_invoicedisputes
 from .RequisitionManagement.Amendments import urlpatterns as _rm_amendments
 from .RequisitionManagement.Requisitions import urlpatterns as _rm_requisitions
 from .RequisitionManagement.Templates import urlpatterns as _rm_templates
@@ -63,4 +67,13 @@ urlpatterns = [
     *_gri_goodsreceiptinspection,  # 6.12 receipt tolerance policies, discrepancy register,
                                    #      returns to vendor, and the three computed pages:
                                    #      receiving console, tolerance exceptions, receipt audit
+    # 6.13 LAST, so it cannot shadow an earlier module: every first segment here is new
+    # (``supplier-invoices/``, ``capture/``, ``invoice-vouchers/``, ``supplier-invoice-lines/``,
+    # ``payment-schedule/``, ``match-variances/``, ``match-board/``, ``invoice-disputes/``) and
+    # this app registers no greedy ``<str:…>`` converter, so appended-last is belt-and-braces
+    # against a future module claiming one of them.
+    *_ivm_supplierinvoices,     # 6.13 invoice register + capture, duplicates, match/approval verbs
+    *_ivm_supplierinvoicelines,  # 6.13 invoice line register + the payment schedule board
+    *_ivm_matchvariances,       # 6.13 match exceptions + the three-way match board
+    *_ivm_invoicedisputes,      # 6.13 dispute register + workflow verbs + the aging board
 ]
