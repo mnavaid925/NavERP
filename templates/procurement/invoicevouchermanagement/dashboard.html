@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}Invoice &amp; Voucher Management{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — module landing page.
+    Context contract: tiles (list of dicts with keys label, url, icon, count),
+    stats{invoices, blocked, disputed, capturable_discount, open_disputes},
+    recent (last 8 invoices), blocked (status="blocked"), expiring (capturable discounts
+    due in <=7 days), open_disputes, aging (dict of bucket key -> count).
+
+    Every invoice row here is a SupplierInvoice, so the badge chains compare the frozen
+    STATUS_CHOICES / MATCH_STATUS_CHOICES keys and always end with a badge-slate fallback.
+    stat-icon is limited to blue/green/orange/purple/slate — there is no approved red.
+    No user-typed value reaches a confirm() handler anywhere on this page.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Invoice &amp; Voucher Management</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span></div>
+      <p class="text-muted">Where a supplier&rsquo;s claim for payment becomes a liability you control: capture the invoice, three-way match it against the order and the receipt, work the exceptions, approve it into the ledger and schedule the payment.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierinvoice_capture' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Capture invoice</a>
+      <a href="{% url 'procurement:supplierinvoice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Invoice</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.invoices }}</div><div class="stat-label">Invoices</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocked }}</div><div class="stat-label">Blocked by matching</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="message-square-warning"></i></div><div class="stat-value">{{ stats.disputed }}</div><div class="stat-label">Disputed</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="percent"></i></div><div class="stat-value">{{ stats.capturable_discount|floatformat:"2" }}</div><div class="stat-label">Discount still capturable</div></div>
+  </div>
+
+  {% if tiles %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Where to go</h2></div>
+      <div class="card-body">
+        <div class="badge-group">
+          {% for tile in tiles %}
+            <a class="btn btn-outline" href="{{ tile.url }}">
+              <i data-lucide="{{ tile.icon|default:'file-text' }}"></i> {{ tile.label }}
+              {% if tile.count != None %}<span class="badge badge-slate">{{ tile.count }}</span>{% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent invoices</h2><span class="text-muted">the last eight captured or updated</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:supplierinvoice_list' %}"><i data-lucide="file-text"></i> All invoices</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Vendor</th>
+            <th>Supplier no.</th>
+            <th>Date</th>
+            <th class="text-right">Total</th>
+            <th>Match</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in recent %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:supplierinvoice_detail' obj.pk %}">{{ obj.number }}</a></td>
+              <td>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}</td>
+              <td>{{ obj.invoice_number|default:"—" }}</td>
+              <td>{{ obj.invoice_date|date:"M d, Y"|default:"—" }}</td>
+              <td class="text-right">{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.total|floatformat:"2" }}</td>
+              <td>
+                {% if obj.match_status == "not_run" %}<span class="badge badge-muted">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "matched" %}<span class="badge badge-green">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "within_tolerance" %}<span class="badge badge-info">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "price_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "quantity_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "total_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "fx_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "no_receipt" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "over_invoiced" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "duplicate_suspect" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_match_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "parked" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "captured" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "blocked" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "disputed" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "pending_approval" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "approved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "paid" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "void" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "reversed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierinvoice_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:supplierinvoice_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="file-text"></i>
+                <h3>No invoices yet</h3>
+                <p>Capture one from the supplier&rsquo;s document, or key it in by hand.</p>
+                <a href="{% url 'procurement:supplierinvoice_capture' %}" class="btn btn-primary"><i data-lucide="file-input"></i> Capture an invoice</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Blocked by matching</h2><span class="text-muted">cannot be approved until the variance is cleared</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:invoice_match_board' %}"><i data-lucide="git-merge"></i> Match board</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:matchvariance_list' %}"><i data-lucide="scale"></i> Exceptions</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Vendor</th>
+            <th>Supplier no.</th>
+            <th class="text-right">Total</th>
+            <th>Match</th>
+            <th>Discount date</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in blocked %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:supplierinvoice_detail' obj.pk %}">{{ obj.number }}</a></td>
+              <td>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}</td>
+              <td>{{ obj.invoice_number|default:"—" }}</td>
+              <td class="text-right">{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.total|floatformat:"2" }}</td>
+              <td>
+                {% if obj.match_status == "not_run" %}<span class="badge badge-muted">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "matched" %}<span class="badge badge-green">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "within_tolerance" %}<span class="badge badge-info">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "price_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "quantity_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "total_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "fx_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "no_receipt" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "over_invoiced" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "duplicate_suspect" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_match_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.discount_date|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierinvoice_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="check-circle"></i>
+                <h3>Nothing is blocked</h3>
+                <p>No invoice failed three-way matching. Blocked invoices are the ones waiting on a real decision — a price the supplier never agreed, goods that never arrived, or an amount that does not add up.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    id="discount" is the anchor the 6.13 "Early Payment Discount Tracking" NavERP.md bullet
+    deep-links to (navigation.LIVE_LINKS["6.13"] → procurement:invoicevoucher_dashboard#discount).
+    scroll-margin-top keeps the card clear of the sticky header when the fragment is jumped to.
+  {% endcomment %}
+  <div class="card" id="discount" style="scroll-margin-top:1rem;">
+    <div class="card-header"><h2 class="card-title">Discounts expiring</h2><span class="text-muted">settlement discounts you can still capture</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:paymentschedule_list' %}"><i data-lucide="calendar-clock"></i> Payment schedule</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Vendor</th>
+            <th class="text-right">Total</th>
+            <th class="text-right">Discountable</th>
+            <th>Discount date</th>
+            <th class="text-right">Annualised</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in expiring %}
+            <tr>
+              <td class="fw-600">
+                {% if row.invoice %}<a href="{% url 'procurement:supplierinvoice_detail' row.invoice.pk %}">{{ row.invoice.number }}</a>
+                {% else %}<a href="{% url 'procurement:supplierinvoice_detail' row.pk %}">{{ row.number }}</a>{% endif %}
+              </td>
+              <td>
+                {% if row.invoice %}{% if row.invoice.vendor %}{{ row.invoice.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}
+                {% else %}{% if row.vendor %}{{ row.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}{% endif %}
+              </td>
+              <td class="text-right">
+                {% if row.invoice %}{% if row.invoice.currency %}{{ row.invoice.currency.code }} {% endif %}{{ row.invoice.total|floatformat:"2" }}
+                {% else %}{% if row.currency %}{{ row.currency.code }} {% endif %}{{ row.total|floatformat:"2" }}{% endif %}
+              </td>
+              <td class="text-right">
+                {% if row.discount_amount != None %}{{ row.discount_amount|floatformat:"2" }}
+                {% elif row.amount != None %}{{ row.amount|floatformat:"2" }}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                {% if row.invoice %}{{ row.invoice.discount_date|date:"M d, Y"|default:"—" }}
+                {% else %}{{ row.discount_date|date:"M d, Y"|default:"—" }}{% endif %}
+              </td>
+              <td class="text-right">
+                {% if row.annualised_pct != None %}{{ row.annualised_pct|floatformat:"2" }}%{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="percent"></i>
+                <h3>No discounts close to expiring</h3>
+                <p>Nothing with a capturable settlement discount falls due in the next seven days. Discounts are easy money — the annualised return on 2/10 Net 30 is about 37%, which beats most short-term financing.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Open disputes</h2><span class="text-muted">{{ stats.open_disputes }} open</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:invoicedispute_list' %}"><i data-lucide="message-square-warning"></i> All disputes</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:invoicedispute_aging' %}"><i data-lucide="clock"></i> Aging</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Invoice</th>
+            <th>Supplier</th>
+            <th>Reason</th>
+            <th class="text-right">Disputed</th>
+            <th>Status</th>
+            <th>Due</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in open_disputes %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:invoicedispute_detail' d.pk %}">{{ d.number }}</a></td>
+              <td>{% if d.invoice %}<a href="{% url 'procurement:supplierinvoice_detail' d.invoice.pk %}">{{ d.invoice.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if d.supplier %}{{ d.supplier.name }}{% else %}<span class="text-muted">No supplier</span>{% endif %}</td>
+              <td>
+                {% if d.reason_code == "price" %}<span class="badge badge-amber">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "quantity" %}<span class="badge badge-amber">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "goods_not_received" %}<span class="badge badge-red">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "damaged" %}<span class="badge badge-red">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "duplicate" %}<span class="badge badge-red">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "credit_not_processed" %}<span class="badge badge-info">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "tax" %}<span class="badge badge-slate">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "freight" %}<span class="badge badge-slate">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "admin" %}<span class="badge badge-muted">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "other" %}<span class="badge badge-muted">{{ d.get_reason_code_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ d.get_reason_code_display }}</span>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ d.disputed_amount|floatformat:"2" }}</td>
+              <td>
+                {% if d.status == "open" %}<span class="badge badge-amber">{{ d.get_status_display }}</span>
+                {% elif d.status == "awaiting_supplier" %}<span class="badge badge-info">{{ d.get_status_display }}</span>
+                {% elif d.status == "awaiting_internal" %}<span class="badge badge-slate">{{ d.get_status_display }}</span>
+                {% elif d.status == "escalated" %}<span class="badge badge-red">{{ d.get_status_display }}</span>
+                {% elif d.status == "resolved" %}<span class="badge badge-green">{{ d.get_status_display }}</span>
+                {% elif d.status == "closed" %}<span class="badge badge-muted">{{ d.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ d.get_status_display }}</span>{% endif %}
+                {% if d.is_overdue %}<div><span class="badge badge-red">Overdue</span></div>{% endif %}
+              </td>
+              <td>{{ d.due_date|date:"M d, Y"|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="message-square-warning"></i>
+                <h3>No open disputes</h3>
+                <p>Nothing is in argument with a supplier right now. Disputes here carry an SLA clock — the escalation list is the place to watch.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if aging %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Dispute aging</h2><span class="text-muted">how long the open ones have been sitting</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          {% for key, count in aging.items %}
+            <div class="detail-item"><dt>{{ key }}</dt><dd class="fw-600">{{ count }}</dd></div>
+          {% endfor %}
+        </dl>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
