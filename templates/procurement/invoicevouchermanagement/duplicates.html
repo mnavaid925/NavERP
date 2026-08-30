@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Duplicate Invoices{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — duplicate detection board.
+    Context contract: groups (list of dicts with keys invoice, candidates, count; each candidate
+    is {"invoice":…, "reasons":[str]}), page_obj, window_days
+    (=SupplierInvoice.DUPLICATE_WINDOW_DAYS), stats{scanned, suspect, linked}.
+
+    ADVISORY BY DESIGN (§8.1): the engine NEVER auto-rejects. A candidate scores only when the
+    normalised invoice number matches AND at least three signals agree; whether it is genuinely
+    a duplicate is a human call. The page therefore offers investigation, not rejection — the
+    honest next step is a dispute, never a silent void.
+    No user-typed value (the supplier's invoice_number) ever reaches a confirm() handler.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Duplicate Invoices</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:invoicevoucher_dashboard' %}">Invoice &amp; Voucher Management</a><span class="sep">›</span><span>Duplicates</span></div>
+      <p class="text-muted">Invoices that look like an invoice already on file — the same supplier, the same number, a near-identical amount inside a {{ window_days|default:"90" }}-day window. This board decides nothing: it gathers the evidence so you can.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Supplier invoices</a>
+      <a href="{% url 'procurement:supplierinvoice_capture' %}" class="btn btn-primary"><i data-lucide="file-input"></i> Capture invoice</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.scanned }}</div><div class="stat-label">Invoices scanned</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="copy"></i></div><div class="stat-value">{{ stats.suspect }}</div><div class="stat-label">Suspect groups</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="git-merge"></i></div><div class="stat-value">{{ stats.linked }}</div><div class="stat-label">Already linked</div></div>
+  </div>
+
+  {% if groups %}
+    <div class="card">
+      <div class="card-body">
+        <p class="text-muted">Each card is one invoice with at least one candidate against it. A candidate is listed only when the normalised invoice number matches and at least three signals agree — so a genuine re-issue, a corrected invoice and a real double-billing all look the same here, and only you can tell them apart.</p>
+      </div>
+    </div>
+
+    {% for group in groups %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">
+            <a href="{% url 'procurement:supplierinvoice_detail' group.invoice.pk %}">{{ group.invoice.number }}</a>
+          </h2>
+          <span class="text-muted">{{ group.count }} candidate(s)</span>
+          <span class="badge {% if group.count %}badge-amber{% else %}badge-slate{% endif %}">Suspect</span>
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Supplier invoice no.</dt><dd>{{ group.invoice.invoice_number|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Vendor</dt>
+              <dd>{% if group.invoice.vendor %}{{ group.invoice.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Invoice date</dt><dd>{{ group.invoice.invoice_date|date:"M d, Y"|default:"—" }}</dd></div>
+            <div class="detail-item"><dt>Total</dt>
+              <dd class="fw-600">{% if group.invoice.currency %}{{ group.invoice.currency.code }} {% endif %}{{ group.invoice.total|floatformat:"2" }}</dd></div>
+            <div class="detail-item"><dt>Status</dt>
+              <dd>{% if group.invoice.status == "draft" %}<span class="badge badge-muted">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "parked" %}<span class="badge badge-slate">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "captured" %}<span class="badge badge-info">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "blocked" %}<span class="badge badge-red">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "disputed" %}<span class="badge badge-amber">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "pending_approval" %}<span class="badge badge-amber">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "approved" %}<span class="badge badge-green">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "scheduled" %}<span class="badge badge-info">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "paid" %}<span class="badge badge-green">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "void" %}<span class="badge badge-slate">{{ group.invoice.get_status_display }}</span>
+                  {% elif group.invoice.status == "reversed" %}<span class="badge badge-slate">{{ group.invoice.get_status_display }}</span>
+                  {% else %}<span class="badge badge-slate">{{ group.invoice.get_status_display }}</span>{% endif %}</dd></div>
+          </dl>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Candidate</th>
+                <th>Supplier no.</th>
+                <th>Vendor</th>
+                <th>Date</th>
+                <th class="text-right">Total</th>
+                <th>Why it looks the same</th>
+                <th class="table-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cand in group.candidates %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'procurement:supplierinvoice_detail' cand.invoice.pk %}">{{ cand.invoice.number }}</a></td>
+                  <td>{{ cand.invoice.invoice_number|default:"—" }}</td>
+                  <td>{% if cand.invoice.vendor %}{{ cand.invoice.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}</td>
+                  <td>{{ cand.invoice.invoice_date|date:"M d, Y"|default:"—" }}</td>
+                  <td class="text-right">{% if cand.invoice.currency %}{{ cand.invoice.currency.code }} {% endif %}{{ cand.invoice.total|floatformat:"2" }}</td>
+                  <td>
+                    <div class="badge-group">
+                      {% for reason in cand.reasons %}<span class="badge badge-slate">{{ reason }}</span>{% endfor %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="table-actions">
+                      <a href="{% url 'procurement:supplierinvoice_detail' cand.invoice.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                      <a href="{% url 'procurement:invoicedispute_create' %}?invoice={{ cand.invoice.pk }}" class="btn btn-outline btn-sm" title="Raise a duplicate dispute against this invoice"><i data-lucide="message-square-warning"></i> Dispute</a>
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="7"><span class="text-muted">No candidates above the scoring threshold.</span></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body text-muted">
+          Nothing here rejects an invoice. If it is genuinely a re-issue, leave it alone. If it is a second charge for the same goods, raise a duplicate dispute — that is the record the supplier can answer.
+        </div>
+      </div>
+    {% endfor %}
+
+    {% include "partials/pagination.html" %}
+  {% else %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="copy"></i>
+        <h3>No duplicate suspects</h3>
+        <p>Nothing in the last {{ window_days|default:"90" }} days scored highly enough against another invoice to be worth your time. A candidate needs a matching invoice number plus at least two further signals — same vendor, near-identical amount, close invoice date.</p>
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Back to invoices</a>
+      </div>
+    </div></div>
+  {% endif %}
+{% endblock %}
