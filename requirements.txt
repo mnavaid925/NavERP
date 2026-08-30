@@ -8,6 +8,10 @@ Pillow==12.2.0
 # Fernet, for reversible encryption of secrets that must be recovered in plaintext
 # (crm.Webhook.secret is HMAC-signed with, so it cannot be hashed) — apps/core/crypto.py
 cryptography==46.0.3
+# PDF text-layer extraction for 6.13 invoice capture (apps/procurement/views/InvoiceVoucherManagement/
+# SupplierInvoices.py::_pdf_text). Imported lazily and optional — the capture flow degrades to
+# manual keying when it is absent, so a workspace without it still runs.
+pdfplumber==0.11.10
 
 # Dev / test
 pytest==9.1.1
