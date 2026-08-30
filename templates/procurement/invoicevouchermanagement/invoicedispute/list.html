@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Invoice Disputes{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — InvoiceDispute register (lane D).
+    Context contract (crud_list + extra_context): object_list, page_obj, q,
+    status_choices, reason_choices, suppliers, assignees,
+    stats{open, overdue, escalated, resolved}. Nothing else exists here.
+    `?overdue=1` is applied by the view before crud_list, so the checkbox posts itself.
+
+    Badge colours are chosen by comparing the frozen CHOICES keys from the contract, not the
+    model's STATUS_CSS / REASON_CSS dicts, so a rename on the backend degrades to badge-slate
+    instead of an unstyled, class-less badge. Only colour-named modifiers exist
+    (theme.css:286-291) — badge-success / badge-danger / badge-warning do not.
+    stat-icon is limited to blue/green/orange/purple/slate; the contract asks for a red
+    escalated icon but red is outside the approved set, so escalated uses purple.
+    The supplier name and the supplier's invoice number are user-typed and are NEVER
+    interpolated into a confirm() handler — only the system-assigned {{ obj.number }}.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Invoice Disputes</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><span>Invoice Disputes</span></div>
+      <p class="text-muted">Every amount contested with a supplier, from the day it is raised to the day it is resolved. Each dispute gets a ten-day SLA clock from the day it is raised; the clock stops only when the dispute is resolved or closed, not when it is parked with the supplier.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:invoicedispute_aging' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Dispute aging</a>
+      <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Supplier invoices</a>
+      <a href="{% url 'procurement:invoicedispute_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise dispute</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="message-square-warning"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open disputes</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Past SLA due date</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.escalated }}</div><div class="stat-label">Escalated</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.resolved }}</div><div class="stat-label">Resolved</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, description, invoice or supplier…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reason_code" aria-label="Reason" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.reason_code == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="assigned_to" aria-label="Assignee" class="form-select">
+            <option value="">Anyone</option>
+            {% for u in assignees %}
+              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.assigned_to == u.pk|stringformat:"d" %}selected{% endif %}>{% if u.get_full_name %}{{ u.get_full_name }}{% else %}{{ u.username }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-overdue"><input type="checkbox" class="form-check" id="filter-overdue" name="overdue" value="1" {% if request.GET.overdue == '1' %}checked{% endif %}> Overdue only</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:invoicedispute_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Invoice</th>
+            <th>Supplier</th>
+            <th>Reason</th>
+            <th class="text-right">Disputed amount</th>
+            <th>Status</th>
+            <th>Due</th>
+            <th class="text-right">Age</th>
+            <th>Assignee</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:invoicedispute_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">Raised {{ obj.raised_at|date:"M d, Y"|default:"—" }}</div>
+              </td>
+              <td>
+                {% if obj.invoice %}
+                  <a href="{% url 'procurement:supplierinvoice_detail' obj.invoice.pk %}" class="fw-600">{{ obj.invoice.number }}</a>
+                  {% if obj.invoice.invoice_number %}<div class="text-muted">{{ obj.invoice.invoice_number }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">No invoice</span>
+                {% endif %}
+                {% if obj.invoice_line %}<div class="text-muted">Line {{ obj.invoice_line.pk }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.supplier %}{{ obj.supplier.name }}{% else %}<span class="text-muted">No supplier</span>{% endif %}
+                {% if obj.supplier_contact %}<div class="text-muted">{{ obj.supplier_contact }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.reason_code == "price" %}<span class="badge badge-amber">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "quantity" %}<span class="badge badge-amber">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "goods_not_received" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "damaged" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "duplicate" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "credit_not_processed" %}<span class="badge badge-info">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "tax" %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "freight" %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "admin" %}<span class="badge badge-muted">{{ obj.get_reason_code_display }}</span>
+                {% elif obj.reason_code == "other" %}<span class="badge badge-muted">{{ obj.get_reason_code_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ obj.disputed_amount|floatformat:"2" }}</td>
+              <td>
+                {% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "awaiting_supplier" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "awaiting_internal" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "escalated" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "resolved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "closed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+                {% if obj.is_overdue %}<div><span class="badge badge-red">Overdue</span></div>{% endif %}
+              </td>
+              <td>{{ obj.due_date|date:"M d, Y"|default:"No SLA date" }}</td>
+              <td class="text-right">{{ obj.days_open|default:"0" }} d</td>
+              <td>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:invoicedispute_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:invoicedispute_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    invoicedispute_delete is @tenant_admin_required, so the bin is gated on the
+                    same test the decorator applies — offering it to a plain member only buys
+                    them a 403. The apostrophe in the confirm text is escaped as \' because
+                    &#39; does not escape inside an event-handler attribute, and a confirm that
+                    throws does not preventDefault — the delete would fire unconfirmed.
+                    Only the system-assigned `{{ obj.number }}` is interpolated: never the
+                    supplier name or the supplier's own invoice number, both free text.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'procurement:invoicedispute_delete' obj.pk %}" onsubmit="return confirm('Delete dispute {{ obj.number }}? The SLA history and the resolution go with it, and the invoice stops being flagged as disputed.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10">
+              <div class="empty-state">
+                <i data-lucide="message-square-warning"></i>
+                <h3>No disputes found</h3>
+                <p>Nothing matches these filters. Raise a dispute when a variance is genuinely wrong — a price the supplier never agreed, goods that never arrived, or an invoice that duplicates one already paid.</p>
+                <a href="{% url 'procurement:invoicedispute_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise a dispute</a>
+                <a href="{% url 'procurement:invoicedispute_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
