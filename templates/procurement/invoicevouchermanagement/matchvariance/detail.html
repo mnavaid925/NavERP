@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Variance #{{ obj.pk }} · Match Variance{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — InvoiceMatchVariance detail (lane C, hand-rolled view).
+    Context contract: obj, invoice, invoice_line, dispute, explanation (=obj.explain()),
+    tolerance (dict with keys abs, pct), actions (list of dicts with keys url, label, verb,
+    css), can_accept, is_admin. Nothing else exists here.
+
+    Four things this page must NOT do:
+    1. Link an edit or delete route — the url module declares only list/detail/accept for
+       this lane (contract line 705), so a {% url %} for either is a NoReverseMatch that
+       kills the page. Variances are written by run_match(), never by a form.
+    2. Dereference an unguarded FK. `invoice_line` and `dispute` are nullable, and
+       `{{ obj.dispute.number|default:obj.dispute.pk }}` RAISES when the FK is None rather
+       than falling through; both go through {% if %}.
+    3. Interpolate `explanation` or `obj.message` into a confirm() handler — the matcher
+       builds both and either can carry an apostrophe. Only the integer {{ obj.pk }} is
+       used, and literal apostrophes are escaped as \'.
+    4. Present variance_pct beyond 4 dp — it is a Decimal(9,4) column.
+
+    Badges compare the frozen CHOICES keys and always end with a badge-slate fallback.
+    The detail grid is <dl class="detail-grid"><div class="detail-item"><dt>/<dd>; there is
+    no .detail-label / .detail-value in theme.css.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Variance #{{ obj.pk }}
+        {% if obj.outcome == "auto_accept" %}<span class="badge badge-green">{{ obj.get_outcome_display }}</span>
+        {% elif obj.outcome == "warn" %}<span class="badge badge-amber">{{ obj.get_outcome_display }}</span>
+        {% elif obj.outcome == "block" %}<span class="badge badge-red">{{ obj.get_outcome_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_outcome_display }}</span>{% endif %}
+        {% if obj.resolution == "open" %}<span class="badge badge-amber">{{ obj.get_resolution_display }}</span>
+        {% elif obj.resolution == "accepted" %}<span class="badge badge-green">{{ obj.get_resolution_display }}</span>
+        {% elif obj.resolution == "disputed" %}<span class="badge badge-red">{{ obj.get_resolution_display }}</span>
+        {% elif obj.resolution == "credit_memo" %}<span class="badge badge-info">{{ obj.get_resolution_display }}</span>
+        {% elif obj.resolution == "debit_memo" %}<span class="badge badge-info">{{ obj.get_resolution_display }}</span>
+        {% elif obj.resolution == "short_paid" %}<span class="badge badge-slate">{{ obj.get_resolution_display }}</span>
+        {% elif obj.resolution == "cancelled" %}<span class="badge badge-muted">{{ obj.get_resolution_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_resolution_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><a href="{% url 'procurement:matchvariance_list' %}">Match Variances</a><span class="sep">›</span><span>#{{ obj.pk }}</span></div>
+      <p class="text-muted">Detected {{ obj.detected_at|date:"M d, Y H:i"|default:"—" }} · written by the three-way match, never by hand — it records what was expected, what was invoiced, and the band that judged the gap.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:invoice_match_board' %}" class="btn btn-outline"><i data-lucide="git-merge"></i> Match board</a>
+      {% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="btn btn-outline"><i data-lucide="receipt"></i> {{ invoice.number }}</a>{% endif %}
+      <a href="{% url 'procurement:matchvariance_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> All variances</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What the match found</h2><span class="text-muted">the gap, and the band that measured it</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Invoice</dt>
+          <dd>{% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="fw-600">{{ invoice.number }}</a>{% if invoice.invoice_number %} · {{ invoice.invoice_number }}{% endif %}{% elif obj.invoice %}<span class="fw-600">{{ obj.invoice.number }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Invoice line</dt>
+          <dd>{% if invoice_line %}<span class="fw-600">Line {{ invoice_line.pk }}</span>{% if invoice_line.description %} · {{ invoice_line.description }}{% endif %}{% elif obj.invoice_line %}<span class="fw-600">Line {{ obj.invoice_line.pk }}</span>{% else %}<span class="text-muted">Header-level check</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Type</dt>
+          <dd>{% if obj.variance_type == "price" %}<span class="badge badge-amber">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "quantity" %}<span class="badge badge-amber">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "quantity_no_receipt" %}<span class="badge badge-amber">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "over_invoice" %}<span class="badge badge-red">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "total_amount" %}<span class="badge badge-amber">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "fx_rate" %}<span class="badge badge-info">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "tax" %}<span class="badge badge-slate">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "duplicate" %}<span class="badge badge-red">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "missing_po" %}<span class="badge badge-slate">{{ obj.get_variance_type_display }}</span>
+              {% elif obj.variance_type == "missing_receipt" %}<span class="badge badge-slate">{{ obj.get_variance_type_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_variance_type_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Basis</dt>
+          <dd>{% if obj.basis == "po" %}<span class="badge badge-info">{{ obj.get_basis_display }}</span>
+              {% elif obj.basis == "receipt" %}<span class="badge badge-info">{{ obj.get_basis_display }}</span>
+              {% elif obj.basis == "header" %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Expected value</dt><dd>{{ obj.expected_value|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Actual value</dt><dd>{{ obj.actual_value|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Variance (absolute)</dt><dd class="fw-600">{{ obj.variance_abs|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Variance (percent)</dt>
+          {% comment %} Decimal(9,4) — four decimal places is the entire column. {% endcomment %}
+          <dd>{% if obj.variance_pct != None %}<span class="fw-600">{{ obj.variance_pct|floatformat:"4" }}%</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Band applied</dt>
+          <dd>
+            {% comment %}
+              `tolerance` is a dict with keys abs / pct — a template dotted lookup on a
+              dict is a key lookup, so tolerance.abs resolves the key, not the builtin.
+              Either half can be None: the resolver ships None for "no band".
+            {% endcomment %}
+            {% if tolerance %}
+              Absolute {% if tolerance.abs != None %}±{{ tolerance.abs|floatformat:"-4" }}{% else %}<span class="text-muted">no band</span>{% endif %}
+              · Percent {% if tolerance.pct != None %}±{{ tolerance.pct|floatformat:"4" }}%{% else %}<span class="text-muted">no band</span>{% endif %}
+            {% else %}
+              <span class="text-muted">No tolerance recorded</span>
+            {% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Outcome</dt>
+          <dd>{% if obj.outcome == "auto_accept" %}<span class="badge badge-green">{{ obj.get_outcome_display }}</span>
+              {% elif obj.outcome == "warn" %}<span class="badge badge-amber">{{ obj.get_outcome_display }}</span>
+              {% elif obj.outcome == "block" %}<span class="badge badge-red">{{ obj.get_outcome_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_outcome_display }}</span>{% endif %}
+            {% if obj.is_blocking %}<div><span class="badge badge-red">Blocking the invoice</span></div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Resolution</dt>
+          <dd>{% if obj.resolution == "open" %}<span class="badge badge-amber">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "accepted" %}<span class="badge badge-green">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "disputed" %}<span class="badge badge-red">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "credit_memo" %}<span class="badge badge-info">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "debit_memo" %}<span class="badge badge-info">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "short_paid" %}<span class="badge badge-slate">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "cancelled" %}<span class="badge badge-muted">{{ obj.get_resolution_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_resolution_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Detected at</dt><dd>{{ obj.detected_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Raised dispute</dt>
+          {% comment %}
+            `dispute` is SET_NULL — a variance survives its dispute being deleted, so the
+            link is guarded rather than assumed.
+          {% endcomment %}
+          <dd>{% if dispute %}<a href="{% url 'procurement:invoicedispute_detail' dispute.pk %}" class="fw-600">{{ dispute.number }}</a>{% elif obj.dispute %}<a href="{% url 'procurement:invoicedispute_detail' obj.dispute.pk %}" class="fw-600">{{ obj.dispute.number }}</a>{% else %}<span class="text-muted">No dispute raised</span>{% endif %}</dd></div>
+      </dl>
+
+      <div class="form-group">
+        <label class="form-label">Explanation</label>
+        <div class="fw-600">{{ explanation|default:obj.explain }}</div>
+        <div class="form-help">The matcher's own reckoning: what it expected, what it was given, and the band it compared them against.</div>
+      </div>
+
+      {% if obj.message %}
+        <div class="form-group">
+          <label class="form-label">Message</label>
+          {% comment %} message is Char(255) — the model truncates it, so it is rendered whole. {% endcomment %}
+          <div>{{ obj.message|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if can_accept %}
+    {% comment %}
+      Accept is @login_required and calls obj.accept(request.user), which only moves an
+      `open` or `disputed` variance to `accepted`. `note` is the single field of
+      InvoiceVarianceAcceptForm (max_length 500) and is optional — the view binds the form
+      and writes an audit entry either way. The route also answers GET with a confirmation
+      page (matchvariance/form.html), which is what the Actions button below links to.
+      The confirm string interpolates only the integer pk; obj.message is free text and is
+      never put inside an event-handler attribute.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Accept this variance</h2><span class="text-muted">records AP's agreement that the difference is fine</span></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:matchvariance_accept' obj.pk %}" onsubmit="return confirm('Accept variance #{{ obj.pk }}? It stops counting against the invoice, and the reason is written to the audit log.');">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_note">Note</label>
+            {% comment %} The detail view does not put `form` in context — the textarea starts empty on purpose rather than reaching for a bound value that is not there. {% endcomment %}
+            <textarea class="form-textarea" id="id_note" name="note" rows="2" maxlength="500" placeholder="Why the invoiced figure stands — a freight uplift agreed by phone, a rounding the supplier will not re-bill."></textarea>
+            <div class="form-help">Optional, up to 500 characters, kept in the audit log. Accepting does not change the amounts — the variance stays on the record with its outcome.</div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Accept variance</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">transitions the view has cleared for you</span></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% comment %}
+          `actions` is a list of dicts with keys url / label / verb / css, already filtered
+          by the view against the model's guard conditions, so it is rendered as given — a
+          POST action becomes its own CSRF form, anything else stays a plain link.
+        {% endcomment %}
+        {% for action in actions %}
+          {% if action.verb == "post" %}
+            <form method="post" action="{{ action.url }}">
+              {% csrf_token %}<button class="btn {{ action.css|default:"btn-outline" }}" type="submit">{{ action.label }}</button>
+            </form>
+          {% else %}
+            <a href="{{ action.url }}" class="btn {{ action.css|default:"btn-outline" }}">{{ action.label }}</a>
+          {% endif %}
+        {% empty %}
+          {% if can_accept %}
+            <p class="text-muted">Accept it above — that is the only transition open on this variance.</p>
+          {% elif is_admin %}
+            <p class="text-muted">No transitions are open on this variance. It is already in a terminal resolution, or the invoice it belongs to is locked because it has been paid, voided or reversed — a locked invoice accepts no further matching decisions.</p>
+          {% else %}
+            <p class="text-muted">No transitions are open on this variance — it is settled, or the invoice it belongs to is locked. Ask a tenant administrator if the resolution needs revisiting.</p>
+          {% endif %}
+        {% endfor %}
+        <a href="{% url 'procurement:matchvariance_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Back to variances</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+{% endblock %}
