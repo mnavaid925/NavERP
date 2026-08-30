@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Supplier Invoices{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — SupplierInvoice register.
+    Context contract (crud_list + extra_context): object_list, page_obj, q,
+    status_choices, match_status_choices, source_choices, invoice_type_choices, vendors,
+    stats{total, blocked, disputed, pending_approval, overdue}. Nothing else exists here.
+    Badge colours are chosen by comparing the frozen CHOICES keys from the contract, not the
+    model's *_css properties, so a rename on the backend degrades to badge-slate instead of
+    an unstyled, class-less badge. Only colour-named modifiers exist (theme.css:286-291) —
+    badge-success / badge-danger / badge-warning do not.
+    stat-icon is limited to blue/green/orange/purple/slate; the contract asks for a red
+    "blocked" icon but red is outside the approved set, so blocked uses orange with `ban`.
+    The supplier's invoice_number is user-typed and is NEVER interpolated into a confirm()
+    handler — only the system-assigned `{{ obj.number }}` is (L42).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier Invoices</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><span>Supplier Invoices</span></div>
+      <p class="text-muted">Every supplier invoice from first capture to payment: three-way matched against its purchase order and goods receipt, blocked on variance, disputed, approved and scheduled. Approving is the only step that writes to the ledger — it raises the bill and the journal entry in one transaction.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:invoicevoucher_dashboard' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Dashboard</a>
+      <a href="{% url 'procurement:supplierinvoice_capture' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Capture invoice</a>
+      <a href="{% url 'procurement:supplierinvoice_duplicates' %}" class="btn btn-outline"><i data-lucide="copy"></i> Duplicates</a>
+      <a href="{% url 'procurement:supplierinvoice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Invoice</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Invoices</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocked }}</div><div class="stat-label">Blocked</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="message-square-warning"></i></div><div class="stat-value">{{ stats.disputed }}</div><div class="stat-label">Disputed</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending_approval }}</div><div class="stat-label">Pending approval</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, invoice no., external ref or vendor…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="match_status" aria-label="Match status" class="form-select">
+            <option value="">All match results</option>
+            {% for val, label in match_status_choices %}
+              <option value="{{ val }}" {% if request.GET.match_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="invoice_type" aria-label="Invoice type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in invoice_type_choices %}
+              <option value="{{ val }}" {% if request.GET.invoice_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Vendor</th>
+            <th>PO / GRN</th>
+            <th>Invoice no.</th>
+            <th class="text-right">Total</th>
+            <th>Discount date</th>
+            <th>Match</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:supplierinvoice_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.invoice_date|date:"M d, Y"|default:"No invoice date" }}</div>
+              </td>
+              <td>
+                {% if obj.vendor %}{{ obj.vendor.name }}{% else %}<span class="text-muted">No vendor</span>{% endif %}
+                {% if obj.external_ref %}<div class="text-muted">Ref {{ obj.external_ref }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.purchase_order %}
+                  <a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a>
+                {% else %}
+                  <span class="text-muted">No PO</span>
+                {% endif %}
+                {% if obj.goods_receipt %}
+                  <div class="text-muted"><a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}">{{ obj.goods_receipt.number }}</a></div>
+                {% else %}
+                  <div class="text-muted">No receipt</div>
+                {% endif %}
+              </td>
+              <td>{{ obj.invoice_number|default:"—" }}</td>
+              <td class="text-right fw-600">
+                {% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.total|floatformat:"2" }}
+                {% if obj.amount_paid %}<div class="text-muted">Paid {{ obj.amount_paid|floatformat:"2" }}</div>{% endif %}
+              </td>
+              <td>
+                {{ obj.discount_date|date:"M d, Y"|default:"—" }}
+                {% if obj.discount_expiry_date and obj.discount_expiry_date != obj.discount_date %}
+                  <div class="text-muted">Grace to {{ obj.discount_expiry_date|date:"M d, Y" }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.match_status == "not_run" %}<span class="badge badge-muted">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "matched" %}<span class="badge badge-green">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "within_tolerance" %}<span class="badge badge-info">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "price_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "quantity_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "total_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "fx_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "no_receipt" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "over_invoiced" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+                {% elif obj.match_status == "duplicate_suspect" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_match_status_display }}</span>{% endif %}
+                {% if obj.match_basis %}<div class="text-muted">{{ obj.get_match_basis_display }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "parked" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "captured" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "blocked" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "disputed" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "pending_approval" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "approved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "paid" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "void" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "reversed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+                {% if obj.source %}<div class="text-muted">{{ obj.get_source_display }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierinvoice_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:supplierinvoice_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    supplierinvoice_delete is @tenant_admin_required, so the bin is gated on the
+                    same test the decorator applies — offering it to a plain member only buys
+                    them a 403. The apostrophe in the confirm text is escaped as \' because
+                    &#39; does not escape inside an event-handler attribute (L42). Only the
+                    system-assigned `{{ obj.number }}` is interpolated — never the supplier's
+                    own invoice_number, which is free text and could break out of the string.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'procurement:supplierinvoice_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its lines, variances and disputes go with it. Void the invoice instead if you only need to stop payment.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="file-text"></i>
+                <h3>No supplier invoices yet</h3>
+                <p>Key one in by hand, or capture it from the supplier&rsquo;s document — capture reads the header fields it can find and drops you into a form where every value stays editable.</p>
+                <a href="{% url 'procurement:supplierinvoice_capture' %}" class="btn btn-primary"><i data-lucide="file-input"></i> Capture an invoice</a>
+                <a href="{% url 'procurement:supplierinvoice_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Key one in</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
