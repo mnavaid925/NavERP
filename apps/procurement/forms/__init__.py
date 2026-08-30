@@ -97,6 +97,14 @@ from .GoodsReceiptInspection import (
     RtvCloseForm,
     RtvShipForm,
 )
+# 6.13 Invoice & Voucher Management — from the entity MODULES, same reason as models/__init__.
+from .InvoiceVoucherManagement.SupplierInvoices import (
+    CaptureUploadForm,
+    SupplierInvoiceForm,
+)
+from .InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLineForm
+from .InvoiceVoucherManagement.MatchVariances import InvoiceVarianceAcceptForm
+from .InvoiceVoucherManagement.InvoiceDisputes import InvoiceDisputeForm
 
 __all__ = [
     "EaucBidForm",
@@ -167,4 +175,9 @@ __all__ = [
     "RtvCloseForm",
     "RtvCancelForm",
     "ReceivingConsoleBookForm",
+    "SupplierInvoiceForm",
+    "CaptureUploadForm",
+    "SupplierInvoiceLineForm",
+    "InvoiceVarianceAcceptForm",
+    "InvoiceDisputeForm",
 ]
