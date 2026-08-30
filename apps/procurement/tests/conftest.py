@@ -678,3 +678,486 @@ def fulfillment_backorder_b(db, tenant_b, fulfillment_po_line_b):
     return _fulfillment_backorder(tenant_b, fulfillment_po_line_b,
                                   quantity_backordered=Decimal("2"),
                                   reason="logistics")
+
+
+# ------------------------------------------------------------------ 6.12 Goods Receipt & Inspection
+# Every fixture below is prefixed ``receipt_`` so the four 6.12 test lanes can share them without
+# shadowing any earlier sub-module's fixture. Dates derive from timezone.localdate() (never
+# date.today()) so exact-date assertions stay stable after local midnight (L16).
+#
+# Shape of the tenant-A spine these build (all dates relative to ``timezone.localdate()``):
+#
+#   receipt_po_a            order_date = today, expected_date = today, status "approved"
+#     line 1 (receipt_po_line_a)   qty 10  @ 25.00  sku "BRG-40"
+#     line 2 (receipt_po_line2_a)  qty  4  @ 60.00  sku "BLT-1200"
+#   receipt_grn_a           receipt_date = today,     DN "DN-5001", draft
+#     receipt_grn_line_a          po_line 1, received 12, rejected 1  -> OVER  bucket
+#     receipt_grn_line2_a         po_line 2, received  1              -> SHORT bucket
+#   receipt_grn_early_a     receipt_date = today - 4, DN "DN-5002"    -> EARLY bucket
+#   receipt_grn_late_a      receipt_date = today + 4, DN "DN-5003"    -> LATE  bucket
+#   receipt_grn_cancelled_a receipt_date = today,     DN "DN-5004", status "cancelled"
+
+def _receipt_party(tenant, name, role="supplier"):
+    """A counterparty WITH its PartyRole - every 6.12 vendor dropdown narrows on
+    ``roles__role__in=("supplier", "vendor")``, so a Party with no role is invisible to the forms
+    and to every ``?vendor=`` filter widget."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role=role, status="active")
+    return party
+
+
+def _receipt_po(tenant, vendor, **overrides):
+    """An approved spine purchase order - the document a receipt is booked against."""
+    from apps.scm.models import PurchaseOrder
+    fields = dict(tenant=tenant, vendor=vendor, status="approved",
+                  order_date=timezone.localdate(), expected_date=timezone.localdate())
+    fields.update(overrides)
+    return PurchaseOrder.objects.create(**fields)
+
+
+def _receipt_po_line(po, description="Bearing housing 40mm", qty="10", price="25.00",
+                     **overrides):
+    from apps.scm.models import PurchaseOrderLine
+    fields = dict(purchase_order=po, item_description=description,
+                  quantity=Decimal(qty), unit_price=Decimal(price),
+                  sku_hint="BRG-40", uom_hint="EA")
+    fields.update(overrides)
+    return PurchaseOrderLine.objects.create(**fields)
+
+
+def _receipt_grn(tenant, po, **overrides):
+    from apps.scm.models import GoodsReceiptNote
+    fields = dict(tenant=tenant, purchase_order=po, receipt_date=timezone.localdate(),
+                  status="draft", delivery_note_ref="DN-5001")
+    fields.update(overrides)
+    return GoodsReceiptNote.objects.create(**fields)
+
+
+def _receipt_grn_line(grn, po_line, received="0", **overrides):
+    from apps.scm.models import GoodsReceiptLine
+    fields = dict(goods_receipt=grn, po_line=po_line, quantity_received=Decimal(received))
+    fields.update(overrides)
+    return GoodsReceiptLine.objects.create(**fields)
+
+
+def _receipt_policy(tenant, name="Workspace 5% band", **overrides):
+    from apps.procurement.models import ReceiptTolerancePolicy
+    fields = dict(tenant=tenant, name=name, over_receipt_pct=Decimal("5"),
+                  under_receipt_pct=Decimal("10"), early_receipt_days=2, late_receipt_days=3,
+                  action="warn", priority=10, is_active=True)
+    fields.update(overrides)
+    return ReceiptTolerancePolicy.objects.create(**fields)
+
+
+def _receipt_discrepancy(tenant, grn, **overrides):
+    from apps.procurement.models import ReceiptDiscrepancy
+    fields = dict(tenant=tenant, goods_receipt=grn, kind="short_shipment", severity="major",
+                  quantity_affected=Decimal("2"),
+                  description="Three cartons short on the pallet.")
+    fields.update(overrides)
+    return ReceiptDiscrepancy.objects.create(**fields)
+
+
+def _receipt_rtv(tenant, vendor, **overrides):
+    from apps.procurement.models import ReturnToVendor
+    fields = dict(tenant=tenant, vendor=vendor, reason="damaged", remedy="credit",
+                  supplier_rma_number="RMA-77")
+    fields.update(overrides)
+    return ReturnToVendor.objects.create(**fields)
+
+
+def _receipt_rtv_line(rtv, po_line=None, qty="3", **overrides):
+    from apps.procurement.models import ReturnToVendorLine
+    fields = dict(return_to_vendor=rtv, po_line=po_line, quantity_returned=Decimal(qty))
+    fields.update(overrides)
+    return ReturnToVendorLine.objects.create(**fields)
+
+
+def _receipt_asn(tenant, po, **overrides):
+    from apps.procurement.models import AdvancedShipmentNotice
+    fields = dict(tenant=tenant, purchase_order=po, source="manual", status="in_transit",
+                  supplier_reference="NW-DN-7001", carrier_name="Northwind Express",
+                  tracking_number="TRK-7001",
+                  ship_date=timezone.localdate() - datetime.timedelta(days=1),
+                  expected_delivery_date=timezone.localdate())
+    fields.update(overrides)
+    return AdvancedShipmentNotice.objects.create(**fields)
+
+
+# -- counterparties, item master and locations ------------------------------------------------
+
+@pytest.fixture
+def receipt_vendor_a(db, tenant_a):
+    """Tenant A supplier, WITH the ``supplier`` PartyRole every 6.12 dropdown filters on."""
+    return _receipt_party(tenant_a, "Northwind Forge Ltd")
+
+
+@pytest.fixture
+def receipt_vendor_b(db, tenant_b):
+    return _receipt_party(tenant_b, "Globex Freight Partners")
+
+
+@pytest.fixture
+def receipt_vendor_other_a(db, tenant_a):
+    """A SECOND tenant-A supplier - the counterparty-mismatch target (returning goods to a
+    supplier other than the one the order was placed with must be refused even though both rows
+    live in this workspace)."""
+    return _receipt_party(tenant_a, "Southgate Bearings")
+
+
+@pytest.fixture
+def receipt_category_a(db, tenant_a):
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_a, name="Bearings")
+
+
+@pytest.fixture
+def receipt_category_b(db, tenant_b):
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_b, name="Globex Spares")
+
+
+@pytest.fixture
+def receipt_item_a(db, tenant_a, receipt_category_a):
+    """SKU ``BRG-40`` - matches ``receipt_po_line_a.sku_hint``, so ``resolve_line_item`` finds it."""
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="BRG-40", name="Bearing housing 40mm",
+                               category=receipt_category_a, item_type="stock")
+
+
+@pytest.fixture
+def receipt_item_b(db, tenant_b, receipt_category_b):
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_b, sku="GBX-SPN", name="Globex spindle",
+                               category=receipt_category_b, item_type="stock")
+
+
+@pytest.fixture
+def receipt_location_a(db, tenant_a):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant_a, code="DOCK-A", name="Receiving dock",
+                                   location_type="staging", is_active=True)
+
+
+@pytest.fixture
+def receipt_location_b(db, tenant_b):
+    from apps.scm.models import Location
+    return Location.objects.create(tenant=tenant_b, code="DOCK-B", name="Globex dock",
+                                   location_type="staging", is_active=True)
+
+
+# -- spine: purchase orders --------------------------------------------------------------------
+
+@pytest.fixture
+def receipt_po_a(db, tenant_a, receipt_vendor_a):
+    """Approved tenant-A PO, ``expected_date`` = TODAY, with TWO lines (10 bearings, 4 belts)."""
+    po = _receipt_po(tenant_a, receipt_vendor_a)
+    _receipt_po_line(po)
+    _receipt_po_line(po, description="Drive belt 1200mm", qty="4", price="60.00",
+                     sku_hint="BLT-1200")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def receipt_po_line_a(receipt_po_a):
+    """First line of ``receipt_po_a`` - quantity 10, sku BRG-40, unit price 25.00."""
+    return receipt_po_a.lines.order_by("id").first()
+
+
+@pytest.fixture
+def receipt_po_line2_a(receipt_po_a):
+    """Second line of ``receipt_po_a`` - quantity 4, sku BLT-1200, unit price 60.00."""
+    return receipt_po_a.lines.order_by("id").last()
+
+
+@pytest.fixture
+def receipt_po_b(db, tenant_b, receipt_vendor_b):
+    """Tenant-B PO with one line - the cross-tenant target for crafted-POST tests."""
+    po = _receipt_po(tenant_b, receipt_vendor_b)
+    _receipt_po_line(po, description="Globex-only spindle", qty="6", price="80.00",
+                     sku_hint="GBX-SPN")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def receipt_po_line_b(receipt_po_b):
+    return receipt_po_b.lines.order_by("id").first()
+
+
+# -- spine: goods receipts ---------------------------------------------------------------------
+
+@pytest.fixture
+def receipt_grn_a(db, tenant_a, admin_user, receipt_po_a, receipt_location_a):
+    """Draft receipt dated TODAY, delivery note ``DN-5001``, landed in the receiving dock."""
+    return _receipt_grn(tenant_a, receipt_po_a, location=receipt_location_a,
+                        received_by=admin_user, notes="Two pallets, one shrink-wrap torn.")
+
+
+@pytest.fixture
+def receipt_grn_line_a(db, receipt_grn_a, receipt_po_line_a):
+    """12 accepted against 10 ordered (+1 rejected) - the OVER-receipt exception row."""
+    return _receipt_grn_line(receipt_grn_a, receipt_po_line_a, received="12",
+                             quantity_rejected=Decimal("1"),
+                             rejection_reason="Crushed carton")
+
+
+@pytest.fixture
+def receipt_grn_line2_a(db, receipt_grn_a, receipt_po_line2_a):
+    """1 accepted against 4 ordered - the SHORT-receipt exception row."""
+    return _receipt_grn_line(receipt_grn_a, receipt_po_line2_a, received="1")
+
+
+@pytest.fixture
+def receipt_grn_early_a(db, tenant_a, receipt_po_a, receipt_po_line_a):
+    """Receipt dated FOUR DAYS BEFORE the order's expected date - the EARLY bucket row."""
+    grn = _receipt_grn(tenant_a, receipt_po_a, delivery_note_ref="DN-5002",
+                       receipt_date=timezone.localdate() - datetime.timedelta(days=4))
+    _receipt_grn_line(grn, receipt_po_line_a, received="0")
+    return grn
+
+
+@pytest.fixture
+def receipt_grn_late_a(db, tenant_a, receipt_po_a, receipt_po_line2_a):
+    """Receipt dated FOUR DAYS AFTER the order's expected date - the LATE bucket row."""
+    grn = _receipt_grn(tenant_a, receipt_po_a, delivery_note_ref="DN-5003",
+                       receipt_date=timezone.localdate() + datetime.timedelta(days=4))
+    _receipt_grn_line(grn, receipt_po_line2_a, received="1")
+    return grn
+
+
+@pytest.fixture
+def receipt_grn_cancelled_a(db, tenant_a, receipt_po_a, receipt_po_line_a):
+    """A cancelled receipt - every 6.12 board and queryset must EXCLUDE it."""
+    grn = _receipt_grn(tenant_a, receipt_po_a, delivery_note_ref="DN-5004", status="cancelled")
+    _receipt_grn_line(grn, receipt_po_line_a, received="5")
+    return grn
+
+
+@pytest.fixture
+def receipt_grn_b(db, tenant_b, receipt_po_b):
+    """Tenant B's receipt - the IDOR / crafted-FK target."""
+    return _receipt_grn(tenant_b, receipt_po_b, delivery_note_ref="GBX-DN-9001")
+
+
+@pytest.fixture
+def receipt_grn_line_b(db, receipt_grn_b, receipt_po_line_b):
+    return _receipt_grn_line(receipt_grn_b, receipt_po_line_b, received="6")
+
+
+# -- tolerance policies ------------------------------------------------------------------------
+
+@pytest.fixture
+def receipt_policy_catchall_a(db, tenant_a):
+    """Catch-all: 5% over / 10% under / 2 days early / 3 days late, action ``warn``, priority 10."""
+    return _receipt_policy(tenant_a)
+
+
+@pytest.fixture
+def receipt_policy_item_a(db, tenant_a, receipt_item_a):
+    """Item-pinned (tier 3), priority 5 - beats the catch-all for SKU BRG-40, zero over-tolerance."""
+    return _receipt_policy(tenant_a, name="BRG-40 strict", item=receipt_item_a,
+                           over_receipt_pct=Decimal("0"), under_receipt_pct=None,
+                           early_receipt_days=None, late_receipt_days=None,
+                           action="block_flag", priority=5)
+
+
+@pytest.fixture
+def receipt_policy_category_a(db, tenant_a, receipt_category_a):
+    """Category-pinned (tier 2), priority 7 - beats the catch-all, loses to the item rule."""
+    return _receipt_policy(tenant_a, name="Bearings band", category=receipt_category_a,
+                           over_receipt_pct=Decimal("15"), priority=7)
+
+
+@pytest.fixture
+def receipt_policy_vendor_a(db, tenant_a, receipt_vendor_a):
+    """Vendor-pinned catch-all - same tier as ``receipt_policy_catchall_a``, but more specific."""
+    return _receipt_policy(tenant_a, name="Northwind exception", vendor=receipt_vendor_a,
+                           over_receipt_qty=Decimal("2"), priority=10)
+
+
+@pytest.fixture
+def receipt_policy_inactive_a(db, tenant_a):
+    """Highest priority but INACTIVE - the resolver must never return it."""
+    return _receipt_policy(tenant_a, name="Retired band", is_active=False, priority=1,
+                           allow_unlimited_over_receipt=True)
+
+
+@pytest.fixture
+def receipt_policy_b(db, tenant_b):
+    """Tenant B's rule - the IDOR target for detail / edit / delete."""
+    return _receipt_policy(tenant_b, name="Globex band")
+
+
+# -- discrepancies -----------------------------------------------------------------------------
+
+@pytest.fixture
+def receipt_discrepancy_open_a(db, tenant_a, admin_user, receipt_grn_a, receipt_grn_line2_a):
+    """OPEN short-shipment finding pinned to the short receipt line."""
+    return _receipt_discrepancy(tenant_a, receipt_grn_a,
+                                goods_receipt_line=receipt_grn_line2_a,
+                                created_by=admin_user)
+
+
+@pytest.fixture
+def receipt_discrepancy_header_a(db, tenant_a, receipt_grn_a):
+    """HEADER-level finding (no receipt line) - the paperwork never arrived."""
+    return _receipt_discrepancy(tenant_a, receipt_grn_a, kind="documentation",
+                                severity="minor", quantity_affected=Decimal("0"),
+                                description="No packing list with the delivery.")
+
+
+@pytest.fixture
+def receipt_discrepancy_notified_a(db, tenant_a, receipt_grn_a):
+    """Already VENDOR_NOTIFIED - notify_vendor must no-op; resolve / cancel must still work."""
+    obj = _receipt_discrepancy(tenant_a, receipt_grn_a, kind="damaged",
+                               quantity_affected=Decimal("1"),
+                               description="Two cartons crushed in transit.")
+    obj.notify_vendor(None, reference="SUP-CASE-11",
+                      notified_on=timezone.localdate() - datetime.timedelta(days=1))
+    return obj
+
+
+@pytest.fixture
+def receipt_discrepancy_resolved_a(db, tenant_a, admin_user, receipt_grn_a):
+    """RESOLVED and therefore FROZEN - edit is refused and every verb no-ops."""
+    obj = _receipt_discrepancy(tenant_a, receipt_grn_a, kind="wrong_item",
+                               quantity_affected=Decimal("3"),
+                               description="Belts sent instead of bearings.")
+    obj.resolve(admin_user, "credit", "Credit note agreed with the supplier.")
+    return obj
+
+
+@pytest.fixture
+def receipt_discrepancy_b(db, tenant_b, receipt_grn_b):
+    """Tenant B's finding - the IDOR / crafted-FK target."""
+    return _receipt_discrepancy(tenant_b, receipt_grn_b, description="Globex-only finding.")
+
+
+# -- returns to vendor -------------------------------------------------------------------------
+
+@pytest.fixture
+def receipt_rtv_draft_a(db, tenant_a, admin_user, receipt_vendor_a, receipt_po_a, receipt_grn_a):
+    """DRAFT return - editable, deletable, authorizable, cancellable."""
+    return _receipt_rtv(tenant_a, receipt_vendor_a, purchase_order=receipt_po_a,
+                        goods_receipt=receipt_grn_a, created_by=admin_user,
+                        notes="Two crushed cartons going back.")
+
+
+@pytest.fixture
+def receipt_rtv_line_a(db, receipt_rtv_draft_a, receipt_po_line_a):
+    """One returned line priced through ``po_line.unit_price`` (3 x 25.00 = 75.00 expected)."""
+    return _receipt_rtv_line(receipt_rtv_draft_a, po_line=receipt_po_line_a, qty="3")
+
+
+@pytest.fixture
+def receipt_rtv_authorized_a(db, tenant_a, admin_user, receipt_vendor_a):
+    """AUTHORIZED - shippable and cancellable, no longer editable or deletable."""
+    obj = _receipt_rtv(tenant_a, receipt_vendor_a, reason="defective", remedy="replacement",
+                       supplier_rma_number="RMA-88", created_by=admin_user)
+    obj.authorize(admin_user)
+    return obj
+
+
+@pytest.fixture
+def receipt_rtv_shipped_a(db, tenant_a, admin_user, receipt_vendor_a):
+    """SHIPPED - closable only; cancel must be refused (the goods have physically gone)."""
+    obj = _receipt_rtv(tenant_a, receipt_vendor_a, reason="expired", remedy="credit",
+                       supplier_rma_number="RMA-99", created_by=admin_user)
+    obj.authorize(admin_user)
+    obj.mark_shipped(admin_user, carrier_name="DHL", tracking_number="TRK-RTV-1",
+                     shipped_on=timezone.localdate() - datetime.timedelta(days=1))
+    return obj
+
+
+@pytest.fixture
+def receipt_rtv_b(db, tenant_b, admin_b, receipt_vendor_b):
+    """Tenant B's return - the IDOR / crafted-FK target."""
+    return _receipt_rtv(tenant_b, receipt_vendor_b, reason="wrong_item",
+                        supplier_rma_number="GBX-RMA-1", created_by=admin_b)
+
+
+# -- advance shipping notices (the receiving console's rows) -----------------------------------
+
+@pytest.fixture
+def receipt_asn_a(db, tenant_a, admin_user, receipt_po_a):
+    """IN TRANSIT and due TODAY - the console's ``?arrival=today`` row. Not yet booked."""
+    return _receipt_asn(tenant_a, receipt_po_a, submitted_at=timezone.now(),
+                        created_by=admin_user)
+
+
+@pytest.fixture
+def receipt_asn_line_a(db, receipt_asn_a, receipt_po_line_a):
+    """5 declared against the 10-unit line, carrying a lot number the mint verb can adopt."""
+    from apps.procurement.models import AsnLine
+    return AsnLine.objects.create(asn=receipt_asn_a, po_line=receipt_po_line_a,
+                                  quantity_shipped=Decimal("5"), package_ref="PLT-1",
+                                  sku_hint="BRG-40", lot_number="LOT-A1",
+                                  country_of_origin="DE")
+
+
+@pytest.fixture
+def receipt_asn_no_reference_a(db, tenant_a, receipt_po_a, receipt_po_line2_a):
+    """Declares NO supplier reference - the book verb must key on the ASN number instead.
+    Expected two days ago, so it also fills the console's ``?arrival=overdue`` tab."""
+    from apps.procurement.models import AsnLine
+    asn = _receipt_asn(tenant_a, receipt_po_a, supplier_reference="",
+                       tracking_number="TRK-7002",
+                       expected_delivery_date=timezone.localdate() - datetime.timedelta(days=2))
+    AsnLine.objects.create(asn=asn, po_line=receipt_po_line2_a,
+                           quantity_shipped=Decimal("2"), sku_hint="BLT-1200")
+    return asn
+
+
+@pytest.fixture
+def receipt_asn_draft_a(db, tenant_a, receipt_po_a):
+    """DRAFT - outside ``CONSOLE_STATUSES``, so the console must neither list nor book it."""
+    return _receipt_asn(tenant_a, receipt_po_a, status="draft",
+                        supplier_reference="NW-DN-7003", tracking_number="TRK-7003")
+
+
+@pytest.fixture
+def receipt_asn_b(db, tenant_b, admin_b, receipt_po_b):
+    """Tenant B's shipment - the IDOR target for the console's two POST verbs."""
+    return _receipt_asn(tenant_b, receipt_po_b, supplier_reference="GBX-DN-9001",
+                        carrier_name="Globex Haulage", created_by=admin_b)
+
+
+# -- the registers a discrepancy POINTS at (and never re-declares, L36) ------------------------
+
+@pytest.fixture
+def receipt_nonconformance_a(db, tenant_a, receipt_grn_a, receipt_item_a):
+    from apps.scm.models import NonConformance
+    return NonConformance.objects.create(
+        tenant=tenant_a, source="receiving", goods_receipt=receipt_grn_a, item=receipt_item_a,
+        title="Bearing bore out of spec", description="Bore measured 0.4mm oversize.",
+        detected_on=timezone.localdate())
+
+
+@pytest.fixture
+def receipt_nonconformance_b(db, tenant_b, receipt_item_b):
+    """Tenant B's quality record - the crafted-FK target on the discrepancy form."""
+    from apps.scm.models import NonConformance
+    return NonConformance.objects.create(
+        tenant=tenant_b, source="receiving", item=receipt_item_b,
+        title="Globex-only finding", description="Not ours.",
+        detected_on=timezone.localdate())
+
+
+@pytest.fixture
+def receipt_quarantine_a(db, tenant_a, receipt_item_a, receipt_location_a):
+    from apps.inventory.models import QuarantineOrder
+    return QuarantineOrder.objects.create(
+        tenant=tenant_a, item=receipt_item_a, source_location=receipt_location_a,
+        quarantine_location=receipt_location_a, quantity=Decimal("2"), reason="qc_hold")
+
+
+@pytest.fixture
+def receipt_quarantine_b(db, tenant_b, receipt_item_b, receipt_location_b):
+    """Tenant B's hold - the crafted-FK target on the discrepancy form."""
+    from apps.inventory.models import QuarantineOrder
+    return QuarantineOrder.objects.create(
+        tenant=tenant_b, item=receipt_item_b, source_location=receipt_location_b,
+        quarantine_location=receipt_location_b, quantity=Decimal("1"), reason="qc_hold")
