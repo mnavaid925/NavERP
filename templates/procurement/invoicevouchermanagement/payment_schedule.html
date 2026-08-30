@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Payment Schedule{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — Payment Scheduling (lane B).
+    Context contract (hand-rolled view, NOT crud_list): buckets (list of dicts with keys
+    key, label, start, end, rows, count, total), page_obj (from paginate() over the flat
+    row list), total_payable, terms, currency, vendors, stats{invoices, total_payable,
+    overdue_total, discounted_total}, horizon_weeks, today, q. Nothing else exists here.
+
+    Two things this page must NOT do:
+    1. Render bucket.start / bucket.end bare. The Overdue bucket carries start=None and
+       end=None — the LABEL is what says "overdue" — so a bare date filter would render
+       the string "None" in the card header. Both are guarded, and the bucket is styled
+       as overdue by the ABSENCE of a start date rather than by guessing its `key`.
+    2. Read the discount as an attribute. `discount_amount` is a METHOD on
+       SupplierInvoice, so it is called as {{ row.discount_amount }} (Django calls
+       callables) — `row.discount_amount` is never a stored column.
+
+    Bucket `rows` are SupplierInvoice objects, not wrapper dicts: number, vendor,
+    due_date, payment_term, total all come straight off the object.
+    Badge colours are hardcoded against the frozen STATUS_CHOICES keys with a
+    get_status_display fallback and a badge-slate tail.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Payment Schedule</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><span>Payment Schedule</span></div>
+      <p class="text-muted">What we have approved or scheduled to pay, bucketed by the week it falls due — the cash-out view of accounts payable. Anything already past its due date sits in the overdue bucket at the top, and every bucket totals the discount still there to be taken.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+      <a href="{% url 'procurement:supplierinvoiceline_list' %}" class="btn btn-outline"><i data-lucide="layers"></i> Invoice lines</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="receipt"></i></div><div class="stat-value">{{ stats.invoices }}</div><div class="stat-label">Invoices in schedule</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="wallet"></i></div><div class="stat-value">{{ stats.total_payable|floatformat:2 }}{% if currency %} <span class="stat-label">{{ currency.code }}</span>{% endif %}</div><div class="stat-label">Total payable</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue_total|floatformat:2 }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="percent"></i></div><div class="stat-value">{{ stats.discounted_total|floatformat:2 }}</div><div class="stat-label">Discount capturable</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search invoice number or vendor…">
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="terms" aria-label="Payment terms" class="form-select">
+            <option value="">All payment terms</option>
+            {% for t in terms %}
+              <option value="{{ t.pk|stringformat:"d" }}" {% if request.GET.terms == t.pk|stringformat:"d" %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="weeks" aria-label="Horizon" class="form-select">
+            <option value="4" {% if request.GET.weeks == "4" %}selected{% endif %}>4 weeks</option>
+            <option value="8" {% if request.GET.weeks == "8" or not request.GET.weeks %}selected{% endif %}>8 weeks</option>
+            <option value="13" {% if request.GET.weeks == "13" %}selected{% endif %}>13 weeks</option>
+            <option value="26" {% if request.GET.weeks == "26" %}selected{% endif %}>26 weeks</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:paymentschedule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="text-muted">Horizon: {{ horizon_weeks }} week(s) from {{ today|date:"M d, Y" }}. Only approved and scheduled invoices with a due date appear — a draft, blocked or disputed invoice is not yet a promise to pay.</p>
+    </div>
+  </div>
+
+  {% if stats.invoices %}
+    {% for bucket in buckets %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">
+            {% comment %}
+              The overdue bucket is identified by the ABSENCE of a start date, not by its
+              `key` — it is the only bucket the view builds with start=None.
+            {% endcomment %}
+            {% if bucket.start %}
+              <i data-lucide="calendar-clock"></i> {{ bucket.label }}
+            {% else %}
+              <i data-lucide="alert-triangle"></i> {{ bucket.label }}
+            {% endif %}
+          </h2>
+          <span class="text-muted">
+            {% if bucket.start %}{{ bucket.start|date:"M d" }} – {{ bucket.end|date:"M d, Y" }}{% else %}Due before {{ today|date:"M d, Y" }}{% endif %}
+            · <span class="badge {% if bucket.start %}badge-info{% else %}badge-red{% endif %}">{{ bucket.count }} invoice(s)</span>
+            · <span class="fw-600">{{ bucket.total|floatformat:2 }}{% if currency %} {{ currency.code }}{% endif %}</span>
+          </span>
+        </div>
+        <div class="card-body">
+          {% if bucket.rows %}
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Vendor</th>
+                    <th>Due date</th>
+                    <th>Terms</th>
+                    <th class="text-right">Total</th>
+                    <th class="text-right">Discount capturable</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in bucket.rows %}
+                    <tr>
+                      <td class="fw-600"><a href="{% url 'procurement:supplierinvoice_detail' row.pk %}">{{ row.number }}</a>
+                        <div class="text-muted">{{ row.invoice_number }}</div>
+                      </td>
+                      <td>{% if row.vendor %}{{ row.vendor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                      <td>
+                        {{ row.due_date|date:"M d, Y" }}
+                        {% if row.due_date < today %}<span class="badge badge-red">Overdue</span>{% endif %}
+                      </td>
+                      <td>
+                        {% if row.payment_term %}{{ row.payment_term.name }}
+                          <div class="text-muted">Net {{ row.payment_term.days_due }}{% if row.payment_term.discount_pct %} · {{ row.payment_term.discount_pct|floatformat:2 }}% in {{ row.payment_term.discount_days }}d{% endif %}</div>
+                        {% else %}<span class="text-muted">No terms — the due date was never derived.</span>{% endif %}
+                      </td>
+                      <td class="text-right fw-600">{{ row.total|floatformat:2 }}{% if currency %} <span class="text-muted">{{ currency.code }}</span>{% endif %}</td>
+                      <td class="text-right">
+                        {% comment %}
+                          discount_amount is a METHOD, called here without parentheses the
+                          way Django expects; annualised_pct is likewise a method and is
+                          pure arithmetic on the already-selected payment term.
+                        {% endcomment %}
+                        {% if row.discount_amount %}{{ row.discount_amount|floatformat:2 }}
+                          <div class="text-muted">{{ row.annualised_pct|floatformat:2 }}% annualised{% if row.discount_expiry_date %} · until {{ row.discount_expiry_date|date:"M d, Y" }}{% endif %}</div>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="4" class="text-right fw-600">Bucket total</td>
+                    <td class="text-right fw-600">{{ bucket.total|floatformat:2 }}{% if currency %} <span class="text-muted">{{ currency.code }}</span>{% endif %}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted">Nothing falls due in this bucket.</p>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+
+    <div class="card">
+      <div class="card-body">
+        <div class="filter-bar">
+          <div class="stat-value">Total payable {{ total_payable|floatformat:2 }}{% if currency %} {{ currency.code }}{% endif %}</div>
+          <div class="text-muted">across {{ stats.invoices }} invoice(s) · {{ stats.overdue_total|floatformat:2 }} of it already overdue · {{ stats.discounted_total|floatformat:2 }} of early-payment discount still capturable</div>
+        </div>
+      </div>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  {% else %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="calendar-clock"></i>
+        <h3>Nothing is scheduled to be paid</h3>
+        <p>An invoice reaches this page once it is approved or scheduled and carries a due date — and a due date is derived from the payment terms, so an invoice with no terms never lands here. Approve an invoice from its own page to put it on the schedule.</p>
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+      </div>
+    </div></div>
+  {% endif %}
+{% endblock %}
