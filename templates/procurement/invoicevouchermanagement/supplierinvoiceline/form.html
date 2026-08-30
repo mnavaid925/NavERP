@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ title|default:"Supplier Invoice Line" }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — SupplierInvoiceLine create + edit, ONE template
+    driven by the contracted `is_edit` flag.
+    Context contract: form, obj, invoice, is_edit, title, submit_label, cancel_url.
+    Nothing else exists here. `obj` is None on create and `invoice` is the header the
+    line is being added to (the view validates ?invoice=<pk> with as_db_int plus a tenant
+    existence check), so every obj reference sits inside an {% if is_edit %} branch.
+    The header is NOT a form field — it is fixed by the URL on create and by the object on
+    edit, which is what stops a crafted POST re-parenting a line onto another invoice.
+    No file field on this form, so no enctype is needed.
+  {% endcomment %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{{ title|default:"Supplier Invoice Line" }}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:supplierinvoiceline_list' %}">Invoice Lines</a><span class="sep">›</span>{% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}">{{ invoice.number }}</a><span class="sep">›</span>{% endif %}<span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  {% if not invoice %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="file-input"></i>
+        <h3>No invoice to add a line to</h3>
+        <p>A line always belongs to an invoice. Open the invoice and add the line from there.</p>
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
+      </div>
+    </div></div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Invoice</h2><span class="text-muted">fixed — a line is never re-parented onto another invoice</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Invoice</dt>
+            <dd>{% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="fw-600">{{ invoice.number }}</a>
+              {% if invoice.status == "draft" %}<span class="badge badge-muted">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "parked" %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "captured" %}<span class="badge badge-info">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "blocked" %}<span class="badge badge-red">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "disputed" %}<span class="badge badge-amber">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "pending_approval" %}<span class="badge badge-amber">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "approved" %}<span class="badge badge-green">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "scheduled" %}<span class="badge badge-info">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "paid" %}<span class="badge badge-green">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "void" %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+              {% elif invoice.status == "reversed" %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ invoice.get_status_display }}</span>{% endif %}
+              <div class="text-muted">Supplier number {{ invoice.invoice_number }} · {{ invoice.invoice_date|date:"M d, Y" }}</div>
+            {% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Vendor</dt>
+            <dd>{% if invoice.vendor %}{{ invoice.vendor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Currency</dt>
+            <dd>{% if invoice.currency %}{{ invoice.currency.code }} — {{ invoice.currency.name }}{% else %}<span class="text-muted">Workspace default</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Invoice type</dt>
+            <dd>{{ invoice.get_invoice_type_display }}
+              {% if invoice.invoice_type == "credit_memo" %}<div class="text-muted">A credit memo line cannot carry a positive value.</div>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == "po_line" %}
+              <div class="form-help">The ordered line this is billed against. Narrowed to this invoice&rsquo;s purchase order. Leave blank for a cost with no order behind it — a non-PO line must then name the GL account.</div>
+            {% elif field.name == "receipt_line" %}
+              <div class="form-help">Narrowed to the receipts booked against the chosen order line. Blank means nothing has been booked against it yet, and the match falls back to comparing with the order.</div>
+            {% elif field.name == "item" %}
+              <div class="form-help">Optional. Purchase-order lines are free text, so linking the item master is a convenience for reporting rather than a requirement.</div>
+            {% elif field.name == "description" %}
+              <div class="form-help">Copied from the purchase-order line when left blank — the supplier&rsquo;s own wording is what an AP clerk has to match against the paper.</div>
+            {% elif field.name == "quantity" %}
+              <div class="form-help">A credit memo legitimately carries a negative quantity.</div>
+            {% elif field.name == "unit_price" %}
+              <div class="form-help">Compared with the order price against a 2% band. Negative only on a credit memo.</div>
+            {% elif field.name == "tax_rate_pct" %}
+              <div class="form-help">Applied to the line total. The header tax total is the sum of these.</div>
+            {% elif field.name == "gl_account" %}
+              <div class="form-help">Where the cost lands. Mandatory on a non-PO line — there is no order to derive an expense account from.</div>
+            {% elif field.help_text %}
+              <div class="form-help">{{ field.help_text }}</div>
+            {% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      The line total is derived (quantity × unit price) and so is the header money — subtotal, tax and total are re-derived from the lines the moment this one is saved. Matched quantity is written only by the match engine, never by hand.
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> {{ submit_label|default:"Save" }}</button>
+      <a href="{% if cancel_url %}{{ cancel_url }}{% elif is_edit %}{% url 'procurement:supplierinvoiceline_detail' obj.pk %}{% else %}{% url 'procurement:supplierinvoiceline_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
