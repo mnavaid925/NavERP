@@ -675,3 +675,91 @@ backorders -> schedules -> ASN lines -> notices. Migration `0016_advancedshipmen
 Tests: `test_fulfillment_{models(202),forms(77),views(105),security(36)}.py` - functions
 `test_fulfillment_*`, fixtures `fulfillment_*` appended to conftest. Sidebar: `LIVE_LINKS["6.11"]`
 maps all five bullets (Real-time Freight Tracking -> the board, not a table).
+
+## 6.12 Goods Receipt & Inspection (built 2026-08-30)
+
+**As-built now: 6.1-6.12.** Package folder `GoodsReceiptInspection/` across all four layers.
+
+**Read this before adding anything here: SIX of the ten NavERP.md bullets were ALREADY BUILT and are
+MAPPED, not rebuilt (L36).** Grep-verified at build time:
+
+| Bullet | Already owned by |
+|---|---|
+| Inventory Posting | `apps/scm/views/_helpers.py:299` `_post_grn_receipt` — real row-locked `StockMove` legs |
+| Receipt Reversal & Audit Trail | `:335` `_reverse_grn_receipt` — compensating legs, refuses after putaway |
+| Quality Inspection Checklists | `inventory.QcChecklist`/`QcRoutingRule`; `scm.QualityInspection` already FKs `goods_receipt` |
+| Quarantine & Inspection Hold | `inventory.QuarantineOrder` [QRD-] |
+| Lot, Batch & Serial Capture | `scm.LotSerial` (`unique_together = (tenant, item, number)`) |
+| Item Tagging & Barcoding | `inventory:barcodelabel_list` / `scan_console` / `putaway_suggestions` |
+
+`apps/quality` does **not** exist (Module 12 is future). SCM 4.9 owns
+`InspectionPlan→QualityInspection→NonConformance`; inventory 5.15 owns the QC/quarantine registers.
+**6.12 owns only the COMMERCIAL consequence** — the discrepancy claim and the vendor return — and
+points at the rest through nullable `SET_NULL` FKs. Do not open a third quality register.
+
+### Models (`models/GoodsReceiptInspection/`)
+- **`ReceiptTolerancePolicy` [no number, `ReceiptTolerances.py`]** — `TenantOwned` config master, no
+  status column. Over/under pct + absolute `over_receipt_qty`, `allow_unlimited_over_receipt`,
+  `early_receipt_days`/`late_receipt_days`, `action` none/warn/block_flag. Scoped by `item` XOR
+  `category` (clean() rejects both) plus an optional `vendor` pin. **No `unique_together` — overlapping
+  rules are LEGAL by design**, which is why the resolver, not the schema, decides. Ships THREE
+  module-level functions, deliberately split so selection and judgement are separately testable:
+  `resolve_receipt_tolerance()` (tier 3 item > 2 category > 1 catchall → vendor-pinned beats
+  vendor-agnostic → priority ASC → id ASC; a vendor-pinned rule NEVER fires for another vendor;
+  refusals start `"No Rule Matched"`), `evaluate_receipt_tolerance()` (**quantity breaches outrank
+  date breaches**; with both `over_receipt_pct` and `over_receipt_qty` set the MORE RESTRICTIVE wins;
+  with neither, tolerance is ZERO), and `resolve_line_item()` — a LOCAL MIRROR of scm's private
+  `_resolve_grn_item`, never a cross-app import. Shape cloned from `resolve_qc_routing`
+  (`apps/inventory/models/QualityControl/QcRoutingRules.py:89`) — read that first.
+- **`ReceiptDiscrepancy` [RDS-, `ReceiptDiscrepancies.py`]** — the claim against a receipt. FK
+  `scm.GoodsReceiptNote` (PROTECT) + optional `goods_receipt_line` (**blank = a header-level
+  finding**). 7 kinds, severity, `evidence` FileField + `evidence_url`, `remedy`
+  pending/replacement/credit/rtv/accept_as_is/scrap. `status` is `editable=False`, moved only by
+  `notify_vendor`/`resolve`/`cancel`, each re-checking its guard INSIDE so a second call returns
+  False and changes nothing. Three nullable escalation POINTERS (`scm.NonConformance`,
+  `inventory.QuarantineOrder` — the typed anchor its free-text `reference` cannot give — and the RTV).
+  `save()` mirrors the PO line's free text only when `update_fields is None`.
+- **`ReturnToVendor` [RTV-] + `ReturnToVendorLine` (`ReturnsToVendor.py`)** — genuinely absent before
+  this: `scm.ReturnAuthorization` is the CUSTOMER RMA and `WarrantyClaim` is post-sale.
+  `draft→authorized→shipped→closed`/`cancelled`. `expected_credit_value` is DERIVED, never stored.
+  `has_duplicate_rma` is ADVISORY and never blocks.
+
+> **An RTV posts NO `StockMove` and NO `JournalEntry`, and that is correct — do not "fix" it.**
+> Defended from code, not asserted: `_post_grn_receipt` (line 319) reads
+> `qty = line.quantity_received or ZERO`, so dock-rejected quantity never entered the ledger and
+> there is nothing to remove. The 6.12 security test lane asserts zero new rows after an authorize.
+
+### Views / URLs / Templates
+Views `views/GoodsReceiptInspection/{ReceiptTolerances,ReceiptDiscrepancies,ReturnsToVendor,ReceiptBoards}.py`.
+Names `tolerancepolicy_* discrepancy_* rtv_*` plus verbs (`discrepancy_notify_vendor/resolve/cancel`,
+`rtv_authorize/ship/close/cancel`) and the three boards `receiving_console` (+`_book`, `_mint_lots`),
+`tolerance_exceptions`, `receipt_audit`. Templates
+`templates/procurement/goodsreceiptinspection/{tolerancepolicy,discrepancy,rtv}/{list,detail,form}.html`
+with the three boards at the **sub-module root**. `receiving_console` finally closes the ASN→GRN
+hand-off 6.11 deferred, keyed `AdvancedShipmentNotice.supplier_reference` →
+`GoodsReceiptNote.delivery_note_ref`.
+
+**Traps already paid for (review + fixes) — do not reintroduce:**
+- A blank `supplier_reference` had no stable delivery-note key, so three book POSTs created THREE
+  receipts. The key is normalized (case/padding-insensitive) and there is ONE definition of
+  "same delivery note".
+- An RTV line's ordered line must match the header's **order AND supplier** — a return to supplier A
+  could otherwise be built on supplier B's line and quote credit off the wrong price. Enforced in
+  `clean()` AND by narrowing the widget.
+- Editing an RTV whose receipt was cancelled afterwards silently saved `goods_receipt = NULL`;
+  the stored value is now exempted from the cancelled-receipt exclusion.
+- `_item_map` must pre-filter SKUs in SQL (`Lower("sku")` + `__in`), never read the whole item master.
+- The RTV line formset shares its rendered options via `_construct_form` — NOT `__init__`, which
+  forces the `forms` cached_property to build eagerly and freezes rows against the pre-edit header.
+- `apps/core/forms/_common.py` `MAX_UPLOAD_BYTES` is 20 MB but
+  `forms/CatalogManagement/UploadBatches.py:13` defines a DIFFERENT 2 MB one. Import the core pair
+  LOCALLY; **never re-export either from `forms/__init__.py`**.
+- Do NOT add the new models to `PROCUREMENT_CONTENT_MODELS` — that tuple is the *scm*-app whitelist;
+  `Q(content_type__app_label="procurement")` already covers them.
+
+### Seeder / Tests
+`_seed_goods_receipt(self, tenant)` in seed_procurement.py, guarded per tenant. Migrations `0017`
+(+`0018` vendor SET_NULL→CASCADE fix, `0019` `(tenant, supplier_rma_number)` index).
+Tests: `test_receipt_{models(234),forms(143),views(140),security(47)}.py` — functions
+`test_receipt_*`, fixtures `receipt_*` in conftest. Sidebar `LIVE_LINKS["6.12"]` has 10 keys, 6 of
+them pointing at the existing scm/inventory pages above.
