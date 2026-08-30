@@ -1068,3 +1068,210 @@ semantic `-success` / `-danger` names do NOT exist in theme.css and render unsty
 
 ## Review notes
 (filled in at close-out)
+
+---
+# Sub-module 6.13 - Invoice & Voucher Management (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.13.md  (2026-08-30)
+
+App EXISTS (`apps/procurement/`, 6.1-6.12 built) -> this pass EXTENDS it. **No `config/settings.py` / `config/urls.py` change** (procurement already installed + included; L31/L32).
+Sub-module package folder: **`InvoiceVoucherManagement/`** in all four backend layers. Template sub-module folder: **`invoicevouchermanagement/`**. Test subslug: **`invoice`**.
+Migration **0020 is CLAIMED**, generated LAST (latest on disk is `0019_returntovendor_prc_rtv_tnt_rma_idx.py`).
+Number prefixes **`SIV`** (SupplierInvoice) and **`DSP`** (InvoiceDispute) re-verified free across `apps/`.
+Three corrections applied to the research doc: (a) **`scm.Item` DOES exist** (`apps/scm/models/InventoryManagement/Items.py:73`) so invoice lines get an optional item FK;
+(b) `accounting.Invoice` is AR - the AP ledger record is **`accounting.Bill`**; (c) the migration is 0020, not 0017.
+
+## Scope decision
+**Four models**: `SupplierInvoice`, `SupplierInvoiceLine`, `InvoiceMatchVariance`, `InvoiceDispute`.
+**Five NavERP.md bullets** (lines 1081-1085, text copied verbatim into LIVE_LINKS below): Invoice Capture (OCR) / Three-Way Matching /
+Dispute Resolution Workflow / Payment Schedule-Terms Management / Early Payment Discount Tracking.
+- [ ] Bullet 1 ships as **"Assisted Capture", NOT OCR** - the UI must never say "OCR". Why: no OCR engine, no Tesseract, no vision API
+      and no Celery worker exists in this stack; `pdfplumber`/`PyMuPDF` read a PDF's **text layer** and return `None` on a scan; an OCR job/queue table with no worker is dead
+      schema. Honest behaviour = text-layer extraction -> anchor+regex heuristics -> **pre-filled form with per-field confidence badges for human review** -> human confirms.
+      A scan with no text layer drops to the manual form with `source="manual"`, `extraction_confidence=0` - the designed path, not an error.
+- [ ] Bullets 4 and 5 need **no new model**: `accounting.PaymentTerm` already carries `days_due`, `discount_pct`, `discount_days`
+      (`models/AccountsPayable/PaymentTerms.py:6-11`, verified). Both pages are pure **derived** views over `SupplierInvoice` (L29 / L37 §2).
+- [ ] Deliberately NOT built (L36 - map, do not rebuild): no `CreditMemo`/`DebitMemo` table (`invoice_type` + sign-aware totals); no stored
+      `PaymentSchedule` / `DiscountOpportunity` table (projections - storing them guarantees drift); no `InvoiceMatchTolerancePolicy` (tolerances are class constants, the
+      `GoodsReceiptNote.PRICE_TOLERANCE_PCT` idiom); no OCR job table; no supplier-facing portal pages (6.4 owns those - L32: a staff bullet must never point at a login-gated view).
+- [ ] Do NOT re-declare `PurchaseOrder` / `GoodsReceiptNote` (L36). Two `PurchaseOrder` classes exist on purpose - `crm.PurchaseOrder` (lightweight)
+      and **`scm.PurchaseOrder`** (canonical). **Use `scm.` everywhere.**
+
+## Models (`apps/procurement/models/InvoiceVoucherManagement/`)
+All FKs by **string**, never an import (app-registry cycle). `TenantOwned.tenant` already declares `related_name="+"` - do not give it a per-model related_name;
+**every other FK needs one**.
+
+### `SupplierInvoices.py` - `SupplierInvoice(TenantNumbered)`, prefix `SIV`
+- [ ] CHOICES verbatim from research §3.1: `STATUS_CHOICES` (draft/parked/captured/blocked/disputed/pending_approval/approved/scheduled/paid/void/reversed); `INVOICE_TYPE_CHOICES` (standard/credit_memo/debit_memo/prepayment/service); `MATCH_BASIS_CHOICES` (quantity/amount/none); `MATCH_STATUS_CHOICES` (not_run/matched/within_tolerance/price_variance/quantity_variance/total_variance/fx_variance/no_receipt/over_invoiced/duplicate_suspect); `SOURCE_CHOICES` (manual/pdf_text_layer/e_invoice_xml/vis/ocr); `DISCOUNT_BASE_CHOICES` (net_of_tax/gross)
+- [ ] FKs: `vendor` -> `'core.Party'` PROTECT; `purchase_order` -> `'scm.PurchaseOrder'` SET_NULL; `goods_receipt` -> `'scm.GoodsReceiptNote'` SET_NULL;
+      `bill` -> `'accounting.Bill'` SET_NULL; `journal_entry` -> `'accounting.JournalEntry'` SET_NULL `editable=False`; `payment_term` -> `'accounting.PaymentTerm'`;
+      `currency` -> `'accounting.Currency'`; `tax_code` -> `'accounting.TaxCode'`; `source_submission` -> `'procurement.VendorInvoiceSubmission'` (one-way, header-only);
+      `document` -> `'core.Document'`; `duplicate_of` -> `'self'`; `approved_by` -> `AUTH_USER_MODEL` `editable=False`. Shared targets use `related_name="procurement_supplier_invoices"`.
+- [ ] Scalars: `invoice_type`, `invoice_number` Char(64), `invoice_number_norm` Char(64) `editable=False` db_index (uppercased, non-alphanumerics stripped - the duplicate key),
+      `external_ref`, `invoice_date`, `posting_date` null, `due_date` / `discount_date` / `discount_expiry_date` null + `editable=False`, `discount_base` (default `net_of_tax`),
+      `discount_grace_days` PosSmallInt default 0, `subtotal` / `tax_total` / `total` / `amount_paid` Decimal(18,2) **`editable=False`**, `fx_rate` Decimal(14,6) null,
+      `match_basis`, `match_status` + `match_notes` `editable=False`, `status` default `draft`, `source` default `manual`, `extraction_confidence` Decimal(5,2) null,
+      `extraction_raw_text`, `notes`
+- [ ] `Meta`: `ordering = ["-invoice_date","-id"]`, `unique_together = ("tenant","number")`, indexes `["tenant","status"]`, `["tenant","match_status"]`,
+      `["tenant","vendor","invoice_number_norm"]`, `["tenant","discount_date"]`, `["tenant","due_date"]`
+- [ ] Methods: `recalc_totals()`, `run_match()`, `is_locked` (status in paid/void/reversed), `cumulative_invoiced_qty(po_line)`, `cumulative_received_qty(po_line)`,
+      `discount_amount()`, `annualised_pct()`, `duplicate_candidates()`
+
+### `SupplierInvoiceLines.py` - `SupplierInvoiceLine` (plain child, scoped through the header)
+- [ ] `invoice` -> `SupplierInvoice` CASCADE `related_name="lines"`; `po_line` -> `'scm.PurchaseOrderLine'` PROTECT null; `receipt_line` -> `'scm.GoodsReceiptLine'` PROTECT null;
+      **`item` -> `'scm.Item'` SET_NULL null (NEW - the research doc wrongly assumed no item master; `scm.Item` exists at Items.py:73)**; `gl_account` -> `'accounting.GLAccount'` SET_NULL null;
+      `tax_code` -> `'accounting.TaxCode'` SET_NULL null. All five use `related_name="procurement_invoice_lines"`.
+- [ ] `description` Char(255), `sku_hint` Char(64) / `uom_hint` Char(32) blank (**kept as the non-PO fallback - the item FK is optional, never required**), `quantity` Decimal(14,4) default 1,
+      `unit_price` Decimal(14,2) default 0, `tax_rate_pct` Decimal(5,2) default 0, `line_total` Decimal(18,2) `editable=False`, `matched_qty` Decimal(14,4) `editable=False`
+- [ ] `cumulative_invoiced_qty` is **DERIVED by aggregation, NOT a stored column** (§5.2 - a cached counter drifts the first time a GRN is cancelled or an invoice reversed)
+- [ ] `save()` recomputes `line_total` (sign-aware for credit memos) then calls `invoice.recalc_totals()`; `clean()` rejects mixing tax-inclusive and tax-exclusive
+      `unit_price` across lines on one invoice
+
+### `MatchVariances.py` - `InvoiceMatchVariance(TenantOwned)` (no number - nobody quotes one)
+- [ ] CHOICES verbatim from research §3.3: `VARIANCE_TYPE_CHOICES` (price/quantity/quantity_no_receipt/over_invoice/total_amount/fx_rate/tax/duplicate/missing_po/missing_receipt); `OUTCOME_CHOICES` (auto_accept/warn/block); `RESOLUTION_CHOICES` (open/accepted/disputed/credit_memo/debit_memo/short_paid/cancelled)
+- [ ] `invoice` -> `SupplierInvoice` CASCADE `related_name="variances"`; `invoice_line` -> `SupplierInvoiceLine` CASCADE **null** `related_name="variances"` (null = header-level check);
+      `dispute` -> `InvoiceDispute` SET_NULL null `related_name="variances"`
+- [ ] `variance_type`, `basis` (`po`/`receipt`/`header`), `expected_value` / `actual_value` Decimal(18,4), `variance_abs` + `variance_pct` `editable=False`
+      (**signed**, actual − expected), `tolerance_abs_applied` / `tolerance_pct_applied` null, `outcome`, `resolution` default `open`, `message` Char(255), `detected_at` `auto_now_add`
+- [ ] `Meta`: `ordering = ["-detected_at"]`, indexes `["tenant","outcome","resolution"]`, `["tenant","variance_type"]`, `["invoice"]`
+
+### `InvoiceDisputes.py` - `InvoiceDispute(TenantNumbered)`, prefix `DSP`
+- [ ] CHOICES verbatim from research §3.4: `REASON_CODE_CHOICES` (price/quantity/goods_not_received/damaged/duplicate/credit_not_processed/tax/freight/admin/other); `RESOLUTION_CHOICES` (credit_memo/debit_memo/reinvoice/short_pay/withdrawn); `STATUS_CHOICES` (open/awaiting_supplier/awaiting_internal/resolved/escalated/closed)
+- [ ] `invoice` -> `SupplierInvoice` CASCADE `related_name="disputes"`; `invoice_line` -> `SupplierInvoiceLine` SET_NULL null `related_name="disputes"`; `supplier` -> `'core.Party'` PROTECT
+      `related_name="procurement_invoice_disputes"`; `raised_by` + `assigned_to` -> `AUTH_USER_MODEL` SET_NULL; `credit_memo_invoice` -> `SupplierInvoice` SET_NULL null
+      `related_name="resolved_disputes"`
+- [ ] `reason_code`, `status` default `open`, `disputed_amount` Decimal(14,2) (**tracked separately from `total` so the undisputed balance stays payable - §8.7**), `description`,
+      `supplier_contact`, `raised_at` `auto_now_add`, `due_date` null, `resolved_at` `editable=False`, `resolution` blank, `resolution_note`
+- [ ] `Meta`: `ordering = ["-raised_at"]`, `unique_together = ("tenant","number")`, indexes `["tenant","status","due_date"]`, `["tenant","supplier"]`
+
+## Status lifecycle & allowed transitions (research §4 - enforce in the VIEW, not the model)
+- [ ] `draft` -> parked / captured; `parked` -> draft / captured; `captured` -> blocked / pending_approval (set by `run_match()`); `blocked` -> pending_approval (**authorised
+      override only, `@tenant_admin_required`, writes an `accepted` variance resolution**) / disputed (requires >=1 open variance); `disputed` -> blocked / pending_approval / void;
+      `pending_approval` -> approved / blocked (sent back); `approved` -> scheduled / void / reversed; `scheduled` -> paid / approved (run rejected); `paid` -> reversed
+      (**reversing entry, never edits the original**); **any non-terminal -> void**
+- [ ] **`pending_approval -> approved` is the ONLY transition that writes `accounting.Bill` + `JournalEntry`**, inside `transaction.atomic()`, guarded by
+      `if invoice.journal_entry_id: return` (§8.10 - double-click / back button / re-approval)
+- [ ] `is_locked` ⇔ status in `("paid","void","reversed")` - mirrors `Bill.is_locked`
+
+## Tolerance constants & match algorithm (constants on `SupplierInvoice`, the `PRICE_TOLERANCE_PCT` idiom)
+- [ ] `PRICE_TOL_PCT_UPPER = 2.00`, `PRICE_TOL_PCT_LOWER = None` (no floor - under-billing is not a risk), `PRICE_TOL_ABS_UPPER = 50.00`
+- [ ] `QTY_TOL_PCT_UPPER = 0.00` (invoiced vs **received** - never pay for more than arrived), `QTY_TOL_ABS_UPPER = 0`, `QTY_TOL_PCT_UPPER_NO_GRN = 5.00`, `QTY_TOL_PCT_LOWER = 5.00`
+- [ ] `TOTAL_TOL_PCT = 1.00`, `TOTAL_TOL_ABS = 25.00`, `FX_TOL_PCT = 1.00`, `TAX_TOL_ABS = 1.00`, `DATE_TOL_DAYS = 5`, `DUPLICATE_WINDOW_DAYS = 90`, `DISCOUNT_GRACE_DAYS = 0`, `DISCOUNT_ANNUALISATION_DAYS = 360`
+- [ ] **Where both a % and an absolute band apply, the MORE RESTRICTIVE wins** (6.12's `ReceiptTolerancePolicy` rule)
+- [ ] `run_match()` per line, this order, **FIRST BREACH WINS**: 1 `missing_po` (basis != none and no `po_line`) -> block; 2 `missing_receipt` (basis=quantity, no `receipt_line`)
+      -> compare vs ordered using `QTY_TOL_PCT_UPPER_NO_GRN`; 3 `quantity` vs `receipt_line.quantity_received` **AND** cumulative invoiced vs cumulative received;
+      4 `over_invoice` (cumulative invoiced > ordered + allowance) -> block; 5 `price` vs `po_line.unit_price`
+- [ ] 6 Header level: `total_amount`, `fx_rate` (**only when `currency` != PO currency**), `tax` (**absolute band only, never a % - tax rounding must never block an invoice**, §8.2)
+- [ ] 7 `duplicate` - flag `duplicate_suspect`, **never auto-reject** (a legitimate re-invoice after a credit memo trips every heuristic). Score: normalised number exact +
+      amount ±1% + date within `DUPLICATE_WINDOW_DAYS`
+- [ ] Outcomes: all inside band -> `auto_accept` -> advance to `pending_approval`; any `block` -> status `blocked` (+ exceptions board); `warn` -> advances but is listed
+- [ ] `match_basis="amount"` **skips steps 2-4** (service / PO-less, 2-way against PO value); `match_basis="none"` skips matching and **requires a `gl_account` on every line**;
+      credit memos (negative total) **never run a normal three-way match** and are excluded from every cumulative aggregation (§8.6)
+- [ ] Cumulative qty aggregated across **all non-terminal invoices** and all `status="received"` GRNs for the same `po_line`, derived every time - not cached
+- [ ] **L40 §3 "same tenant is not the same subject"**: when an invoice is matched to a PO and a GRN, validate they agree on **VENDOR**
+      (`invoice.vendor_id == po.vendor_id == grn.vendor_id`), not merely on tenant - emit a `block` variance and refuse to advance on a mismatch
+- [ ] **L38**: usable with ZERO stock/inventory configuration - no hard dependency on a stock location; a line with no receipt degrades to the no-GRN band, not a crash
+
+## Discount maths (research §5.3 - exact formulas)
+- [ ] `discount_date = invoice_date + payment_term.discount_days`; `due_date = invoice_date + payment_term.days_due`; `discount_expiry_date = discount_date + discount_grace_days`
+- [ ] `discount_base_amount = subtotal if discount_base == "net_of_tax" else total`; `discount_amount = discount_base_amount × payment_term.discount_pct / 100`
+- [ ] `payable_if_discounted = total − discount_amount`; `days_to_discount = discount_expiry_date − today`
+- [ ] `capturable = days_to_discount >= 0 AND status in (approved, scheduled) AND amount_paid == 0` (**a `blocked`/`disputed` discount is noise, not opportunity - §8.9**)
+- [ ] `annualised_pct = discount_pct / (100 − discount_pct) × (DISCOUNT_ANNUALISATION_DAYS / (days_due − discount_days))` - 2/10 Net 30 -> 2/98 × 360/20 = **36.7%** (asserted in tests)
+- [ ] Dashboard sorted `annualised_pct` DESC then `discount_amount` DESC
+
+## Backend package tasks (`apps/procurement/{models,forms,views,urls}/InvoiceVoucherManagement/`)
+- [ ] `models/…/`: `__init__.py`, `SupplierInvoices.py`, `SupplierInvoiceLines.py`, `MatchVariances.py`, `InvoiceDisputes.py`
+- [ ] `forms/…/`: `SupplierInvoices.py` (header form + `SupplierInvoiceLineFormSet`), `MatchVariances.py`, `InvoiceDisputes.py`, `Capture.py`. Every money field uses
+      **`forms.DecimalField(max_digits=…, min_value=0)`** (L35 - hand-parsed Decimal needs `is_finite()`, a magnitude cap vs `max_digits`, and an explicit rejection branch)
+- [ ] `views/…/`: `SupplierInvoices.py`, `MatchVariances.py`, `InvoiceDisputes.py`, `PaymentSchedule.py`, `DiscountOpportunities.py`, `Dashboard.py`
+- [ ] `urls/…/`: one module per entity + `__init__.py` concatenating them, **literal routes BEFORE `<int:pk>`** (first-match-wins)
+- [ ] `models/__init__.py` - re-export all four models + every CHOICES tuple the templates use, add to `__all__` (surgical `Edit` - a concurrent session may be in this tree, L43)
+- [ ] `forms/__init__.py` + `views/__init__.py` - re-export **every** new name (a missing view is an `AttributeError` at URLconf import, not at request time)
+- [ ] `urls/__init__.py` - `from .InvoiceVoucherManagement import urlpatterns as _ivm_invoicevoucher`, splat LAST; extend the docstring's segment inventory with the new first
+      segments (`supplier-invoices/`, `match-variances/`, `invoice-disputes/`, `payment-schedule/`, `discount-opportunities/`, `capture/`, `duplicates/`, `invoice-vouchers/`)
+      and collision-check each against the list at `urls/__init__.py:7-15`
+- [ ] `admin.py` - register `SupplierInvoice`, `InvoiceMatchVariance`, `InvoiceDispute` (+ `SupplierInvoiceLine` inline); `readonly_fields` covering every `editable=False` stamp
+      (L22: system stamps stay on the model + detail page but OUT of `Meta.fields`)
+
+## Views & routes (namespace `procurement`) - CONTEXT KEYS ARE THE CONTRACT
+Every view: `@login_required`, `filter(tenant=request.tenant)` (child tables `filter(invoice__tenant=…)`), never `.all()`. Privileged transitions (approve / post / void /
+reverse / admin override) use **`@tenant_admin_required`**, not bare `@login_required` (L27). Every FK/int filter guarded with `.isdigit()` **and** unit-tested on its POSITIVE path (L11/L44).
+- [ ] `supplierinvoice_list` -> `rows`, `page_obj`, `status_choices`, `match_status_choices`, `vendors`, `sources`, `stats`, echoed GET params
+- [ ] `supplierinvoice_detail` -> `invoice`, `lines`, `variances`, `disputes`, `bill`, `journal_entry`, `duplicate_candidates`, `discount` (dict: `base_amount`/`amount`/`payable_if_discounted`/`days_to_discount`/`annualised_pct`), `allowed_transitions`, `is_locked`, `tolerances`
+- [ ] `supplierinvoice_create` / `_update` -> `form`, `line_formset`, `invoice`, `title`, `submit_label`, `cancel_url`
+- [ ] `supplierinvoice_delete` -> `invoice`, `title`, `cancel_url` (**the confirm string must use the system-assigned `SIV-` number, never `invoice_number` or the vendor name - L42**)
+- [ ] `supplierinvoice_capture` (GET review + POST confirm) -> `form`, `document`, `extraction` (dict field -> `{"value","confidence"}`), `confidence`, `source`, `has_text_layer`, `warnings`, `raw_text`, `cancel_url`
+- [ ] `supplierinvoice_duplicates` -> `groups`, `page_obj`, `window_days`, `stats`
+- [ ] `supplierinvoice_match` (`@require_POST`) -> redirect only; `…_revalidate` (`@require_POST`, `@tenant_admin_required`) -> redirect + `messages`
+- [ ] `matchvariance_list` -> `rows`, `page_obj`, `variance_type_choices`, `outcome_choices`, `resolution_choices`, `bases`, `stats`, echoed GET params
+- [ ] `matchvariance_detail` -> `variance`, `invoice`, `invoice_line`, `dispute`, `explanation`, `tolerance` (`abs`/`pct`), `actions`
+- [ ] `invoicedispute_list` -> `rows`, `page_obj`, `status_choices`, `reason_choices`, `suppliers`, `assignees`, `stats`, echoed GET params
+- [ ] `invoicedispute_detail` -> `dispute`, `invoice`, `invoice_line`, `variances`, `resolution_choices`, `days_open`, `is_overdue`, `actions`
+- [ ] `invoicedispute_create` / `_update` -> `form`, `dispute`, `invoice`, `title`, `cancel_url`
+- [ ] `invoicedispute_resolve` (`@require_POST`, `@tenant_admin_required`) -> redirect + `messages`
+- [ ] `invoicedispute_aging` -> `buckets`, `page_obj`, `today`, `stats`, `bucket_choices`
+- [ ] `paymentschedule_list` -> `buckets`, `page_obj`, `total_payable`, `terms`, `currency`, `vendors`, `stats`, `horizon_weeks`, echoed GET params
+- [ ] `discountopportunity_list` -> `rows`, `page_obj`, `totals` (`capturable`/`expiring_7d`/`missed`), `annualisation_days`, `stats`, `sort`
+- [ ] `invoicevoucher_dashboard` -> `tiles`, `stats`, `recent`, `blocked`, `expiring`, `open_disputes`, `aging`
+
+## Templates (`templates/procurement/InvoiceVoucherManagement/`)
+- [ ] **PRE-WRITE GATE (L33): grep `static/css/theme.css` before writing ANY badge or layout class.** Only `badge-green`, `badge-red`, `badge-amber`, `badge-info`,
+      `badge-muted`, `badge-slate` exist - `badge-success` / `-warning` / `-danger` render UNSTYLED. `stat-icon` supports only `blue/green/orange/purple/slate`.
+      `.detail-label` / `.detail-value` DO NOT EXIST - the real shape is `<dl class="detail-grid"><div class="detail-item"><dt>…</dt><dd>…</dd></div></dl>`
+- [ ] Pagination guarded by `{% if page_obj.has_previous %}` / `has_next` (L9) - never emit `previous_page_number` / `next_page_number()` unconditionally
+- [ ] Multi-line comments use `{% comment %}…{% endcomment %}`; `{# … #}` is single-line only or it leaks as visible text (L2/L3)
+- [ ] `{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}` wrapped in `{% if obj.approved_by %}` - it raises when the FK is None (L10).
+      Same for `assigned_to`, `raised_by`, `vendor`
+- [ ] `supplierinvoice/{list,detail,form}.html` - register / header + lines + variances + disputes + attachment / header + line formset
+- [ ] `invoicedispute/{list,detail,form}.html` - register + aging link / audit trail + resolve actions / raise-or-edit
+- [ ] `matchvariance/{list,detail}.html` - exceptions board / one variance, expected vs actual
+- [ ] Standalone: `capture.html`, `duplicates.html`, `match_board.html`, `payment_schedule.html`, `discount_opportunities.html`, `dispute_aging.html`, `dashboard.html`
+
+## Wire-up
+- [ ] `apps/core/navigation.py` - **exactly ONE** new `LIVE_LINKS["6.13"]` dict inserted after `"6.12"` (ends at `:1593`), bullet text copied EXACTLY from NavERP.md 1081-1085:
+      ```
+      "Invoice Capture (OCR)":               "procurement:supplierinvoice_capture",
+      "Three-Way Matching":                  "procurement:matchvariance_list",
+      "Dispute Resolution Workflow":         "procurement:invoicedispute_list",
+      "Payment Schedule/Terms Management":   "procurement:paymentschedule_list",
+      "Early Payment Discount Tracking":     "procurement:discountopportunity_list",
+      ```
+      plus a comment block recording (a) that bullet 1 is Assisted Capture, not OCR, and (b) that `supplierinvoice_list` and `invoicevoucher_dashboard` are reached from the
+      pages above rather than getting their own bullet (L31 - one entry, five bullets)
+- [ ] Every bullet lands on a page **STAFF can reach** - no login-gated vendor-portal view (L32)
+- [ ] `config/settings.py` / `config/urls.py` - **NO CHANGE** (existing app)
+- [ ] `views/_helpers.py` - do NOT touch `PROCUREMENT_CONTENT_MODELS` (that is the scm-app whitelist; `app_label="procurement"` rows are already covered)
+
+## Seeder (`management/commands/seed_procurement.py` - add `_seed_invoice_voucher(tenant)`)
+- [ ] 5 `accounting.PaymentTerm` (Net 30, Net 60, 2/10 Net 30, 1/15 Net 45, 3/7 Net 60) via `get_or_create(tenant=…, name=…)`
+- [ ] 6 `scm.PurchaseOrder` + lines across 4 vendors (>=2 multi-line); 8 `scm.GoodsReceiptNote` + lines deliberately uneven (1 full, 1 partial 60%, 1 partial-then-completed,
+      1 over-receipt 110%, 1 with `quantity_rejected > 0`, 2 POs with NO receipt)
+- [ ] **14 `SupplierInvoice`** covering EVERY status (1 draft, 1 parked, 2 captured, 2 blocked, 2 disputed, 2 pending_approval, 2 approved, 1 scheduled, 1 paid)
+      + 1 `credit_memo` (negative total), 1 `debit_memo`, 2 `service` (PO-less, `match_basis="amount"`), 1 `source="pdf_text_layer"` with `extraction_confidence=87.50`,
+      1 with `duplicate_of` set
+- [ ] **>25 `SupplierInvoiceLine`** (~38) so pagination is actually exercised (L9); non-PO lines carry a `gl_account`; >=1 line sets the new optional `item` FK
+- [ ] ~16 `InvoiceMatchVariance` - **at least one of EACH `variance_type`**, outcomes mixed auto_accept / warn / block, resolutions mixed incl. 3 `credit_memo`
+- [ ] 6 `InvoiceDispute` - one per distinct `reason_code` except `other`; 2 `open` past `due_date` (lights up aging), 1 `awaiting_supplier`, 1 `escalated`, 2 `resolved`
+- [ ] 14 `core.Document` placeholders (**seeders write no media files**) and 2 `accounting.Bill` rows (the `paid` + one `approved`) so the ledger bridge is demonstrable
+- [ ] **`invoice_date` relative to today** (`timezone.localdate() - timedelta(days=n)`; L16 - never `datetime.date.today()` and never hardcoded), else the discount dashboard
+      shows zero opportunities the moment the demo ages
+- [ ] Idempotent: existence-check before **every** `.create()`; run twice with no new rows
+
+## Verification checklist
+- [ ] `makemigrations procurement` -> exactly **0020** (rename the file if Django picks another suffix); then `migrate`; `manage.py check` clean; seeder runs twice clean
+- [ ] Every view renders 200/302 as `admin_acme` / `password`, including **unbound** forms (L39 - check the feature's preconditions can be true simultaneously; test the GET, not just the POST)
+- [ ] **Blank-page proof**: every context key listed above asserted present and non-empty - an unpinned key renders a blank page at HTTP 200
+- [ ] Filters: each valid choice value returns the RIGHT rows (positive path, L11/L44) AND junk params (`?status=nope&vendor=abc&variance_type=zzz`) still 200; `?page=2` guarded
+- [ ] Cross-tenant IDOR: an `admin_globex` invoice / variance / dispute pk returns **404** on detail/edit/delete and on every verb
+- [ ] Verbs reject GET (405); a non-admin user is refused on approve / void / reverse / revalidate / resolve (`@tenant_admin_required`, L27)
+- [ ] **L42**: a seeded invoice whose `invoice_number` contains an apostrophe deletes with the confirm dialog intact (the confirm string must be the `SIV-` number)
+- [ ] **L33**: grep the rendered HTML for `badge-success|badge-warning|badge-danger|detail-label|detail-value` -> zero hits; `{#` / `{% comment` not leaking as text
+- [ ] **L40 §3**: matching an invoice to a PO and a GRN from a DIFFERENT vendor blocks with a vendor-mismatch variance and does not advance
+- [ ] **L38**: with zero stock locations configured, a PO-less and a no-receipt invoice both match and page without error
+- [ ] **L37 §2 / L29**: approving creates exactly ONE `accounting.Bill` and ONE balanced `JournalEntry` (debits == credits); approving TWICE creates no second entry; a
+      `reversed` invoice posts a reversing entry and leaves the original untouched
+- [ ] `accounting.Bill` is the only ledger target - no write to `scm.GoodsReceiptNote.bill` from 6.13 (one writer per field; 6.12's `recompute_match()` owns it)
+- [ ] Over-invoicing: 3 invoices of 40 against a PO of 100 are each within tolerance individually but the 3rd blocks on the cumulative check
+- [ ] Credit memo: negative total, excluded from cumulative aggregation, never runs a 3-way match
+- [ ] Discount maths: `2/10 Net 30` -> `annualised_pct == 36.73` (±0.01); only `approved` / `scheduled` rows with `amount_paid == 0` appear as capturable
+- [ ] Tests derive dates from `timezone.now().date()` / `timezone.localdate()` (L16); iterate with `--nomigrations` but the FINAL proof run keeps migrations on and is UNFILTERED (L49)
+- [ ] Sidebar shows **6.13 as Live with all five bullets resolving** - no `NoReverseMatch`
