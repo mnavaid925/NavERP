@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}Raise Invoice Dispute{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — InvoiceDispute raise-or-edit (lane D, hand-rolled
+    `_dispute_form`, NOT crud_create/crud_edit), ONE template driven by `is_edit`.
+    Context contract: form, obj (None/unsaved on create, so every obj reference sits
+    inside an {% if is_edit %} branch), invoice, is_edit, title, submit_label, cancel_url.
+
+    The form carries ONLY: invoice, invoice_line, reason_code, supplier_contact,
+    disputed_amount, description, assigned_to, due_date. Everything else is system-set
+    and is deliberately absent — tenant, number, supplier (denormalised from the invoice
+    in save()), status, resolution, resolution_note, resolved_at, raised_by, raised_at,
+    credit_memo_invoice. Do NOT add inputs for them.
+    On EDIT the view POPS `invoice` and `invoice_line` (a saved dispute must not be
+    re-pointed), so they are shown read-only from obj/invoice instead. A disabled <select>
+    would post nothing and read as a lost value — never use one.
+    The SLA due date defaults to ten days out when left blank, and disputed_amount is
+    validated against the invoice total, so both are optional-looking but not unbounded.
+  {% endcomment %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{{ title|default:"Raise Invoice Dispute" }}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><a href="{% url 'procurement:invoicedispute_list' %}">Invoice Disputes</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  {% if is_edit %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Dispute {{ obj.number }}</h2><span class="text-muted">locked to its invoice</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Invoice</dt>
+            <dd>{% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="fw-600">{{ invoice.number }}</a>{% elif obj.invoice %}<a href="{% url 'procurement:supplierinvoice_detail' obj.invoice.pk %}" class="fw-600">{{ obj.invoice.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Invoice line</dt>
+            <dd>{% if obj.invoice_line %}<span class="fw-600">{{ obj.invoice_line.description|default:obj.invoice_line.pk }}</span>{% else %}<span class="text-muted">Whole invoice</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Supplier</dt>
+            <dd>{% if obj.supplier %}<span class="fw-600">{{ obj.supplier.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Status</dt>
+            <dd>{% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "awaiting_supplier" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "awaiting_internal" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "escalated" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "resolved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "closed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Raised by</dt>
+            <dd>{% if obj.raised_by %}{{ obj.raised_by.get_full_name|default:obj.raised_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Days open</dt><dd>{{ obj.days_open|default:"0" }}</dd></div>
+        </dl>
+        <p class="text-muted">The invoice and the line are fixed once a dispute exists — moving them would orphan the variances linked to it. Close this one and raise a new dispute if it was filed against the wrong invoice.</p>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-body">
+        {% if invoice %}
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Raising against</dt>
+              <dd><a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="fw-600">{{ invoice.number }}</a>{% if invoice.invoice_number %} · {{ invoice.invoice_number }}{% endif %}</dd></div>
+            <div class="detail-item"><dt>Supplier</dt>
+              <dd>{% if invoice.vendor %}<span class="fw-600">{{ invoice.vendor.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Invoice total</dt><dd class="fw-600">{% if invoice.currency %}{{ invoice.currency.code }} {% endif %}{{ invoice.total|floatformat:"2" }}</dd></div>
+          </dl>
+        {% else %}
+          <p class="text-muted">Pick the invoice this dispute is against. Raising a dispute does not hold the invoice on its own — the invoice must be blocked or the variance accepted before payment can be stopped.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == "invoice" %}
+              <div class="form-help">The invoice the disputed amount belongs to. The supplier is copied from it automatically.</div>
+            {% elif field.name == "invoice_line" %}
+              <div class="form-help">Optional. Choose a line when only part of the invoice is contested — leave it clear to dispute the whole document.</div>
+            {% elif field.name == "reason_code" %}
+              <div class="form-help">Drives the aging report and what the supplier is asked for. &ldquo;Duplicate&rdquo; and &ldquo;missing goods&rdquo; are the two that block payment outright.</div>
+            {% elif field.name == "disputed_amount" %}
+              <div class="form-help">Cannot exceed the invoice total. The remainder stays payable, so a partial dispute does not hold the whole invoice.</div>
+            {% elif field.name == "due_date" %}
+              <div class="form-help">Your internal SLA target. Leave blank for the default ten days from today.</div>
+            {% elif field.name == "assigned_to" %}
+              <div class="form-help">Who chases it. Nothing enforces this — it is what the aging report groups by.</div>
+            {% elif field.name == "supplier_contact" %}
+              <div class="form-help">Who you raised it with on the supplier side — a name, an email or a ticket reference.</div>
+            {% elif field.name == "description" %}
+              <div class="form-help">What is wrong and what you want. This is the first thing the supplier sees, so be specific.</div>
+            {% elif field.help_text %}
+              <div class="form-help">{{ field.help_text }}</div>
+            {% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="message-square-warning"></i> {{ submit_label|default:"Save dispute" }}</button>
+      <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
