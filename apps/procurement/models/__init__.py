@@ -66,6 +66,13 @@ from .GoodsReceiptInspection import (
     resolve_line_item,
     resolve_receipt_tolerance,
 )
+# 6.13 Invoice & Voucher Management — imported from the entity MODULES (not the sub-package):
+# SupplierInvoices.py imports MatchVariances/SupplierInvoiceLines at module level, so importing
+# the sub-package's own __init__ from inside it would be a star-import cycle at URLconf import.
+from .InvoiceVoucherManagement.SupplierInvoices import SupplierInvoice
+from .InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLine
+from .InvoiceVoucherManagement.MatchVariances import InvoiceMatchVariance
+from .InvoiceVoucherManagement.InvoiceDisputes import InvoiceDispute
 
 __all__ = [
     "EaucBid",
@@ -125,4 +132,8 @@ __all__ = [
     "ReceiptDiscrepancy",
     "ReturnToVendor",
     "ReturnToVendorLine",
+    "SupplierInvoice",
+    "SupplierInvoiceLine",
+    "InvoiceMatchVariance",
+    "InvoiceDispute",
 ]
