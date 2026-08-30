@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Supplier Invoice{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — SupplierInvoice detail (hand-rolled view, NOT crud_detail).
+    Context contract: obj, lines, variances, disputes, bill, journal_entry,
+    duplicate_candidates, discount{base_amount, amount, payable_if_discounted, days_to_discount,
+    annualised_pct, capturable}, allowed_transitions (list of status strings), is_locked,
+    tolerances{price_pct_upper, price_pct_lower, price_abs_upper, qty_pct_upper, qty_abs_upper,
+    qty_pct_upper_no_grn, qty_pct_lower, total_pct, total_abs, fx_pct, tax_abs,
+    duplicate_window_days, duplicate_amount_tol_pct, discount_annualisation_days},
+    can_edit, can_match, can_override, can_approve, can_void, can_reverse, is_admin.
+
+    Every nullable FK is guarded before it is dereferenced (L10 / safety rule 7) — `approved_by`,
+    `vendor`, `bill`, `journal_entry`, `document`, `payment_term`, `currency` especially.
+    `bill` and `journal_entry` are rendered as TEXT, never as links: the contract pins no
+    accounting detail url name and inventing one is the fastest way to a NoReverseMatch on a
+    page that otherwise works (L7).
+    Badges compare the frozen CHOICES keys and always end with a badge-slate fallback.
+    No user-typed value (obj.invoice_number, the vendor name) ever reaches a confirm() handler —
+    only the system-assigned obj.number, and literal apostrophes are escaped as \' (L42).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        {% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "parked" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "captured" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "blocked" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "disputed" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "pending_approval" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "approved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "paid" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "void" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "reversed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.match_status == "not_run" %}<span class="badge badge-muted">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "matched" %}<span class="badge badge-green">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "within_tolerance" %}<span class="badge badge-info">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "price_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "quantity_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "total_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "fx_variance" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "no_receipt" %}<span class="badge badge-amber">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "over_invoiced" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+        {% elif obj.match_status == "duplicate_suspect" %}<span class="badge badge-red">{{ obj.get_match_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_match_status_display }}</span>{% endif %}
+        {% if is_locked %}<span class="badge badge-slate">Locked</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:invoicevoucher_dashboard' %}">Invoice &amp; Voucher Management</a><span class="sep">›</span><a href="{% url 'procurement:supplierinvoice_list' %}">Supplier Invoices</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Purchase order</a>{% endif %}
+      {% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="btn btn-outline"><i data-lucide="package"></i> Goods receipt</a>{% endif %}
+      {% if can_edit %}<a href="{% url 'procurement:supplierinvoice_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  {% if obj.match_notes %}
+    <div class="card"><div class="card-header"><h2 class="card-title">Match notes</h2></div>
+      <div class="card-body">{{ obj.match_notes|linebreaksbr }}</div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Vendor</dt>
+        <dd>{% if obj.vendor %}<span class="fw-600">{{ obj.vendor.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Supplier invoice no.</dt>
+        <dd class="fw-600">{{ obj.invoice_number|default:"—" }}
+          {% if obj.invoice_number_norm %}<div class="text-muted">Matches on {{ obj.invoice_number_norm }}</div>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Invoice type</dt>
+        <dd>{% if obj.invoice_type == "standard" %}<span class="badge badge-info">{{ obj.get_invoice_type_display }}</span>
+            {% elif obj.invoice_type == "credit_memo" %}<span class="badge badge-slate">{{ obj.get_invoice_type_display }}</span>
+            {% elif obj.invoice_type == "debit_memo" %}<span class="badge badge-slate">{{ obj.get_invoice_type_display }}</span>
+            {% elif obj.invoice_type == "prepayment" %}<span class="badge badge-amber">{{ obj.get_invoice_type_display }}</span>
+            {% elif obj.invoice_type == "service" %}<span class="badge badge-muted">{{ obj.get_invoice_type_display }}</span>
+            {% else %}<span class="badge badge-slate">{{ obj.get_invoice_type_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt>
+        <dd>{% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "parked" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "captured" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "blocked" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "disputed" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "pending_approval" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "approved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "paid" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "void" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "reversed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Invoice date</dt><dd>{{ obj.invoice_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Posting date</dt><dd>{{ obj.posting_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Due date</dt><dd>{{ obj.due_date|date:"M d, Y"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Discount date</dt>
+        <dd>{{ obj.discount_date|date:"M d, Y"|default:"—" }}
+          {% if obj.discount_expiry_date %}<div class="text-muted">Grace expires {{ obj.discount_expiry_date|date:"M d, Y" }}</div>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Purchase order</dt>
+        <dd>{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Goods receipt</dt>
+        <dd>{% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="fw-600">{{ obj.goods_receipt.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Payment term</dt>
+        <dd>{% if obj.payment_term %}{{ obj.payment_term.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currency</dt>
+        <dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>FX rate</dt><dd>{{ obj.fx_rate|floatformat:"-6"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Tax code</dt>
+        <dd>{% if obj.tax_code %}{{ obj.tax_code }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Match basis</dt><dd>{{ obj.get_match_basis_display }}</dd></div>
+      <div class="detail-item"><dt>Source</dt>
+        <dd>{% if obj.source == "manual" %}<span class="badge badge-muted">{{ obj.get_source_display }}</span>
+            {% elif obj.source == "pdf_text_layer" %}<span class="badge badge-info">{{ obj.get_source_display }}</span>
+            {% elif obj.source == "e_invoice_xml" %}<span class="badge badge-info">{{ obj.get_source_display }}</span>
+            {% elif obj.source == "vis" %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>
+            {% elif obj.source == "ocr" %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>
+            {% else %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>{% endif %}
+          {% if obj.extraction_confidence != None %}<div class="text-muted">Confidence {{ obj.extraction_confidence|floatformat:"2" }}%</div>{% endif %}</dd></div>
+      <div class="detail-item"><dt>External reference</dt><dd>{{ obj.external_ref|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Subtotal</dt><dd>{{ obj.subtotal|floatformat:"2" }}</dd></div>
+      <div class="detail-item"><dt>Tax total</dt><dd>{{ obj.tax_total|floatformat:"2" }}</dd></div>
+      <div class="detail-item"><dt>Total</dt><dd class="fw-600">{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.total|floatformat:"2" }}</dd></div>
+      <div class="detail-item"><dt>Amount paid</dt><dd>{{ obj.amount_paid|floatformat:"2" }}</dd></div>
+      <div class="detail-item"><dt>Discount base</dt><dd>{{ obj.get_discount_base_display }}</dd></div>
+      <div class="detail-item"><dt>Discount grace days</dt><dd>{{ obj.discount_grace_days }}</dd></div>
+      <div class="detail-item"><dt>Approved by</dt>
+        <dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% if obj.approved_at %} · {{ obj.approved_at|date:"M d, Y H:i" }}{% endif %}{% else %}<span class="text-muted">Not approved</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  {% comment %} Early-payment discount panel — money left on the table if the discount date passes. {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Early-payment discount</h2><span class="text-muted">taking the discount beats the financing</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Discount base</dt><dd>{{ discount.base_amount|floatformat:"2" }}</dd></div>
+        <div class="detail-item"><dt>Discount amount</dt><dd class="fw-600">{{ discount.amount|floatformat:"2" }}</dd></div>
+        <div class="detail-item"><dt>Payable if discounted</dt><dd>{{ discount.payable_if_discounted|floatformat:"2" }}</dd></div>
+        <div class="detail-item"><dt>Days to discount date</dt><dd>{{ discount.days_to_discount|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Annualised return</dt><dd>{{ discount.annualised_pct|floatformat:"2" }}%</dd></div>
+        <div class="detail-item"><dt>Status</dt>
+          <dd>{% if discount.capturable %}<span class="badge badge-green">Capturable</span>{% else %}<span class="badge badge-slate">Not capturable</span>{% endif %}</dd></div>
+      </dl>
+      {% if discount.capturable %}
+        <p class="text-muted">Paying on or before {{ obj.discount_date|date:"M d, Y" }} saves {{ discount.amount|floatformat:"2" }} — an annualised {{ discount.annualised_pct|floatformat:"2" }}% for settling {{ discount.days_to_discount }} day(s) early.</p>
+      {% else %}
+        <p class="text-muted">There is nothing to capture right now — either no discount terms apply, the discount date has passed, or the invoice is already paid, void or reversed.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Lines</h2>
+      <span class="text-muted">{{ lines|length }} line(s)</span>
+      {% if can_edit %}<a class="btn btn-outline btn-sm" href="{% url 'procurement:supplierinvoiceline_create' %}?invoice={{ obj.pk }}"><i data-lucide="plus"></i> Add line</a>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>PO line</th>
+            <th>Receipt line</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Unit price</th>
+            <th class="text-right">Line total</th>
+            <th>GL / tax</th>
+            <th class="text-right">Invoiced vs received</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>
+                <span class="fw-600">{{ line.description|default:"—" }}</span>
+                {% if line.sku_hint %}<div class="text-muted">SKU {{ line.sku_hint }}{% if line.uom_hint %} · {{ line.uom_hint }}{% endif %}</div>{% endif %}
+                {% if line.item %}<div class="text-muted">{{ line.item }}</div>{% endif %}
+              </td>
+              <td>{% if line.po_line %}<a href="{% url 'procurement:supplierinvoiceline_detail' line.pk %}" class="fw-600">{{ line.po_line }}</a>{% else %}<span class="text-muted">No PO line</span>{% endif %}</td>
+              <td>{% if line.receipt_line %}{{ line.receipt_line.quantity_received|floatformat:"-4" }} received{% else %}<span class="text-muted">No receipt line</span>{% endif %}</td>
+              <td class="text-right">{{ line.quantity|floatformat:"-4" }}
+                <div class="text-muted">matched {{ line.matched_qty|floatformat:"-4" }}</div></td>
+              <td class="text-right">{{ line.unit_price|floatformat:"2" }}</td>
+              <td class="text-right fw-600">{{ line.line_total|floatformat:"2" }}
+                <div class="text-muted">tax {{ line.tax_rate_pct|floatformat:"-2" }}% · {{ line.tax_amount|floatformat:"2" }}</div></td>
+              <td>
+                {% if line.gl_account %}{{ line.gl_account }}{% else %}<span class="text-muted">No GL account</span>{% endif %}
+                <div class="text-muted">{% if line.tax_code %}{{ line.tax_code }}{% else %}No tax code{% endif %}</div>
+              </td>
+              <td class="text-right">
+                {{ line.cumulative_invoiced_qty|floatformat:"-4" }}
+                <div class="text-muted">of {{ line.cumulative_received_qty|floatformat:"-4" }} received</div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="layers"></i>
+                <h3>No lines on this invoice</h3>
+                <p>An invoice with no lines matches against nothing and totals zero — add a line before running the match.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Match variances</h2><span class="text-muted">what three-way matching found</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:matchvariance_list' %}?invoice={{ obj.pk }}"><i data-lucide="scale"></i> Exceptions board</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Basis</th>
+            <th class="text-right">Expected</th>
+            <th class="text-right">Actual</th>
+            <th class="text-right">Variance</th>
+            <th class="text-right">Band applied</th>
+            <th>Outcome</th>
+            <th>Resolution</th>
+            <th>Dispute</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in variances %}
+            <tr>
+              <td>
+                {% if v.variance_type == "over_invoice" %}<span class="badge badge-red">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "duplicate" %}<span class="badge badge-red">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "missing_po" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "missing_receipt" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% else %}<span class="badge badge-amber">{{ v.get_variance_type_display }}</span>{% endif %}
+                {% if v.message %}<div class="text-muted">{{ v.message }}</div>{% endif %}
+              </td>
+              <td>{{ v.get_basis_display }}</td>
+              <td class="text-right">{{ v.expected_value|floatformat:"-4" }}</td>
+              <td class="text-right">{{ v.actual_value|floatformat:"-4" }}</td>
+              <td class="text-right fw-600">{{ v.variance_abs|floatformat:"-4" }}
+                {% if v.variance_pct != None %}<div class="text-muted">{{ v.variance_pct|floatformat:"-4" }}%</div>{% endif %}</td>
+              <td class="text-right">
+                {% if v.tolerance_pct_applied != None %}{{ v.tolerance_pct_applied|floatformat:"-4" }}%{% else %}<span class="text-muted">—</span>{% endif %}
+                <div class="text-muted">{% if v.tolerance_abs_applied != None %}{{ v.tolerance_abs_applied|floatformat:"-4" }} abs{% else %}no abs band{% endif %}</div>
+              </td>
+              <td>
+                {% if v.outcome == "auto_accept" %}<span class="badge badge-green">{{ v.get_outcome_display }}</span>
+                {% elif v.outcome == "warn" %}<span class="badge badge-amber">{{ v.get_outcome_display }}</span>
+                {% elif v.outcome == "block" %}<span class="badge badge-red">{{ v.get_outcome_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_outcome_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if v.resolution == "open" %}<span class="badge badge-amber">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "accepted" %}<span class="badge badge-green">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "disputed" %}<span class="badge badge-red">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "credit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "debit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "short_paid" %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "cancelled" %}<span class="badge badge-muted">{{ v.get_resolution_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>{% endif %}
+                <div class="text-muted">{{ v.detected_at|date:"M d, Y H:i" }}</div>
+              </td>
+              <td>{% if v.dispute %}<a href="{% url 'procurement:invoicedispute_detail' v.dispute.pk %}" class="fw-600">{{ v.dispute.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="scale"></i>
+                <h3>No variances recorded</h3>
+                <p>Run the match to compare this invoice against its order and receipt. Nothing is written to the ledger by matching — it only raises the exceptions that block approval.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Disputes</h2><span class="text-muted">raised with the supplier over this invoice</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Reason</th>
+            <th class="text-right">Disputed amount</th>
+            <th>Status</th>
+            <th>Due</th>
+            <th>Assigned to</th>
+            <th>Resolution</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in disputes %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:invoicedispute_detail' d.pk %}">{{ d.number }}</a>
+                <div class="text-muted">{{ d.raised_at|date:"M d, Y" }}</div></td>
+              <td>
+                {% if d.reason_code == "price" %}<span class="badge badge-amber">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "quantity" %}<span class="badge badge-amber">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "goods_not_received" %}<span class="badge badge-red">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "damaged" %}<span class="badge badge-red">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "duplicate" %}<span class="badge badge-red">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "credit_not_processed" %}<span class="badge badge-info">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "tax" %}<span class="badge badge-slate">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "freight" %}<span class="badge badge-slate">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "admin" %}<span class="badge badge-muted">{{ d.get_reason_code_display }}</span>
+                {% elif d.reason_code == "other" %}<span class="badge badge-muted">{{ d.get_reason_code_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ d.get_reason_code_display }}</span>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ d.disputed_amount|floatformat:"2" }}</td>
+              <td>
+                {% if d.status == "open" %}<span class="badge badge-amber">{{ d.get_status_display }}</span>
+                {% elif d.status == "awaiting_supplier" %}<span class="badge badge-info">{{ d.get_status_display }}</span>
+                {% elif d.status == "awaiting_internal" %}<span class="badge badge-slate">{{ d.get_status_display }}</span>
+                {% elif d.status == "escalated" %}<span class="badge badge-red">{{ d.get_status_display }}</span>
+                {% elif d.status == "resolved" %}<span class="badge badge-green">{{ d.get_status_display }}</span>
+                {% elif d.status == "closed" %}<span class="badge badge-muted">{{ d.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ d.get_status_display }}</span>{% endif %}
+                {% if d.is_overdue %}<div><span class="badge badge-red">Overdue</span></div>{% endif %}
+              </td>
+              <td>{{ d.due_date|date:"M d, Y"|default:"—" }}
+                <div class="text-muted">{{ d.days_open }} day(s) open</div></td>
+              <td>{% if d.assigned_to %}{{ d.assigned_to.get_full_name|default:d.assigned_to.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>{% if d.resolution %}{{ d.get_resolution_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="message-square-warning"></i>
+                <h3>No disputes on this invoice</h3>
+                <p>Raise one when a variance is genuinely wrong — a price the supplier never agreed, goods that never arrived, or an invoice that duplicates one already paid.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Duplicate candidates</h2><span class="text-muted">suspects only — never an automatic rejection</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:supplierinvoice_duplicates' %}"><i data-lucide="copy"></i> Duplicates board</a>
+    </div>
+    <div class="card-body">
+      {% if duplicate_candidates %}
+        <ul>
+          {% for cand, reasons in duplicate_candidates %}
+            <li>
+              <a href="{% url 'procurement:supplierinvoice_detail' cand.pk %}" class="fw-600">{{ cand.number }}</a>
+              · {{ cand.invoice_number|default:"no supplier number" }}
+              · {% if cand.currency %}{{ cand.currency.code }} {% endif %}{{ cand.total|floatformat:"2" }}
+              · {{ cand.invoice_date|date:"M d, Y"|default:"no date" }}
+              {% if obj.duplicate_of and obj.duplicate_of.pk == cand.pk %}<span class="badge badge-red">Marked as the duplicate of this one</span>{% endif %}
+              <div class="badge-group" style="margin-top:.25rem;">
+                {% for reason in reasons %}<span class="badge badge-slate">{{ reason }}</span>{% endfor %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="text-muted">A candidate is listed only when the normalised invoice number matches and at least three signals agree. Deciding whether it is genuinely a duplicate is a human call — raise a dispute rather than voiding.</p>
+      {% else %}
+        <p class="text-muted">Nothing in the duplicate window matches this invoice. The check is advisory: it never blocks on its own.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tolerances applied</h2><span class="text-muted">the bands this workspace matches against</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Unit price — upper</dt><dd>{{ tolerances.price_pct_upper|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Unit price — lower</dt><dd>{{ tolerances.price_pct_lower|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Unit price — absolute</dt><dd>{{ tolerances.price_abs_upper|default:"No band" }}</dd></div>
+        <div class="detail-item"><dt>Quantity — upper</dt><dd>{{ tolerances.qty_pct_upper|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Quantity — lower</dt><dd>{{ tolerances.qty_pct_lower|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Quantity — absolute</dt><dd>{{ tolerances.qty_abs_upper|default:"No band" }}</dd></div>
+        <div class="detail-item"><dt>Quantity vs order (no receipt)</dt><dd>{{ tolerances.qty_pct_upper_no_grn|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Header total</dt><dd>{{ tolerances.total_pct|default:"No band" }}% · {{ tolerances.total_abs|default:"no absolute band" }}</dd></div>
+        <div class="detail-item"><dt>FX / conversion rate</dt><dd>{{ tolerances.fx_pct|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Tax</dt><dd>{{ tolerances.tax_abs|default:"No band" }} absolute{% comment %} The one absolute band that ships a value — tax rounding must never block an invoice. {% endcomment %}</dd></div>
+        <div class="detail-item"><dt>Duplicate window</dt><dd>{{ tolerances.duplicate_window_days|default:"—" }} days</dd></div>
+        <div class="detail-item"><dt>Duplicate amount tolerance</dt><dd>{{ tolerances.duplicate_amount_tol_pct|default:"No band" }}%</dd></div>
+        <div class="detail-item"><dt>Discount annualisation year</dt><dd>{{ tolerances.discount_annualisation_days|default:"—" }} days</dd></div>
+      </dl>
+      <p class="text-muted">Where a percentage band and an absolute band both apply, the more restrictive one wins. A band shown as &ldquo;No band&rdquo; never breaches.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Attachment &amp; ledger</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Document</dt>
+          <dd>{% if obj.document %}{% if obj.document.file %}<a href="{{ obj.document.file.url }}" class="btn btn-outline btn-sm"><i data-lucide="file-text"></i> {{ obj.document.name }}</a>{% else %}{{ obj.document.name }}{% endif %}{% else %}<span class="text-muted">No document attached</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier submission</dt>
+          <dd>{% if obj.source_submission %}{{ obj.source_submission }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>AP bill</dt>
+          <dd>{% if bill %}<span class="fw-600">{{ bill.number }}</span>{% if bill.status %} <span class="badge badge-slate">{{ bill.get_status_display }}</span>{% endif %}{% else %}<span class="text-muted">Not raised — approving this invoice creates it</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Journal entry</dt>
+          <dd>{% if journal_entry %}<span class="fw-600">{{ journal_entry.reference|default:journal_entry.description|default:"Posted" }}</span>{% if journal_entry.status %} <span class="badge badge-slate">{{ journal_entry.get_status_display }}</span>{% endif %}{% if journal_entry.entry_date %} · {{ journal_entry.entry_date|date:"M d, Y" }}{% endif %}{% else %}<span class="text-muted">Not posted — approving this invoice posts it</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Duplicate of</dt>
+          <dd>{% if obj.duplicate_of %}<a href="{% url 'procurement:supplierinvoice_detail' obj.duplicate_of.pk %}" class="fw-600">{{ obj.duplicate_of.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <div>{{ obj.notes|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% if can_match %}
+          <form method="post" action="{% url 'procurement:supplierinvoice_match' obj.pk %}">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i> Run match</button>
+          </form>
+        {% endif %}
+        {% if can_approve %}
+          {% comment %}
+            Approving is the ONLY ledger-writing transition: it raises the AP bill and posts a
+            balanced journal entry in one transaction. The guard inside approve() makes a
+            double-click a no-op, but the confirm still explains what is about to happen.
+          {% endcomment %}
+          <form method="post" action="{% url 'procurement:supplierinvoice_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}? This raises the AP bill and posts the journal entry — the only step that writes to the ledger.');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Approve &amp; post</button>
+          </form>
+        {% endif %}
+        {% if can_override %}
+          <form method="post" action="{% url 'procurement:supplierinvoice_override' obj.pk %}" onsubmit="return confirm('Override the blocking variances on {{ obj.number }}? Every open block is accepted and the invoice moves to pending approval.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="git-merge"></i> Override blocks</button>
+          </form>
+        {% endif %}
+        {% if "scheduled" in allowed_transitions %}
+          <form method="post" action="{% url 'procurement:supplierinvoice_schedule' obj.pk %}" onsubmit="return confirm('Schedule {{ obj.number }} for payment?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="calendar-clock"></i> Schedule payment</button>
+          </form>
+        {% endif %}
+        {% if "paid" in allowed_transitions and is_admin %}
+          <form method="post" action="{% url 'procurement:supplierinvoice_mark_paid' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} as paid? This is a terminal state — reverse it afterwards if the payment was recorded in error.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="credit-card"></i> Mark paid</button>
+          </form>
+        {% endif %}
+        {% if can_reverse %}
+          <form method="post" action="{% url 'procurement:supplierinvoice_reverse' obj.pk %}" onsubmit="return confirm('Reverse {{ obj.number }}? A mirrored reversal entry is posted — the original entry is never edited.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="rotate-ccw"></i> Reverse</button>
+          </form>
+        {% endif %}
+        {% if can_edit %}
+          <a href="{% url 'procurement:supplierinvoice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Back to invoices</a>
+      </div>
+
+      {% if can_void %}
+        <hr>
+        <form method="post" action="{% url 'procurement:supplierinvoice_void' obj.pk %}" onsubmit="return confirm('Void {{ obj.number }}? Use this when the invoice will never be paid — reverse it instead if it was already settled.');">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="void_reason">Reason <span class="req">*</span></label>
+            <textarea class="form-textarea" id="void_reason" name="reason" rows="2" placeholder="Why is this invoice being voided?"></textarea>
+            <div class="form-help">Recorded on the invoice and in the audit log. Voiding is terminal — a voided invoice cannot be re-opened.</div>
+          </div>
+          <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Void invoice</button>
+        </form>
+      {% endif %}
+
+      {% if is_locked %}
+        <hr>
+        <p class="text-muted">This invoice is in a terminal state — paid, void or reversed — so it is locked. Nothing here changes it; post a reversal if the entry itself has to be undone.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+{% endblock %}
