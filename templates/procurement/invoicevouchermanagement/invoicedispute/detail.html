@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Invoice Dispute{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — InvoiceDispute detail (lane D, hand-rolled view).
+    Context contract: obj, invoice, invoice_line, variances, resolution_choices,
+    days_open, is_overdue, actions (list of dicts with keys url, label, verb, css),
+    can_edit, can_resolve, is_admin. Nothing else exists here.
+
+    Every nullable FK is guarded before it is dereferenced (safety rule 7) — `invoice`,
+    `invoice_line`, `supplier`, `assigned_to`, `raised_by`, `credit_memo_invoice` especially;
+    `{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}` RAISES when the FK
+    is None, it does not fall through.
+    Badges compare the frozen CHOICES keys and always end with a badge-slate fallback.
+    No user-typed value (the supplier name, the supplier's invoice number) ever reaches a
+    confirm() handler — only the system-assigned obj.number, with literal apostrophes
+    escaped as \' (safety rule 4).
+    `withdraw()` exists on the model but has NO route, so nothing here links to it — a
+    reversal of a dispute is expressed as `closed` + resolution "withdrawn".
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        {% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "awaiting_supplier" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "awaiting_internal" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "escalated" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "resolved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "closed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        {% if is_overdue %}<span class="badge badge-red">Past SLA</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Invoice &amp; Voucher Management</span><span class="sep">›</span><a href="{% url 'procurement:invoicedispute_list' %}">Invoice Disputes</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Raised {{ obj.raised_at|date:"M d, Y H:i"|default:"—" }} · {{ days_open|default:obj.days_open }} day(s) open · SLA is ten days from the day the dispute was raised.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:invoicedispute_aging' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Aging</a>
+      {% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="btn btn-outline"><i data-lucide="receipt"></i> {{ invoice.number }}</a>{% endif %}
+      {% if can_edit %}<a href="{% url 'procurement:invoicedispute_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      {% if is_admin %}
+        {% comment %}
+          Delete is @tenant_admin_required + @require_POST. Only obj.number (system-assigned)
+          is interpolated into the confirm string — never the supplier name or the
+          supplier's invoice number.
+        {% endcomment %}
+        <form method="post" action="{% url 'procurement:invoicedispute_delete' obj.pk %}" onsubmit="return confirm('Delete dispute {{ obj.number }}? The SLA history and the resolution go with it.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Dispute</h2><span class="text-muted">what is contested, and against what</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Invoice</dt>
+          <dd>{% if invoice %}<a href="{% url 'procurement:supplierinvoice_detail' invoice.pk %}" class="fw-600">{{ invoice.number }}</a>{% if invoice.invoice_number %} · {{ invoice.invoice_number }}{% endif %}{% elif obj.invoice %}<span class="fw-600">{{ obj.invoice.number }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Invoice line</dt>
+          <dd>{% if invoice_line %}<span class="fw-600">{{ invoice_line.description|default:invoice_line.pk }}</span>{% elif obj.invoice_line %}<span class="fw-600">{{ obj.invoice_line.description|default:obj.invoice_line.pk }}</span>{% else %}<span class="text-muted">Whole invoice</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd>{% if obj.supplier %}<span class="fw-600">{{ obj.supplier.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier contact</dt><dd>{{ obj.supplier_contact|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Reason</dt>
+          <dd>{% if obj.reason_code == "price" %}<span class="badge badge-amber">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "quantity" %}<span class="badge badge-amber">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "goods_not_received" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "damaged" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "duplicate" %}<span class="badge badge-red">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "credit_not_processed" %}<span class="badge badge-info">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "tax" %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "freight" %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "admin" %}<span class="badge badge-muted">{{ obj.get_reason_code_display }}</span>
+              {% elif obj.reason_code == "other" %}<span class="badge badge-muted">{{ obj.get_reason_code_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_reason_code_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Disputed amount</dt><dd class="fw-600">{{ obj.disputed_amount|floatformat:"2" }}</dd></div>
+        <div class="detail-item"><dt>Invoice total</dt><dd>{% if invoice %}{{ invoice.total|floatformat:"2" }}{% elif obj.invoice %}{{ obj.invoice.total|floatformat:"2" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Undisputed balance</dt>
+          <dd>{% if invoice %}{{ obj.undisputed_balance|floatformat:"2" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>SLA due date</dt>
+          <dd>{{ obj.due_date|date:"M d, Y"|default:"No SLA date" }}
+            {% if is_overdue %}<div><span class="badge badge-red">{{ days_open|default:obj.days_open }} day(s) open, past due</span></div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Days open</dt><dd>{{ days_open|default:obj.days_open }}</dd></div>
+        <div class="detail-item"><dt>Aging bucket</dt><dd>{{ obj.age_bucket|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Assigned to</dt>
+          <dd>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raised by</dt>
+          <dd>{% if obj.raised_by %}{{ obj.raised_by.get_full_name|default:obj.raised_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raised at</dt><dd>{{ obj.raised_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      </dl>
+
+      {% if obj.description %}
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <div>{{ obj.description|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Resolution &amp; audit trail</h2><span class="text-muted">who closed it, how, and on what paper</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Status</dt>
+          <dd>{% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "awaiting_supplier" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "awaiting_internal" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "escalated" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "resolved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "closed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Resolved at</dt><dd>{{ obj.resolved_at|date:"M d, Y H:i"|default:"Not resolved yet" }}</dd></div>
+        <div class="detail-item"><dt>Resolution</dt>
+          <dd>{% if obj.resolution == "credit_memo" %}<span class="badge badge-info">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "debit_memo" %}<span class="badge badge-info">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "reinvoice" %}<span class="badge badge-amber">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "short_pay" %}<span class="badge badge-slate">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution == "withdrawn" %}<span class="badge badge-muted">{{ obj.get_resolution_display }}</span>
+              {% elif obj.resolution %}<span class="badge badge-slate">{{ obj.get_resolution_display }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Credit memo raised</dt>
+          <dd>{% if obj.credit_memo_invoice %}<a href="{% url 'procurement:supplierinvoice_detail' obj.credit_memo_invoice.pk %}" class="fw-600">{{ obj.credit_memo_invoice.number }}</a>{% else %}<span class="text-muted">None raised</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.resolution_note %}
+        <div class="form-group">
+          <label class="form-label">Resolution note</label>
+          <div>{{ obj.resolution_note|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+      {% if obj.resolution == "withdrawn" %}
+        <p class="text-muted">Withdrawn disputes are closed, not deleted — the amount stops blocking the invoice but the SLA history stays on the record.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Match variances on this invoice</h2><span class="text-muted">what the match found behind the dispute</span>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:matchvariance_list' %}?{% if invoice %}invoice={{ invoice.pk }}{% else %}dispute={{ obj.pk }}{% endif %}"><i data-lucide="scale"></i> Exceptions board</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Basis</th>
+            <th class="text-right">Expected</th>
+            <th class="text-right">Actual</th>
+            <th class="text-right">Variance</th>
+            <th>Outcome</th>
+            <th>Resolution</th>
+            <th>Detected</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in variances %}
+            <tr>
+              <td>
+                {% if v.variance_type == "over_invoice" %}<span class="badge badge-red">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "duplicate" %}<span class="badge badge-red">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "missing_po" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% elif v.variance_type == "missing_receipt" %}<span class="badge badge-slate">{{ v.get_variance_type_display }}</span>
+                {% else %}<span class="badge badge-amber">{{ v.get_variance_type_display }}</span>{% endif %}
+                {% if v.message %}<div class="text-muted">{{ v.message }}</div>{% endif %}
+              </td>
+              <td>{{ v.get_basis_display }}</td>
+              <td class="text-right">{{ v.expected_value|floatformat:"-4" }}</td>
+              <td class="text-right">{{ v.actual_value|floatformat:"-4" }}</td>
+              <td class="text-right fw-600">{{ v.variance_abs|floatformat:"-4" }}
+                {% if v.variance_pct != None %}<div class="text-muted">{{ v.variance_pct|floatformat:"-4" }}%</div>{% endif %}</td>
+              <td>
+                {% if v.outcome == "auto_accept" %}<span class="badge badge-green">{{ v.get_outcome_display }}</span>
+                {% elif v.outcome == "warn" %}<span class="badge badge-amber">{{ v.get_outcome_display }}</span>
+                {% elif v.outcome == "block" %}<span class="badge badge-red">{{ v.get_outcome_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_outcome_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if v.resolution == "open" %}<span class="badge badge-amber">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "accepted" %}<span class="badge badge-green">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "disputed" %}<span class="badge badge-red">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "credit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "debit_memo" %}<span class="badge badge-info">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "short_paid" %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>
+                {% elif v.resolution == "cancelled" %}<span class="badge badge-muted">{{ v.get_resolution_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ v.get_resolution_display }}</span>{% endif %}
+              </td>
+              <td>{{ v.detected_at|date:"M d, Y H:i"|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="scale"></i>
+                <h3>No variances recorded</h3>
+                <p>A dispute can be raised on its own — a commercial disagreement needs no matching exception behind it.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if can_resolve %}
+    {% comment %}
+      Resolve is @tenant_admin_required + @require_POST. POST keys: `resolution` (required,
+      must be a RESOLUTION_CHOICES key), `resolution_note`, and `spawn_credit_memo` — the
+      last one only takes effect when resolution == "credit_memo", which is why the
+      checkbox is annotated rather than hidden behind JS.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Resolve this dispute</h2><span class="text-muted">stops the SLA clock and records the outcome</span></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:invoicedispute_resolve' obj.pk %}" onsubmit="return confirm('Resolve {{ obj.number }}? The SLA clock stops here and the outcome is written to the audit log.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="resolution">Resolution <span class="req">*</span></label>
+              <select class="form-select" id="resolution" name="resolution" required>
+                <option value="">Choose an outcome…</option>
+                {% for val, label in resolution_choices %}
+                  <option value="{{ val }}" {% if obj.resolution == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-help">How the dispute ended. Every outcome is terminal — the dispute cannot be re-opened afterwards.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="resolution_note">Resolution note</label>
+              <textarea class="form-textarea" id="resolution_note" name="resolution_note" rows="3" placeholder="What the supplier agreed, and who agreed it.">{{ obj.resolution_note }}</textarea>
+              <div class="form-help">Free text, kept on the dispute and in the audit log.</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label"><input type="checkbox" class="form-check" name="spawn_credit_memo" value="1"> Raise a supplier credit memo for {{ obj.disputed_amount|floatformat:"2" }}</label>
+            <div class="form-help">Only honoured when the resolution is &ldquo;Supplier Credit Memo&rdquo;: a credit memo invoice is created for the negative disputed amount and linked to this dispute.</div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Resolve dispute</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">transitions the view has cleared for you</span></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        {% comment %}
+          `actions` is a list of dicts with keys url / label / verb / css, already filtered
+          by the view against the model's guard conditions, so it is rendered as given —
+          a POST action becomes its own CSRF form, anything else stays a plain link.
+          There is deliberately no withdraw() button: the model has the method but no route.
+        {% endcomment %}
+        {% for action in actions %}
+          {% if action.verb == "post" %}
+            <form method="post" action="{{ action.url }}">
+              {% csrf_token %}<button class="btn {{ action.css|default:"btn-outline" }}" type="submit">{{ action.label }}</button>
+            </form>
+          {% else %}
+            <a href="{{ action.url }}" class="btn {{ action.css|default:"btn-outline" }}">{{ action.label }}</a>
+          {% endif %}
+        {% empty %}
+          <p class="text-muted">No transitions are open on this dispute — it is resolved or closed, so the only thing left is the audit trail above.</p>
+        {% endfor %}
+        <a href="{% url 'procurement:invoicedispute_list' %}" class="btn btn-outline"><i data-lucide="message-square-warning"></i> Back to disputes</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+{% endblock %}
