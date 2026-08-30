@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{{ title|default:"Capture Invoice" }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — invoice capture (GET + POST, two-stage).
+    Context contract: stage ("upload"|"confirm"), upload_form, form, document, extraction,
+    confidence, source, has_text_layer, warnings, raw_text, title, cancel_url.
+    `extraction` is a dict whose keys are EXACTLY invoice_number, invoice_date, due_date,
+    po_number, subtotal, tax_total, total, currency_code, vendor_name; each value is
+    {"value": <str>, "confidence": <"high"|"medium"|"low"|"none">}.
+
+    pdfplumber is not in requirements.txt, so in every current deployment it is None and the
+    designed path is has_text_layer=False / source="manual" / confidence 0 with one honest
+    warning — the page then renders the normal create form pre-filled with nothing. That is
+    the EXPECTED path, not a failure, and this template never promises otherwise: no part of
+    the copy claims a document was read, and nothing is shown as "extracted" unless
+    `extraction` actually carries a value.
+    Every review field stays editable — extraction is a suggestion, never an override. The UI
+    must never say "OCR" (contract line 436).
+    The hidden `stage` field drives the two-stage POST: "upload" then "confirm".
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ title|default:"Capture Invoice" }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:invoicevoucher_dashboard' %}">Invoice &amp; Voucher Management</a><span class="sep">›</span><span>Capture</span></div>
+      <p class="text-muted">Start from the supplier&rsquo;s document. This workspace reads the header fields it can find, shows you each one next to how sure it is, and drops you into the normal invoice form with everything still editable — nothing is saved and nothing is posted until you confirm.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Supplier invoices</a>
+      <a href="{% url 'procurement:supplierinvoice_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Key one in by hand</a>
+    </div>
+  </div>
+
+  {% if warnings %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Before you carry on</h2></div>
+      <div class="card-body">
+        <ul>
+          {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %} Stage 1 — hand over the file. Always available so a second document can be tried. {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{% if stage == "confirm" %}Try a different document{% else %}1 · Choose the document{% endif %}</h2></div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="stage" value="upload">
+        {% for e in upload_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in upload_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="file-up"></i> Read the document</button>
+        <span class="text-muted">You review every field before anything is saved.</span>
+      </form>
+    </div>
+  </div>
+
+  {% if stage == "confirm" %}
+    {% comment %} Stage 2 — the review: extracted value beside its confidence, all editable. {% endcomment %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">2 · Check what was read</h2>
+        <span class="text-muted">
+          {% if has_text_layer %}source: {{ source }}{% else %}nothing could be read from this document — key it in below{% endif %}
+          {% if confidence != None %} · overall confidence {{ confidence|floatformat:"2" }}%{% endif %}
+        </span>
+      </div>
+      <div class="card-body">
+        {% if has_text_layer %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Value read</th>
+                  <th>How sure</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% with inv_no=extraction.invoice_number inv_date=extraction.invoice_date due=extraction.due_date po=extraction.po_number sub=extraction.subtotal tax=extraction.tax_total tot=extraction.total cur=extraction.currency_code ven=extraction.vendor_name %}
+                  <tr><td>Supplier invoice no.</td><td>{{ inv_no.value|default:"—" }}</td>
+                    <td>{% if inv_no.confidence == "high" %}<span class="badge badge-green">High</span>{% elif inv_no.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif inv_no.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif inv_no.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Invoice date</td><td>{{ inv_date.value|default:"—" }}</td>
+                    <td>{% if inv_date.confidence == "high" %}<span class="badge badge-green">High</span>{% elif inv_date.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif inv_date.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif inv_date.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Due date</td><td>{{ due.value|default:"—" }}</td>
+                    <td>{% if due.confidence == "high" %}<span class="badge badge-green">High</span>{% elif due.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif due.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif due.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Purchase order no.</td><td>{{ po.value|default:"—" }}</td>
+                    <td>{% if po.confidence == "high" %}<span class="badge badge-green">High</span>{% elif po.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif po.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif po.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Vendor name</td><td>{{ ven.value|default:"—" }}</td>
+                    <td>{% if ven.confidence == "high" %}<span class="badge badge-green">High</span>{% elif ven.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif ven.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif ven.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Currency</td><td>{{ cur.value|default:"—" }}</td>
+                    <td>{% if cur.confidence == "high" %}<span class="badge badge-green">High</span>{% elif cur.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif cur.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif cur.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Subtotal</td><td>{{ sub.value|default:"—" }}</td>
+                    <td>{% if sub.confidence == "high" %}<span class="badge badge-green">High</span>{% elif sub.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif sub.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif sub.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Tax total</td><td>{{ tax.value|default:"—" }}</td>
+                    <td>{% if tax.confidence == "high" %}<span class="badge badge-green">High</span>{% elif tax.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif tax.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif tax.confidence == "none" %}<span class="badge badge-slate">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                  <tr><td>Total</td><td>{{ tot.value|default:"—" }}</td>
+                    <td>{% if tot.confidence == "high" %}<span class="badge badge-green">High</span>{% elif tot.confidence == "medium" %}<span class="badge badge-amber">Medium</span>{% elif tot.confidence == "low" %}<span class="badge badge-red">Low</span>{% elif tot.confidence == "none" %}<span class="badge badge-muted">Not found</span>{% else %}<span class="badge badge-slate">Unknown</span>{% endif %}</td></tr>
+                {% endwith %}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-muted">Anything marked Medium or Low is a guess against the layout of the document — check it against the original before you carry on. Every value below is editable, and correcting one here is faster than fixing a posted invoice later.</p>
+        {% else %}
+          <p class="text-muted">This document carries no readable text layer, so nothing could be taken from it — a scan or an image export, most likely. Key the invoice in below exactly as you would by hand; the document is still kept as the attachment.</p>
+        {% endif %}
+
+        {% if raw_text %}
+          <details>
+            <summary class="form-label">Text found in the document</summary>
+            <pre class="form-textarea" style="white-space:pre-wrap; max-height:22rem; overflow:auto;">{{ raw_text }}</pre>
+          </details>
+        {% endif %}
+      </div>
+    </div>
+
+    <form method="post" novalidate enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="stage" value="confirm">
+
+      <div class="card"><div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "invoice_number" %}
+                <div class="form-help">The supplier&rsquo;s number as printed. It is the duplicate-detection key — punctuation, spacing and case are ignored when invoices are compared.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div></div>
+
+      {% if document %}
+        <div class="card"><div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Document kept as the attachment</dt>
+              <dd>{% if document.file %}<a href="{{ document.file.url }}" class="fw-600">{{ document.name }}</a>{% else %}{{ document.name }}{% endif %}</dd></div>
+            <div class="detail-item"><dt>Source recorded against the invoice</dt><dd>{{ source|default:"manual" }}</dd></div>
+          </dl>
+        </div></div>
+      {% endif %}
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Save as a draft invoice</button>
+        <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  {% else %}
+    <div class="card"><div class="card-body text-muted">
+      Upload the supplier&rsquo;s document and the fields that can be read from it appear here for review, each one next to how sure the reading is. Nothing is saved at that point — you confirm it into a draft invoice afterwards, and matching, approval and posting all happen later on the invoice itself.
+    </div></div>
+  {% endif %}
+{% endblock %}
