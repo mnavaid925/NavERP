@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %} Supplier Invoice{% endblock %}
+{% block content %}
+  {% comment %}
+    6.13 Invoice & Voucher Management — SupplierInvoice create + edit, ONE template driven by
+    the contracted `is_edit` flag (hand-rolled `_invoice_form`, NOT crud_create/crud_edit).
+    Context contract: form, line_formset, obj (None/unsaved on create, so every obj reference
+    sits inside an {% if is_edit %} branch), title, submit_label, cancel_url.
+
+    The form carries ONLY: vendor, purchase_order, goods_receipt, payment_term, currency,
+    tax_code, invoice_type, invoice_number, external_ref, invoice_date, posting_date,
+    discount_base, discount_grace_days, fx_rate, notes. Everything else is system-set and is
+    deliberately absent — status, match_status, due_date, discount_date, subtotal/tax/total,
+    bill, journal_entry, number. Do NOT add inputs for them.
+    On EDIT the view POPS purchase_order and goods_receipt once the invoice is past
+    draft/parked/captured, so they are shown read-only from obj instead. A disabled <select>
+    would post nothing and read as a lost value — never use one.
+    The line formset uses the inline default prefix "lines" (the child FK declares
+    related_name="lines"); its management form MUST be rendered or Django discards every row.
+  {% endcomment %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Supplier Invoice{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:invoicevoucher_dashboard' %}">Invoice &amp; Voucher Management</a><span class="sep">›</span><a href="{% url 'procurement:supplierinvoice_list' %}">Supplier Invoices</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    <p class="text-muted">Saving records the invoice only — it posts nothing to the ledger. Due date, discount date and the totals are derived when you save; run the match from the invoice page to compare it against the order and the receipt, and approve it there to raise the AP bill.</p>
+  </div></div>
+
+  {% if is_edit %}
+    <div class="card"><div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Vendor</dt>
+          <dd>{% if obj.vendor %}<span class="fw-600">{{ obj.vendor.name }}</span>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Purchase order</dt>
+          <dd>{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Goods receipt</dt>
+          <dd>{% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="fw-600">{{ obj.goods_receipt.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt>
+          <dd>{% if obj.status == "draft" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "parked" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "captured" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "blocked" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "disputed" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "pending_approval" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "approved" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "scheduled" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "paid" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "void" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "reversed" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Total</dt><dd class="fw-600">{% if obj.currency %}{{ obj.currency.code }} {% endif %}{{ obj.total|floatformat:"2" }}</dd></div>
+      </dl>
+      {% if obj.status != "draft" and obj.status != "parked" and obj.status != "captured" %}
+        <p class="text-muted">The order and receipt are fixed once an invoice leaves draft, parked or captured — the form no longer carries them. Changing them would orphan the lines already matched against this invoice. Void it and capture a new one if it was filed against the wrong delivery.</p>
+      {% endif %}
+    </div></div>
+  {% endif %}
+
+  <form method="post" novalidate enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == "invoice_number" %}
+              <div class="form-help">The supplier&rsquo;s own number as printed on the document. It is the duplicate-detection key: punctuation, spacing and case are ignored when invoices are compared, so &ldquo;INV-1001&rdquo; and &ldquo;inv 1001&rdquo; are the same invoice.</div>
+            {% elif field.name == "invoice_date" %}
+              <div class="form-help">The date on the supplier&rsquo;s document. Due date and discount date are counted forward from it using the payment terms.</div>
+            {% elif field.name == "posting_date" %}
+              <div class="form-help">The date the entry will carry in the ledger. Leave blank to post on the day the invoice is approved; it can never be earlier than the invoice date.</div>
+            {% elif field.name == "fx_rate" %}
+              <div class="form-help">Required when the invoice currency differs from the order currency. Leave blank when they match — the FX check is skipped entirely.</div>
+            {% elif field.name == "discount_base" %}
+              <div class="form-help">Whether the settlement discount is calculated on the net amount or on the gross including tax.</div>
+            {% elif field.name == "discount_grace_days" %}
+              <div class="form-help">Extra days granted after the discount date before the discount is treated as lost. Zero means the discount dies on the discount date itself.</div>
+            {% elif field.name == "tax_code" %}
+              <div class="form-help">Applied to lines that carry no tax code of their own.</div>
+            {% elif field.name == "external_ref" %}
+              <div class="form-help">Your own cross-reference — a supplier portal id, an e-invoice identifier or a scan batch.</div>
+            {% elif field.help_text %}
+              <div class="form-help">{{ field.help_text }}</div>
+            {% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Lines</h2><span class="text-muted">one row per invoiced line — subtotal, tax and total are recalculated from these</span></div>
+      <div class="table-wrap">
+        {{ line_formset.management_form }}
+        {% for e in line_formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>PO line</th>
+              <th>Receipt line</th>
+              <th>Item</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Unit price</th>
+              <th class="text-right">Tax %</th>
+              <th>GL account</th>
+              <th>Tax code</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lf in line_formset %}
+              <tr>
+                {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>
+                  {{ lf.description }}{% for e in lf.description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                  <div class="text-muted">SKU {{ lf.sku_hint }}</div>
+                  <div class="text-muted">UOM {{ lf.uom_hint }}</div>
+                </td>
+                <td>{{ lf.po_line }}{% for e in lf.po_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.receipt_line }}{% for e in lf.receipt_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.item }}{% for e in lf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_price }}{% for e in lf.unit_price.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.tax_rate_pct }}{% for e in lf.tax_rate_pct.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.gl_account }}{% for e in lf.gl_account.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.tax_code }}{% for e in lf.tax_code.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Leave a row blank to skip it; tick Remove to drop an existing line. A line with no PO reference needs a GL account of its own, and a credit memo&rsquo;s quantity and unit price must work out negative.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> {{ submit_label|default:"Save" }}</button>
+      <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
