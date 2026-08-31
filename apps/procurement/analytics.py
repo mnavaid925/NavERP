@@ -97,6 +97,12 @@ MAX_CLASSIFY_LINES = 5000
 #: Ceiling on the per-item price-spread scan behind Category Spend Analysis. Same reasoning.
 ITEM_SCAN_CAP = 500
 
+#: The largest date a custom window may name. ``date.max`` is 9999-12-31 and ``SpendReport.clean()``
+#: explicitly permits it, but ``range_bounds`` pushes an inclusive ``date_to`` out by one day to get
+#: its exclusive stop — and ``date(9999, 12, 31) + timedelta(days=1)`` raises ``OverflowError``.
+#: Clamping the INPUT (rather than catching the overflow) keeps the +1 total for every caller.
+_MAX_BOUND = date(9999, 12, 30)
+
 #: Maverick-rate bands, printed on the page next to the number so the colour means something.
 MAVERICK_BAND_LOW = Decimal("10")
 MAVERICK_BAND_HIGH = Decimal("20")
@@ -232,7 +238,11 @@ def range_bounds(key, date_from=None, date_to=None):
         # branches identical instead of sprinkling ``if start is not None`` through the cube.
         return date(1900, 1, 1), end
     if key == "custom" and date_from is not None:
-        stop = (date_to + timedelta(days=1)) if date_to is not None else end
+        # Clamp BEFORE the +1. Both dates come off a query string or off a saved report whose
+        # own clean() permits date(9999, 12, 31), and adding a day to date.max raises
+        # OverflowError — a 500 on the dashboard, the category page, the export and the CSV.
+        date_from = min(date_from, _MAX_BOUND)
+        stop = (min(date_to, _MAX_BOUND) + timedelta(days=1)) if date_to is not None else end
         if stop <= date_from:
             stop = date_from + timedelta(days=1)
         return date_from, stop
