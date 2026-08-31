@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Maverick Spend Analysis{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Maverick Spend Analysis — procurement:maverick_dashboard,
+    apps/procurement/views/SpendAnalyticsReporting/MaverickDashboard.py.
+
+    A COMPUTED, READ-ONLY board over MaverickSpendFinding rows the detectors
+    raised. It owns no table of its own and contributes no migration. The single
+    write on this page is the scan form, which POSTs to
+    procurement:maverick_scan — @require_POST and @tenant_admin_required (L27),
+    so the button is rendered only for an admin and a refused POST and a hidden
+    button always agree.
+
+    Nothing on this page does arithmetic. Every percentage and money string is
+    computed in the view / apps/procurement/analytics.py and handed over.
+
+    Context consumed: by_reason (each {reason, label, n, value, display, pct}),
+    rate ({maverick_value, addressable_value, pct, txn_pct, band}), by_vendor,
+    by_category, by_department, by_severity (each {label, pk, value, display,
+    pct, count} — pk is None for the (unassigned)/(Unclassified) bucket and for
+    every severity row, which is why the drill links are guarded), trend and the
+    pre-zipped trend_rows the table walks (a template cannot pair two parallel
+    lists without index gymnastics that silently render the wrong cell),
+    leakage_total, leakage_display, open_findings, total_value, total_display,
+    stats, reason_choices, severity_choices, status_choices, range_key,
+    date_range_choices, start, end, scan_url, findings_url, dashboard_url,
+    exclusions_note, scan_note, is_admin.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Maverick spend</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Maverick Spend</span></div>
+      <p class="text-muted">Spend that went around the process — off contract, off catalogue, above the contracted price, or with no purchase order behind it. Every row here points at a real document you can open.</p>
+      <p class="text-muted">Window <span class="fw-600">{% if start %}{{ start|date:"M d, Y" }}{% else %}earliest record{% endif %} – {% if end %}{{ end|date:"M d, Y" }}{% else %}today{% endif %}</span></p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ dashboard_url }}" class="btn btn-outline"><i data-lucide="gauge"></i> Spend dashboard</a>
+      <a href="{{ findings_url }}" class="btn btn-primary"><i data-lucide="list"></i> All findings</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="mv_range">Window</label>
+          <select id="mv_range" name="range" class="form-select">
+            {% for val, label in date_range_choices %}
+              <option value="{{ val }}" {% if range_key == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="form-help" style="margin-top:.6rem;">{{ exclusions_note }}</p>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon {% if rate.band == 'high' %}orange{% elif rate.band == 'medium' %}purple{% else %}green{% endif %}"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ rate.pct|floatformat:1 }}%</div>
+      <div class="stat-label">
+        Maverick rate
+        <span class="badge {% if rate.band == 'high' %}badge-red{% elif rate.band == 'medium' %}badge-amber{% else %}badge-green{% endif %}">{{ rate.band|capfirst }}</span>
+        <div class="progress" style="margin-top:.4rem;"><div class="progress-bar" style="width:{{ rate.pct|floatformat:0 }}%"></div></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ total_display }}</div>
+      <div class="stat-label">Value at risk (live findings)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="trending-down"></i></div>
+      <div class="stat-value">{{ leakage_display }}</div>
+      <div class="stat-label">Price leakage above benchmark</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ open_findings }}</div>
+      <div class="stat-label">Open · <a href="{{ findings_url }}?status=open">work the queue</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-search"></i></div>
+      <div class="stat-value">{{ stats.findings }}</div>
+      <div class="stat-label">Live findings in window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ stats.remediated }}</div>
+      <div class="stat-label">Remediated · {{ stats.justified }} justified · {{ stats.dismissed }} dismissed</div>
+    </div>
+  </div>
+
+  {% if is_admin %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Run the detectors</h2>
+        <span class="badge badge-info">Tenant admin</span>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{ scan_url }}">
+          {% csrf_token %}
+          <input type="hidden" name="range" value="{{ range_key }}">
+          <div class="form-group">
+            <label class="form-label">Detectors to run <span class="text-muted">(leave all unticked to run every one)</span></label>
+            <div class="filter-bar">
+              {% for val, label in reason_choices %}
+                <label class="form-label"><input type="checkbox" name="reason" value="{{ val }}"> {{ label }}</label>
+              {% endfor %}
+            </div>
+          </div>
+          <p class="form-help">{{ scan_note }}</p>
+          <button type="submit" class="btn btn-primary" onclick="return confirm('Run the maverick detectors over this window?');"><i data-lucide="radar"></i> Run scan</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Why spend went around the process</h2>
+      <span class="badge badge-slate">{{ by_reason|length }} reason{{ by_reason|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Reason</th><th class="text-right">Value</th><th>Share</th><th class="text-right">Findings</th><th class="text-right">Open the queue</th></tr></thead>
+        <tbody>
+          {% for row in by_reason %}
+            <tr>
+              <td class="fw-600">{{ row.label }}</td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress" style="min-width:120px;"><div class="progress-bar" style="width:{{ row.pct|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.pct|floatformat:1 }}%</span>
+              </td>
+              <td class="text-right">{{ row.n }}</td>
+              <td class="text-right"><a href="{{ findings_url }}?reason={{ row.reason }}" class="btn btn-sm btn-outline"><i data-lucide="arrow-right"></i> Filter</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">A reason with a zero against it means the detector ran and found nothing in this window — not that it was skipped. "We found none" and "we did not look" are different answers, so both are shown.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Maverick spend over time</h2></div>
+    <div class="card-body">
+      {% if trend_rows %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Month</th><th class="text-right">Value</th></tr></thead>
+            <tbody>
+              {% for row in trend_rows %}
+                <tr><td class="fw-600">{{ row.label }}</td><td class="text-right fw-600">{{ row.display }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="form-help" style="margin-top:.75rem;">One row per month of the window, by the date of the SPEND rather than the date of detection — a board that aged by detection date would reset every time somebody re-ran the scan.</p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="bar-chart-3"></i>
+          <h3>Nothing to plot in this window</h3>
+          <p>No live findings fall inside it. Widen the window, or run the detectors above if this workspace has never been scanned.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By supplier</h2>
+      <span class="badge badge-slate">{{ by_vendor|length }} row{{ by_vendor|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th class="text-right">Value</th><th>Share</th><th class="text-right">Findings</th></tr></thead>
+        <tbody>
+          {% for row in by_vendor %}
+            <tr>
+              <td class="fw-600">{% if row.pk %}<a href="{{ findings_url }}?vendor={{ row.pk }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td><span class="text-muted">{{ row.pct|floatformat:1 }}%</span></td>
+              <td class="text-right">{{ row.count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">No findings in this window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By department / cost centre</h2>
+      <span class="badge badge-slate">{{ by_department|length }} row{{ by_department|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Department</th><th class="text-right">Value</th><th>Share</th><th class="text-right">Findings</th></tr></thead>
+        <tbody>
+          {% for row in by_department %}
+            <tr>
+              <td class="fw-600">{% if row.pk %}<a href="{{ findings_url }}?org_unit={{ row.pk }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td><span class="text-muted">{{ row.pct|floatformat:1 }}%</span></td>
+              <td class="text-right">{{ row.count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">No findings in this window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">There is no department column on a supplier invoice: the department is resolved once, at detection, from the purchase order behind the spend. Spend with no purchase order therefore has no department and appears as <span class="fw-600">(unassigned)</span> — it is never dropped, because a breakdown that dropped it would stop agreeing with the total above.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By category</h2>
+      <span class="badge badge-slate">{{ by_category|length }} row{{ by_category|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th class="text-right">Value</th><th>Share</th><th class="text-right">Findings</th></tr></thead>
+        <tbody>
+          {% for row in by_category %}
+            <tr>
+              <td class="fw-600">{% if row.pk %}<a href="{{ findings_url }}?category={{ row.pk }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td><span class="text-muted">{{ row.pct|floatformat:1 }}%</span></td>
+              <td class="text-right">{{ row.count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">No findings in this window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By severity</h2>
+      <span class="badge badge-slate">{{ by_severity|length }} band{{ by_severity|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Severity</th><th class="text-right">Value</th><th>Share</th><th class="text-right">Findings</th></tr></thead>
+        <tbody>
+          {% for row in by_severity %}
+            <tr>
+              <td class="fw-600">{{ row.label }}</td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td><span class="text-muted">{{ row.pct|floatformat:1 }}%</span></td>
+              <td class="text-right">{{ row.count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">No findings in this window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">Severity is a default the detector stamps, not a verdict — a buyer can re-grade any finding on its own page when the engine over- or under-called it.</p>
+    </div>
+  </div>
+{% endblock %}
