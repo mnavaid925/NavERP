@@ -8,9 +8,11 @@ Discipline worth recording, because a reviewer will otherwise go looking for it:
 * **Every queryset is ``filter(tenant=request.tenant)``** — never ``.all()``. This model HAS its
   own tenant column, so every object is fetched ``get_object_or_404(..., tenant=request.tenant)``
   rather than through the invoice it points at.
-* **Ordinary CRUD is ``@login_required``; the disposition adds ``@tenant_admin_required`` and
-  ``@require_POST``** (L27, in that order): accepting a piece of maverick spend as "justified" is
-  a governance decision, and dismissing one deletes a control finding in all but name.
+* **Read/raise/amend are ``@login_required``; the disposition AND the delete add
+  ``@tenant_admin_required`` and ``@require_POST``** (L27, in that order): accepting a piece of
+  maverick spend as "justified" is a governance decision, dismissing one deletes a control finding
+  in all but name — and deleting the row outright is stronger than either, so it cannot be the one
+  verb left ungated.
 * **The disposition runs the row under ``select_for_update()``** inside ``transaction.atomic()``,
   so two reviewers clicking at once cannot both audit a state change.
 * **The status guard lives in the MODEL verb, not in the template.** ``allowed_actions`` mirrors
@@ -306,9 +308,24 @@ def maverickfinding_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def maverickfinding_delete(request, pk):
-    """POST-only. ``crud_delete`` is self-defending as well: it only mutates on POST."""
+    """Admin-gated and POST-only, and a DISPOSED finding cannot be deleted at all.
+
+    Deleting a finding is a strictly stronger act than dismissing one, so it carries the same
+    ``@tenant_admin_required`` gate as the disposition verb (L27) — otherwise any workspace member
+    refused permission to dismiss a finding could simply erase it instead. And once a finding is
+    justified / remediated / dismissed it carries a recorded decision, its note and its
+    ``resolved_by`` stamp: that is an audit trail, not a row, so the delete is refused outright.
+    """
+    obj = get_object_or_404(MaverickSpendFinding, pk=pk, tenant=request.tenant)
+    if obj.is_resolved:
+        messages.error(
+            request,
+            f"{obj.number} is {obj.get_status_display().lower()} — a disposed finding carries a "
+            f"recorded decision and cannot be deleted.")
+        return redirect("procurement:maverickfinding_detail", pk=pk)
     return crud_delete(request, model=MaverickSpendFinding, pk=pk,
                        success_url="procurement:maverickfinding_list")
 
