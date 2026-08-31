@@ -330,12 +330,17 @@ def active_rules(tenant):
     Handed to ``SpendClassificationRule.resolve()`` for every line so classifying ten thousand
     lines costs one query rather than ten thousand. ``resolve()`` re-filters the list against each
     line's own workspace, so passing it is safe as well as fast.
+
+    All four subject FKs are joined, not just ``category``: the workbench legend and
+    ``spendrule_detail`` both render ``rule.subject_label``, which is ``str(self.vendor)`` /
+    ``str(self.gl_account)`` / ``str(self.org_unit)`` depending on ``match_type`` — one extra query
+    per rule without them. The rule list is small and fetched once, so the LEFT JOINs are free.
     """
     if tenant is None:
         return []
     return list(SpendClassificationRule.objects
                 .filter(tenant=tenant, is_active=True)
-                .select_related("category")
+                .select_related("category", "vendor", "gl_account", "org_unit")
                 .order_by("priority", "id"))
 
 
