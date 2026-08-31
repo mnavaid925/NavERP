@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ snapshot.title }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend report snapshot — procurement:spendreportsnapshot_detail,
+    apps/procurement/views/SpendAnalyticsReporting/SpendReports.py.
+
+    A frozen run, rendered EXACTLY as it was stored. Nothing on this page is
+    recomputed: columns, rows, summary and the chart series all come straight
+    out of the snapshot's JSON payload, which is what makes it a record of what
+    the figure was on the day rather than what it would be now. If it recomputed,
+    a snapshot would be indistinguishable from opening the report — and there
+    would be no way to compare one period against another.
+
+    SpendReportSnapshot has no create/edit form by design (the documented CRUD
+    exemption): a snapshot is minted only by the spendreport_snapshot POST, and
+    a hand-typed one would be a figure with no run behind it. It therefore has a
+    detail page, a CSV export and a POST delete — and no form.
+
+    Context consumed: obj, snapshot, report, summary ([{label, value}]), columns,
+    rows (a list of lists — cells are already display strings), chart_type,
+    chart_labels, chart_data, the pre-zipped chart_rows the series table walks,
+    export_url, delete_url, back_url.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ snapshot.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:spendreport_list' %}">Spend reports</a><span class="sep">›</span><a href="{{ back_url }}">{{ report.number }}</a><span class="sep">›</span><span>Snapshot</span></div>
+      <p class="text-muted">A frozen run of <span class="fw-600">{{ report.name }}</span>, stored on {{ snapshot.generated_at|date:"M d, Y H:i" }}{% if snapshot.generated_by %} by {{ snapshot.generated_by.get_full_name|default:snapshot.generated_by.username }}{% endif %}. Nothing on this page is recomputed — that is the point of a snapshot.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ back_url }}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to report</a>
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <form method="post" action="{{ delete_url }}" style="display:inline;" onclick="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Report settings at the time of the run</h2>
+      <span class="badge {{ report.basis_css }}">{{ report.get_basis_display }}</span>
+    </div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div><div class="detail-label">Report</div><div class="detail-value"><a href="{{ back_url }}">{{ report.number }} — {{ report.name }}</a></div></div>
+        <div><div class="detail-label">Measure</div><div class="detail-value">{{ report.get_measure_display }}</div></div>
+        <div><div class="detail-label">Grouped by</div><div class="detail-value">{{ report.get_dimension_1_display }}{% if report.dimension_2 != 'none' %} · {{ report.get_dimension_2_display }}{% endif %}</div></div>
+        <div><div class="detail-label">Window</div><div class="detail-value">{{ report.get_date_range_display }}</div></div>
+        <div><div class="detail-label">Rows frozen</div><div class="detail-value">{{ snapshot.row_count }}</div></div>
+        <div><div class="detail-label">Taken</div><div class="detail-value">{{ snapshot.generated_at|date:"M d, Y H:i" }}</div></div>
+      </div>
+      <p class="form-help" style="margin-top:.75rem;">
+        The settings above are the report's <span class="fw-600">current</span> settings. If somebody has edited the report since this snapshot was taken, they describe the question being asked today rather than the one that produced these rows — which is exactly why the rows themselves are stored and never recomputed.
+      </p>
+    </div>
+  </div>
+
+  {% if summary %}
+    <div class="stat-grid">
+      {% for card in summary %}
+        <div class="stat-card">
+          <div class="stat-icon slate"><i data-lucide="camera"></i></div>
+          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-label">{{ card.label }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Frozen result</h2>
+      <span class="badge badge-muted">{{ rows|length }} row{{ rows|length|pluralize }} · stored, not recomputed</span>
+    </div>
+    {% if columns and rows %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>{% for column in columns %}<th{% if not forloop.first %} class="text-right"{% endif %}>{{ column }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>{% for cell in row %}<td{% if forloop.first %} class="fw-600"{% else %} class="text-right"{% endif %}>{{ cell|default:"—" }}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="camera-off"></i>
+          <h3>This snapshot froze an empty result</h3>
+          <p>The report returned no rows when it was taken. That is a fact about the window it covered, not a fault — nothing here is recomputed, so the page shows what was stored.</p>
+          <a href="{{ back_url }}" class="btn btn-primary"><i data-lucide="arrow-left"></i> Back to the report</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if chart_rows %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Frozen series</h2>
+        <span class="badge badge-slate">{{ chart_type|capfirst }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Label</th><th class="text-right">Value</th></tr></thead>
+          <tbody>
+            {% for row in chart_rows %}
+              <tr><td class="fw-600">{{ row.label }}</td><td class="text-right">{{ row.value|floatformat:2 }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="form-help">The series the chart was drawn from, stored alongside the table so the picture and the numbers can never drift apart.</p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
