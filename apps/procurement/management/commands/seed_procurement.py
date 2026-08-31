@@ -84,6 +84,10 @@ from apps.procurement.models import (
     SupplierInvoiceLine,
     InvoiceMatchVariance,
     InvoiceDispute,
+    MaverickSpendFinding,
+    SpendClassificationRule,
+    SpendReport,
+    SpendReportSnapshot,
     generate_po_from_requisition,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -204,6 +208,15 @@ class Command(BaseCommand):
             ReturnToVendorLine.objects.all().delete()
             ReturnToVendor.objects.all().delete()
             ReceiptTolerancePolicy.objects.all().delete()
+            # 6.14 analytics rows: snapshots are report children (cascade) but go first so the
+            # register clears in one pass; findings PROTECT their vendor but nothing points at a
+            # finding, and a rule PROTECTs its category — neither is pointed at from anywhere, so
+            # they are standalone deletes. Nothing here is a document: every row is either a
+            # saved question, a frozen answer, or a detector's observation.
+            SpendReportSnapshot.objects.all().delete()
+            SpendReport.objects.all().delete()
+            MaverickSpendFinding.objects.all().delete()
+            SpendClassificationRule.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -221,6 +234,10 @@ class Command(BaseCommand):
             self._seed_order_fulfillment(tenant)
             self._seed_goods_receipt(tenant)
             self._seed_invoice_vouchers(tenant)
+            # 6.14 runs LAST on purpose: its detectors read the invoices, orders, contracts and
+            # catalogue rows every block above has just created. Run earlier it would scan an
+            # empty workspace and honestly report nothing.
+            self._seed_spend_analytics(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -1939,3 +1956,213 @@ class Command(BaseCommand):
             f"({len(invoices)} invoices, {variance_count} match variances, "
             f"{InvoiceDispute.objects.filter(tenant=tenant).count()} disputes"
             f"{'' if postable else ' — no chart of accounts, so no invoice was posted'})."))
+
+    def _seed_spend_analytics(self, tenant):
+        """6.14 Spend Analytics & Reporting - classification rules, maverick findings, reports.
+
+        Three blocks, each with its own existence guard so a partially-seeded workspace can be
+        completed rather than skipped whole:
+
+        1. **Classification rules.** One per match type over the categories, suppliers, GL
+           accounts and departments the earlier blocks already created - keyed on
+           ``(tenant, name)``, so a second run updates nothing and mints nothing. One rule is
+           deliberately INACTIVE: a register whose every row is green never shows what the
+           inactive badge looks like, and the resolver has to be seen skipping a disabled rule.
+        2. **Maverick findings.** NOT hand-written. ``MaverickSpendFinding.scan()`` is run over
+           the real window, which is the same code path the scan button on the board uses - so
+           the demo data is whatever the detectors actually see in this workspace, and it can
+           never describe spend that is not there. The scan is idempotent by construction (every
+           candidate carries a deterministic ``dedupe_key`` and is upserted on it), so a second
+           run refreshes rather than duplicates. A few rows are then walked through the real
+           disposition verbs so the board is not a wall of "open" - guarded on there being no
+           disposed row yet, so a re-run never re-decides work somebody has since re-opened.
+        3. **Saved reports.** Four questions across four measures and four dimension pairs, plus
+           ONE snapshot minted through ``analytics.compute_report`` - the same function the
+           detail page calls - so the frozen payload is a real answer rather than a fixture.
+
+        Nothing in this block posts to ``accounting.*`` (L29): 6.14 is a read-only analytics pass
+        over spend that already exists.
+        """
+        from apps.procurement import analytics
+        from apps.scm.models import ItemCategory
+
+        categories = list(ItemCategory.objects.filter(tenant=tenant, is_active=True)
+                          .order_by("name")[:4])
+        if not categories:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no item categories (run seed_scm first) - skipping spend "
+                f"analytics & reporting."))
+            return
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        owner = members[0] if members else None
+
+        # -- 1. classification rules ---------------------------------------------------------
+        if SpendClassificationRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"  {tenant.name}: spend classification rules already present, skipping.")
+        else:
+            supplier_ids = set(PartyRole.objects.filter(
+                tenant=tenant, role="supplier").values_list("party_id", flat=True))
+            vendor = (Party.objects.filter(tenant=tenant, pk__in=supplier_ids)
+                      .order_by("name").first())
+            gl_account = (GLAccount.objects.filter(tenant=tenant, is_active=True)
+                          .order_by("code").first())
+            org_unit = OrgUnit.objects.filter(tenant=tenant).order_by("name").first()
+
+            # (name, match_type, subject kwargs, category index, priority, applies_to, active,
+            #  notes)
+            rows = [
+                ("Keyword: freight and delivery", "keyword",
+                 {"keyword": "freight"}, 0, 10, "both", True,
+                 "Freight lines are coded by their own description, not by the supplier - the "
+                 "same carrier also sells consumables."),
+                ("Keyword: service and maintenance", "keyword",
+                 {"keyword": "service"}, 1 % len(categories), 20, "invoiced", True,
+                 "A service invoice carries no item, so a keyword on the description is the "
+                 "only attribute a rule can read on it."),
+            ]
+            if vendor is not None:
+                rows.append((f"Supplier: {vendor.name}"[:120], "vendor",
+                             {"vendor": vendor}, 2 % len(categories), 30, "both", True,
+                             "A supplier who only ever sells into one category - the cheapest "
+                             "rule there is, and the first one a buyer writes."))
+            if gl_account is not None:
+                rows.append((f"GL {gl_account.code} to {categories[0].name}"[:120], "gl_account",
+                             {"gl_account": gl_account}, 0, 40, "both", True,
+                             "GL coding is already a taxonomy; where finance has coded the "
+                             "line, the rule simply reads it."))
+            if org_unit is not None:
+                rows.append((f"Department: {org_unit.name}"[:120], "org_unit",
+                             {"org_unit": org_unit}, 3 % len(categories), 50, "committed", True,
+                             "A committed-basis rule: a purchase order has no item and no "
+                             "invoice type, so the requesting department is what it can be "
+                             "classified by."))
+            rows.append(("Retired: legacy stationery mapping", "keyword",
+                         {"keyword": "stationery"}, 1 % len(categories), 90, "both", False,
+                         "Kept, not deleted: an inactive rule is skipped by the resolver but "
+                         "stays visible to the buyer auditing why last quarter classified the "
+                         "way it did."))
+
+            created = 0
+            for name, match_type, subject, cat_index, priority, applies_to, active, note in rows:
+                _rule, was_created = SpendClassificationRule.objects.get_or_create(
+                    tenant=tenant, name=name,
+                    defaults={
+                        "match_type": match_type,
+                        "category": categories[cat_index % len(categories)],
+                        "priority": priority,
+                        "applies_to": applies_to,
+                        "is_active": active,
+                        "notes": note,
+                        **subject,
+                    },
+                )
+                created += int(was_created)
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {created} spend classification rules."))
+
+        # -- 2. maverick findings ------------------------------------------------------------
+        # A full year back, so the trend has months in it and the aging on the board is real.
+        # The window is [start, end) with end EXCLUSIVE, exactly as every 6.14 page computes it.
+        _start, end = analytics.range_bounds("year")
+        start = min(_start, NOW.date() - timedelta(days=365))
+        counts = MaverickSpendFinding.scan(tenant, start, end, user=None)
+        raised = sum(counts.values())
+        total = MaverickSpendFinding.objects.filter(tenant=tenant).count()
+
+        # Walk a few rows through the REAL verbs so the board shows every disposition. Guarded on
+        # nothing being disposed yet: a re-run must never re-decide work a person has since
+        # re-opened, and the scan itself already preserves any disposition it finds.
+        if total and not MaverickSpendFinding.objects.filter(
+                tenant=tenant).exclude(status="open").exists():
+            open_rows = list(MaverickSpendFinding.objects.filter(tenant=tenant, status="open")
+                             .order_by("-amount", "id")[:5])
+            verbs = [
+                ("acknowledge", ""),
+                ("justify", "One-off emergency buy, signed off by the category lead at the "
+                            "time."),
+                ("remediate", "Supplier moved onto the framework agreement; repeat spend is now "
+                              "on contract."),
+                ("dismiss", "Intercompany recharge - not addressable spend, so this was never "
+                            "off-contract."),
+                ("acknowledge", ""),
+            ]
+            for row, (verb, note) in zip(open_rows, verbs):
+                action = getattr(row, verb)
+                if verb == "acknowledge":
+                    action(owner)
+                else:
+                    action(owner, note)
+
+        if total:
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {total} maverick findings ({raised} newly raised this run)."))
+        else:
+            self.stdout.write(
+                f"  {tenant.name}: the maverick detectors found nothing in this window - every "
+                f"purchase here is on contract, on catalogue and against an order.")
+
+        # -- 3. saved reports ----------------------------------------------------------------
+        if SpendReport.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: spend reports already present, skipping.")
+            return
+
+        report_rows = [
+            ("Top suppliers by net spend", "invoiced", "net_spend", "supplier", "none",
+             "last_90", "bar", 20, True,
+             "The first question anybody asks: where did the money go, and to whom."),
+            ("Category spend by department", "invoiced", "net_spend", "category", "department",
+             "year", "table", 15, False,
+             "Two axes: the category league, cut inside each cost centre that paid for it. The "
+             "(unassigned) bucket is spend with no purchase order behind it."),
+            ("Committed spend by month", "committed", "net_spend", "month", "none",
+             "year", "line", 24, False,
+             "The committed basis: purchase orders that are a real commitment. A draft or a "
+             "cancelled order is deliberately not spend."),
+            ("Maverick share by supplier", "invoiced", "maverick_pct", "supplier", "none",
+             "last_90", "bar", 10, False,
+             "Which suppliers we buy from around the process. Pair it with the maverick board, "
+             "which carries the finding behind every figure."),
+        ]
+        made = 0
+        for (name, basis, measure, dim1, dim2, date_range, chart, top_n,
+             favorite, description) in report_rows:
+            _report, was_created = SpendReport.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={
+                    "description": description,
+                    "basis": basis,
+                    "measure": measure,
+                    "dimension_1": dim1,
+                    "dimension_2": dim2,
+                    "date_range": date_range,
+                    "chart_type": chart,
+                    "top_n": top_n,
+                    "is_favorite": favorite,
+                    "is_shared": True,
+                    "owner": owner,
+                },
+            )
+            made += int(was_created)
+
+        # ONE snapshot, minted through the SAME function the detail page calls, so the frozen
+        # payload is a real answer rather than a fixture somebody typed. Guarded on the report
+        # having none, which is what keeps a second run from stacking snapshots.
+        first = SpendReport.objects.filter(tenant=tenant).order_by("id").first()
+        if first is not None and not first.snapshots.exists():
+            result = analytics.compute_report(first) or {}
+            rows = result.get("rows") or []
+            SpendReportSnapshot.objects.create(
+                tenant=tenant, report=first,
+                title=f"{first.name} - {NOW:%Y-%m-%d %H:%M}"[:160],
+                generated_by=owner,
+                summary=result.get("summary") or [],
+                data={key: result.get(key) for key in
+                      ("columns", "rows", "chart_type", "chart_labels", "chart_data")},
+                row_count=len(rows),
+            )
+            SpendReport.objects.filter(pk=first.pk).update(last_run_at=NOW)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {made} saved spend reports + 1 snapshot."))
