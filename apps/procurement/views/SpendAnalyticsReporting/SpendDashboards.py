@@ -403,6 +403,10 @@ def _item_spread(lines, basis, label_field, item_keys, vendor_field):
     return item_rows, sole_source_count
 
 
+#: How many rows the export PAGE previews. Also the register row limit it asks for, so the page
+#: never builds rows it will not draw.
+_PREVIEW_ROWS = 25
+
 #: The export register's fixed columns when no dimension is chosen. Kept as one constant so the
 #: preview on the page and the CSV that downloads can never show different headers.
 _REGISTER_COLUMNS = ["Date", "Document", "Supplier", "Description", "SKU", "GL Account",
@@ -413,14 +417,19 @@ def _dimension_label(dimension):
     return dict(DIMENSION_CHOICES).get(dimension, dimension)
 
 
-def _export_dataset(tenant, basis, start, end, dimension, lines):
+def _export_dataset(tenant, basis, start, end, dimension, lines, row_limit=MAX_EXPORT_ROWS):
     """``(columns, rows, total_rows)`` — exactly what the page previews and the CSV downloads.
 
     Two shapes, chosen by ``dimension``:
 
     * a **dimension** produces the aggregated cube (one row per group) — a pivot-ready extract;
     * ``none`` produces the **line-level register** (one row per spend line), capped at
-      :data:`MAX_EXPORT_ROWS`.
+      ``row_limit`` (:data:`MAX_EXPORT_ROWS` by default).
+
+    ``row_limit`` bounds the register BEFORE the rows are built, which is the whole point: the
+    export PAGE previews 25 rows, and slicing after materialising five thousand of them pays the
+    entire download's cost on every page view (L40). It deliberately does NOT touch the cube
+    branch — that branch's ``total_rows`` is the true group count and must stay so.
 
     ``rows`` are lists of plain scalars aligned to ``columns``, so the preview table and
     ``csv.writer`` consume the same structure and cannot drift.
@@ -443,7 +452,7 @@ def _export_dataset(tenant, basis, start, end, dimension, lines):
                .select_related(*_classify_select_related(basis), "gl_account",
                                *document_relations)
                .annotate(_dept=_department_expression(basis))
-               .order_by("-" + _date_field(basis), "-id")[:MAX_EXPORT_ROWS])
+               .order_by("-" + _date_field(basis), "-id")[:row_limit])
     fetched = list(fetched)
 
     names = dict(OrgUnit.objects.filter(
@@ -502,8 +511,11 @@ def spend_export(request):
     lines = apply_axis_filters(basis_lines(request.tenant, basis, start, end),
                                basis, request.tenant, **_axis_pks(request))
 
+    # The page shows a 25-row preview, so it builds 25 rows — not five thousand it then slices.
+    # ``total_rows`` comes from its own ``lines.count()`` inside the helper, so the "Showing N of
+    # M" note is unaffected by the limit.
     columns, rows, total_rows = _export_dataset(
-        request.tenant, basis, start, end, dimension, lines)
+        request.tenant, basis, start, end, dimension, lines, row_limit=_PREVIEW_ROWS)
 
     reports = (SpendReport.objects.filter(tenant=request.tenant)
                .select_related("owner", "vendor", "category", "org_unit", "gl_account"))
@@ -540,7 +552,7 @@ def spend_export(request):
             "rows": total_rows,
             "max_rows": MAX_EXPORT_ROWS,
         },
-        "preview_rows": rows[:25],
+        "preview_rows": rows[:_PREVIEW_ROWS],
         "preview_columns": columns,
     })
 
