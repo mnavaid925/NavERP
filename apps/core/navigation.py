@@ -1604,6 +1604,26 @@ LIVE_LINKS = {
         "Payment Schedule/Terms Management":   "procurement:paymentschedule_list",
         "Early Payment Discount Tracking":     "procurement:invoicevoucher_dashboard#discount",
     },
+    "6.14": {
+        "Spend Dashboards":                    "procurement:spend_dashboard",
+        # The builder is GUIDED, not drag-and-drop: measure, dimensions, window and Top-N are
+        # chosen from dropdowns. The bullet's wording is aspirational; the label a user clicks
+        # must describe the page they actually land on.
+        "Custom Report Builder":               "procurement:spendreport_list",
+        "Category Spend Analysis":             "procurement:category_spend",
+        "Maverick Spend Tracking":             "procurement:maverick_dashboard",
+        # CSV download today. There is no BI/PowerBI connector anywhere in this sub-module, and
+        # the page says so verbatim rather than letting the sidebar imply one.
+        "Data Export & Visualization":         "procurement:spend_export",
+    },
+    # NO sidebar key for `SpendClassificationRule`, the classification workbench or
+    # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
+    # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
+    # is reached from Category Spend Analysis and from the workbench. The WORKBENCH is the queue
+    # that feeds that register, linked from the spend dashboard and from the rules list — it is a
+    # working surface for one bullet, not a bullet of its own. A SNAPSHOT is a child of the report
+    # that owns it and is listed on that report's detail page. None of the three is a NavERP.md
+    # feature bullet, and this dict maps bullets to pages.
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
