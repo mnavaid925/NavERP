@@ -357,7 +357,9 @@ def maverickfinding_disposition(request, pk):
         messages.error(request, "Choose what to do with this finding.")
         return redirect("procurement:maverickfinding_detail", pk=pk)
 
-    note = (request.POST.get("note") or "").strip()
+    # ``resolution_note`` is the field name the detail page posts (and the 6.13 dispute view's
+    # key): reading "note" here made every needs_note verb bounce with "A note is required".
+    note = (request.POST.get("resolution_note") or "").strip()
     if spec["needs_note"] and not note:
         messages.error(request, f"A note is required to {spec['label'].split(' -')[0].lower()} "
                                 f"a finding.")
