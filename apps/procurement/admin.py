@@ -44,6 +44,10 @@ from .models import (
     SupplierInvoiceLine,
     InvoiceMatchVariance,
     InvoiceDispute,
+    MaverickSpendFinding,
+    SpendClassificationRule,
+    SpendReport,
+    SpendReportSnapshot,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -677,3 +681,73 @@ class InvoiceDisputeAdmin(admin.ModelAdmin):
     # settles a claim.
     readonly_fields = ("number", "status", "supplier", "raised_by", "raised_at", "resolved_at",
                        "created_at", "updated_at")
+
+
+# =================================================================================================
+# 6.14 Spend Analytics & Reporting
+# =================================================================================================
+# Every derived stamp on these four models is in ``readonly_fields``. An admin surface that can
+# retype a figure the code computed is a surface that can desynchronise the page from its source —
+# the same defect 6.13 fixed. Nothing here posts to ``accounting.*``.
+
+@admin.register(SpendClassificationRule)
+class SpendClassificationRuleAdmin(admin.ModelAdmin):
+    list_display = ("priority", "name", "match_type", "category", "applies_to", "is_active",
+                    "match_count", "last_matched_at")
+    list_filter = ("tenant", "match_type", "applies_to", "is_active")
+    search_fields = ("name", "keyword", "notes", "category__name", "vendor__name")
+    raw_id_fields = ("category", "vendor", "gl_account", "org_unit")
+    # ``match_count`` / ``last_matched_at`` are stamped by the preview verb after it runs the rule
+    # against real spend. Typed by hand they would claim evidence that was never gathered.
+    readonly_fields = ("match_count", "last_matched_at", "created_at", "updated_at")
+
+
+@admin.register(MaverickSpendFinding)
+class MaverickSpendFindingAdmin(admin.ModelAdmin):
+    list_display = ("number", "reason", "severity", "status", "vendor", "amount",
+                    "leakage_amount", "document_date", "is_addressable")
+    list_filter = ("tenant", "reason", "severity", "status", "is_addressable")
+    search_fields = ("number", "detail", "resolution_note", "vendor__name", "dedupe_key")
+    raw_id_fields = ("vendor", "category", "org_unit", "contract", "catalog_item",
+                     "supplier_invoice", "invoice_line", "purchase_order", "resolved_by")
+    # ``dedupe_key`` is what makes a re-scan idempotent — editing it would let the same fact be
+    # raised twice. ``leakage_amount`` is derived in save() from amount vs benchmark, and the four
+    # disposition stamps move only through acknowledge/justify/remediate/dismiss, each of which
+    # re-checks its own guard. ``status`` is already ``editable=False`` on the model.
+    readonly_fields = ("number", "dedupe_key", "leakage_amount", "detected_at", "resolved_by",
+                       "resolved_at", "resolution_note", "created_at", "updated_at")
+
+
+class SpendReportSnapshotInline(admin.TabularInline):
+    model = SpendReportSnapshot
+    extra = 0
+    # A snapshot is a FROZEN run: it exists to be read, never edited. Every column is readonly, so
+    # the inline is a window onto the report's history rather than a way to rewrite it.
+    readonly_fields = ("title", "generated_at", "generated_by", "row_count", "summary", "data")
+    can_delete = True
+
+
+@admin.register(SpendReport)
+class SpendReportAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "basis", "measure", "dimension_1", "dimension_2",
+                    "date_range", "is_favorite", "is_shared", "owner", "last_run_at")
+    list_filter = ("tenant", "basis", "measure", "date_range", "is_favorite", "is_shared")
+    search_fields = ("number", "name", "description")
+    raw_id_fields = ("vendor", "category", "org_unit", "gl_account", "owner")
+    inlines = (SpendReportSnapshotInline,)
+    # ``last_run_at`` is stamped by the run / snapshot POSTs only — opening a page is not a run,
+    # and neither is opening this form.
+    readonly_fields = ("number", "last_run_at", "created_at", "updated_at")
+
+
+@admin.register(SpendReportSnapshot)
+class SpendReportSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("title", "report", "generated_at", "generated_by", "row_count")
+    list_filter = ("tenant",)
+    search_fields = ("title", "report__number", "report__name")
+    raw_id_fields = ("report", "generated_by")
+    # EVERY field is readonly. A snapshot is created by one POST and rendered as-is forever after;
+    # a hand-edited payload would be a figure with no run behind it, which is the one thing a
+    # snapshot must never be.
+    readonly_fields = ("report", "title", "generated_by", "generated_at", "summary", "data",
+                       "row_count")
