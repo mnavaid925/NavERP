@@ -59,12 +59,13 @@ _MONEY = DecimalField(max_digits=18, decimal_places=2)
 #: Every hop a register row (or its ``__str__``) walks. ``__str__`` itself touches only ``number``
 #: and ``reason``, but the list renders the supplier, the category, the department and the source
 #: document on every row — without these that is five queries per row.
-_ROW_RELATIONS = ("vendor", "category", "org_unit", "supplier_invoice", "purchase_order")
+_ROW_RELATIONS = ("vendor", "category", "org_unit", "supplier_invoice", "purchase_order",
+                  "invoice_line")
 
 #: Every hop the detail page walks, including the CHAINED ones: the invoice line's own header and
 #: item, and the source documents' suppliers.
 _DETAIL_RELATIONS = _ROW_RELATIONS + (
-    "contract", "catalog_item", "catalog_item__supplier", "invoice_line", "invoice_line__invoice",
+    "contract", "catalog_item", "catalog_item__supplier", "invoice_line__invoice",
     "invoice_line__item", "supplier_invoice__vendor", "supplier_invoice__currency",
     "purchase_order__vendor", "resolved_by")
 
