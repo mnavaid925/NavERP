@@ -302,3 +302,22 @@ def evaluate_events_batch(events):
         rows.sort(key=candidate_sort_key)
         result[event.pk] = rows
     return result
+
+
+def csv_safe(value):
+    """Neutralize spreadsheet formula injection: prefix dangerous leading characters.
+
+    Shared by more than one sub-module (Backend rule 5), which is why it lives here rather than in
+    an entity module: 6.1's self-service requisition export, 6.14's spend export and 6.14's saved
+    report / snapshot downloads all write user-authored text into a CSV. Supplier names, line
+    descriptions, rule names and report titles are typed by people, and a reader's spreadsheet
+    EXECUTES a cell that opens with ``=``, ``+``, ``-`` or ``@``. Prefixing an apostrophe makes the
+    cell a string; nothing else about the value changes.
+
+    Byte-identical in behaviour to the definition it replaced in
+    ``views/DashboardPortal/SelfServiceReports.py``, which now aliases this one.
+    """
+    text = str(value)
+    if text[:1] in ("=", "+", "-", "@"):
+        return f"'{text}"
+    return text
