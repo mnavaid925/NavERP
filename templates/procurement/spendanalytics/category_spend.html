@@ -223,7 +223,7 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Item</th><th class="text-right">Quantity</th><th class="text-right">Spend</th><th class="text-right">Lowest price</th><th class="text-right">Highest price</th><th class="text-right">Spread</th></tr></thead>
+        <thead><tr><th>Item</th><th class="text-right">Quantity</th><th class="text-right">Spend</th><th class="text-right">Lowest price</th><th class="text-right">Highest price</th><th class="text-right">Spread</th><th class="text-right">Spread %</th></tr></thead>
         <tbody>
           {% for row in item_rows %}
             <tr>
@@ -232,16 +232,23 @@
               <td class="text-right">{{ row.spend|default:"0"|floatformat:2 }}</td>
               <td class="text-right">{{ row.lo|default:"0"|floatformat:2 }}</td>
               <td class="text-right">{{ row.hi|default:"0"|floatformat:2 }}</td>
+              {% comment %}
+                Two different units, in two cells. ``row.spread`` is MONEY (highest minus lowest
+                unit price), formatted like the two price columns beside it; ``row.spread_pct``
+                is that gap as a share of the lowest price paid, and it is the only one the
+                20% / 5% badge thresholds can meaningfully be about.
+              {% endcomment %}
+              <td class="text-right">{{ row.spread|default:"0"|floatformat:2 }}</td>
               <td class="text-right">
-                {% if row.spread %}
-                  <span class="badge {% if row.spread > 20 %}badge-red{% elif row.spread > 5 %}badge-amber{% else %}badge-green{% endif %}">{{ row.spread|floatformat:1 }}%</span>
+                {% if row.spread_pct %}
+                  <span class="badge {% if row.spread_pct > 20 %}badge-red{% elif row.spread_pct > 5 %}badge-amber{% else %}badge-green{% endif %}">{{ row.spread_pct|floatformat:1 }}%</span>
                 {% else %}
                   <span class="badge badge-green">0.0%</span>
                 {% endif %}
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6">
+            <tr><td colspan="7">
               <div class="empty-state">
                 <i data-lucide="tag"></i>
                 <h3>No repeat purchases to compare</h3>
