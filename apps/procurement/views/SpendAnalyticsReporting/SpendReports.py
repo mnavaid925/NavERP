@@ -246,7 +246,6 @@ def spendreport_detail(request, pk):
     report = get_object_or_404(_report_qs(request), pk=pk)
     result = analytics.compute_report(report)
     start, end = analytics.range_bounds(report.date_range, report.date_from, report.date_to)
-    split = analytics.currency_split(report.tenant, report.basis, start, end) or {}
 
     snapshots = (report.snapshots.filter(tenant=request.tenant)
                  .select_related("generated_by")
@@ -262,8 +261,11 @@ def spendreport_detail(request, pk):
         "snapshots": snapshots,
         "start": start,
         "end": end,
-        "mixed_currency": bool(split.get("mixed_currency")),
-        "currency_rows": _as_list(split.get("rows")),
+        # Off the RESULT, not a second currency_split call: compute_report already ran that
+        # split over the report's own filtered window, and running it again here both cost an
+        # extra aggregate and described the whole window beside a table that is filtered.
+        "mixed_currency": bool(result.get("mixed_currency")),
+        "currency_rows": _as_list(result.get("currency_rows")),
         "row_cap_note": _row_cap_note(report),
         "last_run_at": report.last_run_at,
         "export_url": reverse("procurement:spendreport_export", args=[report.pk]),
