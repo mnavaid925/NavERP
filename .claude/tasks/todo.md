@@ -1275,3 +1275,302 @@ reverse / admin override) use **`@tenant_admin_required`**, not bare `@login_req
 - [ ] Discount maths: `2/10 Net 30` -> `annualised_pct == 36.73` (±0.01); only `approved` / `scheduled` rows with `amount_paid == 0` appear as capturable
 - [ ] Tests derive dates from `timezone.now().date()` / `timezone.localdate()` (L16); iterate with `--nomigrations` but the FINAL proof run keeps migrations on and is UNFILTERED (L49)
 - [ ] Sidebar shows **6.13 as Live with all five bullets resolving** - no `NoReverseMatch`
+
+---
+# Sub-module 6.14 - Spend Analytics & Reporting (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.14.md  (2026-09-01)
+
+App EXISTS (`apps/procurement/`, 6.1-6.13 built) -> this pass EXTENDS it. **No `config/settings.py` / `config/urls.py` change** (procurement already installed + included; L31/L32).
+Sub-module package folder: **`SpendAnalyticsReporting/`** in all four backend layers (PascalCase of the NavERP.md title). Template sub-module folder: **`spendanalytics/`**
+(short-slug form, permitted by Template Folder Structure rule 2 - this is FROZEN, do not "correct" it to `spendanalyticsreporting/`). Test subslug: **`spend`**.
+Migration **0021 is CLAIMED**, generated LAST (latest on disk is `0020_supplierinvoice_invoicedispute_supplierinvoiceline_and_more.py`). Do not generate or assume another number.
+New flat compute module **`apps/procurement/analytics.py`** (Backend Package Structure rule 8 - `analytics.py` stays at the app root, as in `apps/crm/analytics.py` / `apps/scm/analytics.py`). It does not exist today.
+Number prefixes **`MSF`** (MaverickSpendFinding) and **`SPR`** (SpendReport) - re-verify free across `apps/` before the first migration (existing procurement prefixes: CUB RQA POE CMI EBID VSU PCI EAUC VPA CAM RXR VIS RFX PCO RQT RAM SEV DSC DSP BID RDS SIV ASN RTV BKO).
+
+## Scope decision (FROZEN by Phase 1 - do not re-litigate)
+**Four models in THREE entity files** + **five computed pages with NO new table**. 6.14 is an analytics pass: it READS spend that already exists and never posts to the ledger (L29).
+- [ ] `SpendClassificationRule` (TenantOwned, no number) - `models/SpendAnalyticsReporting/SpendClassificationRules.py`
+- [ ] `MaverickSpendFinding` [`MSF-`] (TenantNumbered) - `models/SpendAnalyticsReporting/MaverickFindings.py`
+- [ ] `SpendReport` [`SPR-`] (TenantNumbered) **+ `SpendReportSnapshot`** (plain child) - **ONE file**, `models/SpendAnalyticsReporting/SpendReports.py` (Backend rule 2: an entity file owns the primary model plus its children)
+- [ ] Computed pages, no table: `spend_dashboard`, `category_spend`, `classification_workbench`, `maverick_dashboard`, `spend_export`
+
+## Spine: READ, never re-declare (every target grep-verified this pass, L28/L36)
+- [ ] `scm.SupplierContract` (`apps/scm/models/SupplierRelationshipManagement/SupplierContracts.py:13`) - `party` FK (NOT `vendor`), `status` in draft/active/expiring/expired/terminated/renewed, `start_date`/`end_date`, `is_expiring_soon()`, `days_to_expiry()`.
+      **There is NO `Contract` model in `apps/procurement`** - `ContractsManagement/` holds only clause links, signers, milestones and amendments hanging off `scm.SupplierContract`.
+- [ ] `scm.ItemCategory` (`InventoryManagement/Items.py:34`) - `name`/`parent`/`description`/`is_active`, tenant-scoped, CRUD already at `scm:category_list`. **The ONLY taxonomy. Do NOT declare a `SpendCategory`.**
+      `procurement.CatalogItem.category_text` is a free-text CharField(120) (`CatalogItems.py:81`) - never treat it as a taxonomy key.
+- [ ] `procurement.SupplierInvoice` (`InvoiceVoucherManagement/SupplierInvoices.py:123`) + `SupplierInvoiceLine` (`SupplierInvoiceLines.py:56`) - the primary spend fact
+- [ ] `scm.PurchaseOrder` (`ProcurementManagement/PurchaseOrders.py:15`) + `PurchaseOrderLine` (`:172`) - the committed basis
+- [ ] `core.Party` (vendors are `Party` + `PartyRole` - never re-declare a vendor), `core.OrgUnit` (`kind` incl. `department`/`cost_center`), `accounting.GLAccount`, `accounting.Currency` (**GLOBAL, no tenant column - never tenant-filter it**)
+- [ ] `procurement.CatalogItem` / `CatalogPriceTier` (`is_preferred`, `status`, `supplier`, `item`, `supplier_part_no`, `base_price`, `contract`; tier `min_quantity`/`unit_price`/`discount_pct`/`valid_from`/`valid_until`/`effective_price(base)`) - the maverick benchmark
+- [ ] `procurement.VendorSuspension` (`supplier`, `starts_on`, `ends_on`, `status` incl. `active`) - the blocked-supplier reason
+- [ ] **NO widget-preference model** - 6.1 `DashboardPortal/WidgetPreferences.py:18` already owns `WidgetPreference` and its `WIDGETS` already carries a `"spend": "Spend Summary"` key
+- [ ] **NO second scheduler table** - `accounting.ScheduledReport` already models scheduled delivery and already defers its worker
+- [ ] **NO FX-rate table exists** - sum per currency and raise a `mixed_currency` flag; never invent a rate
+
+## Spend basis (FROZEN)
+- [ ] **Primary = invoiced (recognised) spend**: `SupplierInvoiceLine` filtered `invoice__status__in ("approved","scheduled","paid")`. Statuses `draft/parked/captured/blocked/disputed/pending_approval/void/reversed` are EXCLUDED.
+- [ ] **Secondary = committed PO spend**, a `?basis=committed` toggle: `PurchaseOrderLine` filtered `purchase_order__status__in SPEND_PO_STATUSES` = `("approved","sent","acknowledged","partially_received","received","closed")` - **copied verbatim from `scm/analytics.py:200`** so 4.11 and 6.14 can never disagree
+- [ ] **Credit memos are already signed negative** (`SupplierInvoiceLines.py` has no `MinValueValidator`; `SupplierInvoices.py:407-416` signs them) - a plain `Sum("line_total")` nets. **Do NOT special-case them anywhere.**
+- [ ] `PurchaseOrder.order_date` is NULLABLE - the committed basis annotates `doc_date=Coalesce("purchase_order__order_date", TruncDate("purchase_order__created_at"))` and filters on that, so an unstamped PO is never silently dropped
+- [ ] **`PurchaseOrderLine` has NO `item` FK** (re-verified: it carries `item_description` Char(255) + `sku_hint` Char(64) + `gl_account` only). The category axis is therefore INVOICED-ONLY; on the committed basis
+      `dimension=category` resolves through rules (vendor/gl_account/keyword/org_unit) and otherwise falls to `(Unclassified)`. Say so on the page - do not fake it.
+
+## The department axis is WEAK - mandatory handling
+- [ ] Path: `Coalesce(invoice__purchase_order__requisition__org_unit, invoice__purchase_order__ship_to)` -> `core.OrgUnit`. A 3-hop nullable chain: **NULL for every PO-less invoice**.
+- [ ] **Every department breakdown MUST render an explicit `(unassigned)` bucket** (constant `UNASSIGNED_LABEL = "(unassigned)"`) rather than dropping those rows, and MUST print the caveat on the page
+      (the `GL_AXIS_CAVEAT` precedent in `scm/analytics.py`). A breakdown that silently drops rows makes the totals disagree with the KPI strip - that is the bug users report first.
+
+## Naming honesty - two BANS, enforced in code review (the 6.13 "Assisted Capture" precedent)
+- [ ] **"drag and drop" is BANNED** from model help_text, views, templates, sidebar labels, docstrings and commit messages. NavERP ships a **guided Report Builder**: measure, up to two dimensions, grain,
+      filters, Top-N and chart type chosen from **dropdowns**, rendered server-side. Put a one-line note on the builder page saying dimensions are **selected, not dragged**. Only Zycus names drag-and-drop; the other nine say self-service / configurable / ad-hoc.
+- [ ] **PowerBI / BI-feed integration is NOT implemented.** Only CSV/XLSX download ships. `spend_export` must state that plainly on the page. **Never put "PowerBI" in a sidebar label or a button that only downloads a CSV.**
+- [ ] Related: never label the rules engine "AI" or "ML" - it is explicit, readable, auditable rules (the honest Ivalua-style differentiator). The page says the rules are explicit, not learned.
+
+## Do NOT collide with SCM 4.11 (`scm:spend_analytics`, `LIVE_LINKS["4.11"]` -> "Procurement Analytics")
+- [ ] 4.11 already ships the **PO-based** cube (`apps/scm/analytics.py` §8, `:1369-1866`): `_r_spend_total`, `_r_spend_off_contract_pct`, `_r_spend_top_supplier_share_pct`, `_r_spend_tail_share_pct`, `_r_savings_negotiated`, `_r_savings_price_variance_opportunity`, cycle/lead time.
+- [ ] 6.14's cube is the **INVOICED twin** plus classification and findings. Every 6.14 url name (`spend_dashboard`, `category_spend`, ...), template path (`templates/procurement/spendanalytics/...`) and sidebar label (the five NavERP.md bullets) is distinct from 4.11's.
+- [ ] `spend_dashboard` **links out to `scm:spend_analytics`** for the committed-basis savings and cycle-time narrative rather than restating it. Same for tail share: 6.14 computes the invoiced twin and links across.
+
+## Model 1 - `SpendClassificationRule` (`models/SpendAnalyticsReporting/SpendClassificationRules.py`)
+`TenantOwned`, **no number** (config, not a document - the `ApprovalRoutingRule` / `ReceiptTolerancePolicy` precedent). Drivers: *spend classification into a taxonomy* (all 10 leaders), *business-managed auditable rules* (Ivalua, SAP Ariba, GEP), *% of spend classified* KPI (Sievo, SpendHQ, JAGGAER).
+- [ ] `MATCH_TYPE_CHOICES = [("vendor","Supplier"), ("gl_account","GL Account"), ("keyword","Description / SKU keyword"), ("invoice_type","Invoice Type"), ("org_unit","Department / Cost Centre")]`
+- [ ] `APPLIES_TO_CHOICES = [("both","Invoiced + Committed"), ("invoiced","Invoiced only"), ("committed","Committed (PO) only")]`
+- [ ] Fields: `name` Char(120); `match_type` Char(20) default `vendor`; `vendor` FK `'core.Party'` SET_NULL null blank `related_name="procurement_spend_rules"`; `gl_account` FK `'accounting.GLAccount'` SET_NULL null blank
+      `related_name="procurement_spend_rules"`; `org_unit` FK `'core.OrgUnit'` SET_NULL null blank `related_name="procurement_spend_rules"`; `keyword` Char(120) blank; `invoice_type` Char(20) blank
+      (validated in `clean()` against `SupplierInvoice.INVOICE_TYPE_CHOICES` - standard/credit_memo/debit_memo/prepayment/service); `category` FK `'scm.ItemCategory'` **PROTECT** `related_name="procurement_spend_rules"`;
+      `priority` PosSmallInt default 100 (**lower wins**, ties broken by `id` so resolution is deterministic); `applies_to` Char(10) default `both`; `is_active` Bool default True; `notes` TextField blank
+- [ ] System stamps, **`editable=False`**, written only by preview/apply: `match_count` PosInt default 0; `last_matched_at` DateTime null blank
+- [ ] `clean()`: (a) the field required by `match_type` must be set - a `vendor` rule with no vendor matches EVERYTHING; (b) cross-tenant guard on `vendor` / `gl_account` / `org_unit` / `category` (L40 §3 - same tenant is not the same subject)
+- [ ] Methods: `matches(line, basis)` (pure, unit-testable, works on both a `SupplierInvoiceLine` and a `PurchaseOrderLine` - the keyword match reads `description`/`sku_hint` on invoice lines and `item_description`/`sku_hint` on PO lines);
+      `classmethod resolve(line, basis, rules=None)` -> winning `ItemCategory` or `None` (accepts a pre-fetched rule list so a cube pass does ONE query, not one per line); `preview(start, end)` -> `{"count": n, "value": Decimal}`
+- [ ] `Meta`: `ordering = ["priority", "id"]`, indexes `["tenant","is_active"]`, `["tenant","match_type"]`
+- [ ] **Form `SpendClassificationRuleForm.Meta.fields`** = `["name","match_type","vendor","gl_account","org_unit","keyword","invoice_type","category","priority","applies_to","is_active","notes"]`
+- [ ] **EXCLUDED from the form**: `tenant`, `match_count`, `last_matched_at`, `created_at`, `updated_at` (L22 - system stamps stay on the model and the detail page but OUT of `Meta.fields`)
+- [ ] Form `__init__` narrows every FK queryset to `tenant=self.tenant`: `vendor` -> `Party` with a supplier `PartyRole`, `gl_account` -> `GLAccount.objects.filter(tenant=…, is_active=True)`, `org_unit` -> `OrgUnit.objects.filter(tenant=…)`, `category` -> `ItemCategory.objects.filter(tenant=…, is_active=True)`
+
+## Model 2 - `MaverickSpendFinding` [`MSF-`] (`models/SpendAnalyticsReporting/MaverickFindings.py`)
+`TenantNumbered`, `NUMBER_PREFIX = "MSF"`. Drivers: the umbrex maverick-spend playbook rule set, *maverick dashboards* (SAP Ariba, Coupa), *off-contract leakage* (JAGGAER), *compliance monitoring + remediation workflow* (Ivalua).
+- [ ] `REASON_CHOICES` - all EIGHT, verbatim:
+      `[("no_contract","No active contract"), ("po_less_invoice","Invoice with no purchase order"), ("no_requisition","PO raised with no requisition"), ("off_catalog","Item not on an approved catalogue"), ("non_preferred_vendor","Bought from a non-preferred supplier"), ("price_above_contract","Price above the contracted/catalogue price"), ("suspended_vendor","Supplier was blocked or suspended"), ("split_purchase","Orders split below an approval threshold")]`
+- [ ] `SEVERITY_CHOICES = [("low","Low"),("medium","Medium"),("high","High")]` + class constant `SEVERITY_BY_REASON` default map (constants, not a policy table - the `SupplierInvoice` tolerance-band precedent)
+- [ ] `STATUS_CHOICES = [("open","Open"),("acknowledged","Acknowledged"),("justified","Justified - accepted"),("remediated","Remediated"),("dismissed","Dismissed - false positive")]` default `open`
+- [ ] Source pointers, all `SET_NULL` null blank, **`clean()` requires at least one**: `supplier_invoice` FK `'procurement.SupplierInvoice'` `related_name="maverick_findings"`; `invoice_line` FK `'procurement.SupplierInvoiceLine'` `related_name="maverick_findings"`; `purchase_order` FK `'scm.PurchaseOrder'` `related_name="procurement_maverick_findings"`
+- [ ] Dimensions **stamped at detection** so the dashboard groups in one query with no four-way join: `vendor` FK `'core.Party'` PROTECT (**always set**) `related_name="procurement_maverick_findings"`; `category` FK `'scm.ItemCategory'` SET_NULL null blank
+      `related_name="procurement_maverick_findings"`; `org_unit` FK `'core.OrgUnit'` SET_NULL null blank `related_name="procurement_maverick_findings"`; `contract` FK `'scm.SupplierContract'` SET_NULL null blank
+      `related_name="procurement_maverick_findings"` ("the agreement this should have been on"); `catalog_item` FK `'procurement.CatalogItem'` SET_NULL null blank `related_name="maverick_findings"` (the preferred alternative, for `non_preferred_vendor` / `price_above_contract`)
+- [ ] Money + window: `document_date` DateField **db_index** (the invoice/order date the window filters on); `amount` Decimal(18,2) default 0 - **EDITABLE** (a hand-raised finding must be able to state the spend at risk;
+      the scanner overwrites it from the source document); `benchmark_amount` Decimal(18,2) null blank ("what it should have cost"); `leakage_amount` Decimal(18,2) default 0 **`editable=False`**, DERIVED in `save()` as `max(0, amount - benchmark_amount)` when a benchmark exists, else 0
+- [ ] `is_addressable` Bool default True - the umbrex denominator exclusion (categories with no approved channel: taxes, utilities, payroll, pre-approved exceptions). Class constant `NON_ADDRESSABLE_GL_CODES` seeds the default at detection time.
+- [ ] Governance: `dedupe_key` Char(120) **`editable=False`** with `unique_together = ("tenant","dedupe_key")` so a re-scan **UPDATES** rather than duplicates; `detail` TextField (human-readable "why", written by the detector);
+      `detected_at` DateTime `auto_now_add`; `status` default `open`; `resolution_note` TextField blank; `resolved_by` FK `AUTH_USER_MODEL` SET_NULL null blank **`editable=False`** `related_name="procurement_maverick_findings_resolved"`; `resolved_at` DateTime null blank **`editable=False`**
+- [ ] `dedupe_key` built deterministically in `save()` when blank: `f"{reason}:inv:{supplier_invoice_id}"` / `:line:{invoice_line_id}` / `:po:{purchase_order_id}`, and for `split_purchase` `f"split:{vendor_id}:{window_start:%Y%m%d}"`.
+      `clean()` pre-checks the computed key against the tenant's rows and raises a friendly `ValidationError` instead of letting the unique constraint 500 a manual create.
+- [ ] Detection constants ON THE CLASS: `PRICE_TOLERANCE_PCT = Decimal("5.00")` (umbrex), `SPLIT_WINDOW_DAYS = 30`, `SPLIT_MIN_ORDERS = 3`, `COVERING_CONTRACT_STATUSES = ("active","expiring")` (matching `scm/analytics.py:204`), `NON_ADDRESSABLE_GL_CODES = (...)`
+- [ ] `classmethod scan(tenant, start, end, reasons=None, user=None)` -> `{reason: count}`. Runs the enabled checks, **upserts on `dedupe_key`**, never mints a duplicate, and never re-opens a `justified`/`dismissed`/`remediated` finding
+      (it updates the amount/detail and leaves the disposition alone - without that the worklist is abandoned within a month). Wrapped in `transaction.atomic()`.
+- [ ] Detector shapes (all fields verified): `no_contract` = `Exists()` on `SupplierContract` with `status__in COVERING_CONTRACT_STATUSES` whose `start_date`/`end_date` window covers the document date (the `scm/analytics.py:1461-1467` shape);
+      `po_less_invoice` = `purchase_order_id IS NULL AND invoice_type != "credit_memo"`; `no_requisition` = `PurchaseOrder.requisition_id IS NULL`; `off_catalog` = no approved+active `CatalogItem` for that `item`/`supplier_part_no` at that supplier;
+      `non_preferred_vendor` = an approved `CatalogItem` with `is_preferred=True` exists for the same `item`/`supplier_part_no` at a DIFFERENT supplier; `price_above_contract` = `unit_price` exceeds `CatalogPriceTier.effective_price(base)` (else `CatalogItem.base_price`) by more than `PRICE_TOLERANCE_PCT`;
+      `suspended_vendor` = an `active` `VendorSuspension` whose `starts_on`/`ends_on` covers the document date; `split_purchase` = `>= SPLIT_MIN_ORDERS` POs to one vendor inside `SPLIT_WINDOW_DAYS`, each below a `PurchaseRequisition.APPROVAL_TIERS` threshold, summing above it
+- [ ] **`split_purchase` is the cut line.** It is the most expensive check (a self-join over a rolling window) and the closest to 6.17's fraud-detection territory. The CHOICE ships either way (the schema must not churn later);
+      if the build phase overruns, ship the other seven detectors and leave `split_purchase` detection to a follow-up. **A code comment must name the 6.17 boundary** regardless.
+- [ ] Verb methods move `status` and NOTHING else moves it: `acknowledge(user)`, `justify(user, note)`, `remediate(user, note)`, `dismiss(user, note)` - each re-checks its own guard and returns a bool (the 6.13 discipline); the three terminal verbs stamp `resolved_by`/`resolved_at`
+- [ ] `STATUS_CSS` / `SEVERITY_CSS` badge maps on the model - **only `badge-green|red|amber|info|muted|slate` exist** in `static/css/theme.css:286-291` (L33); `badge-success`/`-warning`/`-danger` render UNSTYLED
+- [ ] `Meta`: `ordering = ["-document_date","-id"]`, `unique_together = (("tenant","number"), ("tenant","dedupe_key"))`, indexes `["tenant","status"]`, `["tenant","reason"]`, `["tenant","document_date"]`, `["tenant","vendor"]`
+- [ ] **Form `MaverickSpendFindingForm.Meta.fields`** = `["reason","severity","supplier_invoice","invoice_line","purchase_order","vendor","category","org_unit","contract","catalog_item","document_date","amount","benchmark_amount","is_addressable","detail"]`
+- [ ] **EXCLUDED from the form**: `tenant`, `number`, `status` (workflow-controlled - moved only by the verbs), `dedupe_key`, `leakage_amount`, `detected_at`, `resolution_note` (written by the verb POST, not the create form), `resolved_by`, `resolved_at`, `created_at`, `updated_at`
+- [ ] Every FK queryset narrowed to the tenant in the form's `__init__`; `amount`/`benchmark_amount` are `forms.DecimalField(max_digits=…, decimal_places=2, min_value=0)` (L35 - never hand-parse a Decimal)
+
+## Model 3 - `SpendReport` [`SPR-`] + `SpendReportSnapshot` (`models/SpendAnalyticsReporting/SpendReports.py`)
+Shaped **field-for-field on `crm.AnalyticsReport` + `crm.ReportSnapshot`** (`apps/crm/models/AnalyticsReporting/Reports.py:6`, `Snapshots.py:5`) - read both before writing. Drivers: saved ad-hoc self-service reports (Zycus, SAP Ariba, Coupa, JAGGAER, Ivalua, Basware), pre-built report libraries (JAGGAER, Ivalua, SAP Ariba), snapshots for period-over-period comparison (Sievo, SpendHQ).
+- [ ] `SpendReport(TenantNumbered)`, `NUMBER_PREFIX = "SPR"`. Fields: `name` Char(120); `description` TextField blank
+- [ ] `BASIS_CHOICES = [("invoiced","Invoiced (recognised) spend"),("committed","Committed (PO) spend")]` default `invoiced`
+- [ ] `MEASURE_CHOICES = [("net_spend","Net spend"),("transaction_count","Transactions"),("avg_transaction","Average transaction value"),("supplier_count","Distinct suppliers"),("maverick_spend","Maverick spend"),("maverick_pct","Maverick spend %"),("classified_pct","Classified spend %"),("leakage","Contract leakage value")]` default `net_spend`
+- [ ] `DIMENSION_CHOICES = [("supplier","Supplier"),("category","Category"),("department","Department / cost centre"),("gl_account","GL account"),("currency","Currency"),("month","Month"),("quarter","Quarter"),("invoice_type","Invoice type"),("none","- none -")]`;
+      `dimension_1` default `supplier`, `dimension_2` default `none`. `clean()` refuses `dimension_1 == dimension_2` unless both are `none`.
+- [ ] `DATE_RANGE_CHOICES = [("last_30","Last 30 days"),("last_90","Last 90 days"),("quarter","This quarter"),("year","This year"),("all","All time"),("custom","Custom range")]` default `last_90`; `date_from` / `date_to` DateField null blank, **required only when `custom`** (checked in `clean()`, which also refuses `date_from > date_to`)
+- [ ] Saved filters: `vendor` FK `'core.Party'` SET_NULL null blank `related_name="procurement_spend_reports"`; `category` FK `'scm.ItemCategory'` SET_NULL null blank `related_name="procurement_spend_reports"`; `org_unit` FK `'core.OrgUnit'` SET_NULL null blank
+      `related_name="procurement_spend_reports"`; `gl_account` FK `'accounting.GLAccount'` SET_NULL null blank `related_name="procurement_spend_reports"`; `min_amount` Decimal(18,2) null blank
+- [ ] `CHART_TYPE_CHOICES = [("bar","Bar"),("line","Line"),("pie","Pie"),("table","Table only")]` default `bar`; `top_n` PosSmallInt default 20 with `MinValueValidator(1)` + `MaxValueValidator(100)`
+- [ ] `is_favorite` Bool default False; `is_shared` Bool default True; `owner` FK `AUTH_USER_MODEL` SET_NULL null blank `related_name="procurement_spend_reports"`; `last_run_at` DateTime null blank **`editable=False`** (system-stamped on render/snapshot - verbatim from `AnalyticsReport`)
+- [ ] `Meta`: `ordering = ["-is_favorite","name"]`, `unique_together = ("tenant","number")`, indexes `["tenant","measure"]`, `["tenant","is_favorite"]`
+- [ ] `SpendReportSnapshot(models.Model)` - the `crm.ReportSnapshot` shape verbatim: `tenant` FK `'core.Tenant'` CASCADE `related_name="+"` db_index; `report` FK `SpendReport` CASCADE `related_name="snapshots"`; `title` Char(160);
+      `generated_by` FK `AUTH_USER_MODEL` SET_NULL null blank `related_name="procurement_spend_report_snapshots"`; `generated_at` `auto_now_add`; `summary` JSONField(default=list, blank=True) = `[{label, value}]` KPI cards;
+      `data` JSONField(default=dict, blank=True) = `{columns, rows, chart_type, chart_labels, chart_data}` **rendered as-is with NO recompute**; `row_count` PosInt default 0. `Meta`: `ordering = ["-generated_at"]`, index `["tenant","report"]`
+- [ ] **`SpendReportSnapshot` has NO form and NO create/edit view** - it is created ONLY by the `spendreport_snapshot` POST action. It gets a detail page, a CSV export and a POST delete, and is listed inside `spendreport_detail`.
+      **Record this exemption in the view docstring** so the CRUD-completeness reviewer sees the reason rather than a gap (it has no list page of its own, so the "every model with a list page" rule does not bind).
+- [ ] **Form `SpendReportForm.Meta.fields`** = `["name","description","basis","measure","dimension_1","dimension_2","date_range","date_from","date_to","vendor","category","org_unit","gl_account","min_amount","chart_type","top_n","is_favorite","is_shared"]`
+- [ ] **EXCLUDED from the form**: `tenant`, `number`, `owner` (set from `request.user` in the create view), `last_run_at`, `created_at`, `updated_at`
+
+## Compute module - `apps/procurement/analytics.py` (NEW, flat at the app root, SINGLE WRITER)
+Import direction is fixed: `analytics.py` imports `models`; **`models` never imports `analytics`**. Written SOLO before the parallel build lanes start (four lanes import from it); no build lane may edit it afterwards.
+- [ ] Constants: `RECOGNISED_INVOICE_STATUSES = ("approved","scheduled","paid")`; `SPEND_PO_STATUSES` (verbatim from `scm/analytics.py:200`); `COVERING_CONTRACT_STATUSES = ("active","expiring")`; `MAX_GROUP_ROWS = 25`; `MAX_EXPORT_ROWS = 5000`; `UNASSIGNED_LABEL = "(unassigned)"`; `UNCLASSIFIED_LABEL = "(Unclassified)"`
+- [ ] Result contracts lifted from `crm/analytics.py:13-21`: scalar -> `{kind, value, display, max, pct}`; series -> `{kind, labels, data}`; table -> `{kind, columns, rows}`. **Every report result must be JSON-serialisable so a snapshot stores it verbatim and re-renders with no recompute.**
+- [ ] `range_bounds(key, date_from=None, date_to=None)` -> `(start, end)` with **`end` EXCLUSIVE**; dates derived from `timezone.localdate()` (L16 - never `datetime.date.today()`)
+- [ ] `invoiced_lines(tenant, start, end)` -> `SupplierInvoiceLine.objects.filter(invoice__tenant=tenant, invoice__status__in=RECOGNISED_INVOICE_STATUSES, invoice__invoice_date__gte=start, invoice__invoice_date__lt=end)` - **defined ONCE, used everywhere**
+- [ ] `committed_lines(tenant, start, end)` -> `PurchaseOrderLine` narrowed through `purchase_order__tenant` + `purchase_order__status__in=SPEND_PO_STATUSES` + the `doc_date` Coalesce window
+- [ ] `spend_cube(tenant, basis, start, end, dimension, top_n)` / `spend_kpis(...)` / `monthly_trend(...)` / `currency_split(...)` (returns `{rows, mixed_currency}` - mirrors `scm/analytics.py:1396`) / `classified_pct(...)` / `maverick_rate(tenant, start, end)` / `compute_report(report)`
+- [ ] `_money(v)` / `_num(v)` / `_pct(v)` display helpers, shape lifted from `crm/analytics.py:35-97`
+- [ ] Classification resolution order for every cube row: `item__category` passthrough -> else `SpendClassificationRule.resolve(line, basis, rules)` against a SINGLE pre-fetched active-rule list -> else `UNCLASSIFIED_LABEL`. **Never one query per line.**
+- [ ] Move `_csv_safe` from `apps/procurement/views/DashboardPortal/SelfServiceReports.py:107` into **`apps/procurement/views/_helpers.py` as `csv_safe`** (Backend rule 5 - a helper used by more than one sub-module lives in `_helpers.py`),
+      leave `_csv_safe = csv_safe` in `SelfServiceReports.py` so 6.1's call sites keep working, and import it in 6.14's export views. **Do not re-invent it.** Both edits are Integrate-phase, surgical, single-writer.
+
+## Backend package tasks (`apps/procurement/{models,forms,views,urls}/SpendAnalyticsReporting/`)
+All FKs by **string**, never an import (app-registry cycle). Imports inside these packages are **ABSOLUTE** (`from apps.procurement.models import X`). `TenantOwned.tenant` already declares `related_name="+"` - do not give it a per-model related_name; **every other FK needs one**.
+- [ ] `models/SpendAnalyticsReporting/`: `__init__.py`, `SpendClassificationRules.py`, `MaverickFindings.py`, `SpendReports.py`
+- [ ] `forms/SpendAnalyticsReporting/`: `__init__.py`, `SpendClassificationRules.py`, `MaverickFindings.py`, `SpendReports.py` (no snapshot form - see the exemption above)
+- [ ] `views/SpendAnalyticsReporting/`: `__init__.py`, `SpendClassificationRules.py` (CRUD + preview), `MaverickFindings.py` (CRUD + the four disposition verbs), `SpendReports.py` (CRUD + run/snapshot/export/favorite + snapshot detail/export/delete),
+      `ClassificationWorkbench.py`, `MaverickDashboard.py`, `Dashboard.py`, `CategorySpend.py`, `SpendExport.py`
+- [ ] `urls/SpendAnalyticsReporting/`: one module per views module + `__init__.py` concatenating them, **literal routes BEFORE `<int:pk>`** (first-match-wins is behaviour, Backend rule 6)
+- [ ] **Build-wave lane split** (no lane touches a shared file): **A** = SpendClassificationRules (4 layers) + ClassificationWorkbench; **B** = MaverickFindings (4 layers) + MaverickDashboard; **C** = SpendReports (4 layers, incl. the snapshot child);
+      **D** = Dashboard + CategorySpend + SpendExport (views/urls only, no model). `analytics.py` is written solo BEFORE the lanes.
+- [ ] `models/__init__.py` - re-export `SpendClassificationRule`, `MaverickSpendFinding`, `SpendReport`, `SpendReportSnapshot` (surgical `Edit`, never a rewrite - a concurrent session may be in this tree, L43)
+- [ ] `forms/__init__.py` - re-export `SpendClassificationRuleForm`, `MaverickSpendFindingForm`, `SpendReportForm`
+- [ ] `views/__init__.py` - re-export **EVERY** new view name (a missing view is an `AttributeError` at URLconf import time, not at request time)
+- [ ] `urls/__init__.py` - `from .SpendAnalyticsReporting import urlpatterns as _sar_spendanalytics`, **splatted LAST**; extend the docstring's first-segment inventory with `spend/`, `spend-rules/`, `maverick-findings/`, `spend-reports/`, `spend-report-snapshots/`
+      and collision-check each against the existing list at `urls/__init__.py:7-15` (all five are new whole components; this app registers no greedy `<str:…>` converter)
+- [ ] `admin.py` - register `SpendClassificationRule`, `MaverickSpendFinding`, `SpendReport` (+ `SpendReportSnapshot` inline or its own ModelAdmin). **`readonly_fields` on EVERY derived stamp**:
+      rule -> `match_count`, `last_matched_at`; finding -> `number`, `dedupe_key`, `leakage_amount`, `detected_at`, `resolved_by`, `resolved_at`; report -> `number`, `last_run_at`; snapshot -> `generated_at`, `generated_by`, `summary`, `data`, `row_count`
+      (an admin surface that can post or desync a derived value is the same bug 6.13 fixed)
+
+## Views & routes (namespace `procurement`) - CONTEXT KEYS ARE THE CONTRACT
+Every view: `@login_required`, `filter(tenant=request.tenant)`, never `.all()`. `crud_list` supplies `object_list` / `page_obj` / `q`; `crud_edit` supplies `form` / `obj` / `is_edit`; `crud_create` supplies `form` / `is_edit`.
+The `crud_*` helpers call `write_audit_log` automatically - **every hand-rolled save path (scan, disposition verbs, snapshot) must call `write_audit_log` itself**. Every FK/int GET filter guarded (`crud_list`'s `as_db_int` or an explicit `.isdecimal()`) and unit-tested on its POSITIVE path (L11/L44).
+Verbs are `@require_POST`; **`maverick_scan` and every disposition verb are `@tenant_admin_required`** (L27), reached from the page they act on.
+- [ ] `spendrule_list` (`spend-rules/`) -> `object_list`, `page_obj`, `q`, `match_type_choices`, `applies_to_choices`, `categories`, `vendors`, `gl_accounts`, `stats` (`total`/`active`/`inactive`/`matched_value`), echoed GET params (`q`, `match_type`, `category`, `is_active`)
+- [ ] `spendrule_create` / `spendrule_edit` (`spend-rules/add/`, `spend-rules/<int:pk>/edit/`) -> `form`, `is_edit`, `obj`, `title`, `submit_label`, `cancel_url`. **Accepts prefill GET params from the workbench** (`?match_type=&vendor=&gl_account=&keyword=`) - echoed into `initial`, never trusted as a pk without `.isdecimal()`
+- [ ] `spendrule_detail` (`spend-rules/<int:pk>/`) -> `obj`, `rule`, `preview` (`{"count","value","start","end"}`), `recent_matches`, `category`, `can_delete`
+- [ ] `spendrule_preview` (`spend-rules/<int:pk>/preview/`, POST) -> redirect + `messages`; stamps `match_count` / `last_matched_at`
+- [ ] `spendrule_delete` (`spend-rules/<int:pk>/delete/`, POST) -> redirect to `spendrule_list` (the confirm string uses `rule.name`, HTML-escaped - L42)
+- [ ] `maverickfinding_list` (`maverick-findings/`) -> `object_list`, `page_obj`, `q`, `reason_choices`, `status_choices`, `severity_choices`, `vendors`, `categories`, `org_units`, `stats` (`open`/`high`/`value_at_risk`/`leakage`), echoed GET params (`q`, `reason`, `status`, `severity`, `vendor`, `category`, `org_unit`, `addressable`)
+- [ ] `maverickfinding_detail` (`maverick-findings/<int:pk>/`) -> `obj`, `finding`, `supplier_invoice`, `invoice_line`, `purchase_order`, `contract`, `catalog_item`, `alternatives` (preferred `CatalogItem` rows), `benchmark` (`{"expected","actual","variance_pct"}`), `allowed_actions`, `is_resolved`, `severity_css`, `status_css`
+- [ ] `maverickfinding_create` / `_edit` -> `form`, `is_edit`, `obj`, `title`, `submit_label`, `cancel_url`
+- [ ] `maverickfinding_disposition` (`maverick-findings/<int:pk>/disposition/`, POST, `@tenant_admin_required`) -> redirect + `messages`; the posted `action` is validated against `("acknowledge","justify","remediate","dismiss")` and nothing else moves `status`
+- [ ] `maverickfinding_delete` (POST) -> redirect to `maverickfinding_list` (confirm string uses the system-assigned `MSF-` number, never free text - L42)
+- [ ] `maverick_dashboard` (`spend/maverick/`) -> `by_reason` (`[{reason, label, n, value}]`), `rate` (`{"maverick_value","addressable_value","pct","txn_pct","band"}` - band from the umbrex `<10 / 10-20 / >20` printed on the page), `by_department` (**with the `(unassigned)` bucket**),
+      `by_vendor`, `by_category`, `trend` (`{labels, data}` from `TruncMonth("document_date")`), `leakage_total`, `open_findings`, `stats`, `reason_choices`, `range_key`, `start`, `end`, `scan_url`, `exclusions_note`
+- [ ] `maverick_scan` (`spend/maverick/scan/`, POST, `@tenant_admin_required`) -> redirect + `messages` with the `{reason: count}` summary; idempotent (re-running updates, never duplicates); calls `write_audit_log`
+- [ ] `spendreport_list` (`spend-reports/`) -> `object_list`, `page_obj`, `q`, `measure_choices`, `basis_choices`, `dimension_choices`, `chart_type_choices`, `date_range_choices`, `stats` (`total`/`favorites`/`shared`/`snapshots`), `builder_note` (the "dimensions are selected, not dragged" line), echoed GET params (`q`, `measure`, `basis`, `is_favorite`)
+- [ ] `spendreport_detail` (`spend-reports/<int:pk>/`) - **runs the report live** -> `obj`, `report`, `result` (`{summary, columns, rows, chart_type, chart_labels, chart_data}`), `snapshots`, `start`, `end`, `mixed_currency`, `row_cap_note`, `last_run_at`, `export_url`, `snapshot_url`, `builder_note`
+- [ ] `spendreport_create` / `_edit` -> `form`, `is_edit`, `obj`, `title`, `submit_label`, `cancel_url`, `builder_note`; create sets `owner = request.user`
+- [ ] `spendreport_run` (`spend-reports/<int:pk>/run/`, POST) -> stamps `last_run_at`, redirects to detail
+- [ ] `spendreport_snapshot` (`spend-reports/<int:pk>/snapshot/`, POST) -> creates ONE `SpendReportSnapshot` from the freshly computed, JSON-serialisable result; stamps `last_run_at`; `write_audit_log`; redirect + `messages`
+- [ ] `spendreport_export` (`spend-reports/<int:pk>/export/`) -> `text/csv` of the report's rows, **filters applied**, every cell through `csv_safe`, capped at `MAX_EXPORT_ROWS`
+- [ ] `spendreport_favorite` (POST) -> toggles `is_favorite`, redirects back
+- [ ] `spendreport_delete` (POST) -> redirect to `spendreport_list` (confirm string uses the `SPR-` number)
+- [ ] `spendreportsnapshot_detail` (`spend-report-snapshots/<int:pk>/`) -> `obj`, `snapshot`, `report`, `summary`, `columns`, `rows`, `chart_type`, `chart_labels`, `chart_data`, `export_url` - **renders `data` as-is, NO recompute**
+- [ ] `spendreportsnapshot_export` -> CSV straight from `snapshot.data` with no recompute; `spendreportsnapshot_delete` (POST) -> back to the parent report
+- [ ] `spend_dashboard` (`spend/`) -> `kpis` (`net_spend`, `invoice_count`, `supplier_count`, `avg_invoice`, `classified_pct`, `maverick_pct`, `top5_share_pct`, `po_less_share_pct`), `by_supplier`, `by_category`, `by_department` (**`(unassigned)` bucket**), `by_gl_account`,
+      `trend` (`{labels, data}`), `currency_rows`, `mixed_currency`, `basis`, `basis_choices`, `range_key`, `date_range_choices`, `start`, `end`, `stats`, `scm_analytics_url` (the link across to 4.11), `department_caveat`, `drill_url_name` (`procurement:supplierinvoice_detail` - link, never re-render 6.13's page)
+- [ ] `category_spend` (`spend/categories/`) -> `categories` (the filter queryset), `category` (the selected `ItemCategory` or None), `rows` (supplier league with `total`, `share_pct`, `cumulative_pct` - the **Pareto**), `hhi` (`sum(share^2) * 10000`), `trend`, `item_rows` (`{item, qty, spend, lo, hi, spread}`),
+      `consolidation_opportunity`, `sole_source_count`, `tail_rows`, `tail_share_pct`, `abc_rows`, `basis`, `range_key`, `start`, `end`, `stats`, `unclassified_value`, `fallback_note` (says the per-item spread falls back to `sku_hint` when `item` is null)
+- [ ] `classification_workbench` (`spend/classification/`) -> `rows` (unclassified spend grouped by `invoice__vendor` / `gl_account` / `sku_hint`, ranked by `Sum("line_total")`), `page_obj`, `classified_pct`, `unclassified_value`, `total_value`, `rules` (active rules, priority order), `group_by`, `group_by_choices`,
+      `range_key`, `start`, `end`, `stats`, `create_rule_url` (each row deep-links `spendrule_create` **pre-filled** with that row's match_type + value), `engine_note` (the rules are explicit, never "AI")
+- [ ] `spend_export` (`spend/export/`) - **a PAGE, not a bare download** (a sidebar bullet must land on a page) -> `reports`, `snapshots`, `basis`, `basis_choices`, `range_key`, `date_range_choices`, `dimension_choices`, `start`, `end`, `row_count`, `max_rows` (`MAX_EXPORT_ROWS`), `showing_note` ("showing N of M"),
+      `download_url`, `bi_note` (**"CSV download today; a live BI / PowerBI feed is not implemented"** - verbatim honesty), `stats`
+- [ ] `spend_export_download` (`spend/export/download/`) -> `text/csv`; **the SAME GET params drive the queryset and the CSV** (an export that ignores the active filters is the first bug users report); every cell through `csv_safe`; capped at `MAX_EXPORT_ROWS` with the cap stated in the response filename/notice
+      **WARNING: vendor names, line descriptions and rule names are all user-authored and Excel executes a leading `=`/`+`/`-`/`@` on open. Every exported cell goes through `csv_safe`. Do not remove.**
+
+## Templates (`templates/procurement/spendanalytics/`)
+- [ ] **PRE-WRITE GATE (L33): grep `static/css/theme.css` before writing ANY badge or layout class.** Only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist (`:286-291`) - `badge-success`/`-warning`/`-danger` render UNSTYLED.
+      `stat-icon` supports only `blue/green/orange/purple/slate/red` (`:260-265`). `.detail-label`/`.detail-value` DO NOT EXIST - the real shape is `<dl class="detail-grid"><div class="detail-item"><dt>…</dt><dd>…</dd></div></dl>` (`:354-357`)
+- [ ] Pagination guarded by `{% if page_obj.has_previous %}` / `{% if page_obj.has_next %}` (L9) - never emit `previous_page_number` / `next_page_number` unconditionally
+- [ ] Multi-line comments use `{% comment %}…{% endcomment %}`; `{# … #}` is single-line ONLY or it leaks as visible text (L2/L3)
+- [ ] `{{ obj.owner.get_full_name|default:obj.owner.username }}` wrapped in `{% if obj.owner %}` - it raises when the FK is None (L10). Same for `resolved_by`, `generated_by`, `vendor`, `category`, `org_unit`, `contract`, `catalog_item`
+- [ ] Filter bars reflect `request.GET`: strings `{% if request.GET.status == value %}selected{% endif %}`; FK pks `{% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}` (**never `|slugify`**)
+- [ ] Every list page gets an Actions column: view (eye) + edit (pencil) + delete (POST form, `{% csrf_token %}`, `onclick="return confirm(...)"`); every detail page gets an Actions sidebar with Edit / Delete / Back to list
+- [ ] `spendrule/{list,detail,form}.html` - rule register with a priority column and a "lower priority number wins" hint / one rule + its preview + recent matches / the guided rule form
+- [ ] `maverickfinding/{list,detail,form}.html` - findings worklist (reason + severity + status badges, addressable flag) / one finding with the benchmark comparison + the four disposition POSTs / hand-raise-or-edit
+- [ ] `spendreport/{list,detail,form}.html` - the saved-report library (favourites first) / live-run result + KPI cards + chart + snapshot list + export button / **the guided Report Builder form with the "dimensions are selected from dropdowns, not dragged" note**
+- [ ] `spendreportsnapshot/detail.html` - a frozen snapshot rendered from `data` with no recompute + its CSV link
+- [ ] Standalone pages at the sub-module root (no entity folder - Template rule 6): `dashboard.html` (`spend_dashboard`), `category_spend.html`, `classification_workbench.html`, `maverick_dashboard.html`, `export.html` (`spend_export`)
+- [ ] Every page that shows a department breakdown renders the `(unassigned)` bucket AND prints `department_caveat`
+- [ ] `dashboard.html` carries the explicit cross-link to `scm:spend_analytics` ("committed-basis analytics, savings and cycle time live in SCM 4.11") instead of restating those figures
+- [ ] `export.html` prints `bi_note` verbatim. **No template, label, button or comment anywhere contains the phrase "drag and drop" or claims a PowerBI connector.**
+
+## Wire-up
+- [ ] `apps/core/navigation.py` - **exactly ONE** new `LIVE_LINKS["6.14"]` dict inserted after the `"6.13"` block (which ends at `:1606`), bullet text copied EXACTLY from NavERP.md lines 1088-1092:
+      ```
+      "Spend Dashboards":            "procurement:spend_dashboard",
+      "Custom Report Builder":       "procurement:spendreport_list",
+      "Category Spend Analysis":     "procurement:category_spend",
+      "Maverick Spend Tracking":     "procurement:maverick_dashboard",
+      "Data Export & Visualization": "procurement:spend_export",
+      ```
+      plus a comment block recording (a) that "Custom Report Builder" is a **guided** builder, not drag-and-drop; (b) that "Data Export & Visualization" ships **CSV only** - no BI/PowerBI feed;
+      (c) that `SpendClassificationRule` CRUD is a **master with no sidebar key** (the `ReceiptTolerancePolicy` / `KpiTarget` precedent), reached from `category_spend` and `classification_workbench`;
+      (d) that 4.11's `scm:spend_analytics` remains the **committed/PO** cube and is linked from `spend_dashboard`, not duplicated
+- [ ] All five bullets land on **staff-reachable** pages - no login-gated portal view (L32)
+- [ ] `config/settings.py` / `config/urls.py` - **NO CHANGE** (existing app)
+- [ ] `apps/procurement/views/_helpers.py` - add `csv_safe` (moved from `SelfServiceReports.py`); leave the `_csv_safe` alias behind. Do NOT touch `PROCUREMENT_CONTENT_MODELS` (that is the scm-app whitelist)
+
+## Seeder (`management/commands/seed_procurement.py` - add `_seed_spend_analytics(tenant)`, called last in `handle()` after `_seed_invoice_vouchers(tenant)`)
+- [ ] ~8 `SpendClassificationRule` rows covering **every `match_type`** (>=2 vendor, >=2 gl_account, >=2 keyword, 1 invoice_type, 1 org_unit), mapped to EXISTING `scm.ItemCategory` rows (`get_or_create` on `(tenant, name)`), mixed `priority` values so ordering is visibly exercised, >=1 `is_active=False`
+- [ ] ~6 `SpendReport` rows forming the pre-built library: spend by supplier, spend by category, spend by department, monthly trend, maverick by reason, unclassified spend - covering >=4 distinct `measure` values, >=1 `basis="committed"`, >=2 `is_favorite=True`
+- [ ] 1-2 `SpendReportSnapshot` rows on ONE report, built by **calling the same compute path** the view uses (so the snapshot payload is genuinely re-renderable), with a real `row_count`
+- [ ] `MaverickSpendFinding` rows generated by **calling `MaverickSpendFinding.scan(tenant, start, end)`** against the 6.13/6.10 seeded invoices and orders - **never hand-written** - so the seeded data proves the detector works.
+      Then hand-move a few dispositions (>=1 each of `acknowledged`, `justified`, `remediated`, `dismissed`) so the worklist filters have rows; leave the rest `open`
+- [ ] Verify after seeding that **>=5 of the 8 reason codes** actually fire against the seeded data; if a reason cannot fire, add the minimal source row that makes it fire (e.g. a PO-less service invoice, a suspended-vendor invoice) rather than faking a finding
+- [ ] **Every date relative to NOW** (`timezone.localdate() - timedelta(days=n)`; L16 - never `datetime.date.today()`, never hardcoded), else the dashboards show an empty window the moment the demo ages
+- [ ] Idempotent: existence-check before **every** `.create()` (`get_or_create` on `(tenant, name)` for rules/reports; `scan()` is already upsert-on-`dedupe_key`); run twice with no new rows and no duplicate findings
+
+## Verification checklist
+- [ ] `makemigrations procurement` -> exactly **0021** (rename the file if Django picks another suffix); then `migrate`; `manage.py check` clean; `seed_procurement` runs **twice** with zero new rows the second time
+- [ ] `makemigrations --check` reports "No changes detected" after the migration lands
+- [ ] Every new view renders 200/302 as `admin_acme` / **`password`**, including **unbound** forms (L39 - test the GET, not just the POST)
+- [ ] **Blank-page proof**: every context key pinned above asserted present and non-empty - an unpinned key renders a blank region at HTTP 200 (L8)
+- [ ] Filters: each valid choice value returns the RIGHT rows (positive path, L11/L44) AND junk params (`?reason=nope&vendor=abc&category=zzz&basis=xx&range=yy`) still 200; `?page=2` guarded
+- [ ] Cross-tenant IDOR: an `admin_globex` rule / finding / report / snapshot pk returns **404** on detail, edit, delete, preview, disposition, run, snapshot and export
+- [ ] Verbs reject GET (405); a non-admin user is refused on `maverick_scan` and every disposition verb (`@tenant_admin_required`, L27)
+- [ ] **L33**: grep the rendered HTML for `badge-success|badge-warning|badge-danger|detail-label|detail-value` -> zero hits; `{#` / `{% comment` not leaking as visible text
+- [ ] **Naming bans**: `grep -ri "drag" apps/procurement templates/procurement` -> zero hits; `grep -ri "powerbi\|power bi" ` -> only the honest "not implemented" note; no "AI"/"ML" claim on the classification pages
+- [ ] **Basis parity**: for a window where every invoice has a PO, the committed and invoiced cubes list the same suppliers; the `basis` toggle changes the numbers and never 500s on an empty basis
+- [ ] **Credit memos net**: adding a credit memo to the window LOWERS net spend by exactly its (negative) line total - no special-casing anywhere in the code path
+- [ ] **Currency**: a window with two currencies raises `mixed_currency=True` and the page shows the per-currency split instead of one summed total
+- [ ] **`(unassigned)` bucket**: a PO-less invoice appears in the department breakdown under `(unassigned)`, and the department rows sum to the KPI net spend
+- [ ] **Classification**: `classified_pct` + unclassified value = total; activating a rule moves value out of `(Unclassified)` on the next render; a `vendor` rule with no vendor is rejected by `clean()`, not silently matching everything
+- [ ] **Rule ordering**: two rules matching the same line resolve to the LOWER `priority`, and ties break on `id` deterministically (asserted twice in a row)
+- [ ] **Maverick idempotency**: `scan()` run twice creates the same number of findings (upsert on `dedupe_key`) and does NOT re-open a `justified`/`dismissed`/`remediated` finding
+- [ ] **Maverick rate**: the denominator is **addressable** spend (`is_addressable=True`), not total spend; flipping one finding to `is_addressable=False` moves the rate; the umbrex bands render
+- [ ] **Export**: the CSV honours the active filters (not "everything"), caps at `MAX_EXPORT_ROWS` with the "showing N of M" notice, and a vendor named `=cmd|' /C calc'!A0` comes back prefixed with an apostrophe (`csv_safe`)
+- [ ] **Snapshot**: `spendreportsnapshot_detail` renders with the query path stubbed/unavailable - proof it re-renders from `data` with NO recompute
+- [ ] **Performance**: `spend_dashboard`, `category_spend` and `classification_workbench` each run a BOUNDED number of queries (assert with `assertNumQueries` or `CaptureQueriesContext`) - the rule list is pre-fetched ONCE, never per line
+- [ ] **L29**: 6.14 writes NOTHING to `accounting.*` - no `Bill`, no `JournalEntry`, no `Budget`. Grep the diff to prove it
+- [ ] Tests derive dates from `timezone.localdate()` / `timezone.now().date()` (L16); iterate with `--nomigrations` but the FINAL proof run keeps migrations on and is **UNFILTERED** (L47/L49)
+- [ ] Sidebar shows **6.14 as Live with all five bullets resolving** - no `NoReverseMatch`; 4.11's "Procurement Analytics" bullet still resolves and still points at `scm:spend_analytics`
+
+## Close-out
+- [ ] Review wave (Phase 4): `code-reviewer · explorer · frontend-reviewer · performance-reviewer · qa-smoke-tester · security-reviewer` in ONE parallel Workflow -> `.claude/tasks/review-procurement-6.14.md`, committed
+- [ ] `code-fixer` (Phase 5) burns the findings down in ID order, one commit per file; no finding left `[ ] open`
+- [ ] Test wave (Phase 6): contract/conftest solo -> 4 parallel `test-writer` lanes over `test_spend_{models,forms,views,security}.py` -> one green UNFILTERED run
+- [ ] Update `.claude/skills/procurement/SKILL.md` with 6.14's models, routes, templates, `analytics.py` compute contract and seeder rows (own commit)
+- [ ] Mark 6.14 complete in `README.md` (own commit)
+- [ ] `build_state.py phase <n> done` at every phase boundary; `build_state.py finish` when 6.14 is documented
+
+## Later passes / deferred (carried from the research so nothing is lost)
+- **ML/NLP auto-classification and supplier normalisation** (all 10 leaders) - needs a classifier and a training corpus. The rules engine is the honest shipped equivalent. Never label it "AI".
+- **Scheduled / subscribed report delivery by email** - `accounting.ScheduledReport` already models the config and already defers the worker; `SpendReport` + snapshot is the substrate it would point at.
+- **Live BI / PowerBI connector, REST or SFTP feeds** - a signed, tenant-scoped read-only endpoint is its own security design.
+- **Community / peer benchmarking and external category price indices** (Coupa, SpendHQ, SAP Ariba, Sievo, GEP) - needs an external corpus.
+- **P-card / T&E / expense spend sources** - no card-transaction model exists in this tree; that is why the reason list omits card/MCC misuse.
+- **Multi-currency normalisation** - still no FX-rate table in the repo; face-value sums per currency + `mixed_currency` is the honest answer.
+- **UNSPSC codes on `scm.ItemCategory`** - a nullable `unspsc_code` is the additive one-column precedent, but it is a cross-app SCM migration from a Procurement build. Out of scope; note the future migration.
+- **`split_purchase` detector** - the choice ships; the detector is the cut line if the build phase overruns (see Model 2).
+- **PDF board pack / CFO-ready print export** - the `hrm/offboarding/relieving_letter.html` print precedent exists; not this pass.
+- **Should-cost modelling, BOM roll-ups, what-if scenarios** - solver work, well outside a Django aggregate pass.
+- **Spend-threshold / overspend alerts** - `procurement.ProcurementAlert` (6.1) already exists; if wanted later this emits an alert row, not a new table.
+
+## Parked for a sibling sub-module (do NOT pull into 6.14)
+- Budget vs actual, commitment accounting, variance analysis, spend forecasting -> **6.15 Budget & Cost Management** (link out, never restate `accounting.Budget`)
+- Supplier scorecards, OTD/defect KPIs, benchmarking supplier performance -> **6.16 Supplier Performance & Evaluation** (`scm.SupplierScorecard` exists; 4.11 already trends it)
+- Fraud-pattern detection, restricted-party screening, conflict-of-interest, tamper-proof audit logging -> **6.17 Risk & Compliance Management** (only `split_purchase` stays here, and the code comment names the boundary)
+- Savings-initiative lifecycle (identified -> approved -> sourcing -> realised -> validated) -> **6.5 Sourcing Analytics** or a later 6.14 pass - a full workflow entity, does not fit this budget
+- Early-payment-discount **worklist** -> already built in **6.13** (`invoicevoucher_dashboard#discount`); 6.14 shows only the aggregate trend and deep-links across
+- Contract renewal/expiry **workflow** -> **6.8 / 4.2**; 6.14 only surfaces the spend at risk on an expiring contract
+- Supplier master deduplication / normalisation -> **6.4 Vendor Management** / `core.Party`; an analytics pass must never edit the party master
+- Catalogue price maintenance and preferred-supplier designation -> **6.9**; 6.14 only READS `is_preferred` / `CatalogPriceTier` as the benchmark
+- PO-based spend cube, negotiated savings, cycle/lead time, committed tail share -> already **SCM 4.11** (`scm:spend_analytics`) - link, never restate
+- Generic dashboard builder, formula-authored KPI library, OLAP cubes, NLQ, ML/AutoML, scheduled distribution and bursting -> **Module 10 (`bi`)** 10.8/10.10/10.11/10.12/10.13/10.15/10.16. **The most important boundary in this plan: 6.14 is a procurement analytics page, not a BI platform.**
+
+## Review notes
+(filled in at the end)
