@@ -20,6 +20,7 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from apps.procurement.views._common import *  # noqa: F401,F403
+from apps.procurement.views._helpers import csv_safe
 from apps.scm.models import PurchaseOrder, PurchaseRequisition
 
 #: How many months the committed-spend trend covers.
@@ -104,12 +105,11 @@ def report_export(request):
     return response
 
 
-def _csv_safe(value):
-    """Neutralize spreadsheet formula injection: prefix dangerous leading characters."""
-    text = str(value)
-    if text[:1] in ("=", "+", "-", "@"):
-        return f"'{text}"
-    return text
+#: The spreadsheet-injection guard moved to ``views/_helpers.py`` when 6.14 became its second
+#: consumer (Backend rule 5: a helper used by more than one sub-module lives in ``_helpers``). The
+#: alias keeps this module's existing call sites working and keeps ONE implementation of the
+#: neutralisation — two copies would eventually disagree about which characters are dangerous.
+_csv_safe = csv_safe
 
 
 def _sum(qs):
