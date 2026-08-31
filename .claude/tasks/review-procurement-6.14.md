@@ -35,7 +35,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L27
 - **Problem:** `maverickfinding_delete` is only `@login_required` while the disposition verb on the same model is `@tenant_admin_required`, and it carries no status guard — so any tenant member can permanently erase a finding, including one already justified/remediated/dismissed with its recorded decision, achieving the outcome the admin gate exists to prevent.
 - **Fix:** Add `@tenant_admin_required` between `@login_required` and `@require_POST` (the exact shape of the sibling `invoicedispute_delete` at apps/procurement/views/InvoiceVoucherManagement/InvoiceDisputes.py:311-314), and before delegating to `crud_delete` fetch the row (`get_object_or_404(MaverickSpendFinding, pk=pk, tenant=request.tenant)`) and refuse with `messages.error` + `redirect('procurement:maverickfinding_detail', pk=pk)` when `obj.is_resolved`. Then wrap the bin form in `{% if is_admin %}` in templates/procurement/spendanalytics/maverickfinding/list.html:212 and detail.html:67 so a button that would now 403 is not offered.
-- **Status:** [ ] open
+- **Status:** [x] fixed - security(procurement): gate maverickfinding_delete with tenant_admin_required and refuse a disposed finding; the bin is now offered only when is_admin and not is_resolved on both list.html and detail.html (3 commits)
 
 ## Important
 
@@ -59,14 +59,14 @@ if key == "custom" and date_from is not None:
 ```
 
 Verified by direct call: `range_bounds("custom", date(2020,1,1), date(9999,12,31))` and `range_bounds("custom", date(9999,12,31), None)` both raise today. The same shape exists nowhere else — `grep -rn "date_to + timedelta(days=1)" apps/` returns only this line.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): clamp the custom spend window to _MAX_BOUND before the exclusive-stop +1. Reviewer repro re-run: range_bounds("custom", 2020-01-01, 9999-12-31) -> (2020-01-01, 9999-12-31) and ("custom", 9999-12-31, None) -> (9999-12-30, 9999-12-31), no OverflowError
 
 ### I2 — `apps/procurement/analytics.py:328`
 
 - **Found by:** performance-reviewer
 - **Problem:** `active_rules()` select_relates only `category`, but `classification_workbench.html:171` renders `{{ rule.subject_label }}` for every rule in the legend panel (up to `MAX_GROUP_ROWS` = 25). `SpendClassificationRule.subject_label` (models/.../SpendClassificationRules.py:329) does `str(self.vendor)` / `str(self.gl_account)` / `str(self.org_unit)`, so every vendor/GL/department rule is one extra query — 1 + N with N up to 25 on the workbench.
 - **Fix:** Change line 328 to `.select_related("category", "vendor", "gl_account", "org_unit")`. The rule list is small and fetched once per request, so the three extra LEFT JOINs are free; this also covers `spendrule_detail`'s use of the same helper.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): join vendor/gl_account/org_unit in active_rules so subject_label costs no extra query (5 rules + 5 labels in 1 query, measured)
 
 ### I3 — `apps/procurement/analytics.py:657`
 
@@ -81,35 +81,35 @@ Verified by direct call: `range_bounds("custom", date(2020,1,1), date(9999,12,31
                           .aggregate(v=Sum("line_total"))["v"] or ZERO)
 
 then change line 657 to `pct = _share(flagged_spend, addressable_value)` and add `"flagged_spend": flagged_spend` to both the returned dict and the `empty` dict at line 636. Leave `maverick_value` exactly as it is — it is the value-at-risk figure the `maverick_spend` report measure returns at line 751 and must keep its current meaning. Verified: with this change the rendered rate becomes 100.0 / 100.0 / 0 for Acme / Globex / SMOKETEST instead of 562.3 / 203.8 / 0, and is bounded to [0,100] by construction. Note that `_scalar(..., max_value=100)` at line 721 only clamps the unused progress `pct`, never `display`, so it is not a bound on what the user actually sees.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): compute the maverick rate from distinct flagged invoices so it is bounded to 0-100. Rendered rate is now 100.0 / 100.0 for acme / globex exactly as the reviewer predicted; maverick_value left untouched as the value-at-risk measure
 
 ### I4 — `apps/procurement/analytics.py:884`
 
 - **Found by:** performance-reviewer
 - **Problem:** The two-axis branch of `compute_report` runs a full `spend_cube` per kept first-axis row: each inner call re-issues its own `SUM(line_total)` total (line 477) plus the group query, and `_narrow_to_row` for the `category` dimension issues a further `SpendClassificationRule` query inside `category_filter_q` (line 344). With the default `top_n=20` that is ~40–60 queries per render, and up to ~300 at the model's `top_n=100` ceiling — paid on every `spendreport_detail` view, every `spendreport_export` download and every `spendreport_snapshot` POST.
 - **Fix:** Add an optional `total=None` parameter to `spend_cube` (used at line 477 as `total = total if total is not None else lines.aggregate(...)`) and pass the outer `total` computed at line 840 into the inner calls at line 884, removing one query per row. Additionally hoist the rule lookup out of the loop: fetch `active_rules(tenant)` once and pass a prebuilt per-category `Q` to `_narrow_to_row` instead of letting `category_filter_q` re-query `SpendClassificationRule` for every row.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): give spend_cube optional total= and rules= and thread both through the two-axis compute_report loop. Took the elegant variant: the inner denominator is row["value"] when _narrow_to_row really cut the window and the outer total when it did not, so the Share column keeps its meaning - 486 dimension x basis x tenant combos byte-identical against the previous implementation, 3357 -> 2548 queries
 
 ### I5 — `apps/procurement/models/SpendAnalyticsReporting/MaverickFindings.py:531`
 
 - **Found by:** performance-reviewer
 - **Problem:** `_upsert` runs `cls.objects.filter(tenant=tenant, dedupe_key=key).first()` once per candidate, and `scan()` (line 522) calls it in a loop over every candidate the eight detectors produced — with `SCAN_LINE_LIMIT = 20000` the three line-level detectors alone can emit tens of thousands of candidates, so the scan is O(N) SELECTs on top of O(N) saves (each new row also costs a `next_number` query via `TenantNumbered.save`). This is the seeder's hot path (`seed_procurement._seed_spend_analytics` calls `scan()` over a one-year window) as well as the board's scan button.
 - **Fix:** In `scan()`, after `candidates` is built and before the `transaction.atomic()` loop, pre-load the map in ONE query: `keys = [c.get("dedupe_key") for c in candidates if c.get("dedupe_key")]; existing_by_key = {o.dedupe_key: o for o in cls.objects.filter(tenant=tenant, dedupe_key__in=keys)}`. Pass it into `_upsert(tenant, row, existing_by_key)` and replace the per-row `.filter(...).first()` at line 531 with `existing_by_key.get(key)`. Optionally collect the refreshed rows and flush them with one `cls.objects.bulk_update(refreshed, [...], batch_size=500)` instead of the per-row `existing.save()` at line 549 (set `leakage_amount` explicitly in the loop, since `save()` is what derives it today).
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): pre-load the dedupe-key map once per scan instead of one SELECT per candidate (chunked at 1000 keys; a row minted mid-loop is folded back into the map). The optional bulk_update was deliberately NOT taken: save() is the single writer that derives leakage_amount, and moving that into the loop would fork the derivation
 
 ### I6 — `apps/procurement/views/SpendAnalyticsReporting/ClassificationWorkbench.py:198`
 
 - **Found by:** explorer
 - **Problem:** The workbench builds its page with a bare `Paginator(rows, PAGE_SIZE).get_page(...)` instead of `apps.core.crud.paginate()`, so `page_obj.window` is never set — and `templates/partials/pagination.html` (included at classification_workbench.html:145) loops `{% for n in page_obj.window %}`, which silently resolves to empty, so the numbered page links disappear from the only paginated page in 6.14.
 - **Fix:** In apps/procurement/views/SpendAnalyticsReporting/ClassificationWorkbench.py change the import on line 29 to `from apps.core.crud import as_db_int, paginate`, delete the now-unused `from django.core.paginator import Paginator` on line 25, and replace lines 198-199 (`paginator = Paginator(rows, PAGE_SIZE)` / `page_obj = paginator.get_page(request.GET.get("page"))`) with `page_obj = paginate(request, rows, PAGE_SIZE)`. In the render context keep `"page_obj": page_obj` and change `"paginator": paginator` to `"paginator": page_obj.paginator` (classification_workbench.html:109 reads `paginator.count`). `apps.core.crud.paginate` takes any sliceable, so the plain list of group rows works unchanged.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): paginate the classification workbench through apps.core.crud.paginate so the numbered page links appear (verified with PAGE_SIZE forced to 1: the window renders 1 and 2 as real links)
 
 ### I7 — `apps/procurement/views/SpendAnalyticsReporting/MaverickFindings.py:60`
 
 - **Found by:** performance-reviewer
 - **Problem:** `_ROW_RELATIONS` omits `invoice_line`, but `maverickfinding/list.html:166-167` reads `obj.invoice_line` (and `.description`/`.pk`) on every row and again in the `{% if not ... %}` fallback at line 172 — the three line-level detectors (`off_catalog`, `non_preferred_vendor`, `price_above_contract`) all stamp `invoice_line`, so most rows on the register issue one extra query each (1 + N; ~16 queries for a 15-row page instead of 1).
 - **Fix:** Add `"invoice_line"` to `_ROW_RELATIONS` on line 60 so it becomes `("vendor", "category", "org_unit", "supplier_invoice", "purchase_order", "invoice_line")`, and drop the now-duplicated bare `"invoice_line"` entry from `_DETAIL_RELATIONS` (line 65), keeping the chained `"invoice_line__invoice"` / `"invoice_line__item"` hops there.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): select_related invoice_line on the maverick register rows
 
 ### I8 — `apps/procurement/views/SpendAnalyticsReporting/MaverickFindings.py:310`
 
@@ -128,7 +128,7 @@ def maverickfinding_delete(request, pk):
 ```
 
 Both templates already receive `is_admin`, so wrap the two delete forms so the now-403 button stops being offered: `templates/procurement/spendanalytics/maverickfinding/list.html:212` and `templates/procurement/spendanalytics/maverickfinding/detail.html:67` become `{% if is_admin %}<form method="post" …>…</form>{% endif %}`, and update the `{% comment %}` above each that currently states the view carries no admin gate.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as C1 (one route, one gate): the delete now carries @tenant_admin_required, both delete forms are wrapped in the is_admin guard and the {% comment %} blocks that claimed there was no admin gate were corrected
 
 ### I9 — `apps/procurement/views/SpendAnalyticsReporting/MaverickFindings.py:342`
 
@@ -136,14 +136,14 @@ Both templates already receive `is_admin`, so wrap the two delete forms so the n
 - **Lesson:** L7
 - **Problem:** The disposition view reads the note from `request.POST.get("note")` but the detail template posts it as `name="resolution_note"` (maverickfinding/detail.html:286), so justify / remediate / dismiss — the three verbs with `needs_note=True` — always bounce with "A note is required…" and no finding can ever be closed from the UI.
 - **Fix:** Change line 342 to `note = (request.POST.get("resolution_note") or "").strip()`, matching the 6.13 precedent in apps/procurement/views/InvoiceVoucherManagement/InvoiceDisputes.py:384 and the ProcurementAlerts view; leave the template key as-is.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): read the disposition note from resolution_note, the key the detail page actually posts. Verified by a real POST round-trip: status=justified with the note and resolved_by stamped, then restored
 
 ### I10 — `apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py:436`
 
 - **Found by:** performance-reviewer
 - **Problem:** The line-level export register select_relates only `_classify_select_related(basis)` + `gl_account`, but the row builder below reads `document.currency` on both bases (line 459/458) and `document.vendor` on the committed basis (line 458) — none of which are fetched. That is 1 unfetched FK per row on the invoiced basis and 2 on the committed basis, over a window sliced at `MAX_EXPORT_ROWS = 5000`, i.e. up to 5,000–10,000 extra queries per export page render and per CSV download.
 - **Fix:** In `_export_dataset`, extend the select_related at line 436 with the document's own vendor/currency: `extra = ("invoice__currency",) if basis == "invoiced" else ("purchase_order__vendor", "purchase_order__currency")` and call `.select_related(*_classify_select_related(basis), "gl_account", *extra)`. Do NOT widen `_classify_select_related` itself — the classification walk in `analytics._category_groups` does not need currency.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): join the document currency (and the PO vendor) for the line-level export register, widened at the call site so _classify_select_related keeps its narrow join list
 
 ### I11 — `apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py:497`
 
@@ -151,7 +151,7 @@ Both templates already receive `is_admin`, so wrap the two delete forms so the n
 - **Lesson:** L40
 - **Problem:** `spend_export` (the PAGE) calls `_export_dataset` with no row limit, which materialises up to 5,000 `SupplierInvoiceLine`/`PurchaseOrderLine` rows and builds 5,000 python lists, only for line 535 to render `rows[:25]`. The 25-row preview costs the full download's work on every page view — the same shape as L40 (a bound applied after the thing it bounds has already been built).
 - **Fix:** Give `_export_dataset` a `row_limit=MAX_EXPORT_ROWS` keyword and use it for the register slice at line 438 (`[:row_limit]`) only — leave the `dimension != "none"` cube branch alone so its `total_rows` stays the true group count. Then call it from `spend_export` (line 497) with `row_limit=25` and from `spend_export_download` (line 556) with the default. `total_rows` already comes from the independent `lines.count()` at line 434, so the "Showing N of M" note stays correct.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): bound the export page register to the 25 rows it previews via a row_limit keyword; the cube branch and the independent total_rows count are untouched, so "Showing N of M" is unchanged
 
 ### I12 — `apps/procurement/views/SpendAnalyticsReporting/SpendReports.py:97`
 
@@ -172,7 +172,7 @@ def _report_qs(request):
 ```
 
 Then replace every `get_object_or_404(SpendReport, pk=pk, tenant=request.tenant)` in this module (lines 184, 259, 276, 296, 325, 346) with `get_object_or_404(_visible(request), pk=pk)`, scope the snapshot fetches through the parent (`SpendReportSnapshot.objects.filter(tenant=request.tenant, report__in=_visible(request))` at lines 356, 388, 398), and narrow `reports`/`snapshots` in `spend_export` (apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py:500-503) the same way. If workspace-wide visibility is the intended behaviour instead, drop the field from `SpendReportForm.Meta.fields` and delete the "Private to the owner" badge rather than leaving an unenforced claim.
-- **Status:** [ ] open
+- **Status:** [x] fixed - security(procurement): enforce is_shared on every SpendReport fetch through one visible_reports() (shared OR mine), snapshots scoped through their visible parent, and the same rule applied to the export page panel. Verified: a private report is 200 for its owner and 404 for ops_acme on all nine routes and absent from both lists (3 commits: views, the visible_reports rename, the export page)
 
 ### I13 — `templates/procurement/spendanalytics/category_spend.html:237`
 
@@ -180,7 +180,7 @@ Then replace every `get_object_or_404(SpendReport, pk=pk, tenant=request.tenant)
 - **Lesson:** L7
 - **Problem:** The "Same item, different price" table renders `row.spread` as a percentage (`{{ row.spread|floatformat:1 }}%`, with badge thresholds `> 20` red / `> 5` amber), but the view computes it as an absolute money amount — `"spread": money((hi - lo) …)` in `_item_spread` at apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py:401 — so a $150 price spread is reported to the category manager as "150.0%" in red and a $2 spread as "2.0%" in green.
 - **Fix:** Add a real percentage to the row dict in `_item_spread` (apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py, in the `item_rows.append({...})` block around line 395-402): `"spread_pct": _share(hi - lo, lo) if (lo is not None and hi is not None and lo) else ZERO` (`_share` is already imported from apps.procurement.analytics). Then in templates/procurement/spendanalytics/category_spend.html line 237 use `row.spread_pct` for the badge thresholds and the `%` display, and add a separate money cell for `{{ row.spread|floatformat:2 }}` (or drop the `%` entirely and format `row.spread` with `floatformat:2` like the neighbouring Lowest/Highest price columns at lines 233-234). Update the `{% else %}` fallback at line 239 to match whichever unit is chosen.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): add spread_pct to the item price-spread rows and render the money gap and its share in separate columns on category_spend.html (2 commits)
 
 ### I14 — `templates/procurement/spendanalytics/classification_workbench.html:145`
 
@@ -188,7 +188,7 @@ Then replace every `get_object_or_404(SpendReport, pk=pk, tenant=request.tenant)
 - **Lesson:** L9
 - **Problem:** `partials/pagination.html` iterates `{% for n in page_obj.window %}` for the numbered page links, but this page's view builds `page_obj` with a bare `Paginator` (apps/procurement/views/SpendAnalyticsReporting/ClassificationWorkbench.py:198-199) instead of `apps.core.crud.paginate`, which is what sets `page.window` — so the queue's page numbers silently render as nothing and only Prev/Next appear.
 - **Fix:** In apps/procurement/views/SpendAnalyticsReporting/ClassificationWorkbench.py replace lines 198-199 with `from apps.core.crud import paginate` + `page_obj = paginate(request, rows, PAGE_SIZE)` and keep `"paginator": page_obj.paginator` for the `{{ paginator.count }}` badge at line 109. The template include needs no change once `page_obj.window` exists.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as I6: the workbench now builds page_obj with apps.core.crud.paginate, so page_obj.window exists and partials/pagination.html draws the numbers
 
 ### I15 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:49`
 
@@ -196,7 +196,7 @@ Then replace every `get_object_or_404(SpendReport, pk=pk, tenant=request.tenant)
 - **Lesson:** L13
 - **Problem:** The "Report settings" grid uses `<div class="detail-label">` / `<div class="detail-value">`, and neither class exists in theme.css (it only ships `.detail-grid`, `.detail-item`, `.detail-item dt`, `.detail-item dd`), so all six rows render as flat unstyled body text instead of the muted uppercase caption every other detail page in the sub-module shows.
 - **Fix:** Replace the plain `<div>` wrapper on line 48 and the six rows on lines 49-54 with the canonical markup used by its own siblings (e.g. spendrule/detail.html:66-106): `<dl class="detail-grid">` and, per row, `<div class="detail-item"><dt>Report</dt><dd><a href="{{ back_url }}">{{ report.number }} — {{ report.name }}</a></dd></div>` … closing with `</dl>`. Do not introduce `.detail-label`/`.detail-value`.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): rebuild the snapshot report-settings grid as dl/dt/dd; no .detail-label / .detail-value remains anywhere in the sub-module
 
 ## Minor
 
@@ -205,7 +205,7 @@ Then replace every `get_object_or_404(SpendReport, pk=pk, tenant=request.tenant)
 - **Found by:** performance-reviewer
 - **Problem:** `spend_cube` recomputes `total = lines.aggregate(Sum("line_total"))` on every call even when the caller passes a pre-built `lines` window. `spend_dashboard` calls it three times and then calls `classified_pct` (line 618) and `spend_kpis` (line 687), so the same `SUM(line_total)` over the same joined invoice-line window is executed 4–5 times per dashboard render.
 - **Fix:** Add the optional `total=None` parameter described above and thread it through: compute the window total ONCE in `spend_dashboard` (apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py:186-194) and pass it to the three `spend_cube` calls and to `classified_pct`. Same change benefits `category_spend`, which already has `totals["value"]` in hand at line 254.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): compute the window SUM once per dashboard render and pass it to the three cubes and the classification pass; classified_pct gained the matching total= parameter and category_spend reuses the totals aggregate it already runs (2 commits)
 
 ### M2 — `apps/procurement/management/commands/seed_procurement.py:1960`
 
@@ -213,7 +213,7 @@ Then replace every `get_object_or_404(SpendReport, pk=pk, tenant=request.tenant)
 - **Lesson:** L44
 - **Problem:** `_seed_spend_analytics` seeds rules, findings and reports but no recognised invoiced spend, so on the default window (`invoiced` / `last_90`) Acme has 3 spend lines from 1 supplier and Globex 3 from 1 — the sub-module's two headline pages render a single-row Pareto with HHI 10000 and an A-band of 100%, and every KPI tile on Spend Dashboards is computed off 3 lines.
 - **Fix:** Add an idempotent block at the top of `_seed_spend_analytics(self, tenant)` (before the classification-rules block, guarded by its own marker so a re-run is a no-op) that creates ~8-10 small SupplierInvoices in `RECOGNISED_INVOICE_STATUSES` (`approved` / `scheduled` / `paid`) spread across at least 4 distinct supplier Parties, 3 distinct ItemCategories and the last 90 days, each with 2-3 lines. Do NOT mutate the statuses of the invoices 6.13's `_seed_invoice_vouchers` created — that block deliberately spreads them across every lifecycle status and promoting them would desync the Bill/JE postings it made. Only 3 of Acme's 16 seeded invoices reach a recognised status today (1 approved, 1 scheduled, 1 paid), which is why the cube is thin.
-- **Status:** [ ] open
+- **Status:** [x] fixed - feat(procurement): _seed_spend_baseline adds nine small recognised invoices across five suppliers and the last 90 days, built through 6.13 own capture/submit/approve/schedule/mark_paid verbs (so approve() posts the ledger entry rather than the column being written) and stopping at pending_approval where there is no chart of accounts. 6.13 invoices were NOT promoted. Idempotent, verified twice-run clean: Acme now renders 21 lines across 5 suppliers at 37.7/22.1/21.7/12.4/6.1 instead of a single-bar Pareto
 
 ### M3 — `apps/procurement/views/_helpers.py:321`
 
@@ -232,7 +232,7 @@ def csv_safe(value):
 ```
 
 Both consumers call through this one definition (`_csv_safe = csv_safe` in apps/procurement/views/DashboardPortal/SelfServiceReports.py:112), so the single edit covers every export.
-- **Status:** [ ] open
+- **Status:** [x] fixed - security(procurement): extend csv_safe to the full OWASP leading set (TAB and CR added); SelfServiceReports._csv_safe is the same function object, asserted, so 6.1 is covered by the one edit
 
 ### M4 — `apps/procurement/views/SpendAnalyticsReporting/ClassificationWorkbench.py:198`
 
@@ -240,28 +240,28 @@ Both consumers call through this one definition (`_csv_safe = csv_safe` in apps/
 - **Lesson:** L9
 - **Problem:** The workbench builds its page with a raw `Paginator(...).get_page(...)` instead of `apps.core.crud.paginate`, so `page_obj.window` is never set and the `{% for n in page_obj.window %}` block in partials/pagination.html silently renders no page-number links (Prev/Next still work).
 - **Fix:** Replace the raw Paginator with the shared helper: `from apps.core.crud import as_db_int, paginate` at the top, then `page_obj = paginate(request, rows, PAGE_SIZE)` and pass `"paginator": page_obj.paginator` in the context (the template reads `paginator.count` at classification_workbench.html:109).
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as I6
 
 ### M5 — `apps/procurement/views/SpendAnalyticsReporting/SpendDashboards.py:500`
 
 - **Found by:** performance-reviewer
 - **Problem:** `reports` is an unbounded tenant queryset rendered in full by `export.html:193` — unlike `snapshots` on line 502, which is correctly sliced `[:10]`. A workspace with hundreds of saved reports renders every one of them on an export page, and `reports.count()` at line 530 issues an extra COUNT because the queryset has not been evaluated yet.
 - **Fix:** Slice the render queryset — `reports = (SpendReport.objects.filter(tenant=request.tenant).select_related("owner").order_by("-is_favorite", "name")[:25])` — and keep `stats["reports"]` as its own `SpendReport.objects.filter(tenant=request.tenant).count()`. Drop `vendor`/`category`/`org_unit`/`gl_account` from the select_related: `export.html` renders only number, name, measure, basis, owner and last_run_at.
-- **Status:** [ ] open
+- **Status:** [x] fixed - folded into the I12 export-page commit: the panel is sliced to _REPORT_PANEL_LIMIT = 25, select_related is narrowed to owner (the only relation export.html renders) and stats["reports"] counts off the unsliced queryset
 
 ### M6 — `apps/procurement/views/SpendAnalyticsReporting/SpendReports.py:218`
 
 - **Found by:** performance-reviewer
 - **Problem:** `spendreport_detail` calls `analytics.currency_split(...)` a second time for the same report — `compute_report` already computed exactly that split at analytics.py:842. Besides the duplicated aggregate query, the view's call omits the report's saved filters (no `lines=` argument), so `mixed_currency`/`currency_rows` describe the WHOLE window while the table beside them is filtered.
 - **Fix:** Return the already-computed split from `compute_report` (add `"currency_rows": split["rows"], "mixed_currency": split["mixed_currency"]` to all three return dicts in analytics.py — `spendreport_snapshot` stores only the five named keys at SpendReports.py:310, so the payload contract is unaffected) and read them off `result` in the view instead of the second `currency_split` call on line 218.
-- **Status:** [ ] open
+- **Status:** [x] fixed - perf(procurement): return currency_rows and mixed_currency from compute_report and read them off result in spendreport_detail, which also fixes the split describing the whole window beside a filtered table (2 commits)
 
 ### M7 — `templates/procurement/spendanalytics/maverick_dashboard.html:110`
 
 - **Found by:** frontend-reviewer
 - **Problem:** `<label class="form-label">Detectors to run …</label>` carries no `for=` and wraps no control, yet it is the group caption for the `name="reason"` checkboxes below it — a screen reader announces a label bound to nothing and the checkbox group has no accessible name.
 - **Fix:** Turn the wrapper into a grouping element: change the `<div class="form-group">` on line 109 to `<fieldset class="form-group">` (closing `</fieldset>` on line 116) and line 110 to `<legend class="form-label">Detectors to run <span class="text-muted">(leave all unticked to run every one)</span></legend>`. The per-checkbox wrapping labels on line 113 are already correct and need no change.
-- **Status:** [ ] open
+- **Status:** [x] fixed - a11y(procurement): make the detector checkbox group a fieldset with a legend on the maverick board
 
 ### M8 — `templates/procurement/spendanalytics/maverickfinding/detail.html:58`
 
@@ -274,35 +274,35 @@ Both consumers call through this one definition (`_csv_safe = csv_safe` in apps/
   <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
 {% endif %}
 ```
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): hide both Edit affordances on a disposed maverick finding (verified: 2 edit links on an open finding, 0 on a dismissed one)
 
 ### M9 — `templates/procurement/spendanalytics/maverickfinding/list.html:203`
 
 - **Found by:** code-reviewer
 - **Problem:** The Edit pencil is rendered on every row, but `maverickfinding_edit` refuses a resolved finding and bounces to the detail page with an error — the template offers an action the view will not perform.
 - **Fix:** Wrap the edit anchor in `{% if not obj.is_resolved %}…{% endif %}` here, and do the same for the two Edit links on templates/procurement/spendanalytics/maverickfinding/detail.html (lines 58 and 301) using `{% if not is_resolved %}`.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): drop the edit pencil from disposed rows on the maverick register
 
 ### M10 — `templates/procurement/spendanalytics/spendreport/list.html:147`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The chart-type badge chain has four explicit branches that collapse to two colours — `bar`/`line`/`pie` all emit `badge-muted` and `table` emits `badge-slate`, which is byte-identical to the `{% else %}` fallback — so three of the five branches are dead weight.
 - **Fix:** Replace lines 147-151 with a single line: `<span class="badge {% if obj.chart_type == "table" %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_chart_type_display }}</span>` — the display label already covers any future CHOICES value.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): collapse the dead chart-type badge branches to one line with the table/else split
 
 ### M11 — `templates/procurement/spendanalytics/spendreport/list.html:162`
 
 - **Found by:** code-reviewer
 - **Problem:** The favourite toggle posts no `next` field, so `spendreport_favorite` (SpendReports.py:333) falls through to its detail redirect and pinning a row from the register navigates the user off the list they were filtering.
 - **Fix:** Add `<input type="hidden" name="next" value="{{ request.get_full_path }}">` inside the favourite form, next to `{% csrf_token %}` — the view already validates it with `url_has_allowed_host_and_scheme`.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same commit as M10: the favourite form now posts next="{{ request.get_full_path }}"; verified the toggle returns to the filtered list and that an off-host next is still refused by url_has_allowed_host_and_scheme
 
 ### M12 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:35`
 
 - **Found by:** code-reviewer
 - **Problem:** The snapshot delete form guards with `onclick="return confirm(...)"` on the `<form>` element rather than `onsubmit`, so the confirm does not fire for a keyboard (Enter) submit and differs from every other delete form in this sub-module.
 - **Fix:** Change the attribute on the `<form>` tag from `onclick=` to `onsubmit=`, matching spendreport/detail.html:247 and spendrule/detail.html:200.
-- **Status:** [ ] open
+- **Status:** [x] fixed - fix(procurement): bind the snapshot delete confirm as onsubmit so its return value actually cancels the submission
 
 ### M13 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:35`
 
@@ -315,21 +315,21 @@ Both consumers call through this one definition (`_csv_safe = csv_safe` in apps/
       onsubmit="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');">
   {% csrf_token %}
 ```
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as M12
 
 ### M14 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:35`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The snapshot delete confirm is bound as `onclick` on the `<form>` element rather than `onsubmit`; a submit that is not a button click (Enter key in the form, or a programmatic submit) never fires the confirm, and it is the only delete in this sub-module not using `onsubmit`.
 - **Fix:** Change the attribute on line 35 from `onclick="return confirm(...)"` to `onsubmit="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');"`, matching spendreport/detail.html:218 and :247.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as M12
 
 ### M15 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:35`
 
 - **Found by:** explorer
 - **Problem:** The snapshot delete form carries `onclick="return confirm(...)"` on the `<form>` element instead of `onsubmit`, unlike every other delete form in this sub-module (spendrule/list.html:169, spendreport/detail.html:218 and :247), so the confirm fires on any click anywhere inside the form region and would not guard a non-click (keyboard) submission.
 - **Fix:** In templates/procurement/spendanalytics/spendreportsnapshot/detail.html line 35 change the attribute `onclick="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');"` to `onsubmit="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');"`, matching spendreport/detail.html:218.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as M12
 
 ### M16 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:49`
 
@@ -337,7 +337,7 @@ Both consumers call through this one definition (`_csv_safe = csv_safe` in apps/
 - **Lesson:** L33
 - **Problem:** The settings grid uses `.detail-label` / `.detail-value`, which do not exist in static/css/theme.css (it ships `.detail-item dt` / `.detail-item dd` only), so those six rows render as unstyled text.
 - **Fix:** Rewrite lines 48-55 in the design-system shape used by every other 6.14 detail page: `<dl class="detail-grid"><div class="detail-item"><dt>Report</dt><dd>…</dd></div>…</dl>`.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as I15: dl.detail-grid / div.detail-item / dt / dd, the markup theme.css actually ships
 
 ### M17 — `templates/procurement/spendanalytics/spendreportsnapshot/detail.html:49`
 
@@ -345,7 +345,7 @@ Both consumers call through this one definition (`_csv_safe = csv_safe` in apps/
 - **Lesson:** L33
 - **Problem:** The "Report settings at the time of the run" grid uses `<div class="detail-label">` / `<div class="detail-value">`, and neither class exists in static/css/theme.css (theme.css:354-357 defines only `.detail-grid`, `.detail-item`, `.detail-item dt`, `.detail-item dd`), so the six labels render as unstyled body text indistinguishable from their values — the sibling 6.14 templates (spendrule/form.html:51-59, spendrule/detail.html) explicitly document the correct markup.
 - **Fix:** In templates/procurement/spendanalytics/spendreportsnapshot/detail.html rewrite lines 48-55 as `<dl class="detail-grid">` with one `<div class="detail-item"><dt>Report</dt><dd>…</dd></div>` per pair (Report / Measure / Grouped by / Window / Rows frozen / Taken), matching templates/procurement/spendanalytics/spendrule/form.html:51-59.
-- **Status:** [ ] open
+- **Status:** [x] fixed - same change as I15
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
 
@@ -410,6 +410,26 @@ Cross-tenant IDOR: 404 on all 9 GET routes and all 9 POST routes (spendrule deta
 DB hygiene: every write made during this pass was reverted - the temp page-2 reports, the 144 combination reports, the temp snapshot and the CRUD round-trip rows were deleted, and the one finding I dispositioned was restored, so acme is back at exactly 6 rules / 14 findings / 4 reports / 1 snapshot. All throwaway scripts under temp/ were deleted; no project file was edited and no git command other than `git diff` / `git log` / `git status` was run.
 
 Not actionable / out of scope: `templates/partials/pagination.html` is the shared app-wide partial (pre-existing) that the three 6.14 lists include - it handled page=2/999/abc/-1/0/overflow without a 500. Acme has no OrgUnit-tagged maverick findings, so the department axis on the register renders only its `(unassigned)` bucket, which is the documented 3-hop-nullable-chain caveat rather than a defect.
+
+## Notes added by the fixer (code-fixer, 2026-09-01)
+
+- **App-wide, not a 6.14 fork:** `csv_safe` (M3) lives in `apps/procurement/views/_helpers.py` and is
+  the single guard for 6.1's self-service export as well as all three 6.14 downloads, so the OWASP
+  leading-set fix lands everywhere at once. No other module defines its own copy - verified.
+- **Recommended app-wide pass (NOT done here):** the performance lane's composite
+  `(tenant, status, invoice_date)` index on `procurement.SupplierInvoice` backs the whole 6.14 hot
+  path but is a 6.13 Meta change plus a migration, so it needs the migration number agreed with any
+  concurrent session (L43). Left for an app-wide pass rather than forking one module out of step.
+- **Observation after M2 + I3, worth one decision:** the maverick rate now reads a bounded 100.0%
+  for Acme and Globex because every recognised invoice in the window is genuinely PO-less - 6.13's
+  register and the new 6.14 baseline are both service invoices, so the `po_less_invoice` detector
+  fires on all of them. The figure is arithmetically correct and bounded; making the tile
+  *informative* needs some seeded spend that was ordered on a PO against a covering contract, which
+  is a seeding decision (a PO + receipt + invoice chain) rather than a defect in the rate.
+- **DB note:** verifying I12 exercised `spendreport_delete` as the owner and deleted Acme's
+  SPR-00001 and its snapshot. Both were restored immediately with the seeder's exact field values
+  (new pks 200 / 9); Acme is back at 4 reports + 1 snapshot. Every later destructive check ran
+  inside a rolled-back `transaction.atomic()`.
 
 ## Done well
 
