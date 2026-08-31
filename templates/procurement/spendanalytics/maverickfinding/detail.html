@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}{{ finding.number }} · Maverick Spend Finding{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — MaverickSpendFinding detail.
+
+    Context contract, and NOTHING else exists here:
+      obj, finding (THE SAME OBJECT, aliased for readability — the {% block title %}
+      above is where the alias is consumed; the body types `obj` so it reads like
+      every other crud detail page in this app),
+      supplier_invoice, invoice_line, purchase_order, contract, catalog_item,
+      alternatives (QuerySet of preferred CatalogItem rows, may be empty),
+      benchmark{expected, actual, variance_pct},
+      allowed_actions (list of dicts: action, label, css, needs_note),
+      is_resolved, severity_css, status_css, is_admin, disposition_url
+
+    `severity_css` / `status_css` are pinned but are NOT printed into a class
+    attribute: the badge colour is decided here by comparing the frozen CHOICES keys,
+    so a backend rename degrades to badge-slate instead of emitting a class-less,
+    unstyled badge. theme.css ships colour-named modifiers only — badge-success,
+    badge-danger and badge-warning DO NOT EXIST and render as bare text (L33).
+
+    Every nullable FK is guarded before it is dereferenced. `{{ obj.resolved_by.get_full_name
+    |default:obj.resolved_by.username }}` RAISES on a None FK — a None inside a FILTER
+    ARGUMENT is not a silent fall-through the way a bare lookup is (L10).
+
+    The disposition POST goes to `disposition_url` (pinned, already reversed for this pk)
+    and carries `action` — validated by the view against
+    ("acknowledge","justify","remediate","dismiss") and nothing else moves status —
+    plus `resolution_note` for the three terminal verbs. The note key follows the 6.13
+    invoicedispute_resolve precedent of naming the POST key after the model field; the
+    contract did not pin it (see the return note).
+
+    6.14 writes NOTHING to accounting.* — this page is a read-only analytical record
+    over spend that already exists (L29). The only writes it offers are the disposition
+    verbs and delete.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        {% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "acknowledged" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "justified" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "remediated" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "dismissed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.severity == "high" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+        {% elif obj.severity == "medium" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+        {% elif obj.severity == "low" %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+        {% if not obj.is_addressable %}<span class="badge badge-muted">Excluded from the rate</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><a href="{% url 'procurement:maverickfinding_list' %}">Maverick Spend Findings</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Detected {{ obj.detected_at|date:"M d, Y H:i"|default:"—" }} · {{ obj.age_days|default:"0" }} day(s) old · document dated {{ obj.document_date|date:"M d, Y"|default:"—" }}. Re-running the detection scan will never re-open a finding you have already justified, remediated or dismissed.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Dashboard</a>
+      <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        maverickfinding_delete is @login_required + @require_POST with no admin gate and
+        no status gate in the contract, so it is offered on every finding rather than
+        hidden behind a condition the view does not apply. Only the system-assigned
+        obj.number is interpolated — never the supplier name or the detail text, both
+        user-authored — and the literal apostrophe is escaped as \' because &#39; does
+        not escape inside an event-handler attribute (L42).
+      {% endcomment %}
+      <form method="post" action="{% url 'procurement:maverickfinding_delete' obj.pk %}" onsubmit="return confirm('Delete finding {{ obj.number }}? The disposition and the resolution note go with it, and the scan\'s dedupe key will raise it again if the underlying document has not changed.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+      <a href="{% url 'procurement:maverickfinding_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What was found</h2><span class="text-muted">the rule that fired, and why</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Reason</dt>
+          <dd>{% if obj.reason == "no_contract" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "po_less_invoice" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "suspended_vendor" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "split_purchase" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "no_requisition" %}<span class="badge badge-amber">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "off_catalog" %}<span class="badge badge-amber">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "price_above_contract" %}<span class="badge badge-amber">{{ obj.get_reason_display }}</span>
+              {% elif obj.reason == "non_preferred_vendor" %}<span class="badge badge-info">{{ obj.get_reason_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_reason_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Severity</dt>
+          <dd>{% if obj.severity == "high" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "medium" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+              {% elif obj.severity == "low" %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Document date</dt><dd>{{ obj.document_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Detected</dt><dd>{{ obj.detected_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Age</dt><dd>{{ obj.age_days|default:"0" }} day(s)</dd></div>
+        <div class="detail-item"><dt>Counts toward the rate</dt>
+          <dd>{% if obj.is_addressable %}<span class="badge badge-green">Addressable</span>
+              {% else %}<span class="badge badge-muted">Excluded</span>
+              <div class="text-muted">Non-addressable spend is left out of the maverick-rate denominator — it was never routable through a contract or catalogue in the first place.</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Dedupe key</dt>
+          <dd><span class="text-muted">{{ obj.dedupe_key|default:"—" }}</span>
+            <div class="text-muted">System-assigned. It is what stops a repeat scan minting a second copy of this finding.</div></dd></div>
+      </dl>
+
+      {% if obj.detail %}
+        <div class="form-group">
+          <label class="form-label">Why this was raised</label>
+          <div>{{ obj.detail|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Source documents</h2><span class="text-muted">the paper this finding was raised from</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier invoice</dt>
+          <dd>{% if supplier_invoice %}<a href="{% url 'procurement:supplierinvoice_detail' supplier_invoice.pk %}" class="fw-600">{{ supplier_invoice.number }}</a>{% if supplier_invoice.invoice_number %} · {{ supplier_invoice.invoice_number }}{% endif %}
+              <div class="text-muted">{{ supplier_invoice.get_status_display }} · {{ supplier_invoice.invoice_date|date:"M d, Y"|default:"no invoice date" }}</div>
+              {% elif obj.supplier_invoice %}<a href="{% url 'procurement:supplierinvoice_detail' obj.supplier_invoice.pk %}" class="fw-600">{{ obj.supplier_invoice.number }}</a>
+              {% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Invoice line</dt>
+          <dd>{% if invoice_line %}<a href="{% url 'procurement:supplierinvoiceline_detail' invoice_line.pk %}" class="fw-600">{{ invoice_line.description|default:invoice_line.pk }}</a>
+              <div class="text-muted">{{ invoice_line.quantity|floatformat:"-4" }} × {{ invoice_line.unit_price|floatformat:"2" }} = {{ invoice_line.line_total|floatformat:"2" }}{% if invoice_line.sku_hint %} · SKU {{ invoice_line.sku_hint }}{% endif %}</div>
+              {% elif obj.invoice_line %}<a href="{% url 'procurement:supplierinvoiceline_detail' obj.invoice_line.pk %}" class="fw-600">{{ obj.invoice_line.description|default:obj.invoice_line.pk }}</a>
+              {% else %}<span class="text-muted">Whole document</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Purchase order</dt>
+          <dd>{% if purchase_order %}<a href="{% url 'scm:purchaseorder_detail' purchase_order.pk %}" class="fw-600">{{ purchase_order.number }}</a>
+              <div class="text-muted">{{ purchase_order.get_status_display }} · {{ purchase_order.order_date|date:"M d, Y"|default:"no order date" }}</div>
+              {% elif obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a>
+              {% else %}<span class="text-muted">No purchase order</span>{% endif %}</dd></div>
+      </dl>
+      {% if not supplier_invoice and not invoice_line and not purchase_order %}
+        <p class="text-muted">No source document is attached to this finding. Every scanned finding carries at least one pointer — a hand-raised one should too, so that the evidence can be checked later.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Dimensions</h2><span class="text-muted">stamped at detection so the dashboard can group without a four-way join</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd>{% if obj.vendor %}<span class="fw-600">{{ obj.vendor.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Category</dt>
+          <dd>{% if obj.category %}{{ obj.category.name }}{% else %}<span class="text-muted">(Unclassified)</span>
+              <div class="text-muted">No item category resolved and no classification rule matched.</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Department / cost centre</dt>
+          <dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% if obj.org_unit.kind %}<div class="text-muted">{{ obj.org_unit.get_kind_display }}</div>{% endif %}
+              {% else %}<span class="text-muted">(unassigned)</span>
+              <div class="text-muted">There is no department column on an invoice — it is resolved through the purchase order&rsquo;s requisition, then its ship-to, and is null for every PO-less document.</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Covering contract</dt>
+          <dd>{% if contract %}<a href="{% url 'scm:contract_detail' contract.pk %}" class="fw-600">{{ contract.number }}</a>{% if contract.title %} · {{ contract.title }}{% endif %}
+              <div class="text-muted">{{ contract.get_status_display }} · {{ contract.start_date|date:"M d, Y"|default:"—" }} → {{ contract.end_date|date:"M d, Y"|default:"—" }}</div>
+              {% elif obj.contract %}<a href="{% url 'scm:contract_detail' obj.contract.pk %}" class="fw-600">{{ obj.contract.number }}</a>
+              {% else %}<span class="text-muted">No covering contract</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Catalogue entry</dt>
+          <dd>{% if catalog_item %}<a href="{% url 'procurement:catalog_item_detail' catalog_item.pk %}" class="fw-600">{{ catalog_item.name }}</a>
+              <div class="text-muted">{{ catalog_item.number }}{% if catalog_item.supplier_part_no %} · part {{ catalog_item.supplier_part_no }}{% endif %} · list {{ catalog_item.base_price|floatformat:"2" }}</div>
+              {% elif obj.catalog_item %}<a href="{% url 'procurement:catalog_item_detail' obj.catalog_item.pk %}" class="fw-600">{{ obj.catalog_item.name }}</a>
+              {% else %}<span class="text-muted">Not on an approved catalogue</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Money</h2><span class="text-muted">what was spent against what it should have cost</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Amount</dt><dd class="fw-600">{{ obj.amount|floatformat:"2" }}</dd></div>
+        <div class="detail-item"><dt>Benchmark</dt>
+          <dd>{% if obj.benchmark_amount != None %}{{ obj.benchmark_amount|floatformat:"2" }}{% else %}<span class="text-muted">No benchmark — this reason is a routing breach, not a price breach</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Leakage</dt>
+          <dd class="fw-600">{{ obj.leakage_amount|floatformat:"2" }}
+            <div class="text-muted">Derived on save as the amount above the benchmark, floored at zero — never keyed by hand.</div></dd></div>
+        <div class="detail-item"><dt>Expected (benchmark basis)</dt>
+          <dd>{% if benchmark.expected != None %}{{ benchmark.expected|floatformat:"2" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Actual (benchmark basis)</dt>
+          <dd>{% if benchmark.actual != None %}{{ benchmark.actual|floatformat:"2" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Variance</dt>
+          <dd>{% if benchmark.variance_pct != None %}<span class="fw-600">{{ benchmark.variance_pct|floatformat:"2" }}%</span>
+              {% elif obj.variance_pct != None %}<span class="fw-600">{{ obj.variance_pct|floatformat:"2" }}%</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted">Figures are at face value in the source document&rsquo;s own currency. There is no exchange-rate master in this workspace, so nothing on this page is converted.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Preferred alternatives</h2><span class="text-muted">approved catalogue entries this could have been bought from</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Catalogue entry</th>
+            <th>Supplier</th>
+            <th>Part number</th>
+            <th class="text-right">List price</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alt in alternatives %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:catalog_item_detail' alt.pk %}">{{ alt.name }}</a>
+                <div class="text-muted">{{ alt.number }}{% if alt.category_text %} · {{ alt.category_text }}{% endif %}</div>
+              </td>
+              <td>{% if alt.supplier %}{{ alt.supplier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ alt.supplier_part_no|default:"—" }}</td>
+              <td class="text-right">{% if alt.currency %}{{ alt.currency.code }} {% endif %}{{ alt.base_price|floatformat:"2" }}</td>
+              <td>
+                {% if alt.status == "approved" %}<span class="badge badge-green">{{ alt.get_status_display }}</span>
+                {% elif alt.status == "pending_approval" %}<span class="badge badge-amber">{{ alt.get_status_display }}</span>
+                {% elif alt.status == "draft" %}<span class="badge badge-slate">{{ alt.get_status_display }}</span>
+                {% elif alt.status == "rejected" %}<span class="badge badge-red">{{ alt.get_status_display }}</span>
+                {% elif alt.status == "blocked" %}<span class="badge badge-red">{{ alt.get_status_display }}</span>
+                {% elif alt.status == "archived" %}<span class="badge badge-muted">{{ alt.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ alt.get_status_display }}</span>{% endif %}
+                {% if alt.is_preferred %}<div><span class="badge badge-info">Preferred</span></div>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="book-open"></i>
+                <h3>No approved alternative on the catalogue</h3>
+                <p>Nothing else in the catalogue covers this purchase, so there was no compliant route to take. That is a catalogue-coverage gap rather than a buyer going around the process — worth reading before you judge the finding.</p>
+                <a href="{% url 'procurement:catalog_item_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Catalogue</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Disposition</h2><span class="text-muted">how this finding was closed, and by whom</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Status</dt>
+          <dd>{% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "acknowledged" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "justified" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "remediated" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "dismissed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Resolved by</dt>
+          <dd>{% if obj.resolved_by %}{{ obj.resolved_by.get_full_name|default:obj.resolved_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Resolved at</dt><dd>{{ obj.resolved_at|date:"M d, Y H:i"|default:"Not resolved yet" }}</dd></div>
+      </dl>
+      {% if obj.resolution_note %}
+        <div class="form-group">
+          <label class="form-label">Resolution note</label>
+          <div>{{ obj.resolution_note|linebreaksbr }}</div>
+        </div>
+      {% endif %}
+      {% if is_resolved %}
+        <p class="text-muted">This finding is closed. A later detection scan will refresh its amount and its detail but will never re-open it — the disposition you recorded is the final word.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">transitions the view has cleared for you</span></div>
+    <div class="card-body">
+      {% comment %}
+        `allowed_actions` is already filtered by the view against the model guards, so it is
+        rendered exactly as given: `action` is the POST value the view validates against
+        ("acknowledge","justify","remediate","dismiss"), `label` is the button text, `css`
+        is a btn-* modifier (defaulted, so an unset value still renders a real button), and
+        `needs_note` decides whether the terminal verb collects a resolution note.
+        `is_admin` mirrors the view's @tenant_admin_required exactly, so a hidden button and
+        a refused POST always agree — offering the form to a plain member only buys them
+        a 403.
+      {% endcomment %}
+      {% if is_admin %}
+        {% for action in allowed_actions %}
+          <form method="post" action="{{ disposition_url }}" onsubmit="return confirm('Record this disposition on {{ obj.number }}? It is written to the audit log and a later scan will not re-open the finding.');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ action.action }}">
+            {% if action.needs_note %}
+              <div class="form-group">
+                <label class="form-label" for="note-{{ action.action }}">Note for &ldquo;{{ action.label }}&rdquo;</label>
+                <textarea class="form-textarea" id="note-{{ action.action }}" name="resolution_note" rows="2" placeholder="Why this outcome, and who agreed it."></textarea>
+                <div class="form-help">Kept on the finding and in the audit log. Say what made the spend acceptable, or what was changed so it cannot recur.</div>
+              </div>
+            {% endif %}
+            <div class="form-actions">
+              <button class="btn {{ action.css|default:"btn-outline" }}" type="submit">{{ action.label }}</button>
+            </div>
+          </form>
+        {% empty %}
+          <p class="text-muted">No transitions are open on this finding — it has already been justified, remediated or dismissed, so the only thing left is the record above.</p>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted">Acknowledging, justifying, remediating or dismissing a finding is reserved for workspace administrators. You can still edit the finding&rsquo;s facts and its evidence pointers.</p>
+      {% endif %}
+      <div class="filter-bar">
+        <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit finding</a>
+        <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Maverick dashboard</a>
+        <a href="{% url 'procurement:maverickfinding_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to findings</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+{% endblock %}
