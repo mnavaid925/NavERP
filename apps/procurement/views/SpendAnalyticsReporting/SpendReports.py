@@ -12,7 +12,7 @@ Discipline a reviewer will otherwise go looking for:
   their own ``tenant`` column, so a snapshot is fetched on its own row rather than through its
   parent report.
 * **``is_shared`` is ENFORCED, not merely labelled.** Every fetch in this module goes through
-  ``_visible(request)`` (reports) or ``_snapshot_qs(request)`` (their frozen runs), which is
+  ``visible_reports(request)`` (reports) or ``_snapshot_qs(request)`` (their frozen runs), which is
   "shared, OR mine". A colleague's private report is a 404 on list, detail, edit, delete, run,
   snapshot, favourite and export alike — the pages print "Private to the owner", so the code has
   to mean it.
@@ -98,8 +98,11 @@ def _need_tenant(request, what):
     return None
 
 
-def _visible(request):
+def visible_reports(request):
     """Every report this caller may see: the SHARED ones, plus their own private ones.
+
+    PUBLIC on purpose: the export page in ``SpendDashboards`` lists saved reports too, and an
+    access-control rule with two definitions has one that is out of date.
 
     ``is_shared`` is a real access-control claim — the list and the detail page both print
     "Private to the owner" against a report without it — so it is enforced in ONE place and every
@@ -116,11 +119,11 @@ def _visible(request):
 def _snapshot_qs(request):
     """Snapshots of the reports this caller may see — a frozen run inherits its parent's privacy."""
     return (SpendReportSnapshot.objects.filter(tenant=request.tenant)
-            .filter(report__in=_visible(request)))
+            .filter(report__in=visible_reports(request)))
 
 
 def _report_qs(request):
-    return _visible(request).select_related(*_ROW_RELATIONS)
+    return visible_reports(request).select_related(*_ROW_RELATIONS)
 
 
 def _as_list(value):
@@ -209,7 +212,7 @@ def spendreport_list(request):
     """Saved reports, favourites pinned first (model ordering)."""
     # The stat cards count what the register SHOWS, so a private report belonging to somebody
     # else is neither listed nor silently included in the totals above the list.
-    base = _visible(request)
+    base = visible_reports(request)
     stats = {
         "total": base.count(),
         "favorites": base.filter(is_favorite=True).count(),
@@ -284,7 +287,7 @@ def spendreport_create(request):
 
 @login_required
 def spendreport_edit(request, pk):
-    report = get_object_or_404(_visible(request), pk=pk)
+    report = get_object_or_404(visible_reports(request), pk=pk)
     return _report_form(request, instance=report)
 
 
@@ -293,7 +296,7 @@ def spendreport_edit(request, pk):
 def spendreport_delete(request, pk):
     # ``crud_delete`` takes a MODEL, not a queryset, so the visibility check happens here: a
     # colleague's private report must 404 rather than be deleted by anyone in the workspace.
-    get_object_or_404(_visible(request), pk=pk)
+    get_object_or_404(visible_reports(request), pk=pk)
     return crud_delete(request, model=SpendReport, pk=pk,
                        success_url="procurement:spendreport_list")
 
@@ -304,7 +307,7 @@ def spendreport_delete(request, pk):
 @require_POST
 def spendreport_run(request, pk):
     """Record an explicit run. The figures themselves are always live — this is the stamp."""
-    report = get_object_or_404(_visible(request), pk=pk)
+    report = get_object_or_404(visible_reports(request), pk=pk)
     now = timezone.now()
     # ``.update()`` so the system stamp does not bump ``updated_at`` (auto_now) and pretend the
     # report's definition was edited.
@@ -324,7 +327,7 @@ def spendreport_snapshot(request, pk):
     inside one ``transaction.atomic()``: a snapshot whose parent never recorded the run would
     misreport when the figure was taken.
     """
-    report = get_object_or_404(_visible(request), pk=pk)
+    report = get_object_or_404(visible_reports(request), pk=pk)
     result = analytics.compute_report(report) or {}
     _columns, rows = _result_table(result)
     now = timezone.now()
@@ -353,7 +356,7 @@ def spendreport_snapshot(request, pk):
 @require_POST
 def spendreport_favorite(request, pk):
     """Pin / unpin. Returns to wherever the toggle was clicked (list or detail)."""
-    report = get_object_or_404(_visible(request), pk=pk)
+    report = get_object_or_404(visible_reports(request), pk=pk)
     report.is_favorite = not report.is_favorite
     report.save(update_fields=["is_favorite", "updated_at"])
     write_audit_log(request.user, report, "update", {"is_favorite": report.is_favorite})
@@ -374,7 +377,7 @@ def spendreport_export(request, pk):
 
     A download, not a feed: there is no live BI/PowerBI connector anywhere in this sub-module.
     """
-    report = get_object_or_404(_visible(request), pk=pk)
+    report = get_object_or_404(visible_reports(request), pk=pk)
     columns, rows = _result_table(analytics.compute_report(report))
     return _csv_response(f"spend-report-{report.number or report.pk}.csv", columns, rows)
 
