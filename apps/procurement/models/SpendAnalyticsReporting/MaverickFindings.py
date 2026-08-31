@@ -56,6 +56,11 @@ MAX_MSF_MONEY = Decimal("9999999999999999.99")
 _MIN_DATE = date(1900, 1, 1)
 _MAX_DATE = date(9999, 12, 31)
 
+#: How many dedupe keys one ``IN (...)`` may carry when ``scan()`` pre-loads the existing findings.
+#: The whole point is to replace one SELECT per candidate with a handful of SELECTs total, and a
+#: scan can legitimately produce tens of thousands of candidates.
+_DEDUPE_LOOKUP_CHUNK = 1000
+
 
 def _finite(value):
     """``value`` as a finite ``Decimal``, or ``None``.
@@ -518,22 +523,53 @@ class MaverickSpendFinding(TenantNumbered):
             candidates.extend(detector(tenant, start, end, ctx))
 
         counts = {reason: 0 for reason in wanted}
+        existing_by_key = cls._existing_by_key(tenant, candidates)
         with transaction.atomic():
             for row in candidates:
-                if cls._upsert(tenant, row):
+                if cls._upsert(tenant, row, existing_by_key):
                     counts[row["reason"]] = counts.get(row["reason"], 0) + 1
         return counts
 
     @classmethod
-    def _upsert(cls, tenant, row):
-        """Create or refresh ONE finding. Returns True only when a new row was minted."""
+    def _existing_by_key(cls, tenant, candidates):
+        """``{dedupe_key: finding}`` for every candidate, in a bounded number of queries.
+
+        The three line-level detectors can emit up to ``SCAN_LINE_LIMIT`` candidates each, so
+        looking each one up on its own would be tens of thousands of SELECTs — the seeder's hot
+        path as well as the board's scan button. Chunked because an ``IN`` list of forty thousand
+        strings is its own problem; the ``(tenant, dedupe_key)`` unique_together backs the lookup.
+        """
+        keys = sorted({row.get("dedupe_key") for row in candidates if row.get("dedupe_key")})
+        found = {}
+        for offset in range(0, len(keys), _DEDUPE_LOOKUP_CHUNK):
+            chunk = keys[offset:offset + _DEDUPE_LOOKUP_CHUNK]
+            found.update({obj.dedupe_key: obj for obj in
+                          cls.objects.filter(tenant=tenant, dedupe_key__in=chunk)})
+        return found
+
+    @classmethod
+    def _upsert(cls, tenant, row, existing_by_key=None):
+        """Create or refresh ONE finding. Returns True only when a new row was minted.
+
+        ``existing_by_key`` is the pre-loaded ``{dedupe_key: finding}`` map from
+        :meth:`_existing_by_key`; without it this falls back to its own SELECT, which is what the
+        map exists to avoid inside ``scan()``'s loop.
+        """
         key = row.get("dedupe_key") or ""
-        existing = (cls.objects.filter(tenant=tenant, dedupe_key=key).first()
-                    if key else None)
+        if not key:
+            existing = None
+        elif existing_by_key is not None:
+            existing = existing_by_key.get(key)
+        else:
+            existing = cls.objects.filter(tenant=tenant, dedupe_key=key).first()
         if existing is None:
             obj = cls(tenant=tenant, **row)
             obj.severity = row.get("severity") or cls.default_severity(row["reason"])
             obj.save()
+            if key and existing_by_key is not None:
+                # Two detectors CAN produce the same key in one pass; the map has to see the row
+                # this call just minted or the second one would hit the unique_together.
+                existing_by_key[key] = obj
             return True
 
         # Refresh the FACTS, never the disposition. ``status`` / ``resolution_note`` /
