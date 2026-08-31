@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.name }}{% else %}New Classification Rule{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — SpendClassificationRule create AND edit, ONE template
+    driven by `is_edit` (crud_create / crud_edit).
+
+    Context contract, and nothing else exists here:
+      create -> form, is_edit (False), title, submit_label, cancel_url
+      edit   -> form, obj, is_edit (True), title, submit_label, cancel_url
+    `obj` is NOT in the create context, so EVERY obj reference sits inside {% if is_edit %}.
+    Reading obj on create would not raise — it would silently render blank, which is worse.
+
+    The form carries exactly twelve fields, in this order:
+      name, match_type, vendor, gl_account, org_unit, keyword, invoice_type,
+      category, priority, applies_to, is_active, notes.
+    Everything else is system-owned and deliberately absent — tenant (stamped by crud_create),
+    match_count and last_matched_at (editable=False stamps moved only by the preview verb),
+    created_at, updated_at. Do NOT add inputs for them.
+
+    The five match-target fields are rendered together and all five are optional on the
+    form: which ONE is required depends on the match type, and the model's clean() decides
+    that server-side. A vendor rule with no vendor set would match every line in the
+    workspace, which is exactly why that check lives in clean() and not in a browser.
+
+    `invoice_type` is a ChoiceField on the FORM only — the model column is a plain CharField
+    with no choices — so it is rendered by {{ field }} like everything else and never through
+    a get_*_display call that does not exist.
+
+    The create view accepts ?match_type= &vendor= &gl_account= &keyword= &org_unit=
+    &invoice_type= prefill from the workbench and echoes them into `initial`, so a bound
+    field already carries the workbench's suggestion. The template does not read request.GET
+    for this — the view owns the prefill, and reading it twice is how the two drift apart.
+
+    theme.css: no .detail-label / .detail-value; the read-only grid is
+    <dl class="detail-grid"><div class="detail-item"><dt>/<dd>. Badges are colour-named only
+    (badge-green|red|amber|info|muted|slate).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ title|default:"New Classification Rule" }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><a href="{% url 'procurement:spendrule_list' %}">Classification Rules</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+      <p class="text-muted">A rule tests one thing and files what it matches under one category. Pick the match type first — the field it needs is the one that has to be filled in, and the rest are ignored.</p>
+    </div>
+  </div>
+
+  {% if is_edit %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2><span class="text-muted">system stamps are not editable</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Status</dt>
+            <dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Switched off</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Lines matched, last run</dt><dd class="fw-600">{{ obj.match_count }}</dd></div>
+          <div class="detail-item"><dt>Last matched</dt>
+            <dd>{% if obj.last_matched_at %}{{ obj.last_matched_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never previewed</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Created</dt>
+            <dd>{% if obj.created_at %}{{ obj.created_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+        <p class="text-muted">Changing a rule changes what future reports show, not what has already been reported. Nothing is rewritten in place — run the preview afterwards to see what the new shape catches.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.name == "name" %}
+              <div class="form-help">What the rule is for, in your own words — &ldquo;Courier spend to logistics&rdquo;. It is the only label anyone sees when a category breakdown looks wrong.</div>
+            {% elif field.name == "match_type" %}
+              <div class="form-help">The one thing this rule tests. Whichever you pick, the matching field below becomes required — a rule with an empty test would match everything in the workspace.</div>
+            {% elif field.name == "vendor" %}
+              <div class="form-help">Needed when the match type is <strong>Supplier</strong>. Everything that supplier bills you goes to the category below.</div>
+            {% elif field.name == "gl_account" %}
+              <div class="form-help">Needed when the match type is <strong>GL Account</strong>. The most reliable rule shape you can write, because the account is already picked deliberately at coding time.</div>
+            {% elif field.name == "org_unit" %}
+              <div class="form-help">Needed when the match type is <strong>Department / Cost Centre</strong>. Note that a purchase-order-less invoice has no department at all — those lines fall to the next rule.</div>
+            {% elif field.name == "keyword" %}
+              <div class="form-help">Needed when the match type is <strong>Description / SKU keyword</strong>. Matched against the line description and the SKU hint. The loosest rule shape — give it a high priority number so tighter rules get first refusal.</div>
+            {% elif field.name == "invoice_type" %}
+              <div class="form-help">Needed when the match type is <strong>Invoice Type</strong>. Applies on the invoiced basis only: a purchase-order line has no invoice type, so this rule never matches committed spend.</div>
+            {% elif field.name == "category" %}
+              <div class="form-help">The category every matched line is filed under. Required — a rule that classifies nothing has no reason to exist.</div>
+            {% elif field.name == "priority" %}
+              <div class="form-help">Lower runs first. Ties break on the order rules were created. Leave broad catch-alls at a high number so a specific rule always gets there before them.</div>
+            {% elif field.name == "applies_to" %}
+              <div class="form-help">Which basis the rule runs on. Committed spend is purchase-order lines, which carry no item link — on that basis these rules are the only thing keeping a line out of (Unclassified).</div>
+            {% elif field.name == "is_active" %}
+              <div class="form-help">Switch a rule off rather than deleting it when you want to stop using it but keep the history.</div>
+            {% elif field.name == "notes" %}
+              <div class="form-help">Why the rule exists, and anything the next person should know before changing it.</div>
+            {% elif field.help_text %}
+              <div class="form-help">{{ field.help_text }}</div>
+            {% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Which field each match type needs</h2><span class="text-muted">the server checks this — the browser does not</span></div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Match type</th><th>Field that must be filled</th><th>Runs on</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge badge-info">Supplier</span></td><td>Supplier</td><td>Invoiced and committed</td></tr>
+              <tr><td><span class="badge badge-slate">GL Account</span></td><td>GL account</td><td>Invoiced and committed</td></tr>
+              <tr><td><span class="badge badge-amber">Description / SKU keyword</span></td><td>Keyword</td><td>Invoiced and committed</td></tr>
+              <tr><td><span class="badge badge-muted">Invoice Type</span></td><td>Invoice type</td><td>Invoiced only — never matches a purchase-order line</td></tr>
+              <tr><td><span class="badge badge-slate">Department / Cost Centre</span></td><td>Department / cost centre</td><td>Invoiced and committed, where a department can be traced</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted">Save is refused with an error on the field, not silently corrected, if the match type and the filled field disagree.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="wand-2"></i> {{ submit_label|default:"Save rule" }}</button>
+      {% comment %} cancel_url is pinned in both the create and the edit context; the branch is a belt-and-braces fallback to the register, never a second source of truth. {% endcomment %}
+      {% if cancel_url %}
+        <a href="{{ cancel_url }}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'procurement:spendrule_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+{% endblock %}
