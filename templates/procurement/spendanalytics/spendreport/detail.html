@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — SpendReport detail. This page RUNS the report live
+    through analytics.compute_report(report) on every GET; nothing on it is cached and
+    nothing on it writes. The three POST verbs (run / snapshot / favourite) and the CSV
+    download are the only state changes reachable from here.
+
+    Context contract, and NOTHING else exists here:
+      obj, report (the SAME object, aliased),
+      result{summary, columns, rows, chart_type, chart_labels, chart_data}
+        — summary is a LIST of DICTS with keys label + value
+        — columns is a LIST of str, rows a LIST of LISTS aligned to columns,
+      snapshots (QuerySet, newest first), start, end,
+      mixed_currency (bool), currency_rows[{code, label, total, display}],
+      row_cap_note, last_run_at,
+      export_url, snapshot_url, run_url, favorite_url,
+      builder_note, department_caveat.
+    There is no `stats` dict, no `is_admin`, no `can_delete` and no per-snapshot url in the
+    context — the snapshot routes are reversed by name from each row's own pk.
+
+    NO FX RATE TABLE EXISTS anywhere in the repo (stand-in 3). When the window holds more
+    than one currency the view sets mixed_currency and the page renders currency_rows
+    instead of one bogus converted total. Never add a converted grand total here.
+
+    department_caveat is printed only when a dimension actually is `department`, because the
+    department axis is a 3-hop nullable chain (requisition org_unit, else the PO ship_to) and
+    is NULL for every PO-less invoice — the breakdown carries an explicit (unassigned)
+    bucket so the rows still add up to the headline (stand-in 4).
+
+    Every nullable FK is guarded before it is dereferenced: owner, vendor, category,
+    org_unit, gl_account, and each snapshot's generated_by. A None FK inside a FILTER
+    ARGUMENT raises and 500s even though a bare lookup would not (L10).
+    Badges compare the frozen CHOICES keys and always end in a badge-slate fallback;
+    only colour-named modifiers exist (badge-green|red|amber|info|muted|slate) —
+    badge-success / badge-danger / badge-warning render unstyled.
+    Only the system-assigned {{ obj.number }} reaches a confirm() handler; obj.name and
+    every snapshot title are user-authored and never do. Literal apostrophes are escaped
+    as \' — &#39; does not escape inside an event-handler attribute.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {% if obj.is_favorite %}<i data-lucide="star" aria-label="Pinned"></i> {% endif %}{{ obj.name }}
+        {% if obj.basis == "invoiced" %}<span class="badge badge-info">{{ obj.get_basis_display }}</span>
+        {% elif obj.basis == "committed" %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>{% endif %}
+        {% if obj.measure == "maverick_spend" or obj.measure == "maverick_pct" %}<span class="badge badge-red">{{ obj.get_measure_display }}</span>
+        {% elif obj.measure == "leakage" %}<span class="badge badge-amber">{{ obj.get_measure_display }}</span>
+        {% elif obj.measure == "classified_pct" %}<span class="badge badge-green">{{ obj.get_measure_display }}</span>
+        {% elif obj.measure == "net_spend" %}<span class="badge badge-info">{{ obj.get_measure_display }}</span>
+        {% elif obj.measure == "transaction_count" %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>
+        {% elif obj.measure == "avg_transaction" %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>
+        {% elif obj.measure == "supplier_count" %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <a href="{% url 'procurement:spend_dashboard' %}">Spend Analytics &amp; Reporting</a><span class="sep">›</span>
+        <a href="{% url 'procurement:spendreport_list' %}">Spend Reports</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        Window {{ start|date:"M d, Y"|default:"—" }} → {{ end|date:"M d, Y"|default:"—" }} (the end of the window is exclusive) ·
+        {% if last_run_at %}last run {{ last_run_at|date:"M d, Y H:i" }}{% elif obj.last_run_at %}last run {{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}never marked as run{% endif %}
+      </p>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{{ favorite_url }}">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="star"></i> {% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}</button>
+      </form>
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Download CSV</a>
+      <form method="post" action="{{ run_url }}">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Mark as run</button>
+      </form>
+      <form method="post" action="{{ snapshot_url }}">
+        {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="camera"></i> Freeze snapshot</button>
+      </form>
+    </div>
+  </div>
+
+  {% if builder_note %}<p class="text-muted">{{ builder_note }}</p>{% endif %}
+  {% if row_cap_note %}<p class="text-muted">{{ row_cap_note }}</p>{% endif %}
+  {% if obj.dimension_1 == "department" or obj.dimension_2 == "department" %}
+    {% if department_caveat %}
+      <div class="card"><div class="card-body">
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> {{ department_caveat }}</p>
+      </div></div>
+    {% endif %}
+  {% endif %}
+
+  {% if mixed_currency %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">More than one currency in this window</h2><span class="badge badge-amber">Not converted</span></div>
+      <div class="card-body">
+        <p class="text-muted">Amounts are summed at face value per currency. There is no exchange-rate table in the system, so no single converted total is shown here — inventing a rate would make the headline wrong in a way nobody could audit.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Currency</th><th>Name</th><th class="text-right">Total at face value</th></tr></thead>
+            <tbody>
+              {% for c in currency_rows %}
+                <tr><td class="fw-600">{{ c.code }}</td><td>{{ c.label }}</td><td class="text-right fw-600">{{ c.display|default:c.total }}</td></tr>
+              {% empty %}
+                <tr><td colspan="3"><span class="text-muted">No currency split available for this window.</span></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if result.summary %}
+    <div class="stat-grid">
+      {% for s in result.summary %}
+        <div class="stat-card"><div class="stat-icon blue"><i data-lucide="sigma"></i></div><div class="stat-value">{{ s.value }}</div><div class="stat-label">{{ s.label }}</div></div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Definition</h2><span class="text-muted">what this report asks, and of what</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd class="fw-600">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Basis</dt>
+          <dd>{% if obj.basis == "invoiced" %}<span class="badge badge-info">{{ obj.get_basis_display }}</span>
+              {% elif obj.basis == "committed" %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Measure</dt><dd>{{ obj.get_measure_display }}</dd></div>
+        <div class="detail-item"><dt>First dimension</dt><dd>{{ obj.get_dimension_1_display }}</dd></div>
+        <div class="detail-item"><dt>Second dimension</dt>
+          <dd>{% if obj.dimension_2 == "none" %}<span class="text-muted">None — a single-axis report</span>{% else %}{{ obj.get_dimension_2_display }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Window</dt>
+          <dd>{{ obj.get_date_range_display }}
+            {% if obj.date_range == "custom" %}<div class="text-muted">{{ obj.date_from|date:"M d, Y"|default:"—" }} → {{ obj.date_to|date:"M d, Y"|default:"—" }}</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier filter</dt>
+          <dd>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}<span class="text-muted">All suppliers</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Category filter</dt>
+          <dd>{% if obj.category %}{{ obj.category.name }}{% else %}<span class="text-muted">All categories</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Department filter</dt>
+          <dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="text-muted">All departments</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>GL account filter</dt>
+          <dd>{% if obj.gl_account %}{{ obj.gl_account.name }}{% else %}<span class="text-muted">All GL accounts</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Minimum amount</dt>
+          <dd>{% if obj.min_amount %}{{ obj.min_amount|floatformat:"2" }}{% else %}<span class="text-muted">No floor</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Top N</dt><dd>{{ obj.top_n }} row(s)</dd></div>
+        <div class="detail-item"><dt>Chart</dt><dd>{{ obj.get_chart_type_display }}</dd></div>
+        <div class="detail-item"><dt>Visibility</dt>
+          <dd>{% if obj.is_shared %}<span class="badge badge-green">Shared with the workspace</span>{% else %}<span class="badge badge-muted">Private to the owner</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Owner</dt>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unowned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last run</dt>
+          <dd>{% if last_run_at %}{{ last_run_at|date:"M d, Y H:i" }}{% elif obj.last_run_at %}{{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      </dl>
+      {% if obj.description %}<p style="margin-top:1rem;">{{ obj.description|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% if result.chart_type != "table" and result.chart_labels %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">{{ obj.get_measure_display }} by {{ obj.get_dimension_1_display }}</h2><span class="badge badge-muted">{{ obj.get_chart_type_display }}</span></div>
+      <div class="card-body"><canvas id="spendReportChart" height="110"></canvas></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Result</h2>
+      <span class="text-muted">{{ result.rows|length }} row(s), recomputed on open</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>{% for c in result.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in result.rows %}
+            <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% empty %}
+            <tr><td colspan="{{ result.columns|length|default:1 }}">
+              <div class="empty-state">
+                <i data-lucide="table"></i>
+                <h3>No spend in this window</h3>
+                <p>Nothing matched the basis, the window and the filters saved on this report. Widen the window or clear a filter, then reopen the report — the numbers are recomputed every time this page loads.</p>
+                <a href="{% url 'procurement:spendreport_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Adjust the definition</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Snapshots</h2><span class="text-muted">frozen runs, rendered exactly as they were captured</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Title</th><th>Generated</th><th>By</th><th class="text-right">Rows</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for s in snapshots %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:spendreportsnapshot_detail' s.pk %}">{{ s.title }}</a></td>
+              <td>{{ s.generated_at|date:"M d, Y H:i" }}</td>
+              <td>{% if s.generated_by %}{{ s.generated_by.get_full_name|default:s.generated_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right">{{ s.row_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:spendreportsnapshot_detail' s.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:spendreportsnapshot_export' s.pk %}" class="btn-icon" title="Download CSV" aria-label="Download CSV"><i data-lucide="download"></i></a>
+                  {% comment %}
+                    The snapshot title is user-supplied, so it is NOT interpolated into the
+                    confirm string — the parent report's SPR- number is used instead.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:spendreportsnapshot_delete' s.pk %}" onsubmit="return confirm('Delete this frozen snapshot of {{ obj.number }}? The numbers it captured cannot be recomputed once the underlying invoices change.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="camera"></i>
+                <h3>No snapshots yet</h3>
+                <p>Freezing a snapshot stores this run exactly as it stands. It is the only way to compare a month against what the numbers actually said at the time, because reopening the report always recomputes from live data.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">this sub-module never writes to the ledger</span></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'procurement:spendreport_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit report</a>
+        {% comment %}
+          spendreport_delete is @require_POST, so this must be a form — never a link.
+          Only obj.number is interpolated; obj.name is user-authored free text.
+        {% endcomment %}
+        <form method="post" action="{% url 'procurement:spendreport_delete' obj.pk %}" onsubmit="return confirm('Delete report {{ obj.number }}? The report\'s frozen snapshots are deleted with it and cannot be recovered.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete report</button>
+        </form>
+        <a href="{% url 'procurement:spendreport_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted">Deleting a report removes its saved definition and every snapshot taken from it. No invoice, purchase order or journal entry is touched — 6.14 only reads.</p>
+    </div>
+  </div>
+
+  {{ result|json_script:"spendreport-result" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    function J(id) {
+      var el = document.getElementById(id);
+      if (!el) { return null; }
+      try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    var d = J("spendreport-result");
+    var el = document.getElementById("spendReportChart");
+    if (!d || !el) { return; }
+    var labels = d.chart_labels || [];
+    var data = d.chart_data || [];
+    if (!labels.length) { return; }
+    var type = d.chart_type || "bar";
+    if (type === "table") { return; }
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"];
+    var pie = (type === "pie");
+    var ds = pie
+      ? [{ data: data, backgroundColor: palette }]
+      {% comment %}
+        The contract pins result to exactly {summary, columns, rows, chart_type,
+        chart_labels, chart_data} — there is no series-label key, so the dataset label is
+        left empty and the legend is hidden for every non-pie chart.
+      {% endcomment %}
+      : [{
+          label: "",
+          data: data,
+          backgroundColor: type === "line" ? "rgba(37,99,235,.15)" : blue,
+          borderColor: blue,
+          borderRadius: 6,
+          fill: type === "line",
+          tension: 0.3
+        }];
+    new Chart(el, {
+      type: type,
+      data: { labels: labels, datasets: ds },
+      options: {
+        plugins: { legend: { display: pie, position: "bottom" } },
+        scales: pie ? {} : { y: { beginAtZero: true } }
+      }
+    });
+  })();
+</script>
+{% endblock %}
