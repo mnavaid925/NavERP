@@ -73,6 +73,21 @@ from .InvoiceVoucherManagement.SupplierInvoices import SupplierInvoice
 from .InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLine
 from .InvoiceVoucherManagement.MatchVariances import InvoiceMatchVariance
 from .InvoiceVoucherManagement.InvoiceDisputes import InvoiceDispute
+# 6.14 Spend Analytics & Reporting — from the entity MODULES, same reason as 6.13 above.
+# ``SpendDashboards.py`` declares no model (three computed pages over rows other sub-modules own,
+# no table, no migration) and exports nothing, so there is nothing to import from it.
+# The two window helpers come along because they ARE this sub-module's definition of "money that
+# counts": ``apps/procurement/analytics.py`` is built on them, and a second copy anywhere would
+# let two pages disagree about what spend is. The CHOICES tuples are deliberately NOT re-exported
+# here — each is reachable as ``SpendReport.BASIS_CHOICES`` etc., and hoisting names as generic as
+# ``BASIS_CHOICES`` into the app-wide model namespace is how the next sub-module collides.
+from .SpendAnalyticsReporting.SpendClassificationRules import (
+    SpendClassificationRule,
+    committed_line_window,
+    invoiced_line_window,
+)
+from .SpendAnalyticsReporting.MaverickFindings import MaverickSpendFinding
+from .SpendAnalyticsReporting.SpendReports import SpendReport, SpendReportSnapshot
 
 __all__ = [
     "EaucBid",
@@ -136,4 +151,10 @@ __all__ = [
     "SupplierInvoiceLine",
     "InvoiceMatchVariance",
     "InvoiceDispute",
+    "SpendClassificationRule",
+    "invoiced_line_window",
+    "committed_line_window",
+    "MaverickSpendFinding",
+    "SpendReport",
+    "SpendReportSnapshot",
 ]
