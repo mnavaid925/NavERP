@@ -304,6 +304,12 @@ def evaluate_events_batch(events):
     return result
 
 
+#: Leading characters a spreadsheet treats as the start of a formula. ``=+-@`` are the obvious
+#: four; TAB and CR are here because Excel strips leading whitespace BEFORE deciding, so a cell
+#: beginning with one of them followed by ``=`` still executes (the full OWASP set).
+_CSV_DANGEROUS = ("=", "+", "-", "@", "\t", "\r")
+
+
 def csv_safe(value):
     """Neutralize spreadsheet formula injection: prefix dangerous leading characters.
 
@@ -314,10 +320,14 @@ def csv_safe(value):
     EXECUTES a cell that opens with ``=``, ``+``, ``-`` or ``@``. Prefixing an apostrophe makes the
     cell a string; nothing else about the value changes.
 
-    Byte-identical in behaviour to the definition it replaced in
-    ``views/DashboardPortal/SelfServiceReports.py``, which now aliases this one.
+    The leading set is the full OWASP one, TAB and CR included: Excel strips leading whitespace
+    before it decides what a cell is, so a cell opening TAB then ``=cmd|'/c calc'!A1`` reaches the reader as a formula
+    while ``=cmd|...`` alone is caught. Four characters was the gap this inherited from 6.1.
+
+    Supersedes the definition it replaced in ``views/DashboardPortal/SelfServiceReports.py``,
+    which aliases this one — so every export in the app is covered by this single edit.
     """
     text = str(value)
-    if text[:1] in ("=", "+", "-", "@"):
+    if text[:1] in _CSV_DANGEROUS:
         return f"'{text}"
     return text
