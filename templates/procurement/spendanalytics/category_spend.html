@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Category Spend Analysis{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Category Spend Analysis — procurement:category_spend,
+    apps/procurement/views/SpendAnalyticsReporting/CategorySpend.py.
+
+    COMPUTED and READ-ONLY, like its sibling dashboard: no table, no migration,
+    no write. It answers the category-manager's questions — who supplies this
+    category, how concentrated is it, what is the price spread on the same item,
+    and how long is the tail — over records that already exist.
+
+    Nothing here does arithmetic. Every share, cumulative share, spread and
+    concentration figure arrives already computed from analytics.py; the one
+    comparison this template makes is banding the HHI against the two thresholds
+    printed next to it, which is a legend, not a metric.
+
+    Context consumed: categories, category (may be None — guarded everywhere),
+    rows, hhi, trend, item_rows, consolidation_opportunity, sole_source_count,
+    tail_rows, tail_share_pct, abc_rows, basis, basis_choices, range_key,
+    date_range_choices, start, end, stats, unclassified_value, fallback_note,
+    committed_category_note, mixed_currency, currency_rows, workbench_url.
+
+    Only `categories` is pinned as an option list, so only the category filter
+    gets a dropdown. The vendor / org_unit / gl_account params this page also
+    honours are echoed as an active-filter chip instead of a fabricated select.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Category Spend Analysis</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Category Spend</span></div>
+      <p class="text-muted">
+        {% if category %}Everything bought under <span class="fw-600">{{ category.name }}</span> in this window{% else %}Every category in this window{% endif %} — the supplier league, how concentrated it is, and where the same item was bought at two different prices.
+      </p>
+      <p class="text-muted">
+        Window <span class="fw-600">{% if start %}{{ start|date:"M d, Y" }}{% else %}earliest record{% endif %} – {% if end %}{{ end|date:"M d, Y" }}{% else %}today{% endif %}</span>
+        · basis <span class="fw-600">{% if basis == 'committed' %}committed (purchase orders){% else %}invoiced (recognised){% endif %}</span>
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:spend_dashboard' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Spend dashboard</a>
+      <a href="{{ workbench_url }}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Classification workbench</a>
+      <a href="{% url 'procurement:spend_export' %}" class="btn btn-primary"><i data-lucide="download"></i> Export</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="min-width:220px;">
+          <label class="form-label" for="cat_category">Category</label>
+          <select id="cat_category" name="category" class="form-select">
+            <option value="">All categories</option>
+            {% for c in categories %}
+              <option value="{{ c.pk|stringformat:"d" }}" {% if request.GET.category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cat_basis">Basis</label>
+          <select id="cat_basis" name="basis" class="form-select">
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cat_range">Window</label>
+          <select id="cat_range" name="range" class="form-select">
+            {% for val, label in date_range_choices %}
+              <option value="{{ val }}" {% if range_key == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cat_date_from">From</label>
+          <input type="date" id="cat_date_from" name="date_from" value="{{ request.GET.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cat_date_to">To</label>
+          <input type="date" id="cat_date_to" name="date_to" value="{{ request.GET.date_to }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:category_spend' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      {% if request.GET.vendor or request.GET.org_unit or request.GET.gl_account %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-info">Narrowed</span>
+          A dimension filter arrived with this link
+          {% if request.GET.vendor %} · supplier{% endif %}
+          {% if request.GET.org_unit %} · department{% endif %}
+          {% if request.GET.gl_account %} · GL account{% endif %}.
+          <a href="{% url 'procurement:category_spend' %}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.category %}&category={{ request.GET.category|urlencode }}{% endif %}">Clear it</a>.
+        </p>
+      {% endif %}
+
+      {% if basis == 'committed' and committed_category_note %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Committed basis</span> {{ committed_category_note }}
+        </p>
+      {% endif %}
+
+      {% if mixed_currency %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Mixed currency</span>
+          More than one currency is in this window. There is no exchange-rate table in this system, so nothing below is converted — each currency is summed at face value and listed separately. Price spreads compare like with like only inside one currency.
+        </p>
+      {% endif %}
+    </div>
+
+    {% if mixed_currency and currency_rows %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Currency</th><th>Name</th><th class="text-right">Total at face value</th></tr></thead>
+          <tbody>
+            {% for row in currency_rows %}
+              <tr>
+                <td class="fw-600 mono">{{ row.code }}</td>
+                <td>{{ row.label|default:"—" }}</td>
+                <td class="text-right fw-600">{{ row.display }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ stats.net_spend|default:"0"|floatformat:2 }}</div>
+      <div class="stat-label">Net spend {% if category %}in {{ category.name }}{% else %}across categories{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="users"></i></div>
+      <div class="stat-value">{{ stats.suppliers|default:"0" }}</div>
+      <div class="stat-label">Suppliers used</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ stats.txns|default:"0" }}</div>
+      <div class="stat-label">Transactions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="tag"></i></div>
+      <div class="stat-value">{{ stats.avg_price|default:"0"|floatformat:2 }}</div>
+      <div class="stat-label">Average unit price</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Supplier league — the Pareto view</h2>
+      <span class="badge {% if hhi > 2500 %}badge-red{% elif hhi > 1500 %}badge-amber{% else %}badge-green{% endif %}">HHI {{ hhi|default:"0" }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th class="text-right">Spend</th><th>Share</th><th class="text-right">Cumulative</th><th class="text-right">Transactions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">
+                {% if row.pk %}
+                  <a href="?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.category %}&category={{ request.GET.category|urlencode }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}&vendor={{ row.pk }}">{{ row.label }}</a>
+                {% else %}
+                  {{ row.label }}
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress"><div class="progress-bar" style="width:{{ row.share_pct|default:0|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.share_pct|default:0|floatformat:1 }}%</span>
+              </td>
+              <td class="text-right">{{ row.cumulative_pct|default:0|floatformat:1 }}%</td>
+              <td class="text-right">{{ row.txns|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="layers"></i>
+                <h3>No spend in this category and window</h3>
+                <p>Nothing was bought here inside the selected dates. Widen the window, clear the category, or switch the basis — a purchase order not yet invoiced only shows on the committed basis.</p>
+                <a href="{% url 'procurement:category_spend' %}" class="btn btn-outline">Clear the filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">
+        <span class="fw-600">HHI</span> is the sum of every supplier's squared share, scaled to 10,000. Under 1,500 the category is spread across many suppliers; 1,500–2,500 is moderately concentrated; above 2,500 a small number of suppliers hold most of it, which is leverage for them and risk for you. The cumulative column is where you read the Pareto point — the row at which the running share crosses 80%.
+        {% if sole_source_count %}<br><span class="badge badge-amber">{{ sole_source_count }} sole-source line{{ sole_source_count|pluralize }}</span> bought from exactly one supplier in this window.{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Category spend over time</h2>
+      <span class="badge badge-slate">{% if basis == 'committed' %}Committed{% else %}Invoiced{% endif %} basis</span>
+    </div>
+    <div class="card-body">
+      {% if trend.labels %}
+        <canvas id="category-trend-chart" height="110"></canvas>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="line-chart"></i>
+          <h3>Nothing to plot</h3>
+          <p>No spend falls inside this window for the selected category.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Same item, different price</h2>
+      <span class="badge badge-slate">{{ item_rows|length }} item{{ item_rows|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th class="text-right">Quantity</th><th class="text-right">Spend</th><th class="text-right">Lowest price</th><th class="text-right">Highest price</th><th class="text-right">Spread</th></tr></thead>
+        <tbody>
+          {% for row in item_rows %}
+            <tr>
+              <td class="fw-600">{{ row.item }}</td>
+              <td class="text-right">{{ row.qty|default:"0"|floatformat:2 }}</td>
+              <td class="text-right">{{ row.spend|default:"0"|floatformat:2 }}</td>
+              <td class="text-right">{{ row.lo|default:"0"|floatformat:2 }}</td>
+              <td class="text-right">{{ row.hi|default:"0"|floatformat:2 }}</td>
+              <td class="text-right">
+                {% if row.spread %}
+                  <span class="badge {% if row.spread > 20 %}badge-red{% elif row.spread > 5 %}badge-amber{% else %}badge-green{% endif %}">{{ row.spread|floatformat:1 }}%</span>
+                {% else %}
+                  <span class="badge badge-green">0.0%</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="tag"></i>
+                <h3>No repeat purchases to compare</h3>
+                <p>A price spread needs the same item bought more than once inside the window. Nothing here was.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">
+        The spread is the gap between the cheapest and the dearest unit price paid for one item in this window — a 20% spread on a repeat purchase is the clearest consolidation signal there is. {{ fallback_note }}
+        {% if consolidation_opportunity %}<br>Buying every one of these lines at its own lowest observed price would have cost <span class="fw-600">{{ consolidation_opportunity|floatformat:2 }}</span> less. That is an upper bound and an argument for a negotiation, not a booked saving — nothing on this page posts to the ledger.{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">ABC bands</h2>
+      <span class="badge badge-slate">{{ abc_rows|length }} band{{ abc_rows|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Band</th><th>What it covers</th><th class="text-right">Suppliers</th><th class="text-right">Value</th><th>Share</th></tr></thead>
+        <tbody>
+          {% for row in abc_rows %}
+            <tr>
+              <td>
+                {% if row.band == 'A' %}<span class="badge badge-red">A</span>
+                {% elif row.band == 'B' %}<span class="badge badge-amber">B</span>
+                {% elif row.band == 'C' %}<span class="badge badge-green">C</span>
+                {% else %}<span class="badge badge-slate">{{ row.band }}</span>{% endif %}
+              </td>
+              <td>{{ row.label }}</td>
+              <td class="text-right">{{ row.suppliers|default:"0" }}</td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress"><div class="progress-bar" style="width:{{ row.share_pct|default:0|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.share_pct|default:0|floatformat:1 }}%</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="bar-chart-4"></i>
+                <h3>Nothing to band</h3>
+                <p>ABC banding needs spend in the window to rank.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The long tail</h2>
+      <span class="badge {% if tail_share_pct > 20 %}badge-amber{% else %}badge-muted{% endif %}">{{ tail_share_pct|default:0|floatformat:1 }}% of spend</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th class="text-right">Spend</th><th>Share</th></tr></thead>
+        <tbody>
+          {% for row in tail_rows %}
+            <tr>
+              <td>
+                {% if row.pk %}
+                  <a href="?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.category %}&category={{ request.GET.category|urlencode }}{% endif %}&vendor={{ row.pk }}">{{ row.label }}</a>
+                {% else %}
+                  {{ row.label }}
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.display }}</td>
+              <td class="text-muted">{{ row.share_pct|default:0|floatformat:2 }}%</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">
+              <div class="empty-state">
+                <i data-lucide="list"></i>
+                <h3>No tail suppliers</h3>
+                <p>Every supplier in this window carries a material share — there is nothing small enough to consolidate away.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">
+        Tail suppliers each carry a tiny share but together cost the same purchase-order, invoice and payment handling as a major one. Consolidating them is usually cheaper than negotiating with them.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How these numbers were arrived at</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Category</dt><dd>{% if category %}{{ category.name }}{% else %}All categories{% endif %}</dd></div>
+        <div class="detail-item"><dt>Basis</dt><dd>{% if basis == 'committed' %}Committed — purchase orders{% else %}Invoiced — recognised supplier invoices{% endif %}</dd></div>
+        <div class="detail-item"><dt>Window</dt><dd>{% if start %}{{ start|date:"M d, Y" }}{% else %}earliest record{% endif %} – {% if end %}{{ end|date:"M d, Y" }}{% else %}today{% endif %}</dd></div>
+        <div class="detail-item"><dt>Unclassified value</dt><dd>{{ unclassified_value|default:"0"|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Concentration (HHI)</dt><dd>{{ hhi|default:"0" }} — {% if hhi > 2500 %}highly concentrated{% elif hhi > 1500 %}moderately concentrated{% else %}unconcentrated{% endif %}</dd></div>
+        <div class="detail-item"><dt>Item price fallback</dt><dd>{{ fallback_note }}</dd></div>
+        <div class="detail-item"><dt>Category on the committed basis</dt><dd>{{ committed_category_note }}</dd></div>
+        <div class="detail-item"><dt>Writes</dt><dd>None. This page computes on read and changes nothing it reports on.</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.9rem;">
+        Spend with no category is counted in the totals and shown as its own bucket — a breakdown that quietly drops rows makes the tables disagree with the KPI strip. The categorisation is a set of explicit, ordered, auditable rules you can read and change in the
+        <a href="{{ workbench_url }}">classification workbench</a>; every match is traceable to the named rule that made it.
+      </p>
+    </div>
+  </div>
+
+  {{ trend|json_script:"category-trend-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var canvas = document.getElementById('category-trend-chart');
+    var payload = document.getElementById('category-trend-data');
+    if (!canvas || !payload || typeof Chart === 'undefined') { return; }
+
+    var data;
+    try { data = JSON.parse(payload.textContent); } catch (e) { return; }
+    if (!data || !data.labels || !data.labels.length) { return; }
+
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'Net spend',
+          data: data.data || [],
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37,99,235,.15)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+  })();
+</script>
+{% endblock %}
