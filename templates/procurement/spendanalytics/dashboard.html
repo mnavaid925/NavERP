@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}Spend Dashboards{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Dashboards — procurement:spend_dashboard,
+    apps/procurement/views/SpendAnalyticsReporting/Dashboard.py.
+
+    A COMPUTED, READ-ONLY page. It owns no table and contributes no migration:
+    every figure is read on the fly through apps/procurement/analytics.py over
+    records that already exist (6.13 supplier invoices on the invoiced basis,
+    SCM 4.1 purchase orders on the committed basis). Nothing here writes — no
+    Bill, no JournalEntry, no Budget, no Payment. The 6.11 inbound_tracking /
+    6.12 receiving_console shape.
+
+    Nothing on this page does arithmetic. A template that computes is a second
+    implementation of a metric under the same name, and the two drift.
+
+    SCM 4.11 (scm:spend_analytics) stays the COMMITTED/PO cube for negotiated
+    savings and cycle time. It is LINKED from here, never restated — two pages
+    printing the same metric under one name is how they start disagreeing.
+
+    Context consumed: kpis (whose eight values are each a scalar result dict, so
+    a cell reads kpis.net_spend.display), by_supplier, by_category,
+    by_department, by_gl_account (each a list of {label, pk, value, display,
+    pct, count} — pk is None for the (unassigned)/(Unclassified) bucket, which
+    is why every drill link is wrapped in {% templatetag openblock %} if row.pk
+    {% templatetag closeblock %}), trend, currency_rows, mixed_currency, basis,
+    basis_choices, range_key, date_range_choices, start, end, stats,
+    scm_analytics_url, department_caveat, maverick_dashboard_url,
+    category_spend_url, workbench_url, export_url.
+
+    Two pinned keys are deliberately NOT consumed here, and the reason is in the
+    return note rather than invented into a wrong link:
+      drill_url_name — the literal "procurement:supplierinvoice_detail". It
+        takes a SupplierInvoice pk, and this page's context carries no invoice
+        row anywhere; the breakdown pks are Party / ItemCategory / OrgUnit /
+        GLAccount. Feeding one of those to an invoice route would resolve to a
+        real URL pointing at somebody else's record, which is worse than no
+        link. The breakdowns drill into category_spend by filter instead.
+      There is no vendors / categories / org_units / gl_accounts option
+        queryset in this context, so the FK filters this page honours get an
+        active-filter chip rather than a fabricated dropdown.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Spend Dashboards</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Spend Dashboards</span></div>
+      <p class="text-muted">Where the money actually went in this window, cut four ways. Every figure is computed on read — this page stores nothing, posts nothing to the ledger, and changes no record it reports on.</p>
+      <p class="text-muted">
+        Window <span class="fw-600">{% if start %}{{ start|date:"M d, Y" }}{% else %}earliest record{% endif %} – {% if end %}{{ end|date:"M d, Y" }}{% else %}today{% endif %}</span>
+        · basis <span class="fw-600">{% if basis == 'committed' %}committed (purchase orders){% else %}invoiced (recognised){% endif %}</span>
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ category_spend_url }}" class="btn btn-outline"><i data-lucide="layers"></i> Category analysis</a>
+      <a href="{{ workbench_url }}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Classification</a>
+      <a href="{{ maverick_dashboard_url }}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Maverick spend</a>
+      <a href="{{ export_url }}" class="btn btn-primary"><i data-lucide="download"></i> Export</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="spend_basis">Basis</label>
+          <select id="spend_basis" name="basis" class="form-select">
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="spend_range">Window</label>
+          <select id="spend_range" name="range" class="form-select">
+            {% for val, label in date_range_choices %}
+              <option value="{{ val }}" {% if range_key == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="spend_date_from">From</label>
+          <input type="date" id="spend_date_from" name="date_from" value="{{ request.GET.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="spend_date_to">To</label>
+          <input type="date" id="spend_date_to" name="date_to" value="{{ request.GET.date_to }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:spend_dashboard' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="form-help" style="margin-top:.6rem;">
+        <span class="fw-600">From</span> and <span class="fw-600">To</span> are read only when the window is set to a custom range. The invoiced basis counts recognised supplier invoices; the committed basis counts purchase orders that are a real commitment — a draft or a cancelled order is deliberately not spend.
+      </p>
+
+      {% if request.GET.vendor or request.GET.category or request.GET.org_unit or request.GET.gl_account %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-info">Narrowed</span>
+          A dimension filter is active on this view
+          {% if request.GET.vendor %} · supplier{% endif %}
+          {% if request.GET.category %} · category{% endif %}
+          {% if request.GET.org_unit %} · department{% endif %}
+          {% if request.GET.gl_account %} · GL account{% endif %}.
+          <a href="{% url 'procurement:spend_dashboard' %}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}">Clear it</a> to see the whole workspace again.
+        </p>
+      {% endif %}
+
+      {% if mixed_currency %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Mixed currency</span>
+          More than one currency is in this window and there is no exchange-rate table in this system, so the totals below are <span class="fw-600">not</span> converted into a single figure. Each currency is summed at face value and listed on its own — an invented rate would produce a number that looks authoritative and is wrong.
+        </p>
+      {% endif %}
+    </div>
+
+    {% if mixed_currency and currency_rows %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Currency</th><th>Name</th><th class="text-right">Transactions</th><th class="text-right">Total at face value</th></tr></thead>
+          <tbody>
+            {% for row in currency_rows %}
+              <tr>
+                <td class="fw-600 mono">{{ row.code }}</td>
+                <td>{{ row.label|default:"—" }}</td>
+                <td class="text-right">{{ row.count|default:"0" }}</td>
+                <td class="text-right fw-600">{{ row.display }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ kpis.net_spend.display|default:"—" }}</div>
+      <div class="stat-label">Net spend in window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ kpis.invoice_count.display|default:"—" }}</div>
+      <div class="stat-label">Transactions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="users"></i></div>
+      <div class="stat-value">{{ kpis.supplier_count.display|default:"—" }}</div>
+      <div class="stat-label">Distinct suppliers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ kpis.avg_invoice.display|default:"—" }}</div>
+      <div class="stat-label">Average transaction</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="tags"></i></div>
+      <div class="stat-value">{{ kpis.classified_pct.display|default:"—" }}</div>
+      <div class="stat-label">
+        Spend with a category
+        {% if kpis.classified_pct.pct %}<div class="progress" style="margin-top:.4rem;"><div class="progress-bar" style="width:{{ kpis.classified_pct.pct|floatformat:0 }}%"></div></div>{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ kpis.maverick_pct.display|default:"—" }}</div>
+      <div class="stat-label">Maverick share · <a href="{{ maverick_dashboard_url }}">see the findings</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="pie-chart"></i></div>
+      <div class="stat-value">{{ kpis.top5_share_pct.display|default:"—" }}</div>
+      <div class="stat-label">Top-5 supplier share</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="file-x"></i></div>
+      <div class="stat-value">{{ kpis.po_less_share_pct.display|default:"—" }}</div>
+      <div class="stat-label">Invoiced with no purchase order</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Spend over time</h2>
+      <span class="badge badge-slate">{% if basis == 'committed' %}Committed{% else %}Invoiced{% endif %} basis</span>
+    </div>
+    <div class="card-body">
+      {% if trend.labels %}
+        <canvas id="spend-trend-chart" height="110"></canvas>
+        <p class="form-help" style="margin-top:.75rem;">
+          One bar per month inside the window. Credit memos are already signed negative on the source line, so a month with more credits than invoices legitimately reads below zero — that is a fact about the month, not a rendering fault.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="bar-chart-3"></i>
+          <h3>Nothing to plot in this window</h3>
+          <p>No spend falls inside it on the {% if basis == 'committed' %}committed{% else %}invoiced{% endif %} basis. Widen the window, or switch the basis — a purchase order that has not been invoiced yet is committed spend, not recognised spend.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Spend by supplier</h2>
+      <span class="badge badge-slate">{{ by_supplier|length }} row{{ by_supplier|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th class="text-right">Spend</th><th>Share</th><th class="text-right">Transactions</th></tr></thead>
+        <tbody>
+          {% for row in by_supplier %}
+            <tr>
+              <td class="fw-600">
+                {% if row.pk %}
+                  <a href="{{ category_spend_url }}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}&vendor={{ row.pk }}">{{ row.label }}</a>
+                {% else %}
+                  {{ row.label }}
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress"><div class="progress-bar" style="width:{{ row.pct|default:0|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.pct|default:0|floatformat:1 }}%</span>
+              </td>
+              <td class="text-right">{{ row.count|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="users"></i>
+                <h3>No supplier spend in this window</h3>
+                <p>Nothing was invoiced or committed to a supplier inside the selected dates.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Spend by category</h2>
+      <a href="{{ workbench_url }}" class="btn btn-sm btn-outline"><i data-lucide="sliders-horizontal"></i> Classification workbench</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th class="text-right">Spend</th><th>Share</th><th class="text-right">Transactions</th></tr></thead>
+        <tbody>
+          {% for row in by_category %}
+            <tr>
+              <td class="fw-600">
+                {% if row.pk %}
+                  <a href="{{ category_spend_url }}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}&category={{ row.pk }}">{{ row.label }}</a>
+                {% else %}
+                  {{ row.label }} <span class="badge badge-muted">No rule matched</span>
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress"><div class="progress-bar" style="width:{{ row.pct|default:0|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.pct|default:0|floatformat:1 }}%</span>
+              </td>
+              <td class="text-right">{{ row.count|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="layers"></i>
+                <h3>No categorised spend in this window</h3>
+                <p>Spend picks up a category from the item on the line, and otherwise from the first classification rule that matches it. Write a rule in the workbench and the same spend reappears here under a real category.</p>
+                <a href="{{ workbench_url }}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Open the workbench</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">
+        Unclassified spend is shown as its own row rather than dropped, so this table and the KPI strip always add up to the same total. The rules are explicit, ordered and auditable — a row is categorised because a named rule matched it, and you can see which one in the workbench.
+        {% if stats.unclassified_value %}<br>Unclassified in this window: <span class="fw-600">{{ stats.unclassified_value|floatformat:2 }}</span>.{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Spend by department / cost centre</h2>
+      <span class="badge badge-slate">{{ by_department|length }} row{{ by_department|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Department</th><th class="text-right">Spend</th><th>Share</th><th class="text-right">Transactions</th></tr></thead>
+        <tbody>
+          {% for row in by_department %}
+            <tr>
+              <td class="fw-600">
+                {% if row.pk %}
+                  <a href="{{ category_spend_url }}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}&org_unit={{ row.pk }}">{{ row.label }}</a>
+                {% else %}
+                  {{ row.label }} <span class="badge badge-muted">No department on the document</span>
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress"><div class="progress-bar" style="width:{{ row.pct|default:0|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.pct|default:0|floatformat:1 }}%</span>
+              </td>
+              <td class="text-right">{{ row.count|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="building-2"></i>
+                <h3>No department breakdown in this window</h3>
+                <p>{{ department_caveat }}</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help"><span class="badge badge-amber">Read this</span> {{ department_caveat }}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Spend by GL account</h2>
+      <span class="badge badge-slate">{{ by_gl_account|length }} row{{ by_gl_account|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>GL account</th><th class="text-right">Spend</th><th>Share</th><th class="text-right">Transactions</th></tr></thead>
+        <tbody>
+          {% for row in by_gl_account %}
+            <tr>
+              <td class="fw-600">
+                {% if row.pk %}
+                  <a href="{{ category_spend_url }}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}&gl_account={{ row.pk }}">{{ row.label }}</a>
+                {% else %}
+                  {{ row.label }} <span class="badge badge-muted">No account coded</span>
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{{ row.display }}</td>
+              <td>
+                <div class="progress"><div class="progress-bar" style="width:{{ row.pct|default:0|floatformat:0 }}%"></div></div>
+                <span class="text-muted">{{ row.pct|default:0|floatformat:1 }}%</span>
+              </td>
+              <td class="text-right">{{ row.count|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="book-open"></i>
+                <h3>No GL-coded spend in this window</h3>
+                <p>Lines pick up a GL account from the invoice or order line that carries one. A line coded to no account still counts in the totals — it simply has no account row to sit under.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page counted, and what it deliberately did not</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Transactions</dt><dd>{{ stats.invoice_count|default:"0" }}</dd></div>
+        <div class="detail-item"><dt>Lines read</dt><dd>{{ stats.line_count|default:"0" }}</dd></div>
+        <div class="detail-item"><dt>Suppliers</dt><dd>{{ stats.supplier_count|default:"0" }}</dd></div>
+        <div class="detail-item"><dt>Unclassified value</dt><dd>{{ stats.unclassified_value|default:"0"|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Basis</dt><dd>{% if basis == 'committed' %}Committed — purchase orders that are a real commitment{% else %}Invoiced — supplier invoices that have been recognised{% endif %}</dd></div>
+        <div class="detail-item"><dt>Writes</dt><dd>None. 6.14 is a read-only pass over spend that already exists — it posts no bill, no journal entry, no payment and no budget line.</dd></div>
+        <div class="detail-item"><dt>Currency</dt><dd>{% if mixed_currency %}Mixed — totals are per currency at face value, never converted.{% else %}Single currency in this window.{% endif %}</dd></div>
+        <div class="detail-item"><dt>Department axis</dt><dd>{{ department_caveat }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.9rem;">
+        Negotiated savings, price variance and purchase-order cycle time are measured on the committed cube in
+        <a href="{{ scm_analytics_url }}">Supply Chain · Procurement Analytics</a> and are not restated here. One metric, one page — the moment two pages compute the same figure they begin to disagree.
+      </p>
+      <p class="text-muted">
+        <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export this view</a>
+        <span style="margin-inline-start:.75rem;">The export carries the same window, the same basis and the same caveats.</span>
+      </p>
+    </div>
+  </div>
+
+  {{ trend|json_script:"spend-trend-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var canvas = document.getElementById('spend-trend-chart');
+    var payload = document.getElementById('spend-trend-data');
+    if (!canvas || !payload || typeof Chart === 'undefined') { return; }
+
+    var data;
+    try { data = JSON.parse(payload.textContent); } catch (e) { return; }
+    if (!data || !data.labels || !data.labels.length) { return; }
+
+    new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'Net spend',
+          data: data.data || [],
+          backgroundColor: '#2563eb',
+          borderColor: '#2563eb',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        // beginAtZero is deliberately off: a month can net negative when credit
+        // memos outweigh invoices, and clamping it to zero would hide that.
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+  })();
+</script>
+{% endblock %}
