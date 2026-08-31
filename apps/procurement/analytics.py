@@ -638,18 +638,30 @@ def classified_pct(tenant, basis, start, end, lines=None, rules=None):
 
 
 def maverick_rate(tenant, start, end):
-    """``{maverick_value, addressable_value, pct, txn_pct, band}`` for the window.
+    """``{maverick_value, flagged_spend, addressable_value, pct, txn_pct, band}`` for the window.
 
-    The numerator is every ADDRESSABLE maverick finding that has not been dismissed as a false
+    The population is every ADDRESSABLE maverick finding that has not been dismissed as a false
     positive — a dismissed finding is the workspace saying "this was never off-contract", so
     counting it would make the rate un-improvable. The denominator is recognised spend over the
     same window, which is what ``is_addressable`` is a flag against.
 
+    Two DIFFERENT numerators come out of that one population, and conflating them is what made
+    this tile print 562%:
+
+    * ``maverick_value`` sums each finding's own ``amount``. It is the value AT RISK — the figure
+      the ``maverick_spend`` report measure returns — and several findings can be raised against
+      one document, so it is deliberately not a share of anything.
+    * ``flagged_spend`` sums the recognised invoice lines belonging to the DISTINCT invoices those
+      findings point at. Because it is a sub-total of the same ``invoiced_lines`` window that forms
+      the denominator, ``pct`` is bounded to [0, 100] by construction. Findings with no invoice at
+      all (PO-only ``no_requisition`` / ``no_contract`` rows) contribute nothing to it, which is
+      correct: there is no recognised spend behind them to be a share of.
+
     ``band`` is one of low / medium / high off the 10% / 20% thresholds the page prints beside it,
     so the colour on the tile always has its own legend.
     """
-    empty = {"maverick_value": ZERO, "addressable_value": ZERO, "pct": ZERO, "txn_pct": ZERO,
-             "band": "low"}
+    empty = {"maverick_value": ZERO, "flagged_spend": ZERO, "addressable_value": ZERO,
+             "pct": ZERO, "txn_pct": ZERO, "band": "low"}
     if tenant is None:
         return empty
 
@@ -666,10 +678,14 @@ def maverick_rate(tenant, start, end):
     addressable_value = money(spend["v"] or ZERO)
 
     documents = spend["n"] or 0
+    flagged_invoice_ids = findings.filter(supplier_invoice__isnull=False).values_list(
+        "supplier_invoice_id", flat=True)
+    flagged_spend = money(lines.filter(invoice_id__in=flagged_invoice_ids)
+                          .aggregate(v=Sum("line_total"))["v"] or ZERO)
     flagged_documents = findings.filter(supplier_invoice__isnull=False).values(
         "supplier_invoice_id").distinct().count()
 
-    pct = _share(maverick_value, addressable_value)
+    pct = _share(flagged_spend, addressable_value)
     band = "low"
     if pct > MAVERICK_BAND_HIGH:
         band = "high"
@@ -677,6 +693,7 @@ def maverick_rate(tenant, start, end):
         band = "medium"
     return {
         "maverick_value": maverick_value,
+        "flagged_spend": flagged_spend,
         "addressable_value": addressable_value,
         "pct": pct,
         "txn_pct": _share(flagged_documents, documents),
