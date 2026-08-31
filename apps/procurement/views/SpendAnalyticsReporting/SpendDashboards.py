@@ -58,6 +58,8 @@ from apps.scm.models import ItemCategory
 # through the package here could re-enter a partially-initialised module at URLconf import time —
 # the 6.13 ``InvoiceDisputes.py`` precedent.
 from apps.procurement.models.SpendAnalyticsReporting.SpendClassificationRules import money
+# The saved-report entity module of this same lane, for the ONE visibility rule both pages share.
+from apps.procurement.views.SpendAnalyticsReporting import SpendReports as spend_reports
 from apps.procurement.models.SpendAnalyticsReporting.SpendReports import (
     BASIS_CHOICES,
     DATE_RANGE_CHOICES,
@@ -403,6 +405,10 @@ def _item_spread(lines, basis, label_field, item_keys, vendor_field):
     return item_rows, sole_source_count
 
 
+#: How many saved reports the export page's panel lists. A workspace with hundreds of them must
+#: not render every one on a page whose subject is the download.
+_REPORT_PANEL_LIMIT = 25
+
 #: How many rows the export PAGE previews. Also the register row limit it asks for, so the page
 #: never builds rows it will not draw.
 _PREVIEW_ROWS = 25
@@ -517,9 +523,15 @@ def spend_export(request):
     columns, rows, total_rows = _export_dataset(
         request.tenant, basis, start, end, dimension, lines, row_limit=_PREVIEW_ROWS)
 
-    reports = (SpendReport.objects.filter(tenant=request.tenant)
-               .select_related("owner", "vendor", "category", "org_unit", "gl_account"))
-    snapshots = (SpendReportSnapshot.objects.filter(tenant=request.tenant)
+    # Saved reports are listed here too, so the SAME visibility rule applies: shared, or mine.
+    # Imported from the entity module that owns it rather than restated — an access-control rule
+    # with two definitions has one that is out of date. Sliced like ``snapshots`` beside it (the
+    # panel is a way in, not an archive browser) and joined only on ``owner``, the one relation
+    # export.html actually renders alongside number / name / measure / basis / last_run_at.
+    visible_reports = spend_reports.visible_reports(request)
+    reports = visible_reports.select_related("owner")[:_REPORT_PANEL_LIMIT]
+    snapshots = (SpendReportSnapshot.objects.filter(tenant=request.tenant,
+                                                    report__in=visible_reports)
                  .select_related("report", "generated_by")[:10])
 
     capped = min(total_rows, MAX_EXPORT_ROWS)
@@ -547,8 +559,11 @@ def spend_export(request):
         "download_url": reverse("procurement:spend_export_download"),
         "bi_note": BI_NOTE,
         "stats": {
-            "reports": reports.count(),
-            "snapshots": SpendReportSnapshot.objects.filter(tenant=request.tenant).count(),
+            # Counted off the unsliced queryset, so the card still says how many there ARE
+            # even though the panel below it draws at most _REPORT_PANEL_LIMIT of them.
+            "reports": visible_reports.count(),
+            "snapshots": SpendReportSnapshot.objects.filter(
+                tenant=request.tenant, report__in=visible_reports).count(),
             "rows": total_rows,
             "max_rows": MAX_EXPORT_ROWS,
         },
