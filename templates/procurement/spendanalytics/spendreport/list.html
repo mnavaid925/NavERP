@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Spend Reports{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — SpendReport register (the Custom Report Builder surface).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      measure_choices, basis_choices, dimension_choices, chart_type_choices, date_range_choices,
+      stats{total, favorites, shared, snapshots}, builder_note.
+    The view's crud_list filter tuple is exactly (("measure","measure",False),
+    ("basis","basis",False), ("is_favorite","is_favorite",False)) with
+    search_fields=("number","name","description") — so the filter bar offers exactly q,
+    measure, basis and is_favorite. dimension_choices / chart_type_choices /
+    date_range_choices are NOT filters on this view; they are rendered in the
+    "what the builder can do" panel instead, so no dead <select> posts a param the
+    view will silently ignore.
+    is_favorite posts the literal strings True / False — crud_list maps them.
+    There is no pk/FK filter on this list, so no |stringformat:"d" comparison arises here;
+    if one is ever added it must use |stringformat:"d" and never |slugify.
+
+    Badge colours compare the frozen CHOICES keys from the contract rather than reading the
+    model's own css helpers, so a backend rename degrades to badge-slate instead of an
+    unstyled badge. Only colour-named modifiers exist (theme.css:286-291) —
+    badge-success / badge-danger / badge-warning DO NOT and render as bare text.
+    stat-icon is limited to blue|green|orange|purple|slate|red (theme.css:260-265).
+
+    SpendReport has NO status field and the delete/edit views are plain @login_required —
+    the contract pins no status or permission gate — so the row actions are unconditional.
+    Only the system-assigned {{ obj.number }} (SPR-#####) is ever interpolated into a
+    confirm() handler; obj.name and obj.description are user-authored and never are.
+    Literal apostrophes inside that handler are escaped as \' because &#39; does not
+    escape inside an event-handler attribute, and a confirm that throws does not
+    preventDefault — the delete would fire unconfirmed.
+
+    obj.owner is nullable: every read of it sits inside an "if obj.owner" branch, because
+    owner.get_full_name|default:owner.username RAISES on a None FK inside the filter
+    argument rather than falling through (L10). Same for every other nullable FK.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Spend Reports</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <a href="{% url 'procurement:spend_dashboard' %}">Spend Analytics &amp; Reporting</a><span class="sep">›</span>
+        <span>Spend Reports</span>
+      </div>
+      <p class="text-muted">{{ builder_note|default:"Saved spend questions. You choose a measure, up to two dimensions and a window from the dropdowns below; the report is recomputed live every time it is opened, and a snapshot freezes one run so a later month can be compared against it." }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:spend_dashboard' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Spend dashboard</a>
+      <a href="{% url 'procurement:spend_export' %}" class="btn btn-outline"><i data-lucide="download"></i> Export</a>
+      <a href="{% url 'procurement:spendreport_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New report</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-bar-chart"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Saved reports</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="star"></i></div><div class="stat-value">{{ stats.favorites }}</div><div class="stat-label">Pinned favourites</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.shared }}</div><div class="stat-label">Shared with the workspace</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="camera"></i></div><div class="stat-value">{{ stats.snapshots }}</div><div class="stat-label">Frozen snapshots</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search reports" class="form-input" placeholder="Search number, name or description…">
+        </div>
+        <div class="form-group">
+          <select name="measure" aria-label="Measure" class="form-select">
+            <option value="">All measures</option>
+            {% for val, label in measure_choices %}
+              <option value="{{ val }}" {% if request.GET.measure == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="basis" aria-label="Basis" class="form-select">
+            <option value="">Either basis</option>
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if request.GET.basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_favorite" aria-label="Favourites" class="form-select">
+            <option value="">Pinned and unpinned</option>
+            <option value="True" {% if request.GET.is_favorite == "True" %}selected{% endif %}>Pinned only</option>
+            <option value="False" {% if request.GET.is_favorite == "False" %}selected{% endif %}>Not pinned</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:spendreport_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Report</th>
+            <th>Measure</th>
+            <th>Basis</th>
+            <th>Dimensions</th>
+            <th>Window</th>
+            <th>Chart</th>
+            <th class="text-right">Top N</th>
+            <th>Owner</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                {% if obj.is_favorite %}<i data-lucide="star" aria-label="Pinned"></i> {% endif %}
+                <a href="{% url 'procurement:spendreport_detail' obj.pk %}">{{ obj.name }}</a>
+                <div class="text-muted">{{ obj.number }}{% if obj.last_run_at %} · last run {{ obj.last_run_at|date:"M d, Y H:i" }}{% else %} · never run{% endif %}</div>
+              </td>
+              <td>
+                {% if obj.measure == "net_spend" %}<span class="badge badge-info">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "transaction_count" %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "avg_transaction" %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "supplier_count" %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "maverick_spend" %}<span class="badge badge-red">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "maverick_pct" %}<span class="badge badge-red">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "classified_pct" %}<span class="badge badge-green">{{ obj.get_measure_display }}</span>
+                {% elif obj.measure == "leakage" %}<span class="badge badge-amber">{{ obj.get_measure_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_measure_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.basis == "invoiced" %}<span class="badge badge-info">{{ obj.get_basis_display }}</span>
+                {% elif obj.basis == "committed" %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_basis_display }}</span>{% endif %}
+              </td>
+              <td>
+                {{ obj.get_dimension_1_display }}
+                {% if obj.dimension_2 != "none" %}<div class="text-muted">then {{ obj.get_dimension_2_display }}</div>{% endif %}
+              </td>
+              <td>
+                {{ obj.get_date_range_display }}
+                {% if obj.date_range == "custom" %}<div class="text-muted">{{ obj.date_from|date:"M d, Y"|default:"—" }} → {{ obj.date_to|date:"M d, Y"|default:"—" }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.chart_type == "bar" %}<span class="badge badge-muted">{{ obj.get_chart_type_display }}</span>
+                {% elif obj.chart_type == "line" %}<span class="badge badge-muted">{{ obj.get_chart_type_display }}</span>
+                {% elif obj.chart_type == "pie" %}<span class="badge badge-muted">{{ obj.get_chart_type_display }}</span>
+                {% elif obj.chart_type == "table" %}<span class="badge badge-slate">{{ obj.get_chart_type_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_chart_type_display }}</span>{% endif %}
+              </td>
+              <td class="text-right">{{ obj.top_n }}</td>
+              <td>
+                {% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unowned</span>{% endif %}
+                {% if obj.is_shared %}<div><span class="badge badge-green">Shared</span></div>{% else %}<div><span class="badge badge-muted">Private</span></div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:spendreport_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:spendreport_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'procurement:spendreport_favorite' obj.pk %}">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}" aria-label="{% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}"><i data-lucide="star"></i></button>
+                  </form>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form — never a link. Only the
+                    system-assigned SPR- number reaches the confirm string; obj.name is free text.
+                    The apostrophe in "report\'s" is escaped as \' , not &#39;.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:spendreport_delete' obj.pk %}" onsubmit="return confirm('Delete report {{ obj.number }}? The report\'s frozen snapshots are deleted with it and cannot be recovered.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="file-bar-chart"></i>
+                <h3>No spend reports found</h3>
+                <p>Nothing matches these filters. A report is a saved question — pick a measure, one or two dimensions and a window, and it recomputes from the invoices and purchase orders already in the system. Nothing here writes to the ledger.</p>
+                <a href="{% url 'procurement:spendreport_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Build a report</a>
+                <a href="{% url 'procurement:spendreport_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next (L9) and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What the builder can do</h2><span class="text-muted">every option is chosen from a dropdown</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Bases</dt><dd><span class="badge-group">{% for val, label in basis_choices %}<span class="badge badge-slate">{{ label }}</span> {% endfor %}</span></dd></div>
+        <div class="detail-item"><dt>Measures</dt><dd><span class="badge-group">{% for val, label in measure_choices %}<span class="badge badge-muted">{{ label }}</span> {% endfor %}</span></dd></div>
+        <div class="detail-item"><dt>Dimensions</dt><dd><span class="badge-group">{% for val, label in dimension_choices %}<span class="badge badge-muted">{{ label }}</span> {% endfor %}</span></dd></div>
+        <div class="detail-item"><dt>Windows</dt><dd><span class="badge-group">{% for val, label in date_range_choices %}<span class="badge badge-muted">{{ label }}</span> {% endfor %}</span></dd></div>
+        <div class="detail-item"><dt>Chart types</dt><dd><span class="badge-group">{% for val, label in chart_type_choices %}<span class="badge badge-muted">{{ label }}</span> {% endfor %}</span></dd></div>
+      </dl>
+      <p class="text-muted">Pinned favourites sort to the top of this list. Measures and dimensions are selected from these lists — there is no free-form query language and nothing here is inferred automatically.</p>
+    </div>
+  </div>
+{% endblock %}
