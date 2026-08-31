@@ -320,6 +320,53 @@ from .InvoiceVoucherManagement.InvoiceDisputes import (
     invoicedispute_resolve,
 )
 
+# 6.14 Spend Analytics & Reporting — from the entity MODULES, same reason as 6.13 above.
+# EVERY view name, including the three computed-page lanes: a view that is imported by the
+# URLconf as ``views.<name>`` but missing here is an AttributeError at URLconf import time,
+# not at request time — the whole site fails to start, which is why this list is exhaustive
+# rather than 'the ones with a sidebar link'.
+from .SpendAnalyticsReporting.SpendClassificationRules import (
+    spendrule_create,
+    spendrule_delete,
+    spendrule_detail,
+    spendrule_edit,
+    spendrule_list,
+    spendrule_preview,
+)
+from .SpendAnalyticsReporting.MaverickFindings import (
+    maverickfinding_create,
+    maverickfinding_delete,
+    maverickfinding_detail,
+    maverickfinding_disposition,
+    maverickfinding_edit,
+    maverickfinding_list,
+)
+from .SpendAnalyticsReporting.MaverickDashboard import (
+    maverick_dashboard,
+    maverick_scan,
+)
+from .SpendAnalyticsReporting.ClassificationWorkbench import classification_workbench
+from .SpendAnalyticsReporting.SpendReports import (
+    spendreport_create,
+    spendreport_delete,
+    spendreport_detail,
+    spendreport_edit,
+    spendreport_export,
+    spendreport_favorite,
+    spendreport_list,
+    spendreport_run,
+    spendreport_snapshot,
+    spendreportsnapshot_delete,
+    spendreportsnapshot_detail,
+    spendreportsnapshot_export,
+)
+from .SpendAnalyticsReporting.SpendDashboards import (
+    category_spend,
+    spend_dashboard,
+    spend_export,
+    spend_export_download,
+)
+
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
     "eauc_publish", "eauc_cancel", "eauc_close",
@@ -477,4 +524,14 @@ __all__ = [
     "invoicedispute_edit", "invoicedispute_delete", "invoicedispute_resolve",
     "invoicedispute_escalate", "invoicedispute_await_supplier",
     "invoicedispute_await_internal", "invoicedispute_close", "invoicedispute_aging",
+    "spendrule_list", "spendrule_detail", "spendrule_create", "spendrule_edit",
+    "spendrule_delete", "spendrule_preview",
+    "maverickfinding_list", "maverickfinding_detail", "maverickfinding_create",
+    "maverickfinding_edit", "maverickfinding_delete", "maverickfinding_disposition",
+    "maverick_dashboard", "maverick_scan", "classification_workbench",
+    "spendreport_list", "spendreport_detail", "spendreport_create", "spendreport_edit",
+    "spendreport_delete", "spendreport_run", "spendreport_snapshot", "spendreport_export",
+    "spendreport_favorite",
+    "spendreportsnapshot_detail", "spendreportsnapshot_export", "spendreportsnapshot_delete",
+    "spend_dashboard", "category_spend", "spend_export", "spend_export_download",
 ]
