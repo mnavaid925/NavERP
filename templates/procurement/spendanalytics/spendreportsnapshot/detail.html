@@ -45,14 +45,26 @@
       <span class="badge {{ report.basis_css }}">{{ report.get_basis_display }}</span>
     </div>
     <div class="card-body">
-      <div class="detail-grid">
-        <div><div class="detail-label">Report</div><div class="detail-value"><a href="{{ back_url }}">{{ report.number }} — {{ report.name }}</a></div></div>
-        <div><div class="detail-label">Measure</div><div class="detail-value">{{ report.get_measure_display }}</div></div>
-        <div><div class="detail-label">Grouped by</div><div class="detail-value">{{ report.get_dimension_1_display }}{% if report.dimension_2 != 'none' %} · {{ report.get_dimension_2_display }}{% endif %}</div></div>
-        <div><div class="detail-label">Window</div><div class="detail-value">{{ report.get_date_range_display }}</div></div>
-        <div><div class="detail-label">Rows frozen</div><div class="detail-value">{{ snapshot.row_count }}</div></div>
-        <div><div class="detail-label">Taken</div><div class="detail-value">{{ snapshot.generated_at|date:"M d, Y H:i" }}</div></div>
-      </div>
+      {% comment %}
+        theme.css ships .detail-grid / .detail-item / .detail-item dt / .detail-item dd and
+        NOTHING else for this shape — a .detail-label / .detail-value pair renders as plain
+        unstyled body text (L33). The dl/dt/dd markup below is the same one every other 6.14
+        detail page uses, e.g. spendrule/detail.html.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Report</dt>
+          <dd><a href="{{ back_url }}">{{ report.number }} — {{ report.name }}</a></dd></div>
+        <div class="detail-item"><dt>Measure</dt>
+          <dd>{{ report.get_measure_display }}</dd></div>
+        <div class="detail-item"><dt>Grouped by</dt>
+          <dd>{{ report.get_dimension_1_display }}{% if report.dimension_2 != 'none' %} · {{ report.get_dimension_2_display }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Window</dt>
+          <dd>{{ report.get_date_range_display }}</dd></div>
+        <div class="detail-item"><dt>Rows frozen</dt>
+          <dd>{{ snapshot.row_count }}</dd></div>
+        <div class="detail-item"><dt>Taken</dt>
+          <dd>{{ snapshot.generated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
       <p class="form-help" style="margin-top:.75rem;">
         The settings above are the report's <span class="fw-600">current</span> settings. If somebody has edited the report since this snapshot was taken, they describe the question being asked today rather than the one that produced these rows — which is exactly why the rows themselves are stored and never recomputed.
       </p>
