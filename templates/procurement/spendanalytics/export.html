@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Data Export &amp; Visualization{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Data Export & Visualization — procurement:spend_export,
+    apps/procurement/views/SpendAnalyticsReporting/SpendExport.py.
+
+    A PAGE, not a bare download: a sidebar bullet has to land somewhere a person
+    can read, so the route that renders this template is separate from
+    procurement:spend_export_download, which returns text/csv and no template.
+    The two read the SAME GET parameters, which is why the download button below
+    carries the current filters forward verbatim — a download that silently
+    ignores the filters on screen hands back a different dataset under the same
+    name.
+
+    HONESTY GATE, non-negotiable and stated on the page itself: this ships CSV
+    download only. There is no live BI feed, no PowerBI connector, no SFTP
+    push, and no scheduled delivery worker. `bi_note` is printed verbatim rather
+    than paraphrased so nobody can soften it into a claim the code cannot back.
+
+    Every cell in the CSV goes through csv_safe on the way out: supplier names,
+    line descriptions and rule names are user-authored, and a spreadsheet will
+    execute a cell that opens with = + - or @.
+
+    Context consumed: reports, snapshots, basis, basis_choices, range_key,
+    date_range_choices, dimension, dimension_choices, start, end, row_count,
+    max_rows, showing_note, download_url, bi_note, stats, preview_rows,
+    preview_columns.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Data Export &amp; Visualization</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Export</span></div>
+      <p class="text-muted">Take the spend cube out of the system. Set the window, the basis and the axis you want the rows cut by, check the preview, then download exactly what you can see.</p>
+      <p class="text-muted">
+        Window <span class="fw-600">{% if start %}{{ start|date:"M d, Y" }}{% else %}earliest record{% endif %} – {% if end %}{{ end|date:"M d, Y" }}{% else %}today{% endif %}</span>
+        · basis <span class="fw-600">{% if basis == 'committed' %}committed (purchase orders){% else %}invoiced (recognised){% endif %}</span>
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:spend_dashboard' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Spend dashboard</a>
+      <a href="{% url 'procurement:spendreport_list' %}" class="btn btn-outline"><i data-lucide="table-2"></i> Report builder</a>
+      <a href="{{ download_url }}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}&dimension={{ dimension|urlencode }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}{% if request.GET.vendor %}&vendor={{ request.GET.vendor|urlencode }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}{% if request.GET.gl_account %}&gl_account={{ request.GET.gl_account|urlencode }}{% endif %}" class="btn btn-primary"><i data-lucide="download"></i> Download CSV</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="text-muted" style="margin:0;">
+        <span class="badge badge-info">What this does today</span> {{ bi_note }}
+      </p>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="rows-3"></i></div>
+      <div class="stat-value">{{ stats.rows|default:"0" }}</div>
+      <div class="stat-label">Rows these filters select</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="shield"></i></div>
+      <div class="stat-value">{{ stats.max_rows|default:"0" }}</div>
+      <div class="stat-label">Rows per download (cap)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="table-2"></i></div>
+      <div class="stat-value">{{ stats.reports|default:"0" }}</div>
+      <div class="stat-label">Saved reports</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="camera"></i></div>
+      <div class="stat-value">{{ stats.snapshots|default:"0" }}</div>
+      <div class="stat-label">Frozen snapshots</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Choose what leaves the system</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="export_basis">Basis</label>
+          <select id="export_basis" name="basis" class="form-select">
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="export_dimension">Cut rows by</label>
+          <select id="export_dimension" name="dimension" class="form-select">
+            {% for val, label in dimension_choices %}
+              <option value="{{ val }}" {% if dimension == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="export_range">Window</label>
+          <select id="export_range" name="range" class="form-select">
+            {% for val, label in date_range_choices %}
+              <option value="{{ val }}" {% if range_key == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="export_date_from">From</label>
+          <input type="date" id="export_date_from" name="date_from" value="{{ request.GET.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="export_date_to">To</label>
+          <input type="date" id="export_date_to" name="date_to" value="{{ request.GET.date_to }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:spend_export' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      <p class="form-help" style="margin-top:.6rem;">
+        The axis, the window and the basis are picked from these dropdowns and applied to both the preview and the download — there is one set of filters on this page, not two. <span class="fw-600">From</span> and <span class="fw-600">To</span> are read only when the window is set to a custom range.
+      </p>
+
+      {% if request.GET.vendor or request.GET.category or request.GET.org_unit or request.GET.gl_account %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-info">Narrowed</span>
+          A dimension filter arrived with this link
+          {% if request.GET.vendor %} · supplier{% endif %}
+          {% if request.GET.category %} · category{% endif %}
+          {% if request.GET.org_unit %} · department{% endif %}
+          {% if request.GET.gl_account %} · GL account{% endif %}.
+          It narrows the preview and travels with the download.
+          <a href="{% url 'procurement:spend_export' %}?basis={{ basis|urlencode }}&range={{ range_key|urlencode }}&dimension={{ dimension|urlencode }}">Clear it</a>.
+        </p>
+      {% endif %}
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if row_count > max_rows %}
+          <span class="badge badge-amber">Capped</span>
+          {{ showing_note }} The download stops at {{ max_rows }} rows and says so in its filename, so a truncated file can never be mistaken for a complete one. Narrow the window or the axis to bring the whole set under the cap.
+        {% else %}
+          <span class="badge badge-green">Complete</span> {{ showing_note }}
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Preview — the first rows of the file</h2>
+      <span class="badge badge-slate">{{ row_count|default:"0" }} row{{ row_count|pluralize }} selected</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            {% for col in preview_columns %}<th>{{ col }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview_rows %}
+            <tr>
+              {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="{{ preview_columns|length|default:1 }}">
+              <div class="empty-state">
+                <i data-lucide="table"></i>
+                <h3>Nothing selected by these filters</h3>
+                <p>No spend falls inside this window on the {% if basis == 'committed' %}committed{% else %}invoiced{% endif %} basis. Widen the window or switch the basis — an order that has not been invoiced yet only appears on the committed side.</p>
+                <a href="{% url 'procurement:spend_export' %}" class="btn btn-outline">Clear the filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">
+        The preview shows the first rows only; the download carries the whole selection up to the cap. Values that start with <span class="mono">=</span>, <span class="mono">+</span>, <span class="mono">-</span> or <span class="mono">@</span> are neutralised on the way out — supplier names and line descriptions are typed by people, and a spreadsheet treats such a cell as a formula.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Saved reports</h2>
+      <a href="{% url 'procurement:spendreport_create' %}" class="btn btn-sm btn-outline"><i data-lucide="plus"></i> New report</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Report</th><th>Measure</th><th>Basis</th><th>Owner</th><th>Last run</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for r in reports %}
+            <tr>
+              <td>
+                <a href="{% url 'procurement:spendreport_detail' r.pk %}" class="fw-600">{{ r.number }}</a>
+                <div class="text-muted">{{ r.name }}</div>
+              </td>
+              <td>{{ r.get_measure_display }}</td>
+              <td><span class="badge {{ r.basis_css|default:'badge-slate' }}">{{ r.get_basis_display }}</span></td>
+              <td>{% if r.owner %}{{ r.owner.get_full_name|default:r.owner.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if r.last_run_at %}{{ r.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never run</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:spendreport_detail' r.pk %}" class="btn-icon" title="View report" aria-label="View report"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:spendreport_export' r.pk %}" class="btn-icon" title="Download this report as CSV" aria-label="Download this report as CSV"><i data-lucide="download"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="table-2"></i>
+                <h3>No saved reports yet</h3>
+                <p>A report is a saved question: pick the measure, the axes, the grain and how many rows you want back from dropdowns, and it runs the same way every time it is opened.</p>
+                <a href="{% url 'procurement:spendreport_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Build a report</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recent snapshots</h2>
+      <span class="badge badge-slate">{{ stats.snapshots|default:"0" }} total</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Snapshot</th><th>Report</th><th>Taken by</th><th>Taken</th><th class="text-right">Rows</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in snapshots %}
+            <tr>
+              <td><a href="{% url 'procurement:spendreportsnapshot_detail' s.pk %}" class="fw-600">{{ s.title }}</a></td>
+              <td>{% if s.report %}<a href="{% url 'procurement:spendreport_detail' s.report.pk %}">{{ s.report.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if s.generated_by %}{{ s.generated_by.get_full_name|default:s.generated_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ s.generated_at|date:"M d, Y H:i" }}</td>
+              <td class="text-right">{{ s.row_count|default:"0" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:spendreportsnapshot_detail' s.pk %}" class="btn-icon" title="View snapshot" aria-label="View snapshot"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:spendreportsnapshot_export' s.pk %}" class="btn-icon" title="Download this snapshot as CSV" aria-label="Download this snapshot as CSV"><i data-lucide="download"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="camera"></i>
+                <h3>No snapshots yet</h3>
+                <p>A snapshot freezes a report exactly as it read at one moment, so a number quoted in a meeting can still be reproduced after the underlying invoices have moved on. Open a report and take one.</p>
+                <a href="{% url 'procurement:spendreport_list' %}" class="btn btn-outline"><i data-lucide="table-2"></i> Saved reports</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What the export is, and what it is not</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Format</dt><dd>CSV, UTF-8, one header row.</dd></div>
+        <div class="detail-item"><dt>Row cap</dt><dd>{{ max_rows }} rows per download. A capped file names the cap in its filename.</dd></div>
+        <div class="detail-item"><dt>Filters</dt><dd>The download reads the same parameters as this page — what you preview is what you get.</dd></div>
+        <div class="detail-item"><dt>Scope</dt><dd>Your workspace only. Every query is scoped to the tenant you are signed in to.</dd></div>
+        <div class="detail-item"><dt>Cell safety</dt><dd>Formula-leading characters are neutralised so a spreadsheet cannot execute a supplier-authored cell.</dd></div>
+        <div class="detail-item"><dt>Live feed</dt><dd>{{ bi_note }}</dd></div>
+        <div class="detail-item"><dt>Scheduled delivery</dt><dd>Not implemented here. Nothing on this page emails, uploads or pushes a file anywhere — a download happens because you asked for it.</dd></div>
+        <div class="detail-item"><dt>Writes</dt><dd>None. Exporting reads records and changes nothing.</dd></div>
+      </dl>
+    </div>
+  </div>
+{% endblock %}
