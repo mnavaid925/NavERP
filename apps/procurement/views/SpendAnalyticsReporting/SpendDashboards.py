@@ -401,6 +401,11 @@ def _item_spread(lines, basis, label_field, item_keys, vendor_field):
             "lo": money(lo) if lo is not None else ZERO,
             "hi": money(hi) if hi is not None else ZERO,
             "spread": money((hi - lo) if (lo is not None and hi is not None) else ZERO),
+            # The spread expressed as a SHARE of the cheapest price paid — the figure the badge
+            # thresholds (>20% red, >5% amber) are about. ``spread`` itself is money, and a
+            # $150 gap rendered as "150.0%" is a different and false claim.
+            "spread_pct": (_share(hi - lo, lo)
+                           if (lo is not None and hi is not None and lo) else ZERO),
         })
     return item_rows, sole_source_count
 
