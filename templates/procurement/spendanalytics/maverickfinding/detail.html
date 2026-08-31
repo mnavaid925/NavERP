@@ -55,7 +55,15 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Dashboard</a>
-      <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        maverickfinding_edit refuses a finding that has already been justified, remediated or
+        dismissed and bounces back here with an error - a disposed finding is the record of a
+        decision, not a draft. The button follows the guard the view applies rather than
+        offering a dead end the page claimed was available.
+      {% endcomment %}
+      {% if not is_resolved %}
+        <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
       {% comment %}
         maverickfinding_delete is @login_required + @tenant_admin_required + @require_POST
         and refuses a finding that has already been disposed, so the button is offered
@@ -301,7 +309,9 @@
         <p class="text-muted">Acknowledging, justifying, remediating or dismissing a finding is reserved for workspace administrators. You can still edit the finding&rsquo;s facts and its evidence pointers.</p>
       {% endif %}
       <div class="filter-bar">
-        <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit finding</a>
+        {% if not is_resolved %}
+          <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit finding</a>
+        {% endif %}
         <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Maverick dashboard</a>
         <a href="{% url 'procurement:maverickfinding_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to findings</a>
       </div>
