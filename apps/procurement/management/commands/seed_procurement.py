@@ -1957,6 +1957,126 @@ class Command(BaseCommand):
             f"{InvoiceDispute.objects.filter(tenant=tenant).count()} disputes"
             f"{'' if postable else ' — no chart of accounts, so no invoice was posted'})."))
 
+    #: Invoice numbers of the 6.14 recognised-spend baseline. The prefix is what makes the block
+    #: idempotent and what tells a reader which sub-module put the row there.
+    SPEND_BASELINE_PREFIX = "SPD-"
+
+    def _seed_spend_baseline(self, tenant, categories, members):
+        """Nine small recognised invoices so the 6.14 cube has a real shape. Idempotent.
+
+        See the call site in ``_seed_spend_analytics`` for WHY these exist and why 6.13's own
+        invoices are not promoted instead. Returns the number of invoices newly created.
+        """
+        filer = members[0] if members else None
+        today = NOW.date()
+
+        supplier_ids = list(PartyRole.objects.filter(tenant=tenant, role="supplier")
+                            .values_list("party_id", flat=True))
+        suppliers = list(Party.objects.filter(tenant=tenant, pk__in=supplier_ids)
+                         .order_by("name")[:5])
+        if not suppliers:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no supplier parties - skipping the 6.14 spend baseline."))
+            return 0
+
+        # Items carry the category the cube's passthrough leg reads (``item.category``); the rest
+        # of the spend is left for the classification RULES to claim, which is what gives the
+        # workbench and the coverage KPI something to actually do.
+        items = list(Item.objects.filter(tenant=tenant, category__in=categories)
+                     .select_related("category").order_by("id")[:6])
+
+        currency = Currency.objects.order_by("id").first()
+        tax_code = TaxCode.objects.filter(tenant=tenant, is_active=True).order_by("id").first()
+        term = PaymentTerm.objects.filter(tenant=tenant, is_active=True).order_by("id").first()
+        expense_gl = (GLAccount.objects.filter(
+            tenant=tenant, is_active=True,
+            code__in=("5000", "5100", "5200", "6000", "6100")).first()
+            or GLAccount.objects.filter(tenant=tenant, is_active=True, account_type="expense")
+            .order_by("code").first())
+        ap_gl = (GLAccount.objects.filter(
+            tenant=tenant, is_active=True, code__in=("2000", "2010", "2100")).first()
+            or GLAccount.objects.filter(tenant=tenant, is_active=True, account_type="liability")
+            .order_by("code").first())
+        postable = expense_gl is not None and ap_gl is not None
+
+        # (days_ago, supplier index, terminal status, [(description, qty, unit price)]).
+        # Days are offsets from NOW (L16) so the window follows the demo rather than aging out of
+        # it, and the amounts are deliberately small and varied: a Pareto needs a long tail, an
+        # HHI below 10000 needs more than one supplier, and the A/B/C bands need a spread.
+        specs = [
+            (4, 0, "paid", [("Laptop dock - bulk order", "6", "148.00"),
+                            ("USB-C cables", "24", "11.50")]),
+            (9, 1, "paid", [("Cold-chain packaging", "40", "18.75"),
+                            ("Dry ice pellets", "12", "42.00"),
+                            ("Thermal liners", "18", "9.90")]),
+            (16, 2, "scheduled", [("Site cleaning - monthly", "1", "860.00"),
+                                  ("Consumables", "6", "37.50")]),
+            (23, 0, "approved", [("Workstation monitors", "4", "215.00"),
+                                 ("Monitor arms", "4", "64.00")]),
+            (31, 3, "paid", [("Courier - regional", "1", "412.60"),
+                             ("Fuel surcharge", "1", "38.40")]),
+            (44, 1, "scheduled", [("Cold-chain packaging", "26", "18.75"),
+                                  ("Temperature loggers", "8", "56.00")]),
+            (57, 4, "paid", [("Office stationery", "30", "6.25"),
+                             ("Printer toner", "6", "78.00")]),
+            (69, 2, "approved", [("Facilities repair - HVAC", "1", "1240.00")]),
+            (82, 3, "paid", [("Freight - inbound consolidation", "1", "705.20"),
+                             ("Pallet handling", "14", "12.00")]),
+        ]
+
+        created = 0
+        for index, (days, supplier_index, terminal, line_specs) in enumerate(specs, start=1):
+            vendor = suppliers[supplier_index % len(suppliers)]
+            number = f"{self.SPEND_BASELINE_PREFIX}{index:02d}"
+            if SupplierInvoice.objects.filter(
+                    tenant=tenant, vendor=vendor, invoice_number=number).exists():
+                continue
+            invoice_date = today - timedelta(days=days)
+            invoice = SupplierInvoice.objects.create(
+                tenant=tenant, vendor=vendor,
+                payment_term=term, currency=currency, tax_code=tax_code,
+                invoice_type="service",
+                invoice_number=number,
+                invoice_date=invoice_date,
+                posting_date=invoice_date,
+                source="manual",
+                notes="Spend-analytics baseline: recognised spend so the 6.14 cube, Pareto and "
+                      "KPI strip have a real population to describe.",
+            )
+            for line_index, (description, quantity, price) in enumerate(line_specs):
+                item = items[(index + line_index) % len(items)] if items else None
+                SupplierInvoiceLine.objects.create(
+                    invoice=invoice,
+                    item=item,
+                    gl_account=expense_gl,
+                    tax_code=tax_code,
+                    description=description,
+                    sku_hint=item.sku if item is not None else "",
+                    quantity=Decimal(quantity), unit_price=Decimal(price))
+            invoice.recalc_totals()
+            write_audit_log(None, invoice, "create")
+
+            # The lifecycle, through the verbs. approve() is the one that touches the ledger.
+            invoice.capture()
+            invoice.submit_for_approval()
+            if postable and invoice.approve(filer):
+                if terminal in ("scheduled", "paid"):
+                    invoice.schedule()
+                if terminal == "paid":
+                    invoice.mark_paid()
+            created += 1
+
+        unposted = ("" if postable else
+                    " - no chart of accounts, so they stopped at pending approval and are NOT "
+                    "recognised spend")
+        if created:
+            self.stdout.write(
+                f"  {tenant.name}: {created} baseline spend invoices across "
+                f"{len(suppliers)} supplier(s){unposted}.")
+        else:
+            self.stdout.write(f"  {tenant.name}: spend baseline invoices already present.")
+        return created
+
     def _seed_spend_analytics(self, tenant):
         """6.14 Spend Analytics & Reporting - classification rules, maverick findings, reports.
 
@@ -1996,6 +2116,30 @@ class Command(BaseCommand):
 
         members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
         owner = members[0] if members else None
+
+        # -- 0. recognised spend for the analytics window ------------------------------------
+        #
+        # Every 6.14 page reads ONE population: invoice lines whose header sits in
+        # RECOGNISED_INVOICE_STATUSES (approved / scheduled / paid) inside the window. 6.13's
+        # register deliberately spreads its sixteen invoices across EVERY lifecycle status, so
+        # only three of them are recognised - which renders a Pareto with a single bar, an HHI of
+        # 10000 and an A-band of 100%, and computes every KPI tile off three lines. Promoting
+        # 6.13's rows is not the fix: their statuses are the point of that block, and moving one
+        # would desync the Bill / JournalEntry it posted. These nine small invoices are additional
+        # spend instead, spread across up to five suppliers, the item categories this workspace
+        # actually has, and the last ninety days.
+        #
+        # Built through 6.13's OWN verbs (capture -> submit_for_approval -> approve -> schedule ->
+        # mark_paid), never by writing ``status``: approve() is what posts the Bill and the
+        # balanced JournalEntry, and an "approved" invoice with no entry behind it is a state the
+        # application itself can never produce. Where the workspace has no chart of accounts the
+        # row stops at pending_approval, exactly as 6.13 leaves its own - a workspace that cannot
+        # post cannot honestly show approved spend.
+        #
+        # Idempotent on (tenant, vendor, invoice_number), the same business key 6.13 uses, because
+        # ``number`` (SIV-) is regenerated on every run and a get_or_create on it would mint a new
+        # row every time.
+        self._seed_spend_baseline(tenant, categories, members)
 
         # -- 1. classification rules ---------------------------------------------------------
         if SpendClassificationRule.objects.filter(tenant=tenant).exists():
