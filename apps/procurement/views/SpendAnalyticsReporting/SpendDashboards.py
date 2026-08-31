@@ -185,11 +185,19 @@ def spend_dashboard(request):
     lines = apply_axis_filters(basis_lines(request.tenant, basis, start, end),
                                basis, request.tenant, **_axis_pks(request))
 
-    by_supplier = spend_cube(request.tenant, basis, start, end, "supplier", lines=lines)
-    by_department = spend_cube(request.tenant, basis, start, end, "department", lines=lines)
-    by_gl_account = spend_cube(request.tenant, basis, start, end, "gl_account", lines=lines)
+    # ONE aggregate over the window, handed to everything that needs a denominator. Each cube
+    # and the classification pass would otherwise re-issue the identical SUM(line_total) over
+    # the identical joined window - four times per render for a figure that cannot change
+    # between them.
+    window_total = lines.aggregate(v=Sum("line_total"))["v"] or ZERO
+    by_supplier = spend_cube(request.tenant, basis, start, end, "supplier", lines=lines,
+                             total=window_total)
+    by_department = spend_cube(request.tenant, basis, start, end, "department", lines=lines,
+                               total=window_total)
+    by_gl_account = spend_cube(request.tenant, basis, start, end, "gl_account", lines=lines,
+                               total=window_total)
     classified_share, unclassified_value, by_category = classified_pct(
-        request.tenant, basis, start, end, lines)
+        request.tenant, basis, start, end, lines, total=window_total)
 
     currency = currency_split(request.tenant, basis, start, end, lines=lines)
     kpis = spend_kpis(request.tenant, basis, start, end, lines,
@@ -319,7 +327,8 @@ def category_spend(request):
 
     currency = currency_split(request.tenant, basis, start, end, lines=lines)
     _classified, unclassified_value, _category_rows = classified_pct(
-        request.tenant, basis, start, end, lines)
+        # ``totals["value"]`` above IS this window's SUM(line_total) - reused rather than re-run.
+        request.tenant, basis, start, end, lines, total=totals["value"] or ZERO)
 
     average_price = money(Decimal(net_spend) / txns) if txns else ZERO
 
