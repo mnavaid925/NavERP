@@ -432,8 +432,16 @@ def _export_dataset(tenant, basis, start, end, dimension, lines):
         return columns, rows, len(rows)
 
     total_rows = lines.count()
+    # The register row builder below reads the DOCUMENT's own currency on both bases and its
+    # vendor on the committed basis — hops ``_classify_select_related`` does not carry, because
+    # the classification walk has no use for a currency. Without them a 5,000-row export is
+    # 5,000-10,000 extra queries. Widened HERE rather than in the shared helper, so the
+    # classification pass keeps its narrow join list.
+    document_relations = (("invoice__currency",) if basis == "invoiced"
+                          else ("purchase_order__vendor", "purchase_order__currency"))
     fetched = (lines
-               .select_related(*_classify_select_related(basis), "gl_account")
+               .select_related(*_classify_select_related(basis), "gl_account",
+                               *document_relations)
                .annotate(_dept=_department_expression(basis))
                .order_by("-" + _date_field(basis), "-id")[:MAX_EXPORT_ROWS])
     fetched = list(fetched)
