@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Spend Classification Rules{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — SpendClassificationRule register.
+
+    Context contract (crud_list + extra_context), and nothing else exists here:
+      object_list, page_obj, q,
+      match_type_choices (=MATCH_TYPE_CHOICES), applies_to_choices (=APPLIES_TO_CHOICES),
+      categories, vendors, gl_accounts, org_units,
+      stats{total, active, inactive, matched_value}.
+    Filter echo is read straight off request.GET: q, match_type, category, is_active.
+
+    Only THREE filters are rendered, because crud_list only declares three:
+      (("match_type","match_type",False), ("category","category_id",True), ("is_active","is_active",False)).
+    `vendors`, `gl_accounts` and `org_units` are pinned in the context but have NO matching
+    filter tuple, so they are NOT rendered as <select>s — a dropdown that changes the URL and
+    then changes nothing is a worse bug than a missing dropdown. They are used in the empty
+    state instead, to say what a rule can actually point at.
+
+    `is_active` option values are the literal strings True / False: crud_list maps
+    {"True": True, "False": False} before it hits the ORM, and a bogus value is skipped
+    rather than 500ing.
+    `category` is an int FK, so it is compared with |stringformat:"d" — never |slugify.
+
+    Badge colours compare the frozen CHOICES keys from the contract rather than reading the
+    model's own CSS map, so a backend rename degrades to badge-slate instead of an unstyled
+    badge. theme.css ships colour-named modifiers ONLY (badge-green|red|amber|info|muted|slate,
+    stat-icon blue|green|orange|purple|slate|red); badge-success / badge-danger / badge-warning
+    DO NOT EXIST and render as class-less text.
+
+    Neither edit nor delete is gated here: spendrule_delete is @login_required + @require_POST
+    with no admin decorator and the rule carries no status column, so there is no contracted
+    condition to wrap them in. The rule NAME is user-authored free text, so it goes into the
+    confirm() through |escapejs (which emits ', surviving HTML-attribute decoding);
+    a bare {{ obj.name }} would emit &#39;, the browser would decode it to a real apostrophe
+    before JS parsed the line, the handler would throw, and a throwing onsubmit does not
+    preventDefault — the row would delete unconfirmed (L42).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Spend Classification Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Classification Rules</span></div>
+      <p class="text-muted">How uncategorised spend gets a category. Each rule tests one thing — a supplier, a GL account, a description keyword, an invoice type or a department — and files every line it matches under one category. The rules are explicit and auditable: you can read why any line landed where it did, and change it by editing the rule. The lowest priority number wins, and ties break on the order the rules were created.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:classification_workbench' %}" class="btn btn-outline"><i data-lucide="wand-2"></i> Classification workbench</a>
+      <a href="{% url 'procurement:spendrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add rule</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Rules defined</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pause-circle"></i></div><div class="stat-value">{{ stats.inactive }}</div><div class="stat-label">Switched off</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="coins"></i></div><div class="stat-value">{{ stats.matched_value|floatformat:"2" }}</div><div class="stat-label">Value last previewed</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search rules" class="form-input" placeholder="Search name, keyword, notes or category…">
+        </div>
+        <div class="form-group">
+          <select name="match_type" aria-label="Match type" class="form-select">
+            <option value="">All match types</option>
+            {% for val, label in match_type_choices %}
+              <option value="{{ val }}" {% if request.GET.match_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">All categories</option>
+            {% for cat in categories %}
+              <option value="{{ cat.pk|stringformat:"d" }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">Active and inactive</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Switched off only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:spendrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Match type</th>
+            <th>Matches on</th>
+            <th>Files under</th>
+            <th>Applies to</th>
+            <th class="text-right">Priority</th>
+            <th>Status</th>
+            <th class="text-right">Matched</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:spendrule_detail' obj.pk %}">{{ obj.name }}</a>
+                {% if obj.notes %}<div class="text-muted">{{ obj.notes|truncatechars:70 }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.match_type == "vendor" %}<span class="badge badge-info">{{ obj.get_match_type_display }}</span>
+                {% elif obj.match_type == "gl_account" %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>
+                {% elif obj.match_type == "keyword" %}<span class="badge badge-amber">{{ obj.get_match_type_display }}</span>
+                {% elif obj.match_type == "invoice_type" %}<span class="badge badge-muted">{{ obj.get_match_type_display }}</span>
+                {% elif obj.match_type == "org_unit" %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  Every one of vendor / gl_account / org_unit is SET_NULL null=True, and
+                  `invoice_type` is a plain CharField with NO choices on the model — there is no
+                  get_invoice_type_display() to call, so the label chain below is written out
+                  against SupplierInvoice.INVOICE_TYPE_CHOICES and falls back to the raw key.
+                  A None FK inside a filter argument raises (L10), so each one is behind {% if %}.
+                {% endcomment %}
+                {% if obj.match_type == "vendor" %}
+                  {% if obj.vendor %}<span class="fw-600">{{ obj.vendor.name }}</span>{% else %}<span class="text-muted">No supplier set</span>{% endif %}
+                {% elif obj.match_type == "gl_account" %}
+                  {% if obj.gl_account %}<span class="fw-600">{{ obj.gl_account.code }}</span> <span class="text-muted">{{ obj.gl_account.name }}</span>{% else %}<span class="text-muted">No account set</span>{% endif %}
+                {% elif obj.match_type == "org_unit" %}
+                  {% if obj.org_unit %}<span class="fw-600">{{ obj.org_unit.name }}</span>{% else %}<span class="text-muted">No department set</span>{% endif %}
+                {% elif obj.match_type == "keyword" %}
+                  {% if obj.keyword %}<span class="fw-600">&ldquo;{{ obj.keyword }}&rdquo;</span>{% else %}<span class="text-muted">No keyword set</span>{% endif %}
+                {% elif obj.match_type == "invoice_type" %}
+                  {% if obj.invoice_type == "standard" %}<span class="fw-600">Standard</span>
+                  {% elif obj.invoice_type == "credit_memo" %}<span class="fw-600">Credit memo</span>
+                  {% elif obj.invoice_type == "debit_memo" %}<span class="fw-600">Debit memo</span>
+                  {% elif obj.invoice_type == "prepayment" %}<span class="fw-600">Prepayment</span>
+                  {% elif obj.invoice_type == "service" %}<span class="fw-600">Service</span>
+                  {% elif obj.invoice_type %}<span class="fw-600">{{ obj.invoice_type }}</span>
+                  {% else %}<span class="text-muted">No invoice type set</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{% if obj.category %}<span class="fw-600">{{ obj.category.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.applies_to == "both" %}<span class="badge badge-green">{{ obj.get_applies_to_display }}</span>
+                {% elif obj.applies_to == "invoiced" %}<span class="badge badge-info">{{ obj.get_applies_to_display }}</span>
+                {% elif obj.applies_to == "committed" %}<span class="badge badge-slate">{{ obj.get_applies_to_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_applies_to_display }}</span>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ obj.priority }}</td>
+              <td>
+                {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Switched off</span>{% endif %}
+              </td>
+              <td class="text-right">
+                {{ obj.match_count }}
+                {% if obj.last_matched_at %}<div class="text-muted">{{ obj.last_matched_at|date:"M d, Y" }}</div>{% else %}<div class="text-muted">never previewed</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:spendrule_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:spendrule_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'procurement:spendrule_delete' obj.pk %}" onsubmit="return confirm('Delete the rule {{ obj.name|escapejs }}? Lines it was classifying fall back to the next matching rule, or to (Unclassified) if there isn\'t one. Nothing already reported changes until the next run.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="wand-2"></i>
+                <h3>No classification rules found</h3>
+                <p>Nothing matches these filters. A rule can point at any of {{ vendors.count }} suppliers, {{ gl_accounts.count }} GL accounts or {{ org_units.count }} departments — or simply at a word in the line description — and file what it matches under one of {{ categories.count }} categories. Start from the workbench: it lists the unclassified spend biggest-first, with a pre-filled rule behind each row.</p>
+                <a href="{% url 'procurement:classification_workbench' %}" class="btn btn-primary"><i data-lucide="wand-2"></i> Open the workbench</a>
+                <a href="{% url 'procurement:spendrule_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a rule by hand</a>
+                <a href="{% url 'procurement:spendrule_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %}
+      L9: the shared partial guards has_previous / has_next before it ever calls
+      previous_page_number / next_page_number, and replays every GET param except `page`,
+      so the filters above survive paging.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How a line gets its category</h2><span class="text-muted">read top to bottom — the first hit wins</span></div>
+    <div class="card-body">
+      <ol class="text-muted">
+        <li>On the invoiced basis, the line's own item category is used when the line points at a catalogued item. Nothing below runs.</li>
+        <li>Otherwise the active rules are tried in priority order, lowest number first, ties broken by the order they were created. The first rule that matches decides the category.</li>
+        <li>If no rule matches, the line is reported as <strong>(Unclassified)</strong> — it is never dropped, so the category breakdown always adds back to the headline total.</li>
+      </ol>
+      <p class="text-muted">On the committed (purchase-order) basis there is no item link to fall back on, so the rules are the only thing standing between a PO line and (Unclassified). Rules set to <em>Invoiced only</em> are skipped on that basis entirely.</p>
+    </div>
+  </div>
+{% endblock %}
