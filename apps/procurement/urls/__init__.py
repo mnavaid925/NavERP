@@ -12,7 +12,10 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 `punchout/`, `catalog-uploads/`, `asn/`, `delivery-schedules/`,
 `backorders/`, `inbound-tracking/`, `delivery-confirmation/`, `receipt-tolerances/`,
 `receipt-discrepancies/`, `returns-to-vendor/`, `receiving-console/`, `tolerance-exceptions/`,
-`receipt-audit/`) is a distinct whole component — no greedy
+`receipt-audit/`, `supplier-invoices/`, `capture/`, `invoice-vouchers/`,
+`supplier-invoice-lines/`, `payment-schedule/`, `match-variances/`, `match-board/`,
+`invoice-disputes/`, `spend/`, `spend-rules/`, `maverick-findings/`, `spend-reports/`,
+`spend-report-snapshots/`) is a distinct whole component — no greedy
 ``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
 about.
 """
@@ -34,6 +37,7 @@ from .RequisitionManagement.Amendments import urlpatterns as _rm_amendments
 from .RequisitionManagement.Requisitions import urlpatterns as _rm_requisitions
 from .RequisitionManagement.Templates import urlpatterns as _rm_templates
 from .RfxManagement import urlpatterns as _rfx_management
+from .SpendAnalyticsReporting import urlpatterns as _sar_spendanalytics
 from .SourcingTendering import urlpatterns as _st_sourcingtendering
 from .VendorManagement import urlpatterns as _vm_vendormanagement
 from .ContractsManagement import urlpatterns as _cm_contractsmanagement
@@ -76,4 +80,12 @@ urlpatterns = [
     *_ivm_supplierinvoicelines,  # 6.13 invoice line register + the payment schedule board
     *_ivm_matchvariances,       # 6.13 match exceptions + the three-way match board
     *_ivm_invoicedisputes,      # 6.13 dispute register + workflow verbs + the aging board
+    # 6.14 LAST for the same reason 6.13 was: every first segment it claims is new
+    # (``spend/`` with its six literal children, ``spend-rules/``, ``maverick-findings/``,
+    # ``spend-reports/``, ``spend-report-snapshots/``), and appended-last is belt-and-braces
+    # against a future module claiming one of them. Note ``spend-rules/`` and ``spend-reports/``
+    # are NOT prefixes of ``spend/`` — Django matches whole path components, not strings.
+    *_sar_spendanalytics,       # 6.14 spend dashboard/category/classification/export + maverick
+                                #      board & scan, classification rules, maverick findings,
+                                #      saved report builder + snapshots
 ]
