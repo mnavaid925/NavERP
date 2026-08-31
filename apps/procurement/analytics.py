@@ -635,11 +635,15 @@ def currency_split(tenant, basis, start, end, lines=None):
     return {"rows": rows, "mixed_currency": len(carrying) > 1}
 
 
-def classified_pct(tenant, basis, start, end, lines=None, rules=None):
+def classified_pct(tenant, basis, start, end, lines=None, rules=None, total=None):
     """``(pct, unclassified_value, category_rows)`` — how much spend the taxonomy actually reaches.
 
     Returned together because all three come out of ONE category pass; computing the percentage
     separately would run the classification walk twice for the same page.
+
+    ``total`` is the window's ``SUM(line_total)`` when the caller already has it — the dashboard
+    runs three cubes, this pass and the KPI strip over ONE window, and each of them would
+    otherwise re-issue the same aggregate.
     """
     if tenant is None:
         return ZERO, ZERO, []
@@ -647,7 +651,8 @@ def classified_pct(tenant, basis, start, end, lines=None, rules=None):
         lines = basis_lines(tenant, basis, start, end)
     if rules is None:
         rules = active_rules(tenant)
-    total = lines.aggregate(v=Sum("line_total"))["v"] or ZERO
+    if total is None:
+        total = lines.aggregate(v=Sum("line_total"))["v"] or ZERO
     groups, unclassified = _category_groups(tenant, basis, lines, rules)
     rows = _rows_from_groups(groups, total=total, top_n=MAX_GROUP_ROWS)
     pct = _share(Decimal(total) - Decimal(unclassified), total)
