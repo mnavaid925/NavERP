@@ -57,16 +57,19 @@
       <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Dashboard</a>
       <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
       {% comment %}
-        maverickfinding_delete is @login_required + @require_POST with no admin gate and
-        no status gate in the contract, so it is offered on every finding rather than
-        hidden behind a condition the view does not apply. Only the system-assigned
-        obj.number is interpolated — never the supplier name or the detail text, both
-        user-authored — and the literal apostrophe is escaped as \' because &#39; does
-        not escape inside an event-handler attribute (L42).
+        maverickfinding_delete is @login_required + @tenant_admin_required + @require_POST
+        and refuses a finding that has already been disposed, so the button is offered
+        under exactly those two conditions — is_admin and not is_resolved, both already in
+        this page's context. Only the system-assigned obj.number is interpolated — never
+        the supplier name or the detail text, both user-authored — and the literal
+        apostrophe is escaped as \' because &#39; does not escape inside an event-handler
+        attribute (L42).
       {% endcomment %}
-      <form method="post" action="{% url 'procurement:maverickfinding_delete' obj.pk %}" onsubmit="return confirm('Delete finding {{ obj.number }}? The disposition and the resolution note go with it, and the scan\'s dedupe key will raise it again if the underlying document has not changed.');">
-        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
-      </form>
+      {% if is_admin and not is_resolved %}
+        <form method="post" action="{% url 'procurement:maverickfinding_delete' obj.pk %}" onsubmit="return confirm('Delete finding {{ obj.number }}? The disposition and the resolution note go with it, and the scan\'s dedupe key will raise it again if the underlying document has not changed.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
       <a href="{% url 'procurement:maverickfinding_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to list</a>
     </div>
   </div>
