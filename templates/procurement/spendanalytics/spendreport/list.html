@@ -144,11 +144,13 @@
                 {% if obj.date_range == "custom" %}<div class="text-muted">{{ obj.date_from|date:"M d, Y"|default:"—" }} → {{ obj.date_to|date:"M d, Y"|default:"—" }}</div>{% endif %}
               </td>
               <td>
-                {% if obj.chart_type == "bar" %}<span class="badge badge-muted">{{ obj.get_chart_type_display }}</span>
-                {% elif obj.chart_type == "line" %}<span class="badge badge-muted">{{ obj.get_chart_type_display }}</span>
-                {% elif obj.chart_type == "pie" %}<span class="badge badge-muted">{{ obj.get_chart_type_display }}</span>
-                {% elif obj.chart_type == "table" %}<span class="badge badge-slate">{{ obj.get_chart_type_display }}</span>
-                {% else %}<span class="badge badge-slate">{{ obj.get_chart_type_display }}</span>{% endif %}
+                {% comment %}
+                  Two colours, so two branches: bar / line / pie all read as a chart
+                  (badge-muted) and table is the one that is not (badge-slate) — which is
+                  also the fallback, so a future CHOICES value lands there with its own
+                  display label rather than in a branch somebody forgot to add.
+                {% endcomment %}
+                <span class="badge {% if obj.chart_type == "table" %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_chart_type_display }}</span>
               </td>
               <td class="text-right">{{ obj.top_n }}</td>
               <td>
@@ -160,7 +162,15 @@
                   <a href="{% url 'procurement:spendreport_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'procurement:spendreport_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   <form method="post" action="{% url 'procurement:spendreport_favorite' obj.pk %}">
-                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}" aria-label="{% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}"><i data-lucide="star"></i></button>
+                    {% csrf_token %}
+                    {% comment %}
+                      Without this the view falls through to its detail redirect and pinning a
+                      row navigates the reader off the list they were filtering. The view
+                      validates it with url_has_allowed_host_and_scheme, so it cannot be an
+                      open redirect.
+                    {% endcomment %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn-icon" type="submit" title="{% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}" aria-label="{% if obj.is_favorite %}Unpin{% else %}Pin{% endif %}"><i data-lucide="star"></i></button>
                   </form>
                   {% comment %}
                     Delete is @require_POST, so it can only be a form — never a link. Only the
