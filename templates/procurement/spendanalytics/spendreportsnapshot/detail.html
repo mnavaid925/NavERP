@@ -32,7 +32,13 @@
     <div class="page-actions">
       <a href="{{ back_url }}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to report</a>
       <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
-      <form method="post" action="{{ delete_url }}" style="display:inline;" onclick="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');">
+      {% comment %}
+        onsubmit, not onclick: only a submit handler's return value cancels the submission, so
+        an onclick here fired on any click inside the form region and guarded nothing when the
+        form was submitted with the keyboard. Every other delete in this sub-module uses
+        onsubmit (spendreport/detail.html, spendrule/list.html).
+      {% endcomment %}
+      <form method="post" action="{{ delete_url }}" style="display:inline;" onsubmit="return confirm('Delete snapshot {{ snapshot.pk }}? The frozen figures cannot be recovered.');">
         {% csrf_token %}
         <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
       </form>
