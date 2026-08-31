@@ -105,6 +105,15 @@ from .InvoiceVoucherManagement.SupplierInvoices import (
 from .InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLineForm
 from .InvoiceVoucherManagement.MatchVariances import InvoiceVarianceAcceptForm
 from .InvoiceVoucherManagement.InvoiceDisputes import InvoiceDisputeForm
+# 6.14 Spend Analytics & Reporting — from the entity MODULES, same reason as 6.13 above.
+# Three forms, not five: ``SpendDashboards.py`` declares none (its three pages are GET-driven
+# reports whose filter bar is sanitised against a whitelist in the view — stricter than a Form,
+# and a junk parameter degrades to "filter ignored" rather than a page of red text), and
+# ``SpendReportSnapshot`` has none by design (a snapshot freezes a computed result; a hand-typed
+# one would be a figure with no run behind it).
+from .SpendAnalyticsReporting.SpendClassificationRules import SpendClassificationRuleForm
+from .SpendAnalyticsReporting.MaverickFindings import MaverickSpendFindingForm
+from .SpendAnalyticsReporting.SpendReports import SpendReportForm
 
 __all__ = [
     "EaucBidForm",
@@ -180,4 +189,7 @@ __all__ = [
     "SupplierInvoiceLineForm",
     "InvoiceVarianceAcceptForm",
     "InvoiceDisputeForm",
+    "SpendClassificationRuleForm",
+    "MaverickSpendFindingForm",
+    "SpendReportForm",
 ]
