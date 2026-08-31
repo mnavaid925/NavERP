@@ -200,7 +200,14 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:maverickfinding_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    The pencil follows the view: maverickfinding_edit refuses a justified /
+                    remediated / dismissed finding and redirects with an error, because a
+                    disposed row is the record of a decision rather than a draft.
+                  {% endcomment %}
+                  {% if not obj.is_resolved %}
+                    <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
                   {% comment %}
                     maverickfinding_delete is @login_required + @tenant_admin_required +
                     @require_POST and refuses a disposed finding, so the bin is shown under
