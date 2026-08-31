@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Maverick Spend Findings{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — MaverickSpendFinding register.
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      reason_choices, status_choices, severity_choices,
+      vendors, categories, org_units,
+      stats{open, high, value_at_risk, leakage},
+      is_admin
+    Filter echo is read straight off request.GET: q, reason, status, severity,
+    vendor, category, org_unit, addressable. `addressable` posts the literal
+    strings "True"/"False" because crud_list maps them onto the is_addressable
+    boolean — the same shape the 6.14 spendrule list uses for is_active.
+
+    Badge colours are decided by comparing the FROZEN CHOICES KEYS from the contract
+    rather than by printing the model's STATUS_CSS / SEVERITY_CSS strings. A rename
+    or a typo on the backend then degrades to badge-slate instead of emitting a
+    class-less, unstyled badge. theme.css ships colour-named modifiers ONLY
+    (badge-green|red|amber|info|muted|slate, theme.css:286-291) — badge-success,
+    badge-danger and badge-warning do not exist and render as bare text (L33).
+    stat-icon is limited to blue|green|orange|purple|slate|red (theme.css:260-265).
+
+    Money is printed at FACE VALUE per document currency: 6.14 has no FX-rate table
+    anywhere in the repo, so a cross-currency total would be invented. The dashboard
+    is where the per-currency split lives; the caveat under the KPI strip says so.
+
+    Only the system-assigned {{ obj.number }} is ever interpolated into a confirm()
+    handler — never the supplier name, the finding detail, or the supplier's own
+    invoice number, all of which are user-authored. Literal apostrophes inside the
+    handler are escaped as \' because &#39; does NOT escape inside an event-handler
+    attribute, and a confirm() that throws does not preventDefault — the delete
+    would fire unconfirmed (L42).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Maverick Spend Findings</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Maverick Spend Findings</span></div>
+      <p class="text-muted">Spend that bypassed the agreed route — bought with no contract, invoiced with no purchase order, ordered off-catalogue or above the price that was agreed. Every finding points back at the document it was raised from, and the detection rules are explicit and auditable, not a black box.{% if is_admin %} You can run a detection scan and dispose of findings from the maverick dashboard.{% else %} Changing a finding&rsquo;s disposition is reserved for workspace administrators.{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Maverick dashboard</a>
+      <a href="{% url 'procurement:spend_dashboard' %}" class="btn btn-outline"><i data-lucide="pie-chart"></i> Spend dashboard</a>
+      <a href="{% url 'procurement:maverickfinding_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add finding</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open &amp; acknowledged</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="shield-alert"></i></div><div class="stat-value">{{ stats.high }}</div><div class="stat-label">High severity</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ stats.value_at_risk|floatformat:"2" }}</div><div class="stat-label">Value at risk</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="trending-down"></i></div><div class="stat-value">{{ stats.leakage|floatformat:"2" }}</div><div class="stat-label">Contract leakage</div></div>
+  </div>
+  <p class="text-muted">Amounts are summed at face value in each document&rsquo;s own currency — there is no exchange-rate master in this workspace, so a mixed-currency figure is never converted. The maverick dashboard renders the per-currency split.</p>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, detail, supplier, invoice or PO…">
+        </div>
+        <div class="form-group">
+          <select name="reason" aria-label="Reason" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.reason == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">Any severity</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %} pk filters compare against pk|stringformat:"d" — |slugify mangles the value and silently never matches. {% endcomment %}
+          <select name="vendor" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">All categories</option>
+            {% for cat in categories %}
+              <option value="{{ cat.pk|stringformat:"d" }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Department" class="form-select">
+            <option value="">All departments</option>
+            {% for ou in org_units %}
+              <option value="{{ ou.pk|stringformat:"d" }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="addressable" aria-label="Addressable" class="form-select">
+            <option value="">Addressable and excluded</option>
+            <option value="True" {% if request.GET.addressable == "True" %}selected{% endif %}>Addressable only</option>
+            <option value="False" {% if request.GET.addressable == "False" %}selected{% endif %}>Excluded from the rate</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:maverickfinding_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Finding</th>
+            <th>Reason</th>
+            <th>Supplier</th>
+            <th>Source document</th>
+            <th>Category / department</th>
+            <th>Document date</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">Leakage</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:maverickfinding_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">Detected {{ obj.detected_at|date:"M d, Y"|default:"—" }} · {{ obj.age_days|default:"0" }} d old</div>
+              </td>
+              <td>
+                {% if obj.reason == "no_contract" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "po_less_invoice" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "suspended_vendor" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "split_purchase" %}<span class="badge badge-red">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "no_requisition" %}<span class="badge badge-amber">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "off_catalog" %}<span class="badge badge-amber">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "price_above_contract" %}<span class="badge badge-amber">{{ obj.get_reason_display }}</span>
+                {% elif obj.reason == "non_preferred_vendor" %}<span class="badge badge-info">{{ obj.get_reason_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_reason_display }}</span>{% endif %}
+                {% if obj.detail %}<div class="text-muted">{{ obj.detail|truncatechars:90 }}</div>{% endif %}
+              </td>
+              <td>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.supplier_invoice %}
+                  <a href="{% url 'procurement:supplierinvoice_detail' obj.supplier_invoice.pk %}" class="fw-600">{{ obj.supplier_invoice.number }}</a>
+                  {% if obj.supplier_invoice.invoice_number %}<div class="text-muted">{{ obj.supplier_invoice.invoice_number }}</div>{% endif %}
+                {% endif %}
+                {% if obj.invoice_line %}
+                  <div class="text-muted"><a href="{% url 'procurement:supplierinvoiceline_detail' obj.invoice_line.pk %}">Line {{ obj.invoice_line.description|default:obj.invoice_line.pk|truncatechars:40 }}</a></div>
+                {% endif %}
+                {% if obj.purchase_order %}
+                  <div><a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="fw-600">{{ obj.purchase_order.number }}</a></div>
+                {% endif %}
+                {% if not obj.supplier_invoice and not obj.invoice_line and not obj.purchase_order %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.category %}{{ obj.category.name }}{% else %}<span class="text-muted">(Unclassified)</span>{% endif %}
+                <div class="text-muted">{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}(unassigned){% endif %}</div>
+              </td>
+              <td>{{ obj.document_date|date:"M d, Y"|default:"—" }}</td>
+              <td class="text-right fw-600">{{ obj.amount|floatformat:"2" }}
+                {% if obj.benchmark_amount != None %}<div class="text-muted">vs {{ obj.benchmark_amount|floatformat:"2" }}</div>{% endif %}
+              </td>
+              <td class="text-right">{{ obj.leakage_amount|floatformat:"2" }}</td>
+              <td>
+                {% if obj.severity == "high" %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+                {% elif obj.severity == "medium" %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+                {% elif obj.severity == "low" %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == "open" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "acknowledged" %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "justified" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "remediated" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "dismissed" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+                {% if not obj.is_addressable %}<div><span class="badge badge-muted">Excluded from rate</span></div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:maverickfinding_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    maverickfinding_delete is @login_required + @require_POST and carries NO
+                    status gate and NO admin gate in the contract, so the bin is offered on
+                    every row — hiding it here would contradict the view. Disposition is the
+                    admin-gated verb, and it lives on the detail page, not in this column.
+                    Only the system-assigned number reaches confirm(); the apostrophe in
+                    "scan\'s" is backslash-escaped for the attribute context.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:maverickfinding_delete' obj.pk %}" onsubmit="return confirm('Delete finding {{ obj.number }}? The disposition and the resolution note go with it, and the next detection scan\'s dedupe key will raise it again if the underlying document has not changed.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11">
+              <div class="empty-state">
+                <i data-lucide="shield-alert"></i>
+                <h3>No maverick findings</h3>
+                <p>Nothing matches these filters. Findings are raised by the detection scan on the maverick dashboard, or added by hand when you spot spend that went around the agreed route.</p>
+                <a href="{% url 'procurement:maverick_dashboard' %}" class="btn btn-primary"><i data-lucide="gauge"></i> Maverick dashboard</a>
+                <a href="{% url 'procurement:maverickfinding_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a finding</a>
+                <a href="{% url 'procurement:maverickfinding_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %}
+      The shared partial guards has_previous / has_next before it ever calls
+      previous_page_number / next_page_number — an unguarded call raises EmptyPage and
+      500s the moment the register outgrows one page (L9). It also replays every GET
+      param except `page`, so the filters above survive paging.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
