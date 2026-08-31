@@ -878,6 +878,10 @@ def compute_report(report):
 
     **Everything returned is JSON-serialisable** - that is what lets ``spendreport_snapshot``
     store the payload verbatim and ``spendreportsnapshot_detail`` re-render it with NO recompute.
+    ``currency_rows`` / ``mixed_currency`` are the split this function ALREADY computes for the
+    KPI strip, returned rather than left for the caller to run a second time against a different
+    (unfiltered) window. ``spendreport_snapshot`` stores five named keys only, so widening the
+    result does not widen the stored payload.
     Money therefore leaves here as a ``float`` in ``chart_data`` and as a formatted STRING in a
     table cell; a raw ``Decimal`` never crosses the boundary.
 
@@ -887,7 +891,8 @@ def compute_report(report):
     tenant = report.tenant
     if tenant is None:
         return {"summary": [], "columns": [], "rows": [], "chart_type": report.chart_type,
-                "chart_labels": [], "chart_data": []}
+                "chart_labels": [], "chart_data": [], "currency_rows": [],
+                "mixed_currency": False}
 
     start, end = range_bounds(report.date_range, report.date_from, report.date_to)
     lines = basis_lines(tenant, report.basis, start, end)
@@ -922,7 +927,8 @@ def compute_report(report):
         _value, display = _measure_value(report.measure, lines, tenant, report.basis, start, end)
         summary.insert(0, {"label": measure_label, "value": display})
         return {"summary": summary, "columns": [measure_label], "rows": [[display]],
-                "chart_type": "table", "chart_labels": [], "chart_data": []}
+                "chart_type": "table", "chart_labels": [], "chart_data": [],
+                "currency_rows": split["rows"], "mixed_currency": split["mixed_currency"]}
 
     # -- the grouped report -----------------------------------------------------------------------
     # Fetched ONCE for the whole report and threaded into every cube and every narrow below: the
@@ -944,7 +950,8 @@ def compute_report(report):
             rows.append([row["label"], display, _pct(row["pct"]), _num(row["count"])])
         return {"summary": summary, "columns": columns, "rows": rows,
                 "chart_type": report.chart_type, "chart_labels": chart_labels,
-                "chart_data": chart_data}
+                "chart_data": chart_data,
+                "currency_rows": split["rows"], "mixed_currency": split["mixed_currency"]}
 
     # Two axes: the second is cut INSIDE each row the first axis kept. One cube per kept row, and
     # the kept rows are bounded by ``top_n`` (<= 100 by the model's own validator) - never by how
@@ -974,4 +981,5 @@ def compute_report(report):
                          _num(sub["count"])])
     return {"summary": summary, "columns": columns, "rows": rows,
             "chart_type": report.chart_type, "chart_labels": chart_labels,
-            "chart_data": chart_data}
+            "chart_data": chart_data,
+            "currency_rows": split["rows"], "mixed_currency": split["mixed_currency"]}
