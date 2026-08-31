@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} · Spend Classification Rule{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — SpendClassificationRule detail.
+
+    Context contract, and nothing else exists here:
+      obj, rule (the SAME object, aliased for readability),
+      preview  -> dict, keys EXACTLY count / value / start / end,
+      recent_matches -> list of dicts, keys EXACTLY label / document / document_url / date / amount (max 10),
+      category -> obj.category, can_delete -> bool,
+      stats    -> dict, keys EXACTLY match_count / last_matched_at / preview_count / preview_value.
+    `obj` and `rule` are one object; `obj` is used for model attributes and `rule` only where
+    the sentence reads better, so a backend that ever drops the alias breaks nothing here.
+
+    Nullable FKs (vendor, gl_account, org_unit) are ALWAYS behind {% if %}: a None FK passed
+    into a filter ARGUMENT raises even where a bare lookup would quietly render empty (L10).
+    `category` is PROTECT + required, but it is guarded too — a template should not be the
+    thing that 500s if the column ever relaxes.
+
+    `invoice_type` is a plain CharField on the model with NO choices (the choices live on the
+    FORM, validated in clean() against SupplierInvoice.INVOICE_TYPE_CHOICES), so there is NO
+    get_invoice_type_display() to call. The label chain is written out here and falls through
+    to the raw key.
+
+    match_count / last_matched_at are editable=False system stamps — they are shown here and
+    never on the form. They move only when the preview verb below is POSTed.
+
+    theme.css: badge-green|red|amber|info|muted|slate and stat-icon blue|green|orange|purple|
+    slate|red are the whole approved set. There is no .detail-label / .detail-value — the
+    detail grid is <dl class="detail-grid"><div class="detail-item"><dt>/<dd>.
+    The rule name is user-authored, so it reaches confirm() through |escapejs, which emits
+    ' rather than &#39; and therefore survives HTML-attribute decoding intact (L42).
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Switched off</span>{% endif %}
+        {% if obj.match_type == "vendor" %}<span class="badge badge-info">{{ obj.get_match_type_display }}</span>
+        {% elif obj.match_type == "gl_account" %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>
+        {% elif obj.match_type == "keyword" %}<span class="badge badge-amber">{{ obj.get_match_type_display }}</span>
+        {% elif obj.match_type == "invoice_type" %}<span class="badge badge-muted">{{ obj.get_match_type_display }}</span>
+        {% elif obj.match_type == "org_unit" %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><a href="{% url 'procurement:spendrule_list' %}">Classification Rules</a><span class="sep">›</span><span>{{ obj.name|truncatechars:40 }}</span></div>
+      <p class="text-muted">Priority {{ obj.priority }} — the lower the number, the earlier this rule is tried. It files what it matches under {% if category %}<strong>{{ category.name }}</strong>{% elif obj.category %}<strong>{{ obj.category.name }}</strong>{% else %}no category{% endif %}.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:classification_workbench' %}" class="btn btn-outline"><i data-lucide="wand-2"></i> Workbench</a>
+      <a href="{% url 'procurement:spendrule_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> All rules</a>
+      <a href="{% url 'procurement:spendrule_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit rule</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="target"></i></div><div class="stat-value">{{ stats.match_count }}</div><div class="stat-label">Lines matched, last run</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock"></i></div><div class="stat-value">{% if stats.last_matched_at %}{{ stats.last_matched_at|date:"M d" }}{% else %}—{% endif %}</div><div class="stat-label">{% if stats.last_matched_at %}Last matched {{ stats.last_matched_at|date:"M d, Y H:i" }}{% else %}Never previewed{% endif %}</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="search-check"></i></div><div class="stat-value">{{ stats.preview_count }}</div><div class="stat-label">Lines in this preview</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="coins"></i></div><div class="stat-value">{{ stats.preview_value|floatformat:"2" }}</div><div class="stat-label">Value in this preview</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this rule tests</h2><span class="text-muted">one test, one category</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Name</dt><dd class="fw-600">{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Match type</dt>
+          <dd>{% if obj.match_type == "vendor" %}<span class="badge badge-info">{{ obj.get_match_type_display }}</span>
+              {% elif obj.match_type == "gl_account" %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>
+              {% elif obj.match_type == "keyword" %}<span class="badge badge-amber">{{ obj.get_match_type_display }}</span>
+              {% elif obj.match_type == "invoice_type" %}<span class="badge badge-muted">{{ obj.get_match_type_display }}</span>
+              {% elif obj.match_type == "org_unit" %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_match_type_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd>{% if obj.vendor %}<span class="fw-600">{{ obj.vendor.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>GL account</dt>
+          <dd>{% if obj.gl_account %}<span class="fw-600">{{ obj.gl_account.code }}</span> {{ obj.gl_account.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Department / cost centre</dt>
+          <dd>{% if obj.org_unit %}<span class="fw-600">{{ obj.org_unit.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Keyword</dt>
+          <dd>{% if obj.keyword %}<span class="fw-600">&ldquo;{{ obj.keyword }}&rdquo;</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Invoice type</dt>
+          <dd>{% if obj.invoice_type == "standard" %}<span class="fw-600">Standard</span>
+              {% elif obj.invoice_type == "credit_memo" %}<span class="fw-600">Credit memo</span>
+              {% elif obj.invoice_type == "debit_memo" %}<span class="fw-600">Debit memo</span>
+              {% elif obj.invoice_type == "prepayment" %}<span class="fw-600">Prepayment</span>
+              {% elif obj.invoice_type == "service" %}<span class="fw-600">Service</span>
+              {% elif obj.invoice_type %}<span class="fw-600">{{ obj.invoice_type }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Files under</dt>
+          <dd>{% if category %}<span class="fw-600">{{ category.name }}</span>{% elif obj.category %}<span class="fw-600">{{ obj.category.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Applies to</dt>
+          <dd>{% if obj.applies_to == "both" %}<span class="badge badge-green">{{ obj.get_applies_to_display }}</span>
+              {% elif obj.applies_to == "invoiced" %}<span class="badge badge-info">{{ obj.get_applies_to_display }}</span>
+              {% elif obj.applies_to == "committed" %}<span class="badge badge-slate">{{ obj.get_applies_to_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_applies_to_display }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd class="fw-600">{{ obj.priority }} <span class="text-muted">(lower runs first)</span></dd></div>
+        <div class="detail-item"><dt>Status</dt>
+          <dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Switched off</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lines matched, last run</dt><dd>{{ obj.match_count }}</dd></div>
+        <div class="detail-item"><dt>Last matched</dt>
+          <dd>{% if obj.last_matched_at %}{{ obj.last_matched_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never previewed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{% if obj.created_at %}{{ obj.created_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last updated</dt><dd>{% if obj.updated_at %}{{ obj.updated_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+
+      {% if obj.notes %}
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <div>{{ obj.notes|linebreaksbr }}</div>
+          <div class="form-help">Why this rule exists. Worth writing — the next person to look at a category breakdown will want to know.</div>
+        </div>
+      {% endif %}
+
+      <p class="text-muted">The match count and the last-matched stamp are written by the preview below, never by hand — that is why neither appears on the edit form. The classification itself is a plain, readable rule: nothing here guesses, and every line it files can be traced back to this one test.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Preview</h2><span class="text-muted">what this rule would catch over the window below</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Window</dt>
+          <dd>{% if preview.start %}{{ preview.start|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %} → {% if preview.end %}{{ preview.end|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lines matched</dt><dd class="fw-600">{{ preview.count }}</dd></div>
+        <div class="detail-item"><dt>Value matched</dt><dd class="fw-600">{{ preview.value|floatformat:"2" }}</dd></div>
+      </dl>
+      {% comment %}
+        The preview verb POSTs: it stamps match_count / last_matched_at inside an atomic block
+        and writes its own audit entry. It changes no spend and no invoice, so it carries no
+        confirm() — the page just re-renders with a fresh count.
+        Credit memos are already signed negative on the invoice line, so a matched value can
+        legitimately come back lower than you expect, or negative, on a window full of credits.
+      {% endcomment %}
+      <form method="post" action="{% url 'procurement:spendrule_preview' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="search-check"></i> Run preview</button>
+        </div>
+      </form>
+      <p class="text-muted">Preview counts what this rule alone would catch. It does not tell you what the rule will actually classify in a report — a rule with a lower priority number may get to the same line first. Check the workbench for the resolved picture.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent matches</h2><span class="text-muted">up to ten lines from the last preview</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Line</th>
+            <th>Document</th>
+            <th>Date</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_matches %}
+            <tr>
+              <td>{{ row.label|default:"—" }}</td>
+              <td>
+                {% comment %} `document_url` is empty for a line whose parent has no detail page of its own — link only when there is somewhere to go. {% endcomment %}
+                {% if row.document_url %}<a href="{{ row.document_url }}" class="fw-600">{{ row.document|default:"View" }}</a>
+                {% elif row.document %}<span class="fw-600">{{ row.document }}</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>{% if row.date %}{{ row.date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right fw-600">{{ row.amount|floatformat:"2" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="search-x"></i>
+                <h3>Nothing matched</h3>
+                <p>This rule caught no lines in the preview window. Either the window holds no spend it applies to, or the test is narrower than the data — a keyword rule in particular has to appear in the line description or the SKU hint exactly as typed.</p>
+                <a href="{% url 'procurement:spendrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Widen the rule</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">what you can do to this rule</span></div>
+    <div class="card-body">
+      <div class="filter-bar">
+        <a href="{% url 'procurement:spendrule_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit rule</a>
+        {% comment %}
+          Delete is gated on `can_delete`, the same test the view applies, so a hidden button
+          and a refused POST always agree. It is POST-only with a CSRF token — a link would
+          let any page on the internet delete the rule with an <img> tag.
+          Only |escapejs-ed text goes inside the handler; the literal apostrophe in "isn't"
+          is escaped as \' because &#39; does NOT escape inside an event-handler attribute
+          and a confirm() that throws does not preventDefault (L42).
+        {% endcomment %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'procurement:spendrule_delete' obj.pk %}" onsubmit="return confirm('Delete the rule {{ obj.name|escapejs }}? Lines it was classifying fall back to the next matching rule, or to (Unclassified) if there isn\'t one. Nothing already reported changes until the next run.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete rule</button>
+          </form>
+        {% else %}
+          <span class="text-muted">This rule cannot be deleted from here. Switch it off instead — an inactive rule is skipped by every report and keeps its history.</span>
+        {% endif %}
+        <a href="{% url 'procurement:classification_workbench' %}" class="btn btn-outline"><i data-lucide="wand-2"></i> Classification workbench</a>
+        <a href="{% url 'procurement:spendrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to rules</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
