@@ -22,11 +22,10 @@ Three things a reviewer will look for, so they are stated rather than inferred:
 
 Nothing on this page moves money and nothing touches ``accounting.*`` (L29).
 """
-from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
 from django.urls import reverse
 
-from apps.core.crud import as_db_int
+from apps.core.crud import as_db_int, paginate
 from apps.procurement.analytics import (
     BASIS_CHOICES,
     DATE_RANGE_CHOICES,
@@ -195,13 +194,16 @@ def classification_workbench(request):
     remainder_total = money(remainder.aggregate(v=Sum("line_total"))["v"] or 0)
 
     rows = _group_rows(remainder, basis, group_by, remainder_total)
-    paginator = Paginator(rows, PAGE_SIZE)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    # The SHARED helper, not a bare Paginator: it is what sets ``page.window``, and
+    # ``partials/pagination.html`` loops that window for the numbered links. A raw Paginator
+    # renders Prev/Next and silently nothing in between (L9). It slices any sequence, so the
+    # plain list of group rows works unchanged.
+    page_obj = paginate(request, rows, PAGE_SIZE)
 
     return render(request, TEMPLATE, {
         "rows": page_obj.object_list,
         "page_obj": page_obj,
-        "paginator": paginator,
+        "paginator": page_obj.paginator,
         "classified_pct": pct,
         "unclassified_value": unclassified_value,
         "unclassified_display": _money(unclassified_value),
