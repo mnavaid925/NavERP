@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Spend Classification Workbench{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Classification & Categorization — procurement:classification_workbench,
+    apps/procurement/views/SpendAnalyticsReporting/ClassificationWorkbench.py.
+
+    A COMPUTED, READ-ONLY page. It owns no table, writes nothing and contributes
+    no migration: the queue is an aggregate over spend that already exists, and
+    the only action it offers is a deep-link into procurement:spendrule_create
+    with that row's match_type and value pre-filled.
+
+    Nothing on this page does arithmetic. Every percentage, total and display
+    string is computed in apps/procurement/analytics.py and handed over — a
+    template that computes is a second implementation of a metric under the same
+    name, and the two drift.
+
+    Context consumed: rows (each {label, pk, value, display, pct, count,
+    match_type, keyword, create_url} — pk is None for a keyword row and for the
+    (unassigned) bucket, which is why the create button is guarded on
+    row.create_url), page_obj, paginator, classified_pct, unclassified_value,
+    unclassified_display, total_value, total_display, rules, rule_count,
+    group_by, group_by_choices, basis, basis_choices, range_key,
+    date_range_choices, start, end, stats, create_rule_url, rules_url,
+    dashboard_url, category_spend_url, engine_note.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Classification workbench</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Spend Analytics &amp; Reporting</span><span class="sep">›</span><span>Classification</span></div>
+      <p class="text-muted">The spend your taxonomy has not reached yet, biggest first. Take the top row, write the one rule that claims it, and watch the coverage figure move.</p>
+      <p class="text-muted">
+        Window <span class="fw-600">{% if start %}{{ start|date:"M d, Y" }}{% else %}earliest record{% endif %} – {% if end %}{{ end|date:"M d, Y" }}{% else %}today{% endif %}</span>
+        · basis <span class="fw-600">{% if basis == 'committed' %}committed (purchase orders){% else %}invoiced (recognised){% endif %}</span>
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ dashboard_url }}" class="btn btn-outline"><i data-lucide="gauge"></i> Spend dashboard</a>
+      <a href="{{ category_spend_url }}" class="btn btn-outline"><i data-lucide="layers"></i> Category analysis</a>
+      <a href="{{ rules_url }}" class="btn btn-outline"><i data-lucide="list-checks"></i> Rules ({{ rule_count }})</a>
+      <a href="{{ create_rule_url }}" class="btn btn-primary"><i data-lucide="plus"></i> New rule</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="wb_basis">Basis</label>
+          <select id="wb_basis" name="basis" class="form-select">
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wb_range">Window</label>
+          <select id="wb_range" name="range" class="form-select">
+            {% for val, label in date_range_choices %}
+              <option value="{{ val }}" {% if range_key == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wb_group">Group the queue by</label>
+          <select id="wb_group" name="group_by" class="form-select">
+            {% for val, label in group_by_choices %}
+              <option value="{{ val }}" {% if group_by == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:classification_workbench' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="form-help" style="margin-top:.6rem;">{{ engine_note }}</p>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="tags"></i></div>
+      <div class="stat-value">{{ classified_pct|floatformat:1 }}%</div>
+      <div class="stat-label">
+        Spend with a category
+        <div class="progress" style="margin-top:.4rem;"><div class="progress-bar" style="width:{{ classified_pct|floatformat:0 }}%"></div></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="help-circle"></i></div>
+      <div class="stat-value">{{ unclassified_display }}</div>
+      <div class="stat-label">Unclassified in window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ total_display }}</div>
+      <div class="stat-label">Total spend in window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ stats.rules }}</div>
+      <div class="stat-label">Active rules · <a href="{{ rules_url }}">manage</a></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Unclassified queue</h2>
+      <span class="badge badge-amber">{{ paginator.count }} group{{ paginator.count|pluralize }}</span>
+    </div>
+    {% if rows %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{% if group_by == 'gl_account' %}GL account{% elif group_by == 'keyword' %}Description / SKU hint{% else %}Supplier{% endif %}</th>
+              <th class="text-right">Unclassified spend</th>
+              <th>Share of unclassified</th>
+              <th class="text-right">Lines</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td class="fw-600">{{ row.label }}</td>
+                <td class="text-right fw-600">{{ row.display }}</td>
+                <td>
+                  <div class="progress" style="min-width:120px;"><div class="progress-bar" style="width:{{ row.pct|floatformat:0 }}%"></div></div>
+                  <span class="text-muted">{{ row.pct|floatformat:1 }}%</span>
+                </td>
+                <td class="text-right">{{ row.count }}</td>
+                <td class="text-right">
+                  {% if row.create_url %}
+                    <a href="{{ row.create_url }}" class="btn btn-sm btn-primary"><i data-lucide="wand-2"></i> Write a rule</a>
+                  {% else %}
+                    <span class="badge badge-muted">Nothing to key on</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "partials/pagination.html" %}
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="check-circle-2"></i>
+          <h3>Nothing unclassified in this window</h3>
+          <p>Every line in the window is reached either by its own item category or by one of your {{ rule_count }} active rule{{ rule_count|pluralize }}. Widen the window or switch the basis to check the rest — a purchase order that has not been invoiced yet is committed spend, not recognised spend.</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Rules already claiming spend</h2>
+      <span class="badge badge-slate">priority order</span>
+    </div>
+    {% if rules %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>#</th><th>Rule</th><th>Matches on</th><th>Category</th><th>Applies to</th><th class="text-right">Matched</th></tr></thead>
+          <tbody>
+            {% for rule in rules %}
+              <tr>
+                <td class="mono">{{ rule.priority }}</td>
+                <td class="fw-600"><a href="{% url 'procurement:spendrule_detail' rule.pk %}">{{ rule.name }}</a></td>
+                <td>{{ rule.get_match_type_display }} · <span class="text-muted">{{ rule.subject_label }}</span></td>
+                <td>{% if rule.category_id %}{{ rule.category.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td><span class="badge badge-info">{{ rule.get_applies_to_display }}</span></td>
+                <td class="text-right">{{ rule.match_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="list-checks"></i>
+          <h3>No classification rules yet</h3>
+          <p>Without a rule, spend is classified only by the item category on the line itself — and a purchase order line has no item at all, so the committed basis has nothing to read. Start from the biggest row in the queue above.</p>
+          <a href="{{ create_rule_url }}" class="btn btn-primary"><i data-lucide="plus"></i> Write the first rule</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
