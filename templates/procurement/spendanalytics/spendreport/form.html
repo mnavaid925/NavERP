@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Spend Report{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.14 Spend Analytics & Reporting — SpendReport create-or-edit. ONE template for both,
+    driven by `is_edit`.
+
+    Context contract:
+      create -> form, is_edit (False), title, submit_label, cancel_url, builder_note
+      edit   -> form, obj, is_edit (True), title, submit_label, cancel_url, builder_note
+    `obj` IS ABSENT from the create context, so every obj reference on this page sits
+    inside an {% if obj %} / {% if is_edit %} branch — a bare {{ obj.number }} on create
+    would render empty and any obj.<fk>.<attr> chain would be a silent blank region (L7).
+
+    The form carries exactly: name, description, basis, measure, dimension_1, dimension_2,
+    date_range, date_from, date_to, vendor, category, org_unit, gl_account, min_amount,
+    chart_type, top_n, is_favorite, is_shared. Everything else is system-set and is
+    deliberately absent — tenant, number (auto SPR-#####), owner (stamped from request.user
+    in the create view), last_run_at, created_at, updated_at. Do NOT add inputs for them.
+
+    This is a GUIDED builder: every axis is chosen from a dropdown the form renders. There
+    is no free-form query language and nothing is inferred on your behalf.
+
+    Field help is keyed off field.name so it stays correct if the form order changes.
+    Each label is bound to its widget with for="{{ field.id_for_label }}", which is the id
+    Django renders on the input itself.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ title|default:"New Spend Report" }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <a href="{% url 'procurement:spend_dashboard' %}">Spend Analytics &amp; Reporting</a><span class="sep">›</span>
+        <a href="{% url 'procurement:spendreport_list' %}">Spend Reports</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">{{ builder_note|default:"Pick a measure, one or two dimensions and a window from the dropdowns. The report is recomputed live every time it is opened, so saving it costs nothing and changing it later is free." }}</p>
+    </div>
+  </div>
+
+  {% if is_edit %}
+    {% if obj %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">{{ obj.number }}</h2><span class="text-muted">the number and the owner are system-assigned</span></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Report</dt><dd class="fw-600">{{ obj.name }}</dd></div>
+            <div class="detail-item"><dt>Owner</dt>
+              <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unowned</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Last run</dt>
+              <dd>{% if obj.last_run_at %}{{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Snapshots</dt><dd>{{ obj.snapshots.count }} frozen run(s)</dd></div>
+          </dl>
+          <p class="text-muted">Editing the definition changes what the report computes from now on. Snapshots already frozen are untouched — they keep the numbers exactly as they were captured, which is the point of taking one.</p>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Definition</h2><span class="text-muted">every axis is chosen from a list</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "name" %}
+                <div class="form-help">What the report answers, in the words your team would use — &ldquo;Top suppliers by category, this year&rdquo;.</div>
+              {% elif field.name == "description" %}
+                <div class="form-help">Optional. Worth writing when the filters below are narrow, so the next person knows what was deliberately excluded.</div>
+              {% elif field.name == "basis" %}
+                <div class="form-help">Invoiced counts recognised supplier invoices; committed counts what is on live purchase orders. On the committed basis a category can only come from a classification rule, because a purchase-order line carries no item link.</div>
+              {% elif field.name == "measure" %}
+                <div class="form-help">What is being counted. Credit memos are already signed negative, so a net spend measure nets them off without any special handling.</div>
+              {% elif field.name == "dimension_1" %}
+                <div class="form-help">The main axis — the rows of the table and the bars of the chart.</div>
+              {% elif field.name == "dimension_2" %}
+                <div class="form-help">Optional second axis. It must differ from the first unless both are set to none. Choosing department adds an explicit &ldquo;(unassigned)&rdquo; row: an invoice raised without a purchase order has no department to attribute it to, and dropping those rows would stop the breakdown adding up to the headline.</div>
+              {% elif field.name == "date_range" %}
+                <div class="form-help">The window. Choose &ldquo;Custom range&rdquo; to use the two dates below; every other option ignores them.</div>
+              {% elif field.name == "date_from" %}
+                <div class="form-help">Required only when the window is a custom range. It may not be later than the end date.</div>
+              {% elif field.name == "date_to" %}
+                <div class="form-help">Required only when the window is a custom range. The end of the window is exclusive.</div>
+              {% elif field.name == "vendor" %}
+                <div class="form-help">Optional. Narrows the report to one supplier. The list holds only parties carrying a supplier or vendor role in this workspace.</div>
+              {% elif field.name == "category" %}
+                <div class="form-help">Optional. Spend with no category resolves to &ldquo;(Unclassified)&rdquo; — the classification workbench is where those get rules written for them.</div>
+              {% elif field.name == "org_unit" %}
+                <div class="form-help">Optional. The department is read from the requisition behind the purchase order, falling back to the order&rsquo;s ship-to unit, so an invoice with no purchase order has none.</div>
+              {% elif field.name == "gl_account" %}
+                <div class="form-help">Optional. Narrows to a single account — useful for separating addressable spend from rent, tax and payroll postings.</div>
+              {% elif field.name == "min_amount" %}
+                <div class="form-help">Optional floor. Rows below this value are dropped, which is the quickest way to cut a long tail down to what is worth acting on.</div>
+              {% elif field.name == "chart_type" %}
+                <div class="form-help">How the first dimension is drawn. &ldquo;Table only&rdquo; skips the chart entirely.</div>
+              {% elif field.name == "top_n" %}
+                <div class="form-help">How many rows to keep, between 1 and 100. The rest are not shown; raise this rather than assuming the tail is empty.</div>
+              {% elif field.name == "is_favorite" %}
+                <div class="form-help">Pinned reports sort to the top of the register.</div>
+              {% elif field.name == "is_shared" %}
+                <div class="form-help">Shared reports are visible to everyone in this workspace. Nothing here is ever visible to another tenant.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted">Saving stores the question, not the answer. Open the report to run it, and freeze a snapshot when you need the numbers kept exactly as they read today.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {{ submit_label|default:"Save report" }}</button>
+      {% comment %} cancel_url is pinned in the contract for both modes; the list url is the fallback so Cancel can never resolve to href="" and simply reload the form. {% endcomment %}
+      <a href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'procurement:spendreport_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
