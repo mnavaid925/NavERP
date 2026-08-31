@@ -16,7 +16,9 @@
     computed in the view / apps/procurement/analytics.py and handed over.
 
     Context consumed: by_reason (each {reason, label, n, value, display, pct}),
-    rate ({maverick_value, addressable_value, pct, txn_pct, band}), by_vendor,
+    rate ({maverick_value, flagged_spend, addressable_value, pct, txn_pct, band} -
+    pct is flagged_spend over addressable_value, so it is bounded to 0-100;
+    maverick_value is the value AT RISK and is deliberately not a share), by_vendor,
     by_category, by_department, by_severity (each {label, pk, value, display,
     pct, count} — pk is None for the (unassigned)/(Unclassified) bucket and for
     every severity row, which is why the drill links are guarded), trend and the
@@ -106,14 +108,20 @@
         <form method="post" action="{{ scan_url }}">
           {% csrf_token %}
           <input type="hidden" name="range" value="{{ range_key }}">
-          <div class="form-group">
-            <label class="form-label">Detectors to run <span class="text-muted">(leave all unticked to run every one)</span></label>
+          {% comment %}
+            A fieldset/legend, not a label: this caption names the GROUP of name="reason"
+            checkboxes below it, and a <label> with no for= and no control inside it is
+            announced by a screen reader as a label bound to nothing, leaving the group with
+            no accessible name. The per-checkbox labels wrap their own input and are correct.
+          {% endcomment %}
+          <fieldset class="form-group">
+            <legend class="form-label">Detectors to run <span class="text-muted">(leave all unticked to run every one)</span></legend>
             <div class="filter-bar">
               {% for val, label in reason_choices %}
                 <label class="form-label"><input type="checkbox" name="reason" value="{{ val }}"> {{ label }}</label>
               {% endfor %}
             </div>
-          </div>
+          </fieldset>
           <p class="form-help">{{ scan_note }}</p>
           <button type="submit" class="btn btn-primary" onclick="return confirm('Run the maverick detectors over this window?');"><i data-lucide="radar"></i> Run scan</button>
         </form>
