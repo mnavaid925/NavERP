@@ -202,16 +202,19 @@
                   <a href="{% url 'procurement:maverickfinding_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'procurement:maverickfinding_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
-                    maverickfinding_delete is @login_required + @require_POST and carries NO
-                    status gate and NO admin gate in the contract, so the bin is offered on
-                    every row — hiding it here would contradict the view. Disposition is the
-                    admin-gated verb, and it lives on the detail page, not in this column.
+                    maverickfinding_delete is @login_required + @tenant_admin_required +
+                    @require_POST and refuses a disposed finding, so the bin is shown under
+                    EXACTLY that pair of conditions — a non-admin would get a 403 and a
+                    justified/remediated/dismissed row would bounce back with an error, and
+                    offering a button that cannot work is worse than offering none.
                     Only the system-assigned number reaches confirm(); the apostrophe in
                     "scan\'s" is backslash-escaped for the attribute context.
                   {% endcomment %}
-                  <form method="post" action="{% url 'procurement:maverickfinding_delete' obj.pk %}" onsubmit="return confirm('Delete finding {{ obj.number }}? The disposition and the resolution note go with it, and the next detection scan\'s dedupe key will raise it again if the underlying document has not changed.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if is_admin and not obj.is_resolved %}
+                    <form method="post" action="{% url 'procurement:maverickfinding_delete' obj.pk %}" onsubmit="return confirm('Delete finding {{ obj.number }}? The disposition and the resolution note go with it, and the next detection scan\'s dedupe key will raise it again if the underlying document has not changed.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
