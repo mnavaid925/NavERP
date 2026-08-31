@@ -344,8 +344,12 @@ def active_rules(tenant):
                 .order_by("priority", "id"))
 
 
-def category_filter_q(tenant, basis, category_id):
+def category_filter_q(tenant, basis, category_id, rules=None):
     """A ``Q`` selecting the lines that belong to ONE category, in classification order.
+
+    ``rules`` is an optional pre-fetched :func:`active_rules` list; the category's own rules are
+    then picked out of it in Python instead of costing a query. A caller inside a loop (the
+    two-axis ``compute_report``) MUST pass it, or the rule table is read once per row.
 
     The passthrough leg (``item.category``) wins outright; the rules leg applies only to lines with
     no item category of their own, which is precisely the order
@@ -355,9 +359,14 @@ def category_filter_q(tenant, basis, category_id):
     Returns an always-false ``Q`` when nothing can select the category — never an empty ``Q()``,
     which would be always-TRUE and would silently report the whole workspace as that category.
     """
+    if rules is None:
+        candidates = SpendClassificationRule.objects.filter(
+            tenant=tenant, is_active=True, category_id=category_id)
+    else:
+        candidates = [rule for rule in rules if rule.category_id == category_id]
+
     rules_q = None
-    for rule in SpendClassificationRule.objects.filter(
-            tenant=tenant, is_active=True, category_id=category_id):
+    for rule in candidates:
         predicate = rule.line_filter(basis)
         if predicate is not None:
             rules_q = predicate if rules_q is None else (rules_q | predicate)
@@ -476,23 +485,31 @@ def _category_groups(tenant, basis, lines, rules):
     return groups, money(unclassified)
 
 
-def spend_cube(tenant, basis, start, end, dimension, top_n=MAX_GROUP_ROWS, lines=None):
+def spend_cube(tenant, basis, start, end, dimension, top_n=MAX_GROUP_ROWS, lines=None,
+               total=None, rules=None):
     """Spend grouped on one axis — ``[{label, pk, value, display, pct, count}, …]``.
 
     ``lines`` lets a page that has already built and filtered its window pass it in rather than
-    have the cube rebuild it (the dashboard runs four axes over ONE window). ``rules`` for the
-    category axis are fetched here when needed; a caller running several category cubes should
-    prefer :func:`_category_groups` with its own pre-fetched list.
+    have the cube rebuild it (the dashboard runs four axes over ONE window).
+
+    ``total`` and ``rules`` are the same idea applied to the two things this function would
+    otherwise re-fetch per call: the window's ``SUM(line_total)`` (the denominator of every row's
+    ``pct``) and the active rule list the category axis classifies against. A caller running the
+    cube several times over one window — the dashboard's four axes, ``compute_report``'s one cube
+    per kept row — computes each ONCE and passes it in.
     """
     if tenant is None or dimension == "none":
         return []
     if lines is None:
         lines = basis_lines(tenant, basis, start, end)
 
-    total = lines.aggregate(v=Sum("line_total"))["v"] or ZERO
+    if total is None:
+        total = lines.aggregate(v=Sum("line_total"))["v"] or ZERO
 
     if dimension == "category":
-        groups, _unclassified = _category_groups(tenant, basis, lines, active_rules(tenant))
+        if rules is None:
+            rules = active_rules(tenant)
+        groups, _unclassified = _category_groups(tenant, basis, lines, rules)
         return _rows_from_groups(groups, total=total, top_n=top_n)
 
     if dimension == "department":
@@ -810,13 +827,27 @@ def _row_measure(measure, row):
     return row["value"], row["display"]
 
 
-def _narrow_to_row(lines, basis, tenant, dimension, row):
+#: The axes ``_narrow_to_row`` can actually cut by pk. Anything else (month, quarter, currency,
+#: invoice type) — and every pk-less ``(unassigned)`` / ``(Unclassified)`` bucket — leaves the
+#: window whole, which is why the caller must not assume the row's own value is the inner total.
+_NARROWABLE_DIMENSIONS = ("supplier", "gl_account", "category", "department")
+
+
+def _narrows(dimension, row):
+    """True when :func:`_narrow_to_row` will actually cut the window for this row."""
+    return bool(row.get("pk")) and dimension in _NARROWABLE_DIMENSIONS
+
+
+def _narrow_to_row(lines, basis, tenant, dimension, row, rules=None):
     """The line window narrowed to ONE cube row, for the second axis.
 
     Only an axis that carries a real pk can be narrowed by pk; a label-only axis (month, quarter,
     currency, invoice type) returns the window unchanged, which makes its second axis a breakdown
     of the whole window rather than a wrong one. ``pk`` is ``None`` for every ``(unassigned)`` /
     ``(Unclassified)`` bucket - which is precisely when "cannot narrow" is the honest answer.
+
+    ``rules`` is threaded through to :func:`category_filter_q` so the category axis does not read
+    the rule table once per row of the loop this is called from.
     """
     pk = row.get("pk")
     if not pk:
@@ -826,7 +857,7 @@ def _narrow_to_row(lines, basis, tenant, dimension, row):
     if dimension == "gl_account":
         return lines.filter(gl_account_id=pk)
     if dimension == "category":
-        return lines.filter(category_filter_q(tenant, basis, pk))
+        return lines.filter(category_filter_q(tenant, basis, pk, rules=rules))
     if dimension == "department":
         prefix = _order_prefix(basis)
         return lines.filter(
@@ -889,8 +920,13 @@ def compute_report(report):
                 "chart_type": "table", "chart_labels": [], "chart_data": []}
 
     # -- the grouped report -----------------------------------------------------------------------
+    # Fetched ONCE for the whole report and threaded into every cube and every narrow below: the
+    # category axis classifies against this list, and without it the rule table is read again for
+    # each of the (up to 100) rows the second-axis loop keeps.
+    rules = (active_rules(tenant)
+             if "category" in (report.dimension_1, report.dimension_2) else None)
     primary = spend_cube(tenant, report.basis, start, end, report.dimension_1,
-                         top_n=top_n, lines=lines)
+                         top_n=top_n, lines=lines, total=total, rules=rules)
     dim1_label = _DIMENSION_LABELS.get(report.dimension_1, "Group")
     chart_labels = [row["label"] for row in primary]
     chart_data = [float(row["value"] or 0) for row in primary]
@@ -912,9 +948,16 @@ def compute_report(report):
     columns = [dim1_label, dim2_label, measure_label, "Share", "Lines"]
     rows = []
     for row in primary:
-        inner_lines = _narrow_to_row(lines, report.basis, tenant, report.dimension_1, row)
+        inner_lines = _narrow_to_row(lines, report.basis, tenant, report.dimension_1, row,
+                                     rules=rules)
+        # The inner denominator is known WITHOUT a second aggregate: when the row was really cut,
+        # ``row["value"]`` IS that slice's SUM (the first axis just grouped it); when it was not —
+        # a label-only axis or a pk-less bucket, where ``_narrow_to_row`` hands the window straight
+        # back — the denominator is the window total we already have. Either way the Share column
+        # keeps exactly the meaning it has today, and the per-row aggregate is gone.
+        inner_total = row["value"] if _narrows(report.dimension_1, row) else total
         inner = spend_cube(tenant, report.basis, start, end, report.dimension_2,
-                           top_n=top_n, lines=inner_lines)
+                           top_n=top_n, lines=inner_lines, total=inner_total, rules=rules)
         if not inner:
             _value, display = _row_measure(report.measure, row)
             rows.append([row["label"], UNASSIGNED_LABEL, display, _pct(row["pct"]),
