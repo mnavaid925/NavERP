@@ -600,6 +600,12 @@ class SupplierInvoice(TenantNumbered):
         if self.is_locked:
             return self.status, counts
 
+        if self.journal_entry_id:
+            # Already posted. Re-matching would move the status back off ``approved``, stranding a
+            # GL-posted invoice that approve() will no-op on and reverse() will no longer offer.
+            # Guarded here as well as in the view so every caller inherits it.
+            return self.status, counts
+
         if self.invoice_type == "credit_memo":
             # A credit memo settles a claim; there is nothing to three-way match it against. The
             # status is deliberately NOT touched — a memo captured but not yet approved stays
