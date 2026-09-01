@@ -7,13 +7,13 @@
 
     Context contract (crud_list + extra_context), and NOTHING else exists here:
       object_list, page_obj, q,
-      stats{total, active, inactive}, budgets, org_units, projects, gl_accounts.
+      stats{total, active, inactive}, budgets, org_units, projects.
     The view's crud_list filter tuple is exactly (("budget","budget_id",True),
     ("org_unit","org_unit_id",True), ("project","project_id",True),
     ("is_active","is_active",False)) with search_fields over budget name/number,
     org-unit name, project name and notes — so the filter bar offers exactly q, budget,
-    org_unit, project and is_active. `gl_accounts` is NOT a filter on this view; it is
-    intentionally absent from the bar so no dead <select> posts a param the view ignores.
+    org_unit, project and is_active. There is NO gl_accounts dropdown: the view ships none
+    and the bar offers none, so no dead <select> posts a param the view ignores.
     The three FK dropdowns post pks and compare with |stringformat:"d" (never |slugify);
     is_active posts the literal strings True / False, which crud_list maps.
 
