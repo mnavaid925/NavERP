@@ -159,6 +159,17 @@ class InvoiceMatchVariance(TenantOwned):
     def is_open(self):
         return self.resolution == "open"
 
+    @property
+    def can_accept(self):
+        """Whether the Accept verb is offered on this row.
+
+        Lives on the MODEL rather than being annotated per view, because three surfaces gate on it
+        — the register, the Match Board and the detail page — and only the detail page used to
+        derive it, so the other two silently rendered no Accept button at all. Every one of those
+        querysets already ``select_related("invoice")``, so it costs no extra query.
+        """
+        return self.resolution in ("open", "disputed") and not self.invoice.is_locked
+
     def explain(self):
         """One readable sentence: what was expected, what arrived, against which band."""
         band_parts = []
