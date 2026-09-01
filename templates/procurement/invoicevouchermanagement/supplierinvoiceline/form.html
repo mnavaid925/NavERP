@@ -26,7 +26,12 @@
         <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
       </div>
     </div></div>
-  {% endif %}
+  {% else %}
+  {% comment %}
+    Either/or, not both: without the {% templatetag openblock %} else {% templatetag closeblock %}
+    the dead-end empty state above was followed by a full, fillable form whose POST the view
+    refuses. On the edit path `invoice` is always set, so nothing is lost.
+  {% endcomment %}
 
   <form method="post" novalidate>
     {% csrf_token %}
@@ -103,4 +108,5 @@
       <a href="{% if cancel_url %}{{ cancel_url }}{% elif is_edit %}{% url 'procurement:supplierinvoiceline_detail' obj.pk %}{% else %}{% url 'procurement:supplierinvoiceline_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
     </div>
   </form>
+  {% endif %}
 {% endblock %}
