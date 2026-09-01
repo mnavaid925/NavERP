@@ -120,6 +120,18 @@ def _gl_account(tenant, codes, account_type):
                                         account_type=account_type).order_by("code").first())
 
 
+def _signed_leg(account, amount):
+    """``(account, debit, credit)`` with the SIGN turned into a side, never into a minus.
+
+    ``JournalLine.clean()`` allows exactly one of debit/credit and refuses a negative, and
+    ``JournalEntry.is_balanced()`` only counts a ``debit > 0`` — so a credit memo, whose subtotal,
+    tax and total are all negative by design, has to post the MIRROR of a standard invoice's legs
+    rather than the same legs carrying a minus sign.
+    """
+    amount = _as_decimal(amount)
+    return (account, amount, ZERO) if amount >= ZERO else (account, ZERO, -amount)
+
+
 class SupplierInvoice(TenantNumbered):
     """One supplier invoice (or credit/debit memo) [SIV-].
 
@@ -866,12 +878,13 @@ class SupplierInvoice(TenantNumbered):
                 created_by=user,
             )
 
-            legs = [(expense_account, subtotal, ZERO)]
+            # Expense and tax follow the sign of the document; AP is the contra side, so it takes
+            # the NEGATED amount — credited on a charge, debited on a credit memo.
+            legs = [_signed_leg(expense_account, subtotal)]
             if tax_account is not None and tax_total != ZERO:
                 # Debit the input tax when it is a charge; credit it on a (negative) tax credit.
-                legs.append((tax_account, tax_total, ZERO) if tax_total > ZERO
-                            else (tax_account, ZERO, -tax_total))
-            legs.append((ap_account, ZERO, total))
+                legs.append(_signed_leg(tax_account, tax_total))
+            legs.append(_signed_leg(ap_account, -total))
             if discount > ZERO:
                 discount_account = _gl_account(self.tenant_id, DISCOUNT_GL_CODES, "income")
                 if discount_account is not None:
