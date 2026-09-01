@@ -8,11 +8,15 @@ export const meta = {
 }
 
 // ---------------------------------------------------------------------------
-// args: { slug, submodule, title?, base, date? }
+// args: { slug, submodule, title?, base, head?, date? }
 //   slug      app slug, e.g. "scm"
 //   submodule the N.M number, e.g. "4.17"
 //   title     the NavERP.md sub-module title, e.g. "Returns Management"
 //   base      sha captured BEFORE the build started (git rev-parse HEAD at Phase 0)
+//   head      OPTIONAL end of the changeset, default "HEAD". Pass it when reviewing a sub-module
+//             whose build is NOT the tip — e.g. resuming an interrupted review after a LATER
+//             sub-module has already landed on top. Without it the wave reviews the later work
+//             too, and the reviewers waste their lanes re-reporting an already-fixed changeset.
 //   date      today's date string (scripts cannot call Date.now())
 // ---------------------------------------------------------------------------
 
@@ -21,6 +25,7 @@ const slug = A.slug
 const sub = A.submodule
 const title = A.title || ''
 const base = A.base
+const head = A.head || 'HEAD'
 const date = A.date || '(see git log)'
 
 if (!slug || !sub || !base) {
@@ -126,10 +131,10 @@ function promptFor(L) {
     'TARGET',
     '  Sub-module: ' + sub + (title ? ' ' + title : ''),
     '  Code:       apps/' + slug + '/  and  templates/' + slug + '/',
-    '  Changeset:  ' + base + '...HEAD — the working tree is CLEAN (the build committed one file per commit),',
+    '  Changeset:  ' + base + '...' + head + ' — the working tree is CLEAN (the build committed one file per commit),',
     '              so review the RANGE, not the working tree:',
-    '                git diff --stat ' + base + '...HEAD',
-    '                git diff ' + base + '...HEAD',
+    '                git diff --stat ' + base + '...' + head,
+    '                git diff ' + base + '...' + head,
     '  Anything outside that range is pre-existing and OUT OF SCOPE.',
     '',
     'YOUR LANE — stay inside it. Five other agents cover the rest and duplicates are merged automatically,',
@@ -162,7 +167,7 @@ function promptFor(L) {
 }
 
 phase('Review')
-log('Reviewing ' + slug + ' ' + sub + ' over ' + base + '...HEAD with ' + LANES.length + ' agents in parallel')
+log('Reviewing ' + slug + ' ' + sub + ' over ' + base + '...' + head + ' with ' + LANES.length + ' agents in parallel')
 
 const raw = await parallel(
   LANES.map(L => () =>
@@ -250,7 +255,7 @@ log('Findings: ' + counters.Critical + ' Critical, ' + counters.Important + ' Im
 const out = []
 out.push('# Review findings — ' + slug + ' ' + sub + (title ? ' ' + title : ''))
 out.push('')
-out.push('Range: `' + base + '...HEAD` · Generated: ' + date)
+out.push('Range: `' + base + '...' + head + '` · Generated: ' + date)
 out.push('Wave (parallel): ' + LANES.map(L => L.type).join(' · '))
 out.push('')
 out.push('## Summary')
