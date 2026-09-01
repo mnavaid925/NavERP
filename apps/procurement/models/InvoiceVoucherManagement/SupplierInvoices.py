@@ -357,6 +357,11 @@ class SupplierInvoice(TenantNumbered):
             # duplicate scan all ORDER BY -invoice_date under a tenant predicate, which was a
             # filesort on the module's largest table without this.
             models.Index(fields=["tenant", "-invoice_date"], name="prc_siv_tnt_invdate_idx"),
+            # 6.14's spend cube slices this table by status and then by date within a workspace
+            # (recognised spend is "approved onwards, in this period"), which the two-column
+            # (tenant, status) index leaves as a filesort once the status is fixed.
+            models.Index(fields=["tenant", "status", "invoice_date"],
+                         name="prc_siv_tnt_status_dt_idx"),
         ]
         verbose_name = "supplier invoice"
 
