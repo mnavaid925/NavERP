@@ -19,7 +19,7 @@ Discipline worth recording, because a reviewer will otherwise go looking for it:
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import F, Q
+from django.db.models import F, OuterRef, Q, Subquery, Sum
 from django.urls import reverse
 
 from apps.accounting.models import Currency, PaymentTerm
@@ -32,7 +32,7 @@ from apps.procurement.forms.InvoiceVoucherManagement.SupplierInvoiceLines import
 from apps.procurement.models.InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLine
 from apps.procurement.models.InvoiceVoucherManagement.SupplierInvoices import SupplierInvoice
 from apps.procurement.views._common import *  # noqa: F401,F403
-from apps.scm.models import Item
+from apps.scm.models import GoodsReceiptLine, Item
 
 ZERO = Decimal("0")
 
@@ -86,6 +86,27 @@ def _line_stats(tenant):
     }
 
 
+def _cumulative_subqueries():
+    """The two over-invoicing figures the register renders, as correlated subqueries.
+
+    The model properties behind them are ``Sum()`` aggregates, so reading them inside the row loop
+    is 2N queries. As subqueries they cost nothing per row. ``.order_by()`` is MANDATORY on both:
+    both models declare ``Meta.ordering = ["id"]``, which would otherwise join the ordering column
+    to the GROUP BY and return one row per line instead of one row per ordered line.
+    """
+    invoiced = (SupplierInvoiceLine.objects
+                .filter(po_line=OuterRef("po_line"))
+                .exclude(invoice__status__in=SupplierInvoice.TERMINAL_STATUSES)
+                .exclude(invoice__invoice_type="credit_memo")
+                .order_by().values("po_line").annotate(s=Sum("quantity")).values("s")[:1])
+    received = (GoodsReceiptLine.objects
+                .filter(po_line=OuterRef("po_line"))
+                .exclude(goods_receipt__status="cancelled")
+                .order_by().values("po_line").annotate(s=Sum("quantity_received"))
+                .values("s")[:1])
+    return invoiced, received
+
+
 def _editable(invoice):
     """Mirrors lane A's header-edit guard: a line may only be added to a draft, parked or
     captured invoice — past that, the header's bill is already posted."""
@@ -99,10 +120,14 @@ def supplierinvoiceline_list(request):
     guard = _need_tenant(request, "review supplier invoice lines")
     if guard is not None:
         return guard
+    invoiced_sq, received_sq = _cumulative_subqueries()
+    rows = (SupplierInvoiceLine.objects.filter(invoice__tenant=request.tenant)
+            .select_related(*_ROW_RELATIONS)
+            .annotate(cum_invoiced_qty=Subquery(invoiced_sq),
+                      cum_received_qty=Subquery(received_sq)))
     return crud_list(
         request,
-        SupplierInvoiceLine.objects.filter(invoice__tenant=request.tenant)
-        .select_related(*_ROW_RELATIONS),
+        rows,
         TEMPLATE_LIST,
         search_fields=["description", "sku_hint", "invoice__number", "invoice__invoice_number"],
         # (get_param, orm_lookup, is_int) — the int ones go through crud_list's as_db_int guard,
