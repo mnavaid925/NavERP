@@ -890,6 +890,15 @@ reports "spend baseline invoices already present" / "0 newly raised".
   table. The `scm.SupplierContract` FK is **`party`**, not `vendor`.
 * `scm.ItemCategory` is the **only** taxonomy in the tree. `procurement.CatalogItem.category_text` is
   free text and is never a taxonomy key.
+* **An unrecognised enum GET param is IGNORED, never applied** — on `spendrule_list` (`match_type`)
+  and `maverickfinding_list` (`reason`/`status`/`severity`) alike. `crud_list` already guards the two
+  *parseable* cases (an int FK via `as_db_int`, a boolean via the `ValidationError` raised inside
+  `.filter()`), but an unknown CHOICES value is a plain string: `.filter(reason="nope")` neither
+  raises nor narrows, so it silently **empties the register** for a value anyone can type into the
+  address bar. The guard is expressed by **withholding the filter spec** (`if request.GET.get(param,
+  "").strip() in dict(CHOICES)`), never by post-filtering. If you add an enum filter to either
+  register, guard it the same way — and keep a *valid-enum-still-narrows* test beside the junk test,
+  or the guard can regress into disarming the real filter without a single test going red.
 
 ### Two contractual naming bans (both survive every edit)
 
