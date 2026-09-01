@@ -30,6 +30,8 @@ urlpatterns = [
     # -- match verbs -------------------------------------------------------------------------
     path("supplier-invoices/<int:pk>/match/", views.supplierinvoice_match,
          name="supplierinvoice_match"),
+    path("supplier-invoices/<int:pk>/submit/", views.supplierinvoice_submit,
+         name="supplierinvoice_submit"),
     path("supplier-invoices/<int:pk>/approve/", views.supplierinvoice_approve,
          name="supplierinvoice_approve"),
     path("supplier-invoices/<int:pk>/override/", views.supplierinvoice_override,
