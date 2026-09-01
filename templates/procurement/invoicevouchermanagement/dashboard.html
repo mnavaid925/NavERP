@@ -313,8 +313,8 @@
       <div class="card-header"><h2 class="card-title">Dispute aging</h2><span class="text-muted">how long the open ones have been sitting</span></div>
       <div class="card-body">
         <dl class="detail-grid">
-          {% for key, count in aging.items %}
-            <div class="detail-item"><dt>{{ key }}</dt><dd class="fw-600">{{ count }}</dd></div>
+          {% for b in aging %}
+            <div class="detail-item"><dt>{{ b.label }}</dt><dd class="fw-600">{{ b.count }}</dd></div>
           {% endfor %}
         </dl>
       </div>
