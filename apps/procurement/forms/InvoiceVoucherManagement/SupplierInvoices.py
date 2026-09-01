@@ -101,14 +101,20 @@ class SupplierInvoiceForm(TenantUniqueMixin, TenantModelForm):
             # Ordered newest-first: the invoice being keyed is almost always against a recent
             # order and a recent receipt. TenantModelForm has already narrowed these; this is
             # presentation, not authorization.
+            #
+            # NEVER slice these. ``ModelChoiceField.to_python`` calls ``queryset.get(pk=…)``, and a
+            # sliced queryset raises ``TypeError: Cannot filter a query once a slice has been
+            # taken`` — which Django swallows into ``invalid_choice``, so every submitted order or
+            # receipt came back as "Select a valid choice" and a PO-matched invoice could not be
+            # saved at all. Narrow with a filter if the dropdown ever needs bounding.
             if "purchase_order" in self.fields:
                 self.fields["purchase_order"].queryset = (
                     PurchaseOrder.objects.filter(tenant=tenant)
-                    .select_related("vendor").order_by("-order_date", "-id")[:200])
+                    .select_related("vendor").order_by("-order_date", "-id"))
             if "goods_receipt" in self.fields:
                 self.fields["goods_receipt"].queryset = (
                     GoodsReceiptNote.objects.filter(tenant=tenant)
-                    .select_related("purchase_order").order_by("-receipt_date", "-id")[:200])
+                    .select_related("purchase_order").order_by("-receipt_date", "-id"))
             # currency is deliberately left ALONE — accounting.Currency is GLOBAL, so scoping it
             # to a tenant would empty the dropdown.
 
