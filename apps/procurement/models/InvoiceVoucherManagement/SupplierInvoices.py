@@ -518,26 +518,36 @@ class SupplierInvoice(TenantNumbered):
 
     # -- duplicate detection ----------------------------------------------------------------------
 
-    def duplicate_candidates(self, limit=10):
+    def duplicate_candidates(self, limit=10, candidates=None):
         """``[(invoice, [reason, ...]), ...]`` — suspected duplicates of this invoice.
 
         **Never auto-rejects** (§8.1): a duplicate is a suspicion to be reviewed, and the register
         that ships a silent block is the register AP stops trusting. The normalised invoice number
         is MANDATORY (it is the queryset's own predicate) and a candidate is only reported once it
         scores at least three independent reasons, so a coincidental number match alone is silent.
+
+        ``candidates`` is the batch escape hatch: a caller that is scanning MANY invoices at once
+        (the duplicate board) fetches every peer sharing a normalised number in ONE query and
+        hands this row's bucket in, so the scoring below runs without a database hit. The bucket
+        must already be this workspace's rows with this row's ``invoice_number_norm``, in the same
+        ``-invoice_date, -id`` order — the predicate this method would have applied itself.
         """
         if self.tenant_id is None or not self.invoice_number_norm:
             return []
-        rows = (type(self).objects
-                .filter(tenant=self.tenant_id, invoice_number_norm=self.invoice_number_norm)
-                .select_related("vendor", "currency", "payment_term")
-                .order_by("-invoice_date", "-id"))
-        if self.pk:
-            rows = rows.exclude(pk=self.pk)
+        if candidates is None:
+            rows = (type(self).objects
+                    .filter(tenant=self.tenant_id, invoice_number_norm=self.invoice_number_norm)
+                    .select_related("vendor", "currency", "payment_term")
+                    .order_by("-invoice_date", "-id"))
+            if self.pk:
+                rows = rows.exclude(pk=self.pk)
+            rows = rows[:limit]
+        else:
+            rows = [other for other in candidates if other.pk != self.pk][:limit]
 
         window = timedelta(days=self.DUPLICATE_WINDOW_DAYS)
         out = []
-        for other in rows[:limit]:
+        for other in rows:
             reasons = ["normalised invoice number matches"]
             if self.vendor_id and other.vendor_id == self.vendor_id:
                 reasons.append("same vendor")
