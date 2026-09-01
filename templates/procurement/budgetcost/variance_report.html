@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Budget Variance Report{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — the Budget Variance Report
+    (apps/procurement/views/BudgetCostManagement/VarianceReport.py).
+
+    COMPUTED and READ-ONLY: budgeted vs committed vs invoiced, one row per (GL account,
+    department) pair. Budgeted is the accounting module's own BudgetLine rows; committed is
+    open PO lines + approved-not-converted requisition lines; invoiced is 6.13's recognised
+    supplier invoices. Nothing here writes anything.
+
+    Context consumed: rows (gl_code/gl_name/org_unit_name/budgeted/committed/invoiced/
+    standalone_invoiced/remaining/variance_pct/over_budget), totals{budgeted, committed,
+    invoiced, remaining}, budgets, fiscal_periods, selected_budget, selected_period
+    (may be None), remaining_note, scoped_invoice_note, row_cap, truncated.
+
+    The export link replays budget and fiscal_period so the CSV matches the page. The two
+    FK selects compare with |stringformat:"d" (never |slugify).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Budget Variance Report</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <span>Variance</span>
+      </div>
+      <p class="text-muted">Budgeted against committed against invoiced, one row per GL account and department. The budget belongs to the accounting module — this page reads it, never restates it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:budget_availability' %}" class="btn btn-outline"><i data-lucide="search-check"></i> Availability check</a>
+      <a href="{% url 'procurement:commitment_register' %}" class="btn btn-outline"><i data-lucide="lock"></i> Commitment register</a>
+      <a href="{% url 'procurement:budget_variance_export' %}?{% if selected_budget %}budget={{ selected_budget.pk }}&{% endif %}{% if selected_period %}fiscal_period={{ selected_period.pk }}{% endif %}" class="btn btn-primary"><i data-lucide="download"></i> Export CSV</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="min-width:240px;">
+          <label class="form-label" for="var_budget">Budget</label>
+          <select id="var_budget" name="budget" class="form-select">
+            <option value="">All budgets</option>
+            {% for b in budgets %}
+              <option value="{{ b.pk|stringformat:"d" }}" {% if selected_budget and selected_budget.pk == b.pk %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="var_period">Fiscal period</label>
+          <select id="var_period" name="fiscal_period" class="form-select">
+            <option value="">All periods</option>
+            {% for p in fiscal_periods %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if selected_period and selected_period.pk == p.pk %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:budget_variance' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      <p class="text-muted" style="margin-top:.75rem;">{{ remaining_note }}</p>
+      {% if scoped_invoice_note %}
+        <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Scoped view</span> {{ scoped_invoice_note }}</p>
+      {% endif %}
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} rows match — the largest budgets are shown and the totals cover the rows shown.</p>
+      {% endif %}
+    </div>
+
+    <div class="stat-grid" style="padding:0 1rem;">
+      <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="wallet"></i></div>
+        <div class="stat-value">{{ totals.budgeted|floatformat:2 }}</div>
+        <div class="stat-label">Budgeted</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="lock"></i></div>
+        <div class="stat-value">{{ totals.committed|floatformat:2 }}</div>
+        <div class="stat-label">Committed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="file-text"></i></div>
+        <div class="stat-value">{{ totals.invoiced|floatformat:2 }}</div>
+        <div class="stat-label">Invoiced (recognised)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon {% if totals.remaining < 0 %}red{% else %}green{% endif %}"><i data-lucide="piggy-bank"></i></div>
+        <div class="stat-value">{{ totals.remaining|floatformat:2 }}</div>
+        <div class="stat-label">Remaining</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>GL</th>
+            <th>Department</th>
+            <th class="text-right">Budgeted</th>
+            <th class="text-right">Committed</th>
+            <th class="text-right">Invoiced</th>
+            <th class="text-right">Remaining</th>
+            <th class="text-right">Variance %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <span class="mono">{{ row.gl_code }}</span>
+                <div class="text-muted">{{ row.gl_name }}</div>
+              </td>
+              <td>{{ row.org_unit_name }}</td>
+              <td class="text-right">{{ row.budgeted|floatformat:2 }}</td>
+              <td class="text-right">{{ row.committed|floatformat:2 }}</td>
+              <td class="text-right">{{ row.invoiced|floatformat:2 }}</td>
+              <td class="text-right fw-600 {% if row.over_budget %}text-danger{% endif %}">{{ row.remaining|floatformat:2 }}</td>
+              <td class="text-right">
+                {% comment %}
+                  variance_pct is None when there is no budget to divide by — "no budget set"
+                  and "exactly on budget" are different findings and render differently.
+                {% endcomment %}
+                {% if row.variance_pct is None %}
+                  <span class="badge badge-slate">—</span>
+                {% elif row.over_budget %}
+                  <span class="badge badge-red">{{ row.variance_pct|floatformat:1 }}%</span>
+                {% elif row.variance_pct < 20 %}
+                  <span class="badge badge-amber">{{ row.variance_pct|floatformat:1 }}%</span>
+                {% else %}
+                  <span class="badge badge-green">{{ row.variance_pct|floatformat:1 }}%</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="git-compare"></i>
+                <h3>Nothing to compare</h3>
+                <p>No budget lines, commitments or recognised invoices match this selection. Choose a budget or a fiscal period above — or clear the filters to see the whole workspace.</p>
+                <a href="{% url 'procurement:budget_variance' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">
+        Invoiced spend behind an open purchase order is shown but not deducted again — the order already carries it as a commitment until it closes. What IS deducted on top of commitments is invoices raised without any purchase order (services billed direct). A department whose chain of requisitions is broken or absent lands in the "Unassigned" row rather than being dropped, so the columns keep adding up to the totals above.
+      </p>
+    </div>
+  </div>
+{% endblock %}
