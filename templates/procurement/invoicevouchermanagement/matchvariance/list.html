@@ -34,6 +34,17 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'procurement:invoice_match_board' %}" class="btn btn-primary"><i data-lucide="git-merge"></i> Match board</a>
+      {% comment %}
+        supplierinvoice_revalidate is @tenant_admin_required @require_POST and redirects back to
+        this register, so this is its natural (and only) entry point — without it the bulk sweep
+        could only be triggered by hand-crafting a POST. Gated on the same test the decorator
+        applies, so a plain member is never offered a button that would 403.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'procurement:supplierinvoice_revalidate' %}" onsubmit="return confirm('Re-match every blocked and captured invoice?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Re-match all</button>
+        </form>
+      {% endif %}
       <a href="{% url 'procurement:supplierinvoice_list' %}" class="btn btn-outline"><i data-lucide="file-input"></i> Supplier invoices</a>
     </div>
   </div>
