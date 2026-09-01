@@ -237,9 +237,16 @@ def maverick_scan(request):
     range_key = range_key if range_key in _RANGE_KEYS else DEFAULT_RANGE
     start, end = range_bounds(range_key)
 
-    posted = [value for value in request.POST.getlist("reason") if value in _REASON_LABELS]
+    requested = request.POST.getlist("reason")
+    posted = [value for value in requested if value in _REASON_LABELS]
+    # ``reasons=None`` means "every detector", and it is reserved for the case where NO reason box
+    # was posted at all. A group that WAS posted but survived the allow-list empty has narrowed to
+    # nothing, and must scan nothing: the old ``posted or None`` coerced that empty list straight
+    # back into "no filter", so a hand-edited reason WIDENED the run into a full scan — the exact
+    # opposite of the rule this docstring states. ``scan()`` already narrows correctly on ``[]``.
+    reasons = posted if requested else None
     counts = MaverickSpendFinding.scan(request.tenant, start, end,
-                                       reasons=posted or None, user=request.user)
+                                       reasons=reasons, user=request.user)
 
     raised = sum(counts.values())
     detail = ", ".join(f"{_REASON_LABELS.get(reason, reason)}: {n}"
@@ -252,11 +259,16 @@ def maverick_scan(request):
         "model": "MaverickSpendFinding",
         "action": "scan",
         "window": f"{start:%Y-%m-%d}..{end:%Y-%m-%d}",
-        "reasons": posted or "all",
+        # "all" only when nothing was selected — an all-junk group logs the empty selection it
+        # really ran, so the audit row cannot claim a full scan that never happened.
+        "reasons": "all" if reasons is None else posted,
         "raised": raised,
     }, tenant=request.tenant)
 
-    if raised:
+    if requested and not posted:
+        messages.error(request, "Scan skipped — none of the selected reasons is a detector this "
+                                "board knows. Choose a reason from the list and run it again.")
+    elif raised:
         messages.success(request, f"Scan complete — {raised} new finding(s). {detail}.")
     else:
         messages.info(request, "Scan complete — no new findings. Existing rows were refreshed "
