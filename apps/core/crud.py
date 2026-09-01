@@ -11,7 +11,7 @@ Context-var contract (pinned, L7):
   * form  -> ``form`` + ``is_edit``
 """
 from django.contrib import messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -71,6 +71,37 @@ def as_db_int(value):
     return number if number <= MAX_DB_INT else None
 
 
+def _enum_values(model, lookup):
+    """The valid CHOICES values for ``lookup``, or ``None`` when the enum guard does not apply.
+
+    Deliberately narrow — every bail-out below leaves the filter behaving exactly as it did before
+    this guard existed, so the only value it can ever suppress is one that could not have matched a
+    row anyway:
+
+    * a ``__`` in the lookup — a relation hop (``vendor__status``) or a lookup suffix (``__in``,
+      ``__icontains``). Resolving those correctly is a different job; out of scope.
+    * a field that is not on the model, so nothing can be introspected.
+    * a field with no ``choices`` — this is what leaves every BooleanField, FK and free-text
+      filter untouched.
+    * choices whose values are not all strings. An int-valued enum belongs on the ``is_int`` path,
+      where ``as_db_int`` already guards it, and comparing a raw GET string against int choices
+      would suppress every legitimate value.
+    """
+    if "__" in lookup:
+        return None
+    try:
+        field = model._meta.get_field(lookup)
+    except FieldDoesNotExist:
+        return None
+    choices = getattr(field, "choices", None)
+    if not choices:
+        return None
+    values = {choice[0] for choice in choices}
+    if not all(isinstance(value, str) for value in values):
+        return None
+    return values
+
+
 def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_context=None, per_page=15):
     """``filters`` = iterable of ``(get_param, orm_lookup, is_int)`` tuples."""
     q = request.GET.get("q", "").strip()
@@ -96,6 +127,17 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
             # Map stringified booleans so BooleanField filters work — `.filter(x="False")` would
             # otherwise coerce via bool("False") == True and silently return every row.
             mapped = {"True": True, "False": False}.get(val, val)
+            # L11 completed for enums. The two PARSEABLE junk cases are already covered — an int FK
+            # by as_db_int above, a BooleanField by the ValidationError below — but an unrecognised
+            # CHOICES value is just a string: `.filter(status="nope")` neither raises nor narrows,
+            # it matches nothing and silently EMPTIES the register for a value anyone can type into
+            # the address bar (a stale bookmark, a hand-edited URL, a renamed choice). A junk enum
+            # is not a narrowing request, so it is IGNORED — the contract scm's own suite already
+            # asserts by name in test_security.py ("..._is_skipped_rather_than_matched",
+            # "_falls_back_to_the_default_view_not_to_an_empty_page").
+            choices = _enum_values(qs.model, lookup)
+            if choices is not None and mapped not in choices:
+                continue
             try:
                 qs = qs.filter(**{lookup: mapped})
             except (ValueError, ValidationError):
