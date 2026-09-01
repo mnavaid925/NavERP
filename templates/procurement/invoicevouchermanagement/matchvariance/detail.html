@@ -119,14 +119,14 @@
       </dl>
 
       <div class="form-group">
-        <label class="form-label">Explanation</label>
+        <div class="form-label">Explanation</div>
         <div class="fw-600">{{ explanation|default:obj.explain }}</div>
         <div class="form-help">The matcher's own reckoning: what it expected, what it was given, and the band it compared them against.</div>
       </div>
 
       {% if obj.message %}
         <div class="form-group">
-          <label class="form-label">Message</label>
+          <div class="form-label">Message</div>
           {% comment %} message is Char(255) — the model truncates it, so it is rendered whole. {% endcomment %}
           <div>{{ obj.message|linebreaksbr }}</div>
         </div>
