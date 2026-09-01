@@ -30,7 +30,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.urls import reverse
 
 from apps.core.crud import as_db_int, paginate
@@ -41,8 +41,10 @@ from apps.procurement.models.InvoiceVoucherManagement.InvoiceDisputes import Inv
 # NOT-YET-WIRED entities of this SAME sub-module: import the entity MODULE directly, never
 # ``from apps.procurement.models import X`` — the sub-package is not wired until the Integrator
 # lands it and a package-level re-export is a star-import cycle at URLconf import.
+from apps.procurement.models.InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLine
 from apps.procurement.models.InvoiceVoucherManagement.SupplierInvoices import SupplierInvoice
 from apps.procurement.views._common import *  # noqa: F401,F403
+from apps.scm.models import GoodsReceiptLine
 
 ZERO = Decimal("0")
 
@@ -153,6 +155,31 @@ def _tolerances():
     }
 
 
+def _stamp_cumulatives(lines):
+    """Attach ``cum_invoiced`` / ``cum_received`` to each line in TWO queries, not 2N.
+
+    ``SupplierInvoiceLine.cumulative_invoiced_qty`` and ``.cumulative_received_qty`` are ``Sum()``
+    aggregates, so reading them inside the detail page's line loop cost two queries per line on the
+    module's most-visited page. Same predicates as the properties, resolved once for the whole
+    document.
+    """
+    po_ids = [line.po_line_id for line in lines if line.po_line_id]
+    invoiced, received = {}, {}
+    if po_ids:
+        invoiced = dict(SupplierInvoiceLine.objects.filter(po_line_id__in=po_ids)
+                        .exclude(invoice__status__in=SupplierInvoice.TERMINAL_STATUSES)
+                        .exclude(invoice__invoice_type="credit_memo")
+                        .values_list("po_line_id").order_by().annotate(s=Sum("quantity")))
+        received = dict(GoodsReceiptLine.objects.filter(po_line_id__in=po_ids)
+                        .exclude(goods_receipt__status="cancelled")
+                        .values_list("po_line_id").order_by()
+                        .annotate(s=Sum("quantity_received")))
+    for line in lines:
+        line.cum_invoiced = invoiced.get(line.po_line_id, ZERO)
+        line.cum_received = received.get(line.po_line_id, ZERO)
+    return lines
+
+
 def _discount_panel(obj):
     """The early-payment discount panel — what is on offer, and whether it is still takeable."""
     today = timezone.localdate()
@@ -209,8 +236,9 @@ def supplierinvoice_detail(request, pk):
     is_admin = _is_admin(request)
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
-        "lines": list(obj.lines.select_related("po_line", "receipt_line", "gl_account",
-                                               "tax_code").order_by("id")),
+        "lines": _stamp_cumulatives(
+            list(obj.lines.select_related("po_line", "po_line__purchase_order", "receipt_line",
+                                          "gl_account", "tax_code").order_by("id"))),
         "variances": list(obj.variances.select_related("invoice_line", "dispute")
                           .order_by("-detected_at", "-id")),
         "disputes": list(obj.disputes.select_related("supplier", "assigned_to")
