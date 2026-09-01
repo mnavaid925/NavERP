@@ -527,11 +527,29 @@ def test_spend_finding_list_junk_fk_params_render_200(client_a, spend_finding_op
 
 
 def test_spend_finding_list_junk_enum_params_render_200(client_a, spend_finding_open_a):
+    """A hand-edited enum is junk, not a narrowing request, so it is IGNORED — the register still
+    shows its rows.
+
+    This asserted ``== []`` when the suite was written, which encoded the bug rather than the
+    contract: ``.filter(reason="nope")`` neither raises nor narrows, so a value anyone can type
+    into the address bar silently emptied the page. The rule register (``spendrule_list``) already
+    ignores its unrecognised ``match_type``; both registers in this sub-module now agree.
+    """
     resp = client_a.get(reverse("procurement:maverickfinding_list"),
                         {"reason": "nope", "status": "??", "severity": "x",
                          "addressable": "maybe"})
     assert resp.status_code == 200
-    assert _spend_pks(resp) == []
+    assert _spend_pks(resp) == [spend_finding_open_a.pk]
+
+
+def test_spend_finding_list_valid_enum_still_narrows(client_a, spend_finding_open_a):
+    """The junk guard must not disarm the real filter: a VALID enum still narrows."""
+    url = reverse("procurement:maverickfinding_list")
+    assert _spend_pks(client_a.get(url, {"status": spend_finding_open_a.status})) == [
+        spend_finding_open_a.pk]
+    other = next(v for v, _ in MaverickSpendFinding.STATUS_CHOICES
+                 if v != spend_finding_open_a.status)
+    assert _spend_pks(client_a.get(url, {"status": other})) == []
 
 
 def test_spend_finding_list_page_two_and_past_the_end(client_a, _spend_bulk_findings,
