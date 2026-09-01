@@ -51,10 +51,12 @@ HORIZON_WEEKS_DEFAULT = 8
 HORIZON_WEEKS_MIN = 1
 HORIZON_WEEKS_MAX = 26
 
-#: Every hop the line register and the detail page walk.
-_ROW_RELATIONS = ("invoice", "po_line", "receipt_line", "item", "gl_account")
-_DETAIL_RELATIONS = _ROW_RELATIONS + ("tax_code", "invoice__vendor", "invoice__currency",
-                                      "invoice__payment_term")
+#: Every hop the line register and the detail page walk. The CHAINED hops are not optional: the
+#: register renders ``po_line.purchase_order``, ``receipt_line.goods_receipt``,
+#: ``invoice.currency`` and ``tax_code`` per row, so leaving them out is 4N single-row queries.
+_ROW_RELATIONS = ("invoice", "invoice__currency", "po_line", "po_line__purchase_order",
+                  "receipt_line", "receipt_line__goods_receipt", "item", "gl_account", "tax_code")
+_DETAIL_RELATIONS = _ROW_RELATIONS + ("invoice__vendor", "invoice__payment_term")
 
 
 # -- shared helpers --------------------------------------------------------------------------
