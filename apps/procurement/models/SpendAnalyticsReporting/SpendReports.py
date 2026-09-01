@@ -280,7 +280,12 @@ class SpendReportSnapshot(models.Model):
     row_count = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ["-generated_at"]
+        # ``-id`` is the TIE-BREAKER, not decoration. generated_at is auto_now_add, and two
+        # snapshots taken in the same clock tick (a fast machine, or a loop in a test) then compare
+        # equal, leaving the order arbitrary — the row a user sees as "latest" could flip between
+        # two renders of the same page, and an ordering assertion passes or fails with machine load.
+        # Falling back to descending pk keeps newest-first deterministic at identical timestamps.
+        ordering = ["-generated_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "report"], name="prc_sprsnap_tnt_rpt_idx"),
         ]
