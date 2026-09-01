@@ -188,8 +188,8 @@
                 <div class="text-muted">{% if line.tax_code %}{{ line.tax_code }}{% else %}No tax code{% endif %}</div>
               </td>
               <td class="text-right">
-                {{ line.cumulative_invoiced_qty|floatformat:"-4" }}
-                <div class="text-muted">of {{ line.cumulative_received_qty|floatformat:"-4" }} received</div>
+                {{ line.cum_invoiced|floatformat:"-4" }}
+                <div class="text-muted">of {{ line.cum_received|floatformat:"-4" }} received</div>
               </td>
             </tr>
           {% empty %}
