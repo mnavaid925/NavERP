@@ -227,7 +227,8 @@ def supplierinvoice_detail(request, pk):
         "can_match": not obj.is_locked and obj.invoice_type != "credit_memo",
         "can_override": is_admin and obj.status == "blocked",
         "can_approve": is_admin and obj.status == "pending_approval",
-        "can_void": is_admin and not obj.is_locked,
+        # Mirrors void()'s own guard: a posted invoice is reversed, never voided.
+        "can_void": is_admin and not obj.is_locked and not obj.journal_entry_id,
         "can_reverse": is_admin and obj.status in ("paid", "approved") and bool(obj.journal_entry_id),
         "is_admin": is_admin,
     })
