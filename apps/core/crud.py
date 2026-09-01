@@ -71,6 +71,16 @@ def as_db_int(value):
     return number if number <= MAX_DB_INT else None
 
 
+def _is_pk_lookup(lookup):
+    """True when ``lookup`` compares against a primary key.
+
+    Deliberately narrow. ``vendor_id`` / ``invoice_id`` / ``pk`` / ``id`` name a pk; ``year`` and
+    ``is_active`` — the two non-pk int filters in the app — do not, and 0 is a perfectly good
+    value for either, so neither may be caught by the zero guard in ``crud_list``.
+    """
+    return lookup in ("pk", "id") or lookup.endswith("_id")
+
+
 def _enum_values(model, lookup):
     """The valid CHOICES values for ``lookup``, or ``None`` when the enum guard does not apply.
 
@@ -121,6 +131,14 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
             # decimal digits and converts fine, then raises OverflowError inside the driver. Same
             # class of bug, one step further along. (L11: never pass a non-pk to an int FK filter.)
             number = as_db_int(val)
+            if number == 0 and _is_pk_lookup(lookup):
+                # L11, third case: 0 is decimal AND in range, so as_db_int passes it — and it is
+                # still not a pk, because an AutoField starts at 1. `?vendor=0` then narrows to
+                # `.filter(vendor_id=0)`, which matches nothing and silently EMPTIES the register,
+                # exactly like the junk enum above. A value that cannot be a pk is not a narrowing
+                # request, so it is IGNORED. Scoped to pk lookups on purpose: a non-pk int filter
+                # (`?year=0`, `?active=0`) must still filter on 0.
+                continue
             if number is not None:
                 qs = qs.filter(**{lookup: number})
         else:
