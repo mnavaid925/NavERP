@@ -74,6 +74,15 @@ SCOPED_INVOICE_NOTE = (
     "out of this scoped view; they appear on the all-budgets view."
 )
 
+#: Printed when a fiscal period (but no budget) is selected: the period reaches an invoice only
+#: through the requisition behind its purchase order, so a PO-less invoice carries no period and
+#: is left out — the same honest gap, disclosed rather than silent.
+PERIOD_INVOICE_NOTE = (
+    "Invoices raised without a purchase order carry no budget or fiscal period, so they cannot "
+    "be attributed to the selected period and are left out of this scoped view; they appear on "
+    "the all-periods view."
+)
+
 
 def _as_date(raw):
     """A ``YYYY-MM-DD`` GET value as a ``date``, or ``None`` — junk is skipped, never raised on
@@ -248,7 +257,9 @@ def budget_variance(request):
         "selected_budget": selected_budget,
         "selected_period": selected_period,
         "remaining_note": REMAINING_NOTE,
-        "scoped_invoice_note": SCOPED_INVOICE_NOTE if selected_budget is not None else "",
+        "scoped_invoice_note": (SCOPED_INVOICE_NOTE if selected_budget is not None
+                                else PERIOD_INVOICE_NOTE if selected_period is not None
+                                else ""),
         "row_cap": ROW_CAP,
         "truncated": truncated,
     })
