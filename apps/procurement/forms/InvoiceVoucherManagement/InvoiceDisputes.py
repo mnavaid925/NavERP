@@ -40,6 +40,10 @@ from apps.procurement.models.InvoiceVoucherManagement.SupplierInvoices import Su
 #: figure is compared or written; ``1e400`` parses cleanly and then dies inside the driver.
 _MONEY_CEILING = Decimal(10) ** 12
 
+#: ``forms/_common`` does not export this, so it has to be declared here — ``_as_decimal`` below
+#: referenced the bare name and would have raised NameError the first time ``_finite`` returned None.
+ZERO = Decimal("0")
+
 
 def _finite(value):
     """``value`` as a finite ``Decimal``, or ``None`` (L35/L11)."""
