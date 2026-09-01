@@ -592,9 +592,13 @@ def supplierinvoice_duplicates(request):
             groups.append({"invoice": invoice, "candidates": candidates,
                            "count": len(candidates)})
 
+    page_obj = paginate(request, groups)
     return render(request, TEMPLATE_DUPLICATES, {
-        "groups": groups,
-        "page_obj": paginate(request, groups),
+        # ``groups`` is the PAGE's slice, not the whole list — the board rendered every group on
+        # every page while the pager underneath it counted them all, so "Next" changed nothing.
+        # (The stats below still describe the whole scan, which is what a stat card is for.)
+        "groups": page_obj.object_list,
+        "page_obj": page_obj,
         "window_days": SupplierInvoice.DUPLICATE_WINDOW_DAYS,
         "stats": {
             "scanned": len(scanned),
