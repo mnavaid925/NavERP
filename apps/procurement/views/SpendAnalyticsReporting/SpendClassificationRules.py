@@ -139,14 +139,20 @@ def spendrule_list(request):
     from apps.core.models import OrgUnit
     from apps.scm.models import ItemCategory
 
+    # L11 for enums. ``?category=abc`` is refused by crud_list's int guard and ``?is_active=abc``
+    # raises ValidationError inside .filter() there and is skipped — but an unrecognised CHOICES
+    # value is a plain string, so ``.filter(match_type="not-a-type")`` neither raises nor narrows:
+    # it silently empties the register. A hand-edited enum is junk, not a narrowing request, so it
+    # must be IGNORED. crud_list reads request.GET itself, so the guard is expressed by WITHHOLDING
+    # the filter spec — the same ``in dict(MATCH_TYPE_CHOICES)`` test the prefill below uses.
+    list_filters = [("category", "category_id", True), ("is_active", "is_active", False)]
+    if request.GET.get("match_type", "").strip() in dict(MATCH_TYPE_CHOICES):
+        list_filters.append(("match_type", "match_type", False))
+
     return crud_list(
         request, base, TEMPLATE_LIST,
         search_fields=("name", "keyword", "notes", "category__name"),
-        filters=(
-            ("match_type", "match_type", False),
-            ("category", "category_id", True),
-            ("is_active", "is_active", False),
-        ),
+        filters=tuple(list_filters),
         extra_context={
             "match_type_choices": MATCH_TYPE_CHOICES,
             "applies_to_choices": APPLIES_TO_CHOICES,
