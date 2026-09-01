@@ -208,6 +208,15 @@ class Command(BaseCommand):
             ReturnToVendorLine.objects.all().delete()
             ReturnToVendor.objects.all().delete()
             ReceiptTolerancePolicy.objects.all().delete()
+            # 6.13 invoice rows: a variance may point at the dispute that was raised from it
+            # (SET_NULL), so disputes go first, then the variances, then the lines (cascade
+            # children, deleted explicitly so the register clears in one pass), then the headers.
+            # Without these four the 6.13 block's "already present, skipping" guard survives a
+            # --flush and the demo invoices can never be regenerated.
+            InvoiceDispute.objects.all().delete()
+            InvoiceMatchVariance.objects.all().delete()
+            SupplierInvoiceLine.objects.all().delete()
+            SupplierInvoice.objects.all().delete()
             # 6.14 analytics rows: snapshots are report children (cascade) but go first so the
             # register clears in one pass; findings PROTECT their vendor but nothing points at a
             # finding, and a rule PROTECTs its category — neither is pointed at from anywhere, so
