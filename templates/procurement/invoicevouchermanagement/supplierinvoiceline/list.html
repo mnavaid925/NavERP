@@ -157,6 +157,13 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:supplierinvoiceline_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete are gated on obj.is_editable — the header's own editable
+                    window, which is exactly what supplierinvoiceline_edit and _delete enforce.
+                    Offered unconditionally they were buttons on approved, scheduled and paid
+                    invoices that could only ever return a refusal. View stays unconditional.
+                  {% endcomment %}
+                  {% if obj.is_editable %}
                   <a href="{% url 'procurement:supplierinvoiceline_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
                     The confirm text interpolates ONLY the integer pk and the header's
@@ -168,6 +175,7 @@
                   <form method="post" action="{% url 'procurement:supplierinvoiceline_delete' obj.pk %}" onsubmit="return confirm('Delete line {{ obj.pk }} of invoice {{ obj.invoice.number }}? The invoice totals are re-derived from the lines that remain.');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
