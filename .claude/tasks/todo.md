@@ -1573,4 +1573,24 @@ Verbs are `@require_POST`; **`maverick_scan` and every disposition verb are `@te
 - Generic dashboard builder, formula-authored KPI library, OLAP cubes, NLQ, ML/AutoML, scheduled distribution and bursting -> **Module 10 (`bi`)** 10.8/10.10/10.11/10.12/10.13/10.15/10.16. **The most important boundary in this plan: 6.14 is a procurement analytics page, not a BI platform.**
 
 ## Review notes
-(filled in at the end)
+
+### 6.15 Budget & Cost Management (built 2026-09-01)
+
+Built by subtraction: `accounting.Budget`/`BudgetLine` is never restated (L29) and no stored
+encumbrance exists anywhere - the commitment vocabulary (`OPEN_COMMITMENT_PO_STATUSES` verbatim
+from scm 4.18; `COMMITTED_PR_STATUSES` excluding `converted` to avoid double-counting) and all
+three computed pages derive at view time. Two models: `BudgetMapping` (config glue, PROTECT
+budget FK, most-specific-wins `resolve()`, no unique_together on nullable scope columns) and
+`CostForecast` [FCST-] (frozen snapshot - amounts `editable=False`, stamped once via
+`compute_forecast_amounts()` in a hand-rolled create, NO edit route, arithmetic-only honesty
+note on every page). Three derived pages: availability checker (mirrors scm `budget_check()`
+semantics, advisory), commitment register (PO line sums unioned with approved-not-converted
+requisition estimates, ROW_CAP 500), variance report (per-BudgetLine
+budgeted/committed/recognised-invoiced/remaining + CSV; actuals basis is 6.13 recognised
+invoices, not scm vouchers). Money via 6.14 `money()`, never `q2`. Migration 0024;
+`_seed_budget_cost` idempotent (4 mappings + 2 forecasts per tenant; SMOKETEST tenant skips
+gracefully without accounting data). Smoke: all 21 URL/param combos 200 incl. junk params,
+cross-tenant IDOR 404, delete POST-only + really deletes (throwaway row), no `{#` leaks, five
+sidebar bullets Live. One bug found during smoke and fixed before commit: missing `reverse`
+import in `views/BudgetCostManagement/CostForecasts.py`. Review wave findings land in
+`.claude/tasks/review-procurement-6.15.md`; tests in `tests/test_budgetcost_*.py`.
