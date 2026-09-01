@@ -121,9 +121,10 @@ def matchvariance_detail(request, pk):
     obj = get_object_or_404(InvoiceMatchVariance.objects.select_related(*_DETAIL_RELATIONS),
                             pk=pk, tenant=request.tenant)
     is_admin = _is_admin(request)
-    # Accepting a variance is a decision about money that has already been paid or reversed is a
-    # no-op, and the route refuses it — the button must not be offered either.
-    can_accept = obj.resolution in ("open", "disputed") and not obj.invoice.is_locked
+    # Accepting a variance on money that has already been paid or reversed is a no-op, and the
+    # route refuses it — the button must not be offered either. The rule lives on the model so the
+    # register and the Match Board gate on exactly the same expression.
+    can_accept = obj.can_accept
     # A GET link, not a POST form: accepting carries an optional note and settles a decision
     # about money, so the button lands on the confirmation page (matchvariance/form.html) and the
     # write only happens when that page is submitted.
