@@ -15,11 +15,13 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 `receipt-audit/`, `supplier-invoices/`, `capture/`, `invoice-vouchers/`,
 `supplier-invoice-lines/`, `payment-schedule/`, `match-variances/`, `match-board/`,
 `invoice-disputes/`, `spend/`, `spend-rules/`, `maverick-findings/`, `spend-reports/`,
-`spend-report-snapshots/`) is a distinct whole component — no greedy
+`spend-report-snapshots/`, `budget-mappings/`, `budget-availability/`, `commitments/`,
+`budget-variance/`, `cost-forecasts/`) is a distinct whole component — no greedy
 ``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
 about.
 """
 from .ApprovalWorkflowEngine import urlpatterns as _awe_approvalengine
+from .BudgetCostManagement import urlpatterns as _bcm_budgetcost
 from .CatalogManagement import urlpatterns as _cat_catalogmanagement
 from .OrderFulfillment import urlpatterns as _of_orderfulfillment
 from .DashboardPortal.ActivityFeed import urlpatterns as _dp_activity
@@ -88,4 +90,10 @@ urlpatterns = [
     *_sar_spendanalytics,       # 6.14 spend dashboard/category/classification/export + maverick
                                 #      board & scan, classification rules, maverick findings,
                                 #      saved report builder + snapshots
+    # 6.15 LAST for the same reason 6.13 and 6.14 were: every first segment it claims is new
+    # (``budget-mappings/``, ``budget-availability/``, ``commitments/``, ``budget-variance/``,
+    # ``cost-forecasts/``), and appended-last is belt-and-braces against a future module
+    # claiming one of them.
+    *_bcm_budgetcost,           # 6.15 budget mappings CRUD, availability checker, commitment
+                                #      register, variance report (+ CSV), frozen cost forecasts
 ]
