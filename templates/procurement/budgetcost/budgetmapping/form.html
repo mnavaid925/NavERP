@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Budget Mapping{% else %}New Budget Mapping{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — BudgetMapping create-or-edit. ONE template for both,
+    driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj).
+
+    The form carries exactly: budget, org_unit, project, default_gl_account, priority,
+    is_active, notes. tenant is system-stamped by the view and has no input.
+
+    Field help is keyed off field.name so it stays correct if the form order changes.
+    Each label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit mapping — {{ obj.dimension_label }}{% else %}New budget mapping{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:budgetmapping_list' %}">Budget Mappings</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">A mapping is a pointer: it says which accounting budget governs this department's or project's procurement spend. The amounts stay in the accounting module.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Mapping</h2><span class="text-muted">the budget, and what it governs</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "budget" %}
+                <div class="form-help">The accounting budget this mapping governs spend against. Deleting a budget that a mapping still points at is blocked until the mapping is removed or re-pointed.</div>
+              {% elif field.name == "org_unit" %}
+                <div class="form-help">The department this mapping applies to. Leave blank for a workspace default — and leave both department and project blank for THE default, the one chosen when nothing more specific matches.</div>
+              {% elif field.name == "project" %}
+                <div class="form-help">Optional. A project mapping is more specific than a department one: when both exist, spend on the project follows this budget even if the department points elsewhere.</div>
+              {% elif field.name == "default_gl_account" %}
+                <div class="form-help">Optional. Pre-filled on requisitions raised under this mapping, so a requester does not have to know the chart of accounts.</div>
+              {% elif field.name == "priority" %}
+                <div class="form-help">Lower numbers win within the same tier of specificity. Ties break on the oldest mapping. 100 is the ordinary default.</div>
+              {% elif field.name == "is_active" %}
+                <div class="form-help">Inactive mappings are never chosen. Prefer deactivating over deleting when a budget winds down — the history stays readable.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Optional. Worth writing when the mapping exists for a reason that is not obvious from the dimensions alone.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create mapping{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:budgetmapping_detail' obj.pk %}{% else %}{% url 'procurement:budgetmapping_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
