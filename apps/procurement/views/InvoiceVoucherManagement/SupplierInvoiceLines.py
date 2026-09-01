@@ -131,18 +131,29 @@ def supplierinvoiceline_list(request):
             .select_related(*_ROW_RELATIONS)
             .annotate(cum_invoiced_qty=Subquery(invoiced_sq),
                       cum_received_qty=Subquery(received_sq)))
+
+    # ``gl_missing`` is applied HERE, not through crud_list. An ``__isnull`` lookup is only
+    # validated when the SQL is compiled — inside ``paginate()``, outside crud_list's
+    # ValueError/ValidationError guard — so ?gl_missing=1 / on / true / abc all 500ed. Anything
+    # that is not a recognised truth value now falls through unfiltered (L11).
+    gl_missing = request.GET.get("gl_missing", "").strip()
+    if gl_missing in ("True", "true", "1", "on", "yes"):
+        rows = rows.filter(gl_account__isnull=True)
+    elif gl_missing in ("False", "false", "0", "off", "no"):
+        rows = rows.filter(gl_account__isnull=False)
+
     return crud_list(
         request,
         rows,
         TEMPLATE_LIST,
         search_fields=["description", "sku_hint", "invoice__number", "invoice__invoice_number"],
         # (get_param, orm_lookup, is_int) — the int ones go through crud_list's as_db_int guard,
-        # so ?invoice=abc skips the filter instead of 500ing (L11). ``gl_missing`` is a boolean
-        # and is named after what it SELECTS, not after the column it inspects: the lookup is
-        # ``gl_account__isnull``, so True means the account is MISSING. "True"/"False" strings
-        # are mapped for us.
+        # so ?invoice=abc skips the filter instead of 500ing (L11). ``gl_missing`` is applied
+        # above, not here: it is named after what it SELECTS rather than the column it inspects
+        # (True means the account is MISSING), and an ``__isnull`` lookup cannot go through
+        # crud_list at all — see the comment on it.
         filters=[("invoice", "invoice_id", True), ("po_line", "po_line_id", True),
-                 ("item", "item_id", True), ("gl_missing", "gl_account__isnull", False)],
+                 ("item", "item_id", True)],
         extra_context={
             "invoices": (SupplierInvoice.objects.filter(tenant=request.tenant)
                          .order_by("-invoice_date", "-id")[:INVOICE_CHOICE_LIMIT]),
