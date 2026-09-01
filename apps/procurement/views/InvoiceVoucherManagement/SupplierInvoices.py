@@ -230,7 +230,8 @@ def supplierinvoice_detail(request, pk):
         # Exactly the statuses _submit() can carry to pending approval: draft/parked are captured
         # on the way through, captured/disputed go straight.
         "can_submit": obj.status in ("draft", "parked", "captured", "disputed"),
-        "can_match": not obj.is_locked and obj.invoice_type != "credit_memo",
+        "can_match": (not obj.is_locked and not obj.journal_entry_id
+                      and obj.invoice_type != "credit_memo"),
         "can_override": is_admin and obj.status == "blocked",
         "can_approve": is_admin and obj.status == "pending_approval",
         # Mirrors void()'s own guard: a posted invoice is reversed, never voided.
@@ -621,6 +622,13 @@ def supplierinvoice_match(request, pk):
     with transaction.atomic():
         obj = get_object_or_404(SupplierInvoice.objects.select_for_update(),
                                 pk=pk, tenant=request.tenant)
+        # A posted invoice must not be re-matched: run_match() would reset the status back to
+        # pending_approval/blocked, after which approve() no-ops on its journal_entry_id guard and
+        # reverse() is no longer offered — a GL-posted invoice stranded by a plain member.
+        if obj.is_locked or obj.journal_entry_id:
+            messages.error(request, f"{obj.number} is already posted — reverse it instead of "
+                                    f"re-matching it.")
+            return redirect("procurement:supplierinvoice_detail", pk=pk)
         _status, counts = obj.run_match(request.user)
     write_audit_log(request.user, obj, "update", {"action": "match"})
     messages.success(
