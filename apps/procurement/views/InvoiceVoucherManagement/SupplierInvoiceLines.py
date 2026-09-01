@@ -233,6 +233,15 @@ def supplierinvoiceline_delete(request, pk):
     obj = get_object_or_404(SupplierInvoiceLine.objects.select_related("invoice"),
                             pk=pk, invoice__tenant=request.tenant)
     invoice = obj.invoice
+    # Same guard the create and edit paths apply: past EDITABLE_STATUSES the header's Bill and
+    # JournalEntry are already posted, so removing a line here would silently rewrite a total
+    # the GL has already booked.
+    if not _editable(invoice):
+        messages.error(
+            request,
+            f"{invoice.number} is {invoice.get_status_display().lower()} — its lines can "
+            f"no longer be removed.")
+        return redirect("procurement:supplierinvoiceline_detail", pk=pk)
     invoice_pk = invoice.pk
     write_audit_log(request.user, obj, "delete")
     obj.delete()
