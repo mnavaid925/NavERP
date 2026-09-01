@@ -34,7 +34,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Found by:** code-reviewer
 - **Problem:** Fiscal-period-only scope silently drops PO-less invoices with no disclosure. When a period (but no budget) is selected, the inv_lines filter through `invoice__purchase_order__requisition__budget__fiscal_period=period` excludes invoices raised without a PO; the standalone map then becomes empty, so those amounts stop being deducted from "remaining" even though REMAINING_NOTE (printed unconditionally) states they are. The same gap IS disclosed for budget scope via SCOPED_INVOICE_NOTE, but the context line renders it only when `selected_budget is not None`.
 - **Fix:** Add a period-scope disclosure constant next to SCOPED_INVOICE_NOTE, e.g. `PERIOD_INVOICE_NOTE = "Invoices raised without a purchase order carry no budget or fiscal period, so they cannot be attributed to the selected period and are left out of this scoped view; they appear on the all-periods view."` and change the context line to `"scoped_invoice_note": SCOPED_INVOICE_NOTE if selected_budget is not None else (PERIOD_INVOICE_NOTE if selected_period is not None else "")` — the existing `{% if scoped_invoice_note %}` block in variance_report.html then prints it.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): 6.15 review I1 - period-only variance scope now discloses the PO-less invoice gap via PERIOD_INVOICE_NOTE chained into scoped_invoice_note
 
 ## Minor
 
@@ -43,35 +43,35 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Found by:** performance-reviewer
 - **Problem:** `prc_bmap_tnt_active_idx` covers `(tenant, is_active)` only, so neither `resolve()`'s `.order_by("priority", "id")` nor the register's default ordering can be satisfied from the index — the index comment claims it backs that ordering, but MySQL must filesort the tenant's rows.
 - **Fix:** Extend the index to `fields=["tenant", "is_active", "priority", "id"]` via a NEW migration 0025 (never edit 0024). Small table, but the fix also makes the comment true.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): 6.15 review M1 - extend prc_bmap_tnt_active_idx to (tenant, is_active, priority, id) so resolve()'s ordering and the register's Meta.ordering are served from the index · + migration 0025 (fix(procurement): 6.15 review M1 - migration 0025 replaces prc_bmap_tnt_active_idx with the extended (tenant, is_active, priority, id) composite)
 
 ### M2 — `apps/procurement/views/BudgetCostManagement/BudgetMappings.py:45`
 
 - **Found by:** code-reviewer (also noted by explorer and performance-reviewer)
 - **Problem:** `budgetmapping_list` passes a `gl_accounts` context variable that the list template never consumes (the filter bar deliberately omits it; the template mentions it only inside its {% comment %} contract block), so the queryset is fetched and shipped for nothing on every list render.
 - **Fix:** Delete the `gl_accounts` entry from both branches of `_filter_dropdowns` so the list view's context exactly matches the template contract; the create/edit forms build their own dropdowns and are unaffected. If the template's {% comment %} contract block mentions gl_accounts, update the comment too.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): 6.15 review M2 - drop the dead gl_accounts context from budgetmapping_list's _filter_dropdowns (both branches) and its now-unused import · + template contract comment (fix(procurement): 6.15 review M2 - budgetmapping list template contract comment updated to match the gl_accounts-free context)
 
 ### M3 — `apps/procurement/views/BudgetCostManagement/BudgetMappings.py:57`
 
 - **Found by:** performance-reviewer
 - **Problem:** budgetmapping_list stat cards run three tenant-scoped COUNT queries although inactive = total − active is derivable, so the third query is redundant on every register render.
 - **Fix:** Replace the three `.count()` calls with one conditional aggregate: `stats = base.aggregate(total=Count("pk"), active=Count("pk", filter=Q(is_active=True)))` and set `stats["inactive"] = stats["total"] - stats["active"]`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): 6.15 review M3 - budgetmapping_list stat cards via one conditional aggregate; inactive derived as total - active
 
 ### M4 — `apps/procurement/views/BudgetCostManagement/CostForecasts.py:80`
 
 - **Found by:** performance-reviewer
 - **Problem:** costforecast_list stat cards run three COUNT queries although workspace_wide = total − budget_scoped is derivable, so the third query is redundant on every register render.
 - **Fix:** Replace the three `.count()` calls with `base.aggregate(total=Count("pk"), budget_scoped=Count("pk", filter=Q(budget__isnull=False)))` and derive `workspace_wide` as total − budget_scoped.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): 6.15 review M4 - costforecast_list stat cards via one conditional aggregate; workspace_wide derived as total - budget_scoped
 
 ### M5 — `apps/procurement/views/BudgetCostManagement/VarianceReport.py:157`
 
 - **Found by:** performance-reviewer
 - **Problem:** When a budget is selected, inv_lines is already filtered to `invoice__purchase_order__requisition__budget=budget`, so the standalone grouped query's added `invoice__purchase_order__isnull=True` is a contradictory filter that always returns an empty result — one grouped-scan round trip to compute an empty dict.
 - **Fix:** Skip the query in the scoped case: `standalone = {} if scoped else _grouped_pair_sum(inv_lines.filter(invoice__purchase_order__isnull=True), ...)`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(procurement): 6.15 review M5 - skip the structurally-empty standalone PO-less grouped query when a budget scopes the variance rows
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
 
