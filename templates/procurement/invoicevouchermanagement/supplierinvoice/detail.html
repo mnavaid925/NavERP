@@ -172,11 +172,11 @@
           {% for line in lines %}
             <tr>
               <td>
-                <span class="fw-600">{{ line.description|default:"—" }}</span>
+                <a href="{% url 'procurement:supplierinvoiceline_detail' line.pk %}" class="fw-600">{{ line.description|default:"Invoice line" }}</a>
                 {% if line.sku_hint %}<div class="text-muted">SKU {{ line.sku_hint }}{% if line.uom_hint %} · {{ line.uom_hint }}{% endif %}</div>{% endif %}
                 {% if line.item %}<div class="text-muted">{{ line.item }}</div>{% endif %}
               </td>
-              <td>{% if line.po_line %}<a href="{% url 'procurement:supplierinvoiceline_detail' line.pk %}" class="fw-600">{{ line.po_line }}</a>{% else %}<span class="text-muted">No PO line</span>{% endif %}</td>
+              <td>{% if line.po_line %}<a href="{% url 'scm:purchaseorder_detail' line.po_line.purchase_order.pk %}" class="fw-600">{{ line.po_line }}</a>{% else %}<span class="text-muted">No PO line</span>{% endif %}</td>
               <td>{% if line.receipt_line %}{{ line.receipt_line.quantity_received|floatformat:"-4" }} received{% else %}<span class="text-muted">No receipt line</span>{% endif %}</td>
               <td class="text-right">{{ line.quantity|floatformat:"-4" }}
                 <div class="text-muted">matched {{ line.matched_qty|floatformat:"-4" }}</div></td>
