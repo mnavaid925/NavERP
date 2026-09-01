@@ -667,6 +667,31 @@ def _refuse(obj, verb):
     return (f"{obj.number} is {obj.get_status_display().lower()} and cannot be {verb}.")
 
 
+def _submit(obj):
+    """Capture-then-submit, so one button carries a half-keyed invoice to the approver.
+
+    ``submit_for_approval()`` only accepts ``captured`` or ``disputed``, and nothing else in the
+    module calls ``capture()`` — which is why a CREDIT MEMO could never leave draft: ``run_match()``
+    early-returns on one without touching its status, so the match verb (the ordinary route into
+    ``pending_approval``) is a no-op for it and the credit never reached the ledger.
+    """
+    if obj.status in ("draft", "parked"):
+        obj.capture()
+    return obj.submit_for_approval()
+
+
+@login_required
+@require_POST
+def supplierinvoice_submit(request, pk):
+    """Send the invoice for approval — ordinary work, not an admin verb (approving it is)."""
+    return _transition(
+        request, pk, "submit",
+        _submit,
+        lambda obj: f"{obj.number} sent for approval.",
+        lambda obj: _refuse(obj, "sent for approval"),
+    )
+
+
 @login_required
 @tenant_admin_required
 @require_POST
