@@ -648,9 +648,16 @@ def test_receipt_discrepancy_list_junk_fk_params_never_500(client_a, receipt_dis
 ])
 def test_receipt_discrepancy_list_junk_enum_params_never_500(client_a,
                                                              receipt_discrepancy_open_a, params):
+    """An unrecognised enum is IGNORED, so the register still shows its rows.
+
+    This asserted ``== []`` when it was written, which encoded the behaviour rather than the
+    contract: ``.filter(status="zzz")`` neither raises nor narrows, so a value anyone can type into
+    the address bar silently emptied the page. ``crud_list`` now skips an enum value that is not in
+    the field's own CHOICES — the contract scm's suite already asserted by name.
+    """
     r = client_a.get(reverse("procurement:discrepancy_list"), params)
     assert r.status_code == 200
-    assert _receipt_pks(r) == []
+    assert _receipt_pks(r) == [receipt_discrepancy_open_a.pk]
 
 
 def test_receipt_discrepancy_list_pagination_page_two_and_past_the_end(client_a, tenant_a,
@@ -1154,9 +1161,11 @@ def test_receipt_rtv_list_junk_fk_params_never_500(client_a, receipt_rtv_draft_a
 
 @pytest.mark.parametrize("params", [{"status": "zzz"}, {"reason": "zzz"}, {"remedy": "zzz"}])
 def test_receipt_rtv_list_junk_enum_params_never_500(client_a, receipt_rtv_draft_a, params):
+    """An unrecognised enum is IGNORED, so the register still shows its rows — see the discrepancy
+    test above for why this previously asserted an empty page."""
     r = client_a.get(reverse("procurement:rtv_list"), params)
     assert r.status_code == 200
-    assert _receipt_pks(r) == []
+    assert _receipt_pks(r) == [receipt_rtv_draft_a.pk]
 
 
 def test_receipt_rtv_list_pagination_page_two_and_past_the_end(client_a, tenant_a,
