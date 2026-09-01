@@ -155,18 +155,20 @@ def _tolerances():
     }
 
 
-def _stamp_cumulatives(lines):
+def _stamp_cumulatives(lines, tenant_id):
     """Attach ``cum_invoiced`` / ``cum_received`` to each line in TWO queries, not 2N.
 
     ``SupplierInvoiceLine.cumulative_invoiced_qty`` and ``.cumulative_received_qty`` are ``Sum()``
     aggregates, so reading them inside the detail page's line loop cost two queries per line on the
-    module's most-visited page. Same predicates as the properties, resolved once for the whole
-    document.
+    module's most-visited page. Same predicates as the properties — including the tenant scope on
+    the invoiced side, which is the over-invoicing control and must never sum across a workspace
+    boundary — resolved once for the whole document.
     """
     po_ids = [line.po_line_id for line in lines if line.po_line_id]
     invoiced, received = {}, {}
     if po_ids:
-        invoiced = dict(SupplierInvoiceLine.objects.filter(po_line_id__in=po_ids)
+        invoiced = dict(SupplierInvoiceLine.objects
+                        .filter(po_line_id__in=po_ids, invoice__tenant_id=tenant_id)
                         .exclude(invoice__status__in=SupplierInvoice.TERMINAL_STATUSES)
                         .exclude(invoice__invoice_type="credit_memo")
                         .values_list("po_line_id").order_by().annotate(s=Sum("quantity")))
@@ -238,7 +240,8 @@ def supplierinvoice_detail(request, pk):
         "obj": obj,
         "lines": _stamp_cumulatives(
             list(obj.lines.select_related("po_line", "po_line__purchase_order", "receipt_line",
-                                          "gl_account", "tax_code").order_by("id"))),
+                                          "gl_account", "tax_code").order_by("id")),
+            obj.tenant_id),
         "variances": list(obj.variances.select_related("invoice_line", "dispute")
                           .order_by("-detected_at", "-id")),
         "disputes": list(obj.disputes.select_related("supplier", "assigned_to")
