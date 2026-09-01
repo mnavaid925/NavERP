@@ -219,8 +219,7 @@
                 {% else %}{% if row.currency %}{{ row.currency.code }} {% endif %}{{ row.total|floatformat:"2" }}{% endif %}
               </td>
               <td class="text-right">
-                {% if row.discount_amount != None %}{{ row.discount_amount|floatformat:"2" }}
-                {% elif row.amount != None %}{{ row.amount|floatformat:"2" }}
+                {% if row.discount.amount %}{{ row.discount.amount|floatformat:"2" }}
                 {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
@@ -228,7 +227,7 @@
                 {% else %}{{ row.discount_date|date:"M d, Y"|default:"—" }}{% endif %}
               </td>
               <td class="text-right">
-                {% if row.annualised_pct != None %}{{ row.annualised_pct|floatformat:"2" }}%{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if row.discount.annualised_pct != None %}{{ row.discount.annualised_pct|floatformat:"2" }}%{% else %}<span class="text-muted">—</span>{% endif %}
               </td>
             </tr>
           {% empty %}
