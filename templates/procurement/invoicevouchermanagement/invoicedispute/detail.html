@@ -136,7 +136,7 @@
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Match variances on this invoice</h2><span class="text-muted">what the match found behind the dispute</span>
-      <a class="btn btn-outline btn-sm" href="{% url 'procurement:matchvariance_list' %}?{% if invoice %}invoice={{ invoice.pk }}{% else %}dispute={{ obj.pk }}{% endif %}"><i data-lucide="scale"></i> Exceptions board</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'procurement:matchvariance_list' %}?invoice={{ obj.invoice_id }}"><i data-lucide="scale"></i> Exceptions board</a>
     </div>
     <div class="table-wrap">
       <table class="table">
