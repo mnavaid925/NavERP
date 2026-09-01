@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Budget Mapping{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — BudgetMapping detail
+    (crud_detail, context contract: obj ONLY — plus nothing else; the template derives its
+    links from obj's FKs).
+
+    Nullable-FK discipline (L10): org_unit, project and default_gl_account are all nullable,
+    so every read of them sits inside an {% if %} branch. budget is PROTECT and never null,
+    but its fiscal_period child IS nullable and is guarded the same way.
+
+    The page's reason to exist is the two links OUT: the availability checker and the
+    variance report pre-filled with this mapping's budget — a mapping that cannot be
+    checked is decoration.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Budget Mapping</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:budgetmapping_list' %}">Budget Mappings</a><span class="sep">›</span>
+        <span>{{ obj.dimension_label }}</span>
+      </div>
+      <p class="text-muted">Points <span class="fw-600">{{ obj.dimension_label }}</span> at an accounting budget. The amounts are the accounting module's — this page only holds the pointer.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:budget_availability' %}?budget={{ obj.budget_id }}" class="btn btn-outline"><i data-lucide="search-check"></i> Check availability</a>
+      <a href="{% url 'procurement:budget_variance' %}?budget={{ obj.budget_id }}" class="btn btn-outline"><i data-lucide="git-compare"></i> Variance</a>
+      <a href="{% url 'procurement:budgetmapping_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ obj.budget }}</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.status_label }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Governs</dt><dd class="fw-600">{{ obj.dimension_label }}</dd></div>
+        <div class="detail-item"><dt>Budget</dt>
+          <dd><a href="{% url 'accounting:budget_detail' obj.budget.pk %}">{{ obj.budget }}</a>
+            {% if obj.budget.fiscal_period %}<div class="text-muted">{{ obj.budget.fiscal_period }}</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Department</dt>
+          <dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="text-muted">Any department</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Project</dt>
+          <dd>{% if obj.project %}{{ obj.project.name }}{% else %}<span class="text-muted">Any project</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Default GL account</dt>
+          <dd>{% if obj.default_gl_account %}{{ obj.default_gl_account.code }} · {{ obj.default_gl_account.name }}{% else %}<span class="text-muted">None — the requisition picks</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Priority</dt>
+          <dd>{{ obj.priority }} <span class="text-muted">(lower wins; ties break on the oldest mapping)</span></dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Deleting a mapping does not touch the budget it points at — but the department or project it governs loses its pointer and falls back to the next matching mapping, or to none.</p>
+      <form method="post" action="{% url 'procurement:budgetmapping_delete' obj.pk %}" onsubmit="return confirm('Delete the mapping for budget {{ obj.budget.number }}? Departments it governs fall back to the workspace default or no mapping at all.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete mapping</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
