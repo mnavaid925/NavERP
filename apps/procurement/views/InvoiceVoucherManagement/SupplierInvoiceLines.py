@@ -92,16 +92,18 @@ def _line_stats(tenant):
     }
 
 
-def _cumulative_subqueries():
+def _cumulative_subqueries(tenant_id):
     """The two over-invoicing figures the register renders, as correlated subqueries.
 
     The model properties behind them are ``Sum()`` aggregates, so reading them inside the row loop
     is 2N queries. As subqueries they cost nothing per row. ``.order_by()`` is MANDATORY on both:
     both models declare ``Meta.ordering = ["id"]``, which would otherwise join the ordering column
-    to the GROUP BY and return one row per line instead of one row per ordered line.
+    to the GROUP BY and return one row per line instead of one row per ordered line. The invoiced
+    side carries the tenant scope the model property applies — it is the over-invoicing control and
+    must never sum across a workspace boundary.
     """
     invoiced = (SupplierInvoiceLine.objects
-                .filter(po_line=OuterRef("po_line"))
+                .filter(po_line=OuterRef("po_line"), invoice__tenant_id=tenant_id)
                 .exclude(invoice__status__in=SupplierInvoice.TERMINAL_STATUSES)
                 .exclude(invoice__invoice_type="credit_memo")
                 .order_by().values("po_line").annotate(s=Sum("quantity")).values("s")[:1])
@@ -126,7 +128,7 @@ def supplierinvoiceline_list(request):
     guard = _need_tenant(request, "review supplier invoice lines")
     if guard is not None:
         return guard
-    invoiced_sq, received_sq = _cumulative_subqueries()
+    invoiced_sq, received_sq = _cumulative_subqueries(request.tenant.pk)
     rows = (SupplierInvoiceLine.objects.filter(invoice__tenant=request.tenant)
             .select_related(*_ROW_RELATIONS)
             .annotate(cum_invoiced_qty=Subquery(invoiced_sq),
