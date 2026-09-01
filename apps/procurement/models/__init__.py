@@ -88,6 +88,24 @@ from .SpendAnalyticsReporting.SpendClassificationRules import (
 )
 from .SpendAnalyticsReporting.MaverickFindings import MaverickSpendFinding
 from .SpendAnalyticsReporting.SpendReports import SpendReport, SpendReportSnapshot
+# 6.15 Budget & Cost Management — from the entity MODULES, same reason as 6.14 above.
+# ``BudgetChecks.py``, ``CommitmentRegister.py`` and ``VarianceReport.py`` declare no model
+# (three computed pages over rows other sub-modules own), so there is nothing to import from
+# them. The commitment vocabulary and the three line-window helpers travel with BudgetMapping
+# because they ARE this sub-module's single definition of "what counts as committed /
+# requested spend" — a second copy anywhere would let the checker, the register and the
+# variance report disagree about the same purchase order. METHOD_CHOICES is deliberately NOT
+# re-exported: it is reachable as ``CostForecast.METHOD_CHOICES`` (6.14 precedent).
+from .BudgetCostManagement.BudgetMappings import (
+    BudgetMapping,
+    COMMITTED_PR_STATUSES,
+    OPEN_COMMITMENT_PO_STATUSES,
+    REQUESTED_PR_STATUSES,
+    committed_pr_lines,
+    open_po_commitment_lines,
+    requested_pr_lines,
+)
+from .BudgetCostManagement.CostForecasts import CostForecast, compute_forecast_amounts
 
 __all__ = [
     "EaucBid",
@@ -157,4 +175,13 @@ __all__ = [
     "MaverickSpendFinding",
     "SpendReport",
     "SpendReportSnapshot",
+    "BudgetMapping",
+    "OPEN_COMMITMENT_PO_STATUSES",
+    "COMMITTED_PR_STATUSES",
+    "REQUESTED_PR_STATUSES",
+    "open_po_commitment_lines",
+    "committed_pr_lines",
+    "requested_pr_lines",
+    "CostForecast",
+    "compute_forecast_amounts",
 ]
