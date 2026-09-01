@@ -306,7 +306,20 @@ def supplierinvoice_edit(request, pk):
 @require_POST
 def supplierinvoice_delete(request, pk):
     """Admin-gated: a deleted invoice takes its lines and variances with it, and the everyday way
-    to withdraw one is ``void`` — which keeps the row and its reason."""
+    to withdraw one is ``void`` — which keeps the row and its reason.
+
+    A POSTED invoice is refused outright. Its ``accounting.Bill`` and ``JournalEntry`` are not
+    cascaded (they are the ledger's, not this module's), so deleting the header would leave those
+    rows behind with no source document and take the lines, variances and disputes that explain
+    them with it.
+    """
+    obj = get_object_or_404(SupplierInvoice, pk=pk, tenant=request.tenant)
+    if obj.journal_entry_id or obj.status not in SupplierInvoice.EDITABLE_STATUSES:
+        messages.error(
+            request,
+            f"{obj.number} is {obj.get_status_display().lower()} — void or reverse it instead of "
+            f"deleting it.")
+        return redirect("procurement:supplierinvoice_detail", pk=pk)
     return crud_delete(request, model=SupplierInvoice, pk=pk,
                        success_url="procurement:supplierinvoice_list")
 
