@@ -10,8 +10,10 @@
     model's *_css properties, so a rename on the backend degrades to badge-slate instead of
     an unstyled, class-less badge. Only colour-named modifiers exist (theme.css:286-291) —
     badge-success / badge-danger / badge-warning do not.
-    stat-icon is limited to blue/green/orange/purple/slate; the contract asks for a red
-    "blocked" icon but red is outside the approved set, so blocked uses orange with `ban`.
+    stat-icon variants are blue/green/orange/purple/slate AND red (theme.css:259-265) —
+    `red` was added after this comment was first written. Blocked is the worst state on this
+    register, so it takes red; Overdue stays orange (a warning), which is what makes the two
+    tiles tell apart. There is still no `amber` stat-icon.
     The supplier's invoice_number is user-typed and is NEVER interpolated into a confirm()
     handler — only the system-assigned `{{ obj.number }}` is (L42).
   {% endcomment %}
@@ -31,7 +33,7 @@
 
   <div class="stat-grid">
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Invoices</div></div>
-    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocked }}</div><div class="stat-label">Blocked</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocked }}</div><div class="stat-label">Blocked</div></div>
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="message-square-warning"></i></div><div class="stat-value">{{ stats.disputed }}</div><div class="stat-label">Disputed</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending_approval }}</div><div class="stat-label">Pending approval</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
