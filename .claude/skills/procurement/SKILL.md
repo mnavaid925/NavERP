@@ -763,3 +763,149 @@ hand-off 6.11 deferred, keyed `AdvancedShipmentNotice.supplier_reference` →
 Tests: `test_receipt_{models(234),forms(143),views(140),security(47)}.py` — functions
 `test_receipt_*`, fixtures `receipt_*` in conftest. Sidebar `LIVE_LINKS["6.12"]` has 10 keys, 6 of
 them pointing at the existing scm/inventory pages above.
+
+## 6.14 Spend Analytics & Reporting (built 2026-09-01)
+
+**As-built now: 6.1-6.14.** Package folder `SpendAnalyticsReporting/` across all four layers, plus a
+new single-writer compute module `apps/procurement/analytics.py`.
+
+**Read this first: 6.14 is the INVOICED twin of an existing cube, not a new one.** SCM 4.11 already
+ships `scm:spend_analytics` (`apps/scm/analytics.py`), a **committed/PO-based** spend cube. Its own
+header caveat records why it is limited: `scm.PurchaseOrderLine` has **no `Item` FK** (free-text
+`item_description` + `sku_hint` only), so its category axis is GL-account-based and any per-SKU
+figure is a best-effort text match. 6.13's `SupplierInvoiceLine` **does** carry real `item` and
+`gl_account` FKs and sees PO-less/service spend that 4.11 structurally cannot. So:
+
+* 6.14's default basis is **invoiced** — `SupplierInvoiceLine` filtered
+  `invoice__status__in ("approved","scheduled","paid")` (`RECOGNISED_INVOICE_STATUSES`).
+* Committed (PO) spend ships as a **second selectable basis** (`SPEND_PO_STATUSES`).
+* `spend_dashboard` **links to** `scm:spend_analytics`; it never duplicates it. That link and 4.11's
+  own "Procurement Analytics" bullet must both keep resolving after any edit here.
+
+### Models (`models/SpendAnalyticsReporting/`)
+
+| Model | Base / number | Notes |
+|---|---|---|
+| `SpendClassificationRule` | `TenantOwned` — **no number** | Config master, not a document |
+| `MaverickSpendFinding` | `TenantNumbered` `MSF-#####` | The off-policy purchase register |
+| `SpendReport` | `TenantNumbered` `SPR-#####` | Saved report definition |
+| `SpendReportSnapshot` | plain `models.Model` child | Minted **only** by the snapshot POST |
+
+**`SpendClassificationRule`** (`SpendClassificationRules.py:184`) is the honest, non-ML answer to
+"spend classification" — a readable, auditable, priority-ordered rule ladder, which is also what
+Ivalua markets as its differentiator. `MATCH_TYPE_CHOICES` = vendor / gl_account / keyword /
+invoice_type / org_unit; `APPLIES_TO_CHOICES` = both / invoiced / committed. `category` (to
+`scm.ItemCategory`) is the **one non-nullable FK** and is `PROTECT`; vendor/gl_account/org_unit are
+`SET_NULL`. **No `unique_together` at all** — two same-shaped rules at different priorities are legal
+by design. `Meta.ordering = ["priority", "id"]`, lower priority wins.
+
+* `line_filter(basis)` returns a `Q` **or `None`**, and `None` means *"this rule can match nothing on
+  this basis"* — **never** treat it as "no filter", or the rule matches everything.
+* `match_count` / `last_matched_at` are `editable=False` usage stamps written **only** by
+  `spendrule_preview`. They are not form fields.
+* Never call this "AI" or "ML". It is a rules engine.
+
+**`MaverickSpendFinding`** (`MaverickFindings.py:132`) has 8 `REASON_CHOICES` — `no_contract`,
+`po_less_invoice`, `no_requisition`, `off_catalog`, `non_preferred_vendor`, `price_above_contract`,
+`suspended_vendor`, `split_purchase` — each mapped to a default severity via `SEVERITY_BY_REASON`.
+Status flow: `open`/`acknowledged` (both open) to `justified`/`remediated`/`dismissed` (terminal).
+
+* `unique_together = (("tenant","number"), ("tenant","dedupe_key"))`. `dedupe_key` is **derived** in
+  `save()` and is what makes `scan()` **idempotent** — a re-scan of an unchanged window raises zero
+  new rows and preserves every existing disposition. Fixtures must vary reason *or* the source
+  pointer or they collide.
+* `leakage_amount` is derived as `max(0, amount - benchmark_amount)` and is `editable=False`;
+  `amount` itself **is editable** (a hand-raised finding needs it, otherwise it is always 0).
+* `status`, `resolution_note`, `resolved_by`, `resolved_at`, `detected_at`, `dedupe_key` and
+  `leakage_amount` are all `editable=False` — moved only by the verbs, each re-checking its own guard.
+* `maverickfinding_delete` is `@tenant_admin_required` **and** refuses a disposed finding. That is
+  deliberate (review C1): deleting a justified/remediated row would erase the recorded decision and
+  achieve exactly what the admin gate exists to prevent.
+
+**`SpendReport` + `SpendReportSnapshot`** (`SpendReports.py:111` / `:253`) mirror
+`crm.AnalyticsReport` / `crm.ReportSnapshot` field-for-field — read those before changing anything
+here. **`SpendReportSnapshot` has no form and no create/edit view by design**; it is minted only by
+the `spendreport_snapshot` POST. That exemption is recorded in the view module docstring so a
+CRUD-completeness reviewer reads it as a decision, not a gap.
+
+### The compute layer (`apps/procurement/analytics.py`)
+
+Every page is computed; there is no materialized cube. Key entry points: `range_bounds()`,
+`invoiced_lines()`, `spend_cube()`, `compute_report()`, `maverick_rate()`, `active_rules()`.
+
+* `spend_cube(..., total=, rules=)` — pass both through the two-axis loop in `compute_report`, or you
+  re-issue a `SUM` and a rules query **per first-axis row** (up to ~300 queries at `top_n=100`).
+* `range_bounds()` clamps to `_MAX_BOUND = date(9999, 12, 30)` **before** adding the exclusive-stop
+  day. Without the clamp, `?range=custom&date_to=9999-12-31` raises `OverflowError` and 500s the
+  page — and the model `clean()` permits that date, so a *saved* report 500s permanently.
+* `maverick_rate()` divides by a **distinct flagged-invoice** numerator, not a sum of finding
+  amounts. Several findings can hit one document, so the naive sum is unbounded (it rendered 562%
+  under a legend claiming 10%/20% thresholds). `maverick_value` is a different figure — the
+  value-at-risk the `maverick_spend` measure returns — and deliberately keeps its own meaning.
+
+### URLs / routes (`app_name = "procurement"`)
+
+Computed pages: `spend_dashboard` · `category_spend` · `classification_workbench` ·
+`maverick_dashboard` · `spend_export` · `spend_export_download` · `maverick_scan`.
+CRUD: `spendrule_{list,detail,create,edit,delete}` + `spendrule_preview`;
+`maverickfinding_{list,detail,create,edit,delete}` + `maverickfinding_disposition`;
+`spendreport_{list,detail,create,edit,delete}` + `_run` / `_export` / `_favorite` / `_snapshot`;
+`spendreportsnapshot_{detail,delete,export}`. Literal segments are registered **before** `<int:pk>`.
+
+### Templates (`templates/procurement/spendanalytics/`)
+
+Folder is `spendanalytics/`, **not** `spendanalyticsreporting/` — the short-slug precedent is
+`approvalworkflow/` for `ApprovalWorkflowEngine`. Do not "correct" it.
+Root pages: `dashboard.html` · `category_spend.html` · `classification_workbench.html` ·
+`maverick_dashboard.html` · `export.html`. Entity folders: `spendrule/{list,detail,form}.html` ·
+`maverickfinding/{list,detail,form}.html` · `spendreport/{list,detail,form}.html` ·
+`spendreportsnapshot/detail.html`.
+
+### Seeder
+
+`_seed_spend_analytics(tenant)` seeds the rule ladder, findings across their lifecycle, saved reports
+and a snapshot. `_seed_spend_baseline(tenant, categories, members)` seeds nine recognised-spend
+invoices so the cube has something to aggregate. Both idempotent — a second `seed_procurement`
+reports "spend baseline invoices already present" / "0 newly raised".
+
+### Conventions & gotchas
+
+* **No FX-rate table exists anywhere in this repo.** Money is summed **at face value per currency**;
+  a window spanning more than one currency sets `mixed_currency=True` and the page renders
+  `currency_rows` instead of one meaningless total. Never invent a rate.
+* **`accounting.Currency` is GLOBAL — it has no tenant column. Never tenant-filter it.**
+* **The department axis is weak and must say so.** There is no department column on an invoice; it is
+  a 3-hop nullable chain `Coalesce("invoice__purchase_order__requisition__org_unit",
+  "invoice__purchase_order__ship_to")` to `core.OrgUnit`, **NULL for every PO-less invoice**. Every
+  department breakdown MUST render an explicit `UNASSIGNED_LABEL = "(unassigned)"` bucket and print
+  `department_caveat` — a breakdown that silently drops rows makes the totals disagree with the KPI
+  strip.
+* **On the committed basis there is no item taxonomy** — category resolves through
+  `SpendClassificationRule` only, else `UNCLASSIFIED_LABEL = "(Unclassified)"`. Do not fake an item join.
+* **Credit-memo lines are already signed negative**, so a plain `Sum` nets correctly. Never
+  special-case them.
+* **6.14 writes NOTHING to `accounting.*`** — no Bill, no JournalEntry, no Payment (L29). It is a
+  read-only analytics pass.
+* Suppliers are `core.Party` + `core.PartyRole` role in `("supplier","vendor")`. There is no vendor
+  table. The `scm.SupplierContract` FK is **`party`**, not `vendor`.
+* `scm.ItemCategory` is the **only** taxonomy in the tree. `procurement.CatalogItem.category_text` is
+  free text and is never a taxonomy key.
+
+### Two contractual naming bans (both survive every edit)
+
+1. **"drag and drop" must not appear** in code, templates, sidebar labels or commit messages. Only
+   one surveyed product actually ships it; NavERP ships a **guided** builder (measure, dimensions,
+   window and Top-N chosen from dropdowns). The comment in `navigation.py` that *denies* the builder
+   is drag-and-drop is deliberate and must stay — it guards the label against a future session
+   "correcting" it to match the aspirational NavERP.md bullet.
+2. **No label may imply a BI/PowerBI connector.** Export is **CSV/XLSX download only**; the export
+   page states this verbatim rather than letting the sidebar imply a live feed.
+
+### Sidebar wiring
+
+`LIVE_LINKS["6.14"]` in `apps/core/navigation.py` maps all five NavERP.md bullets:
+`Spend Dashboards` to `spend_dashboard`; `Custom Report Builder` to `spendreport_list`;
+`Category Spend Analysis` to `category_spend`; `Maverick Spend Tracking` to `maverick_dashboard`;
+`Data Export & Visualization` to `spend_export`. The rule register, workbench and snapshots take **no
+sidebar key** (the `ReceiptTolerancePolicy`/`KpiTarget` master precedent) — they are reached from
+`category_spend` and `classification_workbench`, and snapshots from their parent report.
