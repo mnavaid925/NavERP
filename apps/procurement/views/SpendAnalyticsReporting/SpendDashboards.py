@@ -293,10 +293,18 @@ def category_spend(request):
     for row in league:
         share = row["share_pct"]
         hhi += share * share
-        running += share
-        row["cumulative_pct"] = running.quantize(Decimal("0.1"))
         # A = the suppliers making up the first 80% of spend, B = up to 95%, C = the long tail.
-        band = "A" if running <= Decimal("80") else ("B" if running <= Decimal("95") else "C")
+        # The band is decided on the cumulative share the PREDECESSORS reached, not on the total
+        # after this row is folded in: a supplier belongs to the band whose coverage goal was still
+        # open when its turn came, so the supplier that CROSSES 80% is the last member of A rather
+        # than the first of B. Testing after the add mis-bands the largest supplier in any
+        # concentrated category — and bands a category's SOLE supplier (100% share) as C, which is
+        # exactly backwards.
+        band = "A" if running < Decimal("80") else ("B" if running < Decimal("95") else "C")
+        running += share
+        # The curve itself stays inclusive: cumulative_pct is the share covered UP TO AND INCLUDING
+        # this supplier, which is what the Pareto line on the page plots.
+        row["cumulative_pct"] = running.quantize(Decimal("0.1"))
         row["band"] = band
         abc_buckets[band][0] += 1
         abc_buckets[band][1] += row["total"]
