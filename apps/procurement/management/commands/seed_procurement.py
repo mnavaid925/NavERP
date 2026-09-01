@@ -88,6 +88,9 @@ from apps.procurement.models import (
     SpendClassificationRule,
     SpendReport,
     SpendReportSnapshot,
+    BudgetMapping,
+    CostForecast,
+    compute_forecast_amounts,
     generate_po_from_requisition,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -109,7 +112,7 @@ from apps.procurement.models import (
     VendorPortalAccess,
     VendorSuspension,
 )
-from apps.accounting.models import Currency, GLAccount, PaymentTerm, TaxCode
+from apps.accounting.models import Budget, Currency, GLAccount, PaymentTerm, Project, TaxCode
 from apps.scm.models import Item, PurchaseRequisition, SupplierProfile, UOM
 
 User = get_user_model()
@@ -226,6 +229,11 @@ class Command(BaseCommand):
             SpendReport.objects.all().delete()
             MaverickSpendFinding.objects.all().delete()
             SpendClassificationRule.objects.all().delete()
+            # 6.15 budget & cost rows: a forecast points at its budget SET_NULL so order is not
+            # load-bearing, but children-first keeps the flush reading top-down like every block
+            # above. Without these two the 6.15 block's exists() guard survives a --flush.
+            CostForecast.objects.all().delete()
+            BudgetMapping.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -247,6 +255,11 @@ class Command(BaseCommand):
             # catalogue rows every block above has just created. Run earlier it would scan an
             # empty workspace and honestly report nothing.
             self._seed_spend_analytics(tenant)
+            # 6.15 runs AFTER 6.14 for the same reason one level down: its frozen forecasts are
+            # computed through compute_forecast_amounts over the open purchase orders and the
+            # recognised invoices the blocks above just created, so the stored amounts are real
+            # figures rather than zeros.
+            self._seed_budget_cost(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -2323,3 +2336,116 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {made} saved spend reports + 1 snapshot."))
+
+    def _seed_budget_cost(self, tenant):
+        """6.15 Budget & Cost Management - budget mappings + two frozen cost forecasts.
+
+        REUSES seeded accounting rows (the first Budget = the seeded "FY Operating Budget",
+        the first department org unit, the first project, the first expense GL account) and
+        never creates accounting or core rows itself. A workspace without a budget (the
+        SMOKETEST tenant) is skipped with a warning - a mapping needs something to point at.
+
+        Idempotent twice over: the mapping block is guarded on no mappings existing yet and
+        each row is a get_or_create on ``(tenant, budget, org_unit, project)``; the forecast
+        block is guarded on no forecasts existing yet. The forecasts are minted THROUGH
+        ``compute_forecast_amounts`` - the same pure function the create view calls - so the
+        stored amounts are whatever that computation actually sees in this workspace.
+        """
+        budget = Budget.objects.filter(tenant=tenant).order_by("id").first()
+        if budget is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no accounting budget (run seed_accounting first) - "
+                f"skipping budget & cost management."))
+            return
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        owner = members[0] if members else None
+        today = timezone.localdate()
+
+        # -- 1. mappings ------------------------------------------------------------------------
+        if BudgetMapping.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: budget mappings already present, skipping.")
+        else:
+            gl_account = (GLAccount.objects.filter(tenant=tenant, account_type="expense",
+                                                   is_active=True)
+                          .order_by("code").first())
+            # DEPARTMENTS are units with a parent: the company root is where the whole tree
+            # hangs from, and mapping the root as a department would hide that distinction.
+            departments = list(OrgUnit.objects.filter(tenant=tenant, parent__isnull=False)
+                               .order_by("id")[:2])
+            department = (departments[0] if departments else
+                          OrgUnit.objects.filter(tenant=tenant).order_by("id").first())
+            second_department = departments[1] if len(departments) > 1 else None
+            project = Project.objects.filter(tenant=tenant).order_by("id").first()
+
+            rows = [
+                # (org_unit, project, priority, is_active, notes)
+                (None, None, 100, True,
+                 "Workspace default - governs every department and project no more specific "
+                 "mapping covers."),
+                (department, None, 50, True,
+                 "Department mapping - more specific than the workspace default, so this "
+                 "department's spend follows this budget first."),
+            ]
+            if second_department is not None:
+                # Deliberately INACTIVE, on its OWN department (a get_or_create key is
+                # (tenant, budget, org_unit, project), so it cannot share the active row's):
+                # a register whose every row is green never shows what the inactive badge
+                # looks like, and resolve() has to be seen skipping a disabled row.
+                rows.append((second_department, None, 40, False,
+                             "Kept inactive so the register shows both states - resolve() "
+                             "skips this row and falls through to the workspace default."))
+            if project is not None:
+                rows.append((department, project, 25, True,
+                             "Project mapping - the most specific tier, so spend on this "
+                             "project follows this budget even inside its department."))
+
+            made = 0
+            for org_unit, proj, priority, is_active, notes in rows:
+                _obj, was_created = BudgetMapping.objects.get_or_create(
+                    tenant=tenant, budget=budget, org_unit=org_unit, project=proj,
+                    defaults={
+                        "default_gl_account": gl_account,
+                        "priority": priority,
+                        "is_active": is_active,
+                        "notes": notes,
+                    },
+                )
+                made += int(was_created)
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} budget mapping(s) for {budget.number}."))
+
+        # -- 2. frozen forecasts ------------------------------------------------------------------
+        if CostForecast.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: cost forecasts already present, skipping.")
+        else:
+            made = 0
+            # One budget-scoped run-rate projection...
+            amounts = compute_forecast_amounts(tenant, budget, "run_rate", 3, today)
+            CostForecast.objects.create(
+                tenant=tenant, budget=budget, created_by=owner,
+                name=f"{budget.name} - 3 month run rate",
+                method="run_rate", horizon_months=3, as_of=today,
+                committed_amount=amounts["committed"],
+                historical_amount=amounts["historical"],
+                forecast_amount=amounts["forecast"],
+                assumptions=("Scoped by this budget's GL accounts; recognised invoices over "
+                             "the three months before the as-of date, carried forward. "
+                             "Seeded demo row."),
+            )
+            made += 1
+            # ...and one workspace-wide open-PO projection.
+            amounts = compute_forecast_amounts(tenant, None, "open_pos", 3, today)
+            CostForecast.objects.create(
+                tenant=tenant, budget=None, created_by=owner,
+                name="Whole workspace - open purchase orders",
+                method="open_pos", horizon_months=3, as_of=today,
+                committed_amount=amounts["committed"],
+                historical_amount=amounts["historical"],
+                forecast_amount=amounts["forecast"],
+                assumptions=("Every open purchase order approved or later, whatever its "
+                             "budget. Seeded demo row."),
+            )
+            made += 1
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} frozen cost forecast(s)."))
