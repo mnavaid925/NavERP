@@ -122,6 +122,19 @@ class SupplierInvoiceLine(models.Model):
         return _as_decimal(self.matched_qty) == _as_decimal(self.quantity)
 
     @property
+    def is_editable(self):
+        """Whether this line may still be edited or removed — the HEADER's window, not the line's.
+
+        The same test ``supplierinvoiceline_{create,edit,delete}`` apply, expressed once on the
+        model so the register can gate its Edit and Delete actions on exactly the rule the views
+        enforce instead of offering buttons that only buy a refusal. The register already
+        ``select_related("invoice")``, so it costs no extra query.
+        """
+        # Deferred: SupplierInvoices.py imports this module at module level.
+        from apps.procurement.models.InvoiceVoucherManagement.SupplierInvoices import SupplierInvoice
+        return self.invoice.status in SupplierInvoice.EDITABLE_STATUSES
+
+    @property
     def cumulative_invoiced_qty(self):
         """Everything invoiced against this ordered line across every LIVE invoice (derived)."""
         if self.po_line_id is None:
