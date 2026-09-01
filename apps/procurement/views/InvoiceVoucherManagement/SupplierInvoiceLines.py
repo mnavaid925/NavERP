@@ -23,7 +23,7 @@ from django.db.models import Count, F, OuterRef, Q, Subquery, Sum
 from django.urls import reverse
 
 from apps.accounting.models import Currency, PaymentTerm
-from apps.core.crud import as_db_int, paginate
+from apps.core.crud import as_db_int
 from apps.core.models import Party
 # NOT-YET-WIRED entities of this SAME sub-module: import the entity MODULE directly, never
 # ``from apps.procurement.models import X`` — the sub-package is not wired until the Integrator
@@ -340,8 +340,10 @@ def paymentschedule_list(request):
     (``q``, ``vendor``, ``terms``) is applied BEFORE bucketing, so a bucket's ``count`` and
     ``total`` always describe the rows it actually holds.
 
-    ``page_obj`` paginates the FLAT row list: the buckets are the shape of the page, but a
-    workspace with 400 invoices in one week must still page.
+    NOT paginated, deliberately. A pager over a flattened row list left every bucket rendering in
+    full while the widget underneath counted a slice, so page 2 was byte-identical to page 1. The
+    horizon IS the bound here — the queryset is filtered to ``overdue + 7 x horizon_weeks`` days
+    and ``?weeks=`` is clamped to 26 — so there is nothing left for a pager to do.
     """
     guard = _need_tenant(request, "review the payment schedule")
     if guard is not None:
@@ -386,13 +388,11 @@ def paymentschedule_list(request):
         buckets.append(_bucket(f"w{index}", label, start, end,
                                [row for row in rows if start <= row.due_date <= end]))
 
-    flat_rows = [row for bucket in buckets for row in bucket["rows"]]
     total_payable = sum((bucket["total"] for bucket in buckets), ZERO).quantize(Decimal("0.01"))
     discounted_total = sum((_discount_capturable(row, today) for row in rows), ZERO)
 
     return render(request, TEMPLATE_SCHEDULE, {
         "buckets": buckets,
-        "page_obj": paginate(request, flat_rows),
         "total_payable": total_payable,
         "terms": PaymentTerm.objects.filter(tenant=tenant, is_active=True).order_by("name"),
         # accounting.Currency is GLOBAL — the workspace's own first currency, falling back to any.
