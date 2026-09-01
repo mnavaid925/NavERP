@@ -139,7 +139,7 @@
               </td>
               <td class="text-right">
                 {% if obj.po_line %}
-                  {{ obj.cumulative_invoiced_qty|floatformat:"-4" }} / {{ obj.cumulative_received_qty|floatformat:"-4" }}
+                  {{ obj.cum_invoiced_qty|default:0|floatformat:"-4" }} / {{ obj.cum_received_qty|default:0|floatformat:"-4" }}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
