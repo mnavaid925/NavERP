@@ -1581,3 +1581,545 @@ def spend_snapshot_b(db, tenant_b, spend_report_b, admin_b):
     """Tenant B's frozen run - the cross-tenant 404 target."""
     return _spend_snapshot(tenant_b, spend_report_b, generated_by=admin_b,
                            title="Globex frozen run")
+
+
+# =================================================================================================
+# 6.13 Invoice & Voucher Management
+# =================================================================================================
+#
+# Every fixture below is prefixed ``invoice_`` so the four 6.13 test lanes never collide with the
+# 6.1 / 6.2 / 6.4 / 6.5 / 6.9 / 6.11 / 6.12 / 6.14 records above (or with whatever 6.15 appends
+# next). Dates derive from ``timezone.localdate()`` / ``timezone.now()`` - never
+# ``datetime.date.today()`` - so exact-date assertions stay stable after local midnight (L16).
+#
+# The shape the lanes can rely on:
+#
+#   invoice_vendor_a        core.Party "Northwind Paper Mills"  + supplier PartyRole
+#   invoice_vendor_other_a  core.Party "Southgate Stationers"   + supplier PartyRole (mismatch target)
+#   invoice_vendor_b        tenant-B supplier - the crafted-FK / IDOR target
+#   invoice_term_a          PaymentTerm "2/10 Net 30"  days_due 30, discount_pct 2, discount_days 10
+#   invoice_term_net30_a    PaymentTerm "Net 30"       days_due 30, NO discount window
+#   invoice_term_b          tenant-B term - the crafted-FK target
+#   invoice_taxcode_a / invoice_taxcode_b
+#   invoice_gl_ap_a         GLAccount "2000" liability  (the AP control leg approve() resolves)
+#   invoice_gl_tax_a        GLAccount "1400" liability  (the input-tax leg)
+#   invoice_gl_discount_a   GLAccount "5900" income     (purchase discounts received)
+#   invoice_chart_a         all four at once -> (expense, ap, tax, discount); without it approve()
+#                           raises ValidationError and rolls back (the configuration-fault case)
+#   (``gl_expense_a`` from the 6.1 block above is code "5000" expense - the expense leg.)
+#   invoice_item_a          scm.Item "PPR-A4" / invoice_item_b (tenant-B, crafted-FK target)
+#
+#   invoice_po_a            scm.PurchaseOrder approved, order_date = TODAY, currency USD
+#     invoice_po_line_a       qty 10 @ 25.00  sku "PPR-A4"
+#     invoice_po_line2_a      qty  4 @ 60.00  sku "TNR-55"
+#   invoice_po_other_a      tenant-A order placed with invoice_vendor_other_a (mismatch target)
+#   invoice_grn_a           scm.GoodsReceiptNote on invoice_po_a, receipt_date = TODAY
+#     invoice_grn_line_a      po_line_a, quantity_received 10   (the exact-match receipt)
+#   invoice_grn_short_a     a SHORT receipt (1 of the 4 ordered on po_line2_a)
+#   invoice_po_b / invoice_po_line_b / invoice_grn_b / invoice_grn_line_b   tenant-B twins
+#
+#   invoice_draft_a         SIV draft, PO + GRN + 2/10 Net 30, invoice_number "SUP-7001"
+#     invoice_line_a          po_line_a + grn_line_a, qty 10 @ 25.00 -> total 250.00
+#   invoice_captured_a      status "captured", PO-less service invoice, "SUP-7002"
+#   invoice_blocked_a       status "blocked",  one 10 @ 30.00 line -> total 300.00, "SUP-7003"
+#   invoice_pending_a       status "pending_approval", one 10 @ 25.00 line -> 250.00, "SUP-7004"
+#   invoice_scheduled_a     status "scheduled", one 4 @ 60.00 line -> 240.00, due in 5 days
+#   invoice_paid_a          status "paid" - TERMINAL / is_locked,    "SUP-7006"
+#   invoice_credit_memo_a   invoice_type "credit_memo", one 1 x -50.00 line -> -50.00, "CM-7001"
+#   invoice_duplicate_a     same vendor / same normalised number / same total as invoice_draft_a
+#   invoice_b / invoice_line_b   tenant-B invoice + line - the IDOR / crafted-FK targets
+#
+#   invoice_variance_block_a    "price",    outcome "block", resolution "open"  (on invoice_blocked_a)
+#   invoice_variance_warn_a     "tax",      outcome "warn",  resolution "open"  (header-level)
+#   invoice_variance_accepted_a "quantity", outcome "block", resolution "accepted"
+#   invoice_variance_b          tenant-B variance - the IDOR target
+#
+#   invoice_dispute_open_a       status "open",      reason "price",    on invoice_draft_a
+#   invoice_dispute_escalated_a  status "escalated", reason "quantity", on invoice_blocked_a
+#   invoice_dispute_resolved_a   status "resolved" via resolve(..., "short_pay") - NOT editable
+#   invoice_dispute_overdue_a    status "open", due_date 5 days in the PAST -> "overdue" bucket
+#   invoice_dispute_b            tenant-B dispute - the IDOR target
+
+def _invoice_party(tenant, name, role="supplier"):
+    """A counterparty WITH its PartyRole. 6.13's own dropdowns do NOT filter on the role (the
+    vendor field is auto-scoped by ``TenantModelForm``), but the sibling sub-modules' widgets do,
+    so every procurement fixture party carries one."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role=role, status="active")
+    return party
+
+
+def _invoice_term(tenant, **overrides):
+    from apps.accounting.models import PaymentTerm
+    fields = dict(tenant=tenant, name="2/10 Net 30", days_due=30,
+                  discount_pct=Decimal("2.00"), discount_days=10, is_active=True)
+    fields.update(overrides)
+    return PaymentTerm.objects.create(**fields)
+
+
+def _invoice_gl(tenant, code, name, account_type):
+    from apps.accounting.models import GLAccount
+    return GLAccount.objects.create(tenant=tenant, code=code, name=name,
+                                    account_type=account_type, is_active=True)
+
+
+def _invoice_po(tenant, vendor, **overrides):
+    """A receivable (approved) spine order - the document an invoice is matched against."""
+    from apps.scm.models import PurchaseOrder
+    fields = dict(tenant=tenant, vendor=vendor, status="approved",
+                  order_date=timezone.localdate(), expected_date=timezone.localdate())
+    fields.update(overrides)
+    return PurchaseOrder.objects.create(**fields)
+
+
+def _invoice_po_line(po, description="A4 copy paper 80gsm", qty="10", price="25.00", **overrides):
+    from apps.scm.models import PurchaseOrderLine
+    fields = dict(purchase_order=po, item_description=description,
+                  quantity=Decimal(qty), unit_price=Decimal(price),
+                  sku_hint="PPR-A4", uom_hint="EA")
+    fields.update(overrides)
+    return PurchaseOrderLine.objects.create(**fields)
+
+
+def _invoice_grn(tenant, po, **overrides):
+    from apps.scm.models import GoodsReceiptNote
+    fields = dict(tenant=tenant, purchase_order=po, receipt_date=timezone.localdate(),
+                  status="draft", delivery_note_ref="DN-7001")
+    fields.update(overrides)
+    return GoodsReceiptNote.objects.create(**fields)
+
+
+def _invoice_grn_line(grn, po_line, received="10", **overrides):
+    from apps.scm.models import GoodsReceiptLine
+    fields = dict(goods_receipt=grn, po_line=po_line, quantity_received=Decimal(received))
+    fields.update(overrides)
+    return GoodsReceiptLine.objects.create(**fields)
+
+
+def _invoice(tenant, vendor, **overrides):
+    """One SupplierInvoice header [SIV-].
+
+    ``number`` / ``invoice_number_norm`` / ``due_date`` / ``discount_date`` /
+    ``discount_expiry_date`` and every money column are DERIVED - never pass one.
+    """
+    from apps.procurement.models import SupplierInvoice
+    fields = dict(tenant=tenant, vendor=vendor, invoice_number="SUP-7000",
+                  invoice_date=timezone.localdate(), invoice_type="standard",
+                  status="draft", source="manual")
+    fields.update(overrides)
+    return SupplierInvoice.objects.create(**fields)
+
+
+def _invoice_line(invoice, **overrides):
+    """One SupplierInvoiceLine. ``line_total`` is DERIVED in save() (quantity x unit_price) and the
+    header money follows it through ``recalc_totals()`` - never pass ``line_total`` or
+    ``matched_qty``."""
+    from apps.procurement.models import SupplierInvoiceLine
+    fields = dict(invoice=invoice, description="A4 copy paper 80gsm", sku_hint="PPR-A4",
+                  uom_hint="EA", quantity=Decimal("10"), unit_price=Decimal("25.00"))
+    fields.update(overrides)
+    return SupplierInvoiceLine.objects.create(**fields)
+
+
+def _invoice_variance(invoice, **overrides):
+    """One InvoiceMatchVariance. ``variance_abs`` / ``variance_pct`` are DERIVED in save() from
+    ``expected_value`` / ``actual_value`` and ``detected_at`` is ``auto_now_add`` - never pass any
+    of the three."""
+    from apps.procurement.models import InvoiceMatchVariance
+    fields = dict(tenant=invoice.tenant, invoice=invoice, variance_type="price", basis="po",
+                  expected_value=Decimal("25.0000"), actual_value=Decimal("30.0000"),
+                  tolerance_pct_applied=Decimal("2.0000"),
+                  outcome="block", resolution="open",
+                  message="Unit price differs from the purchase order.")
+    fields.update(overrides)
+    return InvoiceMatchVariance.objects.create(**fields)
+
+
+def _invoice_dispute(tenant, invoice, **overrides):
+    """One InvoiceDispute [DSP-]. ``supplier`` is denormalised from ``invoice.vendor`` in save(),
+    ``status`` is ``editable=False`` and moves only through the verbs, and ``due_date`` defaults to
+    ``localdate() + SLA_DAYS`` on create - so none of the three is ever a form field."""
+    from apps.procurement.models import InvoiceDispute
+    fields = dict(tenant=tenant, invoice=invoice, reason_code="price",
+                  disputed_amount=Decimal("50.00"),
+                  description="Unit price billed above the agreed contract rate.",
+                  supplier_contact="ap@northwind.example")
+    fields.update(overrides)
+    return InvoiceDispute.objects.create(**fields)
+
+
+# -- counterparties, terms, tax codes and the chart of accounts approve() resolves -----------------
+
+@pytest.fixture
+def invoice_vendor_a(db, tenant_a):
+    return _invoice_party(tenant_a, "Northwind Paper Mills")
+
+
+@pytest.fixture
+def invoice_vendor_other_a(db, tenant_a):
+    """A SECOND tenant-A supplier - the vendor-agreement mismatch target (an invoice FROM one
+    supplier against another supplier's order must be refused even though both rows live here)."""
+    return _invoice_party(tenant_a, "Southgate Stationers")
+
+
+@pytest.fixture
+def invoice_vendor_b(db, tenant_b):
+    """Tenant B's supplier - the crafted-POST FK / IDOR target."""
+    return _invoice_party(tenant_b, "Globex Print Supplies")
+
+
+@pytest.fixture
+def invoice_term_a(db, tenant_a):
+    """2/10 Net 30 - 2% off if paid within 10 days, due in 30. Annualised 36.73%."""
+    return _invoice_term(tenant_a)
+
+
+@pytest.fixture
+def invoice_term_net30_a(db, tenant_a):
+    """Plain Net 30 - no discount window, so save() must CLEAR discount_date / expiry."""
+    return _invoice_term(tenant_a, name="Net 30", discount_pct=Decimal("0.00"),
+                         discount_days=0)
+
+
+@pytest.fixture
+def invoice_term_b(db, tenant_b):
+    return _invoice_term(tenant_b, name="Globex Net 45", days_due=45)
+
+
+@pytest.fixture
+def invoice_taxcode_a(db, tenant_a):
+    from apps.accounting.models import TaxCode
+    return TaxCode.objects.create(tenant=tenant_a, name="Standard VAT", tax_type="vat",
+                                  rate_pct=Decimal("20.000"), is_active=True)
+
+
+@pytest.fixture
+def invoice_taxcode_b(db, tenant_b):
+    from apps.accounting.models import TaxCode
+    return TaxCode.objects.create(tenant=tenant_b, name="Globex VAT", tax_type="vat",
+                                  rate_pct=Decimal("10.000"), is_active=True)
+
+
+@pytest.fixture
+def invoice_gl_ap_a(db, tenant_a):
+    """Code "2000", type liability - the AP control leg ``approve()`` looks for FIRST."""
+    return _invoice_gl(tenant_a, "2000", "Accounts Payable Control", "liability")
+
+
+@pytest.fixture
+def invoice_gl_tax_a(db, tenant_a):
+    """Code "1400", type liability - the input-tax leg, only resolved when tax_total != 0."""
+    return _invoice_gl(tenant_a, "1400", "Input VAT Recoverable", "liability")
+
+
+@pytest.fixture
+def invoice_gl_discount_a(db, tenant_a):
+    """Code "5900", type income - purchase discounts received (the gross-method discount leg)."""
+    return _invoice_gl(tenant_a, "5900", "Purchase Discounts Received", "income")
+
+
+@pytest.fixture
+def invoice_chart_a(db, gl_expense_a, invoice_gl_ap_a, invoice_gl_tax_a, invoice_gl_discount_a):
+    """The WHOLE chart ``approve()`` needs, as one fixture -> (expense, ap, tax, discount).
+
+    Request this and ``SupplierInvoice.approve()`` posts; omit it and approve() raises
+    ``ValidationError`` and rolls the whole posting back, which is the configuration-fault case.
+    """
+    return gl_expense_a, invoice_gl_ap_a, invoice_gl_tax_a, invoice_gl_discount_a
+
+
+@pytest.fixture
+def invoice_item_a(db, tenant_a):
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="PPR-A4", name="A4 copy paper 80gsm",
+                               item_type="stock")
+
+
+@pytest.fixture
+def invoice_item_b(db, tenant_b):
+    """Tenant B's item - the crafted-POST FK target on the line form."""
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_b, sku="GBX-1", name="Globex spindle",
+                               item_type="stock")
+
+
+# -- the order / receipt spine an invoice is matched against ---------------------------------------
+
+@pytest.fixture
+def invoice_po_a(db, tenant_a, invoice_vendor_a, usd):
+    """Approved tenant-A order dated TODAY with TWO lines (10 @ 25.00, 4 @ 60.00)."""
+    po = _invoice_po(tenant_a, invoice_vendor_a, currency=usd)
+    _invoice_po_line(po)
+    _invoice_po_line(po, description="Toner cartridge 55A", qty="4", price="60.00",
+                     sku_hint="TNR-55")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def invoice_po_line_a(invoice_po_a):
+    """First line of ``invoice_po_a`` - quantity 10, unit_price 25.00, sku PPR-A4."""
+    return invoice_po_a.lines.order_by("id").first()
+
+
+@pytest.fixture
+def invoice_po_line2_a(invoice_po_a):
+    """Second line of ``invoice_po_a`` - quantity 4, unit_price 60.00, sku TNR-55."""
+    return invoice_po_a.lines.order_by("id").last()
+
+
+@pytest.fixture
+def invoice_po_other_a(db, tenant_a, invoice_vendor_other_a):
+    """A tenant-A order placed with the OTHER supplier - the vendor-agreement mismatch target."""
+    po = _invoice_po(tenant_a, invoice_vendor_other_a)
+    _invoice_po_line(po, description="Envelope C4 box", qty="5", price="12.00",
+                     sku_hint="ENV-C4")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def invoice_po_b(db, tenant_b, invoice_vendor_b):
+    """Tenant-B order with one line - the cross-tenant crafted-POST target."""
+    po = _invoice_po(tenant_b, invoice_vendor_b)
+    _invoice_po_line(po, description="Globex-only spindle", qty="6", price="80.00",
+                     sku_hint="GBX-SPN")
+    po.recalc_totals()
+    return po
+
+
+@pytest.fixture
+def invoice_po_line_b(invoice_po_b):
+    return invoice_po_b.lines.order_by("id").first()
+
+
+@pytest.fixture
+def invoice_grn_a(db, tenant_a, invoice_po_a):
+    """Receipt dated TODAY against ``invoice_po_a`` - delivery note ``DN-7001``."""
+    return _invoice_grn(tenant_a, invoice_po_a)
+
+
+@pytest.fixture
+def invoice_grn_line_a(db, invoice_grn_a, invoice_po_line_a):
+    """EXACTLY 10 received against the 10-unit ordered line - the clean three-way-match receipt."""
+    return _invoice_grn_line(invoice_grn_a, invoice_po_line_a, received="10")
+
+
+@pytest.fixture
+def invoice_grn_short_a(db, tenant_a, invoice_po_a, invoice_po_line2_a):
+    """A SHORT receipt (1 of the 4 ordered) - the quantity-variance receipt."""
+    grn = _invoice_grn(tenant_a, invoice_po_a, delivery_note_ref="DN-7002")
+    _invoice_grn_line(grn, invoice_po_line2_a, received="1")
+    return grn
+
+
+@pytest.fixture
+def invoice_grn_b(db, tenant_b, invoice_po_b):
+    return _invoice_grn(tenant_b, invoice_po_b, delivery_note_ref="GBX-DN-9001")
+
+
+@pytest.fixture
+def invoice_grn_line_b(db, invoice_grn_b, invoice_po_line_b):
+    return _invoice_grn_line(invoice_grn_b, invoice_po_line_b, received="6")
+
+
+# -- supplier invoices, one per lifecycle state ----------------------------------------------------
+
+@pytest.fixture
+def invoice_draft_a(db, tenant_a, invoice_vendor_a, invoice_po_a, invoice_grn_a,
+                    invoice_term_a, usd):
+    """DRAFT, PO- and GRN-matched, on 2/10 Net 30 - editable, deletable, matchable, submittable."""
+    return _invoice(tenant_a, invoice_vendor_a, invoice_number="SUP-7001",
+                    purchase_order=invoice_po_a, goods_receipt=invoice_grn_a,
+                    payment_term=invoice_term_a, currency=usd)
+
+
+@pytest.fixture
+def invoice_line_a(db, invoice_draft_a, invoice_po_line_a, invoice_grn_line_a):
+    """10 @ 25.00 against the ordered AND received line -> header total 250.00, a clean match."""
+    return _invoice_line(invoice_draft_a, po_line=invoice_po_line_a,
+                         receipt_line=invoice_grn_line_a)
+
+
+@pytest.fixture
+def invoice_captured_a(db, tenant_a, invoice_vendor_a, usd):
+    """CAPTURED and PO-less (a service invoice) - still editable, still submittable."""
+    return _invoice(tenant_a, invoice_vendor_a, invoice_number="SUP-7002", status="captured",
+                    invoice_type="service", currency=usd,
+                    posting_date=timezone.localdate())
+
+
+@pytest.fixture
+def invoice_blocked_a(db, tenant_a, invoice_vendor_a, invoice_po_a, invoice_term_a, usd):
+    """BLOCKED with one 10 @ 30.00 line -> total 300.00. Overridable by an admin, disputable once
+    it carries an open variance, and NOT editable (``EDITABLE_STATUSES`` stops at ``captured``)."""
+    invoice = _invoice(tenant_a, invoice_vendor_a, invoice_number="SUP-7003", status="blocked",
+                       purchase_order=invoice_po_a, payment_term=invoice_term_a, currency=usd,
+                       match_basis="amount")
+    _invoice_line(invoice, quantity=Decimal("10"), unit_price=Decimal("30.00"))
+    invoice.refresh_from_db()
+    return invoice
+
+
+@pytest.fixture
+def invoice_pending_a(db, tenant_a, invoice_vendor_a, invoice_po_a, invoice_term_a, usd):
+    """PENDING_APPROVAL with one 10 @ 25.00 line -> total 250.00. The only state ``approve()``
+    accepts, and the fixture the ledger-posting tests start from."""
+    invoice = _invoice(tenant_a, invoice_vendor_a, invoice_number="SUP-7004",
+                       status="pending_approval", purchase_order=invoice_po_a,
+                       payment_term=invoice_term_a, currency=usd, match_basis="amount",
+                       match_status="matched")
+    _invoice_line(invoice)
+    invoice.refresh_from_db()
+    return invoice
+
+
+@pytest.fixture
+def invoice_scheduled_a(db, tenant_a, invoice_vendor_a, invoice_term_a, usd):
+    """SCHEDULED with one 4 @ 60.00 line -> total 240.00, due in 5 days (invoice_date is 25 days
+    back on a Net 30 term). The Payment Schedule board's bucketed row, and the only state
+    ``mark_paid()`` accepts."""
+    invoice = _invoice(tenant_a, invoice_vendor_a, invoice_number="SUP-7005",
+                       status="scheduled", payment_term=invoice_term_a, currency=usd,
+                       invoice_date=timezone.localdate() - datetime.timedelta(days=25))
+    _invoice_line(invoice, quantity=Decimal("4"), unit_price=Decimal("60.00"))
+    invoice.refresh_from_db()
+    return invoice
+
+
+@pytest.fixture
+def invoice_paid_a(db, tenant_a, invoice_vendor_a, usd):
+    """PAID - TERMINAL, so ``is_locked`` is True: no edit, no match, no void, no new lines."""
+    return _invoice(tenant_a, invoice_vendor_a, invoice_number="SUP-7006", status="paid",
+                    currency=usd)
+
+
+@pytest.fixture
+def invoice_credit_memo_a(db, tenant_a, invoice_vendor_a, usd):
+    """A CREDIT MEMO carrying one NEGATIVE line (1 x -50.00) -> total -50.00.
+
+    ``run_match()`` early-returns on one of these without touching ``status``, and lane B refuses a
+    positive line on it.
+    """
+    memo = _invoice(tenant_a, invoice_vendor_a, invoice_number="CM-7001",
+                    invoice_type="credit_memo", status="captured", currency=usd)
+    _invoice_line(memo, description="Credit for over-billed reams",
+                  quantity=Decimal("1"), unit_price=Decimal("-50.00"))
+    memo.refresh_from_db()
+    return memo
+
+
+@pytest.fixture
+def invoice_duplicate_a(db, tenant_a, invoice_vendor_a, invoice_draft_a, invoice_line_a, usd):
+    """Same VENDOR, same NORMALISED number ("sup 7001" -> "SUP7001") and the same 250.00 total,
+    dated today - four scoring reasons, so ``duplicate_candidates()`` reports it."""
+    twin = _invoice(tenant_a, invoice_vendor_a, invoice_number="sup 7001", currency=usd)
+    _invoice_line(twin)
+    twin.refresh_from_db()
+    return twin
+
+
+@pytest.fixture
+def invoice_b(db, tenant_b, invoice_vendor_b, invoice_po_b, usd):
+    """Tenant B's invoice - the cross-tenant 404 target on every pk-scoped 6.13 route."""
+    return _invoice(tenant_b, invoice_vendor_b, invoice_number="GBX-9001",
+                    purchase_order=invoice_po_b, currency=usd)
+
+
+@pytest.fixture
+def invoice_line_b(db, invoice_b, invoice_po_line_b):
+    """Tenant B's line - the IDOR target on the line register and the crafted-FK target."""
+    return _invoice_line(invoice_b, po_line=invoice_po_line_b,
+                         description="Globex-only spindle", sku_hint="GBX-SPN",
+                         quantity=Decimal("6"), unit_price=Decimal("80.00"))
+
+
+# -- match variances (evidence: no create / edit / delete route exists) ----------------------------
+
+@pytest.fixture
+def invoice_variance_block_a(db, invoice_blocked_a):
+    """A BLOCKING, still-OPEN price variance - what ``override()`` accepts and ``raise_dispute()``
+    requires at least one of."""
+    return _invoice_variance(invoice_blocked_a)
+
+
+@pytest.fixture
+def invoice_variance_warn_a(db, invoice_blocked_a):
+    """A header-level tax WARNING (``invoice_line`` NULL) - never blocking (cap="warn")."""
+    return _invoice_variance(invoice_blocked_a, variance_type="tax", basis="header",
+                             expected_value=Decimal("50.0000"),
+                             actual_value=Decimal("50.4000"),
+                             tolerance_pct_applied=None,
+                             tolerance_abs_applied=Decimal("1.0000"),
+                             outcome="warn",
+                             message="Tax differs from the line-derived tax amount.")
+
+
+@pytest.fixture
+def invoice_variance_accepted_a(db, invoice_blocked_a):
+    """Already ACCEPTED - ``accept()`` must no-op on it and the route must refuse."""
+    return _invoice_variance(invoice_blocked_a, variance_type="quantity", basis="receipt",
+                             expected_value=Decimal("10.0000"),
+                             actual_value=Decimal("12.0000"),
+                             resolution="accepted",
+                             message="Invoiced quantity differs from the quantity received.")
+
+
+@pytest.fixture
+def invoice_variance_b(db, invoice_b):
+    """Tenant B's exception - the cross-tenant 404 target on detail and accept."""
+    return _invoice_variance(invoice_b, message="Globex-only exception.")
+
+
+# -- disputes --------------------------------------------------------------------------------------
+
+@pytest.fixture
+def invoice_dispute_open_a(db, tenant_a, admin_user, invoice_draft_a, invoice_line_a):
+    """OPEN price dispute pinned to the invoice's own line - editable, resolvable, escalatable.
+    ``due_date`` is stamped by save() at ``localdate() + SLA_DAYS`` (10)."""
+    return _invoice_dispute(tenant_a, invoice_draft_a, invoice_line=invoice_line_a,
+                            raised_by=admin_user, assigned_to=admin_user)
+
+
+@pytest.fixture
+def invoice_dispute_escalated_a(db, tenant_a, admin_user, invoice_blocked_a):
+    """ESCALATED - still OPEN work, so await_supplier / await_internal / resolve all still apply."""
+    obj = _invoice_dispute(tenant_a, invoice_blocked_a, reason_code="quantity",
+                           disputed_amount=Decimal("75.00"),
+                           description="Three reams short against the delivery note.",
+                           raised_by=admin_user)
+    obj.escalate(admin_user)
+    obj.refresh_from_db()
+    return obj
+
+
+@pytest.fixture
+def invoice_dispute_resolved_a(db, tenant_a, admin_user, invoice_captured_a):
+    """RESOLVED via ``short_pay`` - no longer open, so edit is refused and every open-state verb
+    no-ops; only ``close()`` still applies."""
+    obj = _invoice_dispute(tenant_a, invoice_captured_a, reason_code="freight",
+                           disputed_amount=Decimal("0.00"),
+                           description="Unapproved delivery surcharge.",
+                           raised_by=admin_user)
+    obj.resolve(admin_user, "short_pay", "Paid net of the surcharge.")
+    obj.refresh_from_db()
+    return obj
+
+
+@pytest.fixture
+def invoice_dispute_overdue_a(db, tenant_a, admin_user, invoice_draft_a):
+    """OPEN with a due date FIVE DAYS in the past -> ``is_overdue`` True and ``age_bucket``
+    "overdue" (which outranks the day bands on the aging board)."""
+    return _invoice_dispute(tenant_a, invoice_draft_a, reason_code="duplicate",
+                            disputed_amount=Decimal("25.00"),
+                            description="Second copy of an invoice already paid.",
+                            raised_by=admin_user,
+                            due_date=timezone.localdate() - datetime.timedelta(days=5))
+
+
+@pytest.fixture
+def invoice_dispute_b(db, tenant_b, admin_b, invoice_b):
+    """Tenant B's dispute - the cross-tenant 404 target on detail / edit / delete / every verb."""
+    return _invoice_dispute(tenant_b, invoice_b, description="Globex-only argument.",
+                            raised_by=admin_b)
