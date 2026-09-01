@@ -1161,3 +1161,423 @@ def receipt_quarantine_b(db, tenant_b, receipt_item_b, receipt_location_b):
     return QuarantineOrder.objects.create(
         tenant=tenant_b, item=receipt_item_b, source_location=receipt_location_b,
         quarantine_location=receipt_location_b, quantity=Decimal("1"), reason="qc_hold")
+
+
+# =================================================================================================
+# 6.14 Spend Analytics & Reporting
+# =================================================================================================
+#
+# Every fixture below is prefixed ``spend_`` so the four 6.14 test lanes never collide with the
+# 6.1 / 6.4 / 6.9 / 6.11 / 6.12 records above (or with whatever 6.15 appends next).
+#
+# The shape the lanes can rely on, all dated off ``timezone.localdate()`` so they sit inside the
+# default ``last_90`` window every 6.14 page uses (L16 - never ``date.today()``):
+#
+#   spend_vendor_a         core.Party "Meridian Office Supplies" + supplier PartyRole
+#   spend_vendor_other_a   core.Party "Cobalt Facilities Group"  + supplier PartyRole
+#   spend_vendor_b         tenant-B supplier - the crafted-FK / IDOR target
+#   spend_category_a       scm.ItemCategory "Office Supplies"    (spend_item_a hangs off it)
+#   spend_category_other_a scm.ItemCategory "Facilities"
+#   spend_category_b       tenant-B category
+#   spend_item_a           scm.Item "PPR-A4" in spend_category_a (the invoiced category passthrough)
+#
+#   spend_invoice_a        SupplierInvoice, status "approved", invoice_date = TODAY -> RECOGNISED
+#     spend_invoice_line_a       qty 10 @ 25.00 -> line_total 250.00, sku "PPR-A4", gl_expense_a
+#   spend_invoice_draft_a  SupplierInvoice, status "draft"      -> NOT recognised spend
+#   spend_invoice_b / spend_invoice_line_b   tenant-B twin
+#
+#   spend_po_a             scm.PurchaseOrder, status "approved", order_date = TODAY -> COMMITTED
+#     spend_po_line_a            qty 4 @ 60.00 -> line_total 240.00, sku "TNR-55"
+#   spend_po_b / spend_po_line_b             tenant-B twin
+#
+#   spend_rule_vendor_a    priority 10, match_type "vendor"  -> spend_category_a
+#   spend_rule_keyword_a   priority 50, match_type "keyword" ("toner") -> spend_category_other_a
+#   spend_rule_inactive_a  is_active False, match_type "gl_account"
+#   spend_rule_b           tenant-B rule - the IDOR target
+#
+#   spend_finding_open_a       "no_contract",          open,         on spend_invoice_a
+#   spend_finding_ack_a        "po_less_invoice",      acknowledged, on spend_invoice_a
+#   spend_finding_leakage_a    "price_above_contract", open, high, amount 250 / benchmark 200
+#   spend_finding_dismissed_a  "off_catalog",          dismissed (terminal), on spend_po_a
+#   spend_finding_b            tenant-B finding - the IDOR target
+#
+#   spend_report_a         shared, owner admin_user, measure net_spend / dimension_1 supplier
+#   spend_report_private_a is_shared False, owner MEMBER_user -> a 404 for client_a everywhere
+#   spend_report_b         tenant-B report - the IDOR target
+#   spend_snapshot_a / spend_snapshot_b   frozen runs of the two reports above
+#
+#   spend_contract_a / spend_contract_b   scm.SupplierContract (finding FK + form dropdown)
+#   spend_catalog_item_a                  approved + preferred CatalogItem (the alternatives panel)
+
+def _spend_party(tenant, name, role="supplier"):
+    """A counterparty WITH its PartyRole - every 6.14 supplier dropdown and filter narrows on
+    ``roles__role__in=("supplier", "vendor")``, so a Party with no role is invisible to the forms
+    and to every ``?vendor=`` widget."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role=role, status="active")
+    return party
+
+
+def _spend_invoice(tenant, vendor, **overrides):
+    """A SupplierInvoice (6.13 owns the table). ``status="approved"`` is RECOGNISED spend -
+    ``RECOGNISED_INVOICE_STATUSES`` is ("approved", "scheduled", "paid")."""
+    from apps.procurement.models import SupplierInvoice
+    fields = dict(tenant=tenant, vendor=vendor, invoice_number="SUP-4400",
+                  invoice_date=timezone.localdate(), status="approved",
+                  invoice_type="standard")
+    fields.update(overrides)
+    return SupplierInvoice.objects.create(**fields)
+
+
+def _spend_invoice_line(invoice, **overrides):
+    """One invoice line. ``line_total`` is DERIVED in save() (qty * unit_price) and the header's
+    money follows it - never pass ``line_total``."""
+    from apps.procurement.models import SupplierInvoiceLine
+    fields = dict(invoice=invoice, description="A4 copy paper 80gsm", sku_hint="PPR-A4",
+                  quantity=Decimal("10"), unit_price=Decimal("25.00"))
+    fields.update(overrides)
+    return SupplierInvoiceLine.objects.create(**fields)
+
+
+def _spend_po(tenant, vendor, **overrides):
+    """A committed-basis purchase order - ``SPEND_PO_STATUSES`` includes "approved"."""
+    from apps.scm.models import PurchaseOrder
+    fields = dict(tenant=tenant, vendor=vendor, status="approved",
+                  order_date=timezone.localdate())
+    fields.update(overrides)
+    return PurchaseOrder.objects.create(**fields)
+
+
+def _spend_po_line(po, **overrides):
+    from apps.scm.models import PurchaseOrderLine
+    fields = dict(purchase_order=po, item_description="Toner cartridge 55A",
+                  sku_hint="TNR-55", uom_hint="EA",
+                  quantity=Decimal("4"), unit_price=Decimal("60.00"))
+    fields.update(overrides)
+    return PurchaseOrderLine.objects.create(**fields)
+
+
+def _spend_rule(tenant, category, **overrides):
+    from apps.procurement.models import SpendClassificationRule
+    fields = dict(tenant=tenant, name="Meridian -> Office Supplies", match_type="vendor",
+                  category=category, priority=10, applies_to="both", is_active=True)
+    fields.update(overrides)
+    return SpendClassificationRule.objects.create(**fields)
+
+
+def _spend_finding(tenant, vendor, **overrides):
+    """A MaverickSpendFinding. ``dedupe_key`` and ``leakage_amount`` are DERIVED in save() -
+    never pass either, and vary ``reason`` / the source pointer across fixtures because
+    ``unique_together`` includes ``(tenant, dedupe_key)``."""
+    from apps.procurement.models import MaverickSpendFinding
+    fields = dict(tenant=tenant, vendor=vendor, reason="no_contract", severity="medium",
+                  document_date=timezone.localdate(), amount=Decimal("250.00"),
+                  detail="No active contract covered this purchase.")
+    fields.update(overrides)
+    return MaverickSpendFinding.objects.create(**fields)
+
+
+def _spend_report(tenant, **overrides):
+    from apps.procurement.models import SpendReport
+    fields = dict(tenant=tenant, name="Top suppliers, last 90 days", basis="invoiced",
+                  measure="net_spend", dimension_1="supplier", dimension_2="none",
+                  date_range="last_90", chart_type="bar", top_n=20,
+                  is_favorite=False, is_shared=True)
+    fields.update(overrides)
+    return SpendReport.objects.create(**fields)
+
+
+def _spend_snapshot(tenant, report, **overrides):
+    from apps.procurement.models import SpendReportSnapshot
+    fields = dict(
+        tenant=tenant, report=report, title="Top suppliers - frozen run",
+        summary=[{"label": "Net spend", "value": "250.00"}],
+        data={"columns": ["Supplier", "Net spend", "Share", "Lines"],
+              "rows": [["Meridian Office Supplies", "250.00", "100.0%", "1"]],
+              "chart_type": "bar",
+              "chart_labels": ["Meridian Office Supplies"],
+              "chart_data": [250.0]},
+        row_count=1)
+    fields.update(overrides)
+    return SpendReportSnapshot.objects.create(**fields)
+
+
+# -- masters -------------------------------------------------------------------------------------
+
+@pytest.fixture
+def spend_vendor_a(db, tenant_a):
+    return _spend_party(tenant_a, "Meridian Office Supplies")
+
+
+@pytest.fixture
+def spend_vendor_other_a(db, tenant_a):
+    """A SECOND tenant-A supplier - the "two suppliers, one category" Pareto/HHI case."""
+    return _spend_party(tenant_a, "Cobalt Facilities Group")
+
+
+@pytest.fixture
+def spend_vendor_b(db, tenant_b):
+    """Tenant B's supplier - the crafted-POST FK target."""
+    return _spend_party(tenant_b, "Globex Spend Partners")
+
+
+@pytest.fixture
+def spend_category_a(db, tenant_a):
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_a, name="Office Supplies")
+
+
+@pytest.fixture
+def spend_category_other_a(db, tenant_a):
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_a, name="Facilities")
+
+
+@pytest.fixture
+def spend_category_b(db, tenant_b):
+    """Tenant B's taxonomy row - the crafted-POST FK target on both forms."""
+    from apps.scm.models import ItemCategory
+    return ItemCategory.objects.create(tenant=tenant_b, name="Globex Consumables")
+
+
+@pytest.fixture
+def spend_uom_a(db, tenant_a):
+    from apps.scm.models import UOM
+    obj, _ = UOM.objects.get_or_create(tenant=tenant_a, code="EA",
+                                       defaults={"name": "Each", "factor": Decimal("1")})
+    return obj
+
+
+@pytest.fixture
+def spend_item_a(db, tenant_a, spend_category_a, spend_uom_a):
+    """SKU ``PPR-A4`` in ``spend_category_a`` - the invoiced-basis ``item.category`` passthrough
+    leg of the classification order (item category -> rules -> "(Unclassified)")."""
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="PPR-A4", name="A4 copy paper 80gsm",
+                               category=spend_category_a, uom=spend_uom_a, item_type="stock")
+
+
+@pytest.fixture
+def spend_contract_a(db, tenant_a, spend_vendor_a):
+    from apps.scm.models import SupplierContract
+    return SupplierContract.objects.create(
+        tenant=tenant_a, party=spend_vendor_a, title="Meridian stationery framework",
+        contract_type="framework", status="active",
+        start_date=timezone.localdate() - datetime.timedelta(days=30),
+        end_date=timezone.localdate() + datetime.timedelta(days=300))
+
+
+@pytest.fixture
+def spend_contract_b(db, tenant_b, spend_vendor_b):
+    """Tenant B's contract - the crafted-POST FK target on the finding form."""
+    from apps.scm.models import SupplierContract
+    return SupplierContract.objects.create(
+        tenant=tenant_b, party=spend_vendor_b, title="Globex-only agreement",
+        contract_type="purchase", status="active")
+
+
+@pytest.fixture
+def spend_catalog_item_a(db, tenant_a, spend_item_a, spend_vendor_other_a, usd):
+    """An approved + active + PREFERRED catalogue entry at a DIFFERENT supplier - exactly what
+    ``maverickfinding_detail``'s ``alternatives`` panel looks for."""
+    from apps.procurement.models import CatalogItem
+    return CatalogItem.objects.create(
+        tenant=tenant_a, source_type="internal", item=spend_item_a,
+        supplier=spend_vendor_other_a, currency=usd, uom=spend_item_a.uom,
+        name="A4 copy paper (preferred buy)", supplier_part_no="PPR-A4",
+        base_price=Decimal("21.00"), status="approved", is_preferred=True, is_active=True)
+
+
+# -- spend documents (6.13 invoices + the SCM 4.1 order spine) ------------------------------------
+
+@pytest.fixture
+def spend_invoice_a(db, tenant_a, spend_vendor_a, usd):
+    """RECOGNISED tenant-A invoice dated TODAY - inside every default window."""
+    return _spend_invoice(tenant_a, spend_vendor_a, currency=usd)
+
+
+@pytest.fixture
+def spend_invoice_line_a(db, spend_invoice_a, spend_item_a, gl_expense_a):
+    """qty 10 @ 25.00 -> ``line_total`` 250.00, item in ``spend_category_a``."""
+    return _spend_invoice_line(spend_invoice_a, item=spend_item_a, gl_account=gl_expense_a)
+
+
+@pytest.fixture
+def spend_invoice_draft_a(db, tenant_a, spend_vendor_a, usd):
+    """A DRAFT invoice - deliberately NOT recognised spend, so no 6.14 page counts it."""
+    return _spend_invoice(tenant_a, spend_vendor_a, currency=usd, status="draft",
+                          invoice_number="SUP-4401")
+
+
+@pytest.fixture
+def spend_invoice_b(db, tenant_b, spend_vendor_b):
+    """Tenant B's invoice - the IDOR / crafted-FK target."""
+    return _spend_invoice(tenant_b, spend_vendor_b, invoice_number="GBX-9001")
+
+
+@pytest.fixture
+def spend_invoice_line_b(db, spend_invoice_b):
+    return _spend_invoice_line(spend_invoice_b, description="Globex-only line",
+                               sku_hint="GBX-1", quantity=Decimal("2"),
+                               unit_price=Decimal("40.00"))
+
+
+@pytest.fixture
+def spend_po_a(db, tenant_a, spend_vendor_a, org_unit_a):
+    """Committed-basis tenant-A order dated TODAY, ship_to ``org_unit_a`` (the department axis)."""
+    return _spend_po(tenant_a, spend_vendor_a, ship_to=org_unit_a)
+
+
+@pytest.fixture
+def spend_po_line_a(db, spend_po_a, gl_expense_a):
+    """qty 4 @ 60.00 -> ``line_total`` 240.00, sku "TNR-55" (matches ``spend_rule_keyword_a``)."""
+    return _spend_po_line(spend_po_a, gl_account=gl_expense_a)
+
+
+@pytest.fixture
+def spend_po_b(db, tenant_b, spend_vendor_b):
+    """Tenant B's order - the IDOR / crafted-FK target."""
+    return _spend_po(tenant_b, spend_vendor_b)
+
+
+@pytest.fixture
+def spend_po_line_b(db, spend_po_b):
+    return _spend_po_line(spend_po_b, item_description="Globex-only spindle", sku_hint="GBX-SPN")
+
+
+# -- SpendClassificationRule ----------------------------------------------------------------------
+
+@pytest.fixture
+def spend_rule_vendor_a(db, tenant_a, spend_vendor_a, spend_category_a):
+    """priority 10, ``match_type="vendor"`` -> every line bought from ``spend_vendor_a``."""
+    return _spend_rule(tenant_a, spend_category_a, vendor=spend_vendor_a)
+
+
+@pytest.fixture
+def spend_rule_keyword_a(db, tenant_a, spend_category_other_a):
+    """priority 50, ``match_type="keyword"`` on "toner" - matches ``spend_po_line_a``'s
+    ``item_description`` on the committed basis."""
+    return _spend_rule(tenant_a, spend_category_other_a, name="Toner -> Facilities",
+                       match_type="keyword", keyword="toner", vendor=None, priority=50)
+
+
+@pytest.fixture
+def spend_rule_inactive_a(db, tenant_a, spend_category_a, gl_expense_a):
+    """``is_active=False`` - ``line_filter()`` returns None for it on BOTH bases."""
+    return _spend_rule(tenant_a, spend_category_a, name="Retired GL rule",
+                       match_type="gl_account", gl_account=gl_expense_a, vendor=None,
+                       priority=90, is_active=False)
+
+
+@pytest.fixture
+def spend_rule_b(db, tenant_b, spend_vendor_b, spend_category_b):
+    """Tenant B's rule - the cross-tenant 404 target on detail / edit / delete / preview."""
+    return _spend_rule(tenant_b, spend_category_b, name="Globex -> Consumables",
+                       vendor=spend_vendor_b)
+
+
+# -- MaverickSpendFinding -------------------------------------------------------------------------
+
+@pytest.fixture
+def spend_finding_open_a(db, tenant_a, spend_vendor_a, spend_invoice_a, spend_category_a,
+                         org_unit_a):
+    """status "open" - the only state ``acknowledge()``, ``maverickfinding_edit`` and
+    ``maverickfinding_delete`` accept."""
+    return _spend_finding(tenant_a, spend_vendor_a, supplier_invoice=spend_invoice_a,
+                          category=spend_category_a, org_unit=org_unit_a)
+
+
+@pytest.fixture
+def spend_finding_ack_a(db, tenant_a, spend_vendor_a, spend_invoice_a):
+    """status "acknowledged" - still OPEN work, so the three terminal verbs still apply."""
+    obj = _spend_finding(tenant_a, spend_vendor_a, supplier_invoice=spend_invoice_a,
+                         reason="po_less_invoice",
+                         detail="Service invoice raised with no purchase order.")
+    obj.acknowledge(None)
+    obj.refresh_from_db()
+    return obj
+
+
+@pytest.fixture
+def spend_finding_leakage_a(db, tenant_a, spend_vendor_a, spend_invoice_a, spend_invoice_line_a,
+                            spend_contract_a, spend_catalog_item_a):
+    """amount 250 / benchmark 200 -> ``leakage_amount`` 50.00 DERIVED in save(),
+    ``variance_pct`` 25.00. High severity, still open."""
+    return _spend_finding(tenant_a, spend_vendor_a, supplier_invoice=spend_invoice_a,
+                          invoice_line=spend_invoice_line_a, contract=spend_contract_a,
+                          catalog_item=spend_catalog_item_a,
+                          reason="price_above_contract", severity="high",
+                          amount=Decimal("250.00"), benchmark_amount=Decimal("200.00"),
+                          detail="Unit price 25.00 against a contracted 20.00.")
+
+
+@pytest.fixture
+def spend_finding_dismissed_a(db, tenant_a, spend_vendor_a, spend_po_a, admin_user):
+    """TERMINAL - edit and delete are refused, every disposition verb returns False, and the
+    maverick RATE excludes it from the numerator."""
+    obj = _spend_finding(tenant_a, spend_vendor_a, purchase_order=spend_po_a,
+                         reason="off_catalog", severity="low",
+                         amount=Decimal("240.00"),
+                         detail="Bought off catalogue.")
+    obj.dismiss(admin_user, "Catalogue entry was added the same week.")
+    obj.refresh_from_db()
+    return obj
+
+
+@pytest.fixture
+def spend_finding_b(db, tenant_b, spend_vendor_b, spend_invoice_b):
+    """Tenant B's finding - the cross-tenant 404 target on detail / edit / delete / disposition."""
+    return _spend_finding(tenant_b, spend_vendor_b, supplier_invoice=spend_invoice_b,
+                          detail="Globex-only finding.")
+
+
+# -- SpendReport + SpendReportSnapshot ------------------------------------------------------------
+
+@pytest.fixture
+def spend_report_a(db, tenant_a, admin_user):
+    """SHARED, owned by ``admin_user`` - number ``SPR-00001``."""
+    return _spend_report(tenant_a, owner=admin_user)
+
+
+@pytest.fixture
+def spend_report_favorite_a(db, tenant_a, admin_user, spend_category_a):
+    """Pinned + narrowed to one category, two axes - exercises the ``?is_favorite=True`` filter
+    and the ``dimension_2`` branch of ``compute_report``."""
+    return _spend_report(tenant_a, owner=admin_user, name="Category by month",
+                         dimension_1="category", dimension_2="month", chart_type="line",
+                         category=spend_category_a, is_favorite=True)
+
+
+@pytest.fixture
+def spend_report_private_a(db, tenant_a, member_user):
+    """``is_shared=False`` and owned by the MEMBER - every fetch in the SpendReports module goes
+    through ``visible_reports()``, so this is a 404 for ``client_a`` on list, detail, edit, delete,
+    run, snapshot, favourite and export alike."""
+    return _spend_report(tenant_a, owner=member_user, name="Draft private cut",
+                         is_shared=False)
+
+
+@pytest.fixture
+def spend_report_b(db, tenant_b, admin_b):
+    """Tenant B's report - the cross-tenant 404 target."""
+    return _spend_report(tenant_b, owner=admin_b, name="Globex spend by supplier")
+
+
+@pytest.fixture
+def spend_snapshot_a(db, tenant_a, spend_report_a, admin_user):
+    return _spend_snapshot(tenant_a, spend_report_a, generated_by=admin_user)
+
+
+@pytest.fixture
+def spend_snapshot_private_a(db, tenant_a, spend_report_private_a, member_user):
+    """A frozen run inherits its parent's privacy - a 404 for ``client_a``."""
+    return _spend_snapshot(tenant_a, spend_report_private_a, generated_by=member_user,
+                           title="Private frozen run")
+
+
+@pytest.fixture
+def spend_snapshot_b(db, tenant_b, spend_report_b, admin_b):
+    """Tenant B's frozen run - the cross-tenant 404 target."""
+    return _spend_snapshot(tenant_b, spend_report_b, generated_by=admin_b,
+                           title="Globex frozen run")
