@@ -348,15 +348,15 @@
     <div class="card-body">
       {% if duplicate_candidates %}
         <ul>
-          {% for cand, reasons in duplicate_candidates %}
+          {% for cand in duplicate_candidates %}
             <li>
-              <a href="{% url 'procurement:supplierinvoice_detail' cand.pk %}" class="fw-600">{{ cand.number }}</a>
-              · {{ cand.invoice_number|default:"no supplier number" }}
-              · {% if cand.currency %}{{ cand.currency.code }} {% endif %}{{ cand.total|floatformat:"2" }}
-              · {{ cand.invoice_date|date:"M d, Y"|default:"no date" }}
-              {% if obj.duplicate_of and obj.duplicate_of.pk == cand.pk %}<span class="badge badge-red">Marked as the duplicate of this one</span>{% endif %}
+              <a href="{% url 'procurement:supplierinvoice_detail' cand.invoice.pk %}" class="fw-600">{{ cand.invoice.number }}</a>
+              · {{ cand.invoice.invoice_number|default:"no supplier number" }}
+              · {% if cand.invoice.currency %}{{ cand.invoice.currency.code }} {% endif %}{{ cand.invoice.total|floatformat:"2" }}
+              · {{ cand.invoice.invoice_date|date:"M d, Y"|default:"no date" }}
+              {% if obj.duplicate_of and obj.duplicate_of.pk == cand.invoice.pk %}<span class="badge badge-red">Marked as the duplicate of this one</span>{% endif %}
               <div class="badge-group" style="margin-top:.25rem;">
-                {% for reason in reasons %}<span class="badge badge-slate">{{ reason }}</span>{% endfor %}
+                {% for reason in cand.reasons %}<span class="badge badge-slate">{{ reason }}</span>{% endfor %}
               </div>
             </li>
           {% endfor %}
