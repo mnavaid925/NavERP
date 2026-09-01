@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Commitment Register{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — the Commitment Register
+    (apps/procurement/views/BudgetCostManagement/CommitmentRegister.py).
+
+    READ-ONLY union of two scm populations: open purchase orders (line-summed) and
+    approved-not-converted requisitions (estimated_total). Nothing is stored; a commitment
+    appears and disappears purely as its source document's status moves.
+
+    Context consumed: rows (source/number/url/party/status/status_label/status_css/budget/
+    amount — url is ALREADY reversed in the view, so the template never reverses),
+    totals{count, po_committed, pr_committed, committed}, budgets, vendors,
+    selected_budget, selected_vendor (may be None), source_choices, vendor_filter_note,
+    row_cap, truncated.
+
+    The `source` select compares request.GET.source against the exact frozen values in
+    source_choices; the two FK selects compare with |stringformat:"d" (never |slugify).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Commitment Register</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <span>Commitments</span>
+      </div>
+      <p class="text-muted">Every live commitment in the workspace — purchase orders approved or later, and requisitions approved but not yet ordered. Derived on read and stored nowhere: closing an order removes its row without any record being touched.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:budget_availability' %}" class="btn btn-outline"><i data-lucide="search-check"></i> Availability check</a>
+      <a href="{% url 'procurement:budget_variance' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Variance report</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ totals.count }}</div>
+      <div class="stat-label">Commitments shown{% if truncated %} (capped at {{ row_cap }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ totals.po_committed|floatformat:2 }}</div>
+      <div class="stat-label">On open purchase orders</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clipboard-check"></i></div>
+      <div class="stat-value">{{ totals.pr_committed|floatformat:2 }}</div>
+      <div class="stat-label">On approved requisitions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="lock"></i></div>
+      <div class="stat-value">{{ totals.committed|floatformat:2 }}</div>
+      <div class="stat-label">Total committed</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ request.GET.q }}" aria-label="Search commitments" class="form-input" placeholder="Search number, supplier or title…">
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Orders and requisitions</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }} only</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="budget" aria-label="Budget" class="form-select">
+            <option value="">All budgets</option>
+            {% for b in budgets %}
+              <option value="{{ b.pk|stringformat:"d" }}" {% if selected_budget and selected_budget.pk == b.pk %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if selected_vendor and selected_vendor.pk == v.pk %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:commitment_register' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      {% if vendor_filter_note %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">Narrowed</span> {{ vendor_filter_note }}</p>
+      {% endif %}
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} commitments match — the largest are shown first and the totals above cover the rows shown, not the whole population.</p>
+      {% endif %}
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Source</th>
+            <th>Supplier / Requester</th>
+            <th>Status</th>
+            <th>Budget</th>
+            <th class="text-right">Committed amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600"><a href="{{ row.url }}">{{ row.number }}</a></td>
+              <td>
+                {% if row.source == "po" %}<span class="badge badge-info">Purchase order</span>
+                {% else %}<span class="badge badge-slate">Requisition</span>{% endif %}
+              </td>
+              <td>{{ row.party|default:"—" }}</td>
+              <td><span class="badge {{ row.status_css }}">{{ row.status_label }}</span></td>
+              <td>{% if row.budget %}{{ row.budget }}{% else %}<span class="text-muted">None</span>{% endif %}</td>
+              <td class="text-right fw-600">{{ row.amount|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="unlock"></i>
+                <h3>No live commitments</h3>
+                <p>Nothing matches these filters. A commitment appears when a purchase order is approved (or later) or a requisition is approved and not yet converted — and disappears again when the document is closed or cancelled.</p>
+                <a href="{% url 'procurement:commitment_register' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">A requisition is counted once: once it is converted it IS its purchase order, and the register shows the order instead. Draft and cancelled orders were never commitments; closed ones no longer are. Nothing on this page is a stored encumbrance — the accounting module's budget holds the only amounts, and this register only points at documents.</p>
+    </div>
+  </div>
+{% endblock %}
