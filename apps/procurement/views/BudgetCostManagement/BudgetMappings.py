@@ -12,7 +12,7 @@ Discipline a reviewer will otherwise go looking for:
 * **Writes are audited** through ``write_audit_log`` (create/edit via the ``crud_*`` helpers,
   delete via ``crud_delete``).
 """
-from apps.accounting.models import Budget, GLAccount, Project
+from apps.accounting.models import Budget, Project
 from apps.core.models import OrgUnit
 
 from apps.procurement.forms.BudgetCostManagement.BudgetMappings import BudgetMappingForm
@@ -34,16 +34,19 @@ def _mapping_qs(request):
 
 
 def _filter_dropdowns(request):
-    """The four FK dropdowns' options — empty querysets for a tenant-less user."""
+    """The three FK dropdowns' options — empty querysets for a tenant-less user.
+
+    ``gl_accounts`` is deliberately absent: the list template's filter bar offers no GL-account
+    filter, and the create/edit forms build their own dropdowns, so shipping that queryset here
+    would fetch it for nothing on every render.
+    """
     if request.tenant is None:
         return {"budgets": Budget.objects.none(), "org_units": OrgUnit.objects.none(),
-                "projects": Project.objects.none(), "gl_accounts": GLAccount.objects.none()}
+                "projects": Project.objects.none()}
     return {
         "budgets": Budget.objects.filter(tenant=request.tenant).order_by("-id"),
         "org_units": OrgUnit.objects.filter(tenant=request.tenant).order_by("name"),
         "projects": Project.objects.filter(tenant=request.tenant).order_by("name"),
-        "gl_accounts": (GLAccount.objects.filter(tenant=request.tenant, is_active=True)
-                        .order_by("code")),
     }
 
 
