@@ -33,7 +33,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.urls import reverse
 
-from apps.core.crud import as_db_int, paginate
+from apps.core.crud import _changed, as_db_int, paginate
 from apps.core.models import Document, Party
 from apps.procurement.forms.InvoiceVoucherManagement.SupplierInvoices import (
     CaptureUploadForm, SupplierInvoiceForm, SupplierInvoiceLineFormSet)
@@ -294,7 +294,8 @@ def _invoice_form(request, instance=None):
                 line_formset.save()
                 # The line formset has just changed the lines; the header money must follow them.
                 obj.recalc_totals(save=True)
-            write_audit_log(request.user, obj, "update" if is_edit else "create")
+            write_audit_log(request.user, obj, "update" if is_edit else "create",
+                            _changed(form))
             messages.success(request, f"Supplier invoice {obj.number} saved.")
             return redirect("procurement:supplierinvoice_detail", pk=obj.pk)
     else:
