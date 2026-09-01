@@ -764,6 +764,106 @@ Tests: `test_receipt_{models(234),forms(143),views(140),security(47)}.py` — fu
 `test_receipt_*`, fixtures `receipt_*` in conftest. Sidebar `LIVE_LINKS["6.12"]` has 10 keys, 6 of
 them pointing at the existing scm/inventory pages above.
 
+## 6.13 Invoice & Voucher Management (built 2026-08-30, reviewed + fixed 2026-09-01)
+
+**Package folder `InvoiceVoucherManagement/` across all four layers.** Templates at
+`templates/procurement/invoicevouchermanagement/`.
+
+**Read this before changing anything here.** 6.13 shipped its code before its review wave ran, and
+the review that finally ran found **55 findings including 8 Criticals** — three of them
+user-visible on a seeded database. Every one is fixed and recorded in
+`.claude/tasks/review-procurement-6.13.md`, but the failure classes are worth knowing because they
+are easy to reintroduce:
+
+| Was broken | Why it matters |
+|---|---|
+| `{% for cand, reasons in duplicate_candidates %}` unpacked a list of **dicts** as two-tuples | Django's ForNode zipped the loop vars against the dict's KEYS, so `cand.pk` resolved to `''` and the detail page raised `NoReverseMatch` — a **500 on any invoice with a duplicate candidate**, and the seeder creates exactly such a pair (L7) |
+| Capture's stage-2 form never rendered `{{ line_formset.management_form }}` | `is_valid()` was permanently False, so **Capture Invoice — the headline LIVE_LINKS bullet — could never save**, and the re-render showed no error at all (L44) |
+| `supplierinvoiceline_delete` had no header-status guard | Any member could delete a line off an **approved/paid** invoice; the follow-on `recalc_totals()` then rewrote a header already posted to `accounting.Bill` + `JournalEntry`, desyncing the GL from the AP subledger undetectably |
+| The duplicates board called `duplicate_candidates()` per row | 1 + 200 queries per render, before pagination |
+
+### Models (`models/InvoiceVoucherManagement/`)
+
+| Model | Base / number | Notes |
+|---|---|---|
+| `SupplierInvoice` | `TenantNumbered` `SIV-#####` | 11-state AP lifecycle + the match engine |
+| `SupplierInvoiceLine` | plain `models.Model` child | Sign-aware; drives the header recalc |
+| `InvoiceMatchVariance` | `TenantOwned` | 11 variance types, module-level CHOICES |
+| `InvoiceDispute` | `TenantNumbered` `DSP-#####` | 10 reason codes, 6-state workflow |
+
+**`SupplierInvoice`** — `STATUS_CHOICES` is draft / parked / captured / blocked / disputed /
+pending_approval / approved / scheduled / paid / void / reversed. `INVOICE_TYPE_CHOICES` includes
+`credit_memo`, `debit_memo`, `prepayment` and `service` (PO-less). `subtotal`/`tax`/`total` are
+`editable=False` and derived by `recalc_totals()` — never write them directly.
+
+* **`run_match()` is the three-way match engine** — first-breach-wins, cumulative checks, duplicate
+  scoring and a vendor-agreement guard. Tolerance bands are workspace constants on the model
+  (`PRICE_TOL_PCT_UPPER` etc.), not per-record settings: 6.12 keeps the per-vendor/SKU overrides in
+  its own `ReceiptTolerancePolicy`.
+* **`approve()` posts exactly one `accounting.Bill` + a balanced `JournalEntry`, atomically, behind
+  a double-submit guard.** This is the ONLY place in 6.13 that writes to `accounting.*`. Anything
+  that mutates a posted header without going through the ledger desyncs the subledger — that is the
+  C1/C2 failure class above.
+* Discount maths (`annualised_pct`, the capturable window) drives the dashboard `#discount` panel.
+* `invoice_number_norm` is the normalised number the duplicate engine keys on, so a
+  case/padding-differing reference books once instead of minting a duplicate.
+
+**`SupplierInvoiceLine`** carries optional `po_line` / `receipt_line` / `item` (→ `scm.Item`) /
+`gl_account` (→ `accounting.GLAccount`) FKs. `line_total` is `editable=False`; **credit-memo lines
+are signed negative**, which is what lets 6.14's spend cube `Sum` them without special-casing.
+
+**`InvoiceDispute`** tracks `disputed_amount` separately from the invoice total **on purpose** — the
+undisputed balance stays payable while a dispute is open.
+
+### URLs / routes (`app_name = "procurement"`)
+
+Boards/pages: `invoicevoucher_dashboard` · `invoice_match_board` · `paymentschedule_list` ·
+`supplierinvoice_capture` · `supplierinvoice_duplicates` · `invoicedispute_aging`.
+`supplierinvoice_{list,detail,create,edit,delete}` plus the verbs
+`_submit` / `_match` / `_revalidate` / `_approve` / `_override` / `_schedule` / `_mark_paid` /
+`_void` / `_reverse`. `supplierinvoiceline_{list,detail,create,edit,delete}`.
+`matchvariance_{list,detail,accept}`. `invoicedispute_{list,detail,create,edit,delete}` plus
+`_escalate` / `_await_supplier` / `_await_internal` / `_close` / `_resolve`.
+Every verb is `@require_POST` and re-checks its own guard inside; literal segments precede `<int:pk>`.
+
+### Templates
+
+Root pages: `dashboard.html` · `capture.html` · `duplicates.html` · `match_board.html` ·
+`payment_schedule.html` · `dispute_aging.html`. Entity folders:
+`supplierinvoice/{list,detail,form}.html` · `supplierinvoiceline/{list,detail,form}.html` ·
+`matchvariance/{list,detail,form}.html` · `invoicedispute/{list,detail,form}.html`.
+
+### Seeder
+
+`_seed_invoice_vouchers(tenant)` (`seed_procurement.py:1536`) seeds 16 invoices across every
+lifecycle status — including credit/debit memos, a service/PO-less invoice, a pdf-text-layer row and
+**a deliberate duplicate pair** — plus 16 variances of every type, 6 disputes with aging and 5
+payment terms. `Bill` + `JournalEntry` are posted only where the chart of accounts exists. All dates
+are relative to NOW (L16); idempotent on `(vendor, invoice_number_norm)`.
+
+### Conventions & gotchas
+
+* **Naming honesty.** NavERP.md calls the bullet "Invoice Capture (OCR)". **No OCR engine is
+  implemented.** The page is **Assisted Capture** — a `pdfplumber` text-layer extraction (a lazy,
+  optional import; capture degrades to manual keying when the package is absent) with per-field
+  confidence badges over a pre-filled review form. `ocr` exists as a `SOURCE_CHOICES` value for
+  externally-captured data; it is not a claim that this app performs OCR. Never relabel the page.
+* **Never write a derived stamp directly** — `subtotal`/`tax`/`total`/`matched_qty`/`line_total` and
+  every `*_at`/`*_by` are `editable=False` and owned by `recalc_totals()` or a verb. The admin sets
+  `readonly_fields` on all of them so the admin surface can never post or desync a header.
+* **A posted invoice is not editable.** `_editable(invoice)` is the single gate; every write path
+  (line create/edit/**delete**, header edit, delete) must consult it, and the template must hide the
+  control rather than offer a button that 403s or refuses.
+* Suppliers are `core.Party` + `core.PartyRole`; `accounting.Currency` is **global** (no tenant
+  column) — never tenant-filter it.
+
+### Sidebar wiring
+
+`LIVE_LINKS["6.13"]` maps all five bullets: Invoice Capture → `supplierinvoice_capture`;
+Three-Way Matching → `invoice_match_board`; Dispute Resolution → `invoicedispute_list`;
+Payment Schedule/Terms → `paymentschedule_list`; Early Payment Discount Tracking →
+`invoicevoucher_dashboard#discount` (a deep-link to the dashboard's discount panel).
+
 ## 6.14 Spend Analytics & Reporting (built 2026-09-01)
 
 **As-built now: 6.1-6.14.** Package folder `SpendAnalyticsReporting/` across all four layers, plus a
