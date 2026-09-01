@@ -168,7 +168,11 @@
       </div>
     </div>
 
-    {% include "partials/pagination.html" %}
+    {% comment %}
+      No pagination partial here on purpose: the board renders every row of every bucket, and the
+      horizon (overdue + the clamped ?weeks= window) is what bounds it. A pager over the flattened
+      row list rendered a widget whose "Next" changed nothing.
+    {% endcomment %}
   {% else %}
     <div class="card"><div class="card-body">
       <div class="empty-state">
