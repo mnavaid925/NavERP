@@ -1616,6 +1616,20 @@ LIVE_LINKS = {
         # the page says so verbatim rather than letting the sidebar imply one.
         "Data Export & Visualization":         "procurement:spend_export",
     },
+    # 6.15 maps all five of its NavERP.md bullets, and deliberately no more. The budget itself
+    # stays in accounting (L29 — link out, never restate): this sub-module adds the mapping that
+    # points departments/projects at a budget and three pages DERIVED at view time — no
+    # encumbrance table, no stored balance. "Budget Availability Check" is advisory (the same
+    # posture as scm 4.1's budget_check(): no lock, two checks at once see the same figure), and
+    # "Forecasting & Projection" is arithmetic only — committed open POs and a run rate carried
+    # forward — with no label on the page claiming a predictive model.
+    "6.15": {
+        "Budget Allocation & Mapping":         "procurement:budgetmapping_list",
+        "Budget Availability Check":           "procurement:budget_availability",
+        "Commitment Accounting":               "procurement:commitment_register",
+        "Variance Analysis":                   "procurement:budget_variance",
+        "Forecasting & Projection":            "procurement:costforecast_list",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
