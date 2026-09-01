@@ -12,6 +12,8 @@ Discipline a reviewer will otherwise go looking for:
 * **Writes are audited** through ``write_audit_log`` (create/edit via the ``crud_*`` helpers,
   delete via ``crud_delete``).
 """
+from django.db.models import Count, Q
+
 from apps.accounting.models import Budget, Project
 from apps.core.models import OrgUnit
 
@@ -54,11 +56,9 @@ def _filter_dropdowns(request):
 def budgetmapping_list(request):
     """The mapping register: which budget governs which department / project."""
     base = BudgetMapping.objects.filter(tenant=request.tenant)
-    stats = {
-        "total": base.count(),
-        "active": base.filter(is_active=True).count(),
-        "inactive": base.filter(is_active=False).count(),
-    }
+    # ONE conditional aggregate, not three COUNTs: inactive = total - active is derivable.
+    stats = base.aggregate(total=Count("pk"), active=Count("pk", filter=Q(is_active=True)))
+    stats["inactive"] = stats["total"] - stats["active"]
     extra = {"stats": stats}
     extra.update(_filter_dropdowns(request))
     return crud_list(
