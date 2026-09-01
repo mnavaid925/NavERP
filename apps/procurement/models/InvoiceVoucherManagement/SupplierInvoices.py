@@ -341,6 +341,10 @@ class SupplierInvoice(TenantNumbered):
             models.Index(fields=["tenant", "vendor", "invoice_number_norm"], name="prc_siv_tnt_dup_idx"),
             models.Index(fields=["tenant", "discount_date"], name="prc_siv_tnt_disc_idx"),
             models.Index(fields=["tenant", "due_date"], name="prc_siv_tnt_due_idx"),
+            # Meta.ordering itself: the register, the dashboard's recent/blocked panels and the
+            # duplicate scan all ORDER BY -invoice_date under a tenant predicate, which was a
+            # filesort on the module's largest table without this.
+            models.Index(fields=["tenant", "-invoice_date"], name="prc_siv_tnt_invdate_idx"),
         ]
         verbose_name = "supplier invoice"
 
