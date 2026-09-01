@@ -28,7 +28,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.urls import reverse
 
-from apps.core.crud import as_db_int, paginate
+from apps.core.crud import _changed, as_db_int, paginate
 from apps.core.models import Party
 from apps.procurement.forms.InvoiceVoucherManagement.InvoiceDisputes import InvoiceDisputeForm
 # NOT-YET-WIRED entities of this SAME sub-module: import the entity MODULE directly, never
@@ -258,7 +258,8 @@ def _dispute_form(request, invoice_pk=None, instance=None):
                 # transfer who raised it.
                 obj.raised_by = request.user if request.user.is_authenticated else None
             obj.save()
-            write_audit_log(request.user, obj, "update" if is_edit else "create")
+            write_audit_log(request.user, obj, "update" if is_edit else "create",
+                            _changed(form))
             messages.success(request, f"Dispute {obj.number} saved.")
             return redirect("procurement:invoicedispute_detail", pk=obj.pk)
     else:
