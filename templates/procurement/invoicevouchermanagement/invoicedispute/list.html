@@ -12,8 +12,8 @@
     model's STATUS_CSS / REASON_CSS dicts, so a rename on the backend degrades to badge-slate
     instead of an unstyled, class-less badge. Only colour-named modifiers exist
     (theme.css:286-291) — badge-success / badge-danger / badge-warning do not.
-    stat-icon is limited to blue/green/orange/purple/slate; the contract asks for a red
-    escalated icon but red is outside the approved set, so escalated uses purple.
+    stat-icon variants are blue/green/orange/purple/slate AND red (theme.css:259-265);
+    escalated uses purple by choice, not because red is unavailable. There is no `amber`.
     The supplier name and the supplier's invoice number are user-typed and are NEVER
     interpolated into a confirm() handler — only the system-assigned {{ obj.number }}.
   {% endcomment %}
