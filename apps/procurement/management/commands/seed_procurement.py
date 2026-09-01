@@ -1895,8 +1895,12 @@ class Command(BaseCommand):
             invoice = invoices.get(invoice_key)
             if invoice is None:
                 return None
-            number = f"DSP-DEMO-{key}"
-            existing = InvoiceDispute.objects.filter(tenant=tenant, number=number).first()
+            # Idempotency is keyed on the BUSINESS key, not on a hand-written number. A
+            # "DSP-DEMO-x" string sorts above DSP-0..., so next_number() fell into its int()
+            # ValueError fallback and issued count()+1 for every user-created dispute - a number
+            # that collides the moment one is deleted. TenantNumbered.save() mints DSP-00001...
+            existing = InvoiceDispute.objects.filter(tenant=tenant, invoice=invoice,
+                                                     reason_code=reason).first()
             if existing is not None:
                 return existing
             row = InvoiceDispute.objects.create(
@@ -1904,20 +1908,19 @@ class Command(BaseCommand):
                 disputed_amount=Decimal(amount), description=description,
                 assigned_to=assignee, raised_by=filer,
                 due_date=today + timedelta(days=due_in),
-                supplier_contact="accounts@supplier.example",
-                number=number)
+                supplier_contact="accounts@supplier.example")
             write_audit_log(None, row, "create")
             for verb in verbs:
                 if not verb(row):
                     break
             return row
 
-        _dispute_row(
+        aged_price = _dispute_row(
             "PRICE", "disputed", "price", "86.00",
             "Invoiced at 24.05 a roll against a frame price of 21.90. The supplier points at a "
             "resin surcharge we never accepted in writing; we are holding the difference until "
             "somebody produces the amendment.", -4)
-        _dispute_row(
+        aged_goods = _dispute_row(
             "GOODS", "blocked", "goods_not_received", "312.00",
             "Two pallets of cartons are on the invoice but never appeared on the dock. The "
             "delivery note is signed for one pallet only and the CCTV does not show a second.",
@@ -1927,7 +1930,7 @@ class Command(BaseCommand):
             "Same supplier number as an invoice already on the register, spaced differently. "
             "Either the supplier re-sent it or we keyed the same document twice.", 3,
             lambda row: row.await_supplier(filer))
-        _dispute_row(
+        aged_freight = _dispute_row(
             "FREIGHT", "service_2", "freight", "48.00",
             "Carriage charge that was never on the order and nobody approved. Supplier says it "
             "was a weekend callout; the rate card says callouts are included.", 6,
@@ -1955,9 +1958,10 @@ class Command(BaseCommand):
         # raised_at is auto_now_add, so the age bands are spread with a queryset update rather
         # than by back-dating on create - without this every open dispute lands in the 0-7 bucket
         # and the aging board has only two populated rows.
-        for key, days in (("PRICE", 19), ("GOODS", 33), ("FREIGHT", 9)):
-            InvoiceDispute.objects.filter(tenant=tenant, number=f"DSP-DEMO-{key}").update(
-                raised_at=NOW - timedelta(days=days))
+        for row, days in ((aged_price, 19), (aged_goods, 33), (aged_freight, 9)):
+            if row is not None:
+                InvoiceDispute.objects.filter(pk=row.pk).update(
+                    raised_at=NOW - timedelta(days=days))
 
         variance_count = InvoiceMatchVariance.objects.filter(tenant=tenant).count()
         self.stdout.write(self.style.SUCCESS(
