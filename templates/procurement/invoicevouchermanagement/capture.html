@@ -128,6 +128,13 @@
     <form method="post" novalidate enctype="multipart/form-data">
       {% csrf_token %}
       <input type="hidden" name="stage" value="confirm">
+      {% comment %}
+        Echo back the pk of the core.Document stage one created. Without it _capture_document()
+        reads nothing from the POST, the attachment is orphaned and the saved invoice falls back
+        to source="manual" with no extraction confidence or text — even when a text layer was
+        read. The view re-validates the pk against request.tenant, so echoing it is safe.
+      {% endcomment %}
+      {% if document %}<input type="hidden" name="document" value="{{ document.pk }}">{% endif %}
 
       <div class="card"><div class="card-body">
         {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
