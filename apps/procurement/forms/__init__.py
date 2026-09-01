@@ -115,6 +115,13 @@ from .InvoiceVoucherManagement.InvoiceDisputes import InvoiceDisputeForm
 from .SpendAnalyticsReporting.SpendClassificationRules import SpendClassificationRuleForm
 from .SpendAnalyticsReporting.MaverickFindings import MaverickSpendFindingForm
 from .SpendAnalyticsReporting.SpendReports import SpendReportForm
+# 6.15 Budget & Cost Management — from the entity MODULES, same reason as 6.14 above.
+# Two forms, not five: the three computed pages (checker, register, variance) are GET-driven
+# reports sanitised in the view, and ``CostForecast`` has no EDIT form by design — a frozen
+# projection is deleted and re-frozen, never amended (its create form carries the inputs only;
+# the amounts are stamped by the view).
+from .BudgetCostManagement.BudgetMappings import BudgetMappingForm
+from .BudgetCostManagement.CostForecasts import CostForecastForm
 
 __all__ = [
     "EaucBidForm",
@@ -194,4 +201,6 @@ __all__ = [
     "SpendClassificationRuleForm",
     "MaverickSpendFindingForm",
     "SpendReportForm",
+    "BudgetMappingForm",
+    "CostForecastForm",
 ]
