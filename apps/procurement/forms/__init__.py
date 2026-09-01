@@ -101,6 +101,7 @@ from .GoodsReceiptInspection import (
 from .InvoiceVoucherManagement.SupplierInvoices import (
     CaptureUploadForm,
     SupplierInvoiceForm,
+    SupplierInvoiceLineFormSet,
 )
 from .InvoiceVoucherManagement.SupplierInvoiceLines import SupplierInvoiceLineForm
 from .InvoiceVoucherManagement.MatchVariances import InvoiceVarianceAcceptForm
@@ -187,6 +188,7 @@ __all__ = [
     "SupplierInvoiceForm",
     "CaptureUploadForm",
     "SupplierInvoiceLineForm",
+    "SupplierInvoiceLineFormSet",
     "InvoiceVarianceAcceptForm",
     "InvoiceDisputeForm",
     "SpendClassificationRuleForm",
