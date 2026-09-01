@@ -129,8 +129,10 @@ class BudgetMapping(TenantOwned):
         ordering = ["priority", "id"]
         indexes = [
             # Backs resolve()'s hot query (tenant + is_active in priority order) and the
-            # register's default ORDER BY.
-            models.Index(fields=["tenant", "is_active"], name="prc_bmap_tnt_active_idx"),
+            # register's default ORDER BY — priority and id included so both orderings are
+            # served from the index itself, never a filesort.
+            models.Index(fields=["tenant", "is_active", "priority", "id"],
+                         name="prc_bmap_tnt_active_idx"),
             models.Index(fields=["tenant", "budget"], name="prc_bmap_tnt_budget_idx"),
         ]
         verbose_name = "Budget Mapping"
