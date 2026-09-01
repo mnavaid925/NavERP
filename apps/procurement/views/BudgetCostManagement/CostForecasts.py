@@ -19,6 +19,7 @@ Discipline a reviewer will otherwise go looking for:
   stamping computed amounts plus an author in one save.
 * **Every queryset is ``filter(tenant=request.tenant)``** — never ``.all()``.
 """
+from django.db.models import Count, Q
 from django.urls import reverse
 
 from apps.accounting.models import Budget
@@ -74,11 +75,10 @@ def _budget_dropdowns(request):
 def costforecast_list(request):
     """The register of frozen projections, newest as-of date first (model ordering)."""
     base = CostForecast.objects.filter(tenant=request.tenant)
-    stats = {
-        "total": base.count(),
-        "budget_scoped": base.filter(budget__isnull=False).count(),
-        "workspace_wide": base.filter(budget__isnull=True).count(),
-    }
+    # ONE conditional aggregate, not three COUNTs: workspace_wide = total - budget_scoped.
+    stats = base.aggregate(total=Count("pk"),
+                           budget_scoped=Count("pk", filter=Q(budget__isnull=False)))
+    stats["workspace_wide"] = stats["total"] - stats["budget_scoped"]
     return crud_list(
         request, _forecast_qs(request), TEMPLATE_LIST,
         search_fields=("number", "name", "assumptions"),
