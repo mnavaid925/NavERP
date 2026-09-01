@@ -227,6 +227,9 @@ def supplierinvoice_detail(request, pk):
         # Each flag mirrors the decorator on the route it gates — the sidebar must never offer a
         # button that would 403.
         "can_edit": obj.status in SupplierInvoice.EDITABLE_STATUSES,
+        # Exactly the statuses _submit() can carry to pending approval: draft/parked are captured
+        # on the way through, captured/disputed go straight.
+        "can_submit": obj.status in ("draft", "parked", "captured", "disputed"),
         "can_match": not obj.is_locked and obj.invoice_type != "credit_memo",
         "can_override": is_admin and obj.status == "blocked",
         "can_approve": is_admin and obj.status == "pending_approval",
