@@ -24,6 +24,7 @@ the last lane to merge, so those imports are guaranteed to resolve by the time i
 rather than hiding behind a fallback link (the 6.12 ``_exception_rows`` precedent).
 """
 import re
+from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -550,10 +551,23 @@ def supplierinvoice_duplicates(request):
                    .select_related(*_ROW_RELATIONS)
                    .order_by("-invoice_date", "-id")[:DUPLICATE_SCAN_LIMIT])
 
+    # TWO queries for the whole board, not 1 + DUPLICATE_SCAN_LIMIT: every peer that shares a
+    # normalised number with anything on the scan is fetched once and bucketed here, then handed
+    # to the scorer. An empty ``norms`` short-circuits in the ORM (``__in=[]`` never reaches SQL).
+    norms = {invoice.invoice_number_norm for invoice in scanned if invoice.invoice_number_norm}
+    by_norm = defaultdict(list)
+    for peer in (SupplierInvoice.objects
+                 .filter(tenant=request.tenant, invoice_number_norm__in=norms)
+                 .select_related(*_ROW_RELATIONS)
+                 .order_by("-invoice_date", "-id")):
+        by_norm[peer.invoice_number_norm].append(peer)
+
     groups = []
     for invoice in scanned:
-        candidates = [{"invoice": candidate, "reasons": reasons}
-                      for candidate, reasons in invoice.duplicate_candidates()]
+        candidates = [
+            {"invoice": candidate, "reasons": reasons}
+            for candidate, reasons in invoice.duplicate_candidates(
+                candidates=by_norm.get(invoice.invoice_number_norm, ()))]
         if candidates:
             groups.append({"invoice": invoice, "candidates": candidates,
                            "count": len(candidates)})
