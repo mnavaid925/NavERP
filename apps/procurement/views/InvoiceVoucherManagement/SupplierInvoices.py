@@ -82,11 +82,14 @@ OPEN_STATUSES = tuple(value for value, _label in SupplierInvoice.STATUS_CHOICES
                       if value not in SupplierInvoice.TERMINAL_STATUSES)
 
 #: Every hop a row (or a row's own ``__str__``) walks on the register and the detail page.
-_ROW_RELATIONS = ("vendor", "purchase_order", "currency", "payment_term")
+#: ``goods_receipt`` belongs here, not on the detail tuple: the register row renders
+#: ``obj.goods_receipt.number``, so omitting it was one extra query per GRN-bearing row — and the
+#: same tuple is reused by the dashboard's recent/blocked panels and the duplicate board.
+_ROW_RELATIONS = ("vendor", "purchase_order", "goods_receipt", "currency", "payment_term")
 
 #: Every hop the detail page walks — it renders the whole document spine plus the ledger pointers.
 _DETAIL_RELATIONS = _ROW_RELATIONS + (
-    "goods_receipt", "tax_code", "document", "bill", "journal_entry", "approved_by",
+    "tax_code", "document", "bill", "journal_entry", "approved_by",
     "duplicate_of", "source_submission", "tenant",
 )
 
