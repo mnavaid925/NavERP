@@ -48,6 +48,8 @@ from .models import (
     SpendClassificationRule,
     SpendReport,
     SpendReportSnapshot,
+    BudgetMapping,
+    CostForecast,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -751,3 +753,27 @@ class SpendReportSnapshotAdmin(admin.ModelAdmin):
     # snapshot must never be.
     readonly_fields = ("report", "title", "generated_by", "generated_at", "summary", "data",
                        "row_count")
+
+
+@admin.register(BudgetMapping)
+class BudgetMappingAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "budget", "org_unit", "project", "priority", "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("budget__name", "budget__number", "org_unit__name", "project__name", "notes")
+    raw_id_fields = ("budget", "org_unit", "project", "default_gl_account")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(CostForecast)
+class CostForecastAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "method", "budget", "horizon_months", "as_of",
+                    "forecast_amount", "created_by")
+    list_filter = ("tenant", "method")
+    search_fields = ("number", "name", "assumptions", "budget__name")
+    raw_id_fields = ("budget", "currency", "created_by")
+    # The three amounts and the author are stamped ONCE by the create view from
+    # compute_forecast_amounts — they are editable=False on the model and listed here again so
+    # the reason is visible where the form is built. A hand-typed amount would be a projection
+    # with no computation behind it.
+    readonly_fields = ("number", "committed_amount", "historical_amount", "forecast_amount",
+                       "created_by", "created_at", "updated_at")
