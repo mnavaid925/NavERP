@@ -23,7 +23,7 @@ from django.db.models import Count, F, OuterRef, Q, Subquery, Sum
 from django.urls import reverse
 
 from apps.accounting.models import Currency, PaymentTerm
-from apps.core.crud import as_db_int
+from apps.core.crud import _changed, as_db_int
 from apps.core.models import Party
 # NOT-YET-WIRED entities of this SAME sub-module: import the entity MODULE directly, never
 # ``from apps.procurement.models import X`` — the sub-package is not wired until the Integrator
@@ -209,7 +209,8 @@ def _line_form(request, invoice_pk=None, instance=None):
             obj = form.save(commit=False)
             obj.invoice = invoice
             obj.save()
-            write_audit_log(request.user, obj, "update" if is_edit else "create")
+            write_audit_log(request.user, obj, "update" if is_edit else "create",
+                            _changed(form))
             messages.success(request, f"Line saved on {invoice.number}.")
             return redirect("procurement:supplierinvoice_detail", pk=invoice.pk)
     else:
