@@ -19,7 +19,7 @@ Discipline worth recording, because a reviewer will otherwise go looking for it:
   invoice and writes nothing.
 """
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.urls import reverse
 
 from apps.core.crud import paginate
@@ -202,23 +202,30 @@ def matchvariance_accept(request, pk):
 
 # -- Match Board ---------------------------------------------------------------------------------
 
-def _board_stats(groups, today):
-    """The board's four stat cards, counted over the FILTERED set (before pagination).
+def _board_stats(rows, agg, today, tenant):
+    """The board's four stat cards, counted over the FILTERED set (before pagination) — in SQL.
 
     Unlike the register, "how many invoices are held up" is a question the filters are allowed
-    to answer — the board is a triage view (the ``payment_schedule`` precedent).
+    to answer — the board is a triage view (the ``payment_schedule`` precedent). Two queries over
+    the GROUPED set, not a Python walk of every variance in the workspace: the cards cost what
+    the cards are worth, and the page no longer has to materialise the table to count them.
     """
-    blocking = sum(1 for group in groups if group["blocking_count"])
-    warn = sum(1 for group in groups
-               if group["warn_count"] and not group["blocking_count"])
-    overdue = sum(1 for group in groups if _is_overdue(group["invoice"], today))
-    return {"invoices": len(groups), "blocking": blocking, "warn": warn, "overdue": overdue}
-
-
-def _is_overdue(invoice, today):
-    """An invoice is overdue when its due date has passed and it is not yet settled."""
-    return bool(invoice.due_date and invoice.due_date < today
-                and invoice.status not in SupplierInvoice.TERMINAL_STATUSES)
+    # The output aliases MUST differ from the annotation aliases: reusing ``blocking``/``warn``
+    # here makes Django resolve the filter against the aggregate it is defining and raise
+    # "Cannot compute Count('blocking'): 'blocking' is an aggregate".
+    summary = agg.aggregate(
+        invoice_count=Count("invoice_id"),
+        blocking_invoices=Count("invoice_id", filter=Q(blocking__gt=0)),
+        # "Warn" means warnings and nothing blocking — a card carrying both counts as blocking.
+        warn_invoices=Count("invoice_id", filter=Q(warn__gt=0, blocking=0)),
+    )
+    # An invoice is overdue when its due date has passed and it is not yet settled.
+    overdue = (SupplierInvoice.objects
+               .filter(tenant=tenant, pk__in=rows.values("invoice_id"), due_date__lt=today)
+               .exclude(status__in=SupplierInvoice.TERMINAL_STATUSES).count())
+    return {"invoices": summary["invoice_count"] or 0,
+            "blocking": summary["blocking_invoices"] or 0,
+            "warn": summary["warn_invoices"] or 0, "overdue": overdue}
 
 
 def _group(invoice, variances):
@@ -267,25 +274,37 @@ def invoice_match_board(request):
                            | Q(invoice__invoice_number__icontains=q)
                            | Q(invoice__vendor__name__icontains=q))
 
-    # Newest first WITHIN a card (the freshest run's verdict is on top); dict insertion order
-    # keeps the invoices themselves in the order the scan found them.
+    # The board's unit is the INVOICE, so the grouping AND the paging both happen in SQL: one
+    # aggregate row per invoice (no joins, no model instances), ordered oldest-exception-first,
+    # and only the page's variance rows are then fetched with their relations. Materialising the
+    # whole filtered variance queryset to render fifteen cards made this page cost what the table
+    # costs rather than what the page shows.
+    agg = (rows.values("invoice_id")
+           .annotate(oldest=Min("detected_at"),
+                     blocking=Count("id", filter=Q(outcome="block")),
+                     warn=Count("id", filter=Q(outcome="warn")))
+           .order_by("oldest", "-invoice_id"))
+
+    page_obj = paginate(request, agg, BOARD_PAGE_SIZE)
+    page_ids = [entry["invoice_id"] for entry in page_obj.object_list]
+
+    # Newest first WITHIN a card (the freshest run's verdict is on top); the cards themselves stay
+    # in ``page_ids`` order, which is the aggregate's oldest-first ordering.
     grouped = {}
-    for variance in rows.select_related(*_ROW_RELATIONS).order_by("-detected_at", "-id"):
+    for variance in (rows.filter(invoice_id__in=page_ids).select_related(*_ROW_RELATIONS)
+                     .order_by("-detected_at", "-id")):
         grouped.setdefault(variance.invoice_id, {"invoice": variance.invoice, "rows": []})
         grouped[variance.invoice_id]["rows"].append(variance)
 
-    groups = [_group(entry["invoice"], entry["rows"]) for entry in grouped.values()]
-    # Oldest exception first: the thing that has been waiting longest is the thing to work.
-    groups.sort(key=lambda group: (group["oldest_at"] is None, group["oldest_at"],
-                                   -group["invoice"].pk))
+    groups = [_group(grouped[invoice_id]["invoice"], grouped[invoice_id]["rows"])
+              for invoice_id in page_ids if invoice_id in grouped]
 
-    page_obj = paginate(request, groups, BOARD_PAGE_SIZE)
     return render(request, TEMPLATE_BOARD, {
         # ``groups`` is the page's slice: the invoice is the unit of work, so paging the cards is
         # what keeps a 400-invoice workspace from rendering in one go.
-        "groups": page_obj.object_list,
+        "groups": groups,
         "page_obj": page_obj,
-        "stats": _board_stats(groups, today),
+        "stats": _board_stats(rows, agg, today, request.tenant),
         "outcome_choices": OUTCOME_CHOICES,
         "variance_type_choices": VARIANCE_TYPE_CHOICES,
         "today": today,
