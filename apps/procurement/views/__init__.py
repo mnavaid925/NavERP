@@ -290,6 +290,7 @@ from .InvoiceVoucherManagement.SupplierInvoices import (
     supplierinvoice_revalidate,
     supplierinvoice_reverse,
     supplierinvoice_schedule,
+    supplierinvoice_submit,
     supplierinvoice_void,
 )
 from .InvoiceVoucherManagement.SupplierInvoiceLines import (
@@ -515,6 +516,7 @@ __all__ = [
     "supplierinvoice_revalidate",
     "supplierinvoice_approve", "supplierinvoice_override", "supplierinvoice_void",
     "supplierinvoice_reverse", "supplierinvoice_schedule", "supplierinvoice_mark_paid",
+    "supplierinvoice_submit",
     "invoicevoucher_dashboard",
     "supplierinvoiceline_list", "supplierinvoiceline_detail", "supplierinvoiceline_create",
     "supplierinvoiceline_edit", "supplierinvoiceline_delete", "paymentschedule_list",
