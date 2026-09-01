@@ -366,6 +366,13 @@ def paymentschedule_list(request):
         qs = qs.filter(Q(number__icontains=q) | Q(invoice_number__icontains=q)
                        | Q(vendor__name__icontains=q))
 
+    # Bound the scan to the horizon the page actually reports on. Every overdue row
+    # (due_date < today) and every bucketed row (due_date <= horizon_end) is kept; only rows the
+    # buckets would have discarded are dropped, so ``stats.invoices`` and ``discounted_total``
+    # now describe exactly what is rendered instead of the whole future payables book.
+    horizon_end = today + timedelta(days=7 * horizon_weeks - 1)
+    qs = qs.filter(due_date__lte=horizon_end)
+
     rows = list(qs)
 
     overdue = [row for row in rows if row.due_date < today]
