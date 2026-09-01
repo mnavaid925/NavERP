@@ -143,8 +143,13 @@ def test_eauction_view_list_search_status_type_filters(client_a, tenant_a):
     assert bearings.title in body and gearbox.title not in body
     body = client_a.get(url, {"auction_type": "reverse"}).content.decode()
     assert gearbox.title in body and bearings.title in body
+    # "forward" is NOT in Eauction.AUCTION_TYPES — the model ships reverse-only — so this is a junk
+    # enum, and crud_list now IGNORES an unrecognised choice rather than applying it. This asserted
+    # "No auctions yet" when it was written, which encoded the old behaviour: a value anyone can
+    # type into the address bar silently emptied the register. There is no second VALID auction_type
+    # to narrow with, so narrowing is covered by the ?status= assertions above.
     body = client_a.get(url, {"auction_type": "forward"}).content.decode()
-    assert "No auctions yet" in body
+    assert gearbox.title in body and bearings.title in body
 
 
 def test_eauction_view_register_excludes_other_tenants_rows(client_a, admin_user):
