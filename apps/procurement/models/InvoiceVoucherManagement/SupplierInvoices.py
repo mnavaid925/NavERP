@@ -1056,8 +1056,13 @@ class SupplierInvoice(TenantNumbered):
         return True
 
     def void(self, user, reason=""):
-        """Withdraw the invoice. Any non-terminal status; the reason is kept on the record."""
-        if self.is_locked:
+        """Withdraw the invoice. Any non-terminal, UNPOSTED status; the reason is kept on the record.
+
+        A posted invoice is undone by :meth:`reverse`, which mirrors the entry. Voiding one would
+        mark the document withdrawn while its ``JournalEntry`` left the GL liability standing with
+        nothing to offset it — which is what the detail page's own confirm text already promises.
+        """
+        if self.is_locked or self.journal_entry_id:
             return False
         self.status = "void"
         if reason:
