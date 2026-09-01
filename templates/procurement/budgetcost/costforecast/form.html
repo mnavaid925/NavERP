@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}New Cost Forecast{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — CostForecast create (there is NO edit page).
+    Hand-rolled view context: form, title, submit_label, cancel_url, forecast_note.
+
+    The form carries the INPUTS only: name, budget, method, horizon_months, as_of,
+    currency, assumptions. The three amount columns and created_by are system-stamped
+    between validation and save — do NOT add inputs for them. tenant and number
+    (auto FCST-#####) are likewise system-set.
+
+    Field help is keyed off field.name so it stays correct if the form order changes.
+    Each label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ title }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:costforecast_list' %}">Cost Forecasts</a><span class="sep">›</span>
+        <span>New</span>
+      </div>
+      <p class="text-muted">{{ forecast_note }}</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Inputs</h2><span class="text-muted">the amounts are computed when you save — and never recomputed after</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "name" %}
+                <div class="form-help">What this projection is for, in the words your team would use — &ldquo;Q3 ops spend, whole workspace&rdquo;.</div>
+              {% elif field.name == "budget" %}
+                <div class="form-help">Optional. When set, only spend on this budget&rsquo;s GL accounts is counted; blank projects the whole workspace.</div>
+              {% elif field.name == "method" %}
+                <div class="form-help">Open POs uses only what is already committed on open purchase orders. Run rate carries the recent invoice rate forward over the horizon. Blended averages the two. Arithmetic only — none of these is a prediction model.</div>
+              {% elif field.name == "horizon_months" %}
+                <div class="form-help">How many months ahead to project, 1&ndash;24. On the run rate and blended methods this is also the history window the rate is read from.</div>
+              {% elif field.name == "as_of" %}
+                <div class="form-help">The date the figures are computed as at. The frozen record keeps this date, so a later month can be held against exactly this position.</div>
+              {% elif field.name == "currency" %}
+                <div class="form-help">Optional label only — amounts are summed at face value and nothing is converted.</div>
+              {% elif field.name == "assumptions" %}
+                <div class="form-help">Optional, but worth writing: scope, exclusions, why this method. The next reader should not have to guess what the number assumes.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted">Saving freezes the figure: committed open orders and the recognised-invoice run rate are computed once, stamped on the record and never recomputed. If the result is wrong later, delete it and freeze a new one.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="snowflake"></i> {{ submit_label }}</button>
+      <a href="{{ cancel_url }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
