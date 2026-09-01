@@ -901,8 +901,10 @@ def invoicevoucher_dashboard(request):
          "icon": "copy", "count": None},
         {"label": "Payment schedule", "url": reverse("procurement:paymentschedule_list"),
          "icon": "calendar-clock", "count": None},
+        # ``open_rows``, not the ``open_disputes`` slice: the tile is a count of the workspace and
+        # must agree with stats.open_disputes rather than cap itself at the panel's DISPUTE_LIMIT.
         {"label": "Invoice disputes", "url": reverse("procurement:invoicedispute_list"),
-         "icon": "message-square-warning", "count": len(open_disputes)},
+         "icon": "message-square-warning", "count": len(open_rows)},
         {"label": "Dispute aging", "url": reverse("procurement:invoicedispute_aging"),
          "icon": "clock", "count": None},
     ]
@@ -922,5 +924,8 @@ def invoicevoucher_dashboard(request):
                         .order_by("-invoice_date", "-id")[:BLOCKED_LIMIT]),
         "expiring": expiring,
         "open_disputes": open_disputes,
-        "aging": aging,
+        # label/count pairs, not the raw bucket dict: the panel used to print the machine keys
+        # (`overdue`, `0-7`, `60+`, `none`) because AGING_BUCKETS' labels never left the view.
+        "aging": [{"key": key, "label": label, "count": aging.get(key, 0)}
+                  for key, label in AGING_BUCKETS],
     })
