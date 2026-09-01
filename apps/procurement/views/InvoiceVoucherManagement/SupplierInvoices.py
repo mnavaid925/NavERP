@@ -832,9 +832,16 @@ def supplierinvoice_mark_paid(request, pk):
 # -- the dashboard -----------------------------------------------------------------------------------
 
 def _discount_qs(tenant):
-    """Invoices still carrying a discount window in this workspace."""
-    return (SupplierInvoice.objects.filter(tenant=tenant, status__in=OPEN_STATUSES)
-            .exclude(discount_date=None).select_related(*_ROW_RELATIONS))
+    """Invoices still carrying an OPEN discount window in this workspace.
+
+    The closed windows are dropped in SQL rather than walked in Python: ``save()`` always writes
+    ``discount_expiry_date`` whenever ``discount_date`` is set, so this is exactly the set the
+    ``capturable`` test keeps — and it makes the ``.exclude(discount_date=None)`` redundant.
+    """
+    return (SupplierInvoice.objects
+            .filter(tenant=tenant, status__in=OPEN_STATUSES,
+                    discount_expiry_date__gte=timezone.localdate())
+            .select_related(*_ROW_RELATIONS))
 
 
 @login_required
