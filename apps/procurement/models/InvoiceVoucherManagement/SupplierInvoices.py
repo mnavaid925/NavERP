@@ -485,10 +485,17 @@ class SupplierInvoice(TenantNumbered):
         Derived, never stored: a counter drifts the first time a GRN is cancelled or an invoice is
         reversed, and the correct answer is one aggregate away. Credit memos are excluded — they
         reduce what is owed, they do not un-invoice a delivery.
+
+        Scoped to the ORDER's own workspace: this is the control that stops a supplier billing the
+        same units twice, so it must never be able to read a quantity across a tenant boundary.
+        ``cumulative_received_qty`` needs no such predicate — it reaches the receipt lines through
+        the tenant-verified order line itself.
         """
         if po_line is None:
             return ZERO
-        return (SupplierInvoiceLine.objects.filter(po_line=po_line)
+        return (SupplierInvoiceLine.objects
+                .filter(po_line=po_line,
+                        invoice__tenant_id=po_line.purchase_order.tenant_id)
                 .exclude(invoice__status__in=cls.TERMINAL_STATUSES)
                 .exclude(invoice__invoice_type="credit_memo")
                 .aggregate(s=Sum("quantity"))["s"] or ZERO)
