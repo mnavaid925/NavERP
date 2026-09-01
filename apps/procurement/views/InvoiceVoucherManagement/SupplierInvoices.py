@@ -505,10 +505,11 @@ def _capture_confirm(request, base):
     document = _capture_document(request)
     context = _extraction_context(document)
 
+    # Capture is HEADER-ONLY by design: capture.html has no lines section, so a formset here would
+    # be bound to a POST that carries no ManagementForm and could never validate — the confirm
+    # stage would silently refuse to save. Lines are keyed on the invoice itself afterwards.
     form = SupplierInvoiceForm(request.POST, tenant=request.tenant)
-    line_formset = SupplierInvoiceLineFormSet(request.POST, instance=None,
-                                              form_kwargs={"tenant": request.tenant})
-    if form.is_valid() and line_formset.is_valid():
+    if form.is_valid():
         with transaction.atomic():
             obj = form.save(commit=False)
             obj.tenant = request.tenant
@@ -518,8 +519,6 @@ def _capture_confirm(request, base):
             obj.extraction_confidence = context["confidence"]
             obj.extraction_raw_text = context["raw_text"]
             obj.save()
-            line_formset.instance = obj
-            line_formset.save()
             obj.recalc_totals(save=True)
         write_audit_log(request.user, obj, "create",
                         {"action": "capture", "source": obj.source})
