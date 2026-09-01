@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Cost Forecasts{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — CostForecast register
+    (apps/procurement/views/BudgetCostManagement/CostForecasts.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      method_choices, budgets, stats{total, budget_scoped, workspace_wide}, forecast_note.
+    The view's crud_list filter tuple is exactly (("method","method",False),
+    ("budget","budget_id",True)) with search_fields=("number","name","assumptions") —
+    so the filter bar offers exactly q, method and budget. method compares plain strings;
+    budget posts a pk and compares with |stringformat:"d" (never |slugify).
+
+    A forecast has NO edit route — it is a frozen projection, and a wrong one is deleted
+    and re-frozen (the detail page carries the delete form). Only the system-assigned
+    {{ obj.number }} (FCST-#####) reaches the confirm() handler; obj.name and
+    obj.assumptions are user-authored and never do. Literal apostrophes inside that
+    handler are escaped as \' because &#39; does not escape inside an event-handler
+    attribute.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cost Forecasts</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <span>Forecasts</span>
+      </div>
+      <p class="text-muted">{{ forecast_note }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:budget_availability' %}" class="btn btn-outline"><i data-lucide="search-check"></i> Availability check</a>
+      <a href="{% url 'procurement:costforecast_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New forecast</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Frozen forecasts</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="target"></i></div><div class="stat-value">{{ stats.budget_scoped }}</div><div class="stat-label">Scoped to a budget</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="globe"></i></div><div class="stat-value">{{ stats.workspace_wide }}</div><div class="stat-label">Workspace-wide</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search forecasts" class="form-input" placeholder="Search number, name or assumptions…">
+        </div>
+        <div class="form-group">
+          <select name="method" aria-label="Method" class="form-select">
+            <option value="">All methods</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="budget" aria-label="Budget" class="form-select">
+            <option value="">Any budget scope</option>
+            {% for b in budgets %}
+              <option value="{{ b.pk|stringformat:"d" }}" {% if request.GET.budget == b.pk|stringformat:"d" %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:costforecast_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Forecast</th>
+            <th>Method</th>
+            <th>Budget scope</th>
+            <th class="text-right">Horizon</th>
+            <th>As of</th>
+            <th class="text-right">Forecast amount</th>
+            <th>Created by</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:costforecast_detail' obj.pk %}">{{ obj.name }}</a>
+                <div class="text-muted">{{ obj.number }}</div>
+              </td>
+              <td><span class="badge {{ obj.method_css }}">{{ obj.get_method_display }}</span></td>
+              <td>{% if obj.budget %}{{ obj.budget }}{% else %}<span class="text-muted">Whole workspace</span>{% endif %}</td>
+              <td class="text-right">{{ obj.horizon_months }} mo</td>
+              <td>{{ obj.as_of|date:"M d, Y" }}</td>
+              <td class="text-right fw-600">{{ obj.forecast_amount|floatformat:2 }}</td>
+              <td>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:costforecast_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    There is no edit route — a frozen projection is deleted and re-frozen.
+                    Delete is @require_POST, so it can only be a form; only the
+                    system-assigned FCST- number reaches the confirm string.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:costforecast_delete' obj.pk %}" onsubmit="return confirm('Delete forecast {{ obj.number }}? A forecast is frozen as at its date — if it is wrong, delete it and freeze a new one. The forecast\'s record cannot be recovered.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="trending-up"></i>
+                <h3>No forecasts yet</h3>
+                <p>A forecast freezes what the next months look like — committed open orders and the recent run rate carried forward. Nothing here predicts or learns; it is arithmetic, kept so a later month can be held against it.</p>
+                <a href="{% url 'procurement:costforecast_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Freeze a forecast</a>
+                <a href="{% url 'procurement:costforecast_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
