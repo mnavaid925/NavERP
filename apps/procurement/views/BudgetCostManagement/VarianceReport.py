@@ -162,10 +162,12 @@ def _variance_rows(tenant, budget, period):
     invoiced = _grouped_pair_sum(
         inv_lines, "gl_account", "invoice__purchase_order__requisition__org_unit", "line_total")
     # The ONLY invoiced money deducted from the budget on top of commitments: invoices with no
-    # purchase order, because nothing else has committed it.
-    standalone = _grouped_pair_sum(
+    # purchase order, because nothing else has committed it. With a budget selected, inv_lines
+    # is already filtered THROUGH purchase orders, so the isnull filter below is contradictory
+    # and would scan for a structurally empty result — skip the round trip.
+    standalone = ({} if scoped else _grouped_pair_sum(
         inv_lines.filter(invoice__purchase_order__isnull=True),
-        "gl_account", "invoice__purchase_order__requisition__org_unit", "line_total")
+        "gl_account", "invoice__purchase_order__requisition__org_unit", "line_total"))
 
     keys = set(budgeted) | set(committed_po) | set(committed_pr) | set(standalone)
     if not scoped:
