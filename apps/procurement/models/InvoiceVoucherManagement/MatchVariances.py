@@ -134,6 +134,10 @@ class InvoiceMatchVariance(TenantOwned):
             models.Index(fields=["tenant", "variance_type"], name="prc_imv_tnt_type_idx"),
             # The Match Board groups by invoice, and run_match() deletes by invoice.
             models.Index(fields=["invoice"], name="prc_imv_invoice_idx"),
+            # Meta.ordering itself: this is the append-only exception ledger, rebuilt wholesale by
+            # every run_match(), and both the register and the Match Board sort on -detected_at
+            # under a tenant predicate.
+            models.Index(fields=["tenant", "-detected_at"], name="prc_imv_tnt_detected_idx"),
         ]
         verbose_name = "invoice match variance"
 
