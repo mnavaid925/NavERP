@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Budget Mappings{% endblock %}
+{% block content %}
+  {% comment %}
+    6.15 Budget & Cost Management — BudgetMapping register
+    (apps/procurement/views/BudgetCostManagement/BudgetMappings.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      stats{total, active, inactive}, budgets, org_units, projects, gl_accounts.
+    The view's crud_list filter tuple is exactly (("budget","budget_id",True),
+    ("org_unit","org_unit_id",True), ("project","project_id",True),
+    ("is_active","is_active",False)) with search_fields over budget name/number,
+    org-unit name, project name and notes — so the filter bar offers exactly q, budget,
+    org_unit, project and is_active. `gl_accounts` is NOT a filter on this view; it is
+    intentionally absent from the bar so no dead <select> posts a param the view ignores.
+    The three FK dropdowns post pks and compare with |stringformat:"d" (never |slugify);
+    is_active posts the literal strings True / False, which crud_list maps.
+
+    A mapping has NO system-assigned number (config master, not a document), so the delete
+    confirm interpolates only the SYSTEM-ASSIGNED budget number — obj.budget.name,
+    obj.dimension_label and obj.notes are user-authored and never reach a confirm() handler.
+
+    Rows link out, never restate: the budget cell is a link into accounting:budget_detail
+    (L29 — the budget belongs to Module 2), and the page actions link to the checker and
+    the variance report this register feeds.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Budget Mappings</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Budget &amp; Cost Management</span><span class="sep">›</span>
+        <span>Budget Mappings</span>
+      </div>
+      <p class="text-muted">Which accounting budget governs each department's and project's procurement spend. The amounts live in the accounting module — a mapping only points at them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:budget_availability' %}" class="btn btn-outline"><i data-lucide="search-check"></i> Availability check</a>
+      <a href="{% url 'procurement:budget_variance' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Variance report</a>
+      <a href="{% url 'procurement:budgetmapping_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New mapping</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="map"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Mappings</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pause-circle"></i></div><div class="stat-value">{{ stats.inactive }}</div><div class="stat-label">Inactive</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search mappings" class="form-input" placeholder="Search budget, department, project or notes…">
+        </div>
+        <div class="form-group">
+          <select name="budget" aria-label="Budget" class="form-select">
+            <option value="">All budgets</option>
+            {% for b in budgets %}
+              <option value="{{ b.pk|stringformat:"d" }}" {% if request.GET.budget == b.pk|stringformat:"d" %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Department" class="form-select">
+            <option value="">All departments</option>
+            {% for u in org_units %}
+              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">All projects</option>
+            {% for p in projects %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Status" class="form-select">
+            <option value="">Active and inactive</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:budgetmapping_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Budget</th>
+            <th>Governs</th>
+            <th>Default GL</th>
+            <th class="text-right">Priority</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'accounting:budget_detail' obj.budget.pk %}">{{ obj.budget }}</a>
+                {% if obj.budget.fiscal_period %}<div class="text-muted">{{ obj.budget.fiscal_period }}</div>{% endif %}
+              </td>
+              <td>
+                {{ obj.dimension_label }}
+                {% if obj.project_id and obj.org_unit_id %}<div class="text-muted">within {{ obj.org_unit.name }}</div>{% endif %}
+              </td>
+              <td>{% if obj.default_gl_account %}{{ obj.default_gl_account.code }} · {{ obj.default_gl_account.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right">{{ obj.priority }}</td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.status_label }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:budgetmapping_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:budgetmapping_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. Only the system-assigned
+                    budget number reaches the confirm string — the dimension label and notes are
+                    user-authored text and never are.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:budgetmapping_delete' obj.pk %}" onsubmit="return confirm('Delete the mapping for budget {{ obj.budget.number }}? Departments it governs fall back to the workspace default or no mapping at all.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="map"></i>
+                <h3>No budget mappings found</h3>
+                <p>Nothing matches these filters. A mapping points a department or project at an accounting budget — the amounts themselves stay in the accounting module.</p>
+                <a href="{% url 'procurement:budgetmapping_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New mapping</a>
+                <a href="{% url 'procurement:budgetmapping_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How a mapping is chosen</h2><span class="text-muted">specificity, then priority</span></div>
+    <div class="card-body">
+      <p class="text-muted">When the system needs the budget for a department or a project, the most specific active mapping wins: a project mapping beats a department mapping, which beats the workspace default (both dimensions blank). Within the same tier, the lower priority number wins and ties break on the oldest mapping. Inactive mappings are never chosen — keep one inactive rather than deleting it when a budget winds down.</p>
+    </div>
+  </div>
+{% endblock %}
