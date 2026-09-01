@@ -368,6 +368,26 @@ from .SpendAnalyticsReporting.SpendDashboards import (
     spend_export_download,
 )
 
+# 6.15 Budget & Cost Management — from the entity MODULES, same reason as 6.14 above: a view
+# the URLconf imports as ``views.<name>`` but is missing here fails the whole site at URLconf
+# import time, so the list is exhaustive.
+from .BudgetCostManagement.BudgetMappings import (
+    budgetmapping_create,
+    budgetmapping_delete,
+    budgetmapping_detail,
+    budgetmapping_edit,
+    budgetmapping_list,
+)
+from .BudgetCostManagement.BudgetChecks import budget_availability
+from .BudgetCostManagement.CommitmentRegister import commitment_register
+from .BudgetCostManagement.VarianceReport import budget_variance, budget_variance_export
+from .BudgetCostManagement.CostForecasts import (
+    costforecast_create,
+    costforecast_delete,
+    costforecast_detail,
+    costforecast_list,
+)
+
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
     "eauc_publish", "eauc_cancel", "eauc_close",
@@ -536,4 +556,9 @@ __all__ = [
     "spendreport_favorite",
     "spendreportsnapshot_detail", "spendreportsnapshot_export", "spendreportsnapshot_delete",
     "spend_dashboard", "category_spend", "spend_export", "spend_export_download",
+    "budgetmapping_list", "budgetmapping_detail", "budgetmapping_create", "budgetmapping_edit",
+    "budgetmapping_delete",
+    "budget_availability", "commitment_register",
+    "budget_variance", "budget_variance_export",
+    "costforecast_list", "costforecast_detail", "costforecast_create", "costforecast_delete",
 ]
