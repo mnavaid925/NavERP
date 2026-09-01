@@ -19,7 +19,7 @@ Discipline worth recording, because a reviewer will otherwise go looking for it:
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import F, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, F, OuterRef, Q, Subquery, Sum
 from django.urls import reverse
 
 from apps.accounting.models import Currency, PaymentTerm
@@ -75,16 +75,20 @@ def _line_stats(tenant):
     A stat card answers "how much of this invoice is matched?", which must not change because
     somebody typed a search.
     """
-    rows = SupplierInvoiceLine.objects.filter(invoice__tenant=tenant)
-    total = rows.count()
-    matched = rows.filter(matched_qty=F("quantity")).count()
-    return {
-        "lines": total,
-        "matched": matched,
-        "unmatched": total - matched,
+    # ONE aggregate, the way the other three lanes in this sub-module build their cards — three
+    # separate COUNTs over the same table is three scans for four numbers.
+    agg = SupplierInvoiceLine.objects.filter(invoice__tenant=tenant).aggregate(
+        lines=Count("id"),
+        matched=Count("id", filter=Q(matched_qty=F("quantity"))),
         # Non-PO: a line with nothing to three-way match against, i.e. the free-text spend that
         # has to be coded by hand.
-        "non_po": rows.filter(po_line=None).count(),
+        non_po=Count("id", filter=Q(po_line__isnull=True)),
+    )
+    return {
+        "lines": agg["lines"],
+        "matched": agg["matched"],
+        "unmatched": agg["lines"] - agg["matched"],
+        "non_po": agg["non_po"],
     }
 
 
