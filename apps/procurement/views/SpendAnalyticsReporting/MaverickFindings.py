@@ -195,6 +195,23 @@ def maverickfinding_list(request):
     guard = _need_tenant(request, "review maverick spend")
     if guard is not None:
         return guard
+
+    # (get_param, orm_lookup, is_int) — the int ones go through crud_list's as_db_int guard,
+    # so ?vendor=abc and ?vendor=999999999999999999999 skip the filter instead of 500ing
+    # (L11). ``addressable`` is a BooleanField, so a junk value raises ValidationError inside
+    # .filter() and crud_list skips it.
+    list_filters = [("vendor", "vendor_id", True), ("category", "category_id", True),
+                    ("org_unit", "org_unit_id", True), ("addressable", "is_addressable", False)]
+    # L11 for enums, matching spendrule_list. An unrecognised CHOICES value is a plain string, so
+    # ``.filter(reason="nope")`` neither raises nor narrows — it silently EMPTIES the register for
+    # a value anyone can type into the address bar. A hand-edited enum is junk, not a narrowing
+    # request, so it is IGNORED. crud_list reads request.GET itself, so the guard is expressed by
+    # WITHHOLDING the filter spec.
+    for param, choices in (("reason", REASON_CHOICES), ("status", STATUS_CHOICES),
+                           ("severity", SEVERITY_CHOICES)):
+        if request.GET.get(param, "").strip() in dict(choices):
+            list_filters.append((param, param, False))
+
     return crud_list(
         request,
         MaverickSpendFinding.objects.filter(tenant=request.tenant)
@@ -202,13 +219,7 @@ def maverickfinding_list(request):
         TEMPLATE_LIST,
         search_fields=["number", "detail", "vendor__name", "supplier_invoice__invoice_number",
                        "purchase_order__number"],
-        # (get_param, orm_lookup, is_int) — the int ones go through crud_list's as_db_int guard,
-        # so ?vendor=abc and ?vendor=999999999999999999999 skip the filter instead of 500ing
-        # (L11). ``addressable`` is a BooleanField, which crud_list maps from "True"/"False".
-        filters=[("reason", "reason", False), ("status", "status", False),
-                 ("severity", "severity", False), ("vendor", "vendor_id", True),
-                 ("category", "category_id", True), ("org_unit", "org_unit_id", True),
-                 ("addressable", "is_addressable", False)],
+        filters=list_filters,
         extra_context={
             "reason_choices": REASON_CHOICES,
             "status_choices": STATUS_CHOICES,
