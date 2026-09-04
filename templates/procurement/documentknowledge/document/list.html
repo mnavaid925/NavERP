@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Procurement Documents{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementDocument register
+    (apps/procurement/views/DocumentKnowledgeManagement/Documents.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      doc_type_choices, status_choices, classification_choices, expiry_choices,
+      suppliers, owners,
+      stats{total, active, expiring, expired, unapproved},
+      search_note.
+
+    The view's crud_list filter tuple is exactly (("doc_type","doc_type",False),
+    ("status","status",False), ("classification","classification",False),
+    ("supplier","supplier_id",True), ("owner","owner_id",True)); ?expiry= and ?tag= are
+    pre-narrowed in _document_qs BEFORE pagination. The bar below offers exactly q,
+    doc_type, status, classification, supplier, owner, expiry and tag — one control per
+    declared filter, so no dead <select> posts a param the view ignores.
+    The two FK dropdowns post pks and compare with |stringformat:"d" (never |slugify);
+    the CHOICES dropdowns compare the raw string.
+
+    id="search" is the anchor the "Full-Text Search & Indexing" NavERP.md bullet deep-links
+    to (navigation.LIVE_LINKS["6.19"] -> procurement:pdocument_list#search).
+    scroll-margin-top keeps the card clear of the sticky header when the fragment is jumped to.
+
+    Badges are colour-named theme.css classes only (L33): status_css and classification_css
+    come off the model, and the expiry cell is red when is_expired, amber when is_expiring,
+    muted otherwise.
+
+    Only the SYSTEM-ASSIGNED number reaches a confirm() handler — obj.title, obj.description
+    and obj.tags are user-authored and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Procurement Documents</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <span>Documents</span>
+      </div>
+      <p class="text-muted">{{ search_note }}</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        Both Runs are POST-only verbs that redirect back here. Re-index is additionally
+        tenant-admin gated in the view (PermissionDenied -> 403), so the button is hidden
+        rather than offered and refused.
+      {% endcomment %}
+      <form method="post" action="{% url 'procurement:pdocument_run_reminders' %}" onsubmit="return confirm('Raise expiry and review alerts for every document inside the reminder window? Documents that already have an open alert are skipped.');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="bell-ring"></i> Run reminders</button>
+      </form>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'procurement:pdocument_reindex' %}" onsubmit="return confirm('Re-read the approved file of every document whose search copy is empty? This is capped and safe to repeat.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Re-index</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'procurement:pdocument_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New document</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="files"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Documents</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.expiring }}</div><div class="stat-label">Expiring soon</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="calendar-x"></i></div><div class="stat-value">{{ stats.expired }}</div><div class="stat-label">Expired</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-question"></i></div><div class="stat-value">{{ stats.unapproved }}</div><div class="stat-label">No approved file</div></div>
+  </div>
+
+  <div class="card" id="search" style="scroll-margin-top:1rem;">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search documents" class="form-input" placeholder="Search number, title, description, tags or file text…">
+        </div>
+        <div class="form-group">
+          <select name="doc_type" aria-label="Document type" class="form-select">
+            <option value="">All types</option>
+            {% for value, label in doc_type_choices %}
+              <option value="{{ value }}" {% if request.GET.doc_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="classification" aria-label="Classification" class="form-select">
+            <option value="">All classifications</option>
+            {% for value, label in classification_choices %}
+              <option value="{{ value }}" {% if request.GET.classification == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">All owners</option>
+            {% for u in owners %}
+              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="expiry" aria-label="Life-cycle" class="form-select">
+            <option value="">Any life-cycle state</option>
+            {% for value, label in expiry_choices %}
+              <option value="{{ value }}" {% if request.GET.expiry == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="text" name="tag" value="{{ request.GET.tag|default:'' }}" aria-label="Tag" class="form-input" placeholder="Tag…" style="max-width:160px;">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:pdocument_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Type</th>
+            <th>Classification</th>
+            <th>Supplier</th>
+            <th>Owner</th>
+            <th>Status</th>
+            <th>Expiry</th>
+            <th class="text-right">Rev</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:pdocument_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title }}</div>
+                {% if obj.is_checked_out %}<div class="text-warn">Checked out</div>{% endif %}
+              </td>
+              <td>{{ obj.get_doc_type_display }}</td>
+              <td><span class="badge {{ obj.classification_css }}">{{ obj.get_classification_display }}</span></td>
+              <td>{% if obj.supplier %}{{ obj.supplier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                {% if obj.expires_on %}
+                  {% if obj.is_expired %}
+                    <span class="badge badge-red">Expired {{ obj.expires_on|date:"M d, Y" }}</span>
+                  {% elif obj.is_expiring %}
+                    <span class="badge badge-amber">Due {{ obj.expires_on|date:"M d, Y" }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ obj.expires_on|date:"M d, Y" }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                {% if obj.is_review_due %}<div><span class="badge badge-amber">Review due</span></div>{% endif %}
+                {% if obj.is_over_retention %}<div><span class="badge badge-slate">Past retention</span></div>{% endif %}
+              </td>
+              <td class="text-right">{% if obj.current_revision_no %}r{{ obj.current_revision_no }}{% else %}<span class="text-muted">none</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:pdocument_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:pdocument_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. The confirm is honest
+                    about what deletion does and does not do: the row and its revision rows go,
+                    the stored files under MEDIA_ROOT stay (see the WARNING in the view).
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:pdocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }} and every revision record it holds? The stored files are not reclaimed from disk here.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="files"></i>
+                <h3>No documents found</h3>
+                <p>Nothing matches these filters. A document holds the controlled record — the warranty, the certificate, the specification — and each version of the file lands on it as a revision that has to be approved before it becomes the current one.</p>
+                <a href="{% url 'procurement:pdocument_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New document</a>
+                <a href="{% url 'procurement:pdocument_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How search and expiry work here</h2><span class="text-muted">what the register can and cannot find</span></div>
+    <div class="card-body">
+      <p class="text-muted">Searching sweeps the number, title, description, tags and the text read from the document's currently approved file. Text is read from PDFs that carry a text layer and from plain-text uploads; a scanned image has no text to read, so such a document is findable by what people typed about it rather than by what is inside it. Re-index re-reads files for documents whose stored text is empty.</p>
+      <p class="text-muted">Expiring soon means the expiry date falls inside the next 30 days; Expired means it has passed; Review due means the review date has arrived. Past retention is a flag for a human to act on — nothing on this page deletes anything on a schedule, and deleting a document never reclaims its stored files from disk.</p>
+    </div>
+  </div>
+{% endblock %}
