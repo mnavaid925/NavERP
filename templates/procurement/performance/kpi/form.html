@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Supplier KPI{% else %}New Supplier KPI{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — SupplierKpi create-or-edit. ONE template for both,
+    driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj). EVERY obj.* read below is inside an is_edit branch — on create there
+    is no obj and an unguarded read is a silently blank region (L8).
+
+    The form carries the whole definition: code, name, description, category, unit, direction,
+    source, derived_metric, weight, target_value, warning_threshold, critical_threshold,
+    scoring_method, maps_to_dimension, applies_to, applies_to_tier, review_frequency,
+    industry_benchmark_value, owner, display_order, is_active, notes. tenant and number
+    (auto SKP-#####) are system-set and have no input, and so are the created/updated stamps.
+
+    Three conjunctions are enforced by the MODEL, not by anything here, and are raised together
+    so this page shows every problem at once: the band ordering must follow `direction`;
+    `derived_metric` is required for a derived KPI and must be blank for any other; and
+    `applies_to_tier` is required for a tier-scoped KPI and must be blank for an all-suppliers
+    one. The help text below explains each of them where the field renders.
+
+    Field help is keyed off field.name so it stays correct if the form order changes.
+    Each label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit KPI — {{ obj.code }}{% else %}New supplier KPI{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierkpi_list' %}">Supplier KPIs</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">A KPI is a definition, not a measurement: which number to take, which way is better, where the warning and critical lines fall, and how much it counts. The figures themselves are written onto scorecards when a period is generated.</p>
+      {% if is_edit %}
+        <p class="text-muted">Re-tuning does not rewrite history — every scorecard line already generated froze the weight, target, direction, source and unit in force at the time, so this change takes effect from the next period.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Definition</h2><span class="text-muted">what to measure, which way is better, and where the lines are</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "code" %}
+                <div class="form-help">The master identifier this KPI is rolled up by across every scorecard &mdash; e.g. OTIF-01. Unique within the workspace, and worth keeping stable: changing it later re-labels every report that quotes it.</div>
+              {% elif field.name == "name" %}
+                <div class="form-help">What a buyer would call it in a review meeting.</div>
+              {% elif field.name == "description" %}
+                <div class="form-help">Optional, but the place to settle arguments: exactly what counts, what is excluded, and over what window.</div>
+              {% elif field.name == "category" %}
+                <div class="form-help">Groups the KPI on the boards and on the category filter. It does not affect the arithmetic.</div>
+              {% elif field.name == "unit" %}
+                <div class="form-help">A label for the measured value. Nothing converts between units &mdash; a percentage and a day count are simply printed as what they are.</div>
+              {% elif field.name == "direction" %}
+                <div class="form-help">The single most important choice on this form: it is what makes a threshold mean anything. 98% on time is good and 2 days late is bad, and only this field tells the banding which way to read.</div>
+              {% elif field.name == "source" %}
+                <div class="form-help">Derived reads the transaction spine through a named resolver. 360 survey averages the submitted feedback responses against this KPI, weighted by each respondent&rsquo;s importance. Manual is typed onto the scorecard line.</div>
+              {% elif field.name == "derived_metric" %}
+                <div class="form-help">Required when the source is derived, and must be blank otherwise. The list is closed on purpose: every key here is a promise that a reviewed resolver exists for it, so a KPI can never look like it is computing something it is not.</div>
+              {% elif field.name == "weight" %}
+                <div class="form-help">How much this KPI counts, 1&ndash;100. Weights are re-weighted over the KPIs actually scored in a period, so a KPI with no data does not quietly drag the composite down.</div>
+              {% elif field.name == "target_value" %}
+                <div class="form-help">What good looks like. Optional &mdash; but linear scoring needs it, and without a target or a critical line the KPI cannot band at all.</div>
+              {% elif field.name == "warning_threshold" %}
+                <div class="form-help">The line where a supplier stops being on target. Must sit between the target and the critical line in the direction you chose above &mdash; for a higher-is-better KPI that means target &ge; warning &ge; critical.</div>
+              {% elif field.name == "critical_threshold" %}
+                <div class="form-help">The line where the number becomes a problem to act on. Crossing it is what opens improvement plans and what a band-crossing alert reports.</div>
+              {% elif field.name == "scoring_method" %}
+                <div class="form-help">Band gives 100 on target, 70 at warning, 30 at critical. Linear interpolates between the critical line and the target &mdash; and falls back to the band table when there is no usable span between them. Direct treats the measured value itself as the score, clamped to 0&ndash;100.</div>
+              {% elif field.name == "maps_to_dimension" %}
+                <div class="form-help">Which of the scorecard&rsquo;s four weighted columns this KPI rolls up into. Leave blank to measure it without feeding any of them.</div>
+              {% elif field.name == "applies_to" %}
+                <div class="form-help">All suppliers, or one tier only. Tier-scoped KPIs are how a strategic partner gets asked more than a transactional one without inventing a second catalogue.</div>
+              {% elif field.name == "applies_to_tier" %}
+                <div class="form-help">Required when the KPI applies to one tier, and must be blank when it applies to all. Matched against the supplier&rsquo;s SCM profile tier &mdash; a supplier with no profile only ever gets the all-suppliers KPIs.</div>
+              {% elif field.name == "review_frequency" %}
+                <div class="form-help">The cadence you intend to review this on. Stored only: nothing schedules off it, and scorecards are generated on demand.</div>
+              {% elif field.name == "industry_benchmark_value" %}
+                <div class="form-help">Optional, hand-entered reference figure. There is no external benchmark feed in this system &mdash; whatever you type here is what the pages will show, so note where it came from in the description.</div>
+              {% elif field.name == "owner" %}
+                <div class="form-help">The person answerable for this number when it moves. Optional, but an unowned KPI is one nobody chases.</div>
+              {% elif field.name == "display_order" %}
+                <div class="form-help">Lower numbers sort first on the catalogue and on every scorecard. 100 is the ordinary default; leave gaps so a new KPI can slot between two existing ones.</div>
+              {% elif field.name == "is_active" %}
+                <div class="form-help">Untick to retire a KPI: it stops being picked up when a period is generated, and every figure ever measured under it stays readable. This is the way to withdraw a KPI &mdash; deleting one that has been measured is refused by the database.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Optional. Worth writing when the definition exists for a reason that is not obvious from the fields alone.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create KPI{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:supplierkpi_detail' obj.pk %}{% else %}{% url 'procurement:supplierkpi_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
