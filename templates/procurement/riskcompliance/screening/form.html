@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Screening {{ obj.number }}{% else %}Record Screening{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — ComplianceScreening create-or-edit. ONE template for
+    both routes, driven by `is_edit`
+    (apps/procurement/views/RiskComplianceManagement/Screenings.py :: _screening_form).
+
+    Context contract: `form` + `is_edit` on both paths, plus `obj` on the EDIT path only —
+    the same shape crud_create / crud_edit supply, so nothing here reads a name the view does
+    not pass (L7). Every `obj.` read below therefore sits inside an `{% if is_edit %}` branch.
+
+    The form carries exactly: party, list_source, checkpoint, method, screened_on, list_as_of,
+    reference, result, match_threshold, threshold_rationale, next_rescreen_on, evidence, notes.
+
+    Everything the SYSTEM or the WORKFLOW owns has no input here and cannot be posted:
+    tenant and number (system-stamped), status (moved only by clear / escalate / block),
+    hit_count and open_hit_count (derived from the child rows), screened_by (stamped from the
+    session — a field for "who ran this check" is an attribution anybody could forge),
+    decided_by / decided_at / decision_note and suspension (stamped by the decision verbs).
+
+    `method` offers only the two methods a human can perform; the automated-feed value exists in
+    the model so a future connector writes these rows unchanged, and the form rejects it.
+
+    Field help is keyed off field.name so it stays correct if the field order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit screening — {{ obj.number }}{% else %}Record a screening{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:screening_list' %}">Screenings</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">A screening records one sanctions or denied-party lookup against one supplier: which list, at which checkpoint, and what came back. The decision about it is made afterwards, on the screening itself.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The lookup</h2><span class="text-muted">what was searched, and what it returned</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "party" %}
+                <div class="form-help">The supplier that was screened. Only parties carrying a supplier or vendor role in this workspace are offered.</div>
+              {% elif field.name == "list_source" %}
+                <div class="form-help">Which list the supplier was actually checked against. The Consolidated Screening List merges eleven US lists but excludes SAM.gov exclusions, so those are two separate entries here rather than one.</div>
+              {% elif field.name == "checkpoint" %}
+                <div class="form-help">Where in the buying lifecycle this check was run. Onboarding, pre-award, before a purchase order and before payment are the four a supplier should clear before money moves.</div>
+              {% elif field.name == "method" %}
+                <div class="form-help">How the lookup was performed. An automated list feed is not connected yet and cannot be recorded by hand.</div>
+              {% elif field.name == "screened_on" %}
+                <div class="form-help">The day the lookup was actually run.</div>
+              {% elif field.name == "list_as_of" %}
+                <div class="form-help">The data date of the list itself. A clear result is only as fresh as the list behind it, and this is the column that says how fresh that was. It cannot be later than the day it was screened.</div>
+              {% elif field.name == "reference" %}
+                <div class="form-help">The provider's own search or case id, so the lookup can be reproduced later by somebody who was not there.</div>
+              {% elif field.name == "result" %}
+                <div class="form-help">What the LOOKUP returned — not what you decided. The decision is recorded separately, by clearing, escalating or blocking the screening.</div>
+              {% elif field.name == "match_threshold" %}
+                <div class="form-help">The fuzzy-match score at or above which an entry was treated as a potential match. 85 is the usual starting point; 1 to 100 is accepted.</div>
+              {% elif field.name == "threshold_rationale" %}
+                <div class="form-help">Why that threshold. A screening standard asks for the reasoning, not just the number.</div>
+              {% elif field.name == "next_rescreen_on" %}
+                <div class="form-help">Leave blank and clearing the screening sets it a year out automatically. That date is what puts the supplier on the re-screening board instead of quietly out of scope.</div>
+              {% elif field.name == "evidence" %}
+                <div class="form-help">Optional. The saved search result or list extract this screening rests on — the artefact somebody would ask to see.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Optional. Worth writing when the circumstances of the check are not obvious from the fields alone.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Record screening{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:screening_detail' obj.pk %}{% else %}{% url 'procurement:screening_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2></div>
+    <div class="card-body">
+      <p class="text-muted">A new screening starts as <span class="badge badge-amber">Pending review</span>. Record every potential match the lookup returned as a hit against it; each one has to be adjudicated — false positive, true match, or cleared under licence, always with the reasoning — before the supplier can be cleared. Blocking records a decision here and links to the vendor suspension register, which is the only place a block is put into force.</p>
+    </div>
+  </div>
+{% endblock %}
