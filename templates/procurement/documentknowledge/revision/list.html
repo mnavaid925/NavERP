@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Document Revisions{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementDocumentRevision register
+    (apps/procurement/views/DocumentKnowledgeManagement/Revisions.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      documents, approval_choices,
+      stats{total, approved, pending},
+      revision_note.
+
+    The view's crud_list filter tuple is exactly (("document","document_id",True),
+    ("approved","is_approved",False)); the bar below offers exactly q, document and
+    approved — one control per declared filter, so no dead <select> posts a param the
+    view ignores. The document dropdown posts a pk and compares with |stringformat:"d"
+    (never |slugify); the approval dropdown posts literally "True"/"False", the two
+    strings crud_list maps to booleans — any other value is skipped rather than matched,
+    so a hand-edited URL cannot empty the register (L11).
+
+    Chain badges follow the model, not a guess: the revision the parent points at is
+    green "Current", an older approved one is amber "Superseded", an unapproved one is
+    muted "Pending". r.is_current reads through r.document, which the view's
+    select_related already fetched, so the badge costs no query per row.
+
+    WARNING: an uploaded file is LINKED, never rendered inline. Embedding stored bytes
+    in this page (an <iframe>, an <img>, an inline <svg>) is a stored-XSS surface — the
+    browser would execute whatever an uploader put in a file this workspace accepted.
+    In deployment MEDIA_ROOT must sit outside any executable path and the media response
+    must carry Content-Disposition: attachment, so a served file downloads rather than
+    runs on this origin.
+
+    Only SYSTEM-ASSIGNED values reach a confirm() handler — the document number and the
+    revision number. original_filename and change_note are user-authored and never do.
+
+    There is no Edit action on any row, and that is the design: a revision is immutable,
+    so a wrong one is superseded by the next upload rather than amended in place.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Document Revisions</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <span>Revisions</span>
+      </div>
+      <p class="text-muted">{{ revision_note }}</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        No "New revision" button here on purpose: a revision only exists ON a document, so
+        the upload is reached from that document's page, where the parent is already known
+        and its archive / checkout guards have already been applied.
+      {% endcomment %}
+      <a href="{% url 'procurement:pdocument_list' %}" class="btn btn-outline"><i data-lucide="files"></i> Documents</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Revisions</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.approved }}</div><div class="stat-label">Approved</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Awaiting approval</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search revisions" class="form-input" placeholder="Search document number, title, change note or checksum…">
+        </div>
+        <div class="form-group">
+          <select name="document" aria-label="Document" class="form-select">
+            <option value="">All documents</option>
+            {% for d in documents %}
+              <option value="{{ d.pk|stringformat:"d" }}" {% if request.GET.document == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.number }} · {{ d.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="approved" aria-label="Approval state" class="form-select">
+            <option value="">Any approval state</option>
+            {% for value, label in approval_choices %}
+              <option value="{{ value }}" {% if request.GET.approved == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:pdocrevision_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Revision</th>
+            <th>Document</th>
+            <th>File</th>
+            <th>Change note</th>
+            <th>Uploaded</th>
+            <th>Approval</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:pdocrevision_detail' r.pk %}">r{{ r.revision_no }}</a>
+                <div>
+                  {% if r.is_current %}<span class="badge badge-green">Current</span>
+                  {% elif r.is_approved %}<span class="badge badge-amber">Superseded</span>
+                  {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                <a href="{% url 'procurement:pdocument_detail' r.document.pk %}">{{ r.document.number }}</a>
+                <div class="text-muted">{{ r.document.title }}</div>
+              </td>
+              <td>
+                {% if r.file %}<a href="{{ r.file.url }}"><i data-lucide="download"></i> {{ r.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+                <div class="text-muted">{{ r.file_size|filesizeformat }}{% if r.sha256 %} · checksum {{ r.sha256|slice:":16" }}…{% endif %}</div>
+                {% if r.extraction_note %}<div class="text-warn">{{ r.extraction_note }}</div>{% endif %}
+              </td>
+              <td>{% if r.change_note %}{{ r.change_note }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {{ r.created_at|date:"M d, Y H:i" }}
+                {% if r.uploaded_by %}<div class="text-muted">{{ r.uploaded_by.get_full_name }}</div>{% endif %}
+              </td>
+              <td>
+                {% if r.is_approved %}
+                  <span class="text-ok">Approved {{ r.approved_at|date:"M d, Y" }}</span>
+                  {% if r.approved_by %}<div class="text-muted">{{ r.approved_by.get_full_name }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">Not approved</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:pdocrevision_detail' r.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Approve is tenant-admin gated in the view (PermissionDenied → 403), so the
+                    button is hidden rather than offered and refused. Delete is refused on
+                    anything approved or current, so it is offered on neither. Both conditions
+                    are re-checked in the view — the page not offering an action is UX, not the
+                    control.
+                  {% endcomment %}
+                  {% if not r.is_approved %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'procurement:pdocrevision_approve' r.pk %}" onsubmit="return confirm('Approve r{{ r.revision_no }} of {{ r.document.number }}? It becomes the current version and its text becomes what search matches.');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Approve" aria-label="Approve"><i data-lucide="check"></i></button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'procurement:pdocrevision_delete' r.pk %}" onsubmit="return confirm('Delete r{{ r.revision_no }} of {{ r.document.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="layers"></i>
+                <h3>No revisions found</h3>
+                <p>Nothing matches these filters. A revision is one version of a document's file: it is uploaded from the document's own page, lands awaiting approval, and only becomes the current version when a workspace administrator approves it.</p>
+                <a href="{% url 'procurement:pdocument_list' %}" class="btn btn-primary"><i data-lucide="files"></i> Go to documents</a>
+                <a href="{% url 'procurement:pdocrevision_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How the revision chain works</h2><span class="text-muted">why uploading is not the same as publishing</span></div>
+    <div class="card-body">
+      <p class="text-muted">Uploading a file never changes which version is current. A new revision lands awaiting approval and sits behind the current one; approving it moves the document's pointer, copies its text into what the register searches, and puts a still-draft document into force. Approval only ever moves forward — a revision at or below the current number cannot be approved, which is what keeps the chain linear.</p>
+      <p class="text-muted">Earlier approved revisions keep their approval and are marked superseded. They were approved, and the record of what was in force is not rewritten. Only an unapproved revision that the document does not point at can be deleted, and deleting it removes the record without reclaiming the stored file from disk.</p>
+      <p class="text-muted">The checksum shown against each file is taken from the bytes that arrived and recorded once. Text is read from PDFs that carry a text layer and from plain-text uploads; when a file has no text to read, the row says so rather than leaving an empty column that looks like a fault.</p>
+    </div>
+  </div>
+{% endblock %}
