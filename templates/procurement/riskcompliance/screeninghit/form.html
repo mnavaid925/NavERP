@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Hit{% else %}Add Hit{% endif %} — {{ screening.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — ScreeningHit create-or-edit. ONE template for both
+    routes, driven by `is_edit`
+    (apps/procurement/views/RiskComplianceManagement/ScreeningHits.py :: _hit_form).
+
+    Context contract: `form` + `is_edit` + `screening` on both paths, plus `obj` on the EDIT
+    path only. Every `obj.` read below therefore sits inside an `{% if is_edit %}` branch (L7).
+
+    `screening` is passed because the page cannot render its heading, its breadcrumb or its
+    cancel link without the parent — and because the parent is deliberately NOT a form field:
+    it comes from the URL and is stamped by the view. A screening pk accepted from a POST body
+    would let a crafted request file a hit against another workspace's screening.
+
+    The form carries exactly: matched_name, matched_list, match_score, match_type,
+    entry_reference, program, country, remarks. Every adjudication column is excluded —
+    disposition, its note, and the who/when stamps all belong to the adjudication verb.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit hit{% else %}Add a potential match{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:screening_list' %}">Screenings</a><span class="sep">›</span>
+        <a href="{% url 'procurement:screening_detail' screening.pk %}">{{ screening.number }}</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit hit{% else %}New hit{% endif %}</span>
+      </div>
+      <p class="text-muted">
+        Against <a href="{% url 'procurement:screening_detail' screening.pk %}">{{ screening.number }}</a> — the screening of
+        <span class="fw-600">{{ screening.party.name }}</span> against {{ screening.get_list_source_display }}, at a {{ screening.match_threshold }}% threshold.
+      </p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The list entry</h2><span class="text-muted">what came back, exactly as it came back</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "matched_name" %}
+                <div class="form-help">The name as it appears on the list entry — not the supplier's name in this workspace. The difference between the two is half of what adjudication is about.</div>
+              {% elif field.name == "matched_list" %}
+                <div class="form-help">Which list this entry actually came from. A consolidated search returns entries drawn from eleven different lists, and they do not all mean the same thing: a denied-party name is a hard stop, an Entity List name is a licence application.</div>
+              {% elif field.name == "match_score" %}
+                <div class="form-help">The score the provider returned, 0 to 100. Anything at or over this screening's {{ screening.match_threshold }}% threshold is flagged on the register.</div>
+              {% elif field.name == "match_type" %}
+                <div class="form-help">Which attribute matched. An address or tax-id match is far harder to dismiss than a common surname.</div>
+              {% elif field.name == "entry_reference" %}
+                <div class="form-help">Optional. The list's own entry id, so this exact entry can be found again.</div>
+              {% elif field.name == "program" %}
+                <div class="form-help">Optional. The sanctions programme the entry sits under.</div>
+              {% elif field.name == "country" %}
+                <div class="form-help">Optional, and more useful than it looks: adjudication asks whether the geography lines up.</div>
+              {% elif field.name == "remarks" %}
+                <div class="form-help">Optional. Anything from the entry worth keeping — aliases, dates of birth, registration numbers.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Add hit{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:screeninghit_detail' obj.pk %}{% else %}{% url 'procurement:screening_detail' screening.pk %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2></div>
+    <div class="card-body">
+      <p class="text-muted">A new hit is <span class="badge badge-red">Open</span> until somebody adjudicates it, and <span class="fw-600">{{ screening.party.name }}</span> cannot be cleared while it stays that way. Adjudicating it closes it as a false positive, a true match, or cleared under licence — always with the reasoning, which is the part a recordkeeping examination actually asks to see.</p>
+    </div>
+  </div>
+{% endblock %}
