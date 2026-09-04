@@ -1576,9 +1576,16 @@ def test_spend_snapshot_str_folds_title_and_stamp(spend_snapshot_a):
 
 
 def test_spend_snapshot_ordering_is_newest_first(tenant_a, spend_report_a, spend_snapshot_a):
+    """Newest-first, and DETERMINISTICALLY so.
+
+    ``-id`` is a tie-breaker, not decoration (migration 0023): ``generated_at`` is
+    ``auto_now_add``, so two snapshots minted in the same clock tick - a fast machine, or this
+    very test - compare equal and leave the order arbitrary. Assert the pair, or a future session
+    "simplifies" the tie-breaker away and the flake comes back.
+    """
     later = SpendReportSnapshot.objects.create(tenant=tenant_a, report=spend_report_a,
                                                title="Later run")
-    assert SpendReportSnapshot._meta.ordering == ["-generated_at"]
+    assert SpendReportSnapshot._meta.ordering == ["-generated_at", "-id"]
     assert list(SpendReportSnapshot.objects.filter(tenant=tenant_a))[0] == later
 
 
