@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Compliance Screenings{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — ComplianceScreening register
+    (apps/procurement/views/RiskComplianceManagement/Screenings.py :: screening_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      list_source_choices, checkpoint_choices, result_choices, status_choices,
+      parties, stats{pending, open_hits, blocked, rescreen_due}, is_admin, retention_note.
+
+    crud_list renders `object_list` — never `objects` (L7/L8: a mismatched name renders a
+    silently blank region and still returns 200).
+
+    The view's filter tuple is exactly (("party","party_id",True),
+    ("list_source","list_source",False), ("checkpoint","checkpoint",False),
+    ("result","result",False), ("status","status",False)), so the bar offers exactly q, party,
+    list_source, checkpoint, result and status — no dead <select> posting a param the view
+    ignores. The FK dropdown compares with |stringformat:"d", never |slugify; the four enum
+    dropdowns compare against the raw choice value.
+
+    Two verdict columns on purpose: Result is what the LOOKUP returned, Status is what a HUMAN
+    decided. They are different questions and the register shows both.
+
+    Only the SYSTEM-ASSIGNED number reaches a confirm() string — the supplier name, the
+    reference and the notes are user-authored and never do (L42). Apostrophes in confirm copy
+    would have to be written \' , so the copy avoids them entirely.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Compliance Screenings</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Screenings</span>
+      </div>
+      <p class="text-muted">Every sanctions and denied-party lookup run against a supplier, what came back, and what a human decided about it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:screeninghit_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Hit queue</a>
+      <a href="{% url 'procurement:screening_rescreen_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Re-screening due</a>
+      <a href="{% url 'procurement:screening_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record screening</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending review</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.open_hits }}</div><div class="stat-label">Unadjudicated hits</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="ban"></i></div><div class="stat-value">{{ stats.blocked }}</div><div class="stat-label">Blocked</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.rescreen_due }}</div><div class="stat-label">Re-screen due</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search screenings" class="form-input" placeholder="Search number, supplier, reference or notes…">
+        </div>
+        <div class="form-group">
+          <select name="party" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for p in parties %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="list_source" aria-label="List" class="form-select">
+            <option value="">All lists</option>
+            {% for value, label in list_source_choices %}
+              <option value="{{ value }}" {% if request.GET.list_source == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="checkpoint" aria-label="Checkpoint" class="form-select">
+            <option value="">All checkpoints</option>
+            {% for value, label in checkpoint_choices %}
+              <option value="{{ value }}" {% if request.GET.checkpoint == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="result" aria-label="Lookup result" class="form-select">
+            <option value="">Any result</option>
+            {% for value, label in result_choices %}
+              <option value="{{ value }}" {% if request.GET.result == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Decision" class="form-select">
+            <option value="">Any decision</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Screening</th>
+            <th>Supplier</th>
+            <th>List &amp; checkpoint</th>
+            <th>Screened</th>
+            <th>Result</th>
+            <th class="text-right">Hits</th>
+            <th>Decision</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:screening_detail' obj.pk %}">{{ obj.number }}</a>
+                {% if obj.reference %}<div class="text-muted">Ref {{ obj.reference }}</div>{% endif %}
+              </td>
+              <td><a href="{% url 'core:party_detail' obj.party.pk %}">{{ obj.party.name }}</a></td>
+              <td>
+                {{ obj.get_list_source_display }}
+                <div class="text-muted">{{ obj.get_checkpoint_display }} · {{ obj.get_method_display }}</div>
+              </td>
+              <td>
+                {{ obj.screened_on|date:"M d, Y" }}
+                {% if obj.next_rescreen_on %}<div class="text-muted">Re-screen {{ obj.next_rescreen_on|date:"M d, Y" }}</div>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.result_css }}">{{ obj.get_result_display }}</span></td>
+              <td class="text-right">
+                {{ obj.hit_count }}
+                {% if obj.open_hit_count %}<div class="text-danger">{{ obj.open_hit_count }} open</div>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:screening_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete disappear once the screening is decided, because both views
+                    refuse a terminal row — a hidden button and a refused POST always agree.
+                    Delete is additionally admin-gated, matching @tenant_admin_required.
+                  {% endcomment %}
+                  {% if not obj.is_terminal %}
+                    <a href="{% url 'procurement:screening_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% if is_admin %}
+                      <form method="post" action="{% url 'procurement:screening_delete' obj.pk %}" onsubmit="return confirm('Delete screening {{ obj.number }}? The proof that this check was ever performed goes with it.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="shield-check"></i>
+                <h3>No screenings found</h3>
+                <p>Nothing matches these filters. A screening records one sanctions or denied-party lookup against one supplier, together with every potential match it returned.</p>
+                <a href="{% url 'procurement:screening_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record screening</a>
+                <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How a screening is decided</h2><span class="text-muted">detection suggests, a human decides</span></div>
+    <div class="card-body">
+      <p class="text-muted">Every potential match must be adjudicated before a supplier can be cleared — a screening with an open hit cannot be closed, whatever the counter on this page says. Blocking a supplier records the decision here and links to the vendor suspension register, which is the only place a block is actually put into force. There is no un-clear and no re-open: a correction is a new screening.</p>
+      <p class="text-muted">{{ retention_note }}</p>
+    </div>
+  </div>
+{% endblock %}
