@@ -1596,6 +1596,1105 @@ import in `views/BudgetCostManagement/CostForecasts.py`. Review wave findings la
 `.claude/tasks/review-procurement-6.15.md`; tests in `tests/test_budgetcost_*.py`.
 
 ---
+# Sub-module 6.17 - Risk & Compliance Management (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.17.md  (2026-09-05)
+
+Sub-package `RiskComplianceManagement/` in all four backend layers; templates
+`templates/procurement/riskcompliance/`. Subslug for tests/helpers: **`riskcompliance`**.
+
+## Scope decision (FROZEN - do not re-litigate)
+
+Five NavERP.md bullets, five destinations, **5 primary models + 2 children = 7 tables**. This is
+one over the todo agent's usual 1-4 ceiling and the overage is deliberate and bounded:
+
+- [ ] Adopt research §5.1-§5.5 in full. Each bullet needs its own record; merging any two would
+      make a bullet land on a page that does not answer it (L30).
+- [ ] **`AuditSeal` (Entity 5) is built LAST and is the one CUTTABLE item.** Bullet 3's page
+      (`audit_trail`, a filtered/exportable register over `core.AuditLog` with **no table**) ships
+      regardless and is what `LIVE_LINKS["6.17"]` points at. If the pass overruns, move `AuditSeal`
+      to Later passes, delete its LIVE-LINK-independent routes, and ship bullet 3 as the register
+      alone - the page then states plainly that sealing is not yet available.
+- [ ] `screening_batch` (research 1.10) and the two P2 fraud rules (`po_escalation`,
+      `round_amount`) are the other two cut lines - see Later passes for why.
+- [ ] **Nothing merged, nothing trimmed from the four core models.** No reason found to deviate.
+
+## Spine: grep-verified this pass (L28 - the grep is the truth, not the ERD)
+
+Every FK below was re-confirmed with `grep -rn "^class <Name>" apps/*/models/` on 2026-09-05:
+
+| Target | Verified at | 6.17 uses it for |
+|---|---|---|
+| `core.Party` | `apps/core/models/Party.py:5` - `tenant, kind, name, tax_id, created_at` | screened supplier, risk-signal subject, fraud vendor/related party |
+| `core.PartyRole` | `apps/core/models/PartyRole.py:5` - `tenant, party, role, status, start_date`, `unique_together (party, role)` | who is a vendor vs an employee in fraud rules R1/R3 |
+| `core.Address` | `apps/core/models/Address.py:5` - **has its own `tenant`**, `party, kind, line1, city, country` | R1/R3 address overlap join |
+| `core.ContactMethod` | `apps/core/models/ContactMethod.py:5` - **has its own `tenant`**, `party, kind, value` | R1 contact overlap join |
+| `core.Employment` | `apps/core/models/Employment.py:5` - `tenant, party, org_unit, manager, job_title, hired_on, status(active/on_leave/terminated)` | resolving a policy's `applicable_org_unit` audience |
+| `core.OrgUnit`, `core.Tenant`, `core.Document` | `OrgUnit.py:5`, `Tenant.py:5`, `Document.py:5` (`tenant, content_type, object_id, file, name, classification, version, uploaded_at`) | policy scope; evidence attachments |
+| `core.AuditLog` | `apps/core/models/AuditLog.py:5` - `tenant, user, content_type, object_id, target, action(create/update/delete), changes(JSON), at(auto_now_add)`, `ordering ["-at"]`, `Index(tenant, at)` | the audit trail page + the seal's hash input. **ZERO `core` migrations - do not add columns here** |
+| `scm.PurchaseRequisition` | `apps/scm/models/ProcurementManagement/PurchaseRequisitions.py:14` - `title, requester(User), org_unit, status, estimated_total(derived)`, `APPROVAL_TIERS` | fraud R2 self-approval |
+| `scm.PurchaseOrder` | `apps/scm/models/ProcurementManagement/PurchaseOrders.py:15` - `vendor(core.Party), requisition, order_date(NULLABLE), status, total(derived, editable=False)` | fraud R4/R5 |
+| `accounting.VendorProfile` | `apps/accounting/models/AccountsPayable/VendorProfiles.py:5` | **NO bank fields** - see the R4.9 gap below |
+| `procurement.VendorSuspension` | `apps/procurement/models/VendorManagement/VendorSuspensions.py:27` [VSU-] - `supplier(core.Party), kind, reason_category, status(requested/active/rejected/lifted), starts_on, ends_on`, `blocking_for(tenant, supplier_id, today=None)`; routes `procurement:vsu_list / vsu_create / vsu_detail` | the escalation target. **Never build a second block flag** |
+| `procurement.RequisitionApproval` | `apps/procurement/models/ApprovalWorkflowEngine/Approvals.py:19` [RQA-] - `requisition, tier, tier_count, decision, approver(User), via_delegation, comment, decided_at` | fraud R2 - read-only |
+| `procurement.ProcurementAlert` | `apps/procurement/models/DashboardPortal/ProcurementAlerts.py:26` - `kind(deadline/approval/delivery/task/contract), severity(info/warning/critical), status(open/acknowledged/resolved), title, message, link_url(internal-path-only, XSS-guarded in clean()), due_at, assigned_to`, `OPEN_STATUSES` | the ONLY notification channel. No second alert table |
+| `procurement.SupplierInvoice` | `apps/procurement/models/InvoiceVoucherManagement/SupplierInvoices.py:135` - `vendor, purchase_order, goods_receipt, invoice_type, invoice_number, invoice_number_norm, invoice_date, total(editable=False), status, duplicate_of, match_status` | fraud R4/R6; the duplicate panel CITES 6.13 |
+| `procurement.MaverickSpendFinding` | `apps/procurement/models/SpendAnalyticsReporting/MaverickFindings.py:132` [MSF-] - `scan(tenant,start,end,reasons,user)`, `build_dedupe_key()`, `_existing_by_key()`, `_upsert()`, `_scan_context()`, `SCAN_LINE_LIMIT=20000`, `_DEDUPE_LOOKUP_CHUNK=1000`, module constants `RECOGNISED_INVOICE_STATUSES=("approved","scheduled","paid")` and `SPEND_PO_STATUSES=("approved","sent","acknowledged","partially_received","received","closed")` | **READ THIS FILE BEFORE WRITING `FraudAlert`.** Copy the scan/dedupe SHAPE, never a reason |
+| `apps/procurement/models/_base.py` | `TenantOwned` (tenant FK `related_name="+"`, `created_at`, `updated_at`), `TenantNumbered` (`NUMBER_PREFIX`, `number` CharField(20, editable=False), retry-on-collision `save()` via `apps.core.utils.next_number`), `ZERO`, `q2`, `MAX_Q2` | every 6.17 model's base |
+| `apps/procurement/views/_helpers.py` | `procurement_activity_qs(tenant)` (AuditLog filtered `app_label="procurement"` OR `app_label="scm" AND model IN PROCUREMENT_CONTENT_MODELS`), `ACTIVITY_FEED_NOTE`, `csv_safe(value)`, `_CSV_DANGEROUS = ("=","+","-","@","\t","\r")` | the audit trail page + every CSV cell |
+
+- [ ] **`PROCUREMENT_CONTENT_MODELS` needs NO edit for 6.17** - that tuple whitelists `scm` model
+      names only; 6.17's own rows arrive through the `app_label="procurement"` leg already. Confirm
+      by rendering `audit_trail` after seeding and seeing a `compliancescreening` row.
+- [ ] **NOT BUILDABLE - state it, do not fake it (research 3-R4.9):** the "vendor bank-detail
+      change" fraud rule. `accounting.VendorProfile` has no bank fields and
+      `accounting.BankAccount` is the **tenant's own** account (no party FK). The fraud scan page
+      carries a one-line note naming the gap so an auditor sees the control is absent by DATA, not
+      by oversight. It goes to Later passes as an `apps/accounting` build.
+- [ ] **Already built elsewhere - CITE, never re-detect:** duplicate invoice / duplicate payment is
+      6.13 (`SupplierInvoice.duplicate_of`, `match_status="duplicate_suspect"`,
+      `InvoiceMatchVariance` type `duplicate`). The fraud board renders a count + a link to the
+      6.13 register. **Pin the exact GET param from
+      `apps/procurement/views/InvoiceVoucherManagement/SupplierInvoices.py` at build time.**
+- [ ] **6.17 posts NOTHING to `apps.accounting`** (L29) and writes NOTHING to the spine: no
+      auto-suspension, no invoice block, no PO hold. Detection suggests; a human decides
+      (SAP BIS "park, don't block"). State it in every module docstring.
+
+---
+
+## Entity 1 - `ComplianceScreening` [SCR-] + `ScreeningHit` -- **bullet 1 Regulatory Compliance Checks**
+`apps/procurement/models/RiskComplianceManagement/Screenings.py`
+
+### CHOICES (exact value/label pairs)
+- [ ] `LIST_SOURCE_CHOICES` (module-level, shared with `ScreeningHit.matched_list`) -
+      `("ofac_sdn","OFAC - Specially Designated Nationals (SDN)")`,
+      `("ofac_other","OFAC - other lists (SSI / FSE / PLC / CAP)")`,
+      `("bis_dpl","BIS - Denied Persons List")`, `("bis_entity","BIS - Entity List")`,
+      `("bis_uvl","BIS - Unverified List")`, `("state_isn","State - ISN sanctions")`,
+      `("state_debarred","State - AECA/ITAR debarred parties")`,
+      `("csl_consolidated","ITA Consolidated Screening List (CSL)")`,
+      `("sam_exclusions","SAM.gov Exclusions (federal debarment)")`,
+      `("eu_consolidated","EU consolidated sanctions list")`,
+      `("un_consolidated","UN consolidated sanctions list")`,
+      `("internal_watchlist","Internal watchlist")`, `("other","Other list")`
+      *(driver: research 1.3 + §2.2 - CSL consolidates 11 lists and deliberately EXCLUDES SAM.gov,
+      so both are separate values.)*
+- [ ] `CHECKPOINT_CHOICES` - `("onboarding","Supplier onboarding")`,
+      `("pre_award","Pre-award / before contract")`, `("pre_po","Before raising a purchase order")`,
+      `("pre_payment","Before payment")`, `("periodic","Periodic re-screen")`, `("ad_hoc","Ad hoc")`
+      *(driver: 1.4 - sanctions.io's four minimum checkpoints.)*
+- [ ] `METHOD_CHOICES` - `("manual_lookup","Manual lookup on the official search page")`,
+      `("file_upload","List file / CSV compared offline")`,
+      `("api_feed","Automated list feed (not yet connected)")`
+      plus `SELECTABLE_METHODS = ("manual_lookup", "file_upload")`.
+      **`api_feed` is in the vocabulary but NOT offered by the form** - the form's method field is
+      built from `SELECTABLE_METHODS` so a future connector writes the same rows with no migration
+      (research §5.6). `clean()` rejects `api_feed` from a hand-crafted POST.
+- [ ] `RESULT_CHOICES` - `("clear","Clear - no potential match")`,
+      `("potential_match","Potential match(es) returned")`, `("confirmed_match","Confirmed match")`,
+      `("error","Lookup failed / not completed")` *(what the LOOKUP returned)*
+- [ ] `STATUS_CHOICES` - `("pending_review","Pending review")`, `("cleared","Cleared")`,
+      `("escalated","Escalated")`, `("blocked","Blocked")` *(what a HUMAN decided)*;
+      `OPEN_STATUSES = ("pending_review","escalated")`,
+      `TERMINAL_STATUSES = ("cleared","blocked")`
+- [ ] `STATUS_CSS = {"pending_review":"badge-amber","cleared":"badge-green","escalated":"badge-red","blocked":"badge-red"}`;
+      `RESULT_CSS = {"clear":"badge-green","potential_match":"badge-amber","confirmed_match":"badge-red","error":"badge-muted"}`
+      **L33: only `badge-green/red/amber/info/muted/slate` exist in theme.css.**
+- [ ] Class constants: `RETENTION_YEARS = 10` (OFAC 31 CFR 501.601),
+      `DEFAULT_MATCH_THRESHOLD = 85`, `DEFAULT_RESCREEN_DAYS = 365`,
+      `BATCH_PARTY_LIMIT = 500`, and `RETENTION_NOTE` (one string, rendered on list + detail).
+
+### `ComplianceScreening(TenantNumbered)` - `NUMBER_PREFIX = "SCR"`
+- [ ] `party` FK `"core.Party"` PROTECT, `related_name="procurement_screenings"` - the screened supplier
+- [ ] `list_source` CharField(max_length=20, choices=LIST_SOURCE_CHOICES, default="csl_consolidated")
+- [ ] `checkpoint` CharField(max_length=16, choices=CHECKPOINT_CHOICES, default="onboarding")
+- [ ] `method` CharField(max_length=16, choices=METHOD_CHOICES, default="manual_lookup")
+- [ ] `screened_on` DateField(default=timezone.localdate)
+- [ ] `list_as_of` DateField(null=True, blank=True) - the DATA date of the list screened against *(driver: 1.3, 2.12 "every compliance artefact needs a valid-until")*
+- [ ] `reference` CharField(max_length=120, blank=True) - the provider's search / case id *(driver: 1.9, §5.6 - so a connector can back-fill it)*
+- [ ] `result` CharField(max_length=16, choices=RESULT_CHOICES, default="clear")
+- [ ] `status` CharField(max_length=16, choices=STATUS_CHOICES, default="pending_review", **editable=False**)
+- [ ] `match_threshold` PositiveSmallIntegerField(default=85, validators=[MinValueValidator(1), MaxValueValidator(100)]) *(driver: 1.7 / §2.3 - OFAC's own tool exposes a score and expects you to pick a threshold)*
+- [ ] `threshold_rationale` CharField(max_length=255, blank=True) *(driver: §2.3 - "document the rationale for the threshold chosen")*
+- [ ] `hit_count` PositiveSmallIntegerField(default=0, **editable=False**) - **DERIVED**
+- [ ] `open_hit_count` PositiveSmallIntegerField(default=0, **editable=False**) - **DERIVED**
+- [ ] `next_rescreen_on` DateField(null=True, blank=True) *(driver: 1.6 - Descartes dynamic re-screening)*
+- [ ] `evidence` FK `"core.Document"` SET_NULL null blank, `related_name="procurement_screenings"` *(driver: 1.9)*
+- [ ] `suspension` FK `"procurement.VendorSuspension"` SET_NULL null blank **editable=False**, `related_name="screenings"` - stamped by `block()` *(driver: 1.8 - reuse 6.4, never a second block flag)*
+- [ ] `screened_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_screenings_run"`
+- [ ] `decided_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_screenings_decided"`
+- [ ] `decided_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `decision_note` TextField(blank=True, **editable=False**)
+- [ ] `notes` TextField(blank=True)
+- [ ] `Meta`: `ordering = ["-screened_on", "-id"]`; `unique_together = (("tenant","number"),)`;
+      indexes `(tenant,status)` **`prc_scr_tnt_status_idx`**, `(tenant,party)` **`prc_scr_tnt_party_idx`**,
+      `(tenant,screened_on)` **`prc_scr_tnt_screened_idx`**, `(tenant,next_rescreen_on)` **`prc_scr_tnt_rescreen_idx`**,
+      `(tenant,result)` **`prc_scr_tnt_result_idx`**
+- [ ] `__str__` -> `f"{self.number or 'SCR'} · {self.party} · {self.get_list_source_display()}"`
+- [ ] `save()` - inherited `TenantNumbered.save()` only; **no derivation in `save()`** (the counters
+      are recomputed by `recount_hits()`, called from the hit views, so a plain `.save()` in a test
+      or seeder has no hidden side effect).
+
+### `ScreeningHit(models.Model)` - **tenant-LESS child** (`scm.ComplianceCheck` / `AsnLine` precedent)
+Resolved everywhere as `get_object_or_404(ScreeningHit, pk=pk, screening__tenant=request.tenant)`.
+- [ ] `DISPOSITION_CHOICES` - `("open","Open - not yet adjudicated")`,
+      `("false_positive","False positive")`, `("true_match","True match")`,
+      `("cleared_with_licence","Cleared under licence / authorisation")`;
+      `TERMINAL_DISPOSITIONS = ("false_positive","true_match","cleared_with_licence")`
+      *(driver: 1.2 + §2.3 - SDN is a hard stop, Entity List is a licence application, UVL is a
+      red flag to resolve, so "cleared with licence" is a real third outcome.)*
+- [ ] `DISPOSITION_CSS = {"open":"badge-red","false_positive":"badge-green","true_match":"badge-red","cleared_with_licence":"badge-info"}`
+- [ ] `MATCH_TYPE_CHOICES` - `("name","Name")`, `("alias","Alias / AKA")`, `("address","Address")`,
+      `("tax_id","Tax / registration ID")`, `("other","Other")`
+- [ ] `screening` FK `"procurement.ComplianceScreening"` CASCADE, `related_name="hits"`
+- [ ] `matched_name` CharField(max_length=255)
+- [ ] `matched_list` CharField(max_length=20, choices=LIST_SOURCE_CHOICES) - a CSL search returns entries from 11 different lists, so the hit carries its own
+- [ ] `match_score` PositiveSmallIntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)]) *(driver: 1.7)*
+- [ ] `match_type` CharField(max_length=12, choices=MATCH_TYPE_CHOICES, default="name")
+- [ ] `entry_reference` CharField(max_length=120, blank=True) - the list's own entry id
+- [ ] `program` CharField(max_length=120, blank=True) - the sanctions programme
+- [ ] `country` CharField(max_length=120, blank=True) *(driver: §2.3 - adjudication asks "does the geography line up?")*
+- [ ] `remarks` TextField(blank=True)
+- [ ] `disposition` CharField(max_length=24, choices=DISPOSITION_CHOICES, default="open", **editable=False**)
+- [ ] `disposition_note` TextField(blank=True, **editable=False**)
+- [ ] `disposed_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_screening_hits_disposed"`
+- [ ] `disposed_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `created_at` DateTimeField(auto_now_add=True)
+- [ ] `Meta`: `ordering = ["-match_score", "id"]`; index `(screening, disposition)` **`prc_schit_scr_disp_idx`**
+- [ ] `__str__` -> `f"{self.matched_name} ({self.match_score}%)"`
+- [ ] `clean()` - `matched_name` required; `match_score` 0-100 (validators); no cross-tenant check
+      needed (the parent FK IS the scope), but the VIEW must still resolve via `screening__tenant`.
+
+---
+
+## Entity 2 - `SupplierRiskSignal` [SRS-] -- **bullet 2 Supplier Financial Risk Monitoring**
+`apps/procurement/models/RiskComplianceManagement/RiskSignals.py`
+
+### CHOICES + the scale table (the point of the whole model)
+- [ ] `PROVIDER_CHOICES` - `("dnb","Dun & Bradstreet")`, `("rapidratings","RapidRatings")`,
+      `("creditsafe","Creditsafe")`, `("experian","Experian")`, `("coface","Coface")`,
+      `("ecovadis","EcoVadis")`, `("bitsight","BitSight")`, `("internal","Internal assessment")`,
+      `("other","Other provider")` -- max_length=16 *(driver: 2.2; BitSight/EcoVadis reserved so a
+      later connector needs no migration, research §7.11)*
+- [ ] `METRIC_CHOICES` - max_length=20:
+      `("fhr","RapidRatings FHR (1-100, higher is healthier)")`,
+      `("ser_rating","D&B Supplier Evaluation Risk (1-9, higher is riskier)")`,
+      `("paydex","D&B PAYDEX (1-100, higher is prompter)")`,
+      `("failure_score","D&B Failure / Insolvency score")`,
+      `("credit_score","Credit score (1-100)")`, `("credit_rating","Credit rating notch (1-21)")`,
+      `("altman_z","Altman Z-score")`, `("dso_days","Days sales outstanding")`,
+      `("days_beyond_terms","Days beyond terms")`, `("current_ratio","Current ratio")`,
+      `("esg_rating","ESG / sustainability rating")`, `("cyber_rating","Cyber security rating")`,
+      `("other","Other metric")`
+- [ ] **`METRIC_SCALES`** - `{metric: (scale_min, scale_max, higher_is_better)}` as `Decimal`s.
+      **This is the single most important constant in the sub-module** (research 2.8: "a single
+      'risk score' column without provider+metric is a lie" - FHR 100 = good, SER 9 = bad):
+      `fhr (1,100,True)`, `ser_rating (1,9,False)`, `paydex (1,100,True)`,
+      `failure_score (1,100,True)`, `credit_score (1,100,True)`, `credit_rating (1,21,True)`,
+      `altman_z (-5,10,True)`, `dso_days (0,180,False)`, `days_beyond_terms (0,120,False)`,
+      `current_ratio (0,5,True)`, `esg_rating (0,100,True)`, `cyber_rating (250,900,True)`,
+      `other (None,None,True)`.
+- [ ] `BAND_CHOICES` - `("low","Low")`, `("watch","Watch")`, `("elevated","Elevated")`,
+      `("critical","Critical")`, `("unrated","Not banded")` -- max_length=12
+      *(driver: 2.3 - JAGGAER's yellow/amber/red escalation ladder; `unrated` is the honest answer
+      for `metric="other"`, which has no registered scale.)*
+- [ ] `BAND_CSS = {"low":"badge-green","watch":"badge-info","elevated":"badge-amber","critical":"badge-red","unrated":"badge-muted"}`
+- [ ] `BAND_THRESHOLDS = ((Decimal("25"),"low"), (Decimal("50"),"watch"), (Decimal("75"),"elevated"))`, above 75 -> `"critical"` (on the 0-100 **risk position**, 0 = safest)
+- [ ] `TREND_CHOICES` - `("new","First observation")`, `("improved","Improved")`,
+      `("stable","Stable")`, `("deteriorated","Deteriorated")` -- max_length=14;
+      `TREND_CSS = {"new":"badge-slate","improved":"badge-green","stable":"badge-muted","deteriorated":"badge-red"}`
+- [ ] `REVIEW_STATUS_CHOICES` - `("new","New")`, `("reviewed","Reviewed")`, `("actioned","Actioned")`,
+      `("dismissed","Dismissed")` -- max_length=12;
+      `REVIEW_CSS = {"new":"badge-red","reviewed":"badge-amber","actioned":"badge-green","dismissed":"badge-muted"}`
+- [ ] `MINIMUM_ACCEPTABLE = {"ser_rating": Decimal("5"), "fhr": Decimal("40")}` *(driver: 2.7 - D&B
+      buyers impose a minimum SER; RapidRatings' 40 line. **ADVISORY ONLY** - it colours a badge,
+      it never blocks, exactly the `ReceiptTolerancePolicy` posture.)*
+- [ ] `TREND_EPSILON = Decimal("0.50")`, `STALE_AFTER_DAYS = 180`, `SERIES_LIMIT = 12`,
+      `ALERT_BANDS = ("elevated", "critical")`
+
+### `SupplierRiskSignal(TenantNumbered)` - `NUMBER_PREFIX = "SRS"`
+- [ ] `party` FK `"core.Party"` PROTECT, `related_name="procurement_risk_signals"`
+- [ ] `provider` CharField(max_length=16, choices=PROVIDER_CHOICES, default="internal")
+- [ ] `metric` CharField(max_length=20, choices=METRIC_CHOICES, default="other")
+- [ ] `observed_on` DateField(default=timezone.localdate) - the date the PROVIDER measured it, not the capture date
+- [ ] `value` DecimalField(max_digits=12, decimal_places=2)
+- [ ] `scale_min` DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, **editable=False**) - **DERIVED** from `METRIC_SCALES`
+- [ ] `scale_max` DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, **editable=False**) - **DERIVED**
+- [ ] `higher_is_better` BooleanField(default=True, **editable=False**) - **DERIVED**
+- [ ] `risk_position` DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, **editable=False**) - **DERIVED** 0.00-100.00, 0 = safest
+- [ ] `band` CharField(max_length=12, choices=BAND_CHOICES, default="unrated", **editable=False**) - **DERIVED**
+- [ ] `previous_value` DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, **editable=False**) - **DERIVED**
+- [ ] `trend` CharField(max_length=14, choices=TREND_CHOICES, default="new", **editable=False**) - **DERIVED** *(driver: 2.4 - "derived, not typed")*
+- [ ] `review_status` CharField(max_length=12, choices=REVIEW_STATUS_CHOICES, default="new", **editable=False**) - moved by verbs only
+- [ ] `review_note` TextField(blank=True, **editable=False**)
+- [ ] `reviewed_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_risk_signals_reviewed"`
+- [ ] `reviewed_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `next_refresh_on` DateField(null=True, blank=True) *(driver: 2.6)*
+- [ ] `source_ref` CharField(max_length=160, blank=True) - the report reference. **Rendered as TEXT, never as an `href`** (the `ProcurementAlert.link_url` lesson: staff-authored strings do not become links) *(driver: 2.8)*
+- [ ] `evidence` FK `"core.Document"` SET_NULL null blank, `related_name="procurement_risk_signals"` *(driver: 2.8)*
+- [ ] `captured_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_risk_signals_captured"` *(driver: §5.6 honesty - every row states who captured it)*
+- [ ] `alert` FK `"procurement.ProcurementAlert"` SET_NULL null blank **editable=False**, `related_name="risk_signals"` - stamped when deterioration raised one *(driver: 2.5)*
+- [ ] `notes` TextField(blank=True)
+- [ ] `Meta`: `ordering = ["-observed_on","-id"]`; `unique_together = (("tenant","number"),)`;
+      indexes `(tenant,party,observed_on)` **`prc_srs_tnt_party_obs_idx`**,
+      `(tenant,band)` **`prc_srs_tnt_band_idx`**, `(tenant,review_status)` **`prc_srs_tnt_review_idx`**,
+      `(tenant,next_refresh_on)` **`prc_srs_tnt_refresh_idx`**,
+      `(tenant,party,provider,metric,observed_on)` **`prc_srs_series_idx`** (backs the prior-row lookup AND the detail series)
+- [ ] `__str__` -> `f"{self.number or 'SRS'} · {self.party} · {self.get_metric_display()} {self.value}"`
+
+---
+
+## Entity 3 - `FraudAlert` [FRD-] -- **bullet 4 Fraud Detection Rules**
+`apps/procurement/models/RiskComplianceManagement/FraudAlerts.py`
+
+- [ ] **Read `apps/procurement/models/SpendAnalyticsReporting/MaverickFindings.py` end-to-end first.**
+      Copy `build_dedupe_key` / `_existing_by_key` / `_upsert` / `_scan_context` / `scan` SHAPE
+      verbatim in structure. **Copy none of its eight reasons.** MSF = process leakage; 6.17 =
+      integrity. `split_purchase` stays 6.14's.
+
+### CHOICES + tuning constants
+- [ ] `RULE_CHOICES` (max_length=24) -
+      `("vendor_employee_match","Vendor and employee share an identity attribute")`,
+      `("self_approval","Requisition approved by its own requester")`,
+      `("duplicate_vendor","Duplicate / shell supplier record")`,
+      `("backdated_po","Purchase order raised after the invoice it authorises")`,
+      `("screening_unresolved","New spend against an unresolved screening match")`,
+      `("new_vendor_rush","New supplier with immediate high-value spend")`
+      *(drivers: research 4.1, 4.2, 4.3, 4.4, 4.5, 4.6.)*
+- [ ] `SEVERITY_CHOICES` = `[("low","Low"),("medium","Medium"),("high","High")]` (max_length=10);
+      `SEVERITY_BY_RULE = {"vendor_employee_match":"high", "self_approval":"high",
+      "duplicate_vendor":"medium", "backdated_po":"medium", "screening_unresolved":"high",
+      "new_vendor_rush":"medium"}` - **a DEFAULT, not a verdict** (MSF precedent: `severity` stays
+      on the form so a reviewer can re-grade a row the engine over-called).
+- [ ] `STATUS_CHOICES` (max_length=16) - `("open","Open")`, `("investigating","Under investigation")`,
+      `("substantiated","Substantiated")`, `("unsubstantiated","Unsubstantiated - false positive")`,
+      `("referred","Referred for external action")`;
+      `OPEN_STATUSES = ("open","investigating")`,
+      `TERMINAL_STATUSES = ("substantiated","unsubstantiated","referred")`
+      *(drivers: 4.12 SAP BIS alert management, 4.13 the dismiss escape hatch.)*
+- [ ] `STATUS_CSS = {"open":"badge-amber","investigating":"badge-info","substantiated":"badge-red","unsubstantiated":"badge-muted","referred":"badge-slate"}`
+      **Deliberate deviation from MSF's "open is red":** here the strongest colour belongs to a
+      SUBSTANTIATED fraud finding, not to an untriaged one. Put the reason in the model docstring.
+- [ ] `SEVERITY_CSS = {"low":"badge-slate","medium":"badge-amber","high":"badge-red"}`
+- [ ] Tuning constants, **surfaced READ-ONLY on the scan page** (research 4.11 - a `FraudRule` table
+      is Later passes; do NOT ship an editable rule table with no scan wired to it):
+      `OVERLAP_ATTRIBUTES = ("tax_id", "address", "contact")`, `MAX_GROUP_SIZE = 25`,
+      `MAX_PAIRS_PER_ATTRIBUTE = 500`, `NEW_VENDOR_DAYS = 30`,
+      `NEW_VENDOR_AMOUNT = Decimal("25000.00")`, `BACKDATE_GRACE_DAYS = 1`,
+      `SCAN_ROW_LIMIT = 20000`, `_DEDUPE_LOOKUP_CHUNK = 1000`,
+      `NAME_SUFFIXES = ("ltd","limited","inc","llc","plc","gmbh","pvt","co","company","corp","corporation","sa","bv","pte")`
+
+### `FraudAlert(TenantNumbered)` - `NUMBER_PREFIX = "FRD"`
+Source pointers - **all SET_NULL null blank; `clean()` requires AT LEAST ONE** (MSF pattern):
+- [ ] `vendor` FK `"core.Party"` SET_NULL, `related_name="procurement_fraud_alerts"`
+- [ ] `related_party` FK `"core.Party"` SET_NULL, `related_name="procurement_fraud_alerts_related"` - the employee / second vendor in an overlap
+- [ ] `requisition` FK `"scm.PurchaseRequisition"` SET_NULL, `related_name="procurement_fraud_alerts"`
+- [ ] `purchase_order` FK `"scm.PurchaseOrder"` SET_NULL, `related_name="procurement_fraud_alerts"`
+- [ ] `supplier_invoice` FK `"procurement.SupplierInvoice"` SET_NULL, `related_name="fraud_alerts"`
+- [ ] `approval` FK `"procurement.RequisitionApproval"` SET_NULL, `related_name="fraud_alerts"`
+- [ ] `screening` FK `"procurement.ComplianceScreening"` SET_NULL, `related_name="fraud_alerts"`
+
+Classification + evidence:
+- [ ] `rule` CharField(max_length=24, choices=RULE_CHOICES)
+- [ ] `severity` CharField(max_length=10, choices=SEVERITY_CHOICES, default="medium") - ON the form
+- [ ] `document_date` DateField(db_index=True) - the date of the FACT, never the detection date
+- [ ] `amount` DecimalField(max_digits=18, decimal_places=2, null=True, blank=True) - NULL is legal (a COI match has no amount)
+- [ ] `detail` TextField(blank=True) - the evidence sentence the detector wrote
+- [ ] `matched_on` CharField(max_length=160, blank=True) - WHICH attribute matched, **with the value MASKED**: `"tax_id ••••1234"`, `"email a••@acme.test"`, `"address 12 Mill St, Leeds"`. The unmasked comparison happens inside the scan and is never stored (L20). Auto-escaped in templates, `csv_safe()` on export.
+- [ ] `dedupe_key` CharField(max_length=120, **editable=False**)
+- [ ] `detected_at` DateTimeField(auto_now_add=True)
+- [ ] `status` CharField(max_length=16, choices=STATUS_CHOICES, default="open", **editable=False**)
+- [ ] `assigned_to` FK `settings.AUTH_USER_MODEL` SET_NULL null blank, `related_name="procurement_fraud_alerts"` - ON the form
+- [ ] `resolution_note` TextField(blank=True, **editable=False**)
+- [ ] `resolved_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_fraud_alerts_resolved"`
+- [ ] `resolved_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `suspension` FK `"procurement.VendorSuspension"` SET_NULL null blank **editable=False**, `related_name="fraud_alerts"` - stamped by `substantiate()` when the operator links a raised block
+- [ ] `Meta`: `ordering = ["-document_date","-id"]`;
+      `unique_together = (("tenant","number"), ("tenant","dedupe_key"))`;
+      indexes `(tenant,status)` **`prc_frd_tnt_status_idx`**, `(tenant,rule)` **`prc_frd_tnt_rule_idx`**,
+      `(tenant,severity)` **`prc_frd_tnt_sev_idx`**, `(tenant,document_date)` **`prc_frd_tnt_docdate_idx`**,
+      `(tenant,vendor)` **`prc_frd_tnt_vendor_idx`**
+- [ ] `__str__` -> `f"{self.number or 'FRD'} · {self.get_rule_display()}"`
+
+---
+
+## Entity 4 - `ProcurementPolicy` [PPL-] + `PolicyAttestation` -- **bullet 5 Policy Management & Acknowledgment**
+`apps/procurement/models/RiskComplianceManagement/Policies.py`
+- [ ] Mirror `apps/hrm/models/ComplianceLegal/Hrpolicy.py` + `Policyacknowledgment.py` (proven,
+      in-repo) with ONE deliberate change: the attestation targets **`settings.AUTH_USER_MODEL`**,
+      not an employee profile - the bullet says "tracking of **user** sign-offs" and procurement's
+      audience is buyers/approvers, many of whom have no HRM employee record.
+
+### `ProcurementPolicy(TenantNumbered)` - `NUMBER_PREFIX = "PPL"`
+- [ ] `CATEGORY_CHOICES` (max_length=24) - `("code_of_conduct","Supplier code of conduct")`,
+      `("purchasing_limits","Purchasing limits & delegation of authority")`,
+      `("sourcing","Sourcing & competitive bidding")`,
+      `("supplier_selection","Supplier selection & qualification")`,
+      `("conflict_of_interest","Conflict of interest")`,
+      `("gifts_hospitality","Gifts & hospitality")`,
+      `("anti_bribery","Anti-bribery & anti-corruption")`,
+      `("data_privacy","Data privacy & confidentiality")`,
+      `("sustainability","Sustainable & ethical procurement")`, `("other","Other")`
+- [ ] `STATUS_CHOICES` (max_length=12) - `("draft","Draft")`, `("published","Published")`, `("archived","Archived")`;
+      `STATUS_CSS = {"draft":"badge-slate","published":"badge-green","archived":"badge-muted"}`
+- [ ] `title` CharField(max_length=255)
+- [ ] `category` CharField(max_length=24, choices=CATEGORY_CHOICES, default="other")
+- [ ] `version_number` CharField(max_length=20, default="1.0")
+- [ ] `previous_version` FK `"self"` SET_NULL null blank, `related_name="superseded_by"` *(driver: 5.1 supersession chain)*
+- [ ] `applicable_org_unit` FK `"core.OrgUnit"` SET_NULL null blank, `related_name="procurement_policies"` - blank = the whole workspace *(driver: 5.5 targeted audience)*
+- [ ] `owner` FK `settings.AUTH_USER_MODEL` SET_NULL null blank, `related_name="procurement_policies_owned"` - ON the form
+- [ ] `summary` CharField(max_length=500, blank=True)
+- [ ] `body` TextField(blank=True)
+- [ ] `document` FK `"core.Document"` SET_NULL null blank, `related_name="procurement_policies"` - **FK, not a `FileField`** (research 5.6: consistent with 6.17's other evidence links; 6.19 will index `core.Document`)
+- [ ] `status` CharField(max_length=12, choices=STATUS_CHOICES, default="draft", **editable=False**) - publish/archive verbs only
+- [ ] `effective_from` DateField(null=True, blank=True)
+- [ ] `review_due_on` DateField(null=True, blank=True) *(driver: 2.12 - every compliance artefact needs a re-check date)*
+- [ ] `requires_attestation` BooleanField(default=True)
+- [ ] `attestation_due_days` PositiveSmallIntegerField(default=14) - drives `PolicyAttestation.due_on` at publish *(driver: 5.7)*
+- [ ] `enforced_by` CharField(max_length=255, blank=True) - free-text pointer to the routing rule / tolerance policy that enforces it *(driver: 5.8, the `corrective_reference` precedent)*
+- [ ] `published_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `published_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_policies_published"`
+- [ ] `archived_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `Meta`: `ordering = ["-created_at"]`;
+      `unique_together = (("tenant","number"), ("tenant","title","version_number"))`;
+      indexes `(tenant,status)` **`prc_ppl_tnt_status_idx`**, `(tenant,category)` **`prc_ppl_tnt_cat_idx`**,
+      `(tenant,"-created_at")` **`prc_ppl_tnt_created_idx`**
+- [ ] `__str__` -> `f"{self.title} v{self.version_number}"`
+- [ ] Derived, annotation-aware (copy `HRPolicy.acknowledgment_rate` verbatim in shape):
+      `attested_count` (`_attested_count` annotation else `self.attestations.filter(status="acknowledged").count()`),
+      `target_count`, `attestation_rate` (Decimal, `.quantize(Decimal("0.1"))`, 0 when nobody targeted),
+      `overdue_count`. **DERIVED - never a stored column.**
+
+### `PolicyAttestation(TenantOwned)`
+`TenantOwned` (not tenant-less) per the HRM precedent - there is a cross-policy "My policies" page.
+- [ ] `STATUS_CHOICES` (max_length=14) - `("pending","Pending")`, `("acknowledged","Acknowledged")`, `("exempt","Exempt")`;
+      `STATUS_CSS = {"pending":"badge-amber","acknowledged":"badge-green","exempt":"badge-muted"}`
+- [ ] `policy` FK `"procurement.ProcurementPolicy"` CASCADE, `related_name="attestations"`
+- [ ] `user` FK `settings.AUTH_USER_MODEL` CASCADE, `related_name="procurement_policy_attestations"`
+- [ ] `status` CharField(max_length=14, choices=STATUS_CHOICES, default="pending", **editable=False**)
+- [ ] `due_on` DateField(null=True, blank=True) - stamped at publish from `attestation_due_days`
+- [ ] `acknowledged_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `acknowledgement_note` TextField(blank=True, **editable=False**)
+- [ ] `exempt_reason` CharField(max_length=255, blank=True, **editable=False**)
+- [ ] `alert` FK `"procurement.ProcurementAlert"` SET_NULL null blank **editable=False**, `related_name="policy_attestations"` - the overdue chase *(driver: 5.7 - no mail sender is wired, an alert substitutes)*
+- [ ] `Meta`: `ordering = ["-created_at"]`; `unique_together = ("tenant","policy","user")`;
+      indexes `(tenant,policy)` **`prc_patt_tnt_policy_idx`**, `(tenant,user,status)` **`prc_patt_user_status_idx`**,
+      `(tenant,status,due_on)` **`prc_patt_status_due_idx`**, `(tenant,"-created_at")` **`prc_patt_tnt_created_idx`**
+- [ ] `__str__` -> `f"{self.user} — {self.policy}"` with the `_id` guard the HRM copy uses
+- [ ] Derived: `is_overdue` = `status == "pending" and due_on and due_on < timezone.localdate()`
+
+---
+
+## Entity 5 (LAST, CUTTABLE) - `AuditSeal` [ASL-] -- **bullet 3 Audit Trail & Logging**
+`apps/procurement/models/RiskComplianceManagement/AuditSeals.py`
+
+- [ ] **Bullet 3's PAGE has no table and ships first**: `audit_trail` is a filtered, paginated,
+      exportable register over `core.AuditLog` built on `procurement_activity_qs(tenant)` from
+      `apps/procurement/views/_helpers.py`. **ZERO `core` migrations** - do not add a column to
+      `core.AuditLog` from a procurement build (research §4.2 note 2, and L43 with a concurrent
+      session in this checkout).
+- [ ] **`AuditSeal` is what makes "tamper-proof" true**, and it is honest about being
+      tamper-**EVIDENT**: alteration is DETECTABLE, storage is not immutable. That sentence goes on
+      the page, not only in the docstring. `hashlib` + `json` only - **no new dependency**.
+- [ ] **Documented CRUD deviation: NO edit route and NO delete route.** A seal whose digest can be
+      edited proves nothing, and deleting a seal breaks exactly the chain it exists to protect.
+      In-repo precedent: `CostForecast` (6.15) ships with no edit route; `InvoiceMatchVariance`
+      (6.13) is evidence, not a record. Put the reason in the module docstring AND on the page so
+      the reviewer does not flag it as a CRUD-completeness miss.
+
+### `AuditSeal(TenantNumbered)` - `NUMBER_PREFIX = "ASL"`
+- [ ] `GENESIS_DIGEST = "0" * 64`; `MAX_SEAL_ROWS = 50000`; `ALGORITHM = "sha256"`;
+      `RETENTION_NOTE` (10-year OFAC statement, shared with the screening register)
+- [ ] `from_log_id` BigIntegerField(**editable=False**) - lowest `core.AuditLog.id` covered
+- [ ] `to_log_id` BigIntegerField(**editable=False**) - highest id covered
+- [ ] `period_start` DateTimeField(**editable=False**) - **DERIVED** = `at` of the first row in the range
+- [ ] `period_end` DateTimeField(**editable=False**) - **DERIVED** = `at` of the last row in the range
+- [ ] `row_count` PositiveIntegerField(default=0, **editable=False**) - **DERIVED**
+- [ ] `digest` CharField(max_length=64, **editable=False**) - **DERIVED**
+- [ ] `prev_seal` FK `"self"` SET_NULL null blank **editable=False**, `related_name="next_seals"`
+- [ ] `prev_digest` CharField(max_length=64, blank=True, **editable=False**) - `prev_seal.chain_digest` or `GENESIS_DIGEST`
+- [ ] `chain_digest` CharField(max_length=64, **editable=False**) - **DERIVED**
+- [ ] `algorithm` CharField(max_length=16, default="sha256", **editable=False**)
+- [ ] `sealed_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank **editable=False**, `related_name="procurement_audit_seals"`
+- [ ] `sealed_at` DateTimeField(auto_now_add=True)
+- [ ] `note` CharField(max_length=255, blank=True) - the ONLY operator-supplied field, captured on the "Seal now" POST
+- [ ] `last_verified_at` DateTimeField(null=True, blank=True, **editable=False**)
+- [ ] `last_verify_ok` BooleanField(null=True, **editable=False**) - NULL = never verified
+- [ ] `last_verify_detail` CharField(max_length=255, blank=True, **editable=False**)
+- [ ] `Meta`: `ordering = ["-to_log_id","-id"]`; `unique_together = (("tenant","number"),)`;
+      indexes `(tenant,to_log_id)` **`prc_asl_tnt_tolog_idx`**, `(tenant,sealed_at)` **`prc_asl_tnt_sealed_idx`**
+- [ ] `__str__` -> `f"{self.number or 'ASL'} · {self.row_count} rows · {self.digest[:12]}"`
+
+---
+
+## Service / derivation logic - what is DERIVED (never stored editable)
+
+### 4a. Screening disposition guard (bullet 1 - the single most testable rule here)
+- [ ] `ComplianceScreening.recount_hits()` - recomputes `hit_count` = `self.hits.count()` and
+      `open_hit_count` = `self.hits.filter(disposition="open").count()`, saved with
+      `update_fields=["hit_count","open_hit_count","updated_at"]`. Called from
+      `screeninghit_create/_edit/_delete/_dispose` views. **Display counters only.**
+- [ ] `ComplianceScreening.clear(user, note="")` -> bool. Refuses when `status` is already terminal.
+      **Refuses while ANY hit is undisposed, and the guard runs a LIVE query
+      (`self.hits.filter(disposition="open").exists()`), never the cached counter** - a stale
+      counter must not be able to unlock the gate. On success: `status="cleared"`, stamps
+      `decided_by`/`decided_at`/`decision_note`, and sets `next_rescreen_on` to
+      `screened_on + DEFAULT_RESCREEN_DAYS` when it is blank.
+- [ ] `ComplianceScreening.escalate(user, note)` -> bool. From `pending_review` only. **Note required.**
+- [ ] `ComplianceScreening.block(user, note, suspension=None)` -> bool. From `pending_review` or
+      `escalated`. **Note required.** Stamps `suspension` when the operator picked one from this
+      tenant's `VendorSuspension` rows for the same party. **Creates no suspension itself** - the
+      detail page links to `procurement:vsu_create` and shows
+      `VendorSuspension.blocking_for(tenant, party_id)` if a block is already in force (research 1.8).
+- [ ] **No un-clear / no re-open verb.** A decided screening is evidence; a correction is a NEW
+      screening (the `ACTIVITY_FEED_NOTE` posture).
+- [ ] `ScreeningHit.dispose(user, disposition, note)` -> bool. From `open` only; `disposition` must
+      be in `TERMINAL_DISPOSITIONS`; **note required for EVERY disposition including
+      `false_positive`** (OFAC 31 CFR 501.601: a cleared false positive with no record is
+      indistinguishable from a check never performed). Stamps `disposed_by`/`disposed_at`, then the
+      view calls `screening.recount_hits()`.
+- [ ] `ComplianceScreening.retention_until` - **DERIVED property**, `screened_on + RETENTION_YEARS`.
+      No purge job; the page states the policy (research 3.4).
+- [ ] **Re-screening due board** (`screening_rescreen_board`): supplier/vendor-role parties whose
+      most recent `cleared` screening has `next_rescreen_on <= today` (or is NULL and
+      `screened_on < today - DEFAULT_RESCREEN_DAYS`), PLUS parties with no screening at all. One
+      grouped query over the register - **no stored "due" flag**.
+- [ ] **Batch screen** (`screening_batch`, P2, CUTTABLE): a `@tenant_admin_required` `@require_POST`
+      that mints one `pending_review`, `checkpoint="periodic"`, `result="clear"` screening per
+      active supplier/vendor-role party that has none in `DEFAULT_RESCREEN_DAYS`, capped at
+      `BATCH_PARTY_LIMIT`. Reports `{"created": n, "skipped": m, "capped": bool}`.
+
+### 4b. Risk-signal derivation - the inverted scales (bullet 2)
+All of the following happen in `SupplierRiskSignal.save()` BEFORE `super().save()`, in this order:
+- [ ] 1. **Stamp the scale.** `scale_min, scale_max, higher_is_better = METRIC_SCALES.get(self.metric,
+      (None, None, True))`. Always overwritten from the table - the three columns are
+      `editable=False` and never operator-supplied. `metric="other"` yields `(None, None, True)`.
+- [ ] 2. **Derive `risk_position`** (0 = safest, 100 = riskiest). `None` when either bound is NULL or
+      `scale_max == scale_min`:
+      `clamped = min(max(value, scale_min), scale_max)`;
+      `position = (clamped - scale_min) / (scale_max - scale_min) * 100`;
+      `risk_position = (100 - position) if higher_is_better else position`, `.quantize(Decimal("0.01"))`.
+      Worked examples to assert in tests: **FHR 42 -> 58.59 (elevated)**; **SER 7 -> 75.00
+      (critical)**; **PAYDEX 80 -> 20.20 (low)**; **DSO 90 days -> 50.00 (elevated)**.
+- [ ] 3. **Derive `band`** from `BAND_THRESHOLDS` (`< 25 low`, `< 50 watch`, `< 75 elevated`, else
+      `critical`); `"unrated"` when `risk_position is None`.
+- [ ] 4. **Derive `previous_value` + `trend`.** Prior row = the same
+      `(tenant, party, provider, metric)` with `observed_on <= self.observed_on`, `.exclude(pk=self.pk)`,
+      `.order_by("-observed_on","-id").first()` - **one query, backed by `prc_srs_series_idx`**.
+      `trend = "new"` when there is none. Otherwise compare **`risk_position`, not the raw value**
+      (this is the whole point of the inverted scales): `deteriorated` when
+      `risk_position - prior.risk_position > TREND_EPSILON`, `improved` when the gap is below
+      `-TREND_EPSILON`, else `stable`. When either `risk_position` is NULL, fall back to the raw
+      values plus `higher_is_better`; if still undecidable, `"stable"`.
+- [ ] `breaches_minimum` - **DERIVED property**: `True` when `MINIMUM_ACCEPTABLE` holds a limit for
+      the metric and the value is on the wrong side of it given `higher_is_better`. **Advisory
+      badge only. It never blocks anything** (research 2.7 / the `ReceiptTolerancePolicy` posture).
+- [ ] `raise_deterioration_alert(user=None)` -> `ProcurementAlert | None`. **Called by the create/edit
+      VIEW after a successful save, NOT from `save()`** - a table write hidden inside `save()` would
+      fire in every seeder and test. Guards, all four: `trend == "deteriorated"`, `band in
+      ALERT_BANDS`, `self.alert_id is None`, and no existing `ProcurementAlert` for the same party+
+      metric still in `OPEN_STATUSES`. Creates `kind="risk"`,
+      `severity="critical" if band == "critical" else "warning"`,
+      `title=f"{party} {metric_display} deteriorated to {band_display}"`,
+      `link_url=f"/procurement/risk-signals/{pk}/"` (**internal path with a single leading slash** -
+      `ProcurementAlert.clean()` rejects anything else), then stamps `self.alert`. Idempotent by
+      construction - exactly `run_renewal_alerts` / `Backorder.raise_alert`.
+- [ ] **`ProcurementAlert.KIND_CHOICES` gains `("risk", "Risk")`** - a one-line **surgical `Edit`**
+      to `apps/procurement/models/DashboardPortal/ProcurementAlerts.py` plus an `AlterField` in the
+      6.17 migration. `max_length=12` already fits. Precedent: `0012_alter_procurementalert_kind.py`
+      added `("contract","Contract")` for 6.8. **Never full-rewrite that file (L43)** - and add
+      `"risk": "badge-red"` to `kind_css` in the same edit.
+- [ ] Verbs: `mark_reviewed(user, note="")` (from `new`), `mark_actioned(user, note)` (note
+      required), `dismiss(user, note)` (note required). Each re-checks its guard INSIDE itself and
+      returns a bool (MSF precedent).
+- [ ] **Refresh-due board** (`risksignal_refresh_board`): the latest signal per
+      `(party, provider, metric)` whose `next_refresh_on <= today` or whose `observed_on` is older
+      than `STALE_AFTER_DAYS`, plus supplier/vendor-role parties with no signal at all. Computed,
+      no stored flag.
+- [ ] **Honesty, on the page and in the docstring:** there is no live bureau call anywhere in this
+      repo. Every row is captured by a person or a CSV and shows `captured_by` / `observed_on` /
+      `source_ref` provenance. The page links to `scm:riskassessment_list` for the internal
+      4-factor composite (`scm.SupplierRiskAssessment`) and **ships no second composite score**
+      (research 2.10).
+
+### 4c. Fraud `scan()` - one bullet per rule, naming the exact source models and fields
+- [ ] `FraudAlert.scan(tenant, start, end, rules=None, user=None) -> {rule: newly_raised_count}`.
+      Operator-triggered POST. Returns **newly raised** counts only (a refreshed row is not a new
+      find). Unknown rule names in `rules` are **IGNORED, never raised** (L11 - the list arrives
+      from a POST checkbox group). Whole pass inside one `transaction.atomic()`. Shared
+      `_scan_context(tenant, start, end, wanted)` prefetch; `_existing_by_key` chunked at
+      `_DEDUPE_LOOKUP_CHUNK`; `_upsert` refreshes `amount` / `detail` / `document_date` /
+      `matched_on` and the dimension `*_id`s but **NEVER `status` / `resolution_note` /
+      `resolved_by` / `resolved_at`** - a re-scan can never re-open settled work.
+- [ ] **Deferred imports inside the methods** (MSF module-docstring rule): this module is imported
+      while `apps.procurement.models.__init__` is still executing.
+      **`RECOGNISED_INVOICE_STATUSES` and `SPEND_PO_STATUSES` are imported from
+      `apps.procurement.models.SpendAnalyticsReporting.MaverickFindings`** - do NOT make a fourth
+      copy; two pages must never disagree about what counts as spend.
+- [ ] **R1 `vendor_employee_match`** (research 4.1 - the bullet's own words "vendor conflicts of
+      interest"). Vendor set = `core.PartyRole.objects.filter(tenant=tenant,
+      role__in=("vendor","supplier"), status="active").values_list("party_id", flat=True)`;
+      employee set = the same with `role="employee"`. Three attribute joins, each tenant-scoped:
+      * `tax_id` - `core.Party.objects.filter(tenant=tenant).exclude(tax_id="").values_list("id","tax_id","created_at")`, key = `tax_id` upper-cased with non-alphanumerics stripped.
+      * `address` - `core.Address.objects.filter(tenant=tenant).exclude(line1="").values_list("party_id","line1","city")`, key = `f"{line1}|{city}"` lower-cased with whitespace runs collapsed.
+      * `contact` - `core.ContactMethod.objects.filter(tenant=tenant).exclude(value="").values_list("party_id","kind","value")`, key = `value.strip().lower()`, reduced to digits-only for `kind in ("phone","mobile")`.
+      Emit one candidate per (vendor party, employee party) pair inside a key group.
+      **Skip any group larger than `MAX_GROUP_SIZE`** (200 parties sharing one office address is a
+      data-quality problem, not 19,900 alerts) and stop each attribute at
+      `MAX_PAIRS_PER_ATTRIBUTE`; report both in the scan summary as `skipped_groups` / `capped`.
+      `vendor` = the vendor-role party, `related_party` = the employee-role party,
+      `document_date` = the later of the two `created_at` dates, `amount` = None,
+      `matched_on` = the masked attribute string.
+- [ ] **R2 `self_approval`** (4.2 - segregation of duties; **zero false positives**).
+      `procurement.RequisitionApproval.objects.filter(tenant=tenant, decided_at__gte=start,
+      decided_at__lt=end, approver__isnull=False).select_related("requisition")`, fires where
+      `approval.approver_id == approval.requisition.requester_id`. Stamps `approval`,
+      `requisition`; `document_date = approval.decided_at.date()`;
+      `amount = requisition.estimated_total`; `detail` names the approver, the requisition number
+      and `tier/tier_count`.
+- [ ] **R3 `duplicate_vendor`** (4.3 - **flag only, never merge**; supplier-master dedup stays with
+      6.4 / `core.Party`). Vendor-role parties only. Three groupings: normalised NAME (lower-cased,
+      whitespace collapsed, `NAME_SUFFIXES` stripped, non-alphanumerics removed), `tax_id` and
+      `address` (same normalisers as R1). Pair emission is deterministic - `vendor` = the LOWER pk,
+      `related_party` = the higher - so the row and its dedupe key always agree.
+      `document_date` = the later `created_at.date()`. Same `MAX_GROUP_SIZE` /
+      `MAX_PAIRS_PER_ATTRIBUTE` caps. The detail page links to BOTH parties and says "flagged, not
+      merged".
+- [ ] **R4 `backdated_po`** (4.4 - **distinct from 6.14's `po_less_invoice`, which is "no PO at
+      all"**). `procurement.SupplierInvoice.objects.filter(tenant=tenant,
+      status__in=RECOGNISED_INVOICE_STATUSES, invoice_date__gte=start, invoice_date__lt=end)
+      .exclude(invoice_type="credit_memo").exclude(purchase_order__isnull=True)
+      .select_related("purchase_order","vendor")`. Fires when
+      `Coalesce(po.order_date, po.created_at.date()) > invoice.invoice_date + BACKDATE_GRACE_DAYS`.
+      Stamps `supplier_invoice`, `purchase_order`, `vendor`;
+      `amount = invoice.total`; `document_date = invoice.invoice_date`. The page states the
+      distinction from 6.14 in one line.
+- [ ] **R5 `screening_unresolved`** (4.5 - the cross-link that makes 6.17 ONE sub-module rather than
+      five pages). `scm.PurchaseOrder.objects.filter(tenant=tenant, status__in=SPEND_PO_STATUSES)`
+      annotated `doc_date = Coalesce("order_date", TruncDate("created_at"))` inside the window,
+      whose `vendor_id` has a `ComplianceScreening` in this tenant with `screened_on <= doc_date`
+      carrying a hit whose `disposition in ("open","true_match")`. Stamps `purchase_order`,
+      `vendor`, `screening`; `amount = po.total`; `document_date = doc_date`.
+      *(The `TruncDate` note from `MaverickFindings._scan_context` applies verbatim: safe because
+      `TIME_ZONE = "UTC"` matches the connection - re-check if that ever changes.)*
+- [ ] **R6 `new_vendor_rush`** (4.6). For each vendor-role `core.Party` whose `created_at.date()`
+      falls within `[start - NEW_VENDOR_DAYS, end)`, sum recognised `SupplierInvoice.total` with
+      `invoice_date` between the party's creation date and `+ NEW_VENDOR_DAYS`; fire when the sum
+      `>= NEW_VENDOR_AMOUNT`. Stamps `vendor`, `supplier_invoice` = the LARGEST single invoice in
+      the run (so the detail page has a document to open); `amount` = the summed total;
+      `document_date` = the party's creation date. One alert per vendor.
+- [ ] `build_dedupe_key()` - deterministic per rule, and **order-independent for the pair rules** so
+      the same fact is never two rows: `vem:{min(a,b)}:{max(a,b)}:{attr}` ·
+      `selfapp:{approval_id}` · `dupven:{min(a,b)}:{max(a,b)}:{attr}` · `bdpo:{invoice_id}` ·
+      `scrunres:{po_id}` · `nvrush:{vendor_id}`. Fallback for a hand-raised row with no pointer:
+      `f"{rule}:manual:{secrets.token_hex(8)}"` (MSF precedent - a blank key would turn a data-entry
+      mistake into an IntegrityError 500).
+- [ ] `clean()` - at least one source pointer; `rule` in `RULE_CHOICES`; **a cross-tenant check on
+      EVERY FK** (`vendor`, `related_party`, `requisition`, `purchase_order`, `supplier_invoice`,
+      `approval`, `screening`, `assigned_to`'s tenant) using `_id` guards, never bare `getattr`
+      (the `VendorSuspension.clean()` lesson - `getattr` on an unset FK raises
+      `RelatedObjectDoesNotExist`); and a `dedupe_key` pre-check that renders as a field error
+      instead of a unique-constraint 500.
+- [ ] Verbs: `investigate(user)` (open -> investigating, no note),
+      `substantiate(user, note, suspension=None)`, `unsubstantiate(user, note)`,
+      `refer(user, note)` - the three terminal verbs require a note and share a `_dispose()` body
+      exactly like MSF. `substantiate` optionally stamps a `VendorSuspension` the operator picked.
+- [ ] **The scan writes NOTHING to the spine** - no suspension, no invoice block, no PO hold.
+      State it in the module docstring and on the scan page (SAP BIS "park, don't block", 4.14).
+- [ ] **The page says "rules", never "AI"/"algorithms learn"** - deterministic SQL only
+      (4.15 / the 6.14 naming-honesty precedent). The scan page renders the eight tuning constants
+      read-only so the thresholds are visible rather than folkloric.
+
+### 4d. Policy versioning + attestation (bullet 5)
+- [ ] `ProcurementPolicy.publish(user)` -> bool. Guard: `status == "draft"` AND `effective_from` is
+      set (publishing with no effective date is what makes an attestation unanswerable). Sets
+      `status="published"`, `published_at`, `published_by`, then calls `raise_attestations(user)`
+      when `requires_attestation`.
+- [ ] `ProcurementPolicy.raise_attestations(user)` -> int. Audience:
+      `User.objects.filter(tenant=self.tenant, is_active=True, status="active")`; when
+      `applicable_org_unit` is set, narrowed to users whose `party` has a
+      `core.Employment` row with `tenant=self.tenant, org_unit=self.applicable_org_unit,
+      status="active"` (**verified path: `accounts.User.party` -> `core.Employment.party` ->
+      `core.Employment.org_unit`** - there is no direct User->OrgUnit FK). One
+      `get_or_create(tenant=…, policy=self, user=u, defaults={"due_on": today + attestation_due_days})`
+      per user, so a re-publish/repair is idempotent. Returns the number CREATED.
+- [ ] `ProcurementPolicy.archive(user)` -> bool. From `draft` or `published`. Stamps `archived_at`.
+      **Existing attestations are never rewritten** (NAVEX: retain attestations for current AND
+      previous versions).
+- [ ] `ProcurementPolicy.new_version(user)` -> the new DRAFT policy. Copies title/category/scope/
+      body/summary/document/owner/`attestation_due_days`/`enforced_by`, sets
+      `previous_version=self`, `status="draft"`, blanks `published_at`/`published_by`/`archived_at`,
+      and bumps `version_number` via `_next_version(current)`: split on `"."`, increment the LAST
+      numeric segment (`"1.0" -> "1.1"`, `"2" -> "3"`); a non-numeric tail appends `".1"`.
+      **Guard the `("tenant","title","version_number")` unique constraint** - a clash returns a
+      `messages.error` and no row, never a 500. Publishing v2 raises FRESH attestation rows and
+      **v1's rows are never touched** (research 5.4).
+- [ ] `PolicyAttestation.acknowledge(user, note="")` -> bool. From `pending` only. **The view
+      refuses unless `request.user_id == attestation.user_id`** - a signature signed by somebody
+      else is not a signature. Superusers are NOT exempt. Stamps `acknowledged_at` +
+      `acknowledgement_note`.
+- [ ] `PolicyAttestation.mark_exempt(user, reason)` -> bool. `@tenant_admin_required`. From
+      `pending` only. **Reason required.**
+- [ ] **Overdue board** (`policy_overdue_board`): pending attestations past `due_on`, grouped by
+      policy, with an admin `@require_POST` that raises **one idempotent `ProcurementAlert` per
+      overdue attestation** (`kind="risk"`, `severity="warning"`, `assigned_to` = the attestation's
+      own user, `link_url=f"/procurement/my-policies/"`), stamping `attestation.alert` and skipping
+      any row that already has one or already has an open alert. No email sender is wired anywhere -
+      say so on the page (research 5.7 / §7.8).
+- [ ] `attestation_rate` etc. are **DERIVED annotation-aware properties**, never stored columns; the
+      list view supplies `_attested_count` / `_target_count` annotations so the register does not
+      issue two queries per row.
+
+### 4e. Audit-seal digest chain (bullet 3)
+- [ ] **Ranges are keyed by `core.AuditLog.id`, NOT by time.** `id` is a monotonic autoincrement, so
+      an id-keyed chain has no late-arrival hole; a time-keyed one does (a row committing with an
+      `at` inside an already-sealed window would be missed by both seals). `period_start` /
+      `period_end` are DERIVED metadata taken from the first/last row's `at`, for humans only.
+- [ ] `AuditSeal.canonical_line(row)` - **PIN THIS EXACTLY; changing it silently invalidates every
+      prior seal.** `"|".join([str(row.id), row.at.isoformat(), str(row.user_id or ""),
+      str(row.content_type_id or ""), str(row.object_id or ""), row.action or "", row.target or "",
+      json.dumps(row.changes, sort_keys=True, separators=(",", ":"), default=str)])`.
+      `sort_keys=True` + fixed separators is what makes the JSON canonical; `default=str` stops a
+      `Decimal`/`date` inside `changes` from raising.
+- [ ] `AuditSeal.compute_digest(rows)` - one `hashlib.sha256()`; for each row in **ascending id
+      order**, `update(canonical_line(row).encode("utf-8"))` then `update(b"\n")`. Returns
+      `hexdigest()`.
+- [ ] `chain_digest = sha256(f"{prev_digest}:{digest}".encode("utf-8")).hexdigest()` where
+      `prev_digest = prev_seal.chain_digest or GENESIS_DIGEST`. This is `h_i = H(h_{i-1} ‖ record_i)`:
+      altering any sealed row breaks every subsequent link.
+- [ ] `AuditSeal.seal_now(tenant, user, note="")` -> `(seal, message)`. Inside
+      `transaction.atomic()`: `prev = objects.filter(tenant=tenant).order_by("-to_log_id","-id").first()`;
+      rows = `AuditLog.objects.filter(tenant=tenant, id__gt=(prev.to_log_id if prev else 0))
+      .order_by("id")[:MAX_SEAL_ROWS]`. **Refuse an empty range** with
+      `"No new audit rows since <prev.number>."` - an empty seal is chain spam, not evidence.
+      Stamps `from_log_id`/`to_log_id`/`row_count`/`period_start`/`period_end`/`digest`/
+      `prev_seal`/`prev_digest`/`chain_digest`/`sealed_by`.
+- [ ] `AuditSeal.verify()` -> `(ok: bool, detail: str)`. Re-reads
+      `AuditLog.objects.filter(tenant=…, id__gte=from_log_id, id__lte=to_log_id).order_by("id")`,
+      re-computes the digest and the chain digest, and compares. On failure names the FIRST
+      offending log id, or reports `"{n} of {row_count} sealed rows are missing"` when the count
+      differs. Stamps `last_verified_at` / `last_verify_ok` / `last_verify_detail`. **Read-mostly:
+      the only write is the three verify stamps.**
+- [ ] `AuditSeal.verify_chain(tenant)` -> `(ok, first_broken_seal, detail)`. Walks every seal
+      oldest-first; rendered on `audit_trail` as one line ("chain verified through ASL-00003").
+- [ ] **State the limits on the page, verbatim:** this is tamper-**EVIDENT**, not tamper-proof
+      storage; a seal proves the range is unchanged **since it was sealed** and cannot prove a row
+      was never deleted before the first seal; DB-level append-only / WORM / SIEM streaming is
+      infrastructure and is out of scope (research 3.6, §7.9).
+
+---
+
+## Backend package layout (MANDATORY - four layers, one file per entity group)
+
+### `apps/procurement/models/RiskComplianceManagement/`
+- [ ] `__init__.py` (own commit even if it only re-exports)
+- [ ] `Screenings.py` - `ComplianceScreening` + `ScreeningHit` + `LIST_SOURCE_CHOICES`, `CHECKPOINT_CHOICES`, `METHOD_CHOICES`, `RESULT_CHOICES`, `STATUS_CHOICES`, `DISPOSITION_CHOICES`, `MATCH_TYPE_CHOICES`
+- [ ] `RiskSignals.py` - `SupplierRiskSignal` + `PROVIDER_CHOICES`, `METRIC_CHOICES`, `METRIC_SCALES`, `BAND_CHOICES`, `TREND_CHOICES`, `REVIEW_STATUS_CHOICES`
+- [ ] `FraudAlerts.py` - `FraudAlert` + `RULE_CHOICES`, `SEVERITY_CHOICES`, `STATUS_CHOICES`
+- [ ] `Policies.py` - `ProcurementPolicy` + `PolicyAttestation` + `CATEGORY_CHOICES`, both `STATUS_CHOICES`
+- [ ] `AuditSeals.py` - `AuditSeal` (LAST / cuttable)
+- [ ] Every module starts `from apps.procurement.models._base import *  # noqa: F401,F403`;
+      **absolute imports only**; every cross-app FK **by string**; sibling MODEL classes needed by
+      `scan()` imported **inside the method** (MSF import-discipline rule).
+
+### `apps/procurement/forms/RiskComplianceManagement/` - same five filenames
+- [ ] Each form is `class X(TenantUniqueMixin, TenantModelForm)` - `TenantUniqueMixin` **before**
+      `TenantModelForm` (stamps `instance.tenant` before `full_clean()`, which every model
+      `clean()` cross-tenant check reads). Each calls `_reject_foreign(self, cleaned, [...])` for
+      its own tenant-scoped FK list.
+
+### `apps/procurement/views/RiskComplianceManagement/` - eight modules
+- [ ] `Screenings.py`, `ScreeningHits.py`, `RiskSignals.py`, `FraudAlerts.py`, `FraudScan.py`
+      (the scan form/POST + the triage board - separate module, the `MaverickDashboard.py`
+      precedent), `Policies.py`, `Attestations.py`, `AuditTrail.py` (the register + export + the
+      seal register/detail/create/verify).
+- [ ] Every module starts `from apps.procurement.views._common import *  # noqa: F401,F403`.
+      Sibling models imported as MODULES (`from apps.procurement.models.RiskComplianceManagement.Screenings import ComplianceScreening`),
+      **never** `from apps.procurement.models import X` - that is a star-import cycle at URLconf
+      import while the package is being wired.
+- [ ] Every queryset `filter(tenant=request.tenant)`; **never `.all()`**. Every object
+      `get_object_or_404(..., tenant=request.tenant)`, except `ScreeningHit`, which uses
+      `screening__tenant=request.tenant`.
+- [ ] `_need_tenant(request, what)` guard on every list/board/verb (superuser has `tenant=None`).
+- [ ] `_is_admin(request)` mirrors `@tenant_admin_required` exactly so a hidden button and a refused
+      POST always agree.
+- [ ] Decorator order on privileged verbs: `@login_required` `@tenant_admin_required`
+      `@require_POST` (L27, in that order).
+- [ ] Every verb runs under `select_for_update()` inside `transaction.atomic()` and calls
+      `write_audit_log(request.user, obj, "update", changes)` after the commit (the `crud_*` helpers
+      audit themselves; hand-rolled save paths must not).
+
+### `apps/procurement/urls/RiskComplianceManagement/` - same eight filenames + `__init__.py`
+- [ ] Literal routes before `<int:pk>` in every module (first-match-wins IS behaviour).
+- [ ] New first path segments, **all confirmed free against the list in
+      `apps/procurement/urls/__init__.py`**: `screenings/`, `screening-hits/`, `rescreening-due/`,
+      `risk-signals/`, `risk-refresh-due/`, `fraud-alerts/`, `fraud-scan/`, `fraud-board/`,
+      `policies/`, `policy-attestations/`, `my-policies/`, `policy-overdue/`, `audit-trail/`,
+      `audit-seals/`. **Re-check against 6.16's segments before committing (L43).**
+
+### Re-export blocks - TARGETED `Edit`, never `Write` (L43: another session is in this checkout)
+- [ ] `apps/procurement/models/__init__.py` - append imports (from the entity MODULES, the 6.13/6.14
+      precedent) + append to `__all__`: `ComplianceScreening`, `ScreeningHit`,
+      `SupplierRiskSignal`, `FraudAlert`, `ProcurementPolicy`, `PolicyAttestation`, `AuditSeal`.
+- [ ] `apps/procurement/forms/__init__.py` - append the seven form classes.
+- [ ] `apps/procurement/views/__init__.py` - append every view function + its `__all__` entries.
+- [ ] `apps/procurement/urls/__init__.py` - `from .RiskComplianceManagement import urlpatterns as
+      _rcm_riskcompliance` and splat it **LAST** in `urlpatterns`, with the same
+      "every first segment it claims is new" comment 6.13/6.14/6.15 carry. Extend the docstring's
+      segment list.
+- [ ] **Forgetting any of these four blocks is an ImportError / `NoReverseMatch` at runtime.**
+
+---
+
+## Forms - `Meta.fields` and, critically, the EXCLUSIONS
+
+- [ ] **`ComplianceScreeningForm`** - fields: `party`, `list_source`, `checkpoint`, `method`,
+      `screened_on`, `list_as_of`, `reference`, `result`, `match_threshold`,
+      `threshold_rationale`, `next_rescreen_on`, `evidence`, `notes`.
+      **EXCLUDED:** `tenant`, `number`, `status`, `hit_count`, `open_hit_count`, `screened_by`,
+      `decided_by`, `decided_at`, `decision_note`, `suspension`, `created_at`, `updated_at`.
+      `method` choices narrowed to `SELECTABLE_METHODS` in `__init__`; `clean_method()` rejects
+      `api_feed`. `_reject_foreign(self, cleaned, ["party", "evidence"])`.
+      `screened_by` is stamped by the view from `request.user`.
+- [ ] **`ScreeningHitForm`** - fields: `matched_name`, `matched_list`, `match_score`, `match_type`,
+      `entry_reference`, `program`, `country`, `remarks`.
+      **EXCLUDED:** `screening` (comes from the URL, never a POST field - otherwise it is an IDOR),
+      `disposition`, `disposition_note`, `disposed_by`, `disposed_at`, `created_at`.
+- [ ] **`ScreeningHitDispositionForm`** (plain `forms.Form`) - `disposition`
+      (`TERMINAL_DISPOSITIONS` only) + `disposition_note` (**required**).
+- [ ] **`SupplierRiskSignalForm`** - fields: `party`, `provider`, `metric`, `observed_on`, `value`,
+      `next_refresh_on`, `source_ref`, `evidence`, `notes`.
+      **EXCLUDED (all DERIVED or system):** `tenant`, `number`, `scale_min`, `scale_max`,
+      `higher_is_better`, `risk_position`, `band`, `previous_value`, `trend`, `review_status`,
+      `review_note`, `reviewed_by`, `reviewed_at`, `captured_by`, `alert`, `created_at`,
+      `updated_at`. `_reject_foreign(self, cleaned, ["party", "evidence"])`.
+      `clean()` rejects a `value` outside the metric's registered scale by more than 20% of the
+      span (a typo'd SER of 70 is not a real observation) and rejects a future `observed_on`.
+- [ ] **`FraudAlertForm`** (the hand-raise path, for what no detector can see) - fields: `rule`,
+      `severity`, `document_date`, `amount`, `detail`, `matched_on`, `assigned_to`, `vendor`,
+      `related_party`, `requisition`, `purchase_order`, `supplier_invoice`, `approval`, `screening`.
+      **EXCLUDED:** `tenant`, `number`, `status`, `dedupe_key`, `detected_at`, `resolution_note`,
+      `resolved_by`, `resolved_at`, `suspension`, `created_at`, `updated_at`.
+      `_reject_foreign` over all seven pointer FKs.
+- [ ] **`FraudScanForm`** (plain `forms.Form`) - `start` (date, required), `end` (date, required,
+      `> start`), `rules` (MultipleChoiceField over `RULE_CHOICES`, `required=False` = all).
+      Rejects a window longer than `MAX_SCAN_WINDOW_DAYS = 400`.
+- [ ] **`FraudDispositionForm`** (plain `forms.Form`) - `action` + `resolution_note` +
+      optional `suspension` (queryset narrowed to this tenant's `VendorSuspension` rows for the
+      alert's vendor).
+- [ ] **`ProcurementPolicyForm`** - fields: `title`, `category`, `version_number`,
+      `previous_version`, `applicable_org_unit`, `owner`, `summary`, `body`, `document`,
+      `effective_from`, `review_due_on`, `requires_attestation`, `attestation_due_days`,
+      `enforced_by`.
+      **EXCLUDED:** `tenant`, `number`, `status`, `published_at`, `published_by`, `archived_at`,
+      `created_at`, `updated_at`. `previous_version` queryset excludes `self.instance.pk`
+      (a policy cannot supersede itself). `_reject_foreign(self, cleaned,
+      ["previous_version", "applicable_org_unit", "document"])`.
+- [ ] **`PolicyAttestationForm`** - fields: `policy`, `user`, `due_on`. `user` queryset narrowed to
+      `User.objects.filter(tenant=self.tenant, is_active=True)`.
+      **EXCLUDED:** `tenant`, `status`, `acknowledged_at`, `acknowledgement_note`, `exempt_reason`,
+      `alert`, `created_at`, `updated_at`.
+- [ ] **`AuditSealForm`** - fields: `note` **ONLY**. Every other column is a computed digest, a
+      derived boundary or a system stamp. There is no edit form at all.
+- [ ] **Blanket rule to check at review time:** no form anywhere carries `tenant`, an auto-`number`,
+      a `*_by`/`*_at` system stamp, a workflow-controlled `status`/`disposition`/`review_status`, a
+      derived score/band/trend/count/digest, or a `dedupe_key` (L20/L22/L28).
+
+---
+
+## Views + URLs (namespace `procurement`) - the url names ARE the contract
+
+### Screenings (`urls/RiskComplianceManagement/Screenings.py`)
+- [ ] `screenings/` -> `screening_list` · search `number, party__name, reference, notes`; filters
+      `party` (int), `list_source`, `checkpoint`, `result`, `status` (enum values validated against
+      the CHOICES dict before the filter spec is added - L11); stat cards (`pending`,
+      `open_hits`, `blocked`, `rescreen_due`); pagination via `crud_list`.
+      Context: `objects`/`page_obj`, `list_source_choices`, `checkpoint_choices`, `result_choices`,
+      `status_choices`, `parties`, `stats`, `is_admin`, `retention_note`.
+- [ ] `screenings/add/` -> `screening_create` · `screenings/<int:pk>/` -> `screening_detail`
+      (hits table + `allowed_actions` + the party's `blocking_for()` row + a link to
+      `scm:riskassessment_list`) · `screenings/<int:pk>/edit/` -> `screening_edit` (refused once
+      terminal) · `screenings/<int:pk>/delete/` -> `screening_delete` (`@tenant_admin_required`
+      `@require_POST`; refused once terminal - it carries a recorded decision)
+- [ ] `screenings/<int:pk>/clear/` -> `screening_clear` · `.../escalate/` -> `screening_escalate` ·
+      `.../block/` -> `screening_block` - all `@tenant_admin_required` `@require_POST`
+- [ ] `screenings/<int:pk>/hits/add/` -> `screeninghit_create`
+- [ ] `rescreening-due/` -> `screening_rescreen_board`
+- [ ] `screenings/batch/` -> `screening_batch` (`@tenant_admin_required` `@require_POST`, CUTTABLE)
+      - **literal `batch/` must sit BEFORE `<int:pk>/`**
+
+### Screening hits (`ScreeningHits.py`) - the Resolution Manager
+- [ ] `screening-hits/` -> `screeninghit_list` (cross-screening work queue; filters `disposition`,
+      `matched_list`, `match_type`, `screening`, min score) · `screening-hits/<int:pk>/` ->
+      `screeninghit_detail` · `.../edit/` -> `screeninghit_edit` · `.../delete/` ->
+      `screeninghit_delete` (`@require_POST`) · `.../dispose/` -> `screeninghit_dispose`
+      (`@tenant_admin_required` `@require_POST`)
+
+### Risk signals (`RiskSignals.py`)
+- [ ] `risk-signals/` -> `risksignal_list` (search `number, party__name, source_ref, notes`;
+      filters `party`, `provider`, `metric`, `band`, `trend`, `review_status`; stats
+      `critical`, `deteriorating`, `unreviewed`, `refresh_due`) · `risk-signals/add/` ->
+      `risksignal_create` · `risk-signals/<int:pk>/` -> `risksignal_detail` (the last
+      `SERIES_LIMIT` observations for the same party+provider+metric, the party's latest
+      `scm.SupplierRiskAssessment` with a link to `scm:riskassessment_list`, `breaches_minimum`,
+      the raised alert if any) · `.../edit/` · `.../delete/` (`@tenant_admin_required`
+      `@require_POST`) · `.../review/` -> `risksignal_review` (`@require_POST`, `action` +
+      `review_note`)
+- [ ] `risk-refresh-due/` -> `risksignal_refresh_board`
+
+### Fraud (`FraudAlerts.py` + `FraudScan.py`)
+- [ ] `fraud-alerts/` -> `fraudalert_list` (search `number, detail, matched_on, vendor__name`;
+      filters `rule`, `status`, `severity`, `vendor`, `assigned_to`) · `fraud-alerts/add/` ->
+      `fraudalert_create` · `fraud-alerts/<int:pk>/` -> `fraudalert_detail` (both parties, every
+      source document, the 6.4 block link, `allowed_actions`) · `.../edit/` (refused once
+      terminal) · `.../delete/` (`@tenant_admin_required` `@require_POST`, refused once terminal) ·
+      `.../disposition/` -> `fraudalert_disposition` (`@tenant_admin_required` `@require_POST`)
+- [ ] `fraud-scan/` -> `fraud_scan` (GET renders the window form + the read-only constants + the
+      not-buildable bank-detail note; POST runs `FraudAlert.scan()` and reports
+      `{rule: newly_raised}` + `skipped_groups` + `capped`; the POST leg is
+      `@tenant_admin_required`)
+- [ ] `fraud-board/` -> `fraud_board` (open alerts by rule/severity/age + the **6.13 duplicate-invoice
+      citation panel** linking to `procurement:supplierinvoice_list` - pin the exact GET param at
+      build time - and a link to `procurement:maverick_dashboard` for 6.14's leakage findings)
+
+### Policies + attestations (`Policies.py`, `Attestations.py`)
+- [ ] `policies/` -> `policy_list` (search `number, title, summary, enforced_by`; filters
+      `category`, `status`, `applicable_org_unit`, `requires_attestation`; annotated
+      `_attested_count` / `_target_count`) · `policies/add/` -> `policy_create` ·
+      `policies/<int:pk>/` -> `policy_detail` (roster + rate + version chain both directions) ·
+      `.../edit/` (refused once published - a published policy changes by NEW VERSION) ·
+      `.../delete/` (`@tenant_admin_required` `@require_POST`; refused once published) ·
+      `.../publish/` -> `policy_publish` · `.../archive/` -> `policy_archive` ·
+      `.../new-version/` -> `policy_new_version` - the three verbs `@tenant_admin_required`
+      `@require_POST`
+- [ ] `policy-attestations/` -> `policyattestation_list` (filters `policy`, `status`, `user`,
+      `overdue=1`) · `policy-attestations/add/` -> `policyattestation_create` ·
+      `policy-attestations/<int:pk>/` -> `policyattestation_detail` · `.../edit/` · `.../delete/`
+      (`@tenant_admin_required` `@require_POST`) · `.../sign/` -> `attestation_sign`
+      (`@require_POST`, **owner-only**) · `.../exempt/` -> `attestation_exempt`
+      (`@tenant_admin_required` `@require_POST`)
+- [ ] `my-policies/` -> `policy_mine` - `@login_required`, **STAFF-facing, not a login-gated portal
+      page** (L32): the signed-in user's pending/overdue attestations with a sign-off POST per row
+- [ ] `policy-overdue/` -> `policy_overdue_board` (GET the board; POST raises the chase alerts,
+      `@tenant_admin_required`)
+
+### Audit trail + seals (`AuditTrail.py`)
+- [ ] `audit-trail/` -> `audit_trail` - filters `user`, `action`, `content_type`, `date_from`,
+      `date_to`, `object_id`, `q` (over `target`); pagination; the retention statement; the chain
+      status line; the "tamper-evident, not tamper-proof" note
+- [ ] `audit-trail/export/` -> `audit_trail_export` - CSV through **`csv_safe()` on EVERY cell**
+      (`target`, the user label and the `changes` JSON are all user-authored text and Excel executes
+      a leading `=`/`+`/`-`/`@`)
+- [ ] `audit-seals/` -> `auditseal_list` · `audit-seals/<int:pk>/` -> `auditseal_detail` ·
+      `audit-seals/seal/` -> `auditseal_create` (`@tenant_admin_required` `@require_POST`,
+      **literal `seal/` BEFORE `<int:pk>/`**) · `audit-seals/<int:pk>/verify/` ->
+      `auditseal_verify` (`@require_POST`)
+- [ ] **No `auditseal_edit`, no `auditseal_delete`** - documented deviation, reason on the page.
+
+---
+
+## Templates - `templates/procurement/riskcompliance/`
+Two levels, bare page filenames, never flat `<entity>_<page>.html`.
+- [ ] `screening/list.html` · `screening/detail.html` · `screening/form.html`
+- [ ] `screeninghit/list.html` · `screeninghit/detail.html` · `screeninghit/form.html`
+- [ ] `risksignal/list.html` · `risksignal/detail.html` · `risksignal/form.html`
+- [ ] `fraudalert/list.html` · `fraudalert/detail.html` · `fraudalert/form.html`
+- [ ] `policy/list.html` · `policy/detail.html` · `policy/form.html`
+- [ ] `attestation/list.html` · `attestation/detail.html` · `attestation/form.html`
+- [ ] `auditseal/list.html` · `auditseal/detail.html` (**no `form.html`** - creation is a POST button)
+- [ ] Standalone board/report pages at the SUB-MODULE root (rule 6, the `maverick_dashboard` /
+      `receipt_audit` precedent): `rescreening_due.html`, `risk_refresh_due.html`,
+      `fraud_scan.html`, `fraud_board.html`, `policy_overdue.html`, `my_policies.html`,
+      `audit_trail.html`
+- [ ] Every list page: filter bar reflecting `request.GET` (string enums
+      `{% if request.GET.status == value %}selected{% endif %}`; FK pks
+      `{% if request.GET.party == p.pk|stringformat:"d" %}` - **never `|slugify`**), an Actions
+      column (view / edit / delete-POST + `confirm()` + `{% csrf_token %}`), pagination guarded by
+      `has_previous`/`has_next` (L9), and an empty state.
+- [ ] Every detail page: Actions sidebar (Edit + Delete-POST, both status-conditional, + Back to
+      list) plus the verb forms.
+- [ ] **Badges: `badge-green/red/amber/info/muted/slate` ONLY** (L33 - `badge-success` /
+      `badge-danger` render completely unstyled). Every badge block ends with an
+      `{% else %}{{ obj.get_x_display }}` fallback.
+- [ ] `{% extends "base.html" %}`; `{% include "partials/..." %}` unchanged.
+- [ ] **No `|safe` anywhere** on `matched_on`, `detail`, `target`, `changes` or `source_ref` - all
+      of it is staff-authored text.
+
+---
+
+## Wire-up
+- [ ] `apps/procurement/admin.py` - register `ComplianceScreening`, `ScreeningHit`,
+      `SupplierRiskSignal`, `FraudAlert`, `ProcurementPolicy`, `PolicyAttestation`, `AuditSeal`
+      with `list_display` / `list_filter` / `search_fields`; the seal registers `readonly_fields`
+      for every digest column.
+- [ ] `apps/core/navigation.py` - **ONE surgical `Edit`** adding the `"6.17"` key after `"6.16"`
+      (or after `"6.15"` if 6.16 has not landed yet). **Never full-rewrite this file (L43).**
+      Keys must match `NavERP.md:1109-1113` bold text CHARACTER-FOR-CHARACTER, and all five point
+      at **distinct** staff pages (L30/L32):
+      ```
+      "6.17": {
+          "Regulatory Compliance Checks":       "procurement:screening_list",
+          "Supplier Financial Risk Monitoring": "procurement:risksignal_list",
+          "Audit Trail & Logging":              "procurement:audit_trail",
+          "Fraud Detection Rules":              "procurement:fraudalert_list",
+          "Policy Management & Acknowledgment": "procurement:policy_list",
+      },
+      ```
+      Boards (`rescreening-due`, `risk-refresh-due`, `fraud-scan`, `fraud-board`, `my-policies`,
+      `policy-overdue`) and `audit-seals` get **no** sidebar key - each is reached from its
+      register, the established rule.
+- [ ] **NO `config/settings.py` and NO `config/urls.py` change** - `apps/procurement` already exists
+      and is already included.
+- [ ] `apps/procurement/models/DashboardPortal/ProcurementAlerts.py` - the one-line
+      `("risk", "Risk")` addition to `KIND_CHOICES` + `"risk": "badge-red"` in `kind_css`.
+      **Surgical `Edit` only.**
+
+## Seeder - `_seed_risk_compliance(tenant)` in `apps/procurement/management/commands/seed_procurement.py`
+- [ ] Called LAST in `handle()`, after `_seed_budget_cost(tenant)`. Surgical `Edit`, never a rewrite.
+- [ ] Per-tenant existence guard at the top:
+      `if ComplianceScreening.objects.filter(tenant=tenant).exists(): return` (print the standard
+      "Data already exists. Use --flush to re-seed." warning). **Idempotent - safe to run twice.**
+- [ ] Reuse existing rows only: pick supplier parties via
+      `Party.objects.filter(tenant=tenant, roles__role__in=("supplier","vendor"))` and employee
+      parties via `roles__role="employee"`; **never create a new vendor master**.
+- [ ] Screenings: one `cleared` with `result="clear"` and no hits; one `pending_review` with
+      **two hits** - one disposed `false_positive` (with a note) and one still `open` - so the
+      "cannot clear while a hit is open" guard is demonstrable and the Resolution Manager has rows.
+      Both carry `list_as_of`, `reference`, `match_threshold=85` and `next_rescreen_on`.
+- [ ] Risk signals: **three observations across two providers for the SAME party** (e.g.
+      `rapidratings/fhr` 61 -> 48 -> 39 on three dates, plus one `dnb/ser_rating` 6) so `trend`,
+      `previous_value`, `band` and the deterioration alert all render on a fresh DB. Assert the
+      third row lands `deteriorated` + `elevated`/`critical`.
+- [ ] Fraud alerts: **call `FraudAlert.scan(tenant, start, end, user=None)`** over the seeded
+      window rather than hand-writing findings (the 6.14 posture - the alerts must prove the
+      detector). To make R1 fire, give one existing employee party and one existing vendor party a
+      shared `core.ContactMethod` value **only if neither already has one** - `get_or_create`, and
+      skip silently if the tenant has no employee-role party.
+- [ ] Policies: one **published** v1.0 (`code_of_conduct`, `requires_attestation=True`,
+      `effective_from` set) whose `publish()` raises attestations for the tenant's active users,
+      with one of them acknowledged and one left pending-and-overdue; plus one `draft`
+      (`conflict_of_interest`).
+- [ ] One `AuditSeal` sealed **last**, after every other seed write, so `verify()` returns OK on a
+      fresh DB. Skip gracefully when the tenant has no `AuditLog` rows.
+- [ ] Handle the `SMOKETEST` tenant gracefully (no vendor/employee parties -> skip, do not crash).
+- [ ] Print the standard login instructions + the "superuser `admin` has no tenant" warning.
+
+## Migration
+- [ ] Latest on disk is **`0025_remove_budgetmapping_prc_bmap_tnt_active_idx_and_more.py`**.
+      **A concurrent session is building 6.16 and takes `0026_*` (L43).**
+      6.17 generates **AFTER 6.16's migration has landed** and takes **`0027_*`**.
+      If 6.16 has not landed when the build reaches Integrate, agree the number with that session
+      before running `makemigrations` - do not just take 0026.
+- [ ] One migration for all seven tables **plus** the `ProcurementAlert.kind` `AlterField`.
+      If 6.16 also touches `ProcurementAlert.kind`, coordinate - two `AlterField`s on the same
+      column in sibling migrations is a merge conflict waiting to happen.
+- [ ] `makemigrations procurement` -> `migrate` -> `seed_procurement` **twice** -> `manage.py check`.
+
+---
+
+## Verify (smoke as `admin_acme` / password `password`)
+- [ ] `python manage.py makemigrations procurement` then `migrate` - clean.
+- [ ] `python manage.py seed_procurement` **twice** - second run creates nothing and does not raise.
+- [ ] `python manage.py check` - zero issues.
+- [ ] Throwaway `temp/` script, deleted after: log in as `admin_acme`, hit **every** new
+      `procurement:*` route (all ~54).
+- [ ] **Assert CONTENT, not just status (L8/L41):** a mismatched context var returns 200 and renders
+      a blank region. For each page assert the page title AND a seeded record's identifier is
+      present (`SCR-00001`, `SRS-00002`, `FRD-…`, `PPL-00001`, `ASL-00001`), and assert that
+      **no `{#` and no `{% comment` leaks** into the HTML.
+- [ ] **Each valid filter value returns the RIGHT ROWS (L44)**, not merely a 200: e.g.
+      `?band=critical` shows the critical signal and NOT the low one; `?status=pending_review` on
+      screenings hides the cleared one; `?rule=self_approval` on fraud alerts shows only that rule;
+      `?overdue=1` on attestations returns exactly the overdue row.
+- [ ] Junk params on every list (`?status=nope&party=abc&party=99999999999999999999&page=999`) -
+      200, never a 500, and an unrecognised enum **narrows nothing** rather than emptying the page.
+- [ ] Page 2 renders on at least one paginated register.
+- [ ] **Cross-tenant IDOR -> 404** on every detail/edit/delete/verb route, including
+      `screeninghit_*` (which scopes through `screening__tenant`, not its own column).
+- [ ] Every delete is POST-only (a GET must not delete) and really removes the row.
+- [ ] Guard tests that must pass by hand before the review phase:
+      `screening_clear` refused while an open hit exists · `screeninghit_dispose` refused without a
+      note · `attestation_sign` by a DIFFERENT user refused · `policy_edit` refused on a published
+      policy · `fraudalert_delete` refused on a terminal alert · `auditseal` has no edit/delete
+      route at all · `AuditSeal.verify()` returns OK on a fresh seal and FAILS after a deliberate
+      `AuditLog.objects.filter(pk=…).update(target="tampered")` in the temp script (**then roll it
+      back**).
+- [ ] `FraudAlert.scan()` run twice over the same window raises **zero** new alerts the second time
+      and does not re-open a dismissed one.
+- [ ] Sidebar shows **6.17 Live** with all five bullets, each landing on its own distinct page.
+
+## Close-out (Module Creation Sequence phases 4-7)
+- [ ] Phase 4 - the six reviewers **one after another**, findings appended to
+      `.claude/tasks/review-procurement-6.17.md` after each: `code-reviewer` -> `explorer` ->
+      `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+      Dedupe, sort Critical -> Important -> Minor, assign `C#`/`I#`/`M#`, commit the file.
+- [ ] Phase 5 - one `code-fixer` agent burns the findings down in ID order, one commit per file.
+- [ ] Phase 6 - test contract + `conftest.py` first, then one `test-writer` per file, in order:
+      `apps/procurement/tests/test_riskcompliance_models.py` -> `_forms.py` -> `_views.py` ->
+      `_security.py`. Every test function `test_riskcompliance_*`, every module helper
+      `_riskcompliance_*`. Finish with the **full unfiltered** app suite green (never `-k`, L47).
+- [ ] Phase 7 - update `.claude/skills/procurement/SKILL.md` (models, the 14 route segments, the
+      template paths, the seeder rows, the `LIVE_LINKS["6.17"]` entry, the `METRIC_SCALES` and
+      canonical-digest gotchas) and mark 6.17 complete in `README.md`. One commit each.
+- [ ] One file per commit throughout, PowerShell `;` separators, **never `git push`**.
+
+## Later passes / deferred (carried from research §6-§7 so nothing is lost)
+- Live **ITA CSL / SAM.gov connector** and any commercial screening feed - needs an outbound-HTTP
+  design with the CRM-webhooks SSRF guard, list caching and retention. `method="api_feed"` already
+  reserves the row shape so no migration is needed later.
+- **OFAC 50%-rule ownership analysis, PEP / adverse media, sanctioned-ownership graphs** - licensed data.
+- **`FraudRule` config table + calibration/simulation** ("how many alerts would this threshold
+  raise?") - SAP BIS's strongest idea and the natural 6.17 second pass. This pass ships tunable
+  class constants rendered read-only next to the scan; do **not** ship an editable rule table with
+  no scan wired to it.
+- **Conflict-of-interest DECLARATION register** (evaluator/committee attestations with interest
+  type, related party, mitigating control) - a second attestation kind with its own fields. Rule R1
+  catches the undeclared case meanwhile. Strongest candidate for the second pass.
+- **Vendor bank-detail-change monitoring** - **blocked on data**: no supplier bank record exists
+  anywhere. Needs an AP-owned `VendorBankAccount` with change history - an `apps/accounting` build.
+- **Fraud rules `po_escalation`** (successive `procurement.PurchaseOrderChange` rows raising value
+  after approval, research 4.8) and **`round_amount`** (single document priced just under an
+  `APPROVAL_TIERS` threshold, 4.7) - both cheap, both cut for scope. `round_amount` is additionally
+  boundary-sensitive against 6.14's `split_purchase` and must ship with an explicit code comment
+  naming the boundary.
+- **Batch screening of the whole vendor master** (`screening_batch`) if the pass overruns.
+- **Link/network analysis, ML anomaly scoring, entity-resolution fuzzy matching** - no graph/ML
+  layer; the rules stay deterministic and no page ever says "AI".
+- **Scheduled/automatic re-screening and score refresh** - no worker or scheduler exists
+  (`accounting.ScheduledReport` is the config-without-worker precedent). The due boards + an
+  operator POST are the honest equivalent.
+- **Attestation reminder emails and e-signature** - no mail sender wired; `ProcurementAlert` substitutes.
+- **DB-level append-only / WORM / SIEM export / a 10-year retention purge job** - infrastructure.
+  The seal proves alteration; it does not prevent it, and the page says so.
+- **Inherent-vs-residual risk questionnaires and tiering-driven review cadence** (Coupa,
+  ProcessUnity) - a questionnaire engine; 6.6's `RfxEvent`/`RfxQuestion` is the reusable substrate.
+- **Cyber-rating and ESG feeds** (BitSight / RiskRecon / EcoVadis) - already reserved as
+  `provider` / `metric` values, so a later connector needs no migration.
+
+## Parked for a sibling sub-module (do NOT pull into 6.17)
+- **KPIs, scorecards, OTD/defect metrics, 360 feedback, PIPs, benchmarking, any "risk-adjusted
+  score"** -> **6.16** (being built concurrently). Nothing about supplier *performance* is in scope.
+- **Vendor onboarding, qualification tiers, the portal, the suspension/blacklist register** ->
+  **6.4** (built) and **SCM 4.2**. 6.17 *raises* a block; it never owns blocking.
+- **The internal 4-factor composite risk assessment + mitigation plan** -> **SCM 4.2
+  `SupplierRiskAssessment`**. 6.17 links to `scm:riskassessment_list` and ships no second composite.
+- **Recurring regulatory obligations, frameworks, licences, trade documents, ESG assessments** ->
+  **SCM 4.12** (`ComplianceRequirement`/`ComplianceCheck`, `TradeLicense`,
+  `SustainabilityAssessment`). A screening is one lookup at one moment with match children - it is
+  **not** a cadence obligation. Say so in the module docstring and cross-link.
+- **Duplicate-invoice detection, three-way-match variances, invoice disputes** -> **6.13** (built).
+  Cite those rows on the fraud board; never re-detect them.
+- **Maverick/off-contract spend, `split_purchase`, contract leakage, spend cubes** -> **6.14** (built).
+- **Approval routing, DOA delegation, escalation policy** -> **6.3** (built); 6.17 only READS the
+  signatures.
+- **Policy repository search, full-text indexing, version-controlled document library** -> **6.19**
+  Document & Knowledge Management. 6.17 owns the policy record, its versions and the sign-off
+  ledger; 6.19 will index them.
+- **Journal postings, credit notes, payment blocks** -> `apps.accounting` (L29). 6.17 posts nothing.
+- **Stock/quarantine holds for non-compliant goods** -> inventory 5.14/5.15, SCM 4.9.
+
+## Review notes
+(filled in at the end)
+
+---
 
 ## Procurement 6.16 - Supplier Performance & Evaluation (Module 6, `apps/procurement`) - plan from research-procurement-6.16.md  (2026-09-05)
 
