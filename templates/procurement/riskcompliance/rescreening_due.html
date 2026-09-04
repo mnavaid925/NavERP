@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Re-screening Due{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the re-screening board
+    (apps/procurement/views/RiskComplianceManagement/Screenings.py ::
+    screening_rescreen_board). A standalone sub-module-root page, not an entity CRUD page, so
+    it lives at templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract, and NOTHING else exists here:
+      rows, stats{overdue, due_soon, total}, today, is_admin.
+
+    Each row is a dict, NOT a model instance:
+      row.party, row.screening (may be None — never screened), row.due_on (may be None),
+      row.days (days past due; negative means still ahead; None when never screened),
+      row.state, row.state_label, row.state_css.
+
+    There is NO stored "due" flag anywhere — the board is computed from the register on every
+    request (two queries: the supplier list, then the latest cleared screening per supplier).
+    Rows are built only for suppliers needing attention, so this page has no pagination by
+    design: its length tracks the size of the problem, not the size of the vendor master.
+
+    `row.screening` is nullable, so every read of it sits inside an {% if %} branch (L10).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Re-screening Due</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Re-screening due</span>
+      </div>
+      <p class="text-muted">Which suppliers are overdue a sanctions re-screen, which are approaching one, and which have never been cleared at all. Computed live from the register as at {{ today|date:"M d, Y" }} — there is no stored due flag to go stale.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Screenings</a>
+      <a href="{% url 'procurement:screeninghit_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Hit queue</a>
+      <a href="{% url 'procurement:screening_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record screening</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue or never screened</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.due_soon }}</div><div class="stat-label">Due within 30 days</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Suppliers scanned</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Needs attention</h2>
+      <span class="text-muted">worst first — never screened, then most overdue</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Last cleared screening</th>
+            <th>Screened on</th>
+            <th>Due</th>
+            <th class="text-right">Days</th>
+            <th>State</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:party_detail' row.party.pk %}">{{ row.party.name }}</a></td>
+              <td>
+                {% if row.screening %}
+                  <a href="{% url 'procurement:screening_detail' row.screening.pk %}">{{ row.screening.number }}</a>
+                  <div class="text-muted">{{ row.screening.get_list_source_display }}</div>
+                {% else %}
+                  <span class="text-muted">Never cleared</span>
+                {% endif %}
+              </td>
+              <td>{% if row.screening %}{{ row.screening.screened_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.due_on %}{{ row.due_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right">
+                {% if row.state == "never" %}
+                  <span class="text-muted">—</span>
+                {% elif row.state == "overdue" %}
+                  <span class="text-danger">{{ row.days }} late</span>
+                {% else %}
+                  <span class="text-warn">in {{ row.days|stringformat:"d"|cut:"-" }}</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:screening_create' %}" class="btn-icon" title="Record a screening" aria-label="Record a screening"><i data-lucide="plus"></i></a>
+                  <a href="{% url 'procurement:screening_list' %}?party={{ row.party.pk|stringformat:"d" }}" class="btn-icon" title="Screening history" aria-label="Screening history"><i data-lucide="history"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="shield-check"></i>
+                <h3>Every supplier is in date</h3>
+                <p>All {{ stats.total }} supplier(s) in this workspace hold a cleared screening that is not due for renewal in the next 30 days. Nothing to do here today.</p>
+                <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline">Go to the register</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How due dates are worked out</h2><span class="text-muted">no stored flag, no background job</span></div>
+    <div class="card-body">
+      <p class="text-muted">A supplier's due date comes from its most recent <span class="badge badge-green">Cleared</span> screening: the next-re-screen date if one was set, otherwise a year from the day it was screened. A supplier that has never been cleared is past due by definition and sorts to the top. Pending, escalated and blocked screenings do not count — an undecided check is not a clearance.</p>
+      <p class="text-muted">Nothing on this page writes anything. It tells you which suppliers to screen; recording the screening is a deliberate act, on the register.</p>
+    </div>
+  </div>
+{% endblock %}
