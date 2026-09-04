@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Procurement Document{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementDocument detail
+    (apps/procurement/views/DocumentKnowledgeManagement/Documents.py, hand-rolled render).
+
+    Context contract, and NOTHING else exists here:
+      obj, revisions, current_revision, policies, knowledge_resources,
+      can_upload, lock_holder, search_note.
+
+    Nullable-FK discipline (L10): supplier, contract, purchase_order, sourcing_event, owner,
+    lock_holder and every date are nullable, so every read of them sits inside a conditional
+    branch and renders an em dash otherwise.
+
+    FORWARD REFERENCES, expected: the revision rows link procurement:pdocrevision_detail /
+    _approve / _delete, the upload button links procurement:pdocument_revision_upload, and the
+    "Referenced by" panel links procurement:ppolicy_detail and
+    procurement:knowledgeresource_detail. All four url names land with the other entity modules
+    of this same sub-module in this same build; manage.py check at Integrate is the first point
+    every half is present. Do NOT "fix" this by hard-coding a path.
+
+    Cross-module links are the verified url names: scm:contract_detail,
+    scm:purchaseorder_detail, procurement:event_detail (NOT sourcingevent_detail) and
+    core:party_detail.
+
+    Revision chain badges follow the model, not a guess: the revision the document points at
+    is green "Current", an older approved one is amber "Superseded", an unapproved one is
+    muted "Pending". Older approved revisions keep is_approved=True — they WERE approved, and
+    rewriting that would be a lie; "only the latest approved version is accessible" is
+    expressed by current_revision_no pointing at exactly one row.
+
+    Only the SYSTEM-ASSIGNED number and revision number reach a confirm() handler.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:pdocument_list' %}">Documents</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.title }}</p>
+    </div>
+    <div class="page-actions">
+      {% if can_upload %}
+        <a href="{% url 'procurement:pdocument_revision_upload' obj.pk %}" class="btn btn-primary"><i data-lucide="upload"></i> Upload revision</a>
+      {% endif %}
+      <a href="{% url 'procurement:pdocument_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ obj.title }}</h2>
+      <span class="badge-group">
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.classification_css }}">{{ obj.get_classification_display }}</span>
+        {% if obj.is_expired %}<span class="badge badge-red">Expired</span>
+        {% elif obj.is_expiring %}<span class="badge badge-amber">Expiring soon</span>{% endif %}
+        {% if obj.is_review_due %}<span class="badge badge-amber">Review due</span>{% endif %}
+        {% if obj.is_over_retention %}<span class="badge badge-slate">Past retention</span>{% endif %}
+      </span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_doc_type_display }}</dd></div>
+        <div class="detail-item"><dt>Owner</dt>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Current revision</dt>
+          <dd>{% if current_revision %}<a href="{% url 'procurement:pdocrevision_detail' current_revision.pk %}">r{{ current_revision.revision_no }}</a>{% else %}<span class="text-muted">No approved revision yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Checked out</dt>
+          <dd>{% if lock_holder %}{{ lock_holder.get_full_name }} <span class="text-muted">since {{ obj.checked_out_at|date:"M d, Y H:i" }}</span>{% else %}<span class="text-muted">Not checked out</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Effective</dt>
+          <dd>{% if obj.effective_date %}{{ obj.effective_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Expires</dt>
+          <dd>{% if obj.expires_on %}{{ obj.expires_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Next review</dt>
+          <dd>{% if obj.review_on %}{{ obj.review_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Retention until</dt>
+          <dd>{% if obj.retention_until %}{{ obj.retention_until|date:"M d, Y" }} <span class="text-muted">(a hold to read, not an action)</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Visible to vendors</dt>
+          <dd>{% if obj.supplier_visible %}<span class="badge badge-info">Flagged for the vendor portal</span>{% else %}<span class="text-muted">Internal only</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name }}</span>{% endif %}</dd></div>
+      </dl>
+
+      {% if obj.description %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Description</dt><dd>{{ obj.description|linebreaksbr }}</dd></div>
+      {% endif %}
+      {% if obj.tag_list %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Tags</dt>
+          <dd><span class="badge-group">{% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}</span></dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Linked records</h2><span class="text-muted">what this document belongs to</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd>{% if obj.supplier %}<a href="{% url 'core:party_detail' obj.supplier.pk %}">{{ obj.supplier.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Contract</dt>
+          <dd>{% if obj.contract %}<a href="{% url 'scm:contract_detail' obj.contract.pk %}">{{ obj.contract.number }} · {{ obj.contract.title }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Purchase order</dt>
+          <dd>{% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}">{{ obj.purchase_order.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Sourcing event</dt>
+          <dd>{% if obj.sourcing_event %}<a href="{% url 'procurement:event_detail' obj.sourcing_event.pk %}">{{ obj.sourcing_event.number }} · {{ obj.sourcing_event.title }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Revision chain</h2>
+      <span class="text-muted">newest first · only the approved revision the document points at is the current one</span>
+      {% if can_upload %}
+        <a class="btn btn-outline btn-sm" href="{% url 'procurement:pdocument_revision_upload' obj.pk %}"><i data-lucide="upload"></i> Upload revision</a>
+      {% endif %}
+    </div>
+    {% comment %}
+      WARNING: an uploaded file is LINKED, never rendered inline. Embedding stored bytes in
+      this page (an <iframe>, an <img>, an inline <svg>) is a stored-XSS surface — the browser
+      would execute whatever an uploader put in a file this workspace accepted. The link hands
+      the file to the browser instead. In deployment MEDIA_ROOT must sit outside any
+      executable path and the media response must carry Content-Disposition: attachment, so a
+      served .html or .svg downloads rather than runs on this origin.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Revision</th>
+            <th>File</th>
+            <th>Change note</th>
+            <th>Uploaded</th>
+            <th>Approval</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in revisions %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:pdocrevision_detail' r.pk %}">r{{ r.revision_no }}</a>
+                <div>
+                  {% if r.is_current %}<span class="badge badge-green">Current</span>
+                  {% elif r.is_approved %}<span class="badge badge-amber">Superseded</span>
+                  {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if r.file %}<a href="{{ r.file.url }}"><i data-lucide="download"></i> {{ r.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+                <div class="text-muted">{{ r.file_size|filesizeformat }}{% if r.sha256 %} · checksum {{ r.sha256|slice:":16" }}…{% endif %}</div>
+                {% if r.extraction_note %}<div class="text-warn">{{ r.extraction_note }}</div>{% endif %}
+              </td>
+              <td>{% if r.change_note %}{{ r.change_note }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {{ r.created_at|date:"M d, Y H:i" }}
+                {% if r.uploaded_by %}<div class="text-muted">{{ r.uploaded_by.get_full_name }}</div>{% endif %}
+              </td>
+              <td>
+                {% if r.is_approved %}
+                  <span class="text-ok">Approved {{ r.approved_at|date:"M d, Y" }}</span>
+                  {% if r.approved_by %}<div class="text-muted">{{ r.approved_by.get_full_name }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">Not approved</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:pdocrevision_detail' r.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    There is no Edit: a revision is immutable, so a wrong one is superseded by
+                    the next upload rather than amended in place. Approve is tenant-admin
+                    gated in the view; Delete is refused on anything approved or current.
+                  {% endcomment %}
+                  {% if not r.is_approved %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'procurement:pdocrevision_approve' r.pk %}" onsubmit="return confirm('Approve r{{ r.revision_no }} of {{ obj.number }}? It becomes the current version and its text becomes what search matches.');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Approve" aria-label="Approve"><i data-lucide="check"></i></button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'procurement:pdocrevision_delete' r.pk %}" onsubmit="return confirm('Delete r{{ r.revision_no }} of {{ obj.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="file-plus"></i>
+                <h3>No revisions yet</h3>
+                <p>Upload the first version of the file. A revision lands unapproved: approving one makes it the document's current version and copies its text into what this register searches.</p>
+                {% if can_upload %}
+                  <a href="{% url 'procurement:pdocument_revision_upload' obj.pk %}" class="btn btn-primary"><i data-lucide="upload"></i> Upload revision</a>
+                {% endif %}
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Referenced by</h2><span class="text-muted">policies and knowledge resources pointing at this document</span></div>
+    <div class="card-body">
+      {% if policies %}
+        <h3 class="card-title">Policies</h3>
+        <ul>
+          {% for p in policies %}
+            <li><a href="{% url 'procurement:ppolicy_detail' p.pk %}">{{ p.title }} v{{ p.version_number }}</a>
+              <span class="badge {{ p.status_css }}">{{ p.get_status_display }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if knowledge_resources %}
+        <h3 class="card-title">Knowledge resources</h3>
+        <ul>
+          {% for k in knowledge_resources %}
+            <li><a href="{% url 'procurement:knowledgeresource_detail' k.pk %}">{{ k.title }}</a>
+              <span class="badge {{ k.status_css }}">{{ k.get_status_display }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if not policies and not knowledge_resources %}
+        <p class="text-muted">Nothing points at this document yet. A policy or a knowledge resource can link here so it inherits revision control, approval and text search instead of carrying its own copy of the file.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">every one is recorded in the audit trail</span></div>
+    <div class="card-body">
+      <div class="page-actions">
+        {% if obj.is_checked_out %}
+          <form method="post" action="{% url 'procurement:pdocument_release' obj.pk %}" onsubmit="return confirm('Release the checkout on {{ obj.number }}?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="unlock"></i> Release checkout</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'procurement:pdocument_checkout' obj.pk %}">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Check out</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status != 'active' %}
+          <form method="post" action="{% url 'procurement:pdocument_activate' obj.pk %}" onsubmit="return confirm('Put {{ obj.number }} back in force?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle"></i> Activate</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'active' %}
+          <form method="post" action="{% url 'procurement:pdocument_supersede' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} superseded? It stays searchable and keeps every revision.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="history"></i> Supersede</button>
+          </form>
+        {% endif %}
+        {% if obj.status != 'archived' %}
+          <form method="post" action="{% url 'procurement:pdocument_archive' obj.pk %}" onsubmit="return confirm('Archive {{ obj.number }}? Nothing is deleted — it stays searchable and keeps every revision.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+          </form>
+        {% endif %}
+
+        <a href="{% url 'procurement:pdocument_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <a href="{% url 'procurement:pdocument_list' %}" class="btn btn-outline">Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">{{ search_note }}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Deleting removes this document and every revision RECORD it holds. The stored files themselves are not reclaimed from disk here — reclaiming them is a supervised job, not a side effect of a button. If the document is simply out of use, archive it instead: an archived document keeps its revisions and stays searchable.</p>
+      <form method="post" action="{% url 'procurement:pdocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }} and every revision record it holds? The stored files are not reclaimed from disk here.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete document</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
