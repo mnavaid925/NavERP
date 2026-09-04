@@ -1,6 +1,6 @@
 Here is the text extracted from the image:
 
-### **Workflow Orchestration**
+### **Working Principles**
 
 **1. Plan Mode Default**
 
@@ -9,12 +9,15 @@ Here is the text extracted from the image:
 * Use plan mode for verification steps, not just building
 * Write detailed specs upfront to reduce ambiguity
 
-**2. Subagent Strategy**
+**2. Subagent Strategy — ONE AT A TIME**
 
-* Use subagents liberally to keep main context window clean
-* Offload research, exploration, and parallel analysis to subagents
-* For complex problems, throw more compute at it via subagents
-* One task per subagent for focused execution
+* **Never run agents in parallel and never use the `Workflow` tool.** One agent runs, it reports back, you act on
+  its result, and only then does the next one start.
+* Use a subagent to keep the main context window clean — research, exploration, review, fixes — but exactly **one
+  task per subagent** and exactly **one subagent in flight**.
+* For complex problems, throw more *care* at it — a longer, better-specified single agent — not more concurrent
+  agents.
+* Never launch several `Agent` calls in one message.
 
 **3. Self-Improvement Loop**
 
@@ -47,33 +50,29 @@ Here is the text extracted from the image:
 
 ---
 
-### **Module Creation Sequence (MANDATORY — parallel)**
+### **Module Creation Sequence (MANDATORY — strictly serial)**
 
 Whenever you create a **new module or sub-module** (especially via `/next-module`), follow this exact sequence. It
 **starts with research and planning** (`research` → `todo`) so the build is driven by what the best products in the
-domain actually do, *then* writes the code, *then* **reviews it with six agents in parallel**, *then* has one
-`code-fixer` agent burn the findings down. Every step ends with `git add` + `git commit` (**one file per commit**,
-PowerShell-safe). **Never run `git push` at any step** — the user pushes manually.
+domain actually do, *then* writes the code, *then* **reviews it with six reviewers run one after another**, *then*
+has one `code-fixer` agent burn the findings down, *then* writes the tests. Every step ends with `git add` +
+`git commit` (**one file per commit**, PowerShell-safe). **Never run `git push` at any step** — the user pushes
+manually.
 
-> **The review and test phases are parallel Workflows, NOT one-agent-at-a-time chains.** Running
-> `code-reviewer` → `explorer` → `frontend-reviewer` → … serially, applying findings in the main session between
-> each, is what made a sub-module take two sessions. That chain is **replaced** by Phase 4 + Phase 5 below. Do not
-> reintroduce it.
+> **Everything below runs ONE THING AT A TIME.** No `Workflow` tool, no parallel lanes, no fan-out. A phase's
+> agents run in sequence: agent → result → act on it → next agent. Never start a second agent while one is still
+> running, and never put two `Agent` calls in the same message.
 
-**Budget — one sub-module must land inside a 4-hour session.** Check the clock at each phase boundary. If a phase
-overruns its slot, cut scope *inside that phase* (fewer models, defer Minor findings to a follow-up) rather than
-letting the overrun eat the next phase.
-
-| # | Phase | How it runs | Slot |
-|---|-------|-------------|------|
-| 0 | Claim the tree | inline, ~2 min | 0:00 |
-| 1 | `research` agent | 1 agent | 0:05–0:30 |
-| 2 | `todo` agent | 1 agent | 0:30–0:45 |
-| 3 | **Build wave** | **Workflow — spec → per-entity backend ‖ templates → integrate → smoke** | 0:45–1:50 |
-| 4 | **Review wave** | **Workflow — 6 reviewers in PARALLEL** → one findings `.md` | 1:50–2:20 |
-| 5 | `code-fixer` agent | 1 agent — fixes and commits one by one | 2:20–3:05 |
-| 6 | **Test wave** | **Workflow — contract → 4 parallel test-writers → 1 green run** | 3:05–3:30 |
-| 7 | Skill + README | inline | 3:30–3:40 |
+| # | Phase | How it runs |
+|---|-------|-------------|
+| 0 | Claim the tree | inline |
+| 1 | `research` agent | 1 agent |
+| 2 | `todo` agent | 1 agent |
+| 3 | Build | spec → scaffold (new app only) → entity by entity → integrate → smoke, one step at a time |
+| 4 | Review | the 6 reviewers run **one after another** → one findings `.md` |
+| 5 | `code-fixer` agent | 1 agent — fixes and commits one by one |
+| 6 | Tests | contract + `conftest.py` → the 4 test modules one at a time → 1 green unfiltered run |
+| 7 | Skill + README | inline |
 
 ---
 
@@ -82,10 +81,6 @@ letting the overrun eat the next phase.
   no changeset to read (the build commits as it goes, so the working tree is clean by then).
 * `git status` — a dirty tree at session start is **not yours** (L45). Leave those files alone; never commit them.
 * If another session is building in this same checkout, agree the migration number before generating one (L43).
-* **Register the build so it can survive the session** (see *Session Window & Resume* below):
-  ```
-  venv\Scripts\python.exe .claude/hooks/build_state.py start --slug scm --submodule 4.17 --title 'Returns Management' --base <BASE> --migration <claimed>
-  ```
 
 **Phase 1 — `research` agent.** Research the ~6–10 leading commercial products in the ONE target sub-module's
 (`N.M`) specific domain (not the parent module's generic domain) and write a deduplicated, prioritized feature
@@ -96,86 +91,67 @@ as-built core spine, with a recommended 1–4-model build scope. Commit that fil
 plan in `.claude/tasks/todo.md` (models + their fields/choices **driven by the researched features**, plus
 backend/wire-up/template/verify/close-out items). Commit that file.
 
-**Phase 3 — Build wave (parallel Workflow).**
+**Phase 3 — Build (serial).** Five steps, in this order, one at a time:
 
-```
-Workflow({ scriptPath: '.claude/workflows/module-build.js',
-           args: { slug: 'scm', submodule: '4.17', title: 'Returns Management',
-                   newApp: false, migrationNumber: '<claimed in Phase 0>' } })
-```
+1. **Spec** (read-only `explorer` agent, or inline) — read `.claude/tasks/todo.md`, NavERP.md and the reference
+   apps, and freeze the **contract** in `.claude/tasks/contract-<slug>-<N.M>.md`: every model field and CHOICES
+   value, form `Meta.fields` + exclusions, url names, and — the field that decides whether the build works —
+   **every view context key**. Pin the list var, the detail and edit-mode object vars, every `*_choices`, every FK
+   filter queryset. A name left unpinned is a silently blank region or a `NoReverseMatch` (L7).
+2. **Scaffold** — **brand-new app only**; skipped when `apps/<slug>/` exists.
+3. **Build, entity by entity** — take one entity at a time and finish it completely before starting the next: its
+   four backend files (`models` / `forms` / `views` / `urls`) and then its three templates
+   (`list` / `detail` / `form.html`). Do not interleave entities, and do not touch shared files here: package
+   `__init__.py`, `admin.py`, the seeder, `navigation.py`, `settings.py` and `urls.py` all wait for Integrate.
+4. **Integrate** (single writer, only DB writer) — verify every expected file actually landed *before* wiring
+   anything, then add the `__init__.py` re-export blocks surgically, register admin, extend the seeder, add the
+   one `LIVE_LINKS["N.M"]` entry, do the `settings.py` / `urls.py` wire-up **only now that the app files exist**
+   (the check-after-edit hook blocks otherwise, L12), then `makemigrations` → `migrate` → `seed_<slug>` **twice**
+   → `manage.py check`, and commit one file per commit with explicit paths.
+5. **Smoke** (`qa-smoke-tester` agent) — the gate that catches contract drift: render every new page as
+   `admin_acme` and assert content, not just status (a mismatched context var returns 200 and renders blank, L8),
+   plus a junk-param list, page 2, and cross-tenant IDOR → 404. Fix drift against the contract. This runs so the
+   review phase spends its six passes on quality, not on a page that 500s.
 
-Five phases, and the parallelism axis is **per entity, not per layer**:
+**Phase 4 — Review (six reviewers, ONE AFTER ANOTHER).**
 
-1. **Spec** (solo, read-only `explorer`) — reads `.claude/tasks/todo.md`, NavERP.md and the reference apps, and
-   freezes the **contract**: every model field and CHOICES value, form `Meta.fields` + exclusions, url names, and
-   — the field that decides whether the build works — **every view context key**. Pin the list var, the detail
-   and edit-mode object vars, every `*_choices`, every FK filter queryset. A name left unpinned is a silently
-   blank region or a `NoReverseMatch` (L7).
-2. **Scaffold** (solo) — **brand-new app only**; skipped when `apps/<slug>/` exists.
-3. **Build** (parallel) — for each entity, a **backend agent and a template agent run concurrently**: the backend
-   agent owns that entity's four files across `models/forms/views/urls`, the template agent owns its three
-   `list/detail/form.html`. They never see each other's output — the frozen contract is the whole interface,
-   which is exactly why Spec is exhaustive. **No build agent touches a shared file**: package `__init__.py`,
-   `admin.py`, the seeder, `navigation.py`, `settings.py` and `urls.py` are all off-limits.
-4. **Integrate** (solo, single writer, only DB writer) — verifies every expected file actually landed *before*
-   wiring anything (a workflow can be cut off mid-phase, L21), then adds the `__init__.py` re-export blocks
-   surgically, registers admin, extends the seeder, adds the one `LIVE_LINKS["N.M"]` entry, does the
-   `settings.py`/`urls.py` wire-up **only now that the app files exist** (the check-after-edit hook blocks
-   otherwise, L12), then `makemigrations` → `migrate` → `seed_<slug>` **twice** → `manage.py check`, and commits
-   one file per commit with explicit paths.
-5. **Smoke** (solo `qa-smoke-tester`) — the gate that catches fan-out drift: renders every new page as
-   `admin_acme` and asserts content, not just status (a mismatched context var returns 200 and renders blank,
-   L8), plus a junk-param list, page 2, and cross-tenant IDOR → 404. Fixes drift against the contract. This runs
-   so the review wave spends its six agents on quality, not on a page that 500s.
+Run these six agents **in sequence**, each in its own `Agent` call, waiting for each to report before starting the
+next:
 
-The workflow returns the contract and the expected-file list. If it reports `deadAgents`, confirm those files
-exist before moving on.
+`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` →
+`security-reviewer`
 
-**Phase 4 — Review wave (6 agents in ONE parallel Workflow).**
+Each one reviews `BASE...HEAD` (the sha you saved in Phase 0) and returns structured findings. After each agent
+reports, **append its findings to `.claude/tasks/review-<slug>-<N.M>.md`** — do not carry findings in your head
+between agents. When all six have run, dedupe the file, sort Critical → Important → Minor, and assign IDs
+(`C1`, `I3`, `M7`). Commit the file.
 
-```
-Workflow({ scriptPath: '.claude/workflows/module-review.js',
-           args: { slug: 'scm', submodule: '4.17', title: 'Returns Management',
-                   base: '<BASE from Phase 0>', date: '<today>' } })
-```
-
-`code-reviewer · explorer · frontend-reviewer · performance-reviewer · qa-smoke-tester · security-reviewer` all
-run **at once**, each in its own lane, each returning structured findings. The script dedupes them, sorts
-Critical → Important → Minor, and assigns IDs (`C1`, `I3`, `M7`).
-
-* Write the returned `markdown` to **`.claude/tasks/review-<slug>-<N.M>.md`** and commit that file. This file is
-  the **single hand-off artifact** between the reviewers and the fixer — the main session does not carry findings
-  in its head.
-* The reviewers are **read-only**: they never edit code and never commit. `qa-smoke-tester` is the only lane that
+* The reviewers are **read-only**: they never edit code and never commit. `qa-smoke-tester` is the only one that
   touches the DB (migrate + seed + its throwaway `temp/` script) and its normal "fix what you find" behaviour is
   overridden to "report it instead".
-* If the per-agent table in the file shows a lane with **NO RESULT**, re-run *only that lane* (a single `Agent`
-  call) and append its findings — a missing lane is missing coverage, not a clean bill of health.
-* Do **not** also run these six agents individually. One wave per changeset.
+* If a reviewer returns nothing usable, re-run **that one agent** — a missing pass is missing coverage, not a
+  clean bill of health.
+* Do **not** apply findings yourself in the main session; that is Phase 5's job.
 
 **Phase 5 — `code-fixer` agent.** Hand it the findings file; it fixes every finding in ID order
 (all Critical, then Important, then Minor), verifies each, and makes **one commit per file** as it goes, marking
 each finding `[x] fixed` / `[~] skipped — reason` in the file. **The main session does not apply findings itself** —
-that is what kept blowing out the context window and the clock. When it reports back, check that no finding is
-left `[ ] open` and that `manage.py check` is clean.
+that is what kept blowing out the context window. When it reports back, check that no finding is left `[ ] open`
+and that `manage.py check` is clean.
 
-**Phase 6 — Test wave (parallel Workflow).**
+**Phase 6 — Tests (serial).** In this order, one at a time:
 
-```
-Workflow({ scriptPath: '.claude/workflows/module-tests.js',
-           args: { slug: 'scm', submodule: '4.17', subslug: 'returns',
-                   title: 'Returns Management' } })
-```
+1. One agent pins the test contract (exact model / form / url / context names) and writes the shared
+   `tests/__init__.py` + `conftest.py`.
+2. Then a `test-writer` agent per file, **one after another**: `test_<subslug>_models.py` →
+   `test_<subslug>_forms.py` → `test_<subslug>_views.py` → `test_<subslug>_security.py`. Commit each test file on
+   its own as it lands.
+3. Finally, run the **full unfiltered** app suite and fix it green — never `-k` filtered, because a filter
+   excludes exactly the tests a shared-file change can break (L47).
 
-One solo agent first pins the contract (exact model/form/url/context names) and owns the shared
-`tests/__init__.py` + `conftest.py`; then **four `test-writer` agents run in parallel** over disjoint files —
-`test_<subslug>_{models,forms,views,security}.py`; then one agent runs the **full unfiltered** app suite and fixes
-it green. Tests run on SQLite in-memory, so the parallel pytest processes cannot collide. Every test function is
-named `test_<subslug>_*` and every module-level helper `_<subslug>_*` — not because lanes can shadow each other
-(separate test modules have separate namespaces) but so the *next* sub-module appending nearby cannot shadow
-them. The collision that genuinely crosses files is a `conftest.py` fixture, which is why `conftest.py` is owned
-by the solo contract step; and it is why the final run is never `-k` filtered — a filter excludes exactly the
-tests a shared-file change can break (L47). Commit each test file on its own.
+Tests run on SQLite in-memory. Every test function is named `test_<subslug>_*` and every module-level helper
+`_<subslug>_*`, so the *next* sub-module appending nearby cannot shadow them. `conftest.py` is owned by step 1
+alone — never edit it from a later step without re-running the full suite.
 
 **Phase 7 — Skill + README.** Update (or, on a brand-new app, author) `.claude/skills/<module-slug>/SKILL.md` with
 the new sub-module's models/routes/templates/seeder rows, and mark the sub-module complete in `README.md`. Commit
@@ -185,71 +161,19 @@ each file on its own. (See **Per-Module Skill (MANDATORY)** below.)
 
 **Rules for this sequence:**
 
-* Phases run **in order** — do not skip one and do not reorder. Within Phases 4 and 6, the agents run **in
-  parallel**; everywhere else, one thing at a time.
+* Phases run **in order** — do not skip one and do not reorder. **Everywhere, one thing at a time**: one agent in
+  flight, one entity at a time, one reviewer at a time, one test file at a time.
+* **Never use the `Workflow` tool** for any of this, and never launch two agents in the same message.
 * Phase 1 produces `.claude/tasks/research-<slug>-<N.M>.md`, Phase 2 produces `.claude/tasks/todo.md`, Phase 4
   produces `.claude/tasks/review-<slug>-<N.M>.md`. Each is committed as its own file.
-* **All review findings live in the `.md` file, never only in the transcript.** If a Workflow returns findings and
+* **All review findings live in the `.md` file, never only in the transcript.** If an agent returns findings and
   you do not write them to `.claude/tasks/`, the phase is not done.
-* Single-writer work stays solo: migrations, the seeder, `navigation.py`, `settings.py`, `urls.py`, package
-  `__init__.py` re-export blocks, and app-level `conftest.py`. Parallelize only disjoint file sets.
+* Single-writer work stays in the main session or in one dedicated agent: migrations, the seeder,
+  `navigation.py`, `settings.py`, `urls.py`, package `__init__.py` re-export blocks, and app-level `conftest.py`.
 * Never **full-rewrite** a shared file from an agent — surgical `Edit` only. Another session may be building a
   different sub-module in this same checkout (L43).
 * `git push` is **never** part of this sequence — stop at `git commit` every time.
-* If an agent or lane reports no changes are needed, note that and move on (no empty commit required).
-* **Mark every phase boundary in the build state** — see the next section. A phase that finishes without being
-  marked is a phase the next session will redo.
-
----
-
-### **Session Window & Resume (MANDATORY)**
-
-The 5-hour usage window kills the session, not the work. Everything below exists so that a session which runs out
-mid-build is an *interruption* rather than a restart. The rule in one line: **the transcript is not state — the
-state file is.**
-
-**At session start (automatic).** The `SessionStart` hook (`.claude/hooks/session_start.py`) records the window in
-`.claude/tasks/build-state.json` and injects into context: when the window ends, how long is left, and — if the
-last session was cut off mid-build — the exact phase to resume from. **Read that block before doing anything
-else.** It is authoritative over your own assumptions about what is built.
-
-A window already in flight is **kept, not restarted**: the limit is anchored to the first message of the window,
-so a second session opened two hours in inherits the original deadline. The hook never resets a live clock.
-
-**At every phase boundary (you must do this).** One command, two seconds, and it is the entire difference between
-resuming and rebuilding:
-
-```
-venv\Scripts\python.exe .claude/hooks/build_state.py phase 3_build done
-venv\Scripts\python.exe .claude/hooks/build_state.py phase 4_review in_progress --note 'review wave running, findings not yet written'
-```
-
-Phase keys: `0_claim 1_research 2_todo 3_build 4_review 5_fix 6_tests 7_docs`. Statuses: `pending in_progress done
-skipped`. When the sub-module is finished and documented, close it out with `build_state.py finish` — otherwise the
-next session will keep offering to resume a build that is already done.
-
-**When the window is nearly spent.** The hook warns at **under 20 minutes left**. At that point do **not** start a
-phase — it will not finish, and being cut off mid-phase is what leaves the tree half-wired and the state file
-stale. Instead check out cleanly, in this order:
-
-1. Commit everything already finished (one file per commit, as always).
-2. `build_state.py phase <current> in_progress --note '<exactly where you stopped and what is half-done>'` — write
-   the note for a reader with **no memory of this session**: which files landed, which did not, what to verify first.
-3. Say plainly in your final message which phase is open and what the next session will pick up.
-
-**Resuming.** A new session started after the window resets reads the hook's resume block and continues from the
-first phase not marked `done`. Before re-running an interrupted phase, **verify against `git log` and the disk what
-actually landed** — a phase marked `in_progress` may be 90% complete, and blindly re-running it duplicates commits
-and migrations. Never restart at Phase 1 because the context is empty; the state file is what remembers.
-
-`build-state.json` is **gitignored on purpose** — it is per-checkout machine state that changes every phase, and
-concurrent sessions in one tree would conflict on it constantly. The hook recreates it, so nothing depends on it
-being committed.
-
-> **A session cannot restart itself.** Once the window is exhausted there is no process left to run anything, so
-> "continue automatically" means: the next session you open resumes with zero instruction from you. For a truly
-> unattended restart at the reset time, an OS-level scheduled task has to launch Claude Code — see the run-book in
-> `.claude/skills/next-module/SKILL.md`.
+* If an agent reports no changes are needed, note that and move on (no empty commit required).
 
 ---
 
