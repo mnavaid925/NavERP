@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Procurement Document{% else %}New Procurement Document{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementDocument create-or-edit. ONE template for
+    both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj).
+
+    Context contract, and NOTHING else exists here: form, is_edit, (edit only) obj, search_note.
+    No page_title / submit_label / cancel_url — those belong to a hand-rolled create view, and
+    this one goes through the shared crud_* helpers (the budgetmapping_create precedent).
+
+    The form carries exactly: title, doc_type, description, tags, classification, owner,
+    supplier_visible, effective_date, expires_on, review_on, retention_until, supplier,
+    contract, purchase_order, sourcing_event.
+
+    Deliberately ABSENT and worth knowing why, because a reader will look for them:
+      * the FILE — bytes arrive only as a revision, so every version passes the same allow-list,
+        size cap and approval step. There is no back door attaching a file to the parent.
+      * status — verb-driven. Approving a revision moves draft to active; supersede and archive
+        are buttons on the detail page, each with its own audit row.
+      * number, current_revision_no, the checkout columns, the extracted text and created_by —
+        all system-written.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New procurement document{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:pdocument_list' %}">Documents</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">A document is the controlled record. The file itself arrives afterwards as a revision, so every version is checksummed, read for text and approved before it becomes the current one.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Document</h2><span class="text-muted">what it is, who owns it, and when it matters</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "title" %}
+                <div class="form-help">What a colleague would search for — the supplier and the thing, not the filename. "Acme HVAC extended warranty" beats "scan_004".</div>
+              {% elif field.name == "doc_type" %}
+                <div class="form-help">Drives the type facet on the register. Pick the closest match; Other is honest when nothing fits.</div>
+              {% elif field.name == "description" %}
+                <div class="form-help">Searched alongside the title, the tags and the text read from the approved file — so it is worth writing what the file does not say plainly.</div>
+              {% elif field.name == "tags" %}
+                <div class="form-help">Comma-separated keywords. They are lower-cased, de-duplicated and re-joined on save, so "HVAC, hvac , Warranty" is stored as "hvac, warranty".</div>
+              {% elif field.name == "classification" %}
+                <div class="form-help">How sensitive the content is. This is a label people read, not an access rule — 6.19 does not enforce a permission matrix, and nothing here hides a document from a workspace member.</div>
+              {% elif field.name == "owner" %}
+                <div class="form-help">Who is answerable for keeping this current — renewing it before it expires and reviewing it when it comes due. Reminder alerts are raised into the shared inbox, not mailed.</div>
+              {% elif field.name == "supplier_visible" %}
+                <div class="form-help">A flag for the 6.4 vendor portal to read when that page ships. It changes nothing today and it is not a permission.</div>
+              {% elif field.name == "effective_date" %}
+                <div class="form-help">When the document starts to apply. The expiry date may not fall before it.</div>
+              {% elif field.name == "expires_on" %}
+                <div class="form-help">Drives the Expiring soon and Expired facets and the reminder run. Leave blank for something that does not expire.</div>
+              {% elif field.name == "review_on" %}
+                <div class="form-help">When somebody should read this again even if it has not expired. Also picked up by the reminder run.</div>
+              {% elif field.name == "retention_until" %}
+                <div class="form-help">How long the record must be kept. A flag for a person to act on — nothing here deletes anything on a schedule, and deleting a document never reclaims its stored files.</div>
+              {% elif field.name == "supplier" %}
+                <div class="form-help">Optional. Links the document to the party it concerns, so it shows up when someone is looking at that supplier's paperwork.</div>
+              {% elif field.name == "contract" %}
+                <div class="form-help">Optional. The agreement this belongs to. The contract itself stays in the supply-chain module — this is a pointer, not a copy.</div>
+              {% elif field.name == "purchase_order" %}
+                <div class="form-help">Optional. The order this document supports — a warranty, a certificate, a delivery note.</div>
+              {% elif field.name == "sourcing_event" %}
+                <div class="form-help">Optional. The tender or RFP this came out of, for traceability back to how the award was made.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create document{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:pdocument_detail' obj.pk %}{% else %}{% url 'procurement:pdocument_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2><span class="text-muted">the file, the revision and the approval</span></div>
+    <div class="card-body">
+      <p class="text-muted">{{ search_note }}</p>
+      <p class="text-muted">Saving creates the record with no file and no approved version. From its page you upload the first revision, and approving that revision makes it the document's current version, copies its text into what search matches, and moves the document from draft to active. Uploading on its own never changes which version is current — that is what keeps the chain honest.</p>
+    </div>
+  </div>
+{% endblock %}
