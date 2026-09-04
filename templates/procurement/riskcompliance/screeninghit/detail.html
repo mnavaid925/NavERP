@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Hit — {{ obj.matched_name }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — ScreeningHit detail
+    (apps/procurement/views/RiskComplianceManagement/ScreeningHits.py :: screeninghit_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, screening, allowed_dispositions, disposition_form, is_admin.
+
+    `allowed_dispositions` is empty once the hit has been adjudicated, so the page cannot offer
+    a verb screeninghit_dispose would refuse — a hidden control and a refused POST always agree.
+    It carries only TERMINAL values: un-adjudicating a hit is not something this module does.
+
+    `disposition_form` supplies the labelled fields; the adjudication posts `disposition` and
+    `disposition_note`, and the note is REQUIRED for every disposition including a false
+    positive.
+
+    Nullable-FK discipline (L10): disposed_by is nullable, so it is read inside an {% if %} —
+    a `default:` filter argument on a None FK raises and 500s. `screening` is CASCADE and never
+    null. No |safe on matched_name, remarks or any note: all of it is staff-authored text.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.matched_name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:screeninghit_list' %}">Hits</a><span class="sep">›</span>
+        <a href="{% url 'procurement:screening_detail' screening.pk %}">{{ screening.number }}</a><span class="sep">›</span>
+        <span>{{ obj.match_score }}% match</span>
+      </div>
+      <p class="text-muted">
+        Returned by <a href="{% url 'procurement:screening_detail' screening.pk %}">{{ screening.number }}</a>, the screening of
+        <span class="fw-600">{{ screening.party.name }}</span> against {{ screening.get_list_source_display }}.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:screening_detail' screening.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to screening</a>
+      {% if obj.is_open %}
+        <a href="{% url 'procurement:screeninghit_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The match</h2>
+      <span class="badge {{ obj.disposition_css }}">{{ obj.get_disposition_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Matched name</dt><dd class="fw-600">{{ obj.matched_name }}</dd></div>
+        <div class="detail-item"><dt>List</dt><dd>{{ obj.get_matched_list_display }}</dd></div>
+        <div class="detail-item"><dt>Match score</dt>
+          <dd>{{ obj.match_score }}%
+            {% if obj.is_above_threshold %}
+              <div class="text-danger">At or over the {{ screening.match_threshold }}% threshold this screening declared</div>
+            {% else %}
+              <div class="text-muted">Below the {{ screening.match_threshold }}% threshold this screening declared</div>
+            {% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Matched on</dt><dd>{{ obj.get_match_type_display }}</dd></div>
+        <div class="detail-item"><dt>List entry id</dt>
+          <dd>{% if obj.entry_reference %}{{ obj.entry_reference }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Programme</dt>
+          <dd>{% if obj.program %}{{ obj.program }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Country</dt>
+          <dd>{% if obj.country %}{{ obj.country }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Captured</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.remarks %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Remarks</dt><dd>{{ obj.remarks|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_open %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Adjudicate</h2><span class="badge badge-red">Open</span></div>
+      <div class="card-body">
+        {% if allowed_dispositions %}
+          {% if is_admin %}
+            <p class="text-muted">Does the geography line up? Is the identity actually the same entity, or a namesake? The answer, and the reasoning behind it, is the record — so the reasoning is required for every disposition, a false positive included.</p>
+            <form method="post" action="{% url 'procurement:screeninghit_dispose' obj.pk %}" novalidate>
+              {% csrf_token %}
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label" for="{{ disposition_form.disposition.id_for_label }}">{{ disposition_form.disposition.label }} <span class="req">*</span></label>
+                  {% comment %}
+                    Rendered from `allowed_dispositions` rather than from the bound field, so the
+                    options on the page are exactly the ones the VIEW says are allowed right now.
+                    The form re-validates the posted value against the same terminal set.
+                  {% endcomment %}
+                  <select class="form-select" id="{{ disposition_form.disposition.id_for_label }}" name="disposition">
+                    {% for value, label in allowed_dispositions %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="{{ disposition_form.disposition_note.id_for_label }}">{{ disposition_form.disposition_note.label }} <span class="req">*</span></label>
+                  {{ disposition_form.disposition_note }}
+                  <div class="form-help">{{ disposition_form.disposition_note.help_text }}</div>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Record disposition</button>
+              </div>
+            </form>
+          {% else %}
+            <p class="text-muted">This hit is still open. Adjudicating it is restricted to workspace administrators — ask one to record the disposition and the reasoning behind it.</p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The disposition</h2><span class="badge {{ obj.disposition_css }}">{{ obj.get_disposition_display }}</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Adjudicated by</dt>
+            <dd>{% if obj.disposed_by %}{{ obj.disposed_by.get_full_name|default:obj.disposed_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Adjudicated at</dt>
+            <dd>{% if obj.disposed_at %}{{ obj.disposed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+        {% if obj.disposition_note %}
+          <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Reasoning</dt><dd>{{ obj.disposition_note|linebreaksbr }}</dd></div>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">An adjudicated hit cannot be edited or re-opened — the matched name and score are what this decision was reasoned against. If it was captured wrongly, delete it and record it again.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.is_open %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Deleting a hit removes it from the record entirely. Do this only for a match that should never have been captured — an adjudication, including a false positive, is the honest way to close one that was.</p>
+        <form method="post" action="{% url 'procurement:screeninghit_delete' obj.pk %}" onsubmit="return confirm('Delete this hit from screening {{ screening.number }}? Deleting an unadjudicated match removes it from the record entirely.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete hit</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
