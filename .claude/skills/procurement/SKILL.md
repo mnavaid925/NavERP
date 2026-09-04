@@ -1,6 +1,6 @@
 ---
 name: procurement
-description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics) and 6.4 Vendor Management (VendorPortalAccess[VPA-] login<->supplier binding behind the gated vendor-portal pages with crm-1.4-style refusal ladder, VendorSuspension[VSU-] request->decide->lift block register whose blocking_for() honours ends_on expiry and gates portal invoice submission, VendorInvoiceSubmission[VIS-] supplier-filed invoices reviewed submitted->under_review->accepted/rejected with NO GL posting; onboarding/classification/risk bullets map onto scm 4.2's existing pages). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1–6.8), or invokes /procurement.
+description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics) and 6.4 Vendor Management (VendorPortalAccess[VPA-] login<->supplier binding behind the gated vendor-portal pages with crm-1.4-style refusal ladder, VendorSuspension[VSU-] request->decide->lift block register whose blocking_for() honours ends_on expiry and gates portal invoice submission, VendorInvoiceSubmission[VIS-] supplier-filed invoices reviewed submitted->under_review->accepted/rejected with NO GL posting; onboarding/classification/risk bullets map onto scm 4.2's existing pages). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1–6.15), or invokes /procurement.
 ---
 
 # Procurement — Procurement Management System (Module 6)
@@ -1018,3 +1018,193 @@ reports "spend baseline invoices already present" / "0 newly raised".
 `Data Export & Visualization` to `spend_export`. The rule register, workbench and snapshots take **no
 sidebar key** (the `ReceiptTolerancePolicy`/`KpiTarget` master precedent) — they are reached from
 `category_spend` and `classification_workbench`, and snapshots from their parent report.
+
+## 6.15 Budget & Cost Management (built 2026-09-01, reviewed + fixed 2026-09-01, tested 2026-09-05)
+
+**As-built now: 6.1-6.15.** Package folder `BudgetCostManagement/` across all four layers;
+templates under `templates/procurement/budgetcost/`. Migrations `0024` (both tables) and `0025`
+(the review-M1 index widening).
+
+**Read this first: 6.15 was built by SUBTRACTION, and the subtractions are the design.** Three of
+its five bullets ship as *computed pages with no table behind them*, and the two tables it does add
+are deliberately small:
+
+* **The budget itself belongs to Module 2.** `accounting.Budget` / `accounting.BudgetLine` are
+  never restated here (L29) — 6.15 points at them, links out to them, and reads their lines.
+* **There is no encumbrance table anywhere in NavERP, and 6.15 does not add one.** The availability
+  checker, the commitment register and the variance report all derive at view time, exactly the
+  "derive, don't store" posture `scm.PurchaseRequisition.budget_check()` documents. Nothing on
+  those three pages writes, and none of them opens a `transaction.atomic()`.
+* **A commitment moves through its lifecycle purely by its source document's status changing.**
+  There is no cached balance to go stale and no reconciliation job to write.
+
+### Models (`models/BudgetCostManagement/`)
+
+| Model | Base / number | Notes |
+|---|---|---|
+| `BudgetMapping` | `TenantOwned` — **no number** | Config glue, not a document |
+| `CostForecast` | `TenantNumbered` `FCST-#####` | A **frozen** projection, stamped once |
+
+**The commitment vocabulary** (`BudgetMappings.py:30-88`) is the single definition of "what counts
+as committed / requested spend" for the whole sub-module — all three computed pages *and*
+`compute_forecast_amounts` read these, never their own inline status tuples:
+
+* `OPEN_COMMITMENT_PO_STATUSES` = `approved`/`sent`/`acknowledged`/`partially_received`/`received`,
+  **copied verbatim from scm 4.18**. `draft`/`pending_approval` are not commitments yet,
+  `cancelled` never was, `closed` no longer is.
+* `COMMITTED_PR_STATUSES` = `("approved",)` — **`converted` is deliberately excluded.** A converted
+  requisition *is* its purchase order; counting both would show one commitment twice. This single
+  exclusion is the reason the vocabulary lives in one module instead of being re-typed per page.
+* `REQUESTED_PR_STATUSES` = `("pending_approval",)` — the pipeline, not a commitment.
+* `open_po_commitment_lines()` / `committed_pr_lines()` / `requested_pr_lines()` are their SQL
+  mirrors. They do **no** budget scoping — each caller narrows by budget, GL account or org unit.
+
+**`BudgetMapping`** (`BudgetMappings.py:89`) — `budget` is `PROTECT` (a mapped budget cannot be
+deleted out from under the mapping); `org_unit` / `project` / `default_gl_account` are `SET_NULL`.
+**No `unique_together` at all**, and that is on purpose: the scope columns are nullable, and two
+same-shaped rows at different priorities are a legitimate override — the same call 6.14's
+`SpendClassificationRule` makes. `Meta.ordering = ["priority", "id"]`, lower priority wins.
+
+* **`resolve(tenant, org_unit, project)` — not a database constraint — decides which mapping wins.**
+  Specificity beats priority: a project match beats an org-unit match beats the workspace default
+  (both scope columns `None`); inside each tier the rows are already in `(priority, id)` order, so
+  the lowest priority wins with `id` as tiebreak. Inactive rows never match. Instances and raw pks
+  are both accepted. It fetches the candidate list **once** and walks it in Python — do not
+  "optimize" it into three queries.
+* Index `prc_bmap_tnt_active_idx` is `(tenant, is_active, priority, id)` — the trailing
+  `priority, id` is load-bearing (review M1): it serves both `resolve()`'s ordering and the
+  register's `Meta.ordering` from the index.
+
+**`CostForecast`** (`CostForecasts.py:97`) is a **frozen snapshot**, and every rule below follows
+from that one decision:
+
+* `committed_amount` / `historical_amount` / `forecast_amount` are `editable=False` and are written
+  **once**, from `compute_forecast_amounts`, in the create view. The detail page renders them
+  **as-stored and recomputes nothing** — the whole point of freezing a projection is that a later
+  month can be held against what was expected *then*.
+* **There is no edit view and no edit route, by design.** A wrong forecast is deleted and re-frozen.
+  Same exemption as `SpendReportSnapshot`; it is recorded in the view module docstring so a
+  CRUD-completeness reviewer reads it as a decision, not a gap. Do not "restore" it.
+* `created_by` is an authorship stamp taken from `request.user`. This is why `costforecast_create`
+  is **hand-rolled** rather than `crud_create`: the shared helper has no hook for stamping computed
+  amounts plus an author in one save.
+* `METHOD_CHOICES` = `open_pos` / `run_rate` / `blended`. It is **not** re-exported from the models
+  package (6.14 precedent) — reach it as `CostForecast.METHOD_CHOICES`.
+
+**`compute_forecast_amounts(tenant, budget, method, horizon_months, as_of)`** is pure arithmetic and
+fully unit-testable: every input is an argument, every output is in the returned
+`{"committed", "historical", "forecast"}` dict, and the create view stamps exactly those three.
+
+* `historical` is 6.13's recognised invoice lines over the **half-open** window
+  `[as_of - 30*horizon_months days, as_of)`. A month is documented as 30 days — a projection
+  window is not an accounting period.
+* `forecast` = the commitment total (`open_pos`), the historical window (`run_rate`), or the mean of
+  the two (`blended`).
+* **When a budget is given, both populations are scoped to the GL accounts its lines fund — and a
+  budget with no lines forecasts zeros, not the whole workspace.** Money the budget does not fund is
+  not that forecast's business. A `None` budget forecasts workspace-wide.
+* Every guard case (no tenant, unknown method, `as_of=None`, `horizon_months <= 0`) returns honest
+  zeros rather than raising.
+
+### The three computed pages
+
+**Budget availability checker** (`views/BudgetCostManagement/BudgetChecks.py`) — a GET-form page
+mirroring scm 4.1 `budget_check()` semantics like-for-like: budgeted / committed / requested /
+remaining, with an over-budget badge. **Advisory, and it says so**: nothing is reserved, there is no
+lock, and two buyers checking at once both see the same remaining figure. A budget line with no org
+unit is company-wide and applies to every department, exactly as `budget_check()` reads it. All four
+GET params are parsed defensively (`as_db_int` for the pks, a local `_as_decimal` for the amount) and
+selections resolve **through the tenant-scoped querysets**, so a foreign pk selects nothing rather
+than narrowing the page by a stranger's row.
+
+**Commitment register** (`CommitmentRegister.py`) — read-only union of open PO line sums and
+approved-not-converted requisition estimates, with source / budget / vendor filters. PO lines are
+summed in **one grouped annotate**, never a per-row aggregate. `ROW_CAP = 500`, reported to the
+template as `row_cap` + `truncated` so the page states its limit instead of implying its totals are
+complete. Every row's url is reversed in Python, never in the template.
+
+**Variance report** (`VarianceReport.py`) — one row per `(GL account, department)` pair: budgeted vs
+committed vs invoiced vs remaining, plus a CSV export that replays the GET params.
+
+* **Actuals basis is 6.13's RECOGNISED supplier invoices** (`approved`/`scheduled`/`paid` — the same
+  population 6.14 reports on), **not** scm 4.18's landed-cost vouchers, which have no GL dimension.
+* **`remaining = budgeted - committed - invoiced-without-a-PO`.** Invoiced spend behind an open PO is
+  *already inside* that commitment (a PO stays a commitment until closed), so deducting it again
+  would double-count. Only PO-less invoices are deducted on top.
+* **The honest gap is disclosed on the page, not papered over**: when a specific budget is selected,
+  PO-less invoices cannot be attributed to it and are left out — `scoped_invoice_note`, and for the
+  period-only scope `PERIOD_INVOICE_NOTE` (review I1), say so. A line whose org-unit chain is broken
+  by a `SET_NULL` lands in the `Unassigned` row rather than being dropped: a breakdown that silently
+  drops rows makes its totals disagree with its own KPI strip.
+* `.order_by()` on the grouped querysets is **load-bearing** — Django appends a model's
+  `Meta.ordering` to the `GROUP BY`, and every model involved has one.
+
+### URLs / routes (`app_name = "procurement"`)
+
+Thirteen names, split across five urlconf modules concatenated in
+`urls/BudgetCostManagement/__init__.py`, which is splatted **last** in `urls/__init__.py` (after the
+spend-analytics blocks):
+
+| Route names | Path |
+|---|---|
+| `budgetmapping_list` / `_create` / `_detail` / `_edit` / `_delete` | `budget-mappings/…` |
+| `budget_availability` | `budget-availability/` |
+| `commitment_register` | `commitments/` |
+| `budget_variance`, `budget_variance_export` | `budget-variance/`, `budget-variance/export/` |
+| `costforecast_list` / `_create` / `_detail` / `_delete` | `cost-forecasts/…` — **no `_edit`** |
+
+`budget_variance` also exists as a route name in the `accounting` and `scm` namespaces. Not a
+collision (namespaces differ), but always reverse it fully qualified.
+
+### Templates (`templates/procurement/budgetcost/`)
+
+`budgetmapping/{list,detail,form}.html` (one form template keyed off `is_edit`),
+`costforecast/{list,detail,form}.html` (create-only form; the list has **no edit action**),
+and three standalone pages at the sub-module root: `availability.html`, `commitment_register.html`,
+`variance_report.html`. Delete confirms interpolate **only** system-assigned numbers.
+
+### Seeder
+
+`_seed_budget_cost(tenant)` in `seed_procurement.py:2340`, and it **runs last** because it reuses
+seeded accounting rows (first `Budget`, first department org unit, first project, first expense GL
+account) and creates no accounting or core rows itself. A workspace with no budget — the SMOKETEST
+tenant — is **skipped with a warning**, not crashed: a mapping needs something to point at. Four
+mappings (workspace default, department, an inactive second department, project-pinned) and two
+forecasts per tenant. Idempotent twice over: each block is `exists()`-guarded and each mapping is a
+`get_or_create` keyed on `(tenant, budget, org_unit, project)`. The forecasts are minted **through
+`compute_forecast_amounts`** — the same pure function the create view calls — so the stored amounts
+are whatever that computation actually sees in the workspace. Both tables are in the `--flush` block.
+
+### Conventions & gotchas
+
+* **Money goes through 6.14's `money()`**
+  (`models/SpendAnalyticsReporting/SpendClassificationRules.py:103`), never `_base.q2`. Keep one
+  rounding helper per module.
+* **Honesty rule — arithmetic only.** The forecast is open-PO value and/or a historical run-rate over
+  a horizon. No page, label, template or commit message here may say "AI", "predictive" or
+  "machine-learned": a plain moving average is not one, and the claim would be the forecast's own
+  undoing. Same posture as 6.14's ban on calling the rule ladder ML.
+* **Import shape inside this sub-package**: the entity view modules import their own models from the
+  entity MODULE (`from apps.procurement.models.BudgetCostManagement.BudgetMappings import …`), not
+  from the models *package*. A package-level re-export would be a star-import cycle at URLconf
+  import time while the sub-package is still being wired.
+* `request.tenant is None` renders an empty page on all three computed pages — never a 500.
+* Both deletes are `@require_POST` with CSRF forms; the CSV export is fully `csv_safe`'d.
+
+### Sidebar wiring
+
+`LIVE_LINKS["6.15"]` maps all five NavERP.md bullets char-exact and deliberately no more:
+`Budget Allocation & Mapping` to `budgetmapping_list`; `Budget Availability Check` to
+`budget_availability`; `Commitment Accounting` to `commitment_register`; `Variance Analysis` to
+`budget_variance`; `Forecasting & Projection` to `costforecast_list`.
+
+### Tests
+
+`tests/test_budgetcost_{models,forms,views,security}.py` — 167 tests. Every test function is
+`test_budgetcost_*`, every module-level helper/constant `_budgetcost_*` / `_BUDGETCOST_*` (L47).
+The model lane pins `resolve()`'s specificity ladder, the commitment vocabulary and
+`compute_forecast_amounts`' guard cases; the security lane pins the anonymous ladder over all 13
+URLs, CSRF on both write verbs, cross-tenant IDOR to 404, and that a forged POST cannot set
+`tenant`/`number`/the three amounts/`created_by` on a forecast create. Date bases use
+`timezone.localdate()` throughout, never `datetime.date.today()`, or the window-boundary assertions
+flake after local midnight (L16).
