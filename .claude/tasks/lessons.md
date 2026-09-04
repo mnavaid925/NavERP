@@ -1129,3 +1129,43 @@ The fix for iteration is `--nomigrations`, which builds the schema directly from
    otherwise have asked. Read the settings it depends on before trusting what it says.
 
 Related: L47 (never `-k` the final run), L43 (migrations are where concurrent sessions collide).
+
+---
+
+## L50 — Build serially. No `Workflow` tool, no parallel agents, ever
+
+**Context (2026-09-05, start of procurement 6.16).** I opened the session, resolved the next
+sub-module, registered the build in `build-state.json` and launched the Phase 1 `research` agent.
+The user rejected the tool call and said: remove the workflows and the parallel agents from
+`CLAUDE.md`, make **all phases and their agents work one by one**, and remove the timing and the
+**Session Window & Resume** machinery entirely.
+
+**What was wrong.** Not the sub-module choice and not the research prompt — the *shape* of the
+process. The Module Creation Sequence had grown three `Workflow({ scriptPath: ... })` invocations
+(build wave, six-agent review wave, four-writer test wave) plus a 4-hour phase budget with clock
+slots. That shape optimizes for wall-clock throughput and optimizes *against* the one thing the
+user actually wants: being able to watch the build, interrupt it, and correct it before the work
+lands. Six agents editing and reporting at once is a fait accompli, not a collaboration. The
+time budget added pressure nobody asked for, and the build-state checkpointing existed only to
+serve it.
+
+**Rules:**
+1. **Never call the `Workflow` tool on this project.** Not for build, not for review, not for
+   tests, not "just this once because it is faster".
+2. **One agent in flight at a time.** Never put two `Agent` calls in one message, and never start
+   the next agent before the current one has reported and you have acted on its result.
+3. **Every phase is serial.** Build entity by entity (one entity's four backend files and three
+   templates finished before the next begins). Run the six reviewers
+   `code-reviewer → explorer → frontend-reviewer → performance-reviewer → qa-smoke-tester →
+   security-reviewer` one after another, appending each one's findings to
+   `.claude/tasks/review-<slug>-<N.M>.md` as it reports. Write the four test modules one at a time.
+4. **A missing reviewer is missing coverage**, and the remedy is re-running *that one agent* — not
+   a re-run of a whole wave.
+5. **Do not reintroduce time budgets, phase slots, or `build_state.py` checkpointing into the
+   docs.** The hooks still exist on disk; the process no longer prescribes them. "How long a phase
+   should take" is not a rule, it is a guess.
+6. Serial is slower per sub-module and that is the accepted trade. Legibility beats throughput
+   when the user is the reviewer.
+
+Related: L45 (a dirty tree is another session's, not yours), L43 (migrations are where concurrent
+work collides) — both are about the same underlying preference: fewer things happening at once.
