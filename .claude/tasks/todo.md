@@ -1596,6 +1596,681 @@ import in `views/BudgetCostManagement/CostForecasts.py`. Review wave findings la
 `.claude/tasks/review-procurement-6.15.md`; tests in `tests/test_budgetcost_*.py`.
 
 ---
+
+## Procurement 6.16 - Supplier Performance & Evaluation (Module 6, `apps/procurement`) - plan from research-procurement-6.16.md  (2026-09-05)
+
+NavERP.md lines 1101-1107, five bullets: KPI Definition & Setup - Scorecard Generation -
+360-Degree Feedback Collection - Performance Improvement Plans (PIP) - Benchmarking & Trending.
+App EXISTS (6.1-6.15 built) -> this pass EXTENDS it. No scaffold, no `settings.py`, no
+`config/urls.py` edit.
+
+### Frozen decisions - do NOT re-litigate during the build
+
+- [ ] **Scope is exactly the research's 4 models**: `SupplierKpi` [SKP-], `SupplierKpiScore` (no
+      prefix, `TenantOwned` child fact row), `SupplierFeedback` [SFB-],
+      `SupplierImprovementPlan` [SIP-]. Bullet 5 (Benchmarking & Trending) ships as **computed
+      boards, no table** - every figure it needs is already frozen on the score lines.
+- [ ] **L36 - `scm.SupplierScorecard` is NOT re-declared.** It stays the period container.
+      `SupplierKpiScore.scorecard` FKs it **by string** `"scm.SupplierScorecard"`, `CASCADE`,
+      `related_name="procurement_kpi_scores"`. No second scorecard table, no second vendor table,
+      no second alert table.
+- [ ] **`manual_override` = option (a), deliberately.** `supplierevaluation_generate` writes the
+      four `scm.SupplierScorecard` dimension columns for KPIs declaring a `maps_to_dimension`,
+      sets `manual_override = True`, then calls the scorecard's own `recompute_overall()`.
+      **This permanently hands that scorecard to 6.16**: `scm`'s `recompute_from_signals()`
+      returns immediately on any row with `manual_override` set, so the two engines can never
+      fight over the same row. This is documented behaviour, not a side effect - it must be
+      stated in the model docstring, in the view docstring, in the confirm dialog on the button,
+      and on the scorecard detail page itself.
+- [ ] **Generate REFUSES on a `published` or `archived` scorecard** - `messages.error` +
+      redirect back to the detail page; only `draft` may be generated onto.
+- [ ] **Migration number is `0026`** (agreed with three concurrent peer sessions: 6.17 takes
+      0027, 6.18 takes 0028, 6.19 takes 0029). Latest on disk is `0025_remove_budgetmapping_...`.
+      `makemigrations procurement` must produce `0026_*` and **nothing else** - if it also wants
+      to alter a table this pass did not touch, STOP and re-read (another session's model edit
+      leaked in).
+- [ ] **URL first segments are reserved with the peer sessions - stay inside this set:**
+      `supplier-kpis/`, `supplier-evaluations/`, `supplier-feedback/`, `improvement-plans/`,
+      `supplier-benchmarking/`. Every first path component is a **literal**; this app's standing
+      guarantee is that no route has a converter in first position and 6.16 must not break it.
+- [ ] **The four untracked `apps/procurement/tests/test_budgetcost_*.py` files belong to another
+      session (L45) - never `git add` them.**
+- [ ] One file per commit, PowerShell-safe (`;` never `&&`). Never `git push`.
+
+### Spine verified this pass (grep, not the docs - L28)
+
+- [ ] `core.Party` `apps/core/models/Party.py:5` - the supplier master. **Never a new vendor table.**
+- [ ] `core.Tenant` `apps/core/models/Tenant.py:5` - every model gets a `tenant` FK.
+- [ ] `scm.SupplierScorecard` `apps/scm/models/SupplierRelationshipManagement/SupplierScorecards.py:11`
+      - `TenantNumbered` [SCR-], `party`/`period_start`/`period_end`/`status` draft|published|archived,
+      four nullable 0-100 dimension columns, `overall_score`+`grade` (`editable=False`),
+      `manual_override`, `signal_summary`, `recompute_overall()`, `recompute_from_signals()`.
+      SCM routes exist: `scm:scorecard_list/create/detail/edit/delete/recompute/publish`.
+- [ ] `scm.SupplierProfile` `.../SupplierProfiles.py:12` - `TIER_CHOICES` =
+      `strategic|preferred|approved|transactional`, plus `tier` and `category`.
+- [ ] `scm.SupplierRiskAssessment` `.../SupplierRiskAssessments.py:10` - `risk_index`, the second
+      axis of the benchmark quadrant.
+- [ ] `procurement.VendorSuspension` `apps/procurement/models/VendorManagement/VendorSuspensions.py:27`
+      - the PIP escalation target (its `REASON_CHOICES` already carries `quality` / `delivery`).
+- [ ] `procurement.ProcurementAlert` `apps/procurement/models/DashboardPortal/ProcurementAlerts.py:26`
+      - `KIND_CHOICES` = deadline|approval|delivery|task|contract, `SEVERITY_CHOICES` =
+      info|warning|critical. Band-crossing alerts reuse it (`kind="task"`, severity from the band)
+      - **no new alert table.**
+- [ ] Toolkit verified: `apps/core/crud.py` (`crud_list/create/detail/edit/delete`, pinned context
+      `object_list`+`page_obj`+`q`, detail/edit object = `obj`, form = `form`+`is_edit`;
+      `filters=` tuples are `(get_param, orm_lookup, is_int)`; `crud_create`/`crud_edit` already
+      pass `request.FILES`), `apps/core/utils.write_audit_log`,
+      `apps/core/decorators.tenant_admin_required`,
+      `apps/procurement/{models/_base.py, forms/_common.py, views/_common.py}` (`TenantOwned`,
+      `TenantNumbered`, `TenantUniqueMixin`, `_reject_foreign`, `ZERO`, `q2`).
+- [ ] Names free (no collision anywhere in `apps/`): `SupplierKpi`, `SupplierKpiScore`,
+      `SupplierFeedback`, `SupplierImprovementPlan`. Prefixes free: `SKP`, `SFB`, `SIP`
+      (`PIP` is hrm's, `SCR` is scm's - use neither).
+
+---
+
+### Model 1 - `SupplierKpi` [SKP-] · `TenantNumbered` · `models/SupplierPerformanceEvaluation/SupplierKpis.py`
+
+Serves **bullet 1 (KPI Definition & Setup)** and unlocks bullets 2 and 3. Each field is here
+because a surveyed leader has it; the driver is named.
+
+- [ ] Identity: `code` CharField(32) (driver: Ariba master-KPI identifiers for cross-scorecard
+      roll-up), `name` CharField(160), `description` TextField(blank).
+- [ ] `category` CharField(16, choices `CATEGORY_CHOICES`) =
+      `delivery|quality|cost|service|compliance|esg|innovation|risk`, default `delivery`
+      (drivers: Ivalua's 5 core dimensions + Kodiak ESG/innovation + Zycus balanced scorecard).
+- [ ] `unit` CharField(10, choices `UNIT_CHOICES`) = `pct|days|count|ppm|money|score|ratio`,
+      default `pct` (driver: Kodiak's per-KPI formulas - PPM and days are not percentages).
+- [ ] `direction` CharField(16, choices `DIRECTION_CHOICES`) =
+      `higher_is_better|lower_is_better`, default `higher_is_better` (driver: Kodiak ships an
+      explicit direction column on all 15 KPIs - OTIF up, PPM down).
+- [ ] `source` CharField(8, choices `SOURCE_CHOICES`) = `derived|survey|manual`, default `manual`
+      (driver: **Ariba's three KPI data-source types**; HICX/LeanLinking hard-vs-soft split).
+- [ ] `derived_metric` CharField(24, choices `DERIVED_METRIC_CHOICES`, blank) - a **closed**
+      registry, one key per resolver that exists over verified as-built tables:
+      `otd, otif, defect_rate, ncr_rate, rtv_rate, invoice_accuracy, dispute_rate, dispute_days,
+      promise_adherence, backorder_rate, po_change_rate, price_competitiveness, quote_turnaround,
+      suspension_incidents`. **Never add a key without a reviewed resolver** (the
+      `scm.KpiTarget.metric` discipline, quoted in the docstring).
+- [ ] `weight` PositiveSmallIntegerField(default 10, validators Min 1 / Max 100) - **the field
+      that replaces the hard-coded `SupplierScorecard.WEIGHTS` dict** (drivers: Ivalua 40/20/15/
+      15/10, LeanLinking 40/30/20/10 + pharma variant, Ariba per-scorecard overrides).
+- [ ] `target_value` / `warning_threshold` / `critical_threshold` Decimal(12,4) null blank
+      (drivers: Ivalua green/yellow/red, Kodiak OTIF >= 98% / PPM <= 250 / audit >= 90%).
+- [ ] `scoring_method` CharField(8, choices `SCORING_CHOICES`) = `band|linear|direct`, default
+      `band` (driver: Ariba pre-grading vs post-grading; Ivalua metric-score x weight).
+- [ ] `maps_to_dimension` CharField(16, choices `DIMENSION_CHOICES`, blank) =
+      `delivery|quality|price|responsiveness` (NavERP-specific bridge: which of the four existing
+      `scm.SupplierScorecard` columns this KPI feeds. Blank = feeds none).
+- [ ] `applies_to` CharField(8, choices `APPLIES_CHOICES`) = `all|tier`, default `all`, +
+      `applies_to_tier` CharField(16, choices, blank) = `strategic|preferred|approved|transactional`
+      (drivers: Jaggaer per-category rating models, State of Flux tier-based KPI setup).
+      **Declare the four tier values as a LOCAL `TIER_CHOICES` constant with a comment naming
+      `scm.SupplierProfile.TIER_CHOICES` as the source of truth** - do not import scm into a
+      model module just to mirror four strings.
+- [ ] `review_frequency` CharField(12, choices `FREQUENCY_CHOICES`) =
+      `monthly|quarterly|semiannual|annual`, default `quarterly` (drivers: Ivalua/Kodiak cadence;
+      the auto-scheduler is deferred - the field is stored, nothing schedules off it yet, and the
+      help_text must say so).
+- [ ] `industry_benchmark_value` Decimal(12,4) null blank - the **hand-entered** external
+      reference. help_text must read "hand-entered reference figure - there is no external
+      benchmark feed in this system" (honesty rule, the 6.14 "Assisted Capture" precedent).
+- [ ] `owner` FK `settings.AUTH_USER_MODEL` SET_NULL null blank
+      `related_name="procurement_supplier_kpis"` (driver: Kodiak/HICX "each KPI has an owner").
+- [ ] `display_order` PositiveSmallIntegerField(default 100), `is_active` BooleanField(default
+      True) (retire a KPI by deactivating it - never delete it out from under history),
+      `notes` TextField(blank).
+- [ ] **Meta:** `ordering = ["display_order", "code"]`; `unique_together = (("tenant", "code"),
+      ("tenant", "number"))`; indexes `(tenant, is_active)`, `(tenant, category)`,
+      `(tenant, source)` - names <= 30 chars, prefix `prc_skp_`.
+- [ ] **`clean()`** (three rules, all from the research):
+      1. band ordering by direction - port the rule from
+         `apps/scm/models/SupplyChainAnalytics/KpiTargets.py`'s `clean()`: `higher_is_better` =>
+         `target >= warning >= critical`; `lower_is_better` => `target <= warning <= critical`;
+         compare only the values that are not None.
+      2. `derived_metric` **required iff** `source == "derived"` and **must be blank otherwise**
+         (the "conjunction that can never be true" rule).
+      3. `applies_to_tier` **required iff** `applies_to == "tier"`, blank otherwise.
+- [ ] **Methods:** `score_and_band(measured_value)` -> `(Decimal 0-100 | None, band)` applying
+      `scoring_method` + `direction` + the three thresholds. The KPI owns its own scale so the
+      generate action, the manual edit form and the tests all band by one rule.
+      `@property band_css` is NOT on this model (bands live on the score row).
+- [ ] **Form `SupplierKpiForm`** (`TenantUniqueMixin`, `TenantModelForm`): `Meta.fields` = code,
+      name, description, category, unit, direction, source, derived_metric, weight, target_value,
+      warning_threshold, critical_threshold, scoring_method, maps_to_dimension, applies_to,
+      applies_to_tier, review_frequency, industry_benchmark_value, owner, display_order,
+      is_active, notes. **EXCLUDED: `tenant` (set by `crud_create`), `number` (auto SKP-),
+      `created_at`/`updated_at` (system timestamps, L22).** `owner` queryset narrowed to
+      `User.objects.filter(tenant=tenant, is_active=True)`.
+
+### Model 2 - `SupplierKpiScore` · `TenantOwned`, NO prefix · `models/SupplierPerformanceEvaluation/ScorecardKpiScores.py`
+
+Serves **bullet 2 (Scorecard Generation)** - the L36 "extend the scm table by FK" move. A child
+fact row, so `TenantOwned` not `TenantNumbered` (the `KpiSnapshot` / `InvoiceMatchVariance`
+precedent - nobody would ever quote an `SKS-00001`).
+
+- [ ] `scorecard` FK **`"scm.SupplierScorecard"`** CASCADE
+      `related_name="procurement_kpi_scores"`; `kpi` FK `"procurement.SupplierKpi"` **PROTECT**
+      `related_name="scores"` (deleting a KPI must never silently delete measured history -
+      retire with `is_active=False`); `tenant` from `TenantOwned`.
+- [ ] Measurement: `measured_value` Decimal(16,4) null blank; `score` Decimal(5,2) null blank
+      validators `MinValueValidator(0)` / `MaxValueValidator(100)` (matches every 0-100 field in
+      the codebase; stops a hand-entered value inflating the composite or overflowing a
+      `width:<score>%` bar); `weight_applied` PositiveSmallIntegerField(default 0) - **frozen at
+      generation** because Ariba allows per-scorecard weight overrides.
+- [ ] `band` CharField(10, choices `BAND_CHOICES`) = `ok|warning|critical|unknown`, default
+      `unknown`, plus
+      `BAND_CSS = {"ok": "badge-green", "warning": "badge-amber", "critical": "badge-red",
+      "unknown": "badge-muted"}` and `@property band_css` with a `badge-slate` fallback.
+      **Colour names ONLY (L33) - `badge-success`/`-warning`/`-danger` do not exist in theme.css
+      and render unstyled.**
+- [ ] Frozen-at-time columns, all `editable=False` (a later retune or rename must not rewrite
+      history - the `KpiSnapshot.target_value_at_time` precedent): `target_at_time` Decimal(12,4)
+      null, `direction_at_time` CharField(16, blank), `source_at_time` CharField(8, blank),
+      `unit_at_time` CharField(10, blank), `kpi_name` CharField(160, blank),
+      `kpi_category` CharField(16, blank).
+- [ ] Explainability: `breakdown` JSONField(default=dict, blank, editable=False) - the structured
+      version of `signal_summary` (numerator/denominator/window/rows-considered)
+      (drivers: LeanLinking "audit trail for rating decisions", HICX audit trails).
+- [ ] `respondent_count` PositiveIntegerField(default 0, editable=False) - how many 360 responses
+      were aggregated for a `survey` KPI; `comment` TextField(blank) (driver: Kodiak per-KPI
+      commentary).
+- [ ] `computed_at` DateTimeField(**`default=timezone.now`, NOT `auto_now_add`** - a re-run must
+      re-stamp freshness, editable=False); `computed_by` FK AUTH_USER_MODEL SET_NULL null blank
+      editable=False `related_name="procurement_kpi_scores_computed"`.
+- [ ] **Meta:** `unique_together = ("tenant", "scorecard", "kpi")` - **this is what makes the
+      generate action safe to press twice** (a re-run UPDATES, never stacks);
+      `ordering = ["kpi_category", "kpi_name", "id"]` (the denormalised columns, so no JOIN on
+      every list); indexes `(tenant, scorecard)`, `(tenant, band)`, `(tenant, kpi)`, prefix
+      `prc_sks_`.
+- [ ] **`clean()`**: `scorecard_id` and `kpi_id` must resolve to same-tenant rows - use **`_id`
+      guards and an explicit queryset lookup, never a bare `self.scorecard.tenant_id`** (the
+      `VendorSuspension.clean()` precedent, where the two-arg form raised
+      `RelatedObjectDoesNotExist` and 500'd a live add page).
+- [ ] `@property contribution` = `score * weight_applied` (None-safe) for the detail page's
+      composite arithmetic table.
+- [ ] **Form `SupplierKpiScoreEditForm`**: `Meta.fields = ("measured_value", "comment")` **only**.
+      `save()` re-derives `score` and `band` through `self.instance.kpi.score_and_band(...)` and
+      re-stamps `computed_at` + `breakdown = {"source": "manual entry", ...}` so a hand-typed
+      value is banded by exactly the same rule as a derived one. **EXCLUDED: everything else** -
+      `tenant`, `scorecard`, `kpi`, `weight_applied`, every `*_at_time`, `score`, `band`,
+      `breakdown`, `respondent_count`, `computed_at`, `computed_by`.
+- [ ] **TWO DOCUMENTED CRUD EXEMPTIONS - write them in the module docstring so a reviewer does
+      not flag them as missing:**
+      1. **No create form and no `supplierkpiscore_create` route.** Lines are system-written by
+         `supplierevaluation_generate`; a hand-created line would be a measurement with no
+         computation behind it (the `SpendReportSnapshot` / `CostForecast`-has-no-edit precedent).
+      2. **Edit is limited to `measured_value` + `comment`, and only when
+         `source_at_time == "manual"`** (Ariba's third KPI type). The **view** is the gate: any
+         other row redirects to the detail page with `messages.error` - a disabled widget is UX,
+         not an authorization boundary.
+      Delete (POST-only) DOES exist so a retired KPI's stale line can be removed.
+
+### Model 3 - `SupplierFeedback` [SFB-] · `TenantNumbered` · `models/SupplierPerformanceEvaluation/SupplierFeedback.py`
+
+Serves **bullet 3 (360-Degree Feedback Collection)** and feeds bullet 2 through `source='survey'`
+KPIs. One row = one respondent's rating of one supplier for one period, optionally against one KPI.
+
+- [ ] FKs: `supplier` FK `"core.Party"` PROTECT `related_name="procurement_supplier_feedback"`;
+      `scorecard` FK `"scm.SupplierScorecard"` SET_NULL null blank
+      `related_name="procurement_feedback"` (ad-hoc feedback exists without a period document);
+      `kpi` FK `"procurement.SupplierKpi"` SET_NULL null blank `related_name="feedback"` (set =
+      this response feeds that survey KPI; blank = general commentary);
+      `respondent` + `requested_by` FK AUTH_USER_MODEL SET_NULL null blank
+      (`related_name="procurement_feedback_given"` / `"..._requested"`).
+- [ ] `period_start` / `period_end` DateField.
+- [ ] `respondent_kind` CharField(16, choices) = `internal|supplier_self`, default `internal`
+      (driver: **SupplyHive Hive360** - one CharField buys the whole perception-gap board) +
+      `respondent_name` CharField(160, blank) for a `supplier_self` response that has no internal
+      user account (without it the row is anonymous).
+- [ ] `respondent_function` CharField(16, choices) =
+      `procurement|quality|operations|finance|engineering|logistics|other`, default `procurement`
+      (drivers: Kodiak's RACI set, LeanLinking's three functions).
+- [ ] `rating` PositiveSmallIntegerField(choices `RATING_CHOICES`, null blank) = 1 Poor / 2 Below
+      Expectations / 3 Meets Expectations / 4 Above Expectations / 5 Excellent (driver: Ariba's
+      labelled qualitative anchors) + `score_value()` -> 0/25/50/75/100 for the 0-100 KPI scale.
+- [ ] `importance` PositiveSmallIntegerField(default 5, validators Min 0 / Max 10) - **Ariba's
+      per-question Importance**; it weights the survey aggregate so a category manager's rating
+      can count more than a casual requester's.
+- [ ] `status` CharField(12, choices) = `requested|submitted|declined|expired`, default
+      `requested` (driver: GEP "issuing and tracking scorecards for completion") + `due_date`
+      DateField null blank.
+- [ ] System stamps, all `editable=False`: `requested_at` DateTimeField(default=timezone.now),
+      `submitted_at` DateTimeField(null blank). `comment` TextField(blank) (drivers: SupplyHive
+      theme analysis, Kodiak commentary).
+- [ ] **Meta:** `ordering = ["-period_end", "-id"]`; `unique_together = ("tenant", "number")`;
+      indexes `(tenant, supplier)`, `(tenant, status)`, `(tenant, scorecard)`, prefix `prc_sfb_`.
+- [ ] **`clean()`** (five rules):
+      1. **One response per `(supplier, scorecard, kpi, respondent)`** enforced with an explicit
+         `.exclude(pk=self.pk).filter(...)` existence check that matches NULLs by id - **NOT
+         `unique_together`**, because `scorecard` and `kpi` are nullable and SQL NULLs compare
+         distinct, so a naive constraint lets duplicates straight through (the `KpiSnapshot`
+         blank-vs-NULL trap).
+      2. `kpi`, when set, must have `source == "survey"` - a derived KPI is not a survey question.
+      3. `period_end >= period_start`.
+      4. `rating` required when `status == "submitted"`.
+      5. Same-tenant `_id` guards on `supplier`, `scorecard`, `kpi`; and
+         `respondent_kind == "supplier_self"` => `respondent` (an internal user) must be blank and
+         `respondent_name` is required.
+- [ ] **Form `SupplierFeedbackForm`**: `Meta.fields` = supplier, scorecard, kpi, period_start,
+      period_end, respondent_kind, respondent_function, respondent, respondent_name, rating,
+      importance, due_date, comment. **EXCLUDED: `tenant`, `number` (auto SFB-), `status`
+      (workflow-controlled by the submit/decline/expire verbs), `requested_by`, `requested_at`,
+      `submitted_at` (system stamps, L22).** Querysets narrowed in `__init__`: `supplier` ->
+      `Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).distinct()`
+      (the established procurement convention); `scorecard` -> tenant scorecards; `kpi` ->
+      `SupplierKpi.objects.filter(tenant=tenant, is_active=True, source="survey")`; `respondent`
+      -> tenant users. `_reject_foreign` on all four FKs.
+
+### Model 4 - `SupplierImprovementPlan` [SIP-] · `TenantNumbered` · `models/SupplierPerformanceEvaluation/SupplierImprovementPlans.py`
+
+Serves **bullet 4 (PIP)**. Shaped on the verified in-repo `hrm.PerformanceImprovementPlan` plus
+Kodiak's CAPA-register columns. **Plan grain only this pass** - design it to accept a
+`SupplierImprovementAction` child later without reshaping (do NOT cram a fake action list into a
+TextField).
+
+- [ ] `title` CharField(200); `supplier` FK `"core.Party"` PROTECT
+      `related_name="procurement_improvement_plans"`; `scorecard` FK `"scm.SupplierScorecard"`
+      SET_NULL null blank `related_name="procurement_improvement_plans"` (the triggering evidence
+      - Jaggaer/Ivalua "performance dips -> plan"); `kpi` FK `"procurement.SupplierKpi"` SET_NULL
+      null blank `related_name="improvement_plans"` (the failing KPI).
+- [ ] The CAPA columns, verbatim in structure from Kodiak's register: `finding` TextField (what
+      was observed), `root_cause` TextField(blank), `corrective_actions` TextField(blank),
+      `support_provided` TextField(blank), `success_criteria` TextField(blank).
+- [ ] `severity` CharField(8, choices) = `minor|major|critical`, default `major`.
+- [ ] Dates: `start_date`, `target_close_date` (both required), `next_review_date` null blank
+      (stands in for the deferred check-in child), `extended_close_date` null blank (driver:
+      HRM PIP `extended_end_date`, EcoVadis 12-month CAP validity), `actual_close_date` null
+      blank **editable=False**.
+- [ ] `status` CharField(12, choices) = `draft|active|monitoring|closed|cancelled`, default
+      `draft`; `outcome` CharField(12, choices, blank) =
+      `successful|extended|failed|escalated` (driver: HRM's OUTCOME_CHOICES shape).
+- [ ] Owners: `owner` FK AUTH_USER_MODEL SET_NULL null blank
+      `related_name="procurement_improvement_plans"` (internal);
+      `supplier_owner_name` CharField(160, blank) + `supplier_owner_email` EmailField(blank)
+      (drivers: Kodiak/Ivalua run plans WITH the supplier).
+- [ ] `escalated_suspension` FK `"procurement.VendorSuspension"` SET_NULL null blank
+      `related_name="improvement_plans"` - **closes the loop to the existing block register
+      instead of inventing a second blocking mechanism** (drivers: LeanLinking 3-quarter misses,
+      MasterControl AVL update).
+- [ ] Evidence, mirroring the verified in-app `ReceiptDiscrepancy` precedent exactly:
+      `evidence` FileField(`upload_to="procurement/improvement_evidence/%Y/%m/"`, null blank) +
+      `evidence_url` URLField(blank, "Link to evidence held elsewhere") +
+      `@property has_evidence`. Form `clean_evidence()` validates extension against
+      `apps.core.forms.ALLOWED_DOC_EXTENSIONS` and size against `MAX_UPLOAD_BYTES`.
+      **Not a `core.Document` FK** - the FileField precedent is in this app already.
+- [ ] System stamps, all `editable=False`: `acknowledged_at` / `acknowledged_by`,
+      `verified_at` / `verified_by` (FKs SET_NULL null blank, `related_name="procurement_pip_
+      acknowledged"` / `"procurement_pip_verified"`), `closure_note` TextField(blank).
+- [ ] **Meta:** `ordering = ["-start_date", "-id"]`; `unique_together = ("tenant", "number")`;
+      indexes `(tenant, status)`, `(tenant, supplier)`, `(tenant, severity)`, prefix `prc_sip_`.
+- [ ] **`clean()`**: `target_close_date >= start_date`; `extended_close_date > target_close_date`
+      when set; `outcome` required when `status == "closed"` and must be blank otherwise;
+      `escalated_suspension`, when set, must belong to the SAME supplier and the same tenant;
+      same-tenant `_id` guards on supplier/scorecard/kpi/escalated_suspension.
+- [ ] **Form `SupplierImprovementPlanForm`**: `Meta.fields` = title, supplier, scorecard, kpi,
+      severity, finding, root_cause, corrective_actions, support_provided, success_criteria,
+      start_date, target_close_date, next_review_date, extended_close_date, owner,
+      supplier_owner_name, supplier_owner_email, escalated_suspension, evidence, evidence_url.
+      **EXCLUDED: `tenant`, `number` (auto SIP-), `status` and `outcome` (workflow-controlled by
+      the activate/monitor/close/cancel verbs), `actual_close_date`, `acknowledged_at/_by`,
+      `verified_at/_by`, `closure_note` (system stamps, L22).** FK querysets narrowed to the
+      tenant (supplier via the `roles__role__in=("supplier","vendor")` convention);
+      `_reject_foreign` on all five FKs.
+
+### Compute module - `apps/procurement/performance.py` (NEW, flat at the app root)
+
+The `analytics.py` precedent (6.14): single-purpose compute lives flat, not in a views module, so
+the views stay thin and every figure is unit-testable. **Do not edit `analytics.py` - it is
+6.14's.** Owned by Step 3 below.
+
+- [ ] `applicable_kpis(tenant, party)` -> active KPIs where `applies_to="all"` OR
+      (`applies_to="tier"` AND the tier matches that party's `scm.SupplierProfile.tier`).
+      A party with no profile gets only the `all` KPIs.
+- [ ] `DERIVED_RESOLVERS` - a dict `metric key -> callable(tenant, party, start, end)` returning
+      `(measured_value | None, breakdown dict)`. Fourteen keys, each reading only
+      grep-verified as-built tables: `otd`/`otif`/`defect_rate` (scm GRN + GRN lines vs PO
+      `expected_date` and `PurchaseOrderLine.quantity`), `ncr_rate`/`rtv_rate` (6.12
+      `ReceiptDiscrepancy` / `ReturnToVendor`), `invoice_accuracy`/`dispute_rate`/`dispute_days`
+      (6.13 `InvoiceMatchVariance` / `SupplierInvoice` / `InvoiceDispute`),
+      `promise_adherence`/`backorder_rate` (6.11 `DeliverySchedule` / `Backorder`),
+      `po_change_rate` (6.10 `PurchaseOrderChange`), `price_competitiveness`/`quote_turnaround`
+      (scm `RFQQuote` / `RFQ`), `suspension_incidents` (6.4 `VendorSuspension`).
+      **A metric with no data in the period returns `(None, {...})` - never a phantom zero**
+      (the `recompute_from_signals()` rule).
+- [ ] `survey_aggregate(tenant, party, kpi, start, end)` -> `(score 0-100 | None, respondent_count,
+      breakdown)` - the **importance-weighted** mean of `SupplierFeedback.score_value()` over
+      `status="submitted"`, `respondent_kind="internal"` rows for that KPI and window.
+- [ ] `generate_scorecard_lines(scorecard, user)` -> a result dict
+      `{"written": n, "skipped": n, "dimensions": {...}, "alerts": n}`:
+      resolve the KPI set -> compute each (derived / survey / leave a `manual` line's existing
+      `measured_value` alone) -> `kpi.score_and_band(...)` -> `update_or_create` one line per KPI
+      on `(tenant, scorecard, kpi)` freezing weight/target/direction/source/unit/name/category ->
+      fill the four `scm.SupplierScorecard` dimension columns for KPIs with a `maps_to_dimension`
+      (weighted mean where several map to one column) -> **`manual_override = True`** ->
+      `scorecard.recompute_overall()` -> raise a `ProcurementAlert` per NEW critical band crossing
+      (`kind="task"`, `severity="critical"`, internal `link_url` only).
+      **Refuses (returns a refusal, no writes) when `scorecard.status != "draft"`.**
+      Wrapped in `transaction.atomic`.
+- [ ] Board helpers: `trend_series(tenant, party, kpi=None)`, `benchmark_rows(tenant, period_end,
+      tier=None, category=None)`, `perception_gap_rows(tenant, party, start, end)`.
+      `ROW_CAP = 500` on every board query (the 6.15 precedent) so a big workspace cannot render
+      an unbounded page.
+- [ ] **Import discipline:** import the 6.16 models from their **entity modules**
+      (`from apps.procurement.models.SupplierPerformanceEvaluation.SupplierKpis import
+      SupplierKpi`), not from `apps.procurement.models`, so this module imports cleanly BEFORE
+      the Integrate phase adds the re-export block. Cross-app models (`scm`, `core`) come from
+      their package roots. Sibling-app reads happen INSIDE the functions where a cycle is
+      possible (the `CostForecasts.py` precedent).
+
+### Routes - namespace `procurement`, ALL first segments literal and reserved
+
+- [ ] `urls/SupplierPerformanceEvaluation/SupplierKpis.py`: `supplier-kpis/` ->
+      `supplierkpi_list`; `supplier-kpis/add/` -> `supplierkpi_create`;
+      `supplier-kpis/<int:pk>/` -> `supplierkpi_detail`; `.../edit/` -> `supplierkpi_edit`;
+      `.../delete/` -> `supplierkpi_delete` (POST-only).
+- [ ] `urls/SupplierPerformanceEvaluation/ScorecardKpiScores.py` (**literal `scores/` declared
+      BEFORE `<int:pk>/`**): `supplier-evaluations/` -> `supplierevaluation_list`;
+      `supplier-evaluations/scores/` -> `supplierkpiscore_list`;
+      `supplier-evaluations/scores/<int:pk>/` -> `supplierkpiscore_detail`;
+      `.../scores/<int:pk>/edit/` -> `supplierkpiscore_edit`;
+      `.../scores/<int:pk>/delete/` -> `supplierkpiscore_delete` (POST-only);
+      `supplier-evaluations/<int:pk>/` -> `supplierevaluation_detail`;
+      `supplier-evaluations/<int:pk>/generate/` -> `supplierevaluation_generate`
+      (POST-only + `@tenant_admin_required`).
+- [ ] `urls/SupplierPerformanceEvaluation/SupplierFeedback.py`: `supplier-feedback/` ->
+      `supplierfeedback_list`; `.../add/` -> `supplierfeedback_create`; `.../<int:pk>/` ->
+      `supplierfeedback_detail`; `.../edit/` -> `supplierfeedback_edit`; `.../submit/` ->
+      `supplierfeedback_submit` (POST); `.../decline/` -> `supplierfeedback_decline` (POST);
+      `.../expire/` -> `supplierfeedback_expire` (POST - this is what makes the `expired` choice
+      reachable; no dead choices); `.../delete/` -> `supplierfeedback_delete` (POST).
+- [ ] `urls/SupplierPerformanceEvaluation/SupplierImprovementPlans.py`: `improvement-plans/` ->
+      `improvementplan_list`; `.../add/` -> `improvementplan_create`; `.../<int:pk>/` ->
+      `improvementplan_detail`; `.../edit/` -> `improvementplan_edit`; `.../activate/`,
+      `.../monitor/`, `.../acknowledge/`, `.../close/`, `.../cancel/` -> the five POST verbs
+      (so every `status` and `outcome` value is reachable); `.../delete/` -> POST-only.
+      `close` is `@tenant_admin_required`.
+- [ ] `urls/SupplierPerformanceEvaluation/PerformanceBoards.py`: `supplier-benchmarking/` ->
+      `supplier_benchmark_board`; `supplier-benchmarking/trend/` -> `supplier_trend_board`;
+      `supplier-benchmarking/perception-gap/` -> `supplier_perception_gap`. No converters here.
+- [ ] **No procurement scorecard CREATE route.** The evaluation register's "New period" button
+      links out to `scm:scorecard_create` (L36 - 6.16 never declares a second scorecard form).
+
+---
+
+### Step 1 - Contract (freeze it before any code)
+
+- [ ] `.claude/tasks/contract-procurement-6.16.md`: every model field + every CHOICES value from
+      the four blocks above; each form's `Meta.fields` + its exclusion list; all 30-ish url names;
+      the four template folder slugs; and - **the field that decides whether the build works -
+      EVERY view context key.** Pin at minimum:
+      list pages -> `object_list`, `page_obj`, `q` + each filter's `*_choices` and FK queryset
+      (`category_choices`, `source_choices`, `band_choices`, `status_choices`, `severity_choices`,
+      `tier_choices`, `function_choices`, `kind_choices`, `kpis`, `suppliers`, `scorecards`,
+      `stats`); detail/edit object -> `obj`; form pages -> `form`, `is_edit`;
+      evaluation detail -> `obj`, `lines`, `composite`, `dimension_map`, `can_generate`,
+      `refusal_reason`, `plans`, `feedback_rows`;
+      boards -> `rows`, `periods`, `series`, `cohort`, `gap_rows`, `selected_supplier`,
+      `selected_period`, `row_cap`, `truncated`.
+      **An unpinned name is a silently blank region or a `NoReverseMatch` (L7/L8).**
+- [ ] Commit the contract file on its own.
+
+### Step 2 - Entity 1: `SupplierKpi` (build it FIRST - the other three FK it)
+
+- [ ] `apps/procurement/models/SupplierPerformanceEvaluation/__init__.py` (empty; still its own
+      commit) - the four package folders are created by their first file.
+- [ ] `models/SupplierPerformanceEvaluation/SupplierKpis.py` - `from apps.procurement.models._base
+      import *`, absolute imports only.
+- [ ] `forms/SupplierPerformanceEvaluation/SupplierKpis.py` (+ that package's `__init__.py`).
+- [ ] `views/SupplierPerformanceEvaluation/SupplierKpis.py` - `@login_required`, every queryset
+      `filter(tenant=request.tenant)`, `crud_list` with
+      `search_fields=("code", "name", "description", "notes")` and
+      `filters=(("category","category",False), ("source","source",False),
+      ("direction","direction",False), ("applies_to","applies_to",False),
+      ("owner","owner_id",True), ("is_active","is_active",False))`; `crud_detail` /
+      `crud_create` / `crud_edit`; `crud_delete` under `@require_POST`. During the build import
+      the model from its **entity module**, not from `apps.procurement.models` (the sub-package
+      is not wired until Step 7 - the `BudgetMappings.py` comment says exactly why).
+- [ ] `urls/SupplierPerformanceEvaluation/SupplierKpis.py` (+ that package's `__init__.py`).
+- [ ] `templates/procurement/performance/kpi/list.html` - filter bar reflecting `request.GET`
+      (string filters `{% if request.GET.x == value %}`, the owner pk filter with
+      `|stringformat:"d"`), Actions column (view / edit / delete-POST + `confirm()` +
+      `{% csrf_token %}`), `has_previous`/`has_next`-guarded pagination (L9), empty state,
+      weight + direction + band-threshold columns, `badge-green/-muted` for active/inactive.
+- [ ] `templates/procurement/performance/kpi/detail.html` - thresholds panel with the direction
+      arrow, the derived-metric or survey source stated in words, the
+      `industry_benchmark_value` labelled "hand-entered", scores-using-this-KPI list, Actions
+      sidebar (Edit / Delete POST / Back).
+- [ ] `templates/procurement/performance/kpi/form.html` - shared create+edit, `is_edit` title
+      switch, band-ordering help text.
+- [ ] One commit per file (7 commits).
+
+### Step 3 - Entity 2: `SupplierKpiScore` + `performance.py` + the evaluation register
+
+- [ ] `models/SupplierPerformanceEvaluation/ScorecardKpiScores.py` (model + `BAND_CSS` + the two
+      documented CRUD exemptions in the docstring).
+- [ ] `apps/procurement/performance.py` - the compute module specified above.
+- [ ] `forms/SupplierPerformanceEvaluation/ScorecardKpiScores.py` - the two-field manual edit form.
+- [ ] `views/SupplierPerformanceEvaluation/ScorecardKpiScores.py`:
+      `supplierevaluation_list` (`crud_list` over
+      `SupplierScorecard.objects.filter(tenant=request.tenant)`, search on `number` +
+      `party__name`, filters supplier / status / period-year, annotate the 6.16 line count);
+      `supplierevaluation_detail` (lines ordered by category, the composite arithmetic table, the
+      four mapped dimensions, `can_generate` + `refusal_reason`, links to the PIPs and feedback
+      for that period, a link out to `scm:scorecard_detail`);
+      `supplierevaluation_generate` (`@require_POST` + `@tenant_admin_required`, calls
+      `generate_scorecard_lines`, **hand-rolled save path so it must call `write_audit_log`
+      itself**, `messages.success` with the counts / `messages.error` on refusal);
+      `supplierkpiscore_list` (flat register: search on `kpi_name`, filters band / source /
+      kpi / scorecard); `supplierkpiscore_detail` (the `breakdown` JSON rendered as a table);
+      `supplierkpiscore_edit` (**redirect + `messages.error` when
+      `source_at_time != "manual"`**); `supplierkpiscore_delete` (POST-only).
+- [ ] `urls/SupplierPerformanceEvaluation/ScorecardKpiScores.py` - literal `scores/` before
+      `<int:pk>/`.
+- [ ] `templates/procurement/performance/evaluation/list.html` (register + "New period" ->
+      `scm:scorecard_create`), `.../evaluation/detail.html` (**the generate button's confirm text
+      must say that generating takes this scorecard over from SCM's signal engine**; the page
+      states it again as a note when `manual_override` is set).
+- [ ] `templates/procurement/performance/kpiscore/{list,detail,form}.html` - the list's Actions
+      column shows Edit **only** on `source_at_time == "manual"` rows (the conditional-actions
+      rule), Delete POST on all; bands via `obj.band_css`.
+- [ ] One commit per file (10 commits).
+
+### Step 4 - Entity 3: `SupplierFeedback`
+
+- [ ] `models/.../SupplierFeedback.py`, `forms/.../SupplierFeedback.py`,
+      `views/.../SupplierFeedback.py`, `urls/.../SupplierFeedback.py`.
+- [ ] List filters: supplier (int), status, respondent_kind, respondent_function, kpi (int),
+      scorecard (int); search on `number`, `supplier__name`, `respondent_name`, `comment`.
+      Stats strip: requested / submitted / declined / overdue.
+- [ ] The three POST verbs are hand-rolled save paths -> each calls `write_audit_log` itself;
+      `submit` requires a `rating` and stamps `submitted_at`.
+- [ ] `templates/procurement/performance/feedback/{list,detail,form}.html` - rating rendered with
+      its label (`get_rating_display`) and a `badge-green/-amber/-red` scale, importance shown,
+      `supplier_self` rows visibly marked (`badge-info`).
+- [ ] One commit per file (7 commits).
+
+### Step 5 - Entity 4: `SupplierImprovementPlan`
+
+- [ ] `models/.../SupplierImprovementPlans.py`, `forms/.../SupplierImprovementPlans.py`
+      (+ `clean_evidence()`), `views/.../SupplierImprovementPlans.py`,
+      `urls/.../SupplierImprovementPlans.py`.
+- [ ] List filters: supplier (int), status, severity, outcome, owner (int), kpi (int); search on
+      `number`, `title`, `finding`, `supplier__name`. Stats strip: active / monitoring / overdue
+      / closed.
+- [ ] Five POST verbs (activate / monitor / acknowledge / close / cancel) - each guards the legal
+      source status, stamps its own system columns, calls `write_audit_log`; `close` takes
+      `outcome` + `closure_note` from the POST and is `@tenant_admin_required`.
+- [ ] `templates/procurement/performance/improvementplan/{list,detail,form}.html` - the form
+      carries **`enctype="multipart/form-data"`** (evidence upload) and shows the allowed
+      extensions + max MB; the detail page shows the CAPA columns, the timeline of stamps, the
+      escalation link to the suspension, and the Actions sidebar with the verbs valid for the
+      current status only.
+- [ ] One commit per file (7 commits).
+
+### Step 6 - Boards for bullet 5 (NO models)
+
+- [ ] `views/SupplierPerformanceEvaluation/PerformanceBoards.py` + the matching `urls/` module.
+- [ ] `templates/procurement/performance/benchmark_board.html` - one period, every supplier
+      ranked by composite, cohort average + percentile, filters tier / category / period_end,
+      plus the performance x risk quadrant reading `scm.SupplierRiskAssessment.risk_index`
+      (drivers: Ariba comparative view, LeanLinking cross-base comparability, SupplyHive segments).
+- [ ] `templates/procurement/performance/trend_board.html` - one supplier (`?supplier=<pk>`):
+      composite and per-KPI series across periods with period-over-period deltas and
+      flag-vs-target (driver: Kodiak monthly + trailing-12).
+- [ ] `templates/procurement/performance/perception_gap.html` - internal average vs
+      `respondent_kind="supplier_self"` average per KPI, with the delta (driver: SupplyHive
+      Hive360).
+- [ ] All three are **standalone pages at the sub-module root** (no entity folder - the
+      Template-Folder rule 6 case), every query tenant-scoped and `ROW_CAP`-bounded, every board
+      states plainly that benchmarks are **internal cohort only** - there is no external
+      industry feed.
+- [ ] One commit per file (5 commits).
+
+### Step 7 - Integrate (SINGLE WRITER, the only DB writer - surgical Edits only, never a rewrite)
+
+- [ ] **Verify every expected file from Steps 2-6 actually landed** before wiring anything.
+- [ ] `models/__init__.py` - append the re-export block: `SupplierKpi`, `SupplierKpiScore`,
+      `SupplierFeedback`, `SupplierImprovementPlan` imported **from the entity MODULES**
+      (the 6.13/6.14/6.15 comment pattern), plus the four names appended to `__all__`.
+- [ ] `forms/__init__.py` - append `SupplierKpiForm`, `SupplierKpiScoreEditForm`,
+      `SupplierFeedbackForm`, `SupplierImprovementPlanForm` (+ `__all__`).
+- [ ] `views/__init__.py` - append **every** view function name (all ~30). A view that is not
+      re-exported is an `AttributeError` at URLconf import - this is the single most commonly
+      forgotten step in this repo.
+- [ ] `urls/__init__.py` - import the five 6.16 url modules and append them **LAST** in
+      `urlpatterns` (the 6.13/6.14/6.15 belt-and-braces precedent), and extend the module
+      docstring's first-segment inventory with `supplier-kpis/`, `supplier-evaluations/`,
+      `supplier-feedback/`, `improvement-plans/`, `supplier-benchmarking/`.
+- [ ] `apps/procurement/admin.py` - register the four models (list_display / list_filter /
+      search_fields), following the existing per-sub-module block style.
+- [ ] `apps/core/navigation.py` - **exactly ONE new key**, `LIVE_LINKS["6.16"]`, placed after
+      `"6.15"`, with the five NavERP.md bullet names **verbatim**:
+      `"KPI Definition & Setup" -> "procurement:supplierkpi_list"`,
+      `"Scorecard Generation" -> "procurement:supplierevaluation_list"`,
+      `"360-Degree Feedback Collection" -> "procurement:supplierfeedback_list"`,
+      `"Performance Improvement Plans (PIP)" -> "procurement:improvementplan_list"`,
+      `"Benchmarking & Trending" -> "procurement:supplier_benchmark_board"`.
+      All five point at STAFF-facing management pages (L32). **Touch no other key** - peer
+      sessions are editing 6.17/6.18/6.19 in this same file.
+- [ ] `management/commands/seed_procurement.py` - add `_seed_supplier_performance(self, tenant)`
+      and its dispatch line **immediately after `self._seed_budget_cost(tenant)`** in `handle()`.
+      Idempotent: per-tenant `SupplierKpi.objects.filter(tenant=tenant).exists()` guard,
+      `get_or_create` / number-existence checks throughout, **never `--flush`**. It must:
+      reuse the existing seeded suppliers
+      (`Party.objects.filter(tenant=tenant, roles__role__in=("supplier","vendor"))`) and skip
+      gracefully when there are none (the SMOKETEST-tenant case `_seed_budget_cost` already
+      handles); create ~6 KPIs spanning all three `source` values and at least two
+      `maps_to_dimension` values; create ONE **`draft`** `scm.SupplierScorecard` per demo
+      supplier for a distinct prior period **(seed_scm's own two scorecards are left alone -
+      they are `published`, and generate correctly refuses those)**; run
+      `generate_scorecard_lines` on the draft ones so real banded lines exist; create ~4
+      `SupplierFeedback` rows including one `supplier_self` (so the perception-gap board has
+      data) and one `requested`; create 2 PIPs (one `active`, one `closed` with an outcome).
+      Also add the four models to the `--flush` block, children first.
+- [ ] `python manage.py makemigrations procurement` -> **must be `0026_*` and nothing else.**
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_procurement` **twice** - the second run must print the
+      "already present, skipping" line and create zero rows.
+- [ ] `python manage.py check` - clean.
+- [ ] One commit per file, explicit paths (models/forms/views/urls `__init__.py` x4, admin.py,
+      navigation.py, seed_procurement.py, the migration = 8 commits).
+
+### Step 8 - Verify / smoke (the gate before the review phase)
+
+- [ ] Throwaway script under `temp/`, logged in as **`admin_acme` / `password`**:
+      GET every new url (list, detail, form, all three boards) -> 200; every POST verb ->
+      302 + the intended state change.
+- [ ] **Assert CONTENT, not just status (L8)** - a mismatched context var returns 200 and renders
+      blank: page titles, a seeded KPI code, a seeded SFB-/SIP- number, a banded score line, the
+      cohort table's supplier name, the perception-gap delta.
+- [ ] No `{#` or `{% comment` leaks in any rendered page; no `badge-success/-warning/-danger`
+      anywhere in the new templates (grep the templates, L33).
+- [ ] Junk-param sweep on every list (`?status=nope`, `?supplier=abc`, `?supplier=0`,
+      `?supplier=999999999999999999999`, `?page=99`) -> 200 with the register still populated,
+      never a 500 and never a silently emptied page.
+- [ ] Page 2 renders where seeded rows allow.
+- [ ] Cross-tenant IDOR: fetch a `beta`-tenant pk as `admin_acme` on every detail/edit/delete/
+      verb route -> **404**.
+- [ ] Generate refusal proven: POST generate on a `published` scorecard -> redirect +
+      error message, and **zero** `SupplierKpiScore` rows written.
+- [ ] Generate idempotence proven: POST generate twice on a draft scorecard -> the same line
+      count both times (the `unique_together` re-run rule), `computed_at` re-stamped.
+- [ ] `manual_override` proven: after generate, the scorecard has `manual_override=True` and a
+      subsequent `recompute_from_signals()` leaves the dimensions unchanged.
+- [ ] Sidebar: all five `6.16` bullets render **Live**.
+- [ ] Delete the `temp/` script before committing (never commit it).
+
+### Step 9 - Close-out
+
+- [ ] Phase 4 - the six reviewers **one after another**, appending to
+      `.claude/tasks/review-procurement-6.16.md` after each: `code-reviewer` -> `explorer` ->
+      `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+      Dedupe, sort Critical -> Important -> Minor, assign IDs, commit the file.
+- [ ] Phase 5 - one `code-fixer` agent burns the findings down in ID order, one commit per file;
+      confirm nothing is left `[ ] open` and `manage.py check` is clean.
+- [ ] Phase 6 - tests, serial: contract + `conftest.py` first, then
+      `test_supplierperf_models.py` -> `test_supplierperf_forms.py` ->
+      `test_supplierperf_views.py` -> `test_supplierperf_security.py`, every function named
+      `test_supplierperf_*` and every module helper `_supplierperf_*`. Finish with ONE **full,
+      unfiltered** `apps/procurement` suite run, green (never `-k` filtered, L47).
+- [ ] Phase 7 - update `.claude/skills/procurement/SKILL.md` (models, the ~30 routes, the
+      `performance/` template folders, the seeder rows, the `LIVE_LINKS["6.16"]` block, and the
+      `manual_override` hand-over gotcha), and mark 6.16 complete in `README.md`. One commit each.
+- [ ] Fill in the Review notes block below.
+
+### Later passes / deferred (carried from the research - nothing lost)
+
+- **`SupplierImprovementAction` child** - the multi-row CAPA register (per-action owner, due
+  date, status, evidence, verification date). Kodiak/MasterControl/ComplianceQuest all have it;
+  **this is the first thing the next pass should add**, which is why the plan model must accept a
+  child without reshaping.
+- **Named scorecard template / KPI-set model** (Ariba's Master document) - this pass selects the
+  set via `applies_to_tier` + `is_active`.
+- **PIP check-in child** (the `hrm.Pipcheckin` analogue) - `next_review_date` covers this pass.
+- **Automated cadence scheduling** off `review_frequency` - needs a scheduler; none in this repo.
+- **Survey distribution, reminders and escalation e-mails** - integration/later; the request
+  lifecycle (`status`, `due_date`, `requested_at`) is modelled now so nothing reshapes when mail
+  lands.
+- **Supplier-facing self-review UI and score sharing** - needs the 6.4 `VendorPortalAccess`
+  portal surface; the data model (`respondent_kind="supplier_self"`) is ready today.
+- **Rule-engine auto-triggering of PIPs and standing band-crossing detectors** - this pass ships
+  a "create PIP from this scorecard" link and alerts raised DURING generate only.
+- **External industry benchmarks** (EcoVadis, Prewave, D&B, Coupa pooled feedback) - **not
+  buildable against the as-built spine**; `industry_benchmark_value` is the hand-entered stand-in
+  and every board says "internal cohort only".
+- **NLP sentiment/theme extraction and AI-drafted plans** (SupplyHive, Ivalua IVA) - AI/later.
+- **Bonus/penalty schemes tied to scores** (Jaggaer) - needs a 6.8 contract + accounting hook.
+- **8D / PPAP / APQP methodology templates** - regulated-manufacturing niche.
+- **Derived audit-score / CAPA-closure / certification-currency / ESG KPIs** - the source classes
+  (`scm.QualityAudit`, `scm.CapaAction`, `scm.TradeLicense`, `scm.SustainabilityAssessment`)
+  exist but their FIELD SHAPES were not verified; ship them as `manual`/`survey` KPIs and promote
+  to `derived` only after a fresh grep (L28).
+- **Cost-variance-vs-should-cost, expedite-cost, innovation throughput, contracted-lead-time
+  adherence, supplier credit score** - no source table exists anywhere; `manual` only.
+
+### Parked for a sibling sub-module (do NOT pull into 6.16)
+
+- Supplier onboarding, qualification, tier/segment maintenance, the suspension **workflow**, the
+  supplier portal, share-of-business re-tiering -> **6.4** (6.16 only links to them).
+- Weighted **bid** evaluation and RFx question scoring -> **6.5 / 6.6** (already built - do not
+  rebuild a scoring engine for sourcing events).
+- GRN tolerances, inspection, NCR/RTV **mechanics** -> **6.12**; three-way match and dispute
+  **workflow** -> **6.13**; spend/savings -> **6.14**. 6.16 only READS all of them as KPI signals.
+- Contract SLAs, obligations, penalties tied to performance -> **6.8**.
+- Supplier financial/credit risk, restricted-party screening, fraud rules -> **6.17**
+  (`scm.SupplierRiskAssessment` already exists - the benchmark board READS `risk_index`, never
+  clones it).
+- Evidence-pack repository / version control / full-text search -> **6.19**.
+- Network-wide supply-chain KPI targets, snapshots and the control tower -> **SCM 4.11**
+  (`KpiTarget`/`KpiSnapshot` - a closed metric registry and a different subject; 6.16 borrows the
+  PATTERN, never the table).
+
+### Review notes
+
+(filled in at the end)
+
+---
 # Sub-module 6.19 - Document & Knowledge Management (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.19.md  (2026-09-05)
 
 > Built AHEAD of 6.16/6.17/6.18 (no `LIVE_LINKS` key exists for any of them). Scope is the research's
