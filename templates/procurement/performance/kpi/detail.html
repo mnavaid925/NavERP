@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.code }} — Supplier KPI{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — SupplierKpi detail
+    (crud_detail, context contract: obj, score_rows, plans, feedback_rows, row_cap, truncated,
+    benchmark_note — and NOTHING else).
+
+    The definition on the left, everything measured or opened UNDER it below. The three lists
+    are capped and tenant-scoped in the view; `truncated` is true when any of them was cut.
+
+    Nullable-field discipline (L10): target_value, warning_threshold, critical_threshold,
+    industry_benchmark_value and owner are all nullable, and every read of them sits inside an
+    if-branch. The three thresholds are compared with `is not None`, never truthiness — 0 is a
+    perfectly good target and truthiness would print it as "Not set".
+
+    Badge classes are COLOUR-NAMED only (L33): theme.css ships badge-green / -red / -amber /
+    -info / -muted / -slate and nothing else. Every badge below is an explicit chain over the
+    model's own CHOICES values with an else-fallback, so a renamed helper property can never
+    silently unstyle a row.
+
+    Only the system-assigned {{ obj.number }} (SKP-#####) reaches the delete confirm() handler;
+    obj.code and obj.name are user-authored and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} · {{ obj.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierkpi_list' %}">Supplier KPIs</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.get_category_display }} · {{ obj.get_direction_display|lower }} · weight {{ obj.weight }} · reviewed {{ obj.get_review_frequency_display|lower }}.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierkpi_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'procurement:supplierkpi_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All KPIs</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ obj.number }}</h2>
+      <div>
+        {% if obj.source == "derived" %}<span class="badge badge-info">{{ obj.get_source_display }}</span>
+        {% elif obj.source == "survey" %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_source_display }}</span>{% endif %}
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>
+        {% else %}<span class="badge badge-muted">Retired</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Code</dt><dd class="fw-600">{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}</dd></div>
+        <div class="detail-item"><dt>Unit</dt><dd>{{ obj.get_unit_display }}</dd></div>
+        <div class="detail-item"><dt>Direction</dt>
+          <dd>{{ obj.get_direction_display }}
+            <div class="text-muted">{% if obj.direction == "lower_is_better" %}a smaller number is better — the bands read downwards{% else %}a bigger number is better — the bands read upwards{% endif %}</div>
+          </dd></div>
+        <div class="detail-item"><dt>Source</dt>
+          <dd>{{ obj.get_source_display }}
+            {% if obj.source == "derived" %}
+              <div class="text-muted">computed by the <span class="fw-600">{{ obj.get_derived_metric_display }}</span> resolver over the scorecard period</div>
+            {% elif obj.source == "survey" %}
+              <div class="text-muted">the importance-weighted mean of submitted 360 responses against this KPI</div>
+            {% else %}
+              <div class="text-muted">typed onto the scorecard line by hand</div>
+            {% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Weight</dt>
+          <dd>{{ obj.weight }} <span class="text-muted">(re-weighted over the KPIs actually scored)</span></dd></div>
+        <div class="detail-item"><dt>Scoring method</dt>
+          <dd>{{ obj.get_scoring_method_display }}
+            {% if obj.scoring_method == "direct" %}<div class="text-muted">the measured value IS the score, clamped to 0&ndash;100</div>
+            {% elif obj.scoring_method == "linear" %}<div class="text-muted">interpolated between the critical line (0) and the target (100); falls back to the band table when there is no usable span</div>
+            {% else %}<div class="text-muted">on target 100, warning 70, critical 30</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Target</dt>
+          <dd>{% if obj.target_value is not None %}{{ obj.target_value|floatformat:"-4" }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Warning threshold</dt>
+          <dd>{% if obj.warning_threshold is not None %}{{ obj.warning_threshold|floatformat:"-4" }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Critical threshold</dt>
+          <dd>{% if obj.critical_threshold is not None %}{{ obj.critical_threshold|floatformat:"-4" }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Feeds scorecard dimension</dt>
+          <dd>{% if obj.maps_to_dimension %}{{ obj.get_maps_to_dimension_display }}{% else %}<span class="text-muted">None — measured but not rolled up</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Applies to</dt>
+          <dd>{% if obj.applies_to == "tier" %}{{ obj.get_applies_to_tier_display }} suppliers only<div class="text-muted">matched against the supplier's SCM profile tier</div>{% else %}{{ obj.get_applies_to_display }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Review frequency</dt>
+          <dd>{{ obj.get_review_frequency_display }} <span class="text-muted">(intended cadence — scorecards are generated on demand, nothing schedules off this)</span></dd></div>
+        <div class="detail-item"><dt>Industry benchmark</dt>
+          <dd>{% if obj.industry_benchmark_value is not None %}{{ obj.industry_benchmark_value|floatformat:"-4" }}{% else %}<span class="text-muted">Not entered</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Owner</dt>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Display order</dt><dd>{{ obj.display_order }}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.description %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Description</dt><dd>{{ obj.description|linebreaksbr }}</dd></div>
+      {% endif %}
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <p class="form-help">{{ benchmark_note }}</p>
+      <p class="form-help">Re-tuning this definition does not rewrite history: every scorecard line freezes the weight, target, direction, source and unit that were in force when it was generated, so a retune changes the next period and leaves closed ones alone.</p>
+      {% if truncated %}
+        <p class="form-help">Some of the lists below were cut — the most recent {{ row_cap }} measurements are shown, and only the most recent plans and responses. Open the registers for the full history.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Measured history</h2>
+      <span class="text-muted">newest period first, at most {{ row_cap }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Supplier</th>
+            <th class="text-right">Measured</th>
+            <th class="text-right">Score</th>
+            <th>Band</th>
+            <th class="text-right">Weight applied</th>
+            <th>Computed</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in score_rows %}
+            <tr>
+              <td class="fw-600">{{ r.scorecard.period_end|date:"M d, Y" }}<div class="text-muted">{{ r.scorecard.number }}</div></td>
+              <td>{{ r.scorecard.party.name }}</td>
+              <td class="text-right">{% if r.measured_value is not None %}{{ r.measured_value|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right fw-600">{% if r.score is not None %}{{ r.score|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if r.band == "ok" %}<span class="badge badge-green">{{ r.get_band_display }}</span>
+                {% elif r.band == "warning" %}<span class="badge badge-amber">{{ r.get_band_display }}</span>
+                {% elif r.band == "critical" %}<span class="badge badge-red">{{ r.get_band_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ r.get_band_display }}</span>{% endif %}
+              </td>
+              <td class="text-right">{{ r.weight_applied }}</td>
+              <td>{{ r.computed_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierkpiscore_detail' r.pk %}" class="btn-icon" title="View measurement" aria-label="View measurement"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="line-chart"></i>
+                <h3>Never measured</h3>
+                <p>Nothing has been generated against this KPI yet. Generate a scorecard for a supplier and period, and every KPI that applies to that supplier gets a line here.</p>
+                <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Evaluation periods</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Improvement plans citing this KPI</h2>
+      <span class="text-muted">most recent first</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Supplier</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Target close</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in plans %}
+            <tr>
+              <td class="fw-600">{{ p.title }}<div class="text-muted">{{ p.number }}</div></td>
+              <td>{{ p.supplier.name }}</td>
+              <td>
+                {% if p.severity == "critical" %}<span class="badge badge-red">{{ p.get_severity_display }}</span>
+                {% elif p.severity == "major" %}<span class="badge badge-amber">{{ p.get_severity_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ p.get_severity_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if p.status == "closed" %}<span class="badge badge-green">{{ p.get_status_display }}</span>
+                {% elif p.status == "monitoring" %}<span class="badge badge-info">{{ p.get_status_display }}</span>
+                {% elif p.status == "active" %}<span class="badge badge-amber">{{ p.get_status_display }}</span>
+                {% elif p.status == "cancelled" %}<span class="badge badge-muted">{{ p.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ p.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ p.start_date|date:"M d, Y" }}</td>
+              <td>{{ p.target_close_date|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:improvementplan_detail' p.pk %}" class="btn-icon" title="View plan" aria-label="View plan"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="clipboard-check"></i>
+                <h3>No improvement plans cite this KPI</h3>
+                <p>When one metric is what went wrong, the plan opened against the supplier names it here — so the failing number and the work to fix it stay attached to each other.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">360 responses against this KPI</h2>
+      <span class="text-muted">most recent period first</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Response</th>
+            <th>Supplier</th>
+            <th>Respondent</th>
+            <th>Rating</th>
+            <th class="text-right">Importance</th>
+            <th>Status</th>
+            <th>Period end</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in feedback_rows %}
+            <tr>
+              <td class="fw-600">{{ f.number }}</td>
+              <td>{{ f.supplier.name }}</td>
+              <td>
+                {% if f.respondent %}{{ f.respondent.get_full_name|default:f.respondent.email }}
+                {% elif f.respondent_name %}{{ f.respondent_name }}
+                {% else %}<span class="text-muted">Anonymous</span>{% endif %}
+                <div class="text-muted">{{ f.get_respondent_kind_display }} · {{ f.get_respondent_function_display }}</div>
+              </td>
+              <td>
+                {% if f.rating is not None %}
+                  {% if f.rating >= 4 %}<span class="badge badge-green">{{ f.get_rating_display }}</span>
+                  {% elif f.rating == 3 %}<span class="badge badge-amber">{{ f.get_rating_display }}</span>
+                  {% else %}<span class="badge badge-red">{{ f.get_rating_display }}</span>{% endif %}
+                {% else %}<span class="text-muted">Not rated</span>{% endif %}
+              </td>
+              <td class="text-right">{{ f.importance }}</td>
+              <td>
+                {% if f.status == "submitted" %}<span class="badge badge-green">{{ f.get_status_display }}</span>
+                {% elif f.status == "requested" %}<span class="badge badge-amber">{{ f.get_status_display }}</span>
+                {% elif f.status == "declined" %}<span class="badge badge-muted">{{ f.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ f.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ f.period_end|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierfeedback_detail' f.pk %}" class="btn-icon" title="View response" aria-label="View response"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="message-square"></i>
+                <h3>No 360 responses against this KPI</h3>
+                <p>A survey KPI is only as good as the people who answer it. Request responses for a period and the importance-weighted mean of the submitted ones becomes this KPI's measured value.</p>
+                <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline"><i data-lucide="message-square"></i> Feedback register</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Retiring beats deleting. A KPI that anything has ever been measured under is PROTECTed at the database and the delete is refused with a message — untick <span class="fw-600">Active</span> on the edit form instead, which stops it being generated from now on and leaves every figure ever taken under it readable.</p>
+      <form method="post" action="{% url 'procurement:supplierkpi_delete' obj.pk %}" onsubmit="return confirm('Delete KPI {{ obj.number }}? If anything has ever been measured under it the delete is refused — retire it instead by unticking Active. A KPI that was never measured is gone for good and cannot be recovered.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete KPI</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
