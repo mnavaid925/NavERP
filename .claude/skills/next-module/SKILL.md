@@ -198,7 +198,7 @@ future migration (lessons L28/L29).
 
 ---
 
-## Step 2 — Build the sub-module (prefer a parallel agent Workflow for speed)
+## Step 2 — Build the sub-module (strictly one step at a time)
 
 **Before you write a single file:** run `git rev-parse HEAD` and keep that sha as **`BASE`** — Step 5a reviews
 `BASE...HEAD`, and by then the working tree is clean (the build commits as it goes), so there is no other way to
@@ -223,19 +223,30 @@ those files alone (L45), and agree the migration number before generating one (L
   the `management/commands` tree) AND do the `config/settings.py` + `config/urls.py` wire-up — then build that
   module's first sub-module (`N.1`).
 
-**Run the build as a Workflow — do not build it inline.** The parallelism axis is **per entity, not per layer**:
+**Build it one step at a time — never with the `Workflow` tool and never with two agents at once.** The order is
+**Spec -> Scaffold -> entity by entity -> Integrate -> Smoke**, and each step finishes before the next begins:
 
-```
-Workflow({ scriptPath: '.claude/workflows/module-build.js',
-           args: { slug: '<slug>', submodule: '<N.M>', title: '<sub-module title>',
-                   newApp: <true only for a brand-new app>, migrationNumber: '<claimed above>' } })
-```
+1. **Spec** — read `.claude/tasks/todo.md`, NavERP.md and the reference apps, and freeze the **contract** in
+   `.claude/tasks/contract-<slug>-<N.M>.md`: every model field and CHOICES value, form `Meta.fields` +
+   exclusions, url names, and **every view context key** (the list var, the detail and edit-mode object vars,
+   every `*_choices`, every FK filter queryset). A name left unpinned is a silently blank region or a
+   `NoReverseMatch` (L7). Do this inline, or with a single read-only `explorer` agent.
+2. **Scaffold** — brand-new app only; skipped when `apps/<slug>/` exists.
+3. **Build, entity by entity** — one entity at a time, finished completely before the next starts: its four
+   backend files (`models` / `forms` / `views` / `urls`), then its three templates
+   (`list` / `detail` / `form.html`). Do not interleave entities. Shared files — package `__init__.py`,
+   `admin.py`, the seeder, `navigation.py`, `settings.py`, `urls.py` — are **not** touched here; they wait for
+   Integrate.
+4. **Integrate** (single writer, only DB writer) — verify every expected file actually landed, then add the
+   `__init__.py` re-export blocks surgically, register admin, extend the seeder, add the one
+   `LIVE_LINKS["N.M"]` entry, do the `settings.py` / `urls.py` wire-up **only now that the app files exist**
+   (the check-after-edit hook blocks otherwise, L12), then migrate + seed x2 + `check` per §2d, committing one
+   file per commit.
+5. **Smoke** (`qa-smoke-tester` agent) — render every new page as `admin_acme` and assert **content, not just
+   status** (a mismatched context var returns 200 and renders blank, L8), plus a junk-param list, page 2, and
+   cross-tenant IDOR -> 404. Fix any drift against the contract.
 
-It runs **Spec** (solo, read-only — freezes the contract, including **every view context key**) → **Scaffold**
-(new apps only) → **Build** (per entity, a backend agent and a template agent **concurrently**) → **Integrate**
-(solo single writer: re-exports, admin, seeder, `LIVE_LINKS`, migrate, seed ×2, `check`, commit) → **Smoke**
-(renders every new page and fixes contract drift). The build agents never touch a shared file; §2a–2d below are
-the spec the workflow's agents build to, and the reference for anything you fix by hand afterwards.
+§2a–2d below are the spec you build to.
 
 Produce ALL of the following **for the one sub-module** (for an existing app, "create" means "append to the
 existing file"):
@@ -367,39 +378,41 @@ Credentials: tenant admins `admin_acme` / `admin_globex`, password `password` (p
 
 ---
 
-## Step 5 — Close with the parallel review wave, the fixer, and the test wave (CLAUDE.md "Module Creation Sequence")
+## Step 5 — Close with the review pass, the fixer, and the tests (CLAUDE.md "Module Creation Sequence")
 
-This is the quality bar, not optional (lesson L18) — but it runs **in parallel**, not as a serial chain of agents.
-Three phases, in order:
+This is the quality bar, not optional (lesson L18). It runs **strictly serially** — one agent at a time, never the
+`Workflow` tool, never two `Agent` calls in one message. Three phases, in order:
 
-**5a. Review wave — six agents at once.** One Workflow, scoped to the changeset you captured before building:
+**5a. Review — six reviewers, one after another.** Run each in its own `Agent` call, scoped to the changeset you
+captured before building (`BASE...HEAD`), and wait for each to report before starting the next:
 
-```
-Workflow({ scriptPath: '.claude/workflows/module-review.js',
-           args: { slug: '<slug>', submodule: '<N.M>', title: '<sub-module title>',
-                   base: '<BASE sha from before the build>', date: '<today>' } })
-```
+`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` ->
+`security-reviewer`
 
-`code-reviewer · explorer · frontend-reviewer · performance-reviewer · qa-smoke-tester · security-reviewer` run
-concurrently, read-only, each in its own lane. Write the returned `markdown` to
-**`.claude/tasks/review-<slug>-<N.M>.md`** and commit it. Re-run any lane the summary table marks `NO RESULT`.
+All six are **read-only**: they never edit code and never commit. `qa-smoke-tester` is the only one that touches
+the DB, and its normal "fix what you find" behaviour is overridden to "report it instead".
+
+As each one reports, **append its findings to `.claude/tasks/review-<slug>-<N.M>.md`** — never carry findings in
+your head between agents. When all six are in, dedupe the file, sort Critical -> Important -> Minor, assign IDs
+(`C1`, `I3`, `M7`) and commit it. If a reviewer returns nothing usable, re-run **that one agent**; a missing pass
+is missing coverage, not a clean bill of health.
 
 **5b. `code-fixer` agent.** Hand it that file. It fixes every finding in ID order (Critical → Important → Minor),
 verifies each, commits **one file per commit**, and marks each finding `[x] fixed` / `[~] skipped — reason`. Do
 **not** apply findings yourself in the main session. Confirm nothing is left `[ ] open` when it reports back.
 
-**5c. Test wave — four writers at once.**
+**5c. Tests — one file at a time.**
 
-```
-Workflow({ scriptPath: '.claude/workflows/module-tests.js',
-           args: { slug: '<slug>', submodule: '<N.M>', subslug: '<short-slug>',
-                   title: '<sub-module title>' } })
-```
+1. One agent pins the test contract (exact model / form / url / context names) and writes the shared
+   `tests/__init__.py` + `conftest.py`.
+2. Then a `test-writer` agent per file, **one after another**: `test_<subslug>_models.py` ->
+   `test_<subslug>_forms.py` -> `test_<subslug>_views.py` -> `test_<subslug>_security.py`. Commit each test file
+   on its own as it lands.
+3. Finally, run the **full unfiltered** app suite and fix it green — never `-k` filtered, because a filter
+   excludes exactly the tests a shared-file change can break (L47).
 
-A solo agent pins the contract and owns `tests/conftest.py`, four `test-writer` agents then write
-`test_<subslug>_{models,forms,views,security}.py` in parallel, and a final agent runs the **full unfiltered** app
-suite to green (never `-k` filtered — a filter cannot see the name collisions a fan-out causes, L47). Commit each
-test file on its own.
+Every test function is named `test_<subslug>_*` and every module-level helper `_<subslug>_*`, so the next
+sub-module appending nearby cannot shadow them. `conftest.py` is owned by step 1 alone.
 
 Then **update the module's existing skill** (`.claude/skills/<slug>/SKILL.md`) to document the new sub-module's
 models/routes/templates/seeder rows — for an existing module you *update* the skill, you do NOT create a new one
@@ -414,41 +427,6 @@ ONE. Keep going **sub-module by sub-module** within a module; only roll over to 
 once every sub-module of the current one is wired (Step 1 rollover rule).
 
 ---
-
-## Appendix — surviving the 5-hour window
-
-A build is checkpointed to `.claude/tasks/build-state.json` at every phase boundary (CLAUDE.md
-**Session Window & Resume**). What that buys you depends on how the next session starts.
-
-**Default — resume on next launch (works today, nothing to install).** Open Claude Code any time after the window
-resets. The `SessionStart` hook injects the resume block automatically, and the session continues from the first
-phase not marked `done`. You do not have to say anything: "next" or even an empty start is enough, because the
-instruction to resume is already in context. This is the path to rely on.
-
-**Check where a build stands at any time**, without starting a session:
-
-```bash
-venv\Scripts\python.exe .claude/hooks/build_state.py show
-```
-
-**Unattended — auto-launch at the reset time.** This needs the Claude Code **CLI**, which is *not* currently on
-this machine's PATH (the desktop app does not provide it). To enable it:
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-Then authenticate once (`claude` → sign in), and register a Windows Scheduled Task that fires at the reset time
-and runs the build headlessly:
-
-```bash
-schtasks /Create /TN "NavERP resume build" /SC ONCE /ST 21:58 /TR "cmd /c cd /d C:\xampp\htdocs\NavERP && claude -p \"Resume the interrupted NavERP build from .claude/tasks/build-state.json\" --permission-mode acceptEdits" /F
-```
-
-Three things to know before enabling it: the machine must be awake and logged in at that time; the run **consumes
-your usage window** the moment it starts, unattended; and `--permission-mode acceptEdits` means it edits and
-commits without asking — acceptable here only because the sequence never pushes. Prefer the default path unless
-you specifically want the build running while you are away.
 
 ## Quality bar
 A delivered sub-module must: live in the **backend package layout** (§2a — a `<SubModule>/` folder with one
