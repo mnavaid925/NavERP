@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Screening Hits{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — ScreeningHit resolution queue
+    (apps/procurement/views/RiskComplianceManagement/ScreeningHits.py :: screeninghit_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      disposition_choices, list_source_choices, match_type_choices, screenings,
+      stats{open, true_match, false_positive}, is_admin.
+
+    crud_list renders `object_list` — never `objects` (L7/L8).
+
+    The view's filter tuple is exactly (("disposition","disposition",False),
+    ("matched_list","matched_list",False), ("match_type","match_type",False),
+    ("screening","screening_id",True), ("min_score","match_score__gte",True)), so the bar offers
+    exactly q, disposition, matched_list, match_type, screening and min_score — nothing more.
+    The screening dropdown compares with |stringformat:"d", never |slugify; min_score is a plain
+    number input replayed from request.GET.
+
+    `disposition_choices` here is the FULL vocabulary, "open" included, because "show me what is
+    still open" is this queue's whole reason to exist. The adjudication PICKER, on the hit's own
+    page, offers only the terminal values.
+
+    Only the SYSTEM-ASSIGNED screening number reaches a confirm() string — the matched name is
+    text somebody typed and never does (L42).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Screening Hits</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Hits</span>
+      </div>
+      <p class="text-muted">Every potential match returned across every screening, highest score first. A supplier cannot be cleared while one of its hits is still open.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Screenings</a>
+      <a href="{% url 'procurement:screening_rescreen_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Re-screening due</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="user-x"></i></div><div class="stat-value">{{ stats.true_match }}</div><div class="stat-label">True matches</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.false_positive }}</div><div class="stat-label">False positives</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search hits" class="form-input" placeholder="Search matched name, programme, country or screening…">
+        </div>
+        <div class="form-group">
+          <select name="disposition" aria-label="Disposition" class="form-select">
+            <option value="">Any disposition</option>
+            {% for value, label in disposition_choices %}
+              <option value="{{ value }}" {% if request.GET.disposition == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="matched_list" aria-label="List" class="form-select">
+            <option value="">All lists</option>
+            {% for value, label in list_source_choices %}
+              <option value="{{ value }}" {% if request.GET.matched_list == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="match_type" aria-label="Matched on" class="form-select">
+            <option value="">Matched on anything</option>
+            {% for value, label in match_type_choices %}
+              <option value="{{ value }}" {% if request.GET.match_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="screening" aria-label="Screening" class="form-select">
+            <option value="">All screenings</option>
+            {% for s in screenings %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if request.GET.screening == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.number }} — {{ s.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="number" name="min_score" min="0" max="100" value="{{ request.GET.min_score }}" aria-label="Minimum score" class="form-input" placeholder="Min score">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:screeninghit_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Matched name</th>
+            <th>Screening</th>
+            <th>List &amp; programme</th>
+            <th class="text-right">Score</th>
+            <th>Matched on</th>
+            <th>Disposition</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:screeninghit_detail' obj.pk %}">{{ obj.matched_name }}</a>
+                {% if obj.entry_reference %}<div class="text-muted">Entry {{ obj.entry_reference }}</div>{% endif %}
+              </td>
+              <td>
+                <a href="{% url 'procurement:screening_detail' obj.screening.pk %}">{{ obj.screening.number }}</a>
+                <div class="text-muted">{{ obj.screening.party.name }}</div>
+              </td>
+              <td>
+                {{ obj.get_matched_list_display }}
+                {% if obj.program %}<div class="text-muted">{{ obj.program }}</div>{% endif %}
+                {% if obj.country %}<div class="text-muted">{{ obj.country }}</div>{% endif %}
+              </td>
+              <td class="text-right">
+                {{ obj.match_score }}%
+                {% if obj.is_above_threshold %}<div class="text-danger">at or over threshold</div>{% endif %}
+              </td>
+              <td>{{ obj.get_match_type_display }}</td>
+              <td>
+                <span class="badge {{ obj.disposition_css }}">{{ obj.get_disposition_display }}</span>
+                {% if obj.disposed_at %}<div class="text-muted">{{ obj.disposed_at|date:"M d, Y" }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:screeninghit_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete disappear once a hit is adjudicated, because both views
+                    refuse it — the matched name and score are what the disposition was reasoned
+                    against, so changing them afterwards would rewrite the record.
+                  {% endcomment %}
+                  {% if obj.is_open %}
+                    <a href="{% url 'procurement:screeninghit_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:screeninghit_delete' obj.pk %}" onsubmit="return confirm('Delete this hit from screening {{ obj.screening.number }}? Deleting an unadjudicated match removes it from the record entirely.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="list-checks"></i>
+                <h3>No hits found</h3>
+                <p>Nothing matches these filters. A hit is one potential match a lookup returned; it is captured against its screening and adjudicated from there.</p>
+                <a href="{% url 'procurement:screening_list' %}" class="btn btn-primary"><i data-lucide="shield-check"></i> Go to screenings</a>
+                <a href="{% url 'procurement:screeninghit_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How a hit is adjudicated</h2><span class="text-muted">three outcomes, always with reasoning</span></div>
+    <div class="card-body">
+      <p class="text-muted">A hit closes as a <span class="badge badge-green">False positive</span>, a <span class="badge badge-red">True match</span>, or <span class="badge badge-info">Cleared under licence</span> — different lists genuinely have different right answers. The reasoning is required for every one of them, false positives included: a cleared false positive with no recorded reasoning is indistinguishable from a check that was never performed.</p>
+    </div>
+  </div>
+{% endblock %}
