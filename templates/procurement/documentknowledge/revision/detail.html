@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}{{ document.number }} r{{ obj.revision_no }} — Revision{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementDocumentRevision detail
+    (apps/procurement/views/DocumentKnowledgeManagement/Revisions.py, hand-rolled render).
+
+    Context contract, and NOTHING else exists here:
+      obj, document, is_current, revision_note.
+
+    `document` is obj.document, resolved in the view so this page and the verbs agree about
+    the parent; `is_current` is obj.is_current, resolved there for the same reason.
+
+    Nullable discipline (L10): uploaded_by, approved_by, approved_at, change_note,
+    extraction_note and extracted_text are all optional, so every read of them sits inside a
+    conditional branch and says something honest otherwise.
+
+    Chain badge: green "Current" when the document's pointer lands here, amber "Superseded"
+    when this revision was approved and the pointer has since moved on, muted "Pending" when
+    it has not been approved. An older approved revision KEEPS its approval — it was approved,
+    and rewriting that would be a lie.
+
+    There is deliberately NO Edit action, here or anywhere: every column except the change
+    note is editable=False, there is no edit url and no edit view, and a wrong revision is
+    superseded by the next upload rather than amended in place. That is what makes the stored
+    file still mean what it meant when it was approved.
+
+    WARNING: the file is LINKED, never rendered inline. Embedding stored bytes in this page
+    (an <iframe>, an <img>, an inline <svg>) is a stored-XSS surface — the browser would
+    execute whatever an uploader put in a file this workspace accepted. The extracted text
+    below is printed as escaped text and is never marked safe, for exactly the same reason:
+    it came out of an uploaded file. In deployment MEDIA_ROOT must sit outside any executable
+    path and the media response must carry Content-Disposition: attachment.
+
+    Only SYSTEM-ASSIGNED values reach a confirm() handler — the document number and the
+    revision number.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ document.number }} r{{ obj.revision_no }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:pdocrevision_list' %}">Revisions</a><span class="sep">›</span>
+        <a href="{% url 'procurement:pdocument_detail' document.pk %}">{{ document.number }}</a><span class="sep">›</span>
+        <span>r{{ obj.revision_no }}</span>
+      </div>
+      <p class="text-muted">{{ revision_note }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:pdocument_detail' document.pk %}" class="btn btn-outline"><i data-lucide="file-text"></i> Open document</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ document.title }}</h2>
+      <span class="badge-group">
+        {% if is_current %}<span class="badge badge-green">Current</span>
+        {% elif obj.is_approved %}<span class="badge badge-amber">Superseded</span>
+        {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
+        <span class="badge {{ document.status_css }}">{{ document.get_status_display }}</span>
+        <span class="badge {{ document.classification_css }}">{{ document.get_classification_display }}</span>
+      </span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Document</dt>
+          <dd><a href="{% url 'procurement:pdocument_detail' document.pk %}">{{ document.number }}</a></dd></div>
+        <div class="detail-item"><dt>Revision</dt><dd>r{{ obj.revision_no }}</dd></div>
+        <div class="detail-item"><dt>Document currently on</dt>
+          <dd>{% if document.current_revision_no %}r{{ document.current_revision_no }}{% else %}<span class="text-muted">No approved revision yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Uploaded</dt>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.uploaded_by %} <span class="text-muted">by {{ obj.uploaded_by.get_full_name }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Approval</dt>
+          <dd>{% if obj.is_approved %}<span class="text-ok">Approved {{ obj.approved_at|date:"M d, Y H:i" }}</span>{% if obj.approved_by %} <span class="text-muted">by {{ obj.approved_by.get_full_name }}</span>{% endif %}{% else %}<span class="text-muted">Awaiting approval</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Change note</dt>
+          <dd>{% if obj.change_note %}{{ obj.change_note }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The file</h2><span class="text-muted">downloaded, never displayed inside this page</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Download</dt>
+          <dd>{% if obj.file %}<a href="{{ obj.file.url }}"><i data-lucide="download"></i> {{ obj.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">No file stored</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Size</dt><dd>{{ obj.file_size|filesizeformat }}</dd></div>
+        <div class="detail-item"><dt>Checksum (SHA-256)</dt>
+          <dd>{% if obj.sha256 %}<span style="word-break:break-all;">{{ obj.sha256 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted">The checksum was taken from the bytes that arrived and recorded once. It lets somebody who re-downloads this file confirm they hold the same bytes; nothing on this page re-checks it when the file is served, so it is a record of what was received rather than a guarantee about what is on disk now.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Text read from this file</h2><span class="text-muted">what the register can search inside</span></div>
+    <div class="card-body">
+      {% if obj.extraction_note %}
+        <p class="text-warn">{{ obj.extraction_note }}</p>
+      {% endif %}
+      {% if obj.extracted_text %}
+        {% comment %}
+          Escaped by Django's autoescaping and NEVER marked safe: this text came out of a file
+          somebody uploaded. Shown truncated — the whole stored text can run to 200,000
+          characters, which is a search index, not a reading experience.
+        {% endcomment %}
+        <pre style="white-space:pre-wrap; word-break:break-word; max-height:24rem; overflow:auto;">{{ obj.extracted_text|truncatechars:4000 }}</pre>
+        <p class="text-muted">Shown truncated. The full text is stored on this revision and is what search matches once the revision is approved.</p>
+      {% elif not obj.extraction_note %}
+        <p class="text-muted">No text was read from this file.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">what can still be done to this revision</span></div>
+    <div class="card-body">
+      {% comment %}
+        There is no Edit button because there is no edit url, no edit view and no edit
+        template. Approve is tenant-admin gated in the view, so it is hidden rather than
+        offered and refused; Delete is refused on anything approved or current, so it is
+        offered on neither. Every one of these conditions is re-checked in the view — a page
+        that does not offer an action is UX, not the control.
+      {% endcomment %}
+      <div class="table-actions">
+        {% if not obj.is_approved %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'procurement:pdocrevision_approve' obj.pk %}" onsubmit="return confirm('Approve r{{ obj.revision_no }} of {{ document.number }}? It becomes the current version and its text becomes what search matches.');">
+              {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve this revision</button>
+            </form>
+          {% endif %}
+          {% if not is_current %}
+            <form method="post" action="{% url 'procurement:pdocrevision_delete' obj.pk %}" onsubmit="return confirm('Delete r{{ obj.revision_no }} of {{ document.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
+              {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'procurement:pdocument_detail' document.pk %}" class="btn btn-outline"><i data-lucide="file-text"></i> Back to {{ document.number }}</a>
+        <a href="{% url 'procurement:pdocrevision_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All revisions</a>
+      </div>
+      {% if obj.is_approved %}
+        <p class="text-muted">This revision is approved, so it stays on the record and cannot be deleted or amended. To change what the document says, upload a new revision and approve that — approval only ever moves forward.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
