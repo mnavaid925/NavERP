@@ -1594,3 +1594,1678 @@ cross-tenant IDOR 404, delete POST-only + really deletes (throwaway row), no `{#
 sidebar bullets Live. One bug found during smoke and fixed before commit: missing `reverse`
 import in `views/BudgetCostManagement/CostForecasts.py`. Review wave findings land in
 `.claude/tasks/review-procurement-6.15.md`; tests in `tests/test_budgetcost_*.py`.
+
+---
+# Sub-module 6.19 - Document & Knowledge Management (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.19.md  (2026-09-05)
+
+> Built AHEAD of 6.16/6.17/6.18 (no `LIVE_LINKS` key exists for any of them). Scope is the research's
+> recommended four models, unchanged - the code did not contradict it. Sub-module folder
+> `DocumentKnowledgeManagement/` in all four backend packages; template folder slug **`documentknowledge`**
+> (the as-built short-slug convention the two most recent siblings use: 6.14 -> `spendanalytics`,
+> 6.15 -> `budgetcost` - NOT the full lowercased PascalCase name, and NOT the research's `documents/`).
+
+## Scope decision (FROZEN by Phase 1 - do not re-litigate)
+
+- [ ] Four models, no fifth. `ProcurementDocument` [PDOC-] + `ProcurementDocumentRevision` (child) +
+      `ProcurementPolicy` [PPOL-] + `KnowledgeResource` [PKR-].
+- [ ] **`core.Document` is NOT touched** - no schema change, no migration, no deprecation. It stays the generic
+      GFK attachment (`core:document_*`, FK'd live by `procurement.SupplierInvoice.document`). 6.19 declares its
+      own procurement-scoped repository because `core.Document` has a flat `version` CharField, no owner, no
+      status, no expiry, no extracted text, and a GFK that cannot be tenant-filtered at the queryset level.
+      Note the future Module 13 migration in `ProcurementDocument`'s docstring (the `RequisitionTemplate`
+      `core.Item` idiom).
+- [ ] **Do NOT build Module 13 early.** Out of scope, named in the model docstrings: folder hierarchies/virtual
+      folders (13.4), branching/merge/redline diff (13.2), permission matrices/watermarking/DRM/DLP (13.7),
+      OCR/semantic/NL search + auto-tagging (13.5/13.6), retention auto-destruction/legal hold/WORM (13.9/13.14),
+      wikis (13.17), saved-search alerts (13.6).
+- [ ] **Do NOT build a second one of anything that exists.** `procurement.ContractClause` (6.8) IS the clause
+      library. `procurement.RequisitionTemplate` (6.2) IS the executable requisition template. `RfxEvent`/
+      `RfxQuestion` (6.6) ARE the questionnaire builder. `ContractMilestone` (6.8) IS the obligation record.
+      `KnowledgeResource` is **guidance content**, cross-linked, never a second engine.
+- [ ] **Naming honesty - one hard ban.** The word **"OCR"** may not appear on any 6.19 page, label, help_text or
+      empty state (the 6.13 contract already forbids it and a scanned PDF genuinely yields nothing). Say
+      "text read from the file" / "this file has no text layer".
+
+## Spine: grep-VERIFIED this pass (L28 - the grep is the truth, not the ERD)
+
+| Target | Verified at | Used for |
+|---|---|---|
+| `core.Tenant` | `apps/core/models/Tenant.py:5` | every `tenant` FK (via `TenantOwned`/`TenantNumbered`) |
+| `core.Party` | `apps/core/models/Party.py:5` | `ProcurementDocument.supplier` |
+| `core.OrgUnit` | `apps/core/models/OrgUnit.py:5` | `ProcurementPolicy.applies_to` |
+| `accounting.Currency` | `apps/accounting/models/GeneralLedger/Currencies.py:6` | `ProcurementPolicy.threshold_currency` |
+| `scm.SupplierContract` | `apps/scm/models/SupplierRelationshipManagement/SupplierContracts.py:13` | `ProcurementDocument.contract` |
+| `scm.PurchaseOrder` | `apps/scm/models/ProcurementManagement/PurchaseOrders.py:15` | `ProcurementDocument.purchase_order` - **the SCM one**, NOT the legacy `crm.PurchaseOrder` at `apps/crm/models/InventoryVendor/PurchaseOrders.py:5` |
+| `procurement.SourcingEvent` [SEV-] | `apps/procurement/models/SourcingTendering/SourcingEvents.py:21` | `ProcurementDocument.sourcing_event` |
+| `procurement.ProcurementAlert` | `apps/procurement/models/DashboardPortal/ProcurementAlerts.py:26` | the reminder scan raises `kind="deadline"` rows here |
+| `apps.core.utils.write_audit_log` / `next_number` | `apps/core/utils.py:6` / `:34` | audit rows + the three number prefixes |
+| `ALLOWED_DOC_EXTENSIONS` / `MAX_UPLOAD_BYTES` | `apps/core/forms/_common.py:16` / `:22` | 14 extensions, 20 MB - the ONLY upload allow-list this sub-module uses |
+| `pdfplumber==0.11.10` | `requirements.txt:14` | lazy optional import, mirroring `views/InvoiceVoucherManagement/SupplierInvoices.py:418 _pdf_text` |
+
+- [ ] Every FK above is declared **by string** (`"core.Party"`, `"scm.PurchaseOrder"`, …) - no cross-app model
+      imports at module level.
+- [ ] Confirmed absent, so nothing may hope for them: no `documents` app (Module 13 unbuilt), no
+      `procurement.Contract`, no `core.Item`/commodity taxonomy, no `Tag` table, no Elasticsearch/Celery/
+      `SearchVector`. Search is `icontains`; **no MySQL FULLTEXT index** (prod is MySQL `settings.py:102`, tests
+      are SQLite `settings_test.py:10` - a FULLTEXT index would not exist under test). State this in the model
+      docstring and on the register page.
+
+---
+
+## Model 1 - `ProcurementDocument` [PDOC-] (`models/DocumentKnowledgeManagement/Documents.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PDOC"`. Realizes bullets **1 Central Document Repository**,
+**2 Version Control (parent half)**, **5 Full-Text Search & Indexing**.
+
+### Choices (exact machine values)
+- [ ] `DOC_TYPE_CHOICES` (driver: Oracle attachment categories + Coupa contract types + Ariba main-vs-addenda):
+      `quote`/Quote, `specification`/Specification, `warranty`/Warranty, `certificate`/Certificate,
+      `insurance`/Certificate of Insurance, `sow`/Statement of Work, `drawing`/Drawing, `correspondence`/
+      Correspondence, `policy`/Policy Document, `template`/Template, `other`/Other
+- [ ] `CLASSIFICATION_CHOICES` (driver: Ariba folder ACLs / Ivalua role views / Icertis) - **first three values
+      verbatim from `core.Document.CLASSIFICATION_CHOICES`** so a future Module 13 merge is a straight map:
+      `public`/Public, `internal`/Internal, `confidential`/Confidential, `restricted`/Restricted
+- [ ] `STATUS_CHOICES` (driver: supersede/archive lifecycle in every CLM surveyed):
+      `draft`/Draft, `active`/Active, `superseded`/Superseded, `archived`/Archived
+- [ ] `EXPIRY_FILTER_CHOICES` (register facet, not a column): `expiring`/Expiring soon,
+      `expired`/Expired, `review_due`/Review due, `over_retention`/Past retention
+- [ ] Constants: `EXPIRY_WARN_DAYS = 30`, `REMINDER_WINDOW_DAYS = 30`, `REINDEX_ROW_CAP = 200`
+- [ ] `STATUS_CSS = {"draft": "badge-muted", "active": "badge-green", "superseded": "badge-amber",
+      "archived": "badge-slate"}` and `CLASSIFICATION_CSS = {"public": "badge-info", "internal": "badge-slate",
+      "confidential": "badge-amber", "restricted": "badge-red"}` - **colour-named theme.css classes only
+      (L33); `badge-success`/`badge-danger` do not exist.**
+
+### Fields
+- [ ] `title` `CharField(max_length=200)` - driver: one tenant-wide register (Coupa/JAGGAER/GEP/Ivalua/Icertis)
+- [ ] `doc_type` `CharField(max_length=16, choices=DOC_TYPE_CHOICES, default="other")`
+- [ ] `description` `TextField(blank=True)`
+- [ ] `tags` `CharField(max_length=255, blank=True, help_text="Comma-separated keywords")` - driver: Coupa
+      metadata tagging / Icertis smart tagging. **A CharField, not a `Tag` table** (that is model #5; 13.5 owns
+      controlled vocabulary). Normalized in `clean()`: lowercase, strip, dedupe, re-joined `", "`.
+- [ ] `classification` `CharField(max_length=14, choices=CLASSIFICATION_CHOICES, default="internal")`
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="draft")` - **verb-driven, NOT on the
+      form** (see Verbs)
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="procurement_documents_owned")`
+      - driver: Procurify contract ownership / Ariba SLP primary supplier manager
+- [ ] `supplier_visible` `BooleanField(default=False, help_text="Vendors may see this in the 6.4 portal when that page ships")`
+      - driver: Precoro Internal/External PO attachment sections. **A field only** - the portal page is 6.4's.
+- [ ] `effective_date` `DateField(null=True, blank=True)`
+- [ ] `expires_on` `DateField(null=True, blank=True)` - driver: Ariba SLP Expiring/Expired certificates, Oracle
+      expiration notification, Ivalua missing/expired detection
+- [ ] `review_on` `DateField(null=True, blank=True)` - driver: policy re-review cadence / JAGGAER event reminders
+- [ ] `retention_until` `DateField(null=True, blank=True, help_text="Hold until this date. Nothing is deleted automatically.")`
+      - driver: Basware Vault 7-15 year retention. **A flag, never an action** (13.9/13.14 own destruction).
+- [ ] `current_revision_no` `PositiveSmallIntegerField(default=0, editable=False)` - **an integer pointer, NOT a
+      circular FK** (`crm.ContractDocument.current_version` precedent). `0` = no approved revision yet.
+- [ ] `checked_out_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+      - driver: Ariba document check-out. **Advisory** - see Verbs.
+- [ ] `checked_out_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `extracted_text` `TextField(blank=True, editable=False)` - the **search index copy** of the currently
+      approved revision's text. Never user-editable, never on a form, never shown as an input.
+- [ ] FK `supplier` -> `"core.Party"` `SET_NULL, null=True, blank=True, related_name="procurement_documents"`
+- [ ] FK `contract` -> `"scm.SupplierContract"` `SET_NULL, null=True, blank=True, related_name="procurement_documents"`
+- [ ] FK `purchase_order` -> `"scm.PurchaseOrder"` `SET_NULL, null=True, blank=True, related_name="procurement_documents"`
+- [ ] FK `sourcing_event` -> `"procurement.SourcingEvent"` `SET_NULL, null=True, blank=True, related_name="documents"`
+      - all four drivers: Coupa contracts<->POs<->suppliers, Ivalua sourcing/POs/invoices, Precoro PR/PO/RFP,
+      Procurify contract<->PO. **Four real columns, explicitly NOT a GenericForeignKey** - the register must
+      facet/join on them and a GFK is not tenant-filterable at the queryset level (an IDOR surface).
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+### Meta / behaviour
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant", "number")`
+- [ ] `indexes`: `("tenant","status")` `prc_pdoc_tnt_status_idx`; `("tenant","doc_type")` `prc_pdoc_tnt_type_idx`;
+      `("tenant","expires_on")` `prc_pdoc_tnt_expiry_idx`; `("tenant","supplier")` `prc_pdoc_tnt_sup_idx`
+      (all <= 30 chars)
+- [ ] `verbose_name = "Procurement Document"` / plural `"Procurement Documents"`
+- [ ] `__str__` -> `f"{self.number or 'PDOC'} · {self.title}"`
+- [ ] Properties: `tag_list` (split/strip/drop-empties), `status_css`, `classification_css`,
+      `is_expired` (`expires_on` and `expires_on < today`), `is_expiring`
+      (`today <= expires_on <= today + EXPIRY_WARN_DAYS`), `is_review_due`, `is_over_retention`,
+      `is_checked_out` (`checked_out_by_id is not None`),
+      `current_revision` -> `self.revisions.filter(revision_no=self.current_revision_no).first()` when
+      `current_revision_no` else `None` (**reverse accessor - no import of the child model, no cycle**)
+- [ ] `clean()`: normalize `tags`; cross-tenant backstop on `supplier`/`contract`/`purchase_order`/
+      `sourcing_event` (`"That record belongs to another workspace."`); reject `expires_on < effective_date`
+
+### Reminder engine (same file, module-level - NOT a fifth model)
+- [ ] `expiring_documents(tenant, *, on=None)` -> list of `{"document", "days_left", "reason"}` for rows whose
+      `expires_on` or `review_on` is within `REMINDER_WINDOW_DAYS` (or already past), `status__in=("draft","active")`
+- [ ] `run_document_reminders(tenant, user)` -> `{"raised": n, "skipped_open": n}` - **copy
+      `ContractsManagement/Renewals.py:55 run_renewal_alerts` exactly**: `transaction.atomic()` +
+      `ProcurementDocument.objects.select_for_update().get(pk=...)` row lock, dedupe against an existing
+      `ProcurementAlert` with the same `link_url` and `status__in=("open","acknowledged")`,
+      `kind="deadline"`, `severity="critical"` when `days_left <= 7` else `"warning"`,
+      `link_url = f"/procurement/documents/{pk}/"` (**internal path only** - `ProcurementAlert.clean()` rejects
+      absolute/`javascript:` values)
+- [ ] `@transaction.atomic run_document_reminders_audited(tenant, user)` wrapper -> runs the scan +
+      `write_audit_log(user, None, "document_reminders_run", {...})`
+- [ ] Docstring states plainly: **no scheduler and no mail worker exist** (the 6.3/6.8 ruling) - this is a
+      user-pressed verb and the alert inbox is the channel.
+
+### Form exclusions (`ProcurementDocumentForm`)
+- [ ] `Meta.fields = ["title", "doc_type", "description", "tags", "classification", "owner",
+      "supplier_visible", "effective_date", "expires_on", "review_on", "retention_until",
+      "supplier", "contract", "purchase_order", "sourcing_event"]`
+- [ ] **EXCLUDED, each deliberately:** `tenant` (stamped by `TenantUniqueMixin`/`crud_create`),
+      `number` (`TenantNumbered.save()`), `status` (verb-driven workflow), `current_revision_no` (maintained
+      by the approve verb only), `checked_out_by`/`checked_out_at` (lock verbs), `extracted_text`
+      (machine-written, never typed), `created_by` (authorship stamp), `created_at`/`updated_at` (base timestamps)
+
+---
+
+## Model 2 - `ProcurementDocumentRevision` (`models/DocumentKnowledgeManagement/Revisions.py`)
+
+Base `TenantOwned` (**not** numbered - it takes `revision_no` within its parent, exactly like
+`crm.DocumentVersion`). Realizes bullet **2 Version Control**. Split into its own entity file rather than living
+inside `Documents.py` because it has its own register page and its own url module - the as-built 6.13
+`SupplierInvoices.py` / `SupplierInvoiceLines.py` precedent.
+
+### Fields
+- [ ] `document` `FK("procurement.ProcurementDocument", CASCADE, related_name="revisions")`
+- [ ] `revision_no` `PositiveSmallIntegerField(default=1, editable=False)`
+- [ ] `file` `FileField(upload_to="procurement/documents/%Y/%m/", help_text="Serve with Content-Disposition: attachment and keep MEDIA_ROOT outside any executable path.")`
+      (the `RfxManagement/Responses.py:49` idiom, verbatim)
+- [ ] `original_filename` `CharField(max_length=255, blank=True, editable=False)`
+- [ ] `file_size` `PositiveIntegerField(default=0, editable=False)`
+- [ ] `sha256` `CharField(max_length=64, blank=True, editable=False, help_text="Integrity checksum of the stored bytes")`
+      - driver: Basware signing/timestamping, 13.14 fixity. **`hashlib` only - no dependency, and the page says
+      "checksum", never "tamper-proof"/"WORM".**
+- [ ] `change_note` `CharField(max_length=255, blank=True)` - the ONLY user-typed field on this model
+- [ ] `is_approved` `BooleanField(default=False, editable=False)`
+- [ ] `approved_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+- [ ] `approved_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `uploaded_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+- [ ] `extracted_text` `TextField(blank=True, editable=False)` - the text read from THIS file, capped at ingest
+- [ ] `extraction_note` `CharField(max_length=255, blank=True, editable=False)` - the honest warning
+      ("this file has no text layer", "text extraction is not installed on this server"). **This field is what
+      makes the no-OCR contract visible on the page.**
+- [ ] **No separate `uploaded_at`** - `TenantOwned.created_at` IS the upload moment; say so in the docstring
+      so the templates do not invent a second name.
+
+### Meta / behaviour
+- [ ] `ordering = ["-revision_no", "-id"]`
+- [ ] `unique_together = ("tenant", "document", "revision_no")` - the database backstop for the allocation race
+- [ ] `indexes`: `("tenant","document")` `prc_pdrev_tnt_doc_idx`; `("tenant","is_approved")` `prc_pdrev_tnt_appr_idx`
+- [ ] `__str__` -> `f"{self.document.number} r{self.revision_no}"`
+- [ ] Property `is_current` -> `self.revision_no == self.document.current_revision_no`
+
+### Module-level helpers (same file)
+- [ ] `EXTRACT_MAX_CHARS = 200_000` - cap at ingest so one pathological PDF cannot bloat the row
+- [ ] `PLAIN_TEXT_EXTENSIONS = {".txt", ".csv"}`
+- [ ] `file_sha256(upload)` -> hex digest, streamed over `upload.chunks()`, with `upload.seek(0)` before AND
+      after so the same handle can still be saved
+- [ ] `extract_document_text(revision)` -> `(text, note)`. **Copy the exact posture of
+      `views/InvoiceVoucherManagement/SupplierInvoices.py:418 _pdf_text`:**
+      lazy `import pdfplumber` inside the function with `except ImportError: pdfplumber = None`;
+      `("", "Text extraction is not installed on this server - this file is searchable by its title, description and tags only.")`
+      when absent; `("", "The stored file could not be read back.")` when `file.path` is missing;
+      `("", "That file could not be read.")` on a malformed PDF (broad `except Exception` - a page, not a 500);
+      `("", "This file has no text layer, so there is no text to search.")` when the extract is blank;
+      plain-text extensions decoded directly with `errors="replace"`; every return truncated to `EXTRACT_MAX_CHARS`.
+
+### THE REVISION CHAIN - exact rules (the riskiest part of this sub-module)
+
+- [ ] **Immutability is structural, not enforced by a `save()` guard.** (a) There is **no edit url, no edit view
+      and no edit template** for a revision (the documented CRUD exemption `CostForecast` /
+      `SpendReportSnapshot` already carry - state it in the url module docstring). (b) Every column except
+      `change_note` is `editable=False`, so no `ModelForm` can ever surface it. (c) The ONLY form is
+      `ProcurementDocumentRevisionUploadForm`, used on the create path only. (d) The only post-create writes are
+      the approve verb's `save(update_fields=["is_approved", "approved_by", "approved_at"])`.
+- [ ] **Upload** (`pdocument_revision_upload`): guards, in order -
+      (1) `request.tenant is None` -> refuse (the `_need_tenant` idiom);
+      (2) `document.status == "archived"` -> refuse with a message;
+      (3) `document.checked_out_by_id not in (None, request.user.pk)` -> refuse, naming the holder.
+      Then, inside `transaction.atomic()`:
+      `locked = ProcurementDocument.objects.select_for_update().get(pk=document.pk, tenant=request.tenant)`;
+      `revision_no = (locked.revisions.aggregate(m=Max("revision_no"))["m"] or 0) + 1`;
+      compute `sha256`/`file_size`/`original_filename` **before** `save()`; save; then run
+      `extract_document_text(revision)` and store `extracted_text` + `extraction_note` on the REVISION via
+      `save(update_fields=[...])`. `unique_together` is the backstop - catch `IntegrityError` and retry once
+      (the `TenantNumbered.save()` idiom), then surface an honest error.
+- [ ] **Uploading NEVER moves `current_revision_no`.** A new revision lands `is_approved=False`. This is the
+      literal NavERP bullet: only the latest *approved* version is the accessible one.
+- [ ] **Approve** (`pdocrevision_approve`, `@require_POST` + `@tenant_admin_required`):
+      (1) 404 unless `revision.tenant == request.tenant` **and** `revision.document.tenant == request.tenant`
+      (double scope - never trust the child alone);
+      (2) already `is_approved` -> idempotent `messages.info`, redirect, no write;
+      (3) `revision.revision_no <= document.current_revision_no` -> **refuse**: "the revision chain is linear
+      and only moves forward". **This single rule is what keeps the chain linear.**
+      Then `transaction.atomic()` + `select_for_update()` on the PARENT:
+      stamp `is_approved=True`/`approved_by=request.user`/`approved_at=timezone.now()`
+      (`save(update_fields=[...])`); set `document.current_revision_no = revision.revision_no`;
+      **copy** `document.extracted_text = revision.extracted_text[:EXTRACT_MAX_CHARS]`;
+      if `document.status == "draft"` set `document.status = "active"`;
+      `document.save(update_fields=["current_revision_no", "extracted_text", "status", "updated_at"])`;
+      `write_audit_log(request.user, document, "revision_approve", {"revision_no": n, "sha256": revision.sha256[:16]})`.
+- [ ] **Older approved revisions keep `is_approved=True`** - they *were* approved and rewriting history would be
+      a lie. "Only the latest approved version is accessible" is expressed by `current_revision_no` pointing at
+      exactly one revision; `ProcurementDocument.current_revision` is the single place that resolves it, and the
+      templates badge that one `badge-green` "Current" and every earlier approved one `badge-amber` "Superseded".
+- [ ] **The parent's `extracted_text` is a denormalized SEARCH COPY**, refreshed only by (a) approve and
+      (b) re-index. The text of record lives on the revision. Say this in both docstrings so no later pass
+      "fixes" it into a live join.
+- [ ] **Delete** (`pdocrevision_delete`, `@require_POST`): allowed **only** when `is_approved is False` **and**
+      `revision_no != document.current_revision_no`. Otherwise `messages.error` + redirect (never a 500). A bad
+      upload that never entered the approved record can go; approved history cannot.
+- [ ] `# WARNING:` in the delete view and in `pdocument_delete`: **Django does not remove the file from
+      MEDIA_ROOT when the row is deleted.** The confirm text must say the record is removed but the stored file
+      is not reclaimed here; disk reclamation is a deliberate later job (13.9/13.14 retention), never a silent
+      `os.remove` on a path derived from user input.
+- [ ] `# WARNING:` on the upload path: validate the extension against `ALLOWED_DOC_EXTENSIONS` and the size
+      against `MAX_UPLOAD_BYTES` **imported explicitly from `apps.core.forms._common`, inside the clean method**
+      - `apps/procurement/forms/CatalogManagement/UploadBatches.py:13` defines a DIFFERENT local
+      `MAX_UPLOAD_BYTES` (2 MB), and a package-level re-export would make which limit applies depend on import
+      order. This is exactly what `forms/GoodsReceiptInspection/ReceiptDiscrepancies.py:124` and
+      `forms/InvoiceVoucherManagement/SupplierInvoices.py:204` already do - copy them. **Do not invent a second
+      allow-list.** Never render an uploaded file inline (stored-XSS surface); link to it and let the browser decide.
+
+### Form (`ProcurementDocumentRevisionUploadForm`)
+- [ ] `Meta.fields = ["file", "change_note"]` - **that is the whole form.**
+- [ ] EXCLUDED: `tenant`, `document` (comes from the url pk, never a POST field), `revision_no`,
+      `original_filename`, `file_size`, `sha256`, `is_approved`, `approved_by`, `approved_at`, `uploaded_by`,
+      `extracted_text`, `extraction_note`, `created_at`/`updated_at`.
+- [ ] `clean_file()` - the allow-list + size check described above, message text mirroring
+      `core.forms.DocumentForm.clean_file`.
+
+---
+
+## Model 3 - `ProcurementPolicy` [PPOL-] (`models/DocumentKnowledgeManagement/Policies.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PPOL"`. Realizes bullet **3 Procurement Policy Library**. Modelled on
+the proven `hrm.HRPolicy` (`apps/hrm/models/ComplianceLegal/Hrpolicy.py:5`).
+
+### Choices
+- [ ] `POLICY_TYPE_CHOICES` (driver: Ariba guided-buying policy content, ConvergePoint/Xoralia/Sprinto category):
+      `purchasing_rule`/Purchasing Rule, `approval_limit`/Approval Limit, `competitive_bidding`/Competitive
+      Bidding, `sole_source`/Sole Source, `supplier_code_of_conduct`/Supplier Code of Conduct,
+      `ethics_conflict`/Ethics & Conflict of Interest, `sustainability`/Sustainability, `data_security`/Data
+      Security, `other`/Other
+- [ ] `STATUS_CHOICES`: `draft`/Draft, `published`/Published, `archived`/Archived
+- [ ] `THRESHOLD_BASIS_CHOICES` (driver: Ariba smart-policy rules, JAGGAER value/type/risk approvals, Procurify
+      card limits): `per_line`/Per line, `per_requisition`/Per requisition, `per_purchase_order`/Per purchase
+      order, `per_contract_year`/Per contract year, `annual_supplier_spend`/Annual spend with one supplier
+- [ ] `STATUS_CSS = {"draft": "badge-muted", "published": "badge-green", "archived": "badge-slate"}`
+
+### Fields
+- [ ] `title` `CharField(max_length=200)`
+- [ ] `policy_type` `CharField(max_length=26, choices=POLICY_TYPE_CHOICES, default="purchasing_rule")`
+- [ ] `summary` `CharField(max_length=500, blank=True)`
+- [ ] `body` `TextField(blank=True)` - the rule as written for humans
+- [ ] `version_number` `CharField(max_length=20, default="1.0")` - driver: version-level attestation in the
+      policy-management category
+- [ ] `previous_version` `FK("self", SET_NULL, null=True, blank=True, related_name="superseded_by")` - the
+      supersession chain (HRM precedent)
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="draft")` - **verb-driven, NOT on the form**
+- [ ] `effective_from` `DateField(null=True, blank=True)`
+- [ ] `published_at` `DateTimeField(null=True, blank=True, editable=False)` - stamped by the publish verb only
+- [ ] `next_review_on` `DateField(null=True, blank=True)` - driver: re-review cadence / stale-content surfacing
+- [ ] `threshold_amount` `DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])`
+- [ ] `threshold_basis` `CharField(max_length=22, choices=THRESHOLD_BASIS_CHOICES, blank=True)`
+- [ ] `threshold_currency` `FK("accounting.Currency", SET_NULL, null=True, blank=True, related_name="procurement_policies")`
+      - **a display label; no conversion, no ledger effect (L29)**
+- [ ] `requires_acknowledgment` `BooleanField(default=False, help_text="A hook for 6.17 Policy Management & Acknowledgment - no sign-off ledger is built here.")`
+- [ ] `applies_to` `FK("core.OrgUnit", SET_NULL, null=True, blank=True, related_name="procurement_policies", help_text="Blank = the whole workspace.")`
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="procurement_policies_owned")`
+- [ ] `document` `FK("procurement.ProcurementDocument", SET_NULL, null=True, blank=True, related_name="policies", help_text="The policy PDF in the repository - so it inherits revision control and text search.")`
+      - **this FK is what makes 6.19 one sub-module instead of two unrelated halves**
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+### Meta / behaviour
+- [ ] `ordering = ["-created_at", "-id"]`
+- [ ] `unique_together = (("tenant", "number"), ("tenant", "title", "version_number"))` (HRM precedent - a
+      version of a title exists once)
+- [ ] `indexes`: `("tenant","status")` `prc_ppol_tnt_status_idx`; `("tenant","policy_type")` `prc_ppol_tnt_type_idx`;
+      `("tenant","next_review_on")` `prc_ppol_tnt_review_idx`
+- [ ] `__str__` -> `f"{self.title} v{self.version_number}"`
+- [ ] Properties: `status_css`, `is_review_due` (`next_review_on and next_review_on <= today`)
+- [ ] `clean()`: cross-tenant backstop on `applies_to`/`document`/`previous_version`; `previous_version` may not
+      be `self`; `threshold_amount` and `threshold_basis` must be set together (either both or neither)
+- [ ] Module constant `ADVISORY_NOTE` printed on the list, form and detail pages - **ONE constant so the three
+      surfaces cannot disagree**: "A policy records the rule for people to read. It enforces nothing on its own:
+      approval routing is decided by the 6.3 Approval Workflow Engine's routing rules, and any threshold here is
+      documentation, not a control."
+
+### Verbs
+- [ ] `ppolicy_publish` (`@require_POST` + `@tenant_admin_required`): `draft` -> `published`, stamps
+      `published_at = timezone.now()`, `write_audit_log(user, obj, "policy_publish", {...})`. Already published
+      -> idempotent `messages.info`. Archived -> refuse.
+- [ ] `ppolicy_archive` (`@require_POST`): any -> `archived`, audit `policy_archive`.
+
+### Form (`ProcurementPolicyForm`) exclusions
+- [ ] `Meta.fields = ["title", "policy_type", "summary", "body", "version_number", "previous_version",
+      "applies_to", "owner", "document", "effective_from", "next_review_on", "threshold_amount",
+      "threshold_basis", "threshold_currency", "requires_acknowledgment"]`
+- [ ] EXCLUDED: `tenant`, `number`, `status` (verb-driven), `published_at` (verb stamp), `created_by`,
+      `created_at`/`updated_at`
+- [ ] `previous_version.queryset` excludes `self.instance.pk` on edit; `document.queryset` is tenant-scoped
+      (TenantModelForm does it, `_reject_foreign` re-checks it); `threshold_currency.queryset` =
+      `Currency.objects.filter(is_active=True).order_by("code")` with `empty_label = "- not labelled -"`
+      (**global table, no tenant column - the 6.15 `CostForecastForm` note applies verbatim**)
+
+---
+
+## Model 4 - `KnowledgeResource` [PKR-] (`models/DocumentKnowledgeManagement/KnowledgeResources.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PKR"`. Realizes bullet **4 Best Practices & Templates**, contributes to **5**.
+
+### Choices
+- [ ] `RESOURCE_TYPE_CHOICES` (driver: Ariba sourcing content library, JAGGAER industry templates, GEP template
+      library, Zycus playbooks, Ivalua pre-approved templates): `rfp_template`/RFP Template,
+      `rfq_template`/RFQ Template, `evaluation_scorecard`/Bid Evaluation Scorecard,
+      `negotiation_playbook`/Negotiation Playbook, `checklist`/Checklist, `guide`/How-to Guide,
+      `sample_document`/Sample Document, `training`/Training Material
+- [ ] `CATEGORY_CHOICES` (**a choices field, not an FK - there is no commodity taxonomy table;
+      `procurement.CatalogItem.category_text` is free text**): `general`/General, `it_software`/IT & Software,
+      `facilities`/Facilities, `logistics`/Logistics & Freight,
+      `professional_services`/Professional Services, `raw_materials`/Raw Materials, `capex`/Capital Equipment,
+      `marketing`/Marketing, `other`/Other
+- [ ] `AUDIENCE_CHOICES` (driver: Ariba persona landing pages, JAGGAER region/BU targeting): `all`/Everyone,
+      `requester`/Requesters, `buyer`/Buyers, `approver`/Approvers, `legal`/Legal
+- [ ] `STATUS_CHOICES`: `draft`/Draft, `published`/Published, `archived`/Archived
+- [ ] `STATUS_CSS = {"draft": "badge-muted", "published": "badge-green", "archived": "badge-slate"}`
+- [ ] `FEATURED_CAP = 6` (the "start here" shelf on the library page)
+
+### Fields
+- [ ] `title` `CharField(max_length=200)`
+- [ ] `resource_type` `CharField(max_length=22, choices=RESOURCE_TYPE_CHOICES, default="guide")`
+- [ ] `category` `CharField(max_length=22, choices=CATEGORY_CHOICES, default="general")`
+- [ ] `audience` `CharField(max_length=12, choices=AUDIENCE_CHOICES, default="all")`
+- [ ] `summary` `CharField(max_length=500, blank=True)`
+- [ ] `body` `TextField(blank=True)` - the guidance itself, rendered on the detail page. Driver: Zycus
+      playbook fallback positions ("open with / fall back to / walk away"), GEP approved language.
+- [ ] `tags` `CharField(max_length=255, blank=True)` + `tag_list` property (same normalization as the document)
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="draft")` - **verb-driven, NOT on the form**
+- [ ] `is_featured` `BooleanField(default=False)` - driver: Ariba guided-buying tiles / GEP portal "start here"
+- [ ] `usage_count` `PositiveIntegerField(default=0, editable=False)` - driver: Ivalua clause-utilization
+      analytics, GEP repository intelligence. **A click counter, never a derived metric** - say so in the docstring.
+- [ ] `last_used_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `review_on` `DateField(null=True, blank=True)`
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="procurement_knowledge_owned")`
+- [ ] `document` `FK("procurement.ProcurementDocument", SET_NULL, null=True, blank=True, related_name="knowledge_resources", help_text="The downloadable artifact in the repository - so it gets revisions and approval like everything else.")`
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+### Meta / behaviour
+- [ ] `ordering = ["-is_featured", "-created_at", "-id"]`
+- [ ] `unique_together = ("tenant", "number")`
+- [ ] `indexes`: `("tenant","status")` `prc_pkr_tnt_status_idx`; `("tenant","resource_type")` `prc_pkr_tnt_type_idx`;
+      `("tenant","is_featured")` `prc_pkr_tnt_feat_idx`
+- [ ] `__str__` -> `f"{self.number or 'PKR'} · {self.title}"`
+- [ ] `clean()`: normalize `tags`; cross-tenant backstop on `document`
+- [ ] Module constant `LIBRARY_NOTE` on list/detail/form: "Guidance content, not an executable template. The
+      requisition templates that actually raise a purchase live in 6.2, the RFx questionnaire builder in 6.6 and
+      the pre-approved clause library in 6.8 - this library links to them, it does not replace them."
+
+### Verbs
+- [ ] `knowledgeresource_publish` / `knowledgeresource_archive` (`@require_POST`), same shape as the policy verbs
+- [ ] `knowledgeresource_use` (`@require_POST`, `@login_required`): refuse on `archived`; otherwise
+      `usage_count = F("usage_count") + 1`, `last_used_at = timezone.now()`,
+      `save(update_fields=["usage_count", "last_used_at", "updated_at"])`, `refresh_from_db(fields=["usage_count"])`,
+      `write_audit_log(user, obj, "knowledge_resource_used", {"usage_count": obj.usage_count})`, then
+      **redirect back to the resource detail page** - the download link lives on that page.
+      `# WARNING:` never redirect to a FileField URL from a verb; an unvalidated redirect target derived from
+      stored data is an open-redirect hop, and the detail page is one extra click that removes the surface.
+
+### Form (`KnowledgeResourceForm`) exclusions
+- [ ] `Meta.fields = ["title", "resource_type", "category", "audience", "summary", "body", "tags",
+      "is_featured", "owner", "document", "review_on"]`
+- [ ] EXCLUDED: `tenant`, `number`, `status` (verb-driven), `usage_count`/`last_used_at` (the Use verb owns
+      them), `created_by`, `created_at`/`updated_at`
+
+---
+
+## Backend build order (`apps/procurement/{models,forms,views,urls}/DocumentKnowledgeManagement/`)
+
+> **One entity at a time - finish its four backend files AND its three templates before starting the next.**
+> Do NOT touch any shared file here (`__init__.py`, `admin.py`, the seeder, `navigation.py`) - those all wait
+> for Integrate.
+>
+> **Known forward reference:** `document/detail.html` links `procurement:pdocrevision_*` (step 2) and
+> `revision/detail.html` links `procurement:pdocument_detail` (step 1). Neither page can render until both url
+> modules exist; `manage.py check` at Integrate is the first point both are present. Expected - do not "fix" it
+> by inlining a hard-coded path.
+
+### Step 0 - sub-package inits
+- [ ] `models/DocumentKnowledgeManagement/__init__.py` - **docstring only** (the 6.13/6.14/6.15 precedent:
+      re-exports live in the app-level `models/__init__.py`)
+- [ ] `forms/DocumentKnowledgeManagement/__init__.py` - docstring + a note that `ALLOWED_DOC_EXTENSIONS` /
+      `MAX_UPLOAD_BYTES` are deliberately NOT re-exported (`forms/GoodsReceiptInspection/__init__.py:9` precedent)
+- [ ] `views/DocumentKnowledgeManagement/__init__.py` - docstring only
+- [ ] `urls/DocumentKnowledgeManagement/__init__.py` - concatenates the four entity `urlpatterns`
+
+### Step 1 - `ProcurementDocument`
+- [ ] `models/DocumentKnowledgeManagement/Documents.py` (model + `expiring_documents` +
+      `run_document_reminders` + `run_document_reminders_audited`). `from apps.procurement.models._base import *`
+- [ ] `forms/DocumentKnowledgeManagement/Documents.py` - `ProcurementDocumentForm(TenantUniqueMixin, TenantModelForm)`,
+      `_reject_foreign(self, cleaned, ["supplier", "contract", "purchase_order", "sourcing_event"])`,
+      `owner.queryset` scoped to tenant users
+- [ ] `views/DocumentKnowledgeManagement/Documents.py`
+- [ ] `urls/DocumentKnowledgeManagement/Documents.py`
+- [ ] `templates/procurement/documentknowledge/document/list.html`
+- [ ] `templates/procurement/documentknowledge/document/form.html`
+- [ ] `templates/procurement/documentknowledge/document/detail.html`
+
+### Step 2 - `ProcurementDocumentRevision`
+- [ ] `models/DocumentKnowledgeManagement/Revisions.py` (model + `EXTRACT_MAX_CHARS` + `file_sha256` +
+      `extract_document_text`)
+- [ ] `forms/DocumentKnowledgeManagement/Revisions.py` - `ProcurementDocumentRevisionUploadForm`
+- [ ] `views/DocumentKnowledgeManagement/Revisions.py`
+- [ ] `urls/DocumentKnowledgeManagement/Revisions.py`
+- [ ] `templates/procurement/documentknowledge/revision/list.html`
+- [ ] `templates/procurement/documentknowledge/revision/form.html` (the upload page)
+- [ ] `templates/procurement/documentknowledge/revision/detail.html`
+
+### Step 3 - `ProcurementPolicy`
+- [ ] `models/DocumentKnowledgeManagement/Policies.py`
+- [ ] `forms/DocumentKnowledgeManagement/Policies.py`
+- [ ] `views/DocumentKnowledgeManagement/Policies.py`
+- [ ] `urls/DocumentKnowledgeManagement/Policies.py`
+- [ ] `templates/procurement/documentknowledge/policy/list.html`
+- [ ] `templates/procurement/documentknowledge/policy/form.html`
+- [ ] `templates/procurement/documentknowledge/policy/detail.html`
+
+### Step 4 - `KnowledgeResource`
+- [ ] `models/DocumentKnowledgeManagement/KnowledgeResources.py`
+- [ ] `forms/DocumentKnowledgeManagement/KnowledgeResources.py`
+- [ ] `views/DocumentKnowledgeManagement/KnowledgeResources.py`
+- [ ] `urls/DocumentKnowledgeManagement/KnowledgeResources.py`
+- [ ] `templates/procurement/documentknowledge/knowledgeresource/list.html`
+- [ ] `templates/procurement/documentknowledge/knowledgeresource/form.html`
+- [ ] `templates/procurement/documentknowledge/knowledgeresource/detail.html`
+
+### Package rules that apply to every file above
+- [ ] Absolute imports only (`from apps.procurement.models import X`); entity modules pull the toolkit via
+      `from apps.procurement.<layer>._base|_common import *`
+- [ ] **A not-yet-wired sibling of THIS sub-module is imported from its entity MODULE**
+      (`from apps.procurement.models.DocumentKnowledgeManagement.Documents import ProcurementDocument`), never
+      from `apps.procurement.models` - the sub-package is not wired until Integrate and a package-level
+      re-export would be a star-import cycle at URLconf import time (the 6.13/6.14/6.15 comment, verbatim)
+- [ ] Every view `@login_required`; privileged writes (`pdocrevision_approve`, `pdocument_reindex`,
+      `ppolicy_publish`) also `@tenant_admin_required`; every mutating verb `@require_POST`
+- [ ] **Every queryset `filter(tenant=request.tenant)`** - never `.all()`
+- [ ] `crud_*` helpers write the audit row automatically; every hand-rolled save path calls `write_audit_log`
+      itself
+
+---
+
+## Views & routes - CONTEXT KEYS ARE THE CONTRACT (L7/L8: a name left unpinned renders blank at 200)
+
+> Every list uses `crud_list` and therefore always provides `object_list`, `page_obj`, `q`. Every form template
+> reads **only** `form`, `is_edit` and (edit only) `obj` plus the sub-module note constants - the 6.15
+> `budgetmapping_create` / `crud_create` precedent; do NOT invent `page_title` / `submit_label` keys the
+> siblings do not use. Every detail uses `crud_detail` and therefore provides `obj`.
+
+### `ProcurementDocument` - `templates/procurement/documentknowledge/document/*.html`
+- [ ] `pdocument_list` -> `procurement:pdocument_list`, `documentknowledge/document/list.html`
+      - `_document_qs(request)` pre-narrows **before** `crud_list`: `?expiry=` allow-listed against
+        `EXPIRY_FILTER_CHOICES` (unknown value -> filter skipped, never an empty register, L11) mapping to
+        `expires_on__lt=today` / `expires_on__range` / `review_on__lte=today` / `retention_until__lt=today`;
+        `?tag=` -> `tags__icontains` (stripped, ignored when blank)
+      - `crud_list(search_fields=("number", "title", "description", "tags", "extracted_text"),
+        filters=(("doc_type","doc_type",False), ("status","status",False),
+        ("classification","classification",False), ("supplier","supplier_id",True), ("owner","owner_id",True)))`
+      - `select_related("supplier", "owner", "contract", "purchase_order", "sourcing_event")`
+      - **Context keys:** `object_list`, `page_obj`, `q`, `doc_type_choices`, `status_choices`,
+        `classification_choices`, `expiry_choices`, `suppliers` (tenant Party queryset, supplier role, by name),
+        `owners` (tenant active users, by username), `stats` (`{total, active, expiring, expired, unapproved}`
+        - ONE `aggregate` with `Count(..., filter=Q(...))`, never 5 COUNTs), `search_note`
+      - `SEARCH_NOTE` constant (module-level, shared with the detail page): "Search matches the title,
+        description, tags and any text read from the approved file. Text is read from PDFs that carry a text
+        layer and from plain-text uploads; a scanned image has no text to read."
+- [ ] `pdocument_create` -> `crud_create(form_class=ProcurementDocumentForm, template=TEMPLATE_FORM,
+      success_url="procurement:pdocument_list", extra_context={"search_note": SEARCH_NOTE})`
+- [ ] `pdocument_detail` -> `documentknowledge/document/detail.html`, `crud_detail(select_related=("supplier",
+      "contract", "purchase_order", "sourcing_event", "owner", "checked_out_by", "created_by"))`
+      - **Context keys:** `obj`, `revisions` (`obj.revisions.select_related("uploaded_by","approved_by")[:50]`),
+        `current_revision` (`obj.current_revision`), `policies` (`obj.policies.all()[:10]`),
+        `knowledge_resources` (`obj.knowledge_resources.all()[:10]`), `can_upload` (bool: not archived and not
+        locked by someone else), `lock_holder` (`obj.checked_out_by` or `None`), `search_note`
+- [ ] `pdocument_edit` -> `crud_edit(model=ProcurementDocument, form_class=ProcurementDocumentForm,
+      template=TEMPLATE_FORM, success_url="procurement:pdocument_list")` (context: `form`, `obj`, `is_edit`)
+- [ ] `pdocument_delete` -> `crud_delete`, `@require_POST`, redirect `procurement:pdocument_list`
+- [ ] Verbs (all `@require_POST`, all `write_audit_log`, all redirect to `procurement:pdocument_detail`):
+      `pdocument_checkout`, `pdocument_release` (holder or tenant admin - force release),
+      `pdocument_activate` (`draft`/`superseded`/`archived` -> `active`),
+      `pdocument_supersede` (`active` -> `superseded`), `pdocument_archive` (any -> `archived`).
+      Each rejects a disallowed transition with `messages.error` + redirect - never a 500, never a silent no-op.
+- [ ] `pdocument_reindex` (`@require_POST` + `@tenant_admin_required`) -> re-runs `extract_document_text` over
+      up to `REINDEX_ROW_CAP` documents whose `extracted_text` is empty and which have a current approved
+      revision; `messages.success` with `{"indexed": n, "skipped": n}`; one audit row; redirect to the list
+- [ ] `pdocument_run_reminders` (`@require_POST`) -> `run_document_reminders_audited`; `messages.success` with
+      raised/skipped; redirect to the list
+
+### `ProcurementDocumentRevision` - `templates/procurement/documentknowledge/revision/*.html`
+- [ ] `pdocrevision_list` -> `procurement:pdocrevision_list`, `documentknowledge/revision/list.html`
+      **This is the "Version Control" sidebar bullet's landing page** - every revision in the workspace,
+      newest first.
+      - `crud_list(search_fields=("document__number","document__title","change_note","sha256"),
+        filters=(("document","document_id",True), ("approved","is_approved",False)))`,
+        `select_related("document","uploaded_by","approved_by")`
+      - **Context keys:** `object_list`, `page_obj`, `q`, `documents` (tenant `ProcurementDocument` queryset for
+        the FK dropdown), `approval_choices` = `[("True","Approved"),("False","Pending approval")]`
+        (**exactly the strings `crud_list` maps to booleans**), `stats`
+        (`{total, approved, pending}`), `revision_note`
+      - `REVISION_NOTE`: "A revision is immutable. Approving one makes it the document's current version;
+        earlier approved revisions stay on the record as superseded. There is no edit."
+- [ ] `pdocrevision_detail` -> `documentknowledge/revision/detail.html`
+      - **Context keys:** `obj`, `document` (`obj.document`), `is_current` (`obj.is_current`), `revision_note`
+- [ ] `pdocument_revision_upload` -> `documentknowledge/revision/form.html`, GET renders / POST creates
+      - **Context keys:** `form`, `is_edit` (always `False`), `document`, `upload_note`
+      - `UPLOAD_NOTE`: the allowed extensions (from `ALLOWED_DOC_EXTENSIONS`, rendered, not hard-coded twice),
+        the 20 MB cap, and the honest line about text extraction. **Never the word "OCR".**
+- [ ] `pdocrevision_approve` (`@require_POST` + `@tenant_admin_required`) - the rules pinned above
+- [ ] `pdocrevision_delete` (`@require_POST`) - only unapproved and not current
+- [ ] **No `pdocrevision_edit`** - documented exemption in the url module docstring
+
+### `ProcurementPolicy` - `templates/procurement/documentknowledge/policy/*.html`
+- [ ] `ppolicy_list` -> `procurement:ppolicy_list`
+      - `crud_list(search_fields=("number","title","summary","body"),
+        filters=(("policy_type","policy_type",False), ("status","status",False),
+        ("org_unit","applies_to_id",True)))`, `select_related("applies_to","owner","document","threshold_currency")`
+      - `?review=due` pre-narrow (`next_review_on__lte=today`) applied in `_policy_qs` before `crud_list`
+      - **Context keys:** `object_list`, `page_obj`, `q`, `policy_type_choices`, `status_choices`, `org_units`
+        (tenant OrgUnit queryset), `review_choices` = `[("due","Review overdue")]`, `stats`
+        (`{total, published, draft, review_due}`), `advisory_note`
+- [ ] `ppolicy_create` / `ppolicy_edit` -> `crud_create` / `crud_edit`, `extra_context={"advisory_note": ADVISORY_NOTE}`
+- [ ] `ppolicy_detail` -> **Context keys:** `obj`, `advisory_note`, `supersedes` (`obj.previous_version`),
+      `superseded_by_rows` (`obj.superseded_by.all()[:10]`), `is_review_due`
+- [ ] `ppolicy_delete` (`@require_POST`), `ppolicy_publish`, `ppolicy_archive`
+
+### `KnowledgeResource` - `templates/procurement/documentknowledge/knowledgeresource/*.html`
+- [ ] `knowledgeresource_list` -> `procurement:knowledgeresource_list`
+      - `crud_list(search_fields=("number","title","summary","body","tags"),
+        filters=(("resource_type","resource_type",False), ("category","category",False),
+        ("audience","audience",False), ("status","status",False), ("featured","is_featured",False)))`,
+        `select_related("owner","document")`
+      - **Context keys:** `object_list`, `page_obj`, `q`, `resource_type_choices`, `category_choices`,
+        `audience_choices`, `status_choices`,
+        `featured_choices` = `[("True","Featured only"),("False","Not featured")]`,
+        `featured` (the "start here" shelf: `status="published", is_featured=True` capped at `FEATURED_CAP`,
+        computed separately and **not** paginated), `stats` (`{total, published, featured, used}`), `library_note`
+- [ ] `knowledgeresource_create` / `knowledgeresource_edit` -> `crud_create` / `crud_edit`,
+      `extra_context={"library_note": LIBRARY_NOTE}`
+- [ ] `knowledgeresource_detail` -> **Context keys:** `obj`, `library_note`, `document` (`obj.document`),
+      `is_review_due`
+- [ ] `knowledgeresource_delete` (`@require_POST`), `knowledgeresource_publish`, `knowledgeresource_archive`,
+      `knowledgeresource_use`
+
+### URL modules - first segments checked against the whole concatenated inventory in `urls/__init__.py`
+- [ ] Four NEW first segments, none of which is an existing whole component: **`documents/`**,
+      **`document-revisions/`**, **`procurement-policies/`**, **`knowledge/`**.
+      (`templates/` is already claimed by 6.2 - that is why the library is `knowledge/`, not `templates/`.
+      `contracts/`, `clauses/`, `milestones/` and `renewals/` are 6.8's.) This app registers no greedy
+      `<str:…>` converter, so there is no cross-module shadowing surface.
+- [ ] `urls/DocumentKnowledgeManagement/Documents.py` - **literals before `<int:pk>`**:
+      `documents/` (`pdocument_list`), `documents/add/` (`pdocument_create`),
+      `documents/reindex/` (`pdocument_reindex`), `documents/run-reminders/` (`pdocument_run_reminders`),
+      then `documents/<int:pk>/` (`pdocument_detail`), `…/edit/`, `…/delete/`, `…/checkout/`, `…/release/`,
+      `…/activate/`, `…/supersede/`, `…/archive/`,
+      `documents/<int:pk>/revisions/add/` (`pdocument_revision_upload`)
+- [ ] `urls/…/Revisions.py`: `document-revisions/` (`pdocrevision_list`), `document-revisions/<int:pk>/`
+      (`pdocrevision_detail`), `…/approve/` (`pdocrevision_approve`), `…/delete/` (`pdocrevision_delete`)
+- [ ] `urls/…/Policies.py`: `procurement-policies/` + `add/` + `<int:pk>/` + `edit/` + `delete/` + `publish/`
+      + `archive/` (`ppolicy_*`)
+- [ ] `urls/…/KnowledgeResources.py`: `knowledge/` + `add/` + `<int:pk>/` + `edit/` + `delete/` + `publish/`
+      + `archive/` + `use/` (`knowledgeresource_*`)
+- [ ] `urls/DocumentKnowledgeManagement/__init__.py` concatenates the four in the order Documents ->
+      Revisions -> Policies -> KnowledgeResources, with the segment-inventory docstring
+
+---
+
+## Wire-up (Integrate phase ONLY - single writer, surgical `Edit`, never a full rewrite: L43)
+
+- [ ] `apps/procurement/models/__init__.py` - append the re-export block **from the entity MODULES**
+      (6.13/6.14/6.15 precedent, with the cycle comment):
+      `ProcurementDocument`, `expiring_documents`, `run_document_reminders`, `run_document_reminders_audited`,
+      `ProcurementDocumentRevision`, `extract_document_text`, `ProcurementPolicy`, `KnowledgeResource` -
+      **and add every one of them to `__all__`**. (`EXTRACT_MAX_CHARS` and the `*_CHOICES` tuples are
+      deliberately NOT hoisted - reachable as `ProcurementDocument.DOC_TYPE_CHOICES` etc., the 6.14/6.15 rule.)
+- [ ] `apps/procurement/forms/__init__.py` - re-export `ProcurementDocumentForm`,
+      `ProcurementDocumentRevisionUploadForm`, `ProcurementPolicyForm`, `KnowledgeResourceForm`
+      (+ the "`MAX_UPLOAD_BYTES` is NOT re-exported" note already at line 82 covers this sub-module too)
+- [ ] `apps/procurement/views/__init__.py` - re-export **all 30 view names** listed above (a missing one is an
+      `AttributeError` at URLconf import, not a 404)
+- [ ] `apps/procurement/urls/__init__.py` - `from .DocumentKnowledgeManagement import urlpatterns as
+      _dkm_documentknowledge`, spliced **LAST** in `urlpatterns` (the 6.13/6.14/6.15 belt-and-braces posture),
+      and the four new first segments added to the module docstring's inventory
+- [ ] `apps/procurement/admin.py` - `@admin.register` for all four:
+      `ProcurementDocument` (list_display number/title/doc_type/status/classification/supplier/expires_on/
+      current_revision_no; list_filter status/doc_type/classification; search number/title/tags;
+      readonly number/current_revision_no/extracted_text/checked_out_by/checked_out_at/created_by;
+      raw_id_fields supplier/contract/purchase_order/sourcing_event),
+      `ProcurementDocumentRevision` (readonly everything except `change_note`; raw_id `document`),
+      `ProcurementPolicy`, `KnowledgeResource`
+- [ ] `apps/core/navigation.py` - **exactly one new `LIVE_LINKS["6.19"]` block**, mapping the five NavERP.md
+      bullets verbatim:
+      ```
+      "6.19": {
+          "Central Document Repository":  "procurement:pdocument_list",
+          "Version Control":              "procurement:pdocrevision_list",
+          "Procurement Policy Library":   "procurement:ppolicy_list",
+          "Best Practices & Templates":   "procurement:knowledgeresource_list",
+          "Full-Text Search & Indexing":  "procurement:pdocument_list#search",
+      },
+      ```
+      (`_safe_reverse` supports a `#fragment` / `?query` suffix - `apps/core/navigation.py:1838` - the 6.13
+      `invoicevoucher_dashboard#discount` precedent. The register's filter-bar card must therefore carry
+      `id="search"`.) **No sidebar key for the upload page or the verbs** - this dict maps bullets to pages.
+- [ ] **No `config/settings.py` / `config/urls.py` change** - `apps/procurement` is long since installed and
+      included. This is an EXTEND run, not a scaffold run.
+- [ ] `makemigrations procurement` -> expect **`0026_procurementdocument_procurementdocumentrevision_and_more.py`**
+      (latest on disk is `0025_remove_budgetmapping_...`). **Agree this number with any concurrent session
+      before generating it (L43).** Review the generated file before committing - four tables, nine indexes,
+      no changes to any other app.
+
+---
+
+## Seeder (`apps/procurement/management/commands/seed_procurement.py`)
+
+- [ ] Add `_seed_document_knowledge(tenant)` and call it **LAST** in `handle()`, after `_seed_budget_cost(tenant)`
+      - its documents link to the suppliers, contracts, orders and sourcing events every block above has created.
+- [ ] Extend the module docstring and `Command.help` with the 6.19 line.
+- [ ] Extend the `--flush` block, children first (and note that without these the `exists()` guards survive a
+      flush): `ProcurementDocumentRevision` -> `KnowledgeResource` -> `ProcurementPolicy` ->
+      `ProcurementDocument`. (`KnowledgeResource.document` / `ProcurementPolicy.document` are `SET_NULL`, so
+      order is not load-bearing - children-first keeps the flush reading top-down like every block above.)
+- [ ] Add the four models + `extract_document_text` to the `from apps.procurement.models import (...)` block.
+- [ ] **Reuse only** - create no Party, no contract, no PO, no sourcing event, no OrgUnit, no Currency:
+      first supplier `Party` (via `PartyRole`), first `scm.SupplierContract`, first `scm.PurchaseOrder`,
+      first `procurement.SourcingEvent`, first non-root `OrgUnit`, first active `Currency`, workspace members.
+      Skip with a `self.style.WARNING` line when no supplier Party exists (the SMOKETEST-tenant posture).
+- [ ] **Idempotent, per block:** `if ProcurementDocument.objects.filter(tenant=tenant).exists(): … skipping`,
+      and separately for policies and knowledge resources. Numbered models use the existence guard, never a
+      bare `.create()` in a loop that could re-mint numbers.
+- [ ] Documents (4): an **active warranty** (supplier + purchase_order, `expires_on = today + 45d`);
+      an **expired certificate of insurance** (supplier + contract, `expires_on = today - 20d`) so the
+      Expired filter and the reminder scan have an honest row; a **draft specification** (sourcing_event, no
+      revision -> `current_revision_no = 0`) so the "no revision yet" empty state is real; an **archived
+      correspondence pack** with `retention_until = today - 10d` so the Past-retention filter has a row.
+- [ ] Revisions: 2 each on the two live documents, minted through `ContentFile` with a small **`.txt`** payload
+      (a plain-text extension the extractor genuinely reads, so `extracted_text` is really populated and the
+      search box is demonstrably working **without shipping a binary PDF**). r1 approved then superseded by an
+      approved r2; the parent's `current_revision_no` and `extracted_text` set through the same code path the
+      approve verb uses. `# WARNING:` the seeder writes real files under MEDIA_ROOT - deterministic filenames
+      plus the `exists()` guard, so a second run cannot pile up `_XXXX`-suffixed duplicates.
+- [ ] Policies (3): a **published** competitive-bidding rule (`threshold_amount=10000`,
+      `threshold_basis="per_requisition"`, currency, `applies_to` a department, `published_at` stamped) whose
+      `previous_version` is an **archived** v1.0 row, so the supersession chain renders; plus a **draft**
+      sole-source policy with `next_review_on` in the past so the Review-overdue filter has a row.
+- [ ] Knowledge resources (4): a **featured published RFP template** linked to a seeded `ProcurementDocument`;
+      a bid-evaluation scorecard; a negotiation playbook with `usage_count=7` + `last_used_at`; a draft checklist.
+- [ ] Print the usual per-tenant `SUCCESS` counts; the existing "log in as `admin_<slug>`" footer already covers
+      the tenant warning.
+
+---
+
+## Templates (`templates/procurement/documentknowledge/<entity>/{list,detail,form}.html`)
+
+Shape reference: `templates/procurement/budgetcost/costforecast/list.html` - copy its structure exactly.
+
+- [ ] Every page `{% extends "base.html" %}` + a leading `{% comment %}` block naming **the view module and the
+      complete context contract** (the 6.15 header idiom) - and nothing outside that contract is referenced.
+- [ ] **Every list** = page-header + breadcrumb (`procurement:dashboard` › sub-module › entity) + `stat-grid` +
+      a `<form method="get" class="filter-bar">` reflecting `request.GET` for **every** filter the view declares
+      + a table with an **Actions column** (view eye / edit pencil / delete POST form with `{% csrf_token %}`
+      and `onsubmit="return confirm(…)"`) + an `{% empty %}` empty-state with a "Clear filters" link +
+      `{% include "partials/pagination.html" %}` (it guards `has_previous`/`has_next`, L9).
+- [ ] **Filter comparison rules:** plain strings `{% if request.GET.status == val %}selected{% endif %}`;
+      FK pks `{{ o.pk|stringformat:"d" }}` and compared the same way - **never `|slugify`**.
+- [ ] **Badges use colour-named theme.css classes only** (`badge-green/red/amber/info/muted/slate`) via the
+      models' `*_CSS` maps, with a `{{ obj.get_<field>_display }}` fallback. **`badge-success`/`badge-danger`
+      do not exist (L33).**
+- [ ] `document/list.html` - the register. Filter bar card carries `id="search"` (the sidebar's
+      Full-Text Search bullet deep-links to it). Columns: number+title, type, classification badge, supplier,
+      current revision (`r{{ obj.current_revision_no }}` or "none yet"), expiry with an
+      `is_expired`/`is_expiring` badge, status badge, Actions. Page-actions: New document, Run reminders (POST),
+      Re-index (POST). Prints `search_note` under the title - **no "OCR" anywhere.**
+- [ ] `document/detail.html` - metadata panel; the four link FKs each rendered as a link to the owning module's
+      page when set (`scm:*` / `procurement:*`), "—" when not; a **revision history table** (`revisions`) with
+      the current one badged `badge-green` "Current", approved-but-older `badge-amber` "Superseded", unapproved
+      `badge-muted` "Pending"; each row shows `change_note`, `uploaded_by`, `created_at`, `file_size`, a
+      truncated `sha256`, the `extraction_note`, and a download link (plain `<a href="{{ r.file.url }}">` -
+      **never an inline `<iframe>`/`<embed>` of a user-uploaded file**); an **Actions sidebar** with Edit,
+      Upload revision (when `can_upload`), Check out / Release, Activate / Supersede / Archive, Delete
+      (POST + confirm), Back to list; a lock banner naming `lock_holder` when checked out; the linked policies
+      and knowledge resources.
+- [ ] `revision/list.html` - the Version Control landing page; `approved` filter options are exactly the
+      strings `True` / `False`.
+- [ ] `revision/detail.html` - read-only; Approve (POST, admin only, hidden when `is_current` or approved),
+      Delete (POST, only when unapproved and not current), Back to the parent document. States plainly that a
+      revision is immutable and there is no edit.
+- [ ] `revision/form.html` - the upload page; renders `upload_note`, the file input and `change_note` only.
+      Form tag needs `enctype="multipart/form-data"` (**and so does `document/form.html`'s sibling if any file
+      field is ever added there - it is not, today**).
+- [ ] `policy/list.html` / `policy/detail.html` / `policy/form.html` - detail shows `body`, the threshold with
+      its basis + currency, the supersession chain (`supersedes` / `superseded_by_rows`), the linked repository
+      document, and prints `advisory_note` on all three. Actions: Publish (POST, admin), Archive (POST), Edit,
+      Delete.
+- [ ] `knowledgeresource/list.html` - a **featured shelf** rendered from `featured` above the table, then the
+      filtered register. `knowledgeresource/detail.html` renders `body`, `usage_count`/`last_used_at`, the
+      linked document's download link, and a "Use this resource" POST button. Both print `library_note`.
+- [ ] Template-folder rule check: two levels (`documentknowledge/` then the entity folder), bare page
+      filenames, **no flat `<entity>_<page>.html` anywhere**.
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations procurement` -> one file, `0026_*`; read it before committing
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_procurement` **twice** - the second run prints "already present, skipping" for all
+      three 6.19 blocks and creates no duplicate files under MEDIA_ROOT
+- [ ] `python manage.py check` - clean
+- [ ] `python manage.py makemigrations --check --dry-run` - "No changes detected"
+- [ ] Throwaway `temp/` smoke script as **`admin_acme` / `password`**, asserting **content, not just status**
+      (a mismatched context var returns 200 and renders blank, L8):
+      - [ ] GET 200: `pdocument_list`, `pdocument_create`, `pdocument_detail`, `pdocument_edit`,
+            `pdocrevision_list`, `pdocrevision_detail`, `pdocument_revision_upload`, `ppolicy_list`,
+            `ppolicy_create`, `ppolicy_detail`, `ppolicy_edit`, `knowledgeresource_list`,
+            `knowledgeresource_create`, `knowledgeresource_detail`, `knowledgeresource_edit`
+      - [ ] POST 302: `pdocument_checkout`, `pdocument_release`, `pdocument_supersede`, `pdocument_activate`,
+            `pdocument_archive`, `pdocument_reindex`, `pdocument_run_reminders`, `pdocrevision_approve`,
+            `ppolicy_publish`, `ppolicy_archive`, `knowledgeresource_publish`, `knowledgeresource_archive`,
+            `knowledgeresource_use`; every one of those on GET -> **405**
+      - [ ] Content assertions: each page title present; a seeded `PDOC-`/`PPOL-`/`PKR-` number present on its
+            register; the revision register shows `r1`/`r2`; the policy detail shows the threshold and the
+            supersession row; the knowledge detail shows `usage_count`
+      - [ ] **No `{#` and no `{% comment` leak** in any rendered body
+      - [ ] Junk params on every list: `?status=nope`, `?supplier=abc`, `?supplier=0`,
+            `?supplier=999999999999999999999`, `?expiry=zzz`, `?approved=maybe`, `?page=9999` -> still 200 and
+            still shows rows (a junk value is skipped, never an empty register, L11)
+      - [ ] `?page=2` on every list -> 200
+      - [ ] **Cross-tenant IDOR -> 404** on every `<int:pk>` route for all four models, using a pk owned by
+            another tenant (including `pdocrevision_approve`, which must check BOTH the revision's tenant and
+            its document's tenant)
+      - [ ] Revision-chain behaviour: approving r2 moves `current_revision_no` to 2 and copies
+            `extracted_text`; re-approving r2 is a no-op; approving r1 afterwards is **refused**; deleting the
+            current revision is **refused**; uploading while another user holds the lock is **refused**
+      - [ ] Upload validation: a `.exe` is rejected by extension; an oversize file is rejected by
+            `MAX_UPLOAD_BYTES` (20 MB, core's - not CatalogManagement's 2 MB)
+      - [ ] `pdocument_run_reminders` twice -> the second run reports `skipped_open`, not a second alert
+      - [ ] A non-admin tenant user is refused on `pdocrevision_approve` / `pdocument_reindex` / `ppolicy_publish`
+- [ ] Sidebar: `6.19` shows **five Live bullets** under Module 6; every one resolves (no `NoReverseMatch`)
+- [ ] Delete the `temp/` script before the review phase
+
+---
+
+## Close-out (the mandatory Module Creation Sequence, phases 4-7)
+
+- [ ] Phase 4 - the six reviewers **one after another**, each appending to
+      `.claude/tasks/review-procurement-6.19.md`: `code-reviewer` -> `explorer` -> `frontend-reviewer` ->
+      `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`; then dedupe, sort
+      Critical -> Important -> Minor, assign `C#`/`I#`/`M#` IDs, commit the file
+- [ ] Phase 5 - one `code-fixer` agent burns the findings down in ID order, one commit per file; verify no
+      finding is left `[ ] open` and `manage.py check` is clean
+- [ ] Phase 6 - tests, serial: pin the test contract + `conftest.py`, then
+      `test_docknowledge_models.py` -> `test_docknowledge_forms.py` -> `test_docknowledge_views.py` ->
+      `test_docknowledge_security.py`, one at a time, each committed on its own; every test function
+      `test_docknowledge_*` and every module helper `_docknowledge_*`; finish with one **full unfiltered**
+      `apps/procurement` run, green (never `-k` filtered, L47)
+- [ ] Phase 7 - update `.claude/skills/procurement/SKILL.md` (models, routes, templates, seeder rows, the
+      revision-chain rules, the `LIVE_LINKS["6.19"]` block) and mark 6.19 complete in `README.md`; one commit each
+- [ ] One file per commit throughout, PowerShell-safe (`;`, never `&&`); **never `git push`**
+
+---
+
+## Later passes / deferred (carried from the research so nothing is lost)
+
+- **OCR of scanned PDFs, AI auto-tagging, clause detection, semantic / NL search** -> Module **13.5 / 13.6**.
+  Needs OCR + ML infrastructure that does not exist. **The UI must never use the word "OCR".**
+- **Elasticsearch / MySQL FULLTEXT relevance ranking** -> no search service, and a FULLTEXT index cannot exist
+  under the SQLite test runner. `icontains` over `extracted_text` is the honest ceiling.
+- **Folder hierarchy / virtual folders / metadata inheritance** -> **13.4 / 13.5**. `doc_type` + `tags` + the
+  four object FKs give the same findability without a tree.
+- **Version diff / redline, branching, merge-back** -> **13.2**. The chain stays linear.
+- **Document-level permission matrices, watermarking, DRM, DLP, secure viewer** -> **13.7**. Tenant scoping +
+  `@login_required` + the `classification` badge is this pass's honest level.
+- **Automatic retention destruction, legal hold, WORM / PDF-A archival** -> **13.9 / 13.14** + a scheduler.
+  6.19 stores `retention_until` and can *show* over-retention rows; it deletes nothing on a timer, and it never
+  reclaims the file from MEDIA_ROOT.
+- **E-mail notification of expiring documents** -> no mail worker (the 6.8 renewal scan has the same limit).
+  Reminders land in `ProcurementAlert`; the run is a user-pressed verb.
+- **Bulk / ZIP import and legacy migration** -> a second UX plus a zip-slip surface. 6.9's `CatalogUploadBatch`
+  is the pattern when it is scheduled.
+- **A `Tag` table with autocomplete and a controlled vocabulary** -> a fifth model; **13.5**.
+- **File preview / thumbnails in the browser** -> inline rendering of user-uploaded files is a stored-XSS
+  surface needing `Content-Disposition` / CSP work. Link out; do it deliberately later.
+- **Requisition / RFQ / GRN document FKs** -> `scm.PurchaseRequisition`, `scm.RFQ`, `scm.GoodsReceiptNote` all
+  exist and are one migration away; four link FKs this pass keeps the register's filters comprehensible.
+- **Prevailing-terms panel per supplier** (Coupa) -> a computed panel on the supplier-filtered register (no
+  table). Ship only if a later pass has room.
+
+## Parked for a sibling sub-module (do NOT pull into 6.19)
+
+- **Policy acknowledgement / sign-off ledger + attestation reporting** -> **6.17** (*Policy Management &
+  Acknowledgment*). 6.19 ships `requires_acknowledgment` as the hook; 6.17 copies `hrm.PolicyAcknowledgment`'s
+  shape (`policy` FK + `employee` FK + `status` + `acknowledged_at`, `unique_together (tenant, policy, employee)`)
+  and FKs `procurement.ProcurementPolicy`.
+- **Tamper-proof audit log of every document view/download** -> **6.17** (*Audit Trail & Logging*). 6.19 writes
+  `core.AuditLog` rows for its own verbs only.
+- **Supplier document requirements as a qualification gate** -> **6.16** / SCM 4.2 `SupplierProfile`. 6.19
+  stores and expires the certificate; it does not decide whether the supplier is qualified.
+- **Mandatory-attachment enforcement on requisition submit** (Precoro) -> **6.2 / 6.3**. Record it as a
+  `ProcurementPolicy` row instead.
+- **Vendor-facing document upload/download** -> **6.4** (`VendorPortalAccess` gates the portal). 6.19 ships the
+  `supplier_visible` flag; 6.4 ships the page.
+- **Clause library** -> **6.8** (`ContractClause`, built). **Executable requisition templates** -> **6.2**
+  (`RequisitionTemplate`, built). **RFx questionnaires** -> **6.6** (built). **Contract obligations** -> **6.8**
+  (`ContractMilestone`, built).
+
+## Review notes
+
+(filled in at the end)
+
+---
+
+## 6.18 Inventory & Warehouse Integration (Module 6: Procurement Management System, `procurement`)
+
+Plan from `.claude/tasks/research-procurement-6.18.md` (614 lines, committed) — **2026-09-05**.
+App EXISTS (6.1–6.15 built); this pass EXTENDS it. Backend package
+`apps/procurement/{models,forms,views,urls}/InventoryWarehouseIntegration/`; templates
+`templates/procurement/inventorywarehouse/`. Structural precedent: 6.15
+`BudgetCostManagement/` across all four layers (config master + numbered document + derived
+board = exactly this pass's shape).
+
+**Scope is FROZEN: 3 entities / 5 model classes + 3 derived no-model pages.** Do not widen.
+Optional research entity 4 `CountVarianceReview` is **DROPPED** — see Deferred.
+
+### 6.18-A Concurrency gates (four sessions live on `apps/procurement` — read before touching anything shared)
+
+- [ ] **Migration slot is `0028_*`.** `0025` is the newest on disk today. Queue: `0026`=6.16,
+      `0027`=6.17, **`0028`=us (6.18)**, `0029`=6.19. **Do NOT run `makemigrations procurement`
+      until `apps/procurement/migrations/0027_*.py` exists on disk.** If it does not, wait; if
+      `0028` already exists when we get there, re-agree the slot with the peer session before
+      generating (L43).
+- [ ] **Never run `seed_procurement --flush`.** Plain idempotent `seed_procurement` only — a
+      flush would delete the other three sessions' seeded rows.
+- [ ] **Shared files are APPEND-ONLY via surgical `Edit`, never `Write`, never a full rewrite:**
+      `apps/procurement/models/__init__.py`, `apps/procurement/forms/__init__.py`,
+      `apps/procurement/views/__init__.py`, `apps/procurement/urls/__init__.py`,
+      `apps/procurement/admin.py`,
+      `apps/procurement/management/commands/seed_procurement.py` (our dispatch line goes
+      **after** 6.17's), `apps/core/navigation.py` (**only** the `"6.18"` key), `README.md`.
+- [ ] **Hands off `apps/procurement/tests/test_budgetcost_*.py`** (4 untracked files) — they
+      belong to another session. Never `git add` them, never edit them, never include them in a
+      commit (L45).
+- [ ] One file per commit, PowerShell `;` separators, explicit paths, **never `git push`**.
+
+### 6.18-B URL segments — FINAL LIST (send this to the peer sessions)
+
+Collision check performed 2026-09-05 against the concatenated inventory in
+`apps/procurement/urls/__init__.py:7-19` (63 existing first segments) — **all six are new whole
+path components, zero collisions.** `receipt-bin-map/` is distinct from the existing
+`receipt-tolerances/`, `receipt-discrepancies/`, `receipt-audit/` (Django matches components,
+not string prefixes). Re-run the dump at Integrate time in case 6.16/6.17/6.19 land first.
+
+```
+stock-position/            -> procurement:stock_position        (derived, GET)
+replenishment-policies/    -> procurement:replenishmentpolicy_*  (CRUD)
+replenishment-runs/        -> procurement:replenishmentrun_*     (CRUD + verbs)
+material-issues/           -> procurement:materialissue_*        (CRUD + verbs)
+receipt-bin-map/           -> procurement:receipt_bin_map       (derived, GET)
+count-accuracy/            -> procurement:count_accuracy        (derived, GET)
+```
+
+- [ ] Verify at Integrate: `grep -rhoE 'path\(\s*"[^"/]+' apps/procurement/urls/` → sort -u →
+      confirm none of the six appears twice.
+- [ ] **Urls docstring wording — do NOT copy the stock sentence.** "this app registers no greedy
+      `<str:...>` converter anywhere" is **FALSE**: `contract-sign/<str:token>/` exists at
+      `apps/procurement/urls/ContractsManagement/Contracts.py:16`. Use the accurate form:
+      *"No route in this app uses a converter in its FIRST path component — every first segment
+      is a literal — so nothing can shadow across modules."* (Verified: `grep 'path("<'` across
+      `apps/procurement/urls/` returns zero matches.)
+
+### 6.18-C Spine verification (grep-confirmed 2026-09-05 — every FK below targets a real entity)
+
+| Entity | Verified at | Used by 6.18 for |
+|---|---|---|
+| `scm.Item` | `InventoryManagement/Items.py:73` (`sku:92`, `name:93`, `uom:96` **nullable**, `standard_cost:101`, `average_cost:105` editable=False) | policy/suggestion/issue-line FK |
+| `scm.Location` | `InventoryManagement/Locations.py:14` (`LOCATION_TYPES:17-23` incl. `bin`, `path()`, `capacity:41`, `abc_class:46` **lowercase a/b/c**) | **IS the bin master — no new Bin/Zone model** |
+| `scm.StockMove` | `InventoryManagement/StockMoves.py:13` (signed `quantity:43`, `reference:47`, index `(tenant, reference)` `:60`) | READ ONLY — on-hand aggregate + receipt→bin join |
+| `scm.StockAdjustment` / `Line` | `InventoryManagement/StockAdjustments.py:11` / `:65` (`REASON_CHOICES:23`, `status:35`, `quantity_delta:72`, `unit_cost:76`, `value_impact():48`, `clean()` requires notes when reason=`other` `:58`) | `MaterialIssue.post()` mints a **draft** one |
+| `scm.ReorderRule` | `InventoryManagement/ReorderRules.py:26` (`reorder_point:43`, `safety_stock:46`, `reorder_quantity:48`, `lead_time_days:61`, `avg_daily_demand:76`, `abc_class:78` **uppercase A/B/C**, `on_hand_map():107` staticmethod, `is_below_point():133`, `suggested_quantity():136`) | the run reads it; **never re-declare its columns** |
+| `scm.PurchaseRequisition` / `Line` | `ProcurementManagement/PurchaseRequisitions.py:14` / `:151` (`title:44`, `requester:45`, `org_unit:47`, `budget:50`, `currency:53`, `required_by:55`, `status:56`, `recalc_totals():89`; line `item_description:155`, `sku_hint:156`, `uom_hint:158`, `quantity:159`, `estimated_unit_price:161`, `gl_account:164`) | `ReplenishmentRun.release()` WRITES these |
+| `scm.PurchaseOrder` / `Line` | `ProcurementManagement/PurchaseOrders.py:15` / `:172` (`RECEIVABLE_STATUSES:34`, `sku_hint:177`) | on-order derivation |
+| `scm.GoodsReceiptNote` / `Line` | `ProcurementManagement/GoodsReceiptNotes.py:15` / `:166` (`location:40` staging, `status:44`, `receipt_date:43`) | receipt-bin-map anchor |
+| `scm.PutawayTask` | `WarehouseManagement/PutawayTasks.py:16` (`goods_receipt:38`, `from_location:44`, `to_location:47`, `quantity:49`, `status:52`) | receipt-bin-map onward hop |
+| `scm.CycleCountTask` / `Line` | `WarehouseManagement/CycleCountTasks.py:16` / `:90` (`status:41`, `scheduled_date:39`, `adjustment:48`; line `expected_quantity:98` editable=False, `counted_quantity:100` nullable, `variance:108`, `has_variance:115`) | count-accuracy source |
+| `scm.SalesOrderAllocation` | `OrderManagement/SalesOrderAllocations.py:15` (`ACTIVE_STATUSES`) | availability formula |
+| `scm.LotSerial` | `InventoryManagement/LotSerials.py:5` | optional issue-line FK |
+| `inventory.InventoryReservation` | `InventoryTrackingControl/InventoryReservations.py:37` (`ACTIVE_STATUSES:56`, `item:72`, `location:75`, `quantity`) | availability + optional issue link |
+| `inventory.StockStatus` | `InventoryTrackingControl/StockStatuses.py:18` | non-sellable held qty |
+| `inventory.CountProgram` | `StocktakingCycleCounting/CountPrograms.py:18` (`generate_tasks():85-125` — **the bridge pattern we copy**) | count-accuracy schedule column |
+| `inventory.BinCapacity` | `WarehousingBinManagement/BinCapacities.py:26` | receipt-bin-map fullness badge |
+| `core.Party` / `core.OrgUnit` / `core.Tenant` | `core/models/Party.py:5` / `OrgUnit.py:5` / `Tenant.py:5` | vendor (a `PartyRole`), cost dimension, tenancy |
+| `accounting.Budget` / `GLAccount` | reached by string FK from `PurchaseRequisitions.py:50,164` | requisition defaults, expense account |
+| 6.15 `REQUESTED_PR_STATUSES` / `COMMITTED_PR_STATUSES` | `apps/procurement/models/BudgetCostManagement/BudgetMappings.py:45-49` | open-requisition supply column |
+
+- [ ] **`scm.Item`, `scm.Location`, `scm.SalesOrder*` all EXIST** (SCM 4.1/4.3/4.5 shipped) — no
+      stand-in needed anywhere in this plan. Confirm again before writing the first model file.
+- [ ] **Never re-declare anything owned by `scm` or `inventory` (L36).** Every cross-app FK is a
+      **string** reference. No `Bin`/`Zone`/`Aisle`/`Rack`. No second on-hand column. No second
+      reorder point / safety stock / lead time. No second requisition or PO model. No second
+      count task / count schedule / blind-count mechanism. No second reservation or stock
+      classification. No `accounting.JournalEntry` posting (L29).
+- [ ] **NOTHING in `apps/procurement` writes `scm.StockMove`** — verified: only `apps/scm/views/`
+      writes the ledger in production code.
+
+### 6.18-D Models — `apps/procurement/models/InventoryWarehouseIntegration/`
+
+All inherit `apps.procurement.models._base.TenantOwned` (`:44`) / `TenantNumbered` (`:57`) via
+`from apps.procurement.models._base import *`. Every model gets a `tenant` FK (from the base),
+a `clean()` with **cross-tenant rejection on every FK**, and colour-named badge maps only
+(`badge-green/red/amber/info/muted/slate` — `-success/-warning/-danger` do NOT exist, L33).
+
+#### 1. `ReplenishmentPolicy` — `Policies.py` — **no number prefix** (`TenantOwned`, plain config)
+
+The procurement-side overlay on `scm.ReorderRule`: **who** to buy from, **how much** to round to,
+**what defaults** the generated requisition carries. Unnumbered on the
+`ReceiptTolerancePolicy` / `SpendClassificationRule` / `inventory.PutawayRule` precedent.
+
+- [ ] FKs (all by string): `item` → `scm.Item` **PROTECT** · `location` → `scm.Location`
+      SET_NULL null/blank (**null = "any location"**) · `preferred_vendor` → `core.Party`
+      SET_NULL null/blank · `default_org_unit` → `core.OrgUnit` SET_NULL ·
+      `default_budget` → `accounting.Budget` SET_NULL · `default_gl_account` →
+      `accounting.GLAccount` SET_NULL. Distinct `related_name`s prefixed
+      `procurement_replenishment_`.
+- [ ] `SOURCE_METHOD_CHOICES = [("buy","Buy"),("transfer","Transfer"),("manufacture","Manufacture")]`
+      default `buy` — *driver: Odoo "Preferred Route" / Oracle+D365 supply type / Cin7
+      purchase-transfer-assemble.* **Only `buy` generates a requisition this pass**; `transfer`
+      and `manufacture` render a link-out (`scm:stocktransfer_create`) and are skipped by the run.
+- [ ] `TRIGGER_MODE_CHOICES = [("review","Review then release"),("auto","Automatic")]` default
+      **`review`** — *driver: Odoo Trigger Auto|Manual, D365 coverage code Manual; the human gate
+      on money is universal.* Mirrors `ReorderRule.apply_computed()`'s "calculate proposes, a
+      person accepts" contract (`ReorderRules.py:319-322`).
+- [ ] `target_level` Decimal(14,2) **null/blank** — *driver: NetSuite Preferred Stock Level,
+      Precoro "Reorder To", Odoo Max Quantity.* Order-up-to **override**; null ⇒ fall back to
+      `rule.reorder_point + rule.safety_stock`. Documented as an override, never a copy.
+- [ ] `order_multiple` Decimal(14,2) null/blank — *driver: Odoo "Multiple Quantity".*
+- [ ] `min_order_qty` Decimal(14,2) null/blank — *driver: NetSuite item-vendor minimums, Cin7
+      per-supplier reorder qty.*
+- [ ] `max_order_qty` Decimal(14,2) null/blank.
+- [ ] `include_on_order` Bool **default True** — *driver: Oracle min-max plans on on-hand **plus
+      on-order**; Precoro's On Order column exists to stop double-ordering.* Closes the real
+      behavioural gap: `ReorderRule.is_below_point()` (`:133`) tests on-hand ONLY.
+- [ ] `include_open_requisitions` Bool default True — *driver: SAP MD04 counts PRs as supply.*
+- [ ] `lead_time_days_override` PositiveIntegerField null/blank,
+      `MaxValueValidator(3650)` — *driver: Cin7 per-supplier lead time*; else
+      `rule.lead_time_days`.
+- [ ] `is_active` Bool default True · `notes` TextField blank.
+- [ ] `Meta`: `ordering = ["item__sku", "location__code", "id"]`;
+      `unique_together = ("tenant", "item", "location")` (same grain as
+      `ReorderRule.Meta:90`); indexes `(tenant, is_active, item)` `prc_rpol_tnt_active_idx` and
+      `(tenant, item, location)` `prc_rpol_tnt_item_loc_idx`.
+- [ ] **Nullable-unique honesty:** `location` is nullable, so the DB `unique_together` does NOT
+      stop a second catch-all row (NULLs compare distinct). `clean()` adds an explicit probe:
+      `filter(tenant, item, location__isnull=True).exclude(pk=self.pk).exists()` → reject.
+      Say so in the docstring (the `BudgetMapping` "a nullable-column unique would not be
+      portable anyway" precedent, `BudgetMappings.py:14-17`).
+- [ ] `clean()` also: cross-tenant rejection on **all six** FKs; `max_order_qty >= min_order_qty`
+      when both set; `target_level > 0` when set; `preferred_vendor` must hold a
+      `supplier`/`vendor` `PartyRole` (the 6.5/6.8 `_supplier_parties` rule).
+- [ ] `round_quantity(raw)` — the **single** place rounding happens: floor at `min_order_qty`,
+      round UP to the next `order_multiple`, cap at `max_order_qty`, never negative. The run
+      calls it; nothing else re-implements it.
+- [ ] `@classmethod resolve(tenant, item, location)` — exact `(item, location)` row wins, then
+      the `(item, location=None)` catch-all, else `None`. Specificity-first, the
+      `BudgetMapping.resolve()` shape (`BudgetMappings.py:186-215`).
+- [ ] Badge props: `status_css`/`status_label` (is_active), `SOURCE_CSS`, `TRIGGER_CSS` — all
+      colour-named.
+- [ ] **Form excludes:** `tenant`, `created_at`, `updated_at`.
+
+#### 2. `ReplenishmentRun` `[RPL-]` + `ReplenishmentSuggestion` — `Runs.py` (ONE entity file)
+
+The batch proposal Oracle/Odoo/Cin7/D365 all produce, and the gap in NavERP:
+`scm:reorder_alerts` and `inventory:reorderdraft` both compute-and-forget — **nothing in the repo
+persists a proposal.**
+
+**`ReplenishmentRun(TenantNumbered)`, `NUMBER_PREFIX = "RPL"`**
+
+- [ ] FKs: `location` → `scm.Location` SET_NULL null/blank (**null = whole network**) ·
+      `generated_by` → `settings.AUTH_USER_MODEL` SET_NULL null/blank **`editable=False`**.
+- [ ] `run_date` DateField · `trigger` CHOICES `manual`|`scheduled` default `manual`
+      (*driver: Oracle schedules the min-max report, NetSuite runs AIM weekly, D365 schedules
+      master planning* — the **column ships, the cron does not**, same posture as
+      `CountProgram.is_due()`).
+- [ ] `status` CHOICES `draft`|`proposed`|`released`|`cancelled` default `draft`;
+      `EDITABLE_STATUSES = ("draft",)`; `RELEASABLE_STATUSES = ("proposed",)`.
+- [ ] `abc_class_filter` CharField(max_length=1) blank, choices `A`/`B`/`C` —
+      *driver: D365 plans per ABC group.* **GOTCHA: filters `ReorderRule.abc_class`, which is
+      UPPERCASE `A/B/C` (`ReorderRules.py:36`) — NOT `Location.abc_class`, which is lowercase
+      `a/b/c` (`Locations.py:25-29`).** Put that sentence in the field's `help_text`.
+- [ ] `notes` TextField blank · `generated_at` / `released_at` DateTimeField null/blank
+      **`editable=False`** (L22).
+- [ ] `Meta`: `ordering = ["-run_date", "-id"]`; `unique_together = ("tenant", "number")`;
+      indexes `(tenant, status)` `prc_rpl_tnt_status_idx`, `(tenant, run_date)`
+      `prc_rpl_tnt_date_idx`.
+- [ ] `MAX_SUGGESTIONS = 500` — hard cap; when hit, stamp a truncation marker on `notes` and
+      surface `truncated` on the detail page. An unbounded batch is not a feature.
+- [ ] `generate(user)` — **grouped queries ONLY, never a per-row aggregate** (the perf rule
+      `StockLevels.py:10-11` states outright):
+      - [ ] `transaction.atomic()` + `select_for_update()` on the run row; refuse unless status
+            in `("draft", "proposed")`; **delete this run's existing lines first** so re-generate
+            is idempotent.
+      - [ ] Q1 rules: `ReorderRule.objects.filter(tenant, is_active=True)` (+ `location` when set,
+            + `abc_class` when set) `.select_related("item", "item__uom", "location")`.
+      - [ ] Q2 on-hand: `ReorderRule.on_hand_map(tenant, rules)` (`ReorderRules.py:107`) — ONE
+            grouped `StockMove` query, `{(item_id, location_id): qty}`.
+      - [ ] Q3 allocations: `SalesOrderAllocation` `ACTIVE_STATUSES`, `.values(iid=F(...), loc=F(...))
+            .annotate(s=Sum("quantity"))` — both pair keys ALIASED (the field names collide,
+            `StockLevels.py:93-97`).
+      - [ ] Q4 reservations: `inventory.InventoryReservation` `ACTIVE_STATUSES` grouped by
+            `(item_id, location_id)`.
+      - [ ] Q5 non-sellable: `inventory.StockStatus` `.exclude(status="active")` grouped by
+            `(item_id, location_id)`.
+      - [ ] Q6+Q7 on-order: the `_on_order_map()` **two-query** shape (`StockLevels.py:37-67`)
+            mirrored **LOCALLY** in this module — ordered PO lines on `RECEIVABLE_STATUSES` minus
+            accepted `GoodsReceiptLine` (cancelled GRNs excluded), keyed by exact-string
+            `sku_hint` ↔ `Item.sku`, floored at zero. **Two queries, not one** — a single
+            annotation fans out and multiplies `ordered` by the receipt count. Peer apps do not
+            import each other's internals (the `resolve_line_item` precedent,
+            `ReceiptTolerances.py:398-405`).
+      - [ ] Q8 open requisitions: ONE grouped query over `scm.PurchaseRequisitionLine` where
+            `requisition__status__in = REQUESTED_PR_STATUSES + COMMITTED_PR_STATUSES` (imported
+            from `apps.procurement.models.BudgetCostManagement.BudgetMappings`), keyed by
+            `sku_hint`.
+      - [ ] Q9 policies: ONE query over `ReplenishmentPolicy` for the tenant → dict keyed
+            `(item_id, location_id)` and `(item_id, None)`.
+      - [ ] Then **pure Python per rule** — no further DB hits:
+            `supply = on_hand + (on_order if policy.include_on_order else 0) + (open_req if
+            policy.include_open_requisitions else 0)`; skip when `supply > reorder_point`; skip
+            when `policy.source_method != "buy"`;
+            `target = policy.target_level or (reorder_point + safety_stock)`;
+            `raw = target - supply`; `suggested = policy.round_quantity(raw)`; skip when
+            `suggested <= 0`.
+      - [ ] `bulk_create` the suggestion rows; set `generated_at = timezone.now()`,
+            `generated_by = user`, `status = "proposed"`;
+            `write_audit_log(user, self, "generate", {"lines": n})`.
+- [ ] `release(user)` — *driver: NavERP.md's literal wording "generation of **requisitions**";
+      Oracle generates requisitions, not POs, so 6.3 approval routing / 6.15 budget check /
+      6.10 `generate_po_from_requisition` all still run.* **NOT the `inventory:reorderdraft`
+      draft-PO path.**
+      - [ ] `transaction.atomic()` + `select_for_update()` on the run so a double-clicked Release
+            cannot raise two sets of PRs; refuse unless `status == "proposed"`; refuse when no
+            line is `accepted`.
+      - [ ] Group `decision="accepted"` suggestions by `vendor_id` (`None` → one "unassigned"
+            requisition). Per group: one `scm.PurchaseRequisition(tenant, title=f"Replenishment
+            {self.number} — {vendor or 'Unassigned'}", requester=user,
+            org_unit=<policy.default_org_unit>, budget=<policy.default_budget>,
+            required_by=run_date + max(lead_time_days), status="draft", justification=<marker>)`.
+            **Created as `draft`, never auto-approved.**
+      - [ ] Per line: `PurchaseRequisitionLine(item_description=item.name, sku_hint=item.sku,
+            uom_hint=item.uom.code if item.uom_id else "", quantity=suggested_qty,
+            estimated_unit_price=unit_cost, gl_account=<policy.default_gl_account>)`.
+            **`Item.uom` is nullable (`Items.py:96`) — guard it.**
+      - [ ] `requisition.recalc_totals()` (`PurchaseRequisitions.py:89`); stamp
+            `suggestion.requisition`; set `released_at`, `status="released"`;
+            `write_audit_log(user, self, "release", {"requisitions": [...numbers]})`.
+- [ ] `cancel(user)` — allowed from `draft`/`proposed` only; refused once `released`.
+- [ ] Derived (properties, never stored): `line_count`, `accepted_count`, `total_value`,
+      `is_editable`, `status_css`.
+
+**`ReplenishmentSuggestion(models.Model)`** — child, `related_name="lines"`
+
+- [ ] FKs: `run` → `ReplenishmentRun` CASCADE `related_name="lines"` · `item` → `scm.Item`
+      PROTECT · `location` → `scm.Location` PROTECT · `reorder_rule` → `scm.ReorderRule`
+      SET_NULL null/blank · `policy` → `ReplenishmentPolicy` SET_NULL null/blank · `vendor` →
+      `core.Party` SET_NULL null/blank (policy's preferred vendor, **overridable per line**) ·
+      `requisition` → `scm.PurchaseRequisition` SET_NULL null/blank **`editable=False`**
+      (stamped on release).
+- [ ] **Every snapshot `editable=False`** — the `CycleCountTaskLine.expected_quantity` precedent
+      (`CycleCountTasks.py:97-98`), so the record still explains itself after stock moves:
+      `on_hand_qty`, `allocated_qty`, `on_order_qty`, `open_requisition_qty`, `available_qty`,
+      `reorder_point_snapshot`, `target_level_snapshot`, `raw_suggested_qty`, `suggested_qty`
+      (all Decimal(16,4)), `unit_cost` Decimal(14,4) (from `Item.standard_cost`),
+      `lead_time_days` PositiveIntegerField.
+      *Driver: Oracle min-max report output, D365, Odoo replenishment dashboard.*
+- [ ] `decision` CHOICES `pending`|`accepted`|`snoozed`|`dismissed` default `pending` —
+      *driver: Odoo's explicit Snooze, D365 firming, Cin7 line-dropping.* **The only
+      buyer-editable field family on this model.**
+- [ ] `snooze_until` DateField null/blank · `decision_note` CharField(255) blank.
+- [ ] `line_value` **property** (`suggested_qty × unit_cost`) — derived, **never stored**.
+- [ ] `Meta`: `ordering = ["item__sku", "id"]`; index `(run, decision)` `prc_rsg_run_dec_idx`.
+- [ ] `clean()`: cross-tenant rejection on `item`/`location`/`vendor`/`policy`/`reorder_rule`
+      against `run.tenant_id`; `snooze_until` required and must be in the future when
+      `decision == "snoozed"`.
+- [ ] **Form excludes (run form):** `tenant`, `number`, `status`, `generated_by`, `generated_at`,
+      `released_at`, `created_at`, `updated_at`.
+      **Form fields (line decision form):** `decision`, `snooze_until`, `vendor`,
+      `decision_note` — **every snapshot column is excluded**, as is `requisition`.
+
+#### 3. `MaterialIssue` `[MIS-]` + `MaterialIssueLine` — `MaterialIssues.py` (ONE entity file)
+
+SAP's 201/261 goods issue and Coupa/Precoro's inventory consumption, **plus the return-to-stock
+mirror in the same document** via `movement_type` — *driver: Precoro reverses a completed
+consumption into stock transfers; SAP's 202/262 reversal pair.* **There is no separate return
+document.**
+
+- [ ] **THE BRIDGE (non-negotiable):** `post()` mints a **draft `scm.StockAdjustment` + lines**
+      and stores it on `adjustment` (`editable=False`). **`apps/procurement` writes ZERO
+      `StockMove` rows** — SCM's own post action writes the moves. This is exactly
+      `CountProgram.generate_tasks()` (`apps/inventory/models/StocktakingCycleCounting/
+      CountPrograms.py:85-125`): mint the spine document, stamp a provenance marker, re-read
+      `select_for_update()`, reuse rather than double-mint. Cite that file:line in the model
+      docstring.
+- [ ] **Reason-code mapping (pinned):** `StockAdjustment.reason = "other"` for BOTH directions —
+      `write_off` would mean the stock was destroyed and `found` that it appeared from nowhere;
+      neither is true of an internal consumption. Direction is carried by the **sign** of
+      `quantity_delta`. `StockAdjustment.clean()` (`StockAdjustments.py:58`) requires notes when
+      reason is `other`, and we always stamp the marker, so it validates:
+      `f"Via material issue {self.number} ({self.get_movement_type_display()}) · {self.get_purpose_display()}"`.
+
+**`MaterialIssue(TenantNumbered)`, `NUMBER_PREFIX = "MIS"`**
+
+- [ ] FKs: `location` → `scm.Location` **PROTECT** (issue FROM / return TO) · `org_unit` →
+      `core.OrgUnit` SET_NULL null/blank (*driver: SAP 201 requires a cost centre*) ·
+      `gl_account` → `accounting.GLAccount` SET_NULL null/blank (header default expense account)
+      · `requested_by` → `AUTH_USER_MODEL` SET_NULL null/blank · `issued_by` →
+      `AUTH_USER_MODEL` SET_NULL null/blank **`editable=False`** (stamped at post) ·
+      `adjustment` → `scm.StockAdjustment` SET_NULL null/blank **`editable=False`**
+      (the `CycleCountTask.adjustment:48` provenance precedent) · `reservation` →
+      `inventory.InventoryReservation` SET_NULL null/blank (*driver: SAP MB21 reservation feeds
+      the MB1A issue* — **link out, never re-declare**).
+- [ ] `movement_type` CHOICES `issue`|`return` default `issue`.
+- [ ] `purpose` CHOICES `cost_centre`|`project`|`work_order`|`maintenance`|`sample`|`other`
+      default `cost_centre` — *driver: SAP's 201 (cost centre) / 261 (order) split, generalised.*
+- [ ] `reference` CharField(64) blank — free text project/job/WO number. **NO FK to
+      `scm.WorkOrder`** — that is 4.8's manufacturing object and a procurement issue is not a
+      production draw (which is why `StockMove` has separate `consumption`/`maintenance` types,
+      `StockMoves.py:21-35`). Say so in the `help_text`.
+- [ ] `issue_date` DateField · `status` CHOICES `draft`|`submitted`|`posted`|`cancelled` default
+      `draft`; `EDITABLE_STATUSES = ("draft",)`; `POSTABLE_STATUSES = ("draft", "submitted")`;
+      `CANCELLABLE_STATUSES = ("draft", "submitted")`.
+- [ ] `posted_at` / `cancelled_at` DateTimeField null/blank **`editable=False`** (L22) ·
+      `notes` TextField blank.
+- [ ] `Meta`: `ordering = ["-issue_date", "-id"]`; `unique_together = ("tenant", "number")`;
+      indexes `(tenant, status)` `prc_mis_tnt_status_idx`, `(tenant, issue_date)`
+      `prc_mis_tnt_date_idx`, `(tenant, movement_type)` `prc_mis_tnt_mvt_idx`.
+- [ ] `total_value` — **one aggregate** `Σ quantity × unit_cost` across lines (the
+      `StockAdjustment.value_impact():48` shape), shown beside the minted adjustment's own
+      `value_impact()`.
+- [ ] `on_hand_at_location(item_ids)` — **LOCAL** mirror of `_insufficient_stock()`'s shape
+      (`apps/scm/views/_helpers.py:157`): ONE grouped `Sum(StockMove.quantity)` over
+      `(tenant, location, item_id__in)`. **Do NOT import `apps.scm.views._helpers`.**
+- [ ] `post(user)`:
+      - [ ] `transaction.atomic()` + `select_for_update()` on the header; refuse unless status in
+            `POSTABLE_STATUSES`; refuse when the document has no lines.
+      - [ ] **Availability guard** — for `movement_type == "issue"` only: one grouped query for
+            all line items at this location; reject with a per-item `ValidationError` when any
+            line exceeds on-hand. *Driver: SAP/D365/Fishbowl all refuse to issue more than the
+            location holds.*
+      - [ ] Duplicate protection: if `self.adjustment_id` is already set, **reuse** it instead of
+            minting a second (the `generate_tasks()` "existing/created" branch).
+      - [ ] Mint `scm.StockAdjustment(tenant_id, location, reason="other",
+            adjustment_date=issue_date, status="draft", notes=<marker>)` + one
+            `StockAdjustmentLine(item, lot_serial, quantity_delta=−qty (issue) / +qty (return),
+            unit_cost=line.unit_cost)` per line.
+      - [ ] Stamp `adjustment`, `status="posted"`, `posted_at`, `issued_by`;
+            `write_audit_log(user, self, "post", {"adjustment": adj.number})`.
+      - [ ] The detail page states plainly: **the adjustment is DRAFT; stock changes only when
+            SCM posts it** — with a link to `scm:stockadjustment_detail`.
+- [ ] `submit(user)` (draft → submitted) and `cancel(user)`: **cancellation after posting is
+      REFUSED** — correct it with the mirror document (a `return` against the same location),
+      never by deleting. *Driver: the repo's compensating-move law, `StockMoves.py:5-7`.*
+- [ ] `clean()`: cross-tenant on all seven FKs; `purpose == "other"` requires `notes` (the
+      `StockAdjustment.clean()` precedent); a `movement_type == "return"` with `reservation` set
+      is rejected (a reservation is consumed by an issue, not by a return);
+      `reservation.item`/`location` must be consistent with the header location when set.
+- [ ] Badge maps `STATUS_CSS` (`draft`→muted, `submitted`→amber, `posted`→green,
+      `cancelled`→slate) and `MOVEMENT_CSS` (`issue`→info, `return`→green) — colour-named only.
+- [ ] **Form excludes:** `tenant`, `number`, `status`, `adjustment`, `issued_by`, `posted_at`,
+      `cancelled_at`, `created_at`, `updated_at`.
+
+**`MaterialIssueLine(models.Model)`** — child, `related_name="lines"`
+
+- [ ] FKs: `issue` → `MaterialIssue` CASCADE `related_name="lines"` · `item` → `scm.Item`
+      PROTECT · `lot_serial` → `scm.LotSerial` SET_NULL null/blank (*driver: serial/lot capture
+      at issue — optional field*) · `gl_account` → `accounting.GLAccount` SET_NULL null/blank
+      (per-line override of the header default).
+- [ ] `quantity` Decimal(16,4) `MinValueValidator(Decimal("0.0001"))` (the
+      `PutawayTask.quantity:49` shape).
+- [ ] `unit_cost` Decimal(14,4) default 0 **`editable=False`** — snapshot of
+      `Item.average_cost` (`Items.py:105`), stamped in `save()` when unset.
+      *Driver: value the issue at moving-average cost; `StockAdjustment.value_impact()` already
+      totals it.*
+- [ ] `notes` CharField(255) blank · `line_value` **property** (derived, never stored).
+- [ ] `Meta`: `ordering = ["item__sku", "id"]`.
+- [ ] `clean()`: cross-tenant on `item`/`lot_serial`/`gl_account` against `issue.tenant_id`.
+- [ ] **Line form fields:** `item`, `lot_serial`, `quantity`, `gl_account`, `notes` —
+      **`unit_cost` excluded** (it is a snapshot, not an input).
+
+### 6.18-E Forms — `apps/procurement/forms/InventoryWarehouseIntegration/`
+
+`from apps.procurement.forms._common import *` plus `TenantUniqueMixin` and `_reject_foreign`
+explicitly. `TenantUniqueMixin` comes **FIRST** in the MRO so `instance.tenant` is stamped before
+`full_clean()` — otherwise every CREATE is falsely rejected as cross-tenant
+(`forms/BudgetCostManagement/BudgetMappings.py:21-27`). Import each model from its **entity
+module** (`apps.procurement.models.InventoryWarehouseIntegration.<Entity>`), **never** from
+`apps.procurement.models`, until the Integrator wires the re-exports — a package-level re-export
+is a star-import cycle at URLconf import time.
+
+- [ ] `Policies.py` → `ReplenishmentPolicyForm`. Narrow every dropdown in `__init__(tenant=...)`
+      (`item` active only by sku, `location` by code, `preferred_vendor` = supplier/vendor
+      `PartyRole` only, `default_org_unit`/`default_budget`/`default_gl_account` tenant-scoped
+      active); `empty_label = "- any -"` on the nullable ones; **`tenant is None` ⇒ every
+      queryset `.none()`**; `clean()` calls `_reject_foreign` on all six FKs.
+- [ ] `Runs.py` → `ReplenishmentRunForm` (`location`, `run_date`, `trigger`, `abc_class_filter`,
+      `notes`) and `ReplenishmentSuggestionDecisionForm` (`decision`, `snooze_until`, `vendor`,
+      `decision_note`) — the decision form validates `snooze_until` presence/future-ness and
+      re-checks `vendor` tenancy.
+- [ ] `MaterialIssues.py` → `MaterialIssueForm` (`location`, `movement_type`, `purpose`,
+      `reference`, `issue_date`, `org_unit`, `gl_account`, `requested_by`, `reservation`,
+      `notes`) and `MaterialIssueLineForm` (`item`, `lot_serial`, `quantity`, `gl_account`,
+      `notes`). `reservation` queryset narrowed to `ACTIVE_STATUSES` rows of this tenant;
+      `requested_by` narrowed to tenant users. `_reject_foreign` on every FK in both.
+- [ ] A narrowed `<select>` is UX, not an authorization boundary — the `clean()` re-check is the
+      boundary. Every form says so in its docstring.
+
+### 6.18-F Views — `apps/procurement/views/InventoryWarehouseIntegration/`
+
+`from apps.procurement.views._common import *` (gives `login_required`, `require_POST`,
+`messages`, `render`, `redirect`, `get_object_or_404`, `timezone`, `crud_*`,
+`tenant_admin_required`, `write_audit_log`). **Every queryset `filter(tenant=request.tenant)` —
+never `.all()`.** Every view `@login_required`; every mutating verb `@require_POST`.
+`crud_*` audit automatically; the hand-rolled verb paths call `write_audit_log` themselves.
+Pinned `crud_*` context contract (`apps/core/crud.py:8-11`): list → `object_list` + `page_obj` +
+`q`; detail/edit object → `obj`; form → `form` + `is_edit`.
+
+#### `Policies.py` — 5 views, `TEMPLATE_LIST/DETAIL/FORM` module constants
+- [ ] `replenishmentpolicy_list` — `crud_list`, `search_fields=("item__sku","item__name",
+      "location__code","location__name","preferred_vendor__name","notes")`,
+      `filters=(("item","item_id",True),("location","location_id",True),
+      ("vendor","preferred_vendor_id",True),("source_method","source_method",False),
+      ("trigger_mode","trigger_mode",False),("is_active","is_active",False))`.
+      **Extra context keys: `stats` (dict: `total`, `active`, `inactive`, `auto` — ONE
+      conditional aggregate), `items`, `locations`, `vendors`, `source_choices`,
+      `trigger_choices`.**
+- [ ] `replenishmentpolicy_detail` — `crud_detail`, `select_related` all six FKs.
+      **Extra context: `rule` (the matching `scm.ReorderRule` or `None` — one query),
+      `effective` (dict: `reorder_point`, `safety_stock`, `target_level`, `lead_time_days`,
+      each with a `source` of `"policy override"` / `"reorder rule"`), `recent_suggestions`
+      (last 10 `ReplenishmentSuggestion` rows for this item/location), `rule_url`.**
+- [ ] `replenishmentpolicy_create` / `_edit` / `_delete` (`@require_POST`).
+
+#### `Runs.py` — 9 views
+- [ ] `replenishmentrun_list` — `crud_list`, `search_fields=("number","notes",
+      "location__code","location__name")`,
+      `filters=(("status","status",False),("trigger","trigger",False),
+      ("location","location_id",True),("abc","abc_class_filter",False))`.
+      **Extra context: `stats` (`total`, `draft`, `proposed`, `released`), `locations`,
+      `status_choices`, `trigger_choices`, `abc_choices`.**
+- [ ] `replenishmentrun_detail` — `crud_detail` + **`lines`** (the suggestions, paginated at 25
+      via `paginate`, `select_related("item","item__uom","location","vendor","policy",
+      "requisition")`), **`line_page_obj`**, **`decision_choices`**, **`vendors`**,
+      **`totals`** (dict: `line_count`, `accepted`, `snoozed`, `dismissed`, `pending`,
+      `accepted_value`), **`can_generate`**, **`can_release`**, **`can_cancel`**,
+      **`requisitions`** (distinct released PRs with reversed urls), **`truncated`**,
+      **`sku_match_note`**.
+- [ ] `replenishmentrun_create` / `_edit` / `_delete` (`@require_POST`, draft only).
+- [ ] `replenishmentrun_generate` (`@require_POST`) → `run.generate(request.user)`, catch
+      `ValidationError` → `messages.error`, redirect to detail.
+- [ ] `replenishmentrun_release` (`@require_POST` + **`@tenant_admin_required`** — it raises
+      requisitions that commit money) → `run.release(request.user)`, redirect to detail.
+- [ ] `replenishmentrun_cancel` (`@require_POST`).
+- [ ] `replenishmentsuggestion_decide` (`@require_POST`) — loads the line via
+      `get_object_or_404(ReplenishmentSuggestion, pk=line_id, run__pk=pk,
+      run__tenant=request.tenant)` (**tenant reached through the run — the IDOR boundary**),
+      binds `ReplenishmentSuggestionDecisionForm`, saves, `write_audit_log(..., "decide", ...)`.
+
+#### `MaterialIssues.py` — 10 views
+- [ ] `materialissue_list` — `crud_list`, `search_fields=("number","reference","notes",
+      "location__code","location__name","org_unit__name")`,
+      `filters=(("status","status",False),("movement_type","movement_type",False),
+      ("purpose","purpose",False),("location","location_id",True),
+      ("org_unit","org_unit_id",True))`.
+      **Extra context: `stats` (`total`, `draft`, `submitted`, `posted`, `issues`, `returns`),
+      `locations`, `org_units`, `status_choices`, `movement_choices`, `purpose_choices`.**
+- [ ] `materialissue_detail` — `crud_detail` + **`lines`** (`select_related("item","item__uom",
+      "lot_serial","gl_account")`), **`line_form`**, **`total_value`**, **`adjustment`**,
+      **`adjustment_url`**, **`availability`** (dict `{item_id: on_hand}` from the ONE grouped
+      query, so each line shows a shortfall flag *before* posting), **`can_submit`**,
+      **`can_post`**, **`can_cancel`**, **`can_edit`**, **`boundary_note`** (verbatim: *return to
+      **stock** is this document; return to **vendor** is 6.12 `ReturnToVendor` [RMA-]* — with a
+      link, so nobody files one as the other), **`ledger_note`** (*posting mints a DRAFT stock
+      adjustment; stock moves only when SCM posts it*).
+- [ ] `materialissue_create` / `_edit` (draft only) / `_delete` (`@require_POST`, draft only).
+- [ ] `materialissue_submit` / `_post` / `_cancel` — all `@require_POST`; `_post` additionally
+      `@tenant_admin_required` (it changes stock). Catch `ValidationError` → `messages.error`
+      with the per-item shortfall text.
+- [ ] `materialissueline_add` (`@require_POST`) / `materialissueline_delete` (`@require_POST`) —
+      header fetched with `tenant=request.tenant`, line via `pk=line_id, issue__pk=pk,
+      issue__tenant=request.tenant`; both refuse unless the header is draft.
+
+#### `StockPosition.py` — derived, **no model, no migration**
+Bullet 1. Item-first rows. What makes it different from `inventory:stocklevels`: **the PO
+expected date + vendor + PO number, the open-requisition column, and days of cover.**
+- [ ] Reuse the ONE availability formula (`StockLevels.py:124`) verbatim —
+      `available = on_hand − (SO allocations + reservations) − non-sellable`. **Do not invent a
+      second definition.**
+- [ ] Queries, each ONE grouped query, merged in Python (**never a per-row aggregate**):
+      `StockMove` `.values("item_id","location_id","item__sku",…).annotate(Sum("quantity"))` ·
+      `SalesOrderAllocation` (aliased pair) · `inventory.InventoryReservation` ·
+      `inventory.StockStatus` · the local two-query `_on_order_map` · a PO-supply query for
+      **earliest `expected_date` + vendor + number** per `sku_hint` · open-requisition qty per
+      `sku_hint` · `ReorderRule` (point + `avg_daily_demand`) · `ReplenishmentPolicy`
+      (preferred vendor).
+- [ ] Filters parsed **before** pagination (rows are dicts, so a GROUP BY cannot paginate through
+      the manager): `q`, `item`, `location`, `view` (`all`|`below_point`|`shortage`|`no_cover`),
+      `vendor`.
+- [ ] **Context keys: `page_obj`, `object_list`, `q`, `items`, `locations`, `vendors`,
+      `view_choices`, `selected_view`, `stats` (`rows`, `below_point`, `shortage`, `no_cover`),
+      `row_cap`, `truncated`, `sku_match_note`.**
+      **Row dict keys: `item`, `location`, `on_hand`, `allocated`, `held`, `available`,
+      `on_order`, `expected_date`, `expected_vendor`, `expected_po_number`, `expected_po_url`,
+      `open_requisition_qty`, `reorder_point`, `avg_daily_demand`, `days_of_cover`,
+      `below_point`, `policy_vendor`, `raise_requisition_url`.**
+- [ ] `sku_match_note` states the honest limitation verbatim: on-order and open-requisition
+      figures join through **exact-string `sku_hint` ↔ `Item.sku`** because the spine PO/PR lines
+      carry free text, not an item FK (`StockLevels.py:38-44`) — unmatched lines are **reported,
+      never guessed at**. The real fix is a spine migration, not a 6.18 one.
+- [ ] `ROW_CAP = 500` with a `truncated` flag; `request.tenant is None` renders an empty page,
+      never a 500; junk GET params narrow nothing and return 200; every row url is `reverse()`d
+      **in Python, never in the template** (the four `CommitmentRegister.py:16-19` rules).
+
+#### `ReceiptBinMap.py` — derived, **no model, no migration**
+Bullet 4. "Where did MY received goods actually land?" — the one thing a buyer needs that no
+existing NavERP page answers (the GRN detail shows the staging location, not the final bin).
+- [ ] **The receipt→bin link IS `StockMove.reference == grn.number`** — posted at
+      `apps/scm/views/_helpers.py:328-330` with `reason="Goods receipt"`, and indexed on
+      `(tenant, reference)` (`StockMoves.py:60`). It is a **query, not a table**. A bin **IS**
+      `scm.Location(location_type="bin")` (`Locations.py:17-23`) — **no Bin/Zone model.**
+- [ ] Queries: page of `GoodsReceiptNote` (filtered + paginated FIRST) → then ONE grouped
+      `StockMove` query `filter(tenant, reference__in=<the page's numbers>)
+      .values("reference","location_id","item_id").annotate(Sum("quantity"))` → ONE
+      `PutawayTask` query `filter(tenant, goods_receipt_id__in=<page pks>)` → ONE
+      `inventory.BinCapacity` query for the touched locations → ONE `Location` fetch for
+      `path()`. **Five queries total regardless of page size.**
+- [ ] **Context keys: `page_obj`, `object_list` (row dicts), `q`, `locations`, `status_choices`,
+      `selected_location`, `selected_status`, `date_from`, `date_to`, `stats` (`receipts`,
+      `fully_putaway`, `partially_putaway`, `in_staging`), `row_cap`, `truncated`,
+      `reference_note`, `links` (out to `scm:putawaytask_list`,
+      `inventory:putawayrule_list`, `inventory:bincapacity_list`,
+      `inventory:crossdockorder_list`).**
+      **Row dict keys: `grn`, `grn_url`, `staging_location`, `received_qty`, `bins` (list of
+      `{location, path, quantity, capacity, fullness_pct, capacity_css}`), `putaway_tasks`
+      (list of `{task, url, status, status_css, to_location}`), `unputaway_qty`,
+      `is_unputaway`, `putaway_css`.**
+- [ ] Directed-putaway **suggestions are NOT rebuilt** — `inventory.PutawayRule` +
+      `resolve_putaway_suggestion()` (`PutawayRules.py:48,150`) and `scm.PutawayTask` already
+      exist. Link out only.
+
+#### `CountAccuracy.py` — derived, **no model, no migration**
+Bullet 5. The read-out over counting that is fully built in SCM 4.4 + Module 5.11.
+- [ ] Queries: ONE aggregate over `CycleCountTask` for the window (counts by status) · ONE
+      grouped query over `CycleCountTaskLine` for the item roll-up
+      (`filter(cycle_count__tenant, cycle_count__scheduled_date range)
+      .values("item_id",…).annotate(lines=Count, expected=Sum, counted=Sum)`) · ONE grouped
+      query for the location roll-up · ONE `inventory.CountProgram` fetch for the schedule
+      column. **Variance is computed from `Sum(counted) − Sum(expected)` in the annotation —
+      `CycleCountTaskLine.variance` is a Python property and cannot be aggregated.** State that
+      in a comment.
+- [ ] **Context keys: `stats` (`tasks_total`, `tasks_scheduled`, `tasks_counted`,
+      `tasks_reconciled`, `tasks_cancelled`, `lines_counted`, `lines_with_variance`,
+      `variance_rate_pct`, `net_variance_qty`, `abs_variance_qty`, `variance_value`,
+      `accuracy_pct`), `item_rows`, `location_rows`, `program_rows`, `locations`,
+      `window_choices`, `selected_window`, `selected_location`, `date_from`, `date_to`,
+      `row_cap`, `truncated`, `attribution_note`, `links`.**
+      **`item_rows` keys: `item`, `count_lines`, `variance_lines`, `net_variance`,
+      `abs_variance`, `variance_value`, `accuracy_pct`, `repeat_offender`.**
+      **`location_rows` keys: `location`, `path`, `count_lines`, `variance_lines`,
+      `net_variance`, `accuracy_pct`, `accuracy_css`.**
+      **`program_rows` keys: `program`, `cadence_label`, `last_run_date`, `is_due`, `location`,
+      `abc_class`, `url`.**
+- [ ] `links` reverses out to `scm:cyclecounttask_list`, `inventory:countprogram_list`,
+      `inventory:physicalinventory_list`, `scm:stockadjustment_list`.
+- [ ] `attribution_note` states plainly: **root-cause attribution (receiving error / putaway
+      error / picking error / supplier shortage / damage / data entry / shrinkage) is NOT
+      recorded yet**, and feeding count variance into a supplier scorecard belongs to **6.16**
+      (`scm.SupplierScorecard` exists). The page must not imply a capability it lacks.
+
+### 6.18-G URLs — `apps/procurement/urls/InventoryWarehouseIntegration/`
+
+One module per views module; `app_name` is set once in `apps/procurement/urls/__init__.py`.
+**Literal routes BEFORE `<int:pk>` ones — Django is first-match-wins.**
+
+- [ ] `StockPosition.py` — `path("stock-position/", views.stock_position, name="stock_position")`
+- [ ] `Policies.py` — `replenishment-policies/` + `add/` (literal first) + `<int:pk>/` +
+      `<int:pk>/edit/` + `<int:pk>/delete/` → `replenishmentpolicy_{list,create,detail,edit,delete}`
+- [ ] `Runs.py` — `replenishment-runs/` + `add/` + `<int:pk>/` + `<int:pk>/edit/` +
+      `<int:pk>/delete/` + `<int:pk>/generate/` + `<int:pk>/release/` + `<int:pk>/cancel/` +
+      `<int:pk>/lines/<int:line_id>/decide/` → `replenishmentrun_{list,create,detail,edit,delete,
+      generate,release,cancel}` + `replenishmentsuggestion_decide`
+- [ ] `MaterialIssues.py` — `material-issues/` + `add/` + `<int:pk>/` + `<int:pk>/edit/` +
+      `<int:pk>/delete/` + `<int:pk>/submit/` + `<int:pk>/post/` + `<int:pk>/cancel/` +
+      `<int:pk>/lines/add/` + `<int:pk>/lines/<int:line_id>/delete/` →
+      `materialissue_{list,create,detail,edit,delete,submit,post,cancel}` +
+      `materialissueline_{add,delete}`
+- [ ] `ReceiptBinMap.py` — `path("receipt-bin-map/", views.receipt_bin_map, name="receipt_bin_map")`
+- [ ] `CountAccuracy.py` — `path("count-accuracy/", views.count_accuracy, name="count_accuracy")`
+- [ ] `__init__.py` — concatenates the six modules' `urlpatterns`; docstring lists the six
+      claimed first segments and uses the **accurate** greedy-converter sentence (6.18-B).
+
+### 6.18-H Templates — `templates/procurement/inventorywarehouse/`
+
+`{% extends "base.html" %}` and `{% include "partials/..." %}` are unaffected by the folders.
+**Colour-named badge classes only** (`badge-green/red/amber/info/muted/slate`) — L33.
+
+- [ ] `replenishmentpolicy/list.html` — filter bar (q + item + location + vendor + source_method
+      + trigger_mode + is_active, each reflecting `request.GET`; FK selects compare with
+      `|stringformat:"d"`, **never `|slugify`**), stats strip, Actions column
+      (view / edit / delete POST + `onclick="return confirm(...)"` + `{% csrf_token %}`),
+      pagination guarded on `page_obj.has_previous` / `has_next` (L9), empty state.
+- [ ] `replenishmentpolicy/detail.html` — effective-values table (override vs. reorder-rule
+      source per row), link to `scm:reorderrule_list`, recent suggestions, Actions sidebar
+      (Edit / Delete POST / Back to list).
+- [ ] `replenishmentpolicy/form.html` — `{% if is_edit %}` title split; `notes` textarea;
+      inline field errors.
+- [ ] `replenishmentrun/list.html` — filters (status, trigger, location, abc), stats, Actions,
+      pagination, empty state.
+- [ ] `replenishmentrun/detail.html` — header card, totals strip, the suggestion table with a
+      per-row decision form (POST to `replenishmentsuggestion_decide`, csrf, vendor override
+      select, snooze date), Generate / Release / Cancel POST buttons gated on
+      `can_generate`/`can_release`/`can_cancel`, released-requisition links, `truncated` banner,
+      `sku_match_note`, inner pagination on `line_page_obj`.
+- [ ] `replenishmentrun/form.html`.
+- [ ] `materialissue/list.html` — filters (status, movement_type, purpose, location, org_unit),
+      stats, Actions (edit/delete conditional on `obj.is_editable`), pagination, empty state.
+- [ ] `materialissue/detail.html` — header, `boundary_note` callout (**return to stock vs.
+      return to vendor / 6.12**), `ledger_note` callout (**the minted adjustment is DRAFT**),
+      line table with per-line shortfall flag from `availability`, add-line form, delete-line
+      POST, Submit / Post / Cancel POST buttons gated on the `can_*` keys, adjustment link,
+      Actions sidebar.
+- [ ] `materialissue/form.html`.
+- [ ] `stock_position.html` (standalone, sub-module root) — filter bar, stats, the
+      on-hand/available/on-order/expected-date/vendor/open-PR/days-of-cover table, "Raise
+      requisition" action per row, `sku_match_note`, `truncated` banner, pagination, empty state.
+- [ ] `receipt_bin_map.html` (standalone) — per-GRN card/row with staging location, the bins its
+      stock reached (`Location.path()`), qty per bin, fullness badge, putaway tasks,
+      **unputaway** badge, `reference_note`, link-outs, filters, pagination, empty state.
+- [ ] `count_accuracy.html` (standalone) — KPI strip, top-variance SKU table, location accuracy
+      table, count-program schedule table, `attribution_note`, link-outs to
+      `scm:cyclecounttask_list` / `inventory:countprogram_list`, window + location filters,
+      empty state.
+- [ ] **No flat `<entity>_<page>.html` anywhere.** No `{#` / `{% comment` leaks.
+
+### 6.18-I Integrate (single writer, only DB writer — surgical `Edit` on every shared file)
+
+- [ ] **Verify every expected file actually landed** before wiring anything.
+- [ ] `apps/procurement/models/__init__.py` — append the re-export block (after 6.15's
+      `CostForecast`/`compute_forecast_amounts` at `:185-186`) and extend `__all__`:
+      `ReplenishmentPolicy`, `ReplenishmentRun`, `ReplenishmentSuggestion`, `MaterialIssue`,
+      `MaterialIssueLine`. **Missing re-export = `ImportError` at runtime.**
+- [ ] `apps/procurement/forms/__init__.py` — `ReplenishmentPolicyForm`, `ReplenishmentRunForm`,
+      `ReplenishmentSuggestionDecisionForm`, `MaterialIssueForm`, `MaterialIssueLineForm`.
+- [ ] `apps/procurement/views/__init__.py` — all 27 view names
+      (5 policy + 9 run + 10 issue + 3 derived).
+- [ ] `apps/procurement/urls/__init__.py` — `from .InventoryWarehouseIntegration import
+      urlpatterns as _iwi_inventorywarehouse`, spread **LAST** in `urlpatterns` (the
+      6.13/6.14/6.15 belt-and-braces precedent at `:76-98`), and extend the docstring's segment
+      inventory with the six new segments — **using the corrected greedy-converter sentence.**
+- [ ] `apps/procurement/admin.py` — 5 registrations with `list_display`/`list_filter`/
+      `search_fields`/`raw_id_fields`, `readonly_fields` covering `number` + every
+      `editable=False` snapshot (the `CostForecastAdmin:767-778` precedent). Extend the existing
+      import tuple surgically.
+- [ ] `apps/procurement/management/commands/seed_procurement.py` — add
+      `self._seed_inventory_warehouse(tenant)` **after** 6.17's dispatch line in the tenant loop
+      (currently `self._seed_budget_cost(tenant)` at `:262` is last), and add the model deletes
+      to the `--flush` block for correctness. **Idempotent, `get_or_create`-based, and it must
+      NEVER be run with `--flush` in this session.**
+      Seeded rows per tenant (skip with a `WARNING` when `scm.Item`/`scm.Location`/
+      `scm.ReorderRule` are absent — run `seed_scm` first; the SMOKETEST tenant must skip
+      gracefully, the 6.15 precedent):
+      - [ ] 3 `ReplenishmentPolicy` rows over existing items × locations, one with a
+            `preferred_vendor` (existing supplier `Party`), one location-agnostic catch-all, one
+            with `source_method="transfer"` so the link-out branch is visible.
+      - [ ] 1 `ReplenishmentRun` created then `generate()`d (existence guard on
+            `(tenant, run_date)` before creating; skip when there are no active reorder rules).
+      - [ ] 3 `MaterialIssue` documents — one `draft` issue (2 lines), one `submitted` issue
+            (2 lines), one `draft` return (1 line). **The seeder NEVER calls `post()`** — that
+            would write a `scm.StockAdjustment` from a seed run and couple us to `seed_scm
+            --flush`. Posting stays a user/smoke action; say so in the block's comment.
+      - [ ] Number-collision guard: `filter(tenant=tenant, number=…).first()` before create for
+            every `TenantNumbered` row.
+- [ ] `apps/core/navigation.py` — **exactly one** new key, `"6.18"`, placed after `"6.15"`
+      (`:1626-1632`), with the **exact NavERP.md `### 6.18` bullet text** (`NavERP.md:1116-1120`):
+      ```
+      "6.18": {
+          "Stock Level Visibility":       "procurement:stock_position",
+          "Reorder Point Automation":     "procurement:replenishmentrun_list",
+          "Goods Issue/Return to Stock":  "procurement:materialissue_list",
+          "Warehouse Location Mapping":   "procurement:receipt_bin_map",
+          "Cycle Count Integration":      "procurement:count_accuracy",
+      },
+      ```
+      Plus a comment recording that **`ReplenishmentPolicy` deliberately gets NO sidebar key** —
+      configuration behind an analysis page, reached from the run list (the
+      `ReceiptTolerancePolicy` / `SpendClassificationRule` / `ReorderRule` precedent documented
+      at `navigation.py:1633-1648`). **Do not touch any other key.**
+- [ ] `config/settings.py` / `config/urls.py` — **NO CHANGE** (`apps/procurement` is already
+      installed and included).
+- [ ] **Gate:** confirm `apps/procurement/migrations/0027_*.py` exists → then
+      `python manage.py makemigrations procurement` → **must produce `0028_*`**. If it produces a
+      different number, STOP and re-agree with the peer sessions.
+- [ ] Commit **one file per commit**, explicit paths, PowerShell `;`.
+
+### 6.18-J Verify
+
+- [ ] `python manage.py makemigrations procurement` → `0028_*` only, no unexpected model changes
+      elsewhere.
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_procurement` **twice** (NO `--flush`) — second run must create
+      nothing and print the skip lines.
+- [ ] `python manage.py check` — clean.
+- [ ] `python manage.py makemigrations --check --dry-run` — "No changes detected".
+- [ ] Throwaway `temp/` smoke script, logged in as **`admin_acme` / `password`**, asserting
+      **content, not just status** (a mismatched context var returns 200 and renders blank, L8):
+      - [ ] All 6 GET pages + all 3 list + 3 detail + 3 form pages → 200.
+      - [ ] Every POST verb (`generate`, `release`, `cancel`, `decide`, `submit`, `post`,
+            `lines/add`, `lines/<id>/delete`, all 3 `delete`) → 302, and GET on each → 405/302
+            (POST-only).
+      - [ ] Content assertions: page titles, a seeded `RPL-`/`MIS-` number, a seeded policy's
+            item SKU, the `sku_match_note` / `boundary_note` / `attribution_note` / `ledger_note`
+            strings, at least one bin `path()` on the receipt map, the variance-rate figure.
+      - [ ] **No `{#` or `{% comment` leaks** in any rendered body.
+      - [ ] Junk params on every list + derived page (`?status=nope&item=abc&location=²&
+            vendor=999999999999999999999&page=999`) → 200, not empty-by-accident, no 500.
+      - [ ] `?page=2` on every paginated page → 200.
+      - [ ] **Cross-tenant IDOR → 404** on every `<int:pk>` route including the two child routes
+            (`replenishmentsuggestion_decide`, `materialissueline_delete`) — a line reached via
+            another tenant's run/issue must 404.
+      - [ ] Post one throwaway `MaterialIssue`: assert a **draft** `scm.StockAdjustment` is minted
+            with the marker note, that `quantity_delta` is negative for an issue and positive for
+            a return, and that **zero `scm.StockMove` rows were created**.
+      - [ ] Over-issue guard: posting a quantity above the location's on-hand is refused with the
+            per-item message.
+      - [ ] Release one throwaway run: assert `scm.PurchaseRequisition` rows are created in
+            **`draft`**, one per vendor, with `sku_hint`/`uom_hint`/`gl_account` populated and
+            `estimated_total` recalculated; assert a second Release is refused.
+      - [ ] Tenant-less superuser (`admin`) sees empty pages, **never a 500**.
+      - [ ] Query-count probe on `stock_position`, `receipt_bin_map`, `count_accuracy` and
+            `replenishmentrun_detail` — assert the count does **not** scale with row count.
+      - [ ] Delete the `temp/` script; never commit it.
+- [ ] Sidebar: all **five** `6.18` bullets render **Live** and resolve.
+
+### 6.18-K Close-out
+
+- [ ] Phase 4 — six reviewers **one after another**, each in its own `Agent` call:
+      `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` →
+      `qa-smoke-tester` → `security-reviewer`. Append each one's findings to
+      `.claude/tasks/review-procurement-6.18.md` as it reports; dedupe, sort
+      Critical → Important → Minor, assign `C#`/`I#`/`M#`; commit the file.
+- [ ] Phase 5 — one `code-fixer` agent burns the findings down in ID order, one commit per file;
+      confirm nothing is left `[ ] open` and `manage.py check` is clean.
+- [ ] Phase 6 — tests, **subslug `invwarehouse`**: contract + shared `conftest.py` first, then
+      `test_invwarehouse_models.py` → `test_invwarehouse_forms.py` →
+      `test_invwarehouse_views.py` → `test_invwarehouse_security.py`, one agent each, one commit
+      each. Every test function `test_invwarehouse_*`, every module helper `_invwarehouse_*`.
+      Finish with a **full unfiltered** `apps/procurement` suite run, green (never `-k` filtered,
+      L47). **Do not touch the other session's `test_budgetcost_*.py`.**
+- [ ] Phase 7 — update `.claude/skills/procurement/SKILL.md` with 6.18's models, the six routes,
+      the template folder, the seeder block and the two module-specific gotchas (**never write
+      `StockMove` from procurement**; **a bin is `scm.Location(location_type='bin')`**). Commit
+      on its own.
+- [ ] Mark 6.18 complete in `README.md`. Commit on its own.
+- [ ] **Never `git push`.**
+
+### 6.18-L Later passes / deferred (nothing here is lost — carried from the research)
+
+**Dropped from this pass by an explicit scope decision:**
+- **`CountVarianceReview` `[CVR-]`** (the research's optional entity 4 — root-cause attribution
+  over `scm.CycleCountTaskLine` with `receiving_error`/`putaway_error`/`picking_error`/
+  `supplier_shortage`/`damage`/`data_entry`/`shrinkage`/`unknown`, `supplier_attributable`, and
+  an optional `GoodsReceiptNote` + vendor link). **Why:** bullet 5 is already served by the
+  derived Count Accuracy page plus link-outs to the fully built `scm.CycleCountTask` and
+  `inventory.CountProgram`; the attribution table's only consumer is the supplier scorecard,
+  which is **6.16**'s (`scm.SupplierScorecard` exists). Building the producer before the
+  consumer would ship a table nobody reads. Revisit as a 6.16 hand-off or a later 6.18 pass —
+  the Count Accuracy page's `attribution_note` already names the gap honestly.
+
+**Deferred (from the research's own deferred list):**
+- **Journal posting for issues/returns** (issue → expense, return → credit). Accounting owns the
+  ledger (L29) and `scm.StockAdjustment` posts no `JournalEntry` today. 6.18 shows the GL account
+  and the value impact only; the real hand-off is co-ordinated with `inventory.GLPostRule`
+  (`AccountingFinancialIntegration/GLPostRules.py:23`). **Opening a second posting path here
+  would be the worst possible outcome of this sub-module.**
+- **Scheduled replenishment runs (cron/Celery).** The `trigger` column ships; the scheduler and
+  the management command do not — same posture as `CountProgram.is_due()`.
+- **Low-stock email/notification digests** (Precoro's daily reminder). Reuse
+  `procurement.ProcurementAlert` (6.1) in-app if wanted; email delivery is integration-later.
+  **Never add a second alert table.**
+- **Inline stock check on the requisition/PO entry form** (Coupa/Precoro/Procurify) — high value,
+  but it edits 6.2/6.10 templates and 6.18 must not touch a sibling sub-module's forms this pass.
+- **License plates / handling units** at receiving (D365, SAP HU) — no concept in the spine, and
+  a Module 5 WMS concern rather than a buyer's.
+- **Item→vendor catalogue price on the suggestion line** — should read 6.9 `CatalogItem` /
+  `CatalogPriceTier` rather than `Item.standard_cost`; deferred to keep this pass's query count
+  flat.
+- **`sku_hint` free-text matching.** Every item-level join from a PO/PR line goes through
+  exact-string `sku_hint ↔ Item.sku`. 6.18 mirrors that helper locally and **reports unmatched
+  lines honestly**. The real fix is an `item` FK on the spine line models — a **spine** migration,
+  not a 6.18 one.
+- **Consumption-driven (pull) replenishment** from the new `MaterialIssue` history — becomes
+  possible once issues have run for a period.
+- **Requisition-from-stock / internal fulfilment** (Coupa, Precoro) — the requester-facing mirror
+  of the issue document; needs a requester-facing flow.
+- **Consigned / vendor-managed inventory** — parked here by 6.11 and still parked; needs an
+  ownership dimension neither `scm.Item.owner_client` nor `StockMove` provides.
+- **Count-triggered thresholds** (count when stock hits N or zero, D365) — extends
+  `inventory.CountProgram`, so it belongs to **5.11**.
+- **In-transit quantity column** on the stock page (`Location(location_type='transit')` +
+  6.11 ASN lines) — thin, additive, easy later pass.
+
+**Parked for a sibling sub-module (do NOT pull into 6.18):**
+- Count variance → supplier scorecard / KPI / benchmarking → **6.16** (`scm.SupplierScorecard`)
+- Rejection/discrepancy rates, receipt tolerances, inspection, **return to vendor** → **6.12**
+  (`ReceiptDiscrepancy`, `ReceiptTolerancePolicy`, `ReturnToVendor`). *Return to **stock** (here)
+  and return to **vendor** (6.12) are different documents — the MaterialIssue detail page says so.*
+- Budget availability on the generated requisition, commitment accounting → **6.15**; 6.18 only
+  sets the `budget`/`org_unit` defaults so 6.15's check can run.
+- Requisition approval routing on the generated PR → **6.3**; PO conversion → **6.10**.
+- In-transit/ASN arrival detail → **6.11**. Contract/catalogue price on the line → **6.8 / 6.9**.
+- Bin capacity envelopes, cross-dock, putaway **rules**, count **programs**, physical inventory,
+  stock statuses, reservations, barcode/RFID → **Module 5** (all built).
+- Safety-stock calculation, ABC/XYZ classing, seasonality, demand forecasting → **SCM 4.7**.
+- Putaway/pick/count **execution**, yard, slotting → **SCM 4.4**. Item/UOM/lot masters,
+  adjustments, transfers, valuation → **SCM 4.3**. Landed cost → **SCM 4.18**.
+
+### 6.18-M Review notes
+(filled in at the end of the pass)
