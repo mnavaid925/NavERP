@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% block title %}Screening {{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — ComplianceScreening detail
+    (apps/procurement/views/RiskComplianceManagement/Screenings.py :: screening_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, hits, open_hits, allowed_actions, blocking_suspensions, hit_form,
+      disposition_choices, is_admin, retention_note.
+
+    `allowed_actions` is the SINGLE source of truth for which decisions this page may offer —
+    the view builds it from exactly the guards its decorators and the model enforce, so a
+    hidden button and a refused POST always agree. Each entry carries a `key`, which is what
+    lets a verb render its OWN fields (clear takes an optional note; escalate and block require
+    one; block also offers the suspension already in force) without this template re-deriving
+    the permission logic.
+
+    `disposition_choices` here is the TERMINAL set only — the inline picker never offers "open",
+    because un-adjudicating a hit is not something this module does. (The hit QUEUE's filter
+    uses the full vocabulary; that is a different question on a different page.)
+
+    Nullable-FK discipline (L10): evidence, suspension, screened_by and decided_by are all
+    nullable, so every read of them sits inside an {% if %} branch — a `default:` filter
+    argument on a None FK raises and 500s. `party` is PROTECT and never null.
+
+    No |safe anywhere: matched_name, remarks, notes and every note are staff-authored text.
+    Only the SYSTEM-ASSIGNED number reaches a confirm() string (L42).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:screening_list' %}">Screenings</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        <span class="fw-600">{{ obj.party.name }}</span> checked against {{ obj.get_list_source_display }} at {{ obj.get_checkpoint_display|lower }}.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if not obj.is_terminal %}
+        <a href="{% url 'procurement:screeninghit_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add hit</a>
+        <a href="{% url 'procurement:screening_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The lookup</h2>
+      <span>
+        <span class="badge {{ obj.result_css }}">{{ obj.get_result_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      </span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd class="fw-600"><a href="{% url 'core:party_detail' obj.party.pk %}">{{ obj.party.name }}</a></dd></div>
+        <div class="detail-item"><dt>List screened</dt><dd>{{ obj.get_list_source_display }}</dd></div>
+        <div class="detail-item"><dt>Checkpoint</dt><dd>{{ obj.get_checkpoint_display }}</dd></div>
+        <div class="detail-item"><dt>Method</dt><dd>{{ obj.get_method_display }}</dd></div>
+        <div class="detail-item"><dt>Screened on</dt><dd>{{ obj.screened_on|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>List data date</dt>
+          <dd>{% if obj.list_as_of %}{{ obj.list_as_of|date:"M d, Y" }}{% else %}<span class="text-muted">Not recorded — a clear result is only as fresh as the list behind it</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Provider reference</dt>
+          <dd>{% if obj.reference %}{{ obj.reference }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Match threshold</dt>
+          <dd>{{ obj.match_threshold }}%
+            {% if obj.threshold_rationale %}<div class="text-muted">{{ obj.threshold_rationale }}</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Next re-screen</dt>
+          <dd>{% if obj.next_rescreen_on %}{{ obj.next_rescreen_on|date:"M d, Y" }}{% else %}<span class="text-muted">Set when the screening is cleared</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Evidence</dt>
+          <dd>{% if obj.evidence %}{{ obj.evidence.name }}{% else %}<span class="text-muted">None attached</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Screened by</dt>
+          <dd>{% if obj.screened_by %}{{ obj.screened_by.get_full_name|default:obj.screened_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Retention until</dt>
+          <dd>{% if obj.retention_until %}{{ obj.retention_until|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The decision</h2><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Decided by</dt>
+            <dd>{% if obj.decided_by %}{{ obj.decided_by.get_full_name|default:obj.decided_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Decided at</dt>
+            <dd>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Linked suspension</dt>
+            <dd>{% if obj.suspension %}<a href="{% url 'procurement:vsu_detail' obj.suspension.pk %}">{{ obj.suspension.number }}</a>{% else %}<span class="text-muted">None linked</span>{% endif %}</dd></div>
+        </dl>
+        {% if obj.decision_note %}
+          <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Reasoning</dt><dd>{{ obj.decision_note|linebreaksbr }}</dd></div>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">A decided screening is evidence: it cannot be edited, deleted, un-cleared or re-opened. A correction is a new screening.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if blocking_suspensions %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Block already in force</h2><span class="badge badge-red">Blocked</span></div>
+      <div class="card-body">
+        <p class="text-muted">This supplier is already blocked in the vendor suspension register — the only place a block is actually enforced. 6.17 records decisions; it never raises or lifts a suspension itself.</p>
+        <ul>
+          {% for suspension in blocking_suspensions %}
+            <li>
+              <a href="{% url 'procurement:vsu_detail' suspension.pk %}" class="fw-600">{{ suspension.number }}</a>
+              — {{ suspension.get_kind_display }} · {{ suspension.get_reason_category_display }}
+              {% if suspension.ends_on %}<span class="text-muted">until {{ suspension.ends_on|date:"M d, Y" }}</span>{% else %}<span class="text-muted">until lifted</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if allowed_actions %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Decide</h2><span class="text-muted">recorded here, enforced in the suspension register</span></div>
+      <div class="card-body">
+        {% if open_hits %}
+          <p class="text-warn">{{ open_hits|length }} hit(s) are still unadjudicated. This supplier cannot be cleared until every one of them has a recorded disposition — the check runs against the database, not against the counter on this page.</p>
+        {% endif %}
+        {% for action in allowed_actions %}
+          <form method="post" action="{{ action.url }}" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            {% if action.key == "clear" %}
+              <div class="form-group">
+                <label class="form-label" for="clear-note">Note <span class="text-muted">(optional)</span></label>
+                <textarea class="form-textarea" rows="2" id="clear-note" name="note" placeholder="Anything worth recording about the clearance…"></textarea>
+              </div>
+            {% elif action.key == "escalate" %}
+              <div class="form-group">
+                <label class="form-label" for="escalate-note">Why is this being escalated? <span class="req">*</span></label>
+                <textarea class="form-textarea" rows="2" id="escalate-note" name="note" required placeholder="An escalation with no stated reason is a ticket nobody can action."></textarea>
+              </div>
+            {% elif action.key == "block" %}
+              <div class="form-group">
+                <label class="form-label" for="block-note">The case for blocking this supplier <span class="req">*</span></label>
+                <textarea class="form-textarea" rows="2" id="block-note" name="note" required placeholder="What was matched, and why it is a true match…"></textarea>
+              </div>
+              {% if blocking_suspensions %}
+                <div class="form-group">
+                  <label class="form-label" for="block-suspension">Link to the suspension in force</label>
+                  <select class="form-select" id="block-suspension" name="suspension">
+                    <option value="">Do not link a suspension</option>
+                    {% for suspension in blocking_suspensions %}
+                      <option value="{{ suspension.pk|stringformat:"d" }}">{{ suspension.number }} — {{ suspension.get_kind_display }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              {% else %}
+                <p class="text-muted">No suspension is in force for this supplier. Recording a block here does not stop anything on its own — <a href="{% url 'procurement:vsu_create' %}">raise a vendor suspension</a> to put it into effect.</p>
+              {% endif %}
+            {% endif %}
+            <button class="btn {{ action.css }}" type="submit"><i data-lucide="{{ action.icon }}"></i> {{ action.label }}</button>
+          </form>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Potential matches</h2>
+      <span class="text-muted">{{ hits|length }} returned · {{ open_hits|length }} still open</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Matched name</th>
+            <th>List &amp; programme</th>
+            <th class="text-right">Score</th>
+            <th>Matched on</th>
+            <th>Disposition</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for hit in hits %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:screeninghit_detail' hit.pk %}">{{ hit.matched_name }}</a>
+                {% if hit.entry_reference %}<div class="text-muted">Entry {{ hit.entry_reference }}</div>{% endif %}
+              </td>
+              <td>
+                {{ hit.get_matched_list_display }}
+                {% if hit.program %}<div class="text-muted">{{ hit.program }}</div>{% endif %}
+                {% if hit.country %}<div class="text-muted">{{ hit.country }}</div>{% endif %}
+              </td>
+              <td class="text-right">
+                {{ hit.match_score }}%
+                {% if hit.is_above_threshold %}<div class="text-danger">at or over threshold</div>{% endif %}
+              </td>
+              <td>{{ hit.get_match_type_display }}</td>
+              <td>
+                <span class="badge {{ hit.disposition_css }}">{{ hit.get_disposition_display }}</span>
+                {% if hit.disposed_by %}<div class="text-muted">{{ hit.disposed_by.get_full_name|default:hit.disposed_by.username }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:screeninghit_detail' hit.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if hit.is_open %}
+                    <a href="{% url 'procurement:screeninghit_edit' hit.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:screeninghit_delete' hit.pk %}" onsubmit="return confirm('Delete this hit from screening {{ obj.number }}? Deleting an unadjudicated match removes it from the record entirely.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% if hit.is_open and is_admin %}
+              {% comment %}
+                The inline adjudication picker, offered only for an OPEN hit and only to an admin
+                — exactly what screeninghit_dispose enforces. The note is REQUIRED for every
+                disposition, false positives included.
+              {% endcomment %}
+              <tr>
+                <td colspan="6">
+                  <form method="post" action="{% url 'procurement:screeninghit_dispose' hit.pk %}" class="filter-bar">
+                    {% csrf_token %}
+                    <div class="form-group">
+                      <select class="form-select" name="disposition" aria-label="Disposition for {{ hit.matched_name }}">
+                        {% for value, label in disposition_choices %}
+                          <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="form-group" style="flex:1; min-width:220px;">
+                      <input type="text" class="form-input" name="disposition_note" required placeholder="Why is this the right call? (required)" aria-label="Reasoning">
+                    </div>
+                    <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Adjudicate</button>
+                  </form>
+                </td>
+              </tr>
+            {% endif %}
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="search-check"></i>
+                <h3>No potential matches recorded</h3>
+                <p>The lookup returned nothing worth adjudicating, or the matches have not been captured yet. A screening with no open hits can be cleared.</p>
+                {% if not obj.is_terminal %}
+                  <a href="{% url 'procurement:screeninghit_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add hit</a>
+                {% endif %}
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if not obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Record another potential match</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:screeninghit_create' obj.pk %}" novalidate>
+          {% csrf_token %}
+          {% for e in hit_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in hit_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add hit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Retention</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ retention_note }}</p>
+      {% if is_admin and not obj.is_terminal %}
+        <form method="post" action="{% url 'procurement:screening_delete' obj.pk %}" onsubmit="return confirm('Delete screening {{ obj.number }}? The proof that this check was ever performed goes with it.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete screening</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
