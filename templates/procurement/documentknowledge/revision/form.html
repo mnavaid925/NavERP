@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Upload a revision — {{ document.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementDocumentRevision UPLOAD page
+    (apps/procurement/views/DocumentKnowledgeManagement/Revisions.py,
+    view pdocument_revision_upload, route documents/<int:pk>/revisions/add/).
+
+    Context contract, and NOTHING else exists here:
+      form, is_edit (always False), document, upload_note.
+
+    This is a create-only page. `is_edit` is in the contract and is always False, because a
+    revision is never edited: there is no edit url, no edit view and no edit template. Every
+    column except the change note is editable=False, and the only write after creation is the
+    approve verb's stamp. A wrong revision is superseded by the next upload rather than
+    amended in place, which is what makes an approved file still mean what it meant at
+    approval time. The heading and the Cancel link are therefore unconditional — do not add
+    an {% templatetag openblock %} if is_edit {% templatetag closeblock %} branch here.
+
+    The parent document is NOT a field. It comes from the url pk, and the view fetched and
+    tenant-scoped it — and applied the archived / checked-out guards — before this page
+    rendered. A <select> of documents here would let a crafted POST attach a revision to a
+    record the uploader was never shown.
+
+    enctype="multipart/form-data" is load-bearing: without it the browser posts the file's
+    NAME and no bytes, the form fails validation on a required file, and the page looks
+    broken for a reason nothing on screen explains.
+
+    `upload_note` is built in the view FROM apps.core.forms._common.ALLOWED_DOC_EXTENSIONS and
+    MAX_UPLOAD_BYTES rather than retyped here, so this page cannot promise a limit the form
+    does not enforce.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Upload a revision</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:pdocument_list' %}">Documents</a><span class="sep">›</span>
+        <a href="{% url 'procurement:pdocument_detail' document.pk %}">{{ document.number }}</a><span class="sep">›</span>
+        <span>New revision</span>
+      </div>
+      <p class="text-muted">{{ document.title }} — currently on {% if document.current_revision_no %}r{{ document.current_revision_no }}{% else %}no approved revision{% endif %}. Uploading does not change that: the new revision lands awaiting approval.</p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">New revision of {{ document.number }}</h2><span class="text-muted">the file and one line about what changed</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "file" %}
+                <div class="form-help">{{ upload_note }}</div>
+              {% elif field.name == "change_note" %}
+                <div class="form-help">One line for the next person: what is different in this version and why it was re-issued. It is searched alongside the document's title and number, and it is the only thing on a revision anybody types.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="upload"></i> Upload revision</button>
+      <a href="{% url 'procurement:pdocument_detail' document.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens when you upload</h2><span class="text-muted">and what deliberately does not</span></div>
+    <div class="card-body">
+      <p class="text-muted">The file is stored, checksummed and given the next revision number for this document. That number is allocated while the document row is locked, so two people uploading at the same moment get r{{ document.current_revision_no|add:1 }} and the one after it rather than both claiming the same version.</p>
+      <p class="text-muted">The revision lands <strong>awaiting approval</strong>. Uploading never changes which version is current — a workspace administrator approves the new revision, and only then does the document's pointer move, its text become what search matches, and a draft document come into force. Approval only moves forward: a revision at or below the current number cannot be approved.</p>
+      <p class="text-muted">The file is stored to be downloaded, never displayed inside a page. Text is read from it where there is text to read; when there is not, the revision says so on its own row instead of leaving an empty column that looks like a fault.</p>
+    </div>
+  </div>
+{% endblock %}
