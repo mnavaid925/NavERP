@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Supplier KPIs{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — SupplierKpi catalogue
+    (apps/procurement/views/SupplierPerformanceEvaluation/SupplierKpis.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      category_choices, source_choices, direction_choices, applies_choices, active_choices,
+      owners, stats{total, active, derived, survey, manual}.
+
+    The view's crud_list filter tuple is exactly
+      (("category","category",False), ("source","source",False), ("direction","direction",False),
+       ("applies_to","applies_to",False), ("owner","owner_id",True), ("is_active","is_active",False))
+    with search_fields=("code","name","description","notes") — so the filter bar offers exactly
+    q, category, source, direction, applies to, owner and active/inactive. The five CHOICES
+    filters compare plain strings; owner posts a pk and compares with |stringformat:"d"
+    (never |slugify). active_choices carries the strings "True"/"False", which crud_list maps
+    onto real booleans before it filters a BooleanField.
+
+    Badge classes are COLOUR-NAMED only (L33): theme.css ships badge-green / -red / -amber /
+    -info / -muted / -slate and nothing else — badge-success / -warning / -danger render
+    completely unstyled.
+
+    Delete is @require_POST, so it can only be a form. Only the system-assigned {{ obj.number }}
+    (SKP-#####) reaches the confirm() handler; obj.code and obj.name are user-authored and never
+    do. Literal apostrophes inside that handler are escaped as \' because &#39; does not escape
+    inside an event-handler attribute.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier KPIs</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <span>KPIs</span>
+      </div>
+      <p class="text-muted">The catalogue of what &ldquo;good supplier&rdquo; means here. A row is a definition — which number to take, which way is better, where the warning and critical lines fall, and how much it counts. The measured figures live on the scorecards.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierkpi_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New KPI</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="ruler"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Definitions</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="database"></i></div><div class="stat-value">{{ stats.derived }}</div><div class="stat-label">Derived from transactions</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="message-square"></i></div><div class="stat-value">{{ stats.survey }}</div><div class="stat-label">From 360 survey</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pencil-line"></i></div><div class="stat-value">{{ stats.manual }}</div><div class="stat-label">Entered by hand</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search KPIs" class="form-input" placeholder="Search code, name, description or notes…">
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">All categories</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="direction" aria-label="Direction" class="form-select">
+            <option value="">Either direction</option>
+            {% for val, label in direction_choices %}
+              <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="applies_to" aria-label="Applies to" class="form-select">
+            <option value="">Any applicability</option>
+            {% for val, label in applies_choices %}
+              <option value="{{ val }}" {% if request.GET.applies_to == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active or retired" class="form-select">
+            <option value="">Active and retired</option>
+            {% for val, label in active_choices %}
+              <option value="{{ val }}" {% if request.GET.is_active == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplierkpi_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>KPI</th>
+            <th>Category</th>
+            <th>Source</th>
+            <th>Direction</th>
+            <th class="text-right">Weight</th>
+            <th>Target · warning · critical</th>
+            <th>Applies to</th>
+            <th>Owner</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:supplierkpi_detail' obj.pk %}">{{ obj.code }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+              </td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>
+                {% if obj.source == "derived" %}
+                  <span class="badge badge-info">{{ obj.get_source_display }}</span>
+                  {% if obj.derived_metric %}<div class="text-muted">{{ obj.get_derived_metric_display }}</div>{% endif %}
+                {% elif obj.source == "survey" %}
+                  <span class="badge badge-slate">{{ obj.get_source_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_source_display }}</span>
+                {% endif %}
+              </td>
+              <td>{{ obj.get_direction_display }}</td>
+              <td class="text-right">{{ obj.weight }}</td>
+              <td>
+                {% if obj.target_value is not None %}{{ obj.target_value|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                ·
+                {% if obj.warning_threshold is not None %}{{ obj.warning_threshold|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                ·
+                {% if obj.critical_threshold is not None %}{{ obj.critical_threshold|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                <div class="text-muted">{{ obj.get_unit_display }} · {{ obj.get_scoring_method_display }}</div>
+              </td>
+              <td>
+                {% if obj.applies_to == "tier" %}
+                  {{ obj.get_applies_to_tier_display }}<div class="text-muted">tier only</div>
+                {% else %}
+                  {{ obj.get_applies_to_display }}
+                {% endif %}
+              </td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Retired</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierkpi_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:supplierkpi_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. A KPI that any scorecard
+                    line references is PROTECTed at the database and refuses with a message —
+                    retiring it (Edit → uncheck Active) is the way to take a measured KPI out of
+                    service without losing the history under it.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:supplierkpi_delete' obj.pk %}" onsubmit="return confirm('Delete KPI {{ obj.number }}? If anything has ever been measured under it the delete is refused — retire it instead by unticking Active. A KPI that was never measured is gone for good and cannot be recovered.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10">
+              <div class="empty-state">
+                <i data-lucide="ruler"></i>
+                <h3>No KPIs defined yet</h3>
+                <p>A scorecard can only measure what this catalogue defines. Start with the handful your buyers already argue about — on-time delivery, defect rate, invoice accuracy — and give each one a target, a warning line and a critical line so a number can be read without a meeting.</p>
+                <a href="{% url 'procurement:supplierkpi_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Define a KPI</a>
+                <a href="{% url 'procurement:supplierkpi_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
