@@ -24,6 +24,14 @@ templates/procurement/inventorywarehouse/**
 would miss every `<entity>/<page>.html` file, i.e. all nine CRUD templates. This sub-module adds
 **no flat app-root module** (no `apps/procurement/<something>.py`), so the five globs are complete.
 
+**PRE-FLIGHT, before handing any glob to a reviewer: expand it and count the files.** A glob that
+matches nothing makes a reviewer report **clean**, and clean is the answer we are hoping for — so
+an under-matching glob is far more dangerous here than an over-matching one, which merely produces
+findings we can discard. The same trap applies to the `%s`-anchored shared-file query above: it
+returned empty on `navigation.py` simply because nothing had been committed there yet, and empty
+is indistinguishable from broken. **Expected counts at Integrate: 4 model files, 4 forms, 7 views,
+7 urls, 12 templates.** If an expansion comes back short, the glob is wrong — not the work.
+
 The shared files touched at Integrate (`apps/core/navigation.py`, `admin.py`,
 `seed_procurement.py`, the four app-level `__init__.py`, `README.md`) are **not** reviewable by
 glob — a glob pulls in three peers' hunks too, and a commit range pulls in their commits. Isolate
