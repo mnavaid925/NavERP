@@ -40,6 +40,23 @@
     </div>
   </div>
 
+
+  {% comment %}
+    L39 dead-end notice: `party` is required and its queryset is this workspace's suppliers and
+    vendors. With none on file the <select> renders empty and the form cannot be submitted, with
+    nothing on the page saying why. Same precondition and same treatment as
+    attestation/form.html.
+  {% endcomment %}
+  {% if not form.fields.party.queryset %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">No supplier to monitor</h2></div>
+      <div class="card-body">
+        <p class="text-muted">This workspace has no party carrying a supplier or vendor role, so there is nobody to monitor yet. That is a precondition rather than a fault: a risk observation is a statement about one named supplier’s health, so the supplier has to exist before a score against it means anything.</p>
+        <a href="{% url 'core:party_list' %}" class="btn btn-primary"><i data-lucide="users"></i> Go to parties</a>
+      </div>
+    </div>
+  {% endif %}
+
   <form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
     <div class="card">
