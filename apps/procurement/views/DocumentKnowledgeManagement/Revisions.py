@@ -307,8 +307,13 @@ def pdocument_revision_upload(request, pk):
     if guard is not None:
         return guard
 
+    # Narrowed by the read rule as well as the tenant: uploading a revision onto a document is
+    # writing to it, and a member who may not read a confidential record may not add to its
+    # chain either. Same queryset shape as ``_get_document`` in the Documents view module.
     document = get_object_or_404(
-        ProcurementDocument.objects.select_related("checked_out_by"),
+        ProcurementDocument.objects
+        .filter(readable_document_q(request.user))
+        .select_related("checked_out_by"),
         pk=pk, tenant=request.tenant)
 
     if document.status == "archived":
