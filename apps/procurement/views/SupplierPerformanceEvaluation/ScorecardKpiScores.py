@@ -91,6 +91,12 @@ _REFUSAL_NOT_ADMIN = ("Generating hands this scorecard to Procurement permanentl
 #: a hand-edited query string skips the filter; it never raises.
 _MIN_YEAR, _MAX_YEAR = 1, 9999
 
+#: The legal ``?source=`` values. ``source_at_time`` is a FROZEN copy of the KPI's source, so it
+#: is declared without ``choices`` — which means ``crud_list``'s enum guard (``_enum_values``)
+#: disables itself on it and the raw GET value reaches ``.filter()``. Validating against the KPI's
+#: own registry here is what keeps the two dropdowns on that register agreeing.
+_SOURCE_VALUES = frozenset(value for value, _ in SOURCE_CHOICES)
+
 
 def _is_admin(request):
     """Mirrors ``@tenant_admin_required`` exactly, so a hidden button and a refused POST agree.
@@ -377,23 +383,40 @@ def _score_stats(tenant):
     )
 
 
+def _score_filters(request):
+    """The score register's ``crud_list`` filter tuples, with ``source`` dropped when it is junk.
+
+    ``source_at_time`` is a plain CharField with **no** ``choices`` — it is a frozen copy of the
+    KPI's source, not an input — so ``crud_list``'s enum guard disables itself on it (see
+    :data:`_SOURCE_VALUES`) and the raw GET value went straight into ``.filter()``. An
+    unrecognised value therefore matched nothing and WIPED the register: a tenant holding 41
+    measured lines was shown an empty page with its own empty-state copy, while ``?band=zzz`` on
+    the very same page fell back correctly and showed all 41. Two dropdowns on one register
+    disagreeing about what a bad value means.
+
+    Dropping the tuple is the answer every other filter in the app gives a value it does not
+    recognise (L11): the filter is not applied and the register still renders its rows.
+    """
+    filters = [("band", "band", False),
+               ("kpi", "kpi_id", True),
+               ("scorecard", "scorecard_id", True)]
+    if request.GET.get("source", "") in _SOURCE_VALUES:
+        filters.insert(1, ("source", "source_at_time", False))
+    return tuple(filters)
+
+
 @login_required
 def supplierkpiscore_list(request):
     """Every measured line in the workspace, grouped by the FROZEN category and KPI name.
 
-    ``source_at_time`` is a plain CharField with **no** ``choices``, so ``crud_list``'s enum
-    guard bails out and the raw value reaches ``.filter()``. That is safe — junk matches nothing
-    — but it means the template's ``source_choices`` dropdown is the only thing keeping the
-    offered values legal, which is why it is pinned to ``SupplierKpi.SOURCE_CHOICES`` rather than
-    invented in the template.
+    ``band``, ``kpi`` and ``scorecard`` are guarded by ``crud_list`` itself; ``source`` needs the
+    extra guard :func:`_score_filters` gives it, because the column it filters carries no
+    ``choices`` for the enum guard to read.
     """
     return crud_list(
         request, _score_qs(request), TEMPLATE_LIST,
         search_fields=("kpi_name", "comment", "scorecard__number", "scorecard__party__name"),
-        filters=(("band", "band", False),
-                 ("source", "source_at_time", False),
-                 ("kpi", "kpi_id", True),
-                 ("scorecard", "scorecard_id", True)),
+        filters=_score_filters(request),
         extra_context={
             "band_choices": BAND_CHOICES,
             "source_choices": SOURCE_CHOICES,
