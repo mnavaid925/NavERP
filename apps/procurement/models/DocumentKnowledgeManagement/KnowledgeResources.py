@@ -255,15 +255,11 @@ class KnowledgeResource(TenantNumbered):
     def is_review_due(self):
         """Computed against today rather than stored, so a row cannot go stale in the database.
 
-        The register runs the same comparison in SQL for its review stat tile, so the badge on a
-        row and the count above it always agree.
+        Rendered as a badge on the register row and on the detail page. Unlike
+        :attr:`ProcurementPolicy.is_review_due`, this register offers no ``?review=`` facet and no
+        review stat tile — the sentence claiming one was copied across with the property.
         """
         return bool(self.review_on and self.review_on <= timezone.localdate())
-
-    @property
-    def has_been_used(self):
-        """Whether anybody has pressed "use this" yet. Reads the counter, claims nothing more."""
-        return bool(self.usage_count)
 
     # -- validation -----------------------------------------------------------------------
 
