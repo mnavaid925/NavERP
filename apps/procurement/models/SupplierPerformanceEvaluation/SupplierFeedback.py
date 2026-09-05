@@ -158,6 +158,14 @@ class SupplierFeedback(TenantNumbered):
             models.Index(fields=["tenant", "supplier"], name="prc_sfb_tnt_supp_idx"),
             models.Index(fields=["tenant", "status"], name="prc_sfb_tnt_status_idx"),
             models.Index(fields=["tenant", "scorecard"], name="prc_sfb_tnt_scr_idx"),
+            # The register's DEFAULT SORT, covered. None of the three above matches
+            # ``ordering``, so every page of the 360 register was a filesort over the whole
+            # tenant partition: measured 113 ms -> 822 ms at 50,028 rows and the perception-gap
+            # board 91 ms -> 384 ms, both with the query count FLAT and ``EXPLAIN`` reporting
+            # ``Using where; Using filesort``. Same shape, and the same reason, as
+            # ``prc_sks_tnt_cat_name_idx`` on SupplierKpiScore.
+            models.Index(fields=["tenant", "-period_end", "-id"],
+                         name="prc_sfb_tnt_period_idx"),
         ]
         verbose_name = "Supplier Feedback"
         verbose_name_plural = "Supplier Feedback"
