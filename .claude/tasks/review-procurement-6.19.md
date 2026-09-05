@@ -26,6 +26,81 @@ model); OCR / semantic search / folder trees / retention destruction are Module 
 
 ---
 
+# CONSOLIDATED WORKLIST — fix in this order
+
+All six passes complete. Deduped, sorted Critical → Important → Minor, IDs assigned. The **was**
+column points back at the pass section holding the full scenario, reproduction and fix.
+**Runtime** = confirmed by executing it (pass 5 or 6), not merely reasoned about.
+
+## Critical
+
+| ID | was | Runtime | Issue |
+|---|---|---|---|
+| **C1** | S1 | ✅ anonymous `curl` | Every uploaded file readable with **no login, no session, no tenant**. No download view exists anywhere in the codebase; `file.url` is a raw static URL and `MEDIA_ROOT` has no tenant partitioning. `Content-Disposition: attachment` is documented in five places and **implemented in none**. *Clone family of 18 across 16 templates — fix 6.19's three links, and raise the app-wide sweep separately (L28).* |
+| **C2** | P1 | ✅ measured | Revision-register dropdown selects full `ProcurementDocument` rows, unbounded, including the 200 KB `extracted_text`, to render three fields. **59.02 MB and 4.872 s at 2,007 documents** vs a 0.189 s control. Fix measured 699× smaller. |
+
+## Important
+
+| ID | was | Runtime | Issue |
+|---|---|---|---|
+| **I1** | Q1 | ✅ ×3 routes | Pointer can land on an **unapproved** revision → green **Current** badge beside **Not approved** on the same row, and delete then refuses it. `current_revision` resolves by number alone. **Fix `current_revision` to filter `is_approved=True`** as well as closing I2/I3. |
+| **I2** | E2 | ✅ 2 clicks | Revision `document` FK is admin-editable (`readonly_fields` omits it) → **deterministic** route into I1, no race. Extension: with the app-wide editable `tenant`, an acme revision + file + `approved_by` stamp was moved into globex. *(The `tenant` half is app-wide — 50 of 52 ModelAdmins; only the `document` half is 6.19's.)* |
+| **I3** | item 3 | ✅ | `pdocrevision_delete` guards an **unlocked** snapshot while approve uses `select_for_update` → destroys an approved revision and dangles the pointer, with a success message. *Consequence paragraph needs rewording — see pass 5.* |
+| **I4** | item 2 | ✅ | Re-index blind-overwrites the search copy after a slow read → **permanently** installs a superseded revision's text. Measured: search finds the doc by superseded words, misses current ones. |
+| **I5** | S2 | ✅ reachable | `classification` enforced **nowhere** — any member can search *inside*, enumerate via the facet, and read 4,000 chars of a `restricted` document. Either enforce it or stop the UI claiming "only a named few may read". |
+| **I6** | item 4 | ✅ | `pdocument_delete` ungated → a non-admin cascaded **2 of 2 approved revisions**, the exact rows `pdocrevision_delete` refuses to touch. |
+| **I7** | E1 | ✅ | `ppolicy_delete` ungated, and its Danger-zone text promises "Nothing cascades" — false the moment 6.17 integrates (their `PolicyAttestation` CASCADEs this table). Non-admin deleted a published policy. |
+| **I8** | S4 | — | Any member can **archive a published policy** that only an admin could publish, and only an admin can repair it. Same class: `pdocument_activate`/`_supersede`/`_archive`. |
+| **I9** | S3 | — | `pdfplumber` parses attacker-supplied PDFs in-process with **no page/time/memory bound**; amplified 200× by the re-index Run. "Never raises" ≠ bounded. |
+| **I10** | item 1 | ✅ HTTP 500 | `ProcurementPolicyAdmin.search_fields` names `"tags"`, which the model does not have → `FieldError` 500 on any admin search. `manage.py check` does not validate `search_fields`. |
+| **I11** | F1 | ✅ | "Release checkout" offered to every viewer; the view refuses non-holders. *On the same page "Upload revision" is correctly hidden — the page already knows how.* |
+| **I12** | P5 | — | Re-index: **401 queries and up to 200 synchronous `pdfplumber` parses in one POST** — 200–400 s, through both the gunicorn (30 s) and nginx (60 s) timeouts. **Compose with I4 and I9 in one edit.** |
+| **I13** | P4 | — | `run_document_reminders` costs 4–5 queries **per row** over a window with **no lower bound** → ~3,200 queries on a second press that writes nothing. Hoisting the dedupe drops it to **2**. |
+| **I14** | P2 | ✅ measured | All four registers haul `extracted_text` they never render (465.7 KB / 6057.2 KB / 94.2 KB / 186.7 KB per page); `knowledgeresource_list` reads **no** FK at all yet `select_related`s two. |
+| **I15** | P3 | ✅ 1.5 s | `?q=` sweeps the TextField **twice** per matching search (COUNT + page). Acceptable to ~1,000 docs/tenant; add the `len(q) >= 4` guard. *(A non-matching term runs it once — Paginator short-circuits.)* |
+| **I16** | P6 | ✅ EXPLAIN | `(tenant, review_on)` unindexed on two hot paths → `type=ALL, rows=2021, filesort`. **Argue it from the scan, not the policy twin — that argument did not survive EXPLAIN.** |
+
+## Minor
+
+| ID | was | Issue |
+|---|---|---|
+| M1 | item 6 ✅ | `policy/list.html:185` claims the register never shows two published versions — **2, then 3, rendered on that same page**. |
+| M2 | item 11 ✅ | Re-index makes no progress past 200 textless rows; contradicts "picks up where it left off". |
+| M3 | item 10 ✅ | "Check out" offered on an archived document; the view refuses it. |
+| M4 | F4 ✅ | Revision delete guard spelled three ways; two registers offer a trash icon the view rejects **in the I1 state**. |
+| M5 | item 5 | Untenanted self-FK traversal on policy detail (defense-in-depth; no write path found). |
+| M6 | item 7 | `revision/form.html:85` predicts the wrong next revision number. |
+| M7 | item 8 | `btn btn-outline danger` — inert modifier, renders unstyled (L33). |
+| M8 | item 9 | Bare `get_full_name` with no `\|default:` — **15 occurrences across 6 files**. |
+| M9 | F2 | `revision/detail.html:128` uses `table-actions` where its three siblings use `page-actions`. |
+| M10 | F3 | `<dt>`/`<dd>` outside any `<dl>` — 4 occurrences, 3 files (WCAG 1.3.1). |
+| M11 | F5 | Knowledge-resource tags render as unlabelled pills; the document page labels the same thing. |
+| M12 | E3 | `KnowledgeResource.is_review_due` docstring claims a stat tile that does not exist. |
+| M13 | E4 | One "needs reviewing" concept, three renderings (two labels, two colours, three levels of support). |
+| M14 | E5 | Three review-date fields, two spellings, neither matching the app's `next_review_date` precedent. |
+| M15 | E6 | `is_review_due` reached by two names — context key on two detail views, `obj.` on the other two. |
+| M16 | E7 | `KnowledgeResource.has_been_used` is dead code. |
+| M17 | E8 | Seeder comment cites a re-export rule the package `__init__` contradicts in plain words. |
+| M18 | E9 | `_holder_name` duplicated byte-identically across two view modules → `views/_helpers.py`. |
+| M19 | E11 | Unjustified function-local `import os`; every other local import here carries a reason. |
+| M20 | P7 | `prc_pdrev_tnt_doc_idx` fully redundant (leftmost prefix of the unique constraint + the FK index). |
+| M21 | P8 | `pdocument_detail` spends a 5th query re-fetching a row already in memory. |
+| M22 | P9 | Three uncapped reverse lists on `pdocument_detail`; the sibling bounds its fan-out at 10. |
+| M23 | P11 | Seeder audit loop re-queries the seven rows it just created. |
+| M24 | Q2 ✅ | `usage_count` at the `PositiveIntegerField` ceiling saturates silently; **500s under strict SQL mode**. |
+
+## No action — recorded, deliberately not fixed
+
+| was | Why |
+|---|---|
+| E10 | `pdocument_*` vs `pdocrevision_*` abbreviation — within house norms; the `p` prefixes have a real justification (`policy_list` is in fact already claimed by 6.17). |
+| P10 | Pagination ordering unindexed — **app-wide pattern** (25 of 894 tenant-prefixed indexes). 6.19 conforms; fix as an app-wide pass, not a fork. |
+| Q3 | Dev DB runs without `STRICT_TRANS_TABLES` — environment config, not 6.19. Means QA on this box under-reports over-range classes. |
+| S5 | `supplier_visible` inert — no code path reads it. **Recorded for 6.4:** a portal view filtering it inherits I1 *and* C1. |
+| — | 6.17 ships a second read surface over `ProcurementPolicy`; once both LIVE_LINKS land the sidebar offers two policy registers. Cross-session, for the second integrator. |
+
+---
+
 ## Pass 1 — `code-reviewer` (correctness, tenancy, authz, structure, integrity)
 
 Verified 20 Python + 12 templates against the contract; `makemigrations --check` "No changes
@@ -750,3 +825,163 @@ verified end states show `status=draft`, `current_revision_no=0`, `extracted_tex
 uploads and is stored as `procurement/documents/2026/09/passwd.txt` with
 `original_filename='passwd.txt'`. The `os.path.basename` at `views/…/Revisions.py:256` and Django's
 storage sanitisation both do their jobs. **No traversal.**
+
+---
+
+## Pass 6 — `security-reviewer`
+
+*(This pass numbered its findings C1-C5; renamed **S1-S5** here to avoid colliding with the
+consolidated severity IDs below.)*
+
+### [ ] S1 — CRITICAL — every uploaded document file is readable with no login, no session, no tenant
+
+`models/…/Revisions.py:85-88` (the `FileField`), linked from `revision/detail.html:89`,
+`revision/list.html:123`, `document/detail.html:156`; served by `config/urls.py:23-24` and by Apache
+from `MEDIA_ROOT` (`settings.py:127-128`).
+
+**Runtime-confirmed with an anonymous `curl` — no cookie, no login, no tenant:**
+
+```
+GET http://localhost/NavERP/media/procurement/documents/2026/09/hvac-warranty-r1.txt
+HTTP/1.1 200 OK
+Server: Apache/2.4.46 (Win64) ...
+Content-Type: text/plain
+
+ROOFTOP HVAC UNIT WARRANTY - ISSUE 1
+Coverage: parts and labour on both rooftop air handling units for sixty (60) months...
+```
+
+**There is no download view anywhere in this codebase** — grepping every app for `FileResponse` /
+`serve(` returns only two CSV exports and an HRM letter. `file.url` is a raw static URL.
+`MEDIA_ROOT` has **no tenant partitioning** (`upload_to="procurement/documents/%Y/%m/"`), so acme's
+and globex's bytes share one directory with no boundary between them and none against the anonymous
+internet. **The clean IDOR sweep tested the HTML pages; it never tested the object those pages
+link to.**
+*Path predictability:* Django appends a random suffix only on a name *collision*, so the first
+upload of any filename lands at its literal sanitised name — `NDA.pdf`, `msa-signed.pdf` are one
+guess. (The seeded `_GMReZp4` suffixes are the re-seeds, confirming the rule.)
+**Is the `Content-Disposition: attachment` mitigation implemented or merely described? Merely
+described**, in five places that read as though it were done (`Revisions.py:87` help_text,
+`forms/…/Revisions.py:68-79` WARNING block, `revision/detail.html:85` "downloaded, never displayed
+inside this page"). The live response carries **no `Content-Disposition` and no
+`X-Content-Type-Options`** — `SECURE_CONTENT_TYPE_NOSNIFF` sits inside `if not DEBUG:`
+(`settings.py:171-178`) and `.env:5` is `DEBUG=True`.
+*Fix:* route every file through an authenticated, tenant-scoped `FileResponse` view with
+`Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`; link that url instead of
+`file.url`; drop the media `static()` line from `config/urls.py`; deny direct directory access
+(move `MEDIA_ROOT` outside `C:\xampp\htdocs`, or `media/.htaccess` with `Require all denied` as the
+interim).
+**Clone family (L28) — this is NOT 6.19-only.** `grep -rn "\.file\.url" templates/` → **18
+occurrences across 16 files** (procurement RFx responses, HRM onboarding, expense claims, investment
+proofs, travel bookings, inventory catalog). 6.19 is the sub-module that makes it *matter*, being
+the first repository with a `confidential`/`restricted` classification and an approval chain.
+*Checked and clean:* the double-extension execution vector is **not** available — XAMPP wires PHP
+with an end-anchored `<FilesMatch "\.php$">`, so `evil.php.pdf` is served, not executed; `.htaccess`
+is rejected because `splitext` yields `''`, not in the allow-list.
+**So is the allow-list the only thing standing between this and stored XSS? Effectively yes**, and
+it holds today (no `.html`/`.htm`/`.svg`/`.xhtml`/`.php`) — but it is doing that job **alone**: no
+nosniff in dev, no disposition header, same-origin serving. Add one scriptable extension to that
+shared set at any future point and this is stored XSS on the app origin with no second control.
+
+### [ ] S2 — Important — `classification` is a decorative label; confidential/restricted file *contents* are searchable by every member
+
+`views/…/Documents.py:147` (`extracted_text` in `search_fields`), `:153` (the facet), `:83`, `:176`;
+`revision/detail.html:110`.
+**Enforced nowhere.** Grepped `classification` across the codebase: in 6.19 it appears five times —
+a model field, a badge helper, a form field, a `crud_list` filter, and a template badge. **Not one
+queryset, decorator, permission check or `if` anywhere in `apps/` reads it to decide access.**
+`restricted` — documented at `models/…/Documents.py:79` as "the tier above confidential, for records
+only a named few may read" — grants and restricts nothing.
+*Attack:* a junior buyer with an ordinary login GETs `/procurement/documents/?q=indemnity+cap`;
+`apply_search` ORs `extracted_text__icontains`, matching the **body text** of a `restricted`
+document (the seeder creates both a confidential and a restricted one, so this is reachable on a
+stock install). The row leaks number, title, supplier, owner, dates. Two clicks further,
+`pdocument_detail` applies no check and `revision/detail.html:110` renders
+`{{ obj.extracted_text|truncatechars:4000 }}` — 4,000 characters of the restricted file. And
+`?classification=restricted` is offered as a **facet**, so the UI hands over an enumeration of
+exactly the need-to-know set. Even without reading the body, the search oracle alone confirms the
+presence and wording of a suspected phrase.
+*Fix:* enforce it once in `_document_qs` and every fetch (owner-or-admin for
+confidential/restricted), mirrored on the revision side via `document__classification`. **If a full
+read-ACL is genuinely deferred to Module 13.7, then say so on the form help_text and the detail
+badge** — the current UI, with a tier literally named "for records only a named few may read",
+actively misleads the person choosing it.
+
+### [ ] S3 — Important — `pdfplumber` parses attacker-supplied files in-process with no page, time or memory bound
+
+`models/…/Revisions.py:271-285`, driven from the upload (`views/…/Revisions.py:296`) and re-index
+(`views/…/Documents.py:420`). Any authenticated member (upload is `@login_required` only) can post a
+20 MB PDF — inside `MAX_UPLOAD_BYTES` — crafted with a huge page count or deeply nested streams.
+`text = "\n".join(page.extract_text() … for page in pdf.pages)` materialises the whole joined string
+**before** the `EXTRACT_MAX_CHARS` truncation at :285, and `pdf.pages` retains every page object.
+The `except Exception` at :281 is honest about not raising (`MemoryError`/`RecursionError` are both
+caught) — but **"never raises" is not "bounded"**: the worker has already spent the CPU and RSS,
+synchronously, inside the request. No `signal`, `alarm`, timeout, page cap or `resource` limit
+anywhere in the module. Amplified 200× by `pdocument_reindex` (`REINDEX_ROW_CAP = 200`) — 200
+planted bombs are one request. The plain-text branch **is** bounded correctly
+(`Revisions.py:261` reads a fixed `EXTRACT_MAX_CHARS * 4` prefix); the gap is PDF-only.
+*Fix:* cap pages (`MAX_EXTRACT_PAGES = 500`), accumulate and `break` once the character budget is
+met, call `page.flush_cache()` per page, and move extraction off the request path (or wrap a hard
+wall-clock budget) before this accepts untrusted uploads. Compose with P5.
+
+### [ ] S4 — Important — any member can archive a published policy that only an admin could publish
+
+`views/…/Policies.py:302-304` (`ppolicy_archive`: `@login_required` + `@require_POST` only) against
+`:204-207` (`ppolicy_publish`: `@tenant_admin_required`). A non-admin POSTs
+`/procurement/policies/<pk>/archive/` on the workspace's published bidding policy; no status guard
+applies, and the rule vanishes from the published library for everyone. **They cannot undo it** —
+`ppolicy_publish:238-242` refuses to re-publish an archived row, so restoring the workspace's stated
+position needs an admin to author a new version. One click, member-reachable, admin-to-repair,
+changing what every member sees as authoritative.
+The docstring's defence ("taking a rule OUT is the safe direction") does not survive the asymmetry:
+if publish needs an admin because it makes a rule the workspace's stated position, un-making that
+position needs the same gate.
+*Fix:* `@tenant_admin_required` on `ppolicy_archive` + gate the button. **Same shape, lower impact:**
+`pdocument_activate` / `_supersede` / `_archive` (`Documents.py:311,329,354`) are all
+member-reachable and all change the document-of-record's status (archiving additionally blocks
+checkout and new revisions). Worth a deliberate ruling rather than a default.
+
+### [ ] S5 — Minor — `supplier_visible` is inert today
+
+Asked directly, answered directly: **no code path acts on it.** Every hit is passive — model field,
+form checkbox, admin `list_filter`, seeder value, display badge, one docstring. No queryset filters
+on it; no view reads it.
+*Recorded for whoever ships 6.4:* the moment a vendor-portal view filters `supplier_visible=True`,
+it inherits **Q1** (the pointer can land on an unapproved revision) **and S1** (the file is
+anonymously readable regardless of the flag), and this checkbox becomes the switch that publishes an
+unapproved internal file to an external counterparty. That portal view must filter
+`supplier_visible=True` **and** join through to an `is_approved=True` current revision, **and** serve
+bytes through the S1 download view, never `file.url`.
+
+### Authorization matrix (all 32 views)
+
+| Gate | Count | Views |
+|---|---|---|
+| `@tenant_admin_required` | **3** | `pdocument_reindex`, `pdocrevision_approve`, `ppolicy_publish` |
+| `@login_required` only | **29** | everything else |
+
+The three admin gates are the right three, correctly placed — approval decides the document of
+record, publish decides the stated rule, re-index reads every stored file and rewrites a searched
+column. **The split is defensible on the forward verbs and indefensible on the inverse ones**: S4 is
+the clear break, with `pdocument_archive`/`_supersede`/`_activate` in the same class.
+`pdocument_checkout`/`release` are correct as-is — an advisory lock, and forced release already
+requires holder-or-admin with `forced` recorded in the audit row.
+`knowledgeresource_publish`/`archive`/`use` are defensibly ungated: the resource states no binding
+rule and retires nothing, and `use` increments a counter documented as a click tally.
+
+### Clean — checked, nothing to report
+
+**CSRF:** 30 `method="post"` forms across the 12 templates, 30 `{% csrf_token %}`, one-for-one; no
+`@csrf_exempt`. **XSS:** zero `|safe`, `mark_safe`, `{% autoescape off %}`, inline handlers, `eval` —
+the only string matches are two comments *forbidding* them. No user data in an inline `style`
+(L26). **Open redirect:** every `redirect()` targets a reversed url name with a pk; no `?next=`;
+`knowledgeresource_use` deliberately redirects to its own detail page rather than `file.url` and
+documents why — **that mitigation is implemented.** **SQLi:** no `.raw()`, `.extra()` or
+`cursor.execute`; `apply_search` builds ORM `Q` objects from a hard-coded field tuple with `q` as a
+parameter. **Upload validation:** extension + size checked against the core constants, imported
+function-locally for the stated (correct) reason; no SVG in the allow-list. **SHA-256:** streams
+chunks with both `seek(0)` calls present; the WARNING correctly calls it a checksum, not
+tamper-proofing. **Mass assignment:** both `Meta.fields` sets exclude every machine-written column,
+which are additionally `editable=False`. **Audit:** all eleven verbs call `write_audit_log`, with
+`sha256` truncated to 16 chars. **Secrets:** none in the sub-module; no generated value in a
+`messages.success` (L25).
