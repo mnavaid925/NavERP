@@ -80,6 +80,33 @@ following `apps/core/views/Party.py:47-72` and
 not file it as an unauthorised deviation, and so the contract can be amended rather than the code
 reverted.
 
+### PB5 — `benchmark_rows()` slices before it filters (correctness at scale)
+
+`apps/procurement/performance.py`
+
+The `ROW_CAP` (500) slice is applied **before** the Python-side tier/category filter. Under 500
+scorecards in a period the result is exact. Above that, a tier or category filter sees only the
+first 500 rows by `party__name` — so a filtered cohort silently ranks a truncated population, and
+the supplier ranked "top of tier" may simply be the best of the first 500 alphabetically.
+
+Disclosed rather than silent: `truncated` is returned and the board prints a warning. But the
+warning says *the list was cut*, not *your filter was applied to a cut list*, which is the part that
+changes the meaning of the ranking.
+
+**Fix:** apply the tier/category filter in the queryset before the slice, so the cap truncates the
+filtered cohort rather than the filter narrowing a truncated one.
+
+Found by the boards build agent while measuring, and flagged as out of its scope (the function was
+already committed by the Entity 2 agent).
+
+### PB6 — `trend_series()` truncates at 24 but the shared cap constant says 500 (minor)
+
+The boards re-export `ROW_CAP` (500) per the contract's §5 convention, but `trend_series()` actually
+truncates at `PERIOD_CAP` (24). The trend board therefore passes `PERIOD_CAP` as its `row_cap` so
+the page cannot print "more than 500 scorecards" when the cut happened at 24. Correct behaviour,
+but the two caps sharing one context key name across three boards is a trap for the next editor —
+worth either renaming the key per board or documenting why trend's differs.
+
 ---
 
 ## Reviewer findings
