@@ -10,8 +10,10 @@ fall back on, so a route that forgets it is an IDOR.
 
 Two guards that are easy to miss and cost the module its meaning if dropped:
 
-* **A hit cannot be added to a screening that has already been decided.** Otherwise a new open
-  hit appears under a cleared supplier and the clearance silently stops meaning anything.
+* **A hit cannot be added to, amended on, or deleted from a screening that has already been
+  decided.** Otherwise a new open hit appears under a cleared supplier and the clearance silently
+  stops meaning anything — or, in the other direction, the match a block was reasoned against is
+  deleted and the block stands with nothing behind it.
 * **An adjudicated hit cannot be edited.** Its ``matched_name`` and score are what the
   disposition was reasoned against; changing them afterwards rewrites the record. Delete-and-
   recapture is the honest correction, and delete is audited.
@@ -209,10 +211,30 @@ def screeninghit_create(request, pk):
     return _hit_form(request, screening)
 
 
+def _refuse_if_parent_decided(request, screening, verb):
+    """A decided screening's hits are the evidence its decision was reasoned against.
+
+    ``screeninghit_create`` already refuses this parent state; amend and delete must refuse it
+    too, or the record can be rewritten (or emptied) *after* the clearance/block was recorded.
+    Returns a redirect to refuse, or ``None`` to allow.
+    """
+    if screening.is_terminal:
+        messages.error(
+            request,
+            f"{screening.number} is already {screening.get_status_display().lower()} — a hit "
+            f"on a decided screening cannot be {verb}. It is the evidence that decision was "
+            f"reasoned against. Record a NEW screening instead.")
+        return redirect("procurement:screening_detail", pk=screening.pk)
+    return None
+
+
 @login_required
 def screeninghit_edit(request, pk):
-    """Amend a hit — refused once it has been adjudicated."""
+    """Amend a hit — refused once it has been adjudicated, or its screening decided."""
     obj = _get_hit(request, pk)
+    refusal = _refuse_if_parent_decided(request, obj.screening, "amended")
+    if refusal is not None:
+        return refusal
     if not obj.is_open:
         # The matched name and score are what the disposition was reasoned against; editing them
         # afterwards rewrites the record. Delete and re-capture is the honest correction.
@@ -227,9 +249,17 @@ def screeninghit_edit(request, pk):
 @login_required
 @require_POST
 def screeninghit_delete(request, pk):
-    """Remove a hit that should never have been captured, and re-count the parent."""
+    """Remove a hit that should never have been captured, and re-count the parent.
+
+    Refused once the parent screening is decided: ``block()`` only requires an OPEN status, not
+    disposed hits, so a blocked screening routinely still carries open hits — and deleting one
+    would leave the block standing with no match behind it.
+    """
     obj = _get_hit(request, pk)
     screening = obj.screening
+    refusal = _refuse_if_parent_decided(request, screening, "deleted")
+    if refusal is not None:
+        return refusal
     write_audit_log(request.user, obj, "delete")
     obj.delete()
     screening.recount_hits()
