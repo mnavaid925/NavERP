@@ -64,12 +64,29 @@ acknowledgement ledger (contract §6a). ``policy-overdue/`` follows ``fraud-scan
 deliberately not ``@require_POST``: its GET leg writes nothing, and only its POST leg — which
 raises one inbox item per overdue person — is admin-gated, inside the view.
 
-Later entities of this sub-module append their own modules here (``AuditTrail``) with their own
-segments; the splat list below grows, it is never rewritten.
+**Entity 5 (AuditSeal, the last) claims two more**, checked the same way and against Entity 1's,
+Entity 2's, Entity 3's and Entity 4's twelve:
+
+* ``audit-trail/`` — the compliance register over ``core.AuditLog`` and its ``export/`` CSV
+* ``audit-seals/`` — the seal register, one detail page, and the two verbs
+  ``audit-seals/seal/`` and ``audit-seals/<int:pk>/verify/``
+
+Neither is a prefix of any existing segment, and neither collides with 6.12's ``receipt-audit/``:
+Django matches path COMPONENTS, so those are simply different components. ``audit-seals/seal/`` is
+declared before ``audit-seals/<int:pk>/`` in its own module — first-match-wins is behaviour, and
+the other order would resolve the verb as a request for a seal whose pk is the string "seal".
+**Entity 5 registers NO edit and NO delete route**, which is the sub-module's one documented
+deviation from the CRUD-completeness rule: a seal whose digest can be edited proves nothing, and
+deleting a seal breaks exactly the chain it exists to protect (contract §3). Its two verbs are
+gated in opposite directions on purpose — ``seal/`` is admin-only, ``verify/`` is deliberately not,
+because a tamper check that only an administrator can run is a check nobody runs.
+
+That completes 6.17: the splat list below grows, it is never rewritten.
 
 ``screening_batch`` is deliberately unregistered — see the note in ``Screenings.py``.
 """
 from .Attestations import urlpatterns as _rcm_attestations
+from .AuditTrail import urlpatterns as _rcm_audit_trail
 from .FraudAlerts import urlpatterns as _rcm_fraud_alerts
 from .FraudScan import urlpatterns as _rcm_fraud_scan
 from .Policies import urlpatterns as _rcm_policies
@@ -86,4 +103,5 @@ urlpatterns = [
     *_rcm_fraud_scan,      # fraud-scan/ runner + fraud-board/
     *_rcm_policies,        # policies/ register + raise-attestations/ + my-policies/ + policy-overdue/
     *_rcm_attestations,    # policy-attestations/ CRUD + sign/ + exempt/
+    *_rcm_audit_trail,     # audit-trail/ register + export/ + audit-seals/ register + seal/ + verify/
 ]
