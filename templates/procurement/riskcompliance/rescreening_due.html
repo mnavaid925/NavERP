@@ -90,7 +90,13 @@
               <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'procurement:screening_create' %}" class="btn-icon" title="Record a screening" aria-label="Record a screening"><i data-lucide="plus"></i></a>
+                  {% comment %}
+                    Both icons carry the ROW's party, because in an Actions column a button reads
+                    as row-scoped. _screening_form seeds the form's `initial` from ?party= after
+                    checking it through as_db_int and against the form's own tenant-scoped party
+                    queryset, so a junk or foreign value simply seeds nothing.
+                  {% endcomment %}
+                  <a href="{% url 'procurement:screening_create' %}?party={{ row.party.pk|stringformat:"d" }}" class="btn-icon" title="Record a screening for {{ row.party.name }}" aria-label="Record a screening for {{ row.party.name }}"><i data-lucide="plus"></i></a>
                   <a href="{% url 'procurement:screening_list' %}?party={{ row.party.pk|stringformat:"d" }}" class="btn-icon" title="Screening history" aria-label="Screening history"><i data-lucide="history"></i></a>
                 </div>
               </td>
