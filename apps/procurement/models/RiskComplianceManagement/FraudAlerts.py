@@ -911,12 +911,20 @@ class FraudAlert(TenantNumbered):
         # -- unresolved screenings -----------------------------------------------------------------
         # party -> [screenings carrying at least one hit still open or confirmed a true match],
         # newest first. ONE query with a hit-level EXISTS, rather than a screening lookup per PO.
+        #
+        # ``has_true_match`` rides along on the SAME join at no extra query: the aggregate is
+        # applied to the already-filtered hits, so it is 1 exactly when one of the unresolved hits
+        # was adjudicated a true match. The rule fires either way; it is the alert's evidence
+        # SENTENCE that has to tell the two apart, because "nobody has adjudicated it" is false of
+        # a confirmed match and that is the sentence a reader quotes back.
         unresolved = {}
         if "screening_unresolved" in wanted:
             for screening in (ComplianceScreening.objects
                               .filter(tenant=tenant,
                                       hits__disposition__in=_UNRESOLVED_DISPOSITIONS)
-                              .distinct()
+                              .annotate(has_true_match=models.Max(models.Case(
+                                  models.When(hits__disposition="true_match", then=1),
+                                  default=0, output_field=models.IntegerField())))
                               .select_related("party")
                               .order_by("party_id", "-screened_on", "-id")[:SCAN_ROW_LIMIT]):
                 unresolved.setdefault(screening.party_id, []).append(screening)
@@ -1206,6 +1214,12 @@ class FraudAlert(TenantNumbered):
             # Newest first out of _scan_context, so the first survivor is the most recent
             # screening that predates this order.
             screening = candidates[0]
+            # ``true_match`` HAS been adjudicated — it was adjudicated a match. Saying nobody
+            # looked at it would understate the finding on exactly the alert where it matters.
+            unresolved_phrase = (
+                "still carries a match somebody confirmed as a true match"
+                if getattr(screening, "has_true_match", 0)
+                else "still carries a match nobody has adjudicated")
             rows.append({
                 "rule": "screening_unresolved",
                 "purchase_order_id": order.pk,
@@ -1217,9 +1231,9 @@ class FraudAlert(TenantNumbered):
                     "screening", f"{screening.number} unresolved on {doc_date:%Y-%m-%d}"),
                 "detail": (f"Purchase order {order.number} of {doc_date:%Y-%m-%d} commits spend "
                            f"to this supplier while screening {screening.number} of "
-                           f"{screening.screened_on:%Y-%m-%d} still carries a match nobody has "
-                           f"adjudicated. Resolve the hit or record why the order stands - the "
-                           f"order itself is not held by this alert."),
+                           f"{screening.screened_on:%Y-%m-%d} {unresolved_phrase}. Resolve the "
+                           f"hit or record why the order stands - the order itself is not held "
+                           f"by this alert."),
                 "dedupe_key": f"scrunres:{order.pk}",
             })
         return rows
