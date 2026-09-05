@@ -171,8 +171,20 @@
               </td>
               <td>{% if row.policy_vendor %}{{ row.policy_vendor.name }}{% else %}<span class="text-muted">No policy</span>{% endif %}</td>
               <td class="text-right">
+                {% comment %}
+                  Buy is offered only where the RUN would buy. The view leaves
+                  `raise_requisition_url` EMPTY on a transfer- or manufacture-sourced row —
+                  generate() skips those policies — and sets `source_label` instead, so the cell
+                  names the method rather than going mysteriously blank beside an amber reorder
+                  point. Testing the url rather than re-deriving the rule here keeps one decision
+                  in one place.
+                {% endcomment %}
                 {% if row.below_point %}
-                  <a href="{{ row.raise_requisition_url }}" class="btn btn-sm btn-outline" title="Raise a requisition" aria-label="Raise a requisition for {{ row.sku }}"><i data-lucide="file-plus"></i></a>
+                  {% if row.raise_requisition_url %}
+                    <a href="{{ row.raise_requisition_url }}" class="btn btn-sm btn-outline" title="Raise a requisition" aria-label="Raise a requisition for {{ row.sku }}"><i data-lucide="file-plus"></i></a>
+                  {% else %}
+                    <span class="badge badge-slate" title="Replenished by {{ row.source_label|lower }} — a replenishment run never raises a requisition for it">{{ row.source_label }}</span>
+                  {% endif %}
                 {% endif %}
               </td>
             </tr>
