@@ -388,6 +388,94 @@ should have been — same 500-row cap, same need to explain it, and its version 
 the view's `order_by(...)[:ROW_CAP+1]` + stats-over-capped-pks pipeline. Written the same week as
 R1-M2, against a harder pipeline, and correct.
 
+### Pass 4 — `security-reviewer`
+
+Scope counts re-verified 4/4/7/7/12 plus the 6.18 blocks in `admin.py` and `seed_procurement.py`.
+**No Critical or High.** Two Medium, two Low. Both Mediums reproduced by the main session.
+
+#### R4-I1 — `ReplenishmentPolicy` CRUD is login-only, but the config steers real spend
+
+**File:** `views/…/Policies.py:255-273`
+
+Any authenticated tenant member — not only a tenant admin — can create or rewrite the workspace's
+replenishment configuration, and `release()` stamps it verbatim onto `scm.PurchaseRequisition`
+rows: `default_org_unit` → `org_unit_id`, `default_budget` → `budget_id`, `default_gl_account` →
+the line's GL, `preferred_vendor` → the grouping vendor, and the rounding fields → the quantity. So
+a non-admin can pre-load the supplier, cost centre, budget and GL coding of a document the
+admin-gated Release then raises **in the admin's name**.
+
+**Confirmed by the main session, and the precedent is the model's own:** `Policies.py:26-29` names
+`ReceiptTolerancePolicy` as what it is modelled on — and that one carries `@tenant_admin_required`
+on all three verbs (`ReceiptTolerances.py:213,223,233`), as does `RoutingRule`. Only the
+*configuration master* is ungated here; `release` and `post` are correctly gated.
+
+**Fix:** add `@tenant_admin_required` to `replenishmentpolicy_create` / `_edit` / `_delete`.
+
+**Pattern-clone (L28):** the same gap exists on the sibling config master `BudgetMapping`
+(`views/BudgetCostManagement/BudgetMappings.py:85/91/98`) — **6.15's, not ours.** Route it, do not
+fix it here.
+
+#### R4-I2 — deleting a policy silently rewrites the provenance of *released* suggestions
+
+**File:** `views/…/Policies.py:268-272` with `models/…/Runs.py:655-659`
+
+`replenishmentpolicy_delete` calls `crud_delete` with no reference guard, and
+`ReplenishmentSuggestion.policy` is **`on_delete=SET_NULL`** (confirmed). One POST nulls the FK on
+every historical suggestion — including lines already released into real requisitions — after
+which `replenishmentrun/detail.html:177-179` prints the affirmatively false *"no policy — plain
+defaults, no rounding"* beside a line whose `raw_suggested_qty != suggested_qty` proves it **was**
+rounded. The `AuditLog` records the policy delete and none of the N rows it mutated.
+
+Same class as R1-C1 (a destructive verb with no guard against erasing evidence for an
+already-committed document), different entity — a sibling, not a re-report.
+
+**Fix:** refuse when `obj.suggestions.filter(requisition__isnull=False).exists()`, and steer to
+deactivation — which the model already recommends at `Policies.py:152-155`.
+
+#### R4-M1 — `post()`'s `bulk_create` bypasses SCM's own `unit_cost` cap
+
+`models/…/MaterialIssues.py:361-371`. `bulk_create` skips `full_clean()`, so
+`StockAdjustmentLine.unit_cost`'s `MaxValueValidator(999999.9999)` never runs — and SCM's comment
+on that validator describes *exactly* this path: *"a tenant member drafts the line and a
+tenant-admin posts it, so an absurd cost would otherwise ride a bulk approval straight into the
+valuation report"*. `MaterialIssueLine.unit_cost` is `Decimal(14,4)`, ceiling ~10^10. Clamp at the
+boundary.
+
+#### R4-M2 — the two admin-gated buttons are rendered for every member (guaranteed 403)
+
+`materialissue/detail.html:60-64` (Post) and `replenishmentrun/detail.html:53-57` (Release) gate
+only on the status flags, so a non-admin sees the button, confirms the dialog and gets
+`PermissionDenied`. `grep -rn "is_tenant_admin" templates/procurement/inventorywarehouse/` returns
+nothing, against 178 templates repo-wide that do gate. Narrow `can_post` / `can_release` with an
+`_is_admin(request)` term — the decorator stays the enforcement, the flag stops offering it.
+
+#### Verified clean — and the two properties most at risk are enforced *by construction*
+
+- **Cross-tenant IDOR — clean and structural, not accidental.** All three tenant-less-child routes
+  resolve through the parent with all three legs present (`pk=line_id, run__pk=pk,
+  run__tenant=request.tenant`, and the equivalents). `materialissueline_add` sets `issue` from the
+  URL and omits it from `Meta.fields`, so it cannot be POSTed. All ~35 querysets scope by tenant or
+  through a parent; `.objects.all()` appears nowhere in the sub-module.
+- **Mass assignment — clean.** All five forms use explicit `Meta.fields`; every system stamp and
+  all eleven snapshot columns are absent, with `editable=False` behind them and `readonly_fields`
+  in admin.
+- **FK re-checks complete, not partial** — every FK on every form appears in its `_reject_foreign`
+  list (6/6, 5/5, 3/3, 1/1, 1/1), with each model's `clean()` as a third layer.
+- **Numeric input — clean.** No `int()`/`Decimal()`/`float()` on request data anywhere; all pks via
+  `as_db_int`, dates via a guarded `_as_date`, `int(selected_window)` fenced by membership.
+- **XSS — clean on all 12 templates including the three dict-row pages.** Zero `|safe`,
+  `mark_safe`, `autoescape off`, `innerHTML`. Every dynamic `class="badge {{ … }}"` value comes
+  from a Python constant dict with a `badge-muted` default.
+- **CSRF — 18 POST forms, 18 tokens.** No `@csrf_exempt`.
+- **Ledger boundary holds as a security property** — no `StockMove(` anywhere in `apps/procurement`;
+  `post()` is the only mint and writes `status="draft"`; `adjustment` is `editable=False`, off every
+  form, and read-only in admin; the seeder calls neither `post()` nor `release()`.
+- **Audit present on every mutating path.** The one gap is the collateral `SET_NULL` in R4-I2.
+
+*Noted, not filed:* no `ModelAdmin` in the repo scopes `get_queryset` by tenant, so `/admin/` is
+cross-tenant by construction — pre-existing across ~100 admin classes, `is_staff` defaults False,
+**not a 6.18 regression.**
+
 ---
 
 **Called out as done well:** `MaterialIssue.post()` implements all four properties of the
