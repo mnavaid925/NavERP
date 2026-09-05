@@ -122,6 +122,25 @@ from .DocumentKnowledgeManagement.Documents import (
 from .DocumentKnowledgeManagement.Revisions import ProcurementDocumentRevision, extract_document_text
 from .DocumentKnowledgeManagement.Policies import ProcurementPolicy
 from .DocumentKnowledgeManagement.KnowledgeResources import KnowledgeResource
+# 6.16 Supplier Performance & Evaluation — from the entity MODULES, same reason as 6.13-6.15.
+#
+# FOUR MODEL CLASSES AND NOTHING ELSE. The sub-module's CHOICES / CSS vocabularies are
+# deliberately NOT re-exported here: ``SupplierFeedback`` and ``SupplierImprovementPlans`` each
+# declare a ``STATUS_CHOICES`` and a ``STATUS_CSS`` and they are DIFFERENT enums (the response
+# lifecycle vs the plan lifecycle), so one bare name at this level would silently shadow the
+# other — and with three sub-modules being built into this file concurrently, generic names like
+# CATEGORY_CHOICES are a collision waiting to happen besides. Views and forms already import
+# every vocabulary from its entity module by path, and each is aliased onto its own model class
+# (``SupplierFeedback.STATUS_CHOICES``), so nothing needs them here. See the sub-package
+# __init__ for the full reasoning.
+#
+# ``generate_scorecard_lines`` — the one writer of ``SupplierKpiScore`` — is NOT here either: it
+# lives in ``apps/procurement/performance.py``, a flat app-root service module, and the seeder
+# and views import it from there.
+from .SupplierPerformanceEvaluation.SupplierKpis import SupplierKpi
+from .SupplierPerformanceEvaluation.ScorecardKpiScores import SupplierKpiScore
+from .SupplierPerformanceEvaluation.SupplierFeedback import SupplierFeedback
+from .SupplierPerformanceEvaluation.SupplierImprovementPlans import SupplierImprovementPlan
 
 __all__ = [
     "EaucBid",
@@ -208,4 +227,8 @@ __all__ = [
     "extract_document_text",
     "ProcurementPolicy",
     "KnowledgeResource",
+    "SupplierKpi",
+    "SupplierKpiScore",
+    "SupplierFeedback",
+    "SupplierImprovementPlan",
 ]
