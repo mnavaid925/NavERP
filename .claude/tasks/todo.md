@@ -3451,8 +3451,15 @@ apps/procurement/views/RiskComplianceManagement/**
 apps/procurement/urls/RiskComplianceManagement/**
 templates/procurement/riskcompliance/**
 ```
-Expected counts to check the glob against before trusting a clean report: **14 `.py`** under the four
-`RiskComplianceManagement/` dirs (incl. `__init__.py`), **16 `.html`** under `riskcompliance/` once Entity 4 lands.
+Expected counts to check the glob against before trusting a clean report — **verified on disk 2026-09-05 12:47**:
+
+| | now (Entities 1-3 + Entity 4 model/form) | after Entity 4 completes | after Entity 5 (if not cut) |
+|---|---|---|---|
+| `.py` under the four `RiskComplianceManagement/` dirs (incl. `__init__.py`, excl. `__pycache__`) | **22** | 26 | 30 |
+| `.html` under `templates/procurement/riskcompliance/` | **16** | 23 | 25 |
+
+If a glob returns fewer than the "now" column, the glob is wrong — not the work absent. Verify with:
+`find apps/procurement -path "*RiskComplianceManagement*" -name "*.py" ! -path "*pycache*" | wc -l`
 
 ## Commit discipline in this tree
 `git add 'path'; git commit --only 'path' -m 'msg'` — one file per commit. Plain `git add` + `git commit` sweeps
