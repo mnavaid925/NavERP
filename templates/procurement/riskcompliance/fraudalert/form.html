@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Fraud Alert {{ obj.number }}{% else %}Raise Fraud Alert{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — FraudAlert raise-or-amend. ONE template for both routes,
+    driven by `is_edit`
+    (apps/procurement/views/RiskComplianceManagement/FraudAlerts.py :: _alert_form).
+
+    Context contract: `form` + `is_edit` on both paths, plus `obj` on the EDIT path only — the
+    same shape crud_create / crud_edit supply, so nothing here reads a name the view does not
+    pass (L7). Every `obj.` read below therefore sits inside an `{% if is_edit %}` branch.
+
+    THIS IS THE HAND-RAISE PATH, for what no rule can see: a tip-off, a pattern somebody
+    noticed, a relationship the system has no column for. It writes into the same register the
+    scan does on purpose, so a human finding and a machine finding get the same triage, the same
+    disposition vocabulary and the same audit trail.
+
+    The form carries exactly: rule, severity, document_date, amount, detail, matched_on,
+    assigned_to, and the seven source pointers.
+
+    Everything the SYSTEM or the WORKFLOW owns has no input here and cannot be posted: tenant and
+    number (system-stamped), dedupe_key and detected_at (detection's), and status /
+    resolution_note / resolved_by / resolved_at / suspension (moved only by the four verb methods
+    on the model). `severity` IS on the form on purpose — it is a default a rule stamped, not a
+    verdict, and a reviewer has to be able to re-grade a row the engine over-called.
+
+    Field help is keyed off field.name so it stays correct if the field order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Amend alert — {{ obj.number }}{% else %}Raise a fraud alert{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:fraudalert_list' %}">Fraud alerts</a><span class="sep">›</span>
+        <span>{% if is_edit %}Amend{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">For what no rule can see. Point it at the records the question is about, say what you noticed in plain words, and leave the disposition to whoever looks at it — including, quite possibly, you. An alert raised here is a question on the record, not a conclusion.</p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The question</h2><span class="text-muted">what you noticed, and what it is about</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "rule" %}
+                <div class="form-help">Which pattern this is. Pick the one that actually describes what you saw — the rule decides how the alert is grouped on the board and what the detail page says about it. If the scan could have found this itself, it probably already has: check the register before raising a second row for the same fact.</div>
+              {% elif field.name == "severity" %}
+                <div class="form-help">How serious you think it is. Each rule carries a default the scan stamps, and this is deliberately re-gradable: a rule that over-calls its severity should be corrected on the row, not argued with in the register.</div>
+              {% elif field.name == "document_date" %}
+                <div class="form-help">The date of the FACT — the approval, the invoice, the day the two records started overlapping — never the date you are recording it. Ageing on the board is measured from here, so a detection date would reset every bucket each time somebody re-ran the scan. It cannot be in the future.</div>
+              {% elif field.name == "amount" %}
+                <div class="form-help">Optional, and leaving it blank is a real answer. A conflict of interest between a supplier and an employee is not a transaction and has no amount; entering 0 to fill the box would put a measured zero into every rollup on the board.</div>
+              {% elif field.name == "detail" %}
+                <div class="form-help">What you noticed, in the words you would use to explain it to the person who has to decide. This is the whole of the evidence for a hand-raised alert, so write the fact rather than the conclusion — who, what, when, and how you came to see it.</div>
+              {% elif field.name == "matched_on" %}
+                <div class="form-help">Optional. WHICH attribute connects the records, with the value masked — the scan writes things like <span class="fw-600">tax_id ••••1234</span> here. Do not paste a full identifier, a bank detail or anything else you would not want copied across the register.</div>
+              {% elif field.name == "assigned_to" %}
+                <div class="form-help">Optional. Who is looking into it. Leaving it blank puts it in the unassigned pile, and whoever takes it on is stamped automatically when they do.</div>
+              {% elif field.name == "vendor" %}
+                <div class="form-help">The supplier the question is about. Only parties carrying a supplier or vendor role in this workspace are offered.</div>
+              {% elif field.name == "related_party" %}
+                <div class="form-help">The second party, when there is one: the EMPLOYEE in a conflict of interest, or the SECOND SUPPLIER RECORD in a suspected duplicate. Any party in the workspace can be picked, because those two rules need opposite kinds of record. Nothing here merges, deactivates or edits either one.</div>
+              {% elif field.name == "requisition" %}
+                <div class="form-help">Optional. The requisition behind the question.</div>
+              {% elif field.name == "purchase_order" %}
+                <div class="form-help">Optional. The purchase order behind the question.</div>
+              {% elif field.name == "supplier_invoice" %}
+                <div class="form-help">Optional. The supplier invoice behind the question.</div>
+              {% elif field.name == "approval" %}
+                <div class="form-help">Optional. The approval signature behind the question — the one sign-off that looks wrong.</div>
+              {% elif field.name == "screening" %}
+                <div class="form-help">Optional. The compliance screening behind the question, when a sanctions or denied-party match is part of it.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">At least one of the seven pointers is required. An accusation with no record behind it cannot be reviewed by anybody, which is why the form refuses one rather than filing it.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Raise alert{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:fraudalert_detail' obj.pk %}{% else %}{% url 'procurement:fraudalert_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{% if is_edit %}What amending does{% else %}What happens when you save{% endif %}</h2></div>
+    <div class="card-body">
+      {% if is_edit %}
+        <p class="text-muted">Saving changes the alert and nothing else. An alert can only be amended while it is still open: once it has been substantiated, marked a false positive or referred on, it is the record a decision rests on, and the honest way to correct it is to raise a new alert with the new evidence.</p>
+      {% else %}
+        <p class="text-muted">Saving files the alert as open and takes you to it. It joins the same register the rules write into and gets the same four dispositions, so nobody reading the board has to know whether a row came from a person or from a rule.</p>
+      {% endif %}
+      <p class="text-muted">Nothing else happens. Raising an alert holds no purchase order, blocks no payment, refuses no award and never edits, merges or deactivates a supplier record. The only place a vendor is actually blocked is the <a href="{% url 'procurement:vsu_list' %}">vendor suspension register</a>, and that stays a separate, deliberate decision made by somebody who can defend it.</p>
+    </div>
+  </div>
+{% endblock %}
