@@ -2,6 +2,10 @@
 from django.contrib import admin
 
 from .models import (
+    KnowledgeResource,
+    ProcurementDocument,
+    ProcurementDocumentRevision,
+    ProcurementPolicy,
     AdvancedShipmentNotice,
     AsnLine,
     Backorder,
@@ -777,3 +781,65 @@ class CostForecastAdmin(admin.ModelAdmin):
     # with no computation behind it.
     readonly_fields = ("number", "committed_amount", "historical_amount", "forecast_amount",
                        "created_by", "created_at", "updated_at")
+
+
+# ---------------------------------------------------------------------------
+# 6.19 Document & Knowledge Management
+# ---------------------------------------------------------------------------
+
+
+@admin.register(ProcurementDocument)
+class ProcurementDocumentAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "doc_type", "status", "classification",
+                    "current_revision_no", "expires_on", "owner")
+    list_filter = ("tenant", "doc_type", "status", "classification", "supplier_visible")
+    search_fields = ("number", "title", "description", "tags", "extracted_text")
+    raw_id_fields = ("supplier", "contract", "purchase_order", "sourcing_event",
+                     "owner", "checked_out_by", "created_by")
+    # extracted_text is machine-written by the revision ingest, never typed. current_revision_no
+    # is the pointer the approve verb moves under a row lock — editing it here by hand would
+    # silently make a superseded revision the current one without any approval behind it.
+    readonly_fields = ("number", "current_revision_no", "extracted_text",
+                       "created_at", "updated_at")
+
+
+@admin.register(ProcurementDocumentRevision)
+class ProcurementDocumentRevisionAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "document", "revision_no", "is_approved", "approved_by",
+                    "approved_at", "file_size")
+    list_filter = ("tenant", "is_approved")
+    search_fields = ("document__number", "document__title", "change_note", "original_filename",
+                     "sha256")
+    raw_id_fields = ("document", "uploaded_by", "approved_by")
+    # A revision is immutable by design: every column but change_note is editable=False on the
+    # model, and the whole point of the chain is that history is never rewritten. Listing them
+    # here too keeps the reason visible where the form is built.
+    readonly_fields = ("revision_no", "file", "sha256", "file_size", "original_filename",
+                       "extracted_text", "extraction_note", "is_approved", "approved_by",
+                       "approved_at", "uploaded_by", "created_at", "updated_at")
+
+
+@admin.register(ProcurementPolicy)
+class ProcurementPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "policy_type", "status", "effective_from",
+                    "requires_acknowledgment", "owner")
+    list_filter = ("tenant", "policy_type", "status", "requires_acknowledgment")
+    search_fields = ("number", "title", "summary", "body", "tags")
+    raw_id_fields = ("document", "applies_to", "previous_version", "owner")
+    # published_at is stamped once by the publish verb, which also archives the predecessor in
+    # the same transaction. Setting it by hand would put a policy "in force" with no supersession
+    # behind it, and the library could then show two published versions of one rule.
+    readonly_fields = ("number", "published_at", "created_at", "updated_at")
+
+
+@admin.register(KnowledgeResource)
+class KnowledgeResourceAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "resource_type", "status", "audience", "is_featured",
+                    "usage_count", "last_used_at")
+    list_filter = ("tenant", "resource_type", "status", "audience", "is_featured")
+    search_fields = ("number", "title", "summary", "body", "tags")
+    raw_id_fields = ("document", "owner")
+    # usage_count is incremented atomically by the "use this resource" verb (an F() expression,
+    # so concurrent presses both count). Typing a number here would invent usage that never
+    # happened — and the counter is already documented as a click count, not an audit trail.
+    readonly_fields = ("number", "usage_count", "last_used_at", "created_at", "updated_at")
