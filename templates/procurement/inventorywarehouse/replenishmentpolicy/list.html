@@ -47,7 +47,14 @@
     <div class="page-actions">
       <a href="{% url 'procurement:replenishmentrun_list' %}" class="btn btn-outline"><i data-lucide="refresh-cw"></i> Replenishment runs</a>
       <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Reorder rules</a>
-      <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+      {% comment %}
+        Writing a policy is @tenant_admin_required — it presets the vendor, cost centre, budget
+        and GL coding of the requisitions a release raises. The decorator is the enforcement;
+        this test only stops the page offering a button that is guaranteed to 403.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+      {% endif %}
     </div>
   </div>
 
@@ -172,15 +179,20 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:replenishmentpolicy_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'procurement:replenishmentpolicy_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
-                  {% comment %}
-                    Delete is @require_POST, so it can only be a form. Only the primary key
-                    reaches the confirm string — the SKU, the location code and the vendor name
-                    are all user-authored text and never do.
-                  {% endcomment %}
-                  <form method="post" action="{% url 'procurement:replenishmentpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment policy #{{ obj.pk }}? This item falls back to its any-location policy, or to no procurement policy at all — the SCM reorder rule is untouched either way.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <a href="{% url 'procurement:replenishmentpolicy_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% comment %}
+                      Delete is @require_POST, so it can only be a form. Only the primary key
+                      reaches the confirm string — the SKU, the location code and the vendor name
+                      are all user-authored text and never do. It is also refused outright once
+                      this policy has shaped a suggestion that was released into a requisition:
+                      the FK is SET_NULL, so deleting would quietly erase how those quantities
+                      were arrived at. The view says so and steers to deactivation.
+                    {% endcomment %}
+                    <form method="post" action="{% url 'procurement:replenishmentpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment policy #{{ obj.pk }}? This item falls back to its any-location policy, or to no procurement policy at all — the SCM reorder rule is untouched either way. A policy that already shaped a released suggestion is refused.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -190,7 +202,9 @@
                 <i data-lucide="sliders-horizontal"></i>
                 <h3>No replenishment policies found</h3>
                 <p>Nothing matches these filters. A policy is procurement's overlay on an SCM reorder rule — it adds the vendor, the rounding and the requisition defaults that turn a reorder signal into something somebody can actually buy.</p>
-                <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                  <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+                {% endif %}
                 <a href="{% url 'procurement:replenishmentpolicy_list' %}" class="btn btn-outline">Clear filters</a>
               </div>
             </td></tr>
