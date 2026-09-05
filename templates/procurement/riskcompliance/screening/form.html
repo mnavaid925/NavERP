@@ -39,6 +39,23 @@
     </div>
   </div>
 
+
+  {% comment %}
+    L39 dead-end notice: `party` is required and its queryset is this workspace's suppliers and
+    vendors. With none on file the <select> renders empty and the form cannot be submitted, with
+    nothing on the page saying why. Same precondition and same treatment as
+    attestation/form.html.
+  {% endcomment %}
+  {% if not form.fields.party.queryset %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">No supplier to screen</h2></div>
+      <div class="card-body">
+        <p class="text-muted">This workspace has no party carrying a supplier or vendor role, so there is nobody to screen yet. That is a precondition rather than a fault: a sanctions lookup is a check against a named counterparty, so the counterparty has to exist and carry a supplier role before the result of checking it means anything.</p>
+        <a href="{% url 'core:party_list' %}" class="btn btn-primary"><i data-lucide="users"></i> Go to parties</a>
+      </div>
+    </div>
+  {% endif %}
+
   <form method="post" novalidate>
     {% csrf_token %}
     <div class="card">
