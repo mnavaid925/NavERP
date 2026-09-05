@@ -488,5 +488,119 @@ closed-escalated, and **all four set `acknowledge=`**. Consequences against
 
 ---
 
-*(remaining reviewers append below: frontend-reviewer → performance-reviewer → qa-smoke-tester →
-security-reviewer)*
+### 3/6 - `frontend-reviewer` (all 17 templates read in full)
+
+**Critical: none.** Three Important, two Minor. The first two are the same bug with opposite bias, and
+both were reproduced against the model definitions.
+
+#### F1 - Important - the feedback submit form pre-selects "1 - Poor", the WORST rating
+
+`templates/procurement/performance/feedback/detail.html:143-149`
+
+On the ordinary flow (`requested`, `rating is None`) no `{% if obj.rating == N %}selected{% endif %}`
+fires, so the browser selects the first `<option>`. An operator who clicks **Submit response** without
+touching the select files that supplier at **rating 1 (Poor)** - and `supplierfeedback_submit` accepts
+it as a deliberate choice (`posted` is truthy, `1 in _RATING_VALUES`,
+`views/.../SupplierFeedback.py:300-305`). The confirm at line 152 says "with the rating selected above"
+**without naming it**, so nothing catches it. That rating then feeds the survey aggregate and the
+perception-gap board.
+
+**Fix:** a neutral first option - `<option value="" selected>Choose a rating...</option>` - plus
+`required`. Safe: the view already refuses an empty post with `messages.error` + redirect
+(`:306-309`), which is exactly what the help text at line 150 promises.
+
+#### F2 - Important - the close form pre-selects "Successful", and closing is irreversible
+
+`templates/procurement/performance/improvementplan/detail.html:210-214`. Verified:
+
+```
+OUTCOME_CHOICES = [("successful", "Successful"), ("extended", "Extended"), ...]   # first = default
+<option value="{{ val }}">{{ label }}</option>                                    # nothing selected
+```
+
+Same shape as F1, opposite bias, and worse: closing is **admin-only**, stamps `verified_by` /
+`verified_at`, writes `closure_note` once, and **cannot be edited afterwards** (the page says so at
+line 220). It is the ending the supplier is shown. An admin who presses **Close plan** without opening
+the select signs the plan *Successful*. The confirm at line 222 again only says "with the outcome
+selected above".
+
+**Fix:** `<option value="" selected>Choose how it ended...</option>` first, plus `required`.
+`improvementplan_close` already refuses `""` with a message (`SupplierImprovementPlans.py:348-353`).
+
+#### F3 - Important - a zero-response survey line claims it is not a survey line
+
+`templates/procurement/performance/kpiscore/detail.html:132` -
+`{% if obj.respondent_count %}` is a **truthiness** test on a `PositiveIntegerField(default=0)`, so `0`
+falls through to `{% else %}None - not a survey measurement{% endif %}`.
+
+That path is live: `performance.py:631` runs `update_or_create` for **every** applicable KPI, so a
+survey KPI with no submitted responses in the window gets a real line with `source_at_time="survey"`,
+`measured_value=None`, `respondent_count=0`. The card then reads "Source at the time: **360 survey**"
+at `:125-126` and "Responses aggregated: **not a survey measurement**" seven lines later - two rows of
+one card contradicting each other, and the honest fact ("asked, nobody answered") is lost.
+
+**Fix:** branch on the source, not the count -
+`{% if obj.source_at_time == "survey" %}{{ obj.respondent_count }}{% else %}...{% endif %}`.
+
+#### Minor
+
+- **F4** badge chains hand-rolled where the model already owns the mapping -
+  `evaluation/detail.html:337-346, :401-403, :408-411` and `kpi/detail.html:145-148, :197-206, :262-264,
+  :269-272`. All seven chains **agree with the model today**, so drift risk rather than a live defect -
+  but the list templates for the same models already use `{{ obj.status_css }}`, and both files' header
+  comments claim badges come "from the model's own committed mapping", which is only true of the lists.
+- **F5** `benchmark_board.html:107` - the only `.stat-grid` in 6.16 nested inside a `.card` and needing
+  an inline `style="padding:0 1rem;"` correction; the five list pages put it at top level with no
+  override.
+
+#### Clean - coverage statement
+
+- **Comment leak (L2):** zero `{#` in all 17 files; every note uses `{% comment %}`.
+- **L33 / theme classes:** only `badge-green/-red/-amber/-info/-muted/-slate` used; the 5
+  `badge-success` hits are inside `{% comment %}` warnings. All `stat-icon` variants used exist. Every
+  non-badge modifier resolves against `theme.css` - no invented class names.
+- **Model-owned mappings:** `BAND_CSS`, both `STATUS_CSS`, `RATING_CSS`, `KIND_CSS`, `SEVERITY_CSS`,
+  `OUTCOME_CSS` and `performance._delta_css()` all emit real theme classes, and `_delta_css`'s
+  thresholds match the perception-gap legend **exactly** (>=20 red, >=10 amber, <=-10 info, else green,
+  None slate).
+- **Badge conditions vs CHOICES:** every literal chain tests a value the model can hold; no dead
+  branches; all carry an `{% else %}` fallback.
+- **Pagination (L9):** all five lists delegate to the shared partial, which guards `has_previous` /
+  `has_next` and replays every GET param except `page` - filters survive paging.
+- **Filters:** every list has `name="q"` plus exactly the selects its view declares, each reflecting
+  `request.GET`; all pk comparisons use `|stringformat:"d"` and there is **no `|slugify` anywhere** (the
+  seven grep hits are comments saying never to use it). `benchmark_board.html:67-69` even re-offers a
+  hand-typed out-of-range `?period=` so the picker cannot disagree with the table it filters.
+- **URLs:** all 38 distinct `{% url %}` names resolve, including cross-app `scm:scorecard_detail` /
+  `scm:scorecard_create` and `procurement:vsu_detail`.
+- **Destructive controls:** every delete is a POST form with `{% csrf_token %}`, and every confirm names
+  the specific record (`{{ obj.number }}`) and its real consequence - no generic "Are you sure?". Only
+  system-assigned numbers reach `confirm()`; no user-authored strings do.
+- **Overflow:** all 17 tables sit inside `.table-wrap`, including both branches of the
+  `{% if selected_kpi %}` split in `trend_board.html`.
+- **Empty states:** copy is accurate - `perception_gap.html:160-164` correctly distinguishes "no
+  responses at all" from "none in this window", and `evaluation/list.html:167` does not blame filters
+  when the register is genuinely empty.
+- **Honest numbers:** every nullable read traced - `composite`, `overall`, `measured_value`, `score`,
+  `delta`, `percentile`, `risk_index`, `quadrant`, `grade` all render as an em dash, "Not scored", "No
+  data" or "Unplaced", never `0`. **F3 is the single exception.**
+- **Accessibility:** matches house level exactly; the bare `q` input with `aria-label` and no
+  `<label for>` is the same pattern as `budgetcost/` and `spendanalytics/`, so not filed against 6.16.
+  Every icon-only button has `title` **and** `aria-label`; every field uses `for="{{ field.id_for_label }}"`.
+- **Not a finding after checking:** the second `.card-header` mid-card after a table is an established
+  house pattern (seven sibling templates do it).
+
+#### Praise
+
+The `*_css` model properties are the best thing in this sub-module: by putting the colour mapping on
+the model and having templates emit `<span class="badge {{ obj.band_css }}">`, **L33 - the bug that has
+shipped three times on this project - is made structurally unable to recur on those rows**, because the
+template never names a colour at all. Combined with `evaluation/detail.html:84-93`, where the one-way
+handover is stated as a standing warning, again inside the `confirm()` at the moment of the click, and
+a third time in past tense once set - and where `can_generate=False` *replaces* the button with
+`refusal_reason` rather than greying it out. F4 is only asking that the same idea be finished across
+the seven embedded tables.
+
+---
+
+*(remaining reviewers append below: performance-reviewer → qa-smoke-tester → security-reviewer)*
