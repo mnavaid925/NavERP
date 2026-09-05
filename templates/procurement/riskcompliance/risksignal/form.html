@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Risk Signal {{ obj.number }}{% else %}Capture Risk Signal{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — SupplierRiskSignal capture-or-amend. ONE template for
+    both routes, driven by `is_edit`
+    (apps/procurement/views/RiskComplianceManagement/RiskSignals.py :: _signal_form).
+
+    Context contract: `form` + `is_edit` on both paths, plus `obj` on the EDIT path only — the
+    same shape crud_create / crud_edit supply, so nothing here reads a name the view does not
+    pass (L7). Every `obj.` read below therefore sits inside an `{% if is_edit %}` branch.
+
+    The form carries exactly: party, provider, metric, observed_on, value, next_refresh_on,
+    source_ref, evidence, notes. AN OPERATOR SUPPLIES WHAT THE REPORT SAYS AND NOTHING ABOUT
+    WHAT IT MEANS.
+
+    Everything the SYSTEM or the WORKFLOW owns has no input here and cannot be posted:
+    tenant and number (system-stamped), captured_by (stamped from the session — a field for "who
+    captured this" is an attribution anybody could forge, and amending must not silently transfer
+    it), scale_min / scale_max / higher_is_better / risk_position / band / previous_value / trend
+    (all derived from the metric own registered scale and this row own predecessor), and
+    review_status / review_note / reviewed_by / reviewed_at (moved only by the three review
+    verbs). A form field for "what band is this?" would defeat the whole model: two people
+    entering the same report would produce two different bands.
+
+    Field help is keyed off field.name so it stays correct if the field order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Amend observation — {{ obj.number }}{% else %}Capture an observation{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:risksignal_list' %}">Risk signals</a><span class="sep">›</span>
+        <span>{% if is_edit %}Amend{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">One observation of one financial-health metric for one supplier, from one provider, on one date. Enter the number exactly as the provider published it — the scale, the risk position, the band and the trend are all worked out from the metric you pick, so they cannot disagree between one person and the next.</p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The observation</h2><span class="text-muted">what the report says, not what it means</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "party" %}
+                <div class="form-help">The supplier this observation is about. Only parties carrying a supplier or vendor role in this workspace are offered.</div>
+              {% elif field.name == "provider" %}
+                <div class="form-help">Who published the number. It is part of the identity of a series: a reading is only ever trended against earlier readings of the same metric from the same provider, because two bureaus scoring the same supplier are not measuring the same thing.</div>
+              {% elif field.name == "metric" %}
+                <div class="form-help">Which number this is — and the single most important field on the form. The scale and its direction come from here: an FHR of 100 is excellent, a Supplier Evaluation Risk of 9 is dangerous, and picking the wrong metric bands the supplier at the wrong end of the right scale. Each label states its range and direction. A metric with no registered scale bands as Not banded rather than as low.</div>
+              {% elif field.name == "observed_on" %}
+                <div class="form-help">The date the PROVIDER measured it, which is not the date you are capturing it. It cannot be in the future, and it is what orders the series.</div>
+              {% elif field.name == "value" %}
+                <div class="form-help">The raw number exactly as published — do not convert, invert or round it to make it look like a score. A value well outside the metric registered range is refused here rather than clamped, because a mis-keyed Supplier Evaluation Risk of 70 would otherwise clamp silently to 9 and report the supplier as maximally dangerous with total confidence.</div>
+              {% elif field.name == "next_refresh_on" %}
+                <div class="form-help">When this supplier is due a fresh observation of this metric. Leave it blank and the series will surface as stale rather than overdue once it ages past the staleness window — either way it reaches the refresh board, but a date says when you promised to look again. It cannot be before the observation date.</div>
+              {% elif field.name == "source_ref" %}
+                <div class="form-help">The provider report or reference id, so somebody who was not there can trace the number back. Stored and displayed as plain text, never as a link.</div>
+              {% elif field.name == "evidence" %}
+                <div class="form-help">Optional. The saved report or extract this observation rests on — the artefact somebody would ask to see. There is no live bureau connection here, so this is what stands behind the number.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Optional. Worth writing when the circumstances of the reading are not obvious from the fields alone.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Capture observation{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:risksignal_detail' obj.pk %}{% else %}{% url 'procurement:risksignal_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{% if is_edit %}What amending does{% else %}What happens when you save{% endif %}</h2></div>
+    <div class="card-body">
+      {% if is_edit %}
+        <p class="text-muted">Saving re-derives this row scale, risk position, band and trend against its own predecessor. It does not restamp the rows captured after it: those keep the previous reading they were stamped with at the time, because a series is a record of what was known when. An observation can only be amended while it is still open — once it has been actioned or dismissed it is the record a decision rests on, and the honest way to correct a reading is to capture the corrected one as a new observation.</p>
+      {% else %}
+        <p class="text-muted">Saving works out the scale from the metric, converts the raw number to a risk position where 0 is always the safest end, reads the band off that position, and compares it with the previous observation in the same series to set the trend. Nothing here is typed by hand, so the same report entered by two people produces the same band.</p>
+      {% endif %}
+      <p class="text-muted">A deterioration that lands in the elevated or critical band raises one item in the Task &amp; Alert Center — one per supplier and metric until somebody closes it, not one a month. Nothing else happens: a risk signal holds no purchase order, blocks no payment and refuses no award. The only place a vendor is actually blocked is the vendor suspension register.</p>
+    </div>
+  </div>
+{% endblock %}
