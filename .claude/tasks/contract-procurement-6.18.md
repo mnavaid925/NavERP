@@ -521,10 +521,34 @@ Availability formula is **reused verbatim** from
 **Row dict keys:** `grn`, `grn_url`, `staging_location`, `received_qty`, `bins` (list of
 `{location, path, quantity, capacity, fullness_pct, capacity_css}`), `putaway_tasks` (list of
 `{task, url, status, status_css, to_location}`), `unputaway_qty`, `is_unputaway`, `putaway_css`.
-**The receipt→bin link IS `StockMove.reference == grn.number`** (posted at
-`apps/scm/views/_helpers.py:328-330`, indexed `StockMoves.py:60`). A bin **IS**
-`scm.Location(location_type="bin")` — **no Bin/Zone model.** Paginate the GRNs FIRST, then five
-grouped queries regardless of page size.
+**CORRECTED — the earlier version of this line was WRONG and would have shipped a blank or
+misleading bins column.** It said "the receipt→bin link IS `StockMove.reference == grn.number`".
+It is not. Verified in `apps/scm/views/_helpers.py`:
+
+| move | written by | `reference` | `move_type` | lands in |
+|---|---|---|---|---|
+| goods receipt | `_post_receipt` `:330` | **`grn.number`** | `receipt` | the **staging** location |
+| putaway out/in | `_post_putaway` `:227-234` | **`task.number`** | `transfer` | the destination **bin** |
+
+So `reference == grn.number` finds **only the receipt into staging** — it can never tell you which
+bin the goods reached, which is the one question this page exists to answer. The correct join is
+two hops, and the second is not a `StockMove` lookup at all:
+
+1. `scm.PutawayTask.objects.filter(tenant=…, goods_receipt_id__in=<page pks>)` — the FK already
+   ties the task to its GRN.
+2. **`PutawayTask.to_location` IS the destination bin.** No stock query is needed for the
+   destination. Use `StockMove` only where a *quantity per bin* is wanted, and then join on
+   `reference == task.number` with `reason="Putaway in"` (positive leg), never on `grn.number`.
+
+`unputaway_qty` is therefore `received_qty` minus the sum of completed putaway task quantities for
+that GRN — not a `StockMove` difference.
+
+A bin **IS** `scm.Location(location_type="bin")` — **no Bin/Zone model.** Paginate the GRNs FIRST,
+then the grouped queries, regardless of page size.
+
+`reference_note` must state this honestly: the receipt→bin trail runs GRN → `PutawayTask` → bin,
+and stock received but never put away has **no bin at all** — it is still sitting in staging, which
+is exactly what the `is_unputaway` flag reports.
 
 ### `count_accuracy` (derived, no model)
 
