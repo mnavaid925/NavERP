@@ -109,6 +109,76 @@ worth either renaming the key per board or documenting why trend's differs.
 
 ---
 
+## RESUME POINT — where 6.16 stands (session ended here)
+
+**Build: COMPLETE.** Four entities + three boards, all committed. `manage.py check` clean.
+
+**Integrate: DONE except the seeder.** Verified on disk this session:
+
+| Step | State |
+|---|---|
+| four `SupplierPerformanceEvaluation/__init__.py` re-export blocks | done (33/22/24/51 lines) |
+| `models/` `forms/` `views/` `urls/` app-level `__init__.py` | done |
+| `admin.py` — four models registered | done (`07f0b03c`) |
+| `apps/core/navigation.py` — `LIVE_LINKS["6.16"]` | done (`d33ac440`) |
+| `urls/__init__.py` — appended last | done (`851c486c`) |
+| **`seed_procurement.py` — `_seed_supplier_performance`** | **NOT STARTED** |
+| `makemigrations` / `migrate` / seed / smoke | **NOT RUN** |
+
+Verified by resolver walk (not grep — grep cannot see factory-generated names):
+**33 of 33 routes register, zero duplicate url names app-wide, procurement total 385.**
+
+### The seeder is the only code left. Two traps it must handle
+
+1. **`seed_scm` leaves its scorecards `published`** (`apps/scm/management/commands/seed_scm.py` ~288:
+   creates `draft`, recomputes, then flips to `published`). `generate_scorecard_lines` **refuses on
+   anything but draft**, so the seeder must create its OWN draft `scm.SupplierScorecard` per demo
+   supplier for a prior period and generate onto those. Seeding against the scm scorecards produces
+   a page that is correct, empty, and looks broken.
+2. Dispatch line goes **immediately after `self._seed_budget_cost(tenant)`**; 6.17/6.18/6.19 append
+   theirs after. Idempotent (`.exists()` guard, `get_or_create`), reuse seeded `core.Party`
+   suppliers, never `--flush`.
+
+### MIGRATION IS DELIBERATELY NOT GENERATED — do not just run it
+
+`makemigrations procurement` **cannot be scoped to one session's models.** It reads the app model
+registry, and a `--dry-run` this session showed it would emit ONE migration containing 6.19's four
+models alongside 6.16's four:
+
+```
+0026_procurementdocument_knowledgeresource_and_more.py
+    + ProcurementDocument · KnowledgeResource · ProcurementDocumentRevision · ProcurementPolicy   (6.19)
+    + SupplierKpi · SupplierImprovementPlan · SupplierFeedback · SupplierKpiScore                 (6.16)
+```
+
+A shared migration is functionally fine. **The blocker is `ProcurementPolicy`** — still disputed
+between 6.17 and 6.19 as of this session's end. Generating would bake `procurement_procurementpolicy`
+into the graph under a 6.16 migration and settle by accident a question 6.16 is not party to,
+converting a class rename into a cross-session migration-graph edit.
+
+**Before generating, confirm with the 6.17 and 6.19 sessions that ownership is settled.** Then
+announce immediately before running (only *simultaneous* generation splits the graph), and verify a
+single leaf afterwards:
+
+```python
+MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes()   # filter app == 'procurement'
+```
+
+Leaf at session end: `0025_remove_budgetmapping_prc_bmap_tnt_active_idx_and_more`.
+
+**Registration is the lever** (found by the 6.18 session): a model enters the registry only when
+`models/__init__.py` re-exports it. 6.16's block has landed, so 6.16's models are now exposed to
+capture by whoever generates next — including a peer. That is accepted, not a problem: the four
+models are settled and verified.
+
+### Remaining phases after the seeder
+
+migrate → `seed_procurement` **twice** → `manage.py check` → smoke as `admin_acme`/`password`
+(assert content, not status) → the six reviewers **scoped to path globs, NOT `BASE...HEAD`** (see the
+top of this file) → `code-fixer` on findings PB1–PB6 → tests → SKILL.md + README.
+
+---
+
 ## Reviewer findings
 
 *(appended as each of the six reviewers reports: code-reviewer → explorer → frontend-reviewer →
