@@ -86,7 +86,7 @@
     <div class="card-body">
       <dl class="detail-grid">
         <div class="detail-item"><dt>Download</dt>
-          <dd>{% if obj.file %}<a href="{{ obj.file.url }}"><i data-lucide="download"></i> {{ obj.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">No file stored</span>{% endif %}</dd></div>
+          <dd>{% if obj.file %}<a href="{% url 'procurement:pdocrevision_download' obj.pk %}"><i data-lucide="download"></i> {{ obj.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">No file stored</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Size</dt><dd>{{ obj.file_size|filesizeformat }}</dd></div>
         <div class="detail-item"><dt>Checksum (SHA-256)</dt>
           <dd>{% if obj.sha256 %}<span style="word-break:break-all;">{{ obj.sha256 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
