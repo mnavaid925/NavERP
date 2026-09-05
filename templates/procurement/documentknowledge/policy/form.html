@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Procurement Policy{% else %}New Procurement Policy{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementPolicy create-or-edit. ONE template for
+    both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj).
+
+    Context contract, and NOTHING else exists here: form, is_edit, (edit only) obj,
+    advisory_note.
+    No page_title / submit_label / cancel_url — those belong to a hand-rolled create view, and
+    this one goes through the shared crud_* helpers (the budgetmapping_create precedent).
+
+    The form carries exactly: title, policy_type, summary, body, version_number,
+    previous_version, applies_to, owner, document, effective_from, next_review_on,
+    threshold_amount, threshold_basis, threshold_currency, requires_acknowledgment.
+
+    Deliberately ABSENT and worth knowing why, because a reader will look for them:
+      * status — verb-driven. Publish and archive are buttons on the detail page, each with its
+        own audit row, and publish is administrator-gated AND archives the version it replaces.
+        A status <select> here would skip all three at once.
+      * published_at — stamped by the publish verb alone. Typed here it would claim a
+        publication that never happened.
+      * a FILE field — a policy PDF is an ordinary document chosen through `document`, so it
+        goes through the repository's allow-list, size cap, checksum, text read and approval
+        step. There is no second upload path that skips those.
+      * number and created_by — system-written.
+
+    advisory_note is the ONE constant this page, the register and the detail page all print, so
+    the person filling this form in is told what a threshold does before they wonder.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New procurement policy{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:ppolicy_list' %}">Policies</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">{{ advisory_note }}</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Policy</h2><span class="text-muted">the rule, its version, its scope and the guideline it quotes</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "title" %}
+                <div class="form-help">What a colleague would search for — the rule, not the document number. "Competitive bidding" beats "Policy 4b". The same title may exist once per version.</div>
+              {% elif field.name == "policy_type" %}
+                <div class="form-help">Drives the type facet on the register. Pick the closest match; Other is honest when nothing fits.</div>
+              {% elif field.name == "summary" %}
+                <div class="form-help">One or two sentences a buyer can act on without opening the full text. Searched alongside the title and the body.</div>
+              {% elif field.name == "body" %}
+                <div class="form-help">The rule as written, for people to read. Searched in full. If the signed wording lives in a PDF, link that document below instead of pasting a second copy here.</div>
+              {% elif field.name == "version_number" %}
+                <div class="form-help">Free text — "1.0", "2024-A", whatever this workspace uses. Publishing a new version archives the one it replaces, so the library never shows two published versions of the same rule.</div>
+              {% elif field.name == "previous_version" %}
+                <div class="form-help">The version this one replaces. Leave blank for a first version. A policy cannot point at itself, and it cannot point at anything that already traces its history back here — both would make the chain loop, and both are refused.</div>
+              {% elif field.name == "applies_to" %}
+                <div class="form-help">Narrow the policy to one company, branch, department or team. Blank means it applies to the whole workspace.</div>
+              {% elif field.name == "owner" %}
+                <div class="form-help">Who is answerable for keeping this rule current — rewriting it when it stops matching practice, and reading it again when the review date arrives.</div>
+              {% elif field.name == "document" %}
+                <div class="form-help">Optional. The signed PDF in the repository, so it inherits revision control, approval and text search instead of sitting somewhere as an unversioned copy.</div>
+              {% elif field.name == "effective_from" %}
+                <div class="form-help">When the rule starts to apply. It is a date people read, not a switch — nothing begins or stops enforcing anything on it.</div>
+              {% elif field.name == "next_review_on" %}
+                <div class="form-help">When somebody should read this again. Once the date arrives the policy is badged "Review overdue" on the register and counted in the tile above it.</div>
+              {% elif field.name == "threshold_amount" %}
+                <div class="form-help">The guideline figure the written rule quotes — for example the value above which three quotes are expected. It is documentation. Nothing in this module reads it to stop, route or approve anything; approval bands are the routing rules in Approval Workflow Engine (6.3). Set it together with the basis below, or leave both blank.</div>
+              {% elif field.name == "threshold_basis" %}
+                <div class="form-help">What the guideline figure is measured against — per line, per requisition, per order, per contract year, or annual spend with one supplier. Required once an amount is given, so the figure is readable.</div>
+              {% elif field.name == "threshold_currency" %}
+                <div class="form-help">Optional label on the figure, so the page does not print a bare number. No conversion happens and no rate is looked up.</div>
+              {% elif field.name == "requires_acknowledgment" %}
+                <div class="form-help">A marker for Policy Management &amp; Acknowledgment (6.17), which owns assignment and sign-off. Ticking it records that sign-offs should be collected for this policy; it does not collect them, and nothing here tracks who has read it.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create policy{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:ppolicy_detail' obj.pk %}{% else %}{% url 'procurement:ppolicy_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2><span class="text-muted">draft, publish, supersede</span></div>
+    <div class="card-body">
+      <p class="text-muted">{{ advisory_note }}</p>
+      <p class="text-muted">Saving creates the policy as a draft — visible in the library, not yet stated as in force. A workspace administrator publishes it, which stamps the publication time and, when this version replaces a published one, archives that predecessor in the same moment so the register never shows two live versions of the same rule. Archiving is available to anyone and deletes nothing.</p>
+    </div>
+  </div>
+{% endblock %}
