@@ -79,6 +79,8 @@ _SCORE_RELATIONS = ("kpi", "scorecard", "scorecard__party")
 #: no control at all.
 _REFUSAL_NO_TENANT = ("Select a tenant workspace before generating — a scorecard belongs to one "
                       "workspace and the superuser has none.")
+_REFUSAL_NOT_ADMIN = ("Generating hands this scorecard to Procurement permanently, so it is a "
+                      "workspace-admin action — ask an admin of this workspace to press it.")
 
 #: The range ``datetime.date`` can hold. ``period_end__year`` is the app's ONLY ``__year`` int
 #: filter, and it is NOT a pk lookup — so ``crud_list``'s zero-skip (scoped to pk lookups on
@@ -88,6 +90,16 @@ _REFUSAL_NO_TENANT = ("Select a tenant workspace before generating — a scoreca
 #: ``ValueError: year 0 is out of range`` — an uncaught 500 from a URL anybody can type. L11 says
 #: a hand-edited query string skips the filter; it never raises.
 _MIN_YEAR, _MAX_YEAR = 1, 9999
+
+
+def _is_admin(request):
+    """Mirrors ``@tenant_admin_required`` exactly, so a hidden button and a refused POST agree.
+
+    The local-copy convention twelve sibling view modules follow (6.3, 6.12 and 6.13 each carry
+    the same three lines). Without it ``can_generate`` was computed from status and tenant alone
+    and offered the Generate button to every member — who then got a bare 403 from the verb.
+    """
+    return bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
 
 
 def _scorecard_model():
@@ -240,14 +252,19 @@ def supplierevaluation_detail(request, pk):
         entry["kpi_names"].append(line.kpi_name or line.kpi.name)
         entry["weight_total"] += line.weight_applied
 
-    can_generate = obj.status == "draft" and request.tenant is not None
+    # Three conditions, and the page PRINTS whichever one refused. ``supplierevaluation_generate``
+    # is @tenant_admin_required, so the admin test belongs here too: a button that renders for
+    # everybody and then 403s is worse than no button.
+    can_generate = (obj.status == "draft" and request.tenant is not None and _is_admin(request))
     if can_generate:
         refusal_reason = ""
     elif request.tenant is None:
         refusal_reason = _REFUSAL_NO_TENANT
-    else:
+    elif obj.status != "draft":
         refusal_reason = (f"A {obj.get_status_display().lower()} scorecard is closed — only a "
                           "draft may be generated onto.")
+    else:
+        refusal_reason = _REFUSAL_NOT_ADMIN
 
     return render(request, TEMPLATE_EVALUATION_DETAIL, {
         "obj": obj,
