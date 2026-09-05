@@ -599,3 +599,154 @@ pdocument_reindex (10 textless candidates)     <= 15   # after P5; ~21 today
 Two payload tests a query-count assertion will **not** catch: capture each register's SQL with
 `CaptureQueriesContext` and assert `"extracted_text" not in sql`; assert the revision register's
 document-dropdown query carries a `LIMIT`.
+
+---
+
+## Pass 5 — `qa-smoke-tester` (runtime verification, report-only)
+
+Not a route sweep — the earlier sweep already passed 37/37. This pass **executed** what passes 1-4
+could only reason about. 16 mutation blocks, every one inside a rolled-back `transaction.atomic()`
+with a before/after fingerprint assert; **all 16 printed "ROLLBACK VERIFIED: YES — state
+identical"**. Final independent check: acme 7/6/3/4, globex identical, 0 residue rows, media
+directory clean.
+
+### Reproduced — every theorised finding CONFIRMED
+
+**item 3** — CONFIRMED core, **REFINED consequence**. Interleaving the real approve verb into the
+delete's unlocked window destroys the approved row and leaves `current_revision_no=3` with
+`current_revision=None`, remaining `[1, 2]`, and a success message telling the user it worked.
+Two corrections to the write-up:
+- *"the register still prints r3"* is true of `document/list.html:177` only;
+  `document/detail.html:72-73` prints "No approved revision yet". **The disagreement between the two
+  surfaces is the visible symptom a user reports.**
+- *"wedging the document until a second throwaway upload"* **does not reproduce** — and what happens
+  instead is worse. See **Q1**.
+
+**item 2** — CONFIRMED verbatim, including permanence. End state: pointer=r3, parent
+`extracted_text='ALPHASUPERSEDEDTEXT r2 body'`, r3 holds the current text, row no longer a
+re-index candidate. The user-visible defect measured:
+`?q=ALPHASUPERSEDEDTEXT` (superseded) **finds** the document; `?q=BRAVOCURRENTTEXT` (current)
+**does not**.
+
+**E2** — CONFIRMED, and it is the **deterministic** route into the item-3 state — two admin clicks,
+no race. That raises its priority relative to the race. Cross-tenant reparent is still correctly
+refused, so `clean()` does its half.
+**New on the same form:** `tenant` is editable too, and changing `tenant` **and** `document`
+together satisfies `clean()` and relocates an acme revision — its file, its SHA-256, its
+`approved_by = admin_acme` stamp — into globex, where `admin_globex` can open it, leaving acme with
+a dangling pointer. **Scope honesty: `tenant`-editable is the app-wide admin pattern — 50 of 52
+procurement ModelAdmins with a tenant field leave it editable**, so that half is out of 6.19's
+scope. E2's stated fix (add `"document"` to `readonly_fields`) removes the reparent leg and leaves
+only the app-wide `tenant` leg.
+
+**Also confirmed by execution:** item 1 (`/admin/…/procurementpolicy/?q=abc` → **HTTP 500**,
+`FieldError`, with KnowledgeResource and Document controls both 200) · item 4 (`ops_acme`, a
+non-admin, deletes an active document and **cascades 2 of 2 approved revisions**) · item 6 (forked
+chain → **2 published rows for one title, then 3**, rendered on the same page that claims it never
+happens) · item 10 · item 11 (Run makes no progress on either press) · E1 (`ops_acme` deletes a
+published policy after reading "Nothing cascades") · F1 (non-holder offered Release, refused on
+click — *on the same page where "Upload revision" is correctly hidden*, which is what makes it
+clearly a bug and not a style choice) · F4 (both registers offer a trash icon the view rejects).
+
+### Measured — P1/P2/P3/P6 turned from estimates into numbers
+
+Seeded 2,007 documents × 30 KB text (58.59 MB), rolled back. SQL captured with
+`CaptureQueriesContext`, payload weighed by re-executing through a raw cursor.
+
+| P1 — revision-register dropdown | 207 docs | 2,007 docs |
+|---|---|---|
+| query payload | 5.90 MB | **59.02 MB** |
+| that `<select>` as HTML | 19.5 KB | **189.8 KB** of a 586.9 KB page |
+| whole request | 0.19 s | **4.872 s** |
+
+Estimates were accurate (6 MB / 60 MB predicted) and the HTML figure was **under-called by ~60 %**.
+Breakdown for the fixer: only 0.810 s of the 4.87 s is the query — the rest is instantiating 2,007
+model objects and rendering 2,008 `<option>` tags, so `.only()` fixes the query and instantiation
+and the `[:200]` cap fixes the rendering. Control (`pdocument_list`, same 2,007 rows): **0.189 s**.
+Proposed fix measured at **699× smaller**. OOM-under-concurrency remains an inference (sound: 59 MB
+resident per request).
+
+**P2** measured: `pdocument_list` 465.7 KB · `pdocrevision_list` 6057.2 KB · `ppolicy_list`
+4.6 KB → **94.2 KB** once 3 policies link a fat document · `knowledgeresource_list` 7.7 KB →
+**186.7 KB**. *(The seeder's documents carry almost no text, which is exactly why the first sweep
+could not have seen this.)*
+
+**P3** CONFIRMED on the doubling, **REFINED on cost**: at 2,007 docs, `?q=clause` = **1.516 s** wall,
+2 LIKE passes ~0.7 s each, vs **0.189 s** unsearched. New detail: a term matching **nothing** runs
+the LIKE **once** — `Paginator` short-circuits the page query at count 0. So "twice" is the common
+case, not universal. The 1.5 s supports the "bound it beyond ~1,000 documents" call and no more —
+the 120 MB/800 MB figures are bytes scanned, not seconds.
+
+**P6** CONFIRMED as a plan, REFINED on argument: `EXPLAIN` gives `type=ALL, key=None, rows=2021,
+Using filesort` — a genuine full scan. But it is **0.153 s at 2,007 rows** (the TEXT column is
+off-page and never read for the WHERE), and the *"the policy twin has the index, so the asymmetry is
+a tell"* argument **does not survive EXPLAIN** — the policy query chose the `(tenant,title,version)`
+unique index, not `prc_ppol_tnt_review_idx`, and only avoids `ALL` because it has 3 rows. Add the
+index; argue it from the scan, not the twin.
+
+### New findings
+
+**[ ] Q1 — Important — the item-3 / E2 end state is a pointer on an UNAPPROVED revision, not an unusable document.**
+`models/…/Documents.py:278` (`current_revision`) and `models/…/Revisions.py:144` (`is_current`)
+resolve the pointer **by number alone, with no `is_approved` predicate**. Once a dangling pointer is
+re-filled by the next upload's re-allocated number, every read surface treats an unapproved file as
+the document of record. Rendered proof:
+
+```
+revision-register row: r3 | Current | PDOC-00008 | ... | Not approved
+revision detail badges: ['Current']
+```
+
+A green **Current** badge in one column and **Not approved** in the next, on the same row — and
+`pdocrevision_delete` then refuses to remove it. The workspace's document of record, the file
+`supplier_visible` would expose to a vendor portal, is one nobody approved, with no error anywhere.
+Escaping requires uploading r4 and approving it, leaving the unapproved r3 permanently in history.
+Reproduced three ways (item 3's race, E2's admin reparent, and directly).
+*Fix:* the item-3 and E2 fixes prevent entry; **additionally make `current_revision` filter
+`is_approved=True`** so no future path can paint "Current" on an unapproved row. Fold F4's
+`and not r.is_current` into the same pass — same state.
+
+**[ ] Q2 — Minor — `knowledgeresource_use` at the `usage_count` ceiling saturates silently here, 500s under strict SQL mode.**
+`views/…/KnowledgeResources.py:294`. At `usage_count = 4294967295` this box returns 302, the counter
+stays put, and the banner reports the unchanged number as a fresh increment. The identical UPDATE
+under `sql_mode='STRICT_TRANS_TABLES'`:
+`DataError: (1264, "Out of range value for column 'usage_count' at row 1")` — an uncaught 500 on a
+POST verb in a strict deployment. Unreachable in practice (4.29 billion clicks); filed for
+completeness and as the concrete example of Q3.
+
+**[ ] Q3 — Observation, not a 6.19 defect — this database runs without `STRICT_TRANS_TABLES`.**
+MariaDB 10.4.14, `sql_mode='NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION'`. Django's docs
+call non-strict MySQL/MariaDB a data-corruption risk: anything the form layer misses truncates or
+clamps silently instead of raising. 6.19's form layer caught everything thrown at it, so no 6.19 bug
+is hidden — but **smoke and QA on this box systematically under-report over-range/over-length
+classes relative to a strict production.** For whoever owns the dev-environment config; out of scope.
+
+### States the first sweep never created — results
+
+**Document with zero revisions: clean, nothing to file.** Swept through all eight verbs, three read
+surfaces and the upload page — correct messages, correct transitions, correctly excluded from
+re-index. **`?expiry=over_retention`: clean** — ORM answer and page rows agree exactly.
+**Archived upload path: correct** (both GET and POST refused, 0 revisions created, 0 Upload buttons
+rendered) — but Check out is still offered, confirming item 10.
+
+### Area 5 — ~60 malformed POSTs across the four forms: **zero 500s**
+
+Every malformed input rejected with a field-level error and no row written: over-length on every
+CharField; junk and traversal strings in enums; decimals and over-range values into dates and FK
+pks; `NaN` / `Infinity` / `-Infinity` / `1e400` / 17-digit / negative / 3-decimal into
+`threshold_amount`, each with its own correct message; the paired amount/basis guard; **foreign-tenant
+pk in all 8 FK fields — 8 for 8 rejected**; `previous_version` = itself (caught by the `__init__`
+exclusion) and = its own successor (caught by the walking cycle guard, with `previous_version` left
+`None` after both attempts); the upload allow-list including `a.txt.php` caught on the last segment;
+21 MB refused.
+
+**Two saves that look wrong and are not:** `is_featured="not-a-bool"` → `True` is standard Django
+`CheckboxInput` semantics. Smuggled view-owned fields save with **every smuggled value ignored** —
+verified end states show `status=draft`, `current_revision_no=0`, `extracted_text=''`,
+`usage_count=0`, `revision_no=2` (POST said 99), `is_approved=False` (POST said True),
+`tenant=acme` (POST said globex). The `Meta.fields` exclusions hold on all four forms.
+
+**Worth recording because it looks scariest and is clean:** a file named `../../../etc/passwd.txt`
+uploads and is stored as `procurement/documents/2026/09/passwd.txt` with
+`original_filename='passwd.txt'`. The `os.path.basename` at `views/…/Revisions.py:256` and Django's
+storage sanitisation both do their jobs. **No traversal.**
