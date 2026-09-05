@@ -368,6 +368,14 @@ class SupplierRiskSignal(TenantNumbered):
         ordering = ["-observed_on", "-id"]
         unique_together = (("tenant", "number"),)
         indexes = [
+            # Backs the DEFAULT page of the register: Meta.ordering drives every unfiltered read,
+            # and the two indexes that mention observed_on both put `party` BETWEEN tenant and it,
+            # so neither can serve `WHERE tenant_id=? ORDER BY observed_on DESC` — page 1 was a
+            # filesort over every signal in the workspace. Ascending, exactly like the same index
+            # on the four sibling 6.17 models: MariaDB scans an index backwards for a DESC order,
+            # and InnoDB appends the PK to every secondary index, which is what also satisfies the
+            # `-id` tie-break without a sort.
+            models.Index(fields=["tenant", "observed_on"], name="prc_srs_tnt_obs_idx"),
             models.Index(fields=["tenant", "party", "observed_on"],
                          name="prc_srs_tnt_party_obs_idx"),
             models.Index(fields=["tenant", "band"], name="prc_srs_tnt_band_idx"),
