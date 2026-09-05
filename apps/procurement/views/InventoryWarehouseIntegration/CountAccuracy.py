@@ -175,11 +175,25 @@ def count_accuracy(request):
     location_id = as_db_int(request.GET.get("location"))
     date_from = _as_date(request.GET.get("date_from"))
     date_to = _as_date(request.GET.get("date_to"))
-    # An explicit pair wins; otherwise the named window resolves to one. Either way the page always
-    # shows the dates it actually used, so nobody has to guess what "last 90 days" meant.
-    if date_from is None and date_to is None:
-        date_to = today
-        date_from = today - timedelta(days=int(selected_window))
+    # An explicit date wins on the side it is given; the named window supplies whichever side was
+    # left blank, so the window is a shortcut rather than a cage AND the pair is always closed.
+    #
+    # **Half-filled is the ordinary case, not a hand-edited URL.** The filter bar renders two
+    # INDEPENDENT ``<input type="date">`` boxes, so clearing one and pressing Apply submits
+    # ``date_to=`` — and ``scheduled_date__lte=None`` is ``ValueError: Cannot use None as a query
+    # value``, i.e. a 500 off the filter bar. Resolving the missing half rather than dropping the
+    # bound also keeps the prose beneath the form ("Counts scheduled between X and Y") true: it
+    # prints both dates unconditionally and would otherwise print a blank.
+    #
+    # The window is a LENGTH, so it is applied in whichever direction is missing: given a start,
+    # the window ends it; given an end, the window starts it; given neither, it is the N days
+    # ending today. That is also what makes the dropdown live — with a start date typed in, a
+    # window that only ever resolved to "today" would change nothing.
+    window = timedelta(days=int(selected_window))
+    if date_to is None:
+        date_to = (date_from + window) if date_from is not None else today
+    if date_from is None:
+        date_from = date_to - window
 
     stats = {
         "tasks_total": 0, "tasks_scheduled": 0, "tasks_counted": 0,
