@@ -125,6 +125,14 @@ class SupplierKpiScore(TenantOwned):
             models.Index(fields=["tenant", "scorecard"], name="prc_sks_tnt_scr_idx"),
             models.Index(fields=["tenant", "band"], name="prc_sks_tnt_band_idx"),
             models.Index(fields=["tenant", "kpi"], name="prc_sks_tnt_kpi_idx"),
+            # The register's DEFAULT SORT, covered. Nothing above matches ``ordering``, so every
+            # page of the score register was a filesort over the whole tenant partition:
+            # measured 130 ms -> 1,484 ms at 60,041 lines with the query count FLAT at 12, and
+            # ``EXPLAIN`` reporting ``Using where; Using filesort``. This is the fastest-growing
+            # table in 6.16 (suppliers x periods x catalogue size) and it was the one ledger-like
+            # model in the app without its sort indexed — 12 siblings already carry theirs.
+            models.Index(fields=["tenant", "kpi_category", "kpi_name", "id"],
+                         name="prc_sks_tnt_cat_name_idx"),
         ]
         verbose_name = "Supplier KPI Score"
         verbose_name_plural = "Supplier KPI Scores"
