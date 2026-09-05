@@ -341,8 +341,13 @@ def fraudalert_delete(request, pk):
 
     A DISPOSED alert cannot be deleted at all, by anybody. That is the point of a disposition:
     the record that somebody looked and decided has to outlive the person who would rather it
-    did not. A re-scan would in any case re-raise a deleted OPEN alert on the next pass — the
-    dedupe key is deterministic — which is why deletion is for mistakes, not for disagreement.
+    did not.
+
+    For an alert the RULES raised, a re-scan re-raises a deleted open one on the next pass over
+    the same window — the dedupe key is deterministic — which is why deletion is for mistakes,
+    not for disagreement. That is **not** true of a HAND-RAISED alert: no rule computed it, so
+    nothing recomputes it, and deleting one is final. Deleting somebody else's hand-raised
+    concern therefore removes it for good, which is exactly why this route is admin-gated.
     """
     obj = get_object_or_404(FraudAlert, pk=pk, tenant=request.tenant)
     if obj.is_terminal:
