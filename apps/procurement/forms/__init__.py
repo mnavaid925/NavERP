@@ -144,6 +144,16 @@ from .SupplierPerformanceEvaluation.SupplierKpis import SupplierKpiForm
 from .SupplierPerformanceEvaluation.ScorecardKpiScores import SupplierKpiScoreEditForm
 from .SupplierPerformanceEvaluation.SupplierFeedback import SupplierFeedbackForm
 from .SupplierPerformanceEvaluation.SupplierImprovementPlans import SupplierImprovementPlanForm
+# 6.18 Inventory & Warehouse Integration
+from .InventoryWarehouseIntegration.Policies import ReplenishmentPolicyForm
+from .InventoryWarehouseIntegration.Runs import (
+    ReplenishmentRunForm,
+    ReplenishmentSuggestionDecisionForm,
+)
+from .InventoryWarehouseIntegration.MaterialIssues import (
+    MaterialIssueForm,
+    MaterialIssueLineForm,
+)
 
 __all__ = [
     "EaucBidForm",
@@ -233,4 +243,10 @@ __all__ = [
     "SupplierKpiScoreEditForm",
     "SupplierFeedbackForm",
     "SupplierImprovementPlanForm",
+    # 6.18 Inventory & Warehouse Integration
+    "ReplenishmentPolicyForm",
+    "ReplenishmentRunForm",
+    "ReplenishmentSuggestionDecisionForm",
+    "MaterialIssueForm",
+    "MaterialIssueLineForm",
 ]
