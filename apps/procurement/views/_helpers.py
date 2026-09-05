@@ -341,3 +341,68 @@ def csv_safe(value):
     if text[:1] in _CSV_DANGEROUS:
         return f"'{text}"
     return text
+
+
+# ---------------------------------------------------------------------------------------------
+# 6.19 Document & Knowledge Management. Both helpers below are read by TWO entity modules of that
+# one sub-module (Documents and Revisions), which is what puts them here rather than in either
+# one (Backend rule 5). Neither is 6.19-only in spirit: a read rule and a "who holds it" label
+# are exactly the things that must not be spelled two ways on two pages of the same register.
+# ---------------------------------------------------------------------------------------------
+
+#: The classifications every member of the workspace may read. ``confidential`` and ``restricted``
+#: are deliberately absent - see :func:`readable_document_q`.
+OPEN_CLASSIFICATIONS = ("public", "internal")
+
+#: Printed on the document register, its detail page and its form, so the three places somebody
+#: learns what a classification DOES cannot disagree - and so the tier documented as "the tier
+#: above confidential, for records only a named few may read" describes what is enforced.
+CLASSIFICATION_NOTE = (
+    "Public and Internal documents are visible to everyone in the workspace. Confidential and "
+    "Restricted ones are visible only to the document's owner, whoever created it, and workspace "
+    "administrators - to everybody else they are absent from the register, from search, from the "
+    "revision chain and from the text read out of the file."
+)
+
+
+def readable_document_q(user, prefix=""):
+    """``Q()`` narrowing a ProcurementDocument queryset to what ``user`` is allowed to READ.
+
+    ``classification`` used to be a label and nothing else: it was rendered as a badge, offered
+    as a facet and stored on the row, and not one queryset, decorator or branch in the codebase
+    read it to decide anything. That made ``?q=indemnity+cap`` a search INSIDE the body text of a
+    restricted document for any member with an ordinary login, and ``?classification=restricted``
+    an enumeration of exactly the need-to-know set.
+
+    The rule, in one place so both entity modules enforce the same one:
+
+    * ``public`` / ``internal`` - every member of the workspace, as before;
+    * ``confidential`` / ``restricted`` - the named owner, whoever created the row, and workspace
+      administrators. Everybody else gets a queryset that does not contain the document, so the
+      register, the search, the facets, the detail page and every verb 404 identically. There is
+      no separate "hidden" state to keep in sync.
+
+    ``prefix`` reaches the same columns through a relation: pass ``"document__"`` from the
+    revision side, where the parent's classification is what governs the child.
+
+    This is deliberately NOT the full permission matrix - named readers, groups and inheritance
+    are Module 13.7. It is the smallest rule that makes the tier mean something today, and it is
+    stated to the user in :data:`CLASSIFICATION_NOTE` rather than left to be discovered.
+    """
+    if user is None or not user.is_authenticated:
+        return Q(pk__in=[])
+    if user.is_superuser or getattr(user, "is_tenant_admin", False):
+        return Q()
+    return (Q(**{f"{prefix}classification__in": OPEN_CLASSIFICATIONS})
+            | Q(**{f"{prefix}owner_id": user.pk})
+            | Q(**{f"{prefix}created_by_id": user.pk}))
+
+
+def holder_name(user):
+    """A person's name for a refusal message - never a bare pk.
+
+    One definition for the two 6.19 view modules that refuse an action because somebody else
+    holds a document's advisory checkout: the document verbs and the revision upload have to name
+    the same person the same way, or the two refusals read like two different rules.
+    """
+    return (user.get_full_name() or user.username) if user is not None else "someone else"
