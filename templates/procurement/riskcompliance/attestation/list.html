@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Policy Sign-offs{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the policy acknowledgement ledger
+    (apps/procurement/views/RiskComplianceManagement/Attestations.py ::
+    policyattestation_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      status_choices, policies, users, stats{pending, overdue, acknowledged}, is_admin.
+
+    crud_list renders `object_list` — never `objects` (L7/L8: a mismatched name renders a
+    silently blank region and still returns 200).
+
+    The view's filter tuple is exactly (("status","status",False), ("policy","policy_id",True),
+    ("user","user_id",True)), so the bar offers exactly q, status, policy and user — no dead
+    <select> posting a param the view ignores. Both FK dropdowns compare with |stringformat:"d",
+    never |slugify; the status dropdown compares against the raw choice value.
+
+    THE POLICY AND PERSON DROPDOWNS LIST ONLY WHO APPEARS IN THIS LEDGER, not every published
+    policy and every account. A filter option that can only ever return an empty register is a
+    dead end the page invites people into; the assignment FORM is where the full published list
+    belongs.
+
+    `stats.pending` and `stats.overdue` are deliberately NOT disjoint — an overdue row is a
+    pending row that has run out of time. Two tiles you had to add together to get the total would
+    be the wrong pair of numbers to print.
+
+    Status colour comes from the model's own STATUS_CSS through obj.status_css — never from an
+    {% if %} ladder here, because theme.css ships only badge-green / badge-red / badge-amber /
+    badge-info / badge-muted / badge-slate and a semantic badge-success renders completely
+    unstyled while passing every test (L33).
+
+    Nullable-FK discipline (L10): exempted_by is nullable, so every read of it sits inside an
+    {% if %} branch. `policy` and `user` are NOT nullable and are select_related by the view.
+
+    Edit and Delete disappear once a row is acknowledged or exempt, because both views refuse a
+    settled row — a settled attestation is evidence, and a hidden button and a refused POST always
+    agree. Delete is additionally admin-gated, matching @tenant_admin_required.
+
+    THIS LEDGER HAS NO NUMBER OF ITS OWN: PolicyAttestation extends TenantOwned, not
+    TenantNumbered, because an obligation is identified by the pair of things it joins. So the
+    confirm() string quotes the POLICY's system-assigned PPOL- number rather than inventing a
+    second identifier, and it never quotes the person's name or the policy title, which are
+    user-typed (L42). The copy avoids apostrophes entirely.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Policy Sign-offs</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Sign-off ledger</span>
+      </div>
+      <p class="text-muted">One row per person per policy: who was asked to acknowledge which published rule, by when, and what became of it. Only the person named on a row can sign it — an administrator who believes somebody should not have to has a different verb, and it says exemption on it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:policy_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Policy acknowledgment</a>
+      <a href="{% url 'procurement:policy_mine' %}" class="btn btn-outline"><i data-lucide="user-check"></i> My policies</a>
+      <a href="{% url 'procurement:policy_overdue_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Overdue board</a>
+      <a href="{% url 'procurement:policyattestation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Assign a sign-off</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Still owed</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.acknowledged }}</div><div class="stat-label">Signed</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search sign-offs" class="form-input" placeholder="Search policy number, title or person…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any state</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="policy" aria-label="Policy" class="form-select">
+            <option value="">All policies</option>
+            {% for p in policies %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if request.GET.policy == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.title }} v{{ p.version_number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="user" aria-label="Person" class="form-select">
+            <option value="">Everybody</option>
+            {% for person in users %}
+              <option value="{{ person.pk|stringformat:"d" }}" {% if request.GET.user == person.pk|stringformat:"d" %}selected{% endif %}>{{ person.get_full_name|default:person.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:policyattestation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Policy</th>
+            <th>Person</th>
+            <th>Due</th>
+            <th>State</th>
+            <th>Settled</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:policy_detail' obj.policy.pk %}">{{ obj.policy.number }}</a>
+                <div>{{ obj.policy.title }} <span class="text-muted">v{{ obj.policy.version_number }}</span></div>
+              </td>
+              <td>{{ obj.user.get_full_name|default:obj.user.username }}</td>
+              <td>
+                {% if obj.due_on %}
+                  {{ obj.due_on|date:"M d, Y" }}
+                  {% if obj.is_overdue %}<div class="text-danger">{{ obj.days_late }} day(s) late</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">No deadline</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                {% if obj.acknowledged_at %}
+                  {{ obj.acknowledged_at|date:"M d, Y" }}
+                  <div class="text-muted">Signed by the person named</div>
+                {% elif obj.exempted_at %}
+                  {{ obj.exempted_at|date:"M d, Y" }}
+                  {% if obj.exempted_by %}<div class="text-muted">Excused by {{ obj.exempted_by.get_full_name|default:obj.exempted_by.username }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:policyattestation_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete disappear once the row is signed or exempted, because both
+                    views refuse a settled row. Delete is additionally admin-gated, matching
+                    @tenant_admin_required.
+                  {% endcomment %}
+                  {% if not obj.is_terminal %}
+                    <a href="{% url 'procurement:policyattestation_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% if is_admin %}
+                      <form method="post" action="{% url 'procurement:policyattestation_delete' obj.pk %}" onsubmit="return confirm('Withdraw this sign-off for {{ obj.policy.number }}? The person will no longer be asked to acknowledge it.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Withdraw" aria-label="Withdraw"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="list-checks"></i>
+                <h3>No sign-offs found</h3>
+                <p>Nothing matches these filters. A sign-off is raised either one at a time here, or for a whole policy at once from the policy acknowledgment page — which assigns it to everybody the policy applies to and is safe to press again whenever somebody new joins.</p>
+                <a href="{% url 'procurement:policyattestation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Assign a sign-off</a>
+                <a href="{% url 'procurement:policyattestation_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Why a settled row cannot be edited or withdrawn</h2><span class="text-muted">a signature is evidence, not a field</span></div>
+    <div class="card-body">
+      <p class="text-muted">A pending row is an assignment, and an assignment can be corrected: somebody was asked to acknowledge a policy that does not apply to them, or the deadline was wrong. A signed row is something else entirely — it is the record that a named person read a named version of a rule on a named day — so it has no Edit button and no Withdraw button, and neither view will accept the POST even if one is crafted by hand.</p>
+      <p class="text-muted">There is no un-sign and no un-exempt either, for the same reason. A withdrawn signature is not a correction; it is a second, contradictory claim about the same day. If a policy has changed, the honest move is to publish the new version and collect its own sign-offs, which is exactly what the version chain in the policy library is for.</p>
+    </div>
+  </div>
+{% endblock %}
