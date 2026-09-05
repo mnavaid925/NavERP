@@ -62,7 +62,16 @@
       </div>
       <p class="text-muted">{{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }} · {{ obj.get_status_display|lower }} · {{ composite.total_lines }} KPI line{{ composite.total_lines|pluralize }} measured.</p>
     </div>
+    {% comment %}
+      The three boards are read-only views of exactly this data, and this page is the only one
+      that knows BOTH the supplier and the period they need — so it is the page that should emit
+      the deep links. Without them the boards were reachable only from the sidebar, where the
+      operator has to re-pick a supplier and a period they were already looking at.
+    {% endcomment %}
     <div class="page-actions">
+      <a href="{% url 'procurement:supplier_trend_board' %}?supplier={{ obj.party_id }}" class="btn btn-outline"><i data-lucide="trending-up"></i> Trend</a>
+      <a href="{% url 'procurement:supplier_benchmark_board' %}?period={{ obj.period_end|date:'Y-m-d' }}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Benchmark</a>
+      <a href="{% url 'procurement:supplier_perception_gap' %}?supplier={{ obj.party_id }}" class="btn btn-outline"><i data-lucide="git-compare"></i> Perception gap</a>
       <a href="{% url 'scm:scorecard_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open in SCM</a>
       <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All periods</a>
     </div>
