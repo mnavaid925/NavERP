@@ -845,7 +845,7 @@ def benchmark_rows(tenant, period_end, tier=None, category=None):
     from apps.scm.models import SupplierProfile, SupplierRiskAssessment, SupplierScorecard
 
     scored = Q(procurement_kpi_scores__score__isnull=False)
-    cards = list(SupplierScorecard.objects
+    cohort_qs = (SupplierScorecard.objects
                  .filter(tenant=tenant, period_end=period_end)
                  .select_related("party")
                  .annotate(
@@ -854,8 +854,24 @@ def benchmark_rows(tenant, period_end, tier=None, category=None):
                      weighted_score=Sum(
                          F("procurement_kpi_scores__score")
                          * F("procurement_kpi_scores__weight_applied"),
-                         output_field=DecimalField(max_digits=20, decimal_places=4)))
-                 .order_by("party__name", "-id")[:ROW_CAP + 1])
+                         output_field=DecimalField(max_digits=20, decimal_places=4))))
+
+    # The tier/category narrowing happens HERE, before the cap — not in the loop below. Applied
+    # after the slice it filtered a truncated population: a 13-supplier cohort averaging 55.14
+    # (best 95.00) displayed as 6 suppliers averaging 10.00 with a best of 10.00, because
+    # ``benchmark_rows`` slices by ``party__name`` and every top performer sorted past the cut.
+    # The rank, the percentile and every cohort statistic are computed over these rows, so the
+    # cap must truncate the FILTERED cohort rather than the filter narrow a truncated one.
+    # ``scm_supplier_profile`` is a reverse OneToOne, so joining it cannot fan the rows out and
+    # the aggregates above are unaffected.
+    if tier:
+        cohort_qs = cohort_qs.filter(party__scm_supplier_profile__tenant=tenant,
+                                     party__scm_supplier_profile__tier=tier)
+    if category:
+        cohort_qs = cohort_qs.filter(party__scm_supplier_profile__tenant=tenant,
+                                     party__scm_supplier_profile__category=category)
+
+    cards = list(cohort_qs.order_by("party__name", "-id")[:ROW_CAP + 1])
     truncated = len(cards) > ROW_CAP
     cards = cards[:ROW_CAP]
     if not cards:
@@ -879,11 +895,8 @@ def benchmark_rows(tenant, period_end, tier=None, category=None):
     tier_labels = dict(SupplierKpi.TIER_CHOICES)
     rows = []
     for card in cards:
+        # No tier/category test here — the queryset above already did it, before the cap.
         card_tier, card_category = profiles.get(card.party_id, ("", ""))
-        if tier and card_tier != tier:
-            continue
-        if category and card_category != category:
-            continue
         composite = _composite_from_sums(card.weighted_score, card.scored_weight)
         risk_index = risk.get(card.party_id)
         rows.append({
