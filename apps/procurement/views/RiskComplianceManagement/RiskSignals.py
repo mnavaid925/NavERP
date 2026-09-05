@@ -355,8 +355,10 @@ def risksignal_review(request, pk):
 def risksignal_refresh_board(request):
     """Which supplier metrics are due — or overdue — a fresh observation, and which have none.
 
-    Two queries and no stored "due" flag: the supplier list, then every signal in the workspace
-    ordered so the first row of each ``(party, provider, metric)`` series is its latest. Rows are
+    Two queries and no stored "due" flag: the supplier list, then every signal belonging to one of
+    those suppliers, ordered so the first row of each ``(party, provider, metric)`` series is its
+    latest — narrowed to 8 columns and streamed, because that second read follows the append-only
+    ledger and not the vendor master, and ~88% of its rows lose to ``setdefault``. Rows are
     built only for series that need attention, so the page's length tracks the size of the
     PROBLEM rather than the size of the vendor master — which is also why it needs no pagination.
 
@@ -372,25 +374,39 @@ def risksignal_refresh_board(request):
     soon = today + timedelta(days=REFRESH_DUE_SOON_DAYS)
     stale_before = today - timedelta(days=SupplierRiskSignal.STALE_AFTER_DAYS)
     parties = list(_monitorable_parties(request.tenant))
-    party_ids = {party.pk for party in parties}
+    parties_by_id = {party.pk: party for party in parties}
 
     # The latest signal per (party, provider, metric). Ordered so the first row setdefault() sees
     # within each series is the one that counts.
+    #
+    # Three deliberate narrowings, because this is the one read here whose size follows the
+    # append-only LEDGER rather than the vendor master:
+    #  * ``party_id__in`` pushes the "has it still got a supplier role?" test into SQL instead of
+    #    fetching every signal and dropping it in Python one line later;
+    #  * ``.only(...)`` fetches the 8 columns the board and its template actually read - not the
+    #    22-column row with two TextFields (``notes``/``review_note``) that neither touches;
+    #  * ``.iterator()`` keeps the discarded rows out of ``_result_cache``. With ~200 suppliers x
+    #    ~3 metrics, the vast majority of rows lose to ``setdefault()`` immediately, and holding
+    #    all of them resident for the length of the request is the actual cost here.
+    # ``select_related("party")`` is deliberately dropped: the row-dict takes its Party from
+    # ``parties_by_id``, which is already in memory, so the join was fetching each supplier again
+    # once per signal.
     latest, monitored_parties = {}, set()
     for signal in (SupplierRiskSignal.objects
-                   .filter(tenant=request.tenant)
-                   .select_related("party")
-                   .order_by("party_id", "provider", "metric", "-observed_on", "-id")):
+                   .filter(tenant=request.tenant, party_id__in=parties_by_id)
+                   .only("party_id", "provider", "metric", "observed_on", "next_refresh_on",
+                         "band", "number", "tenant_id")
+                   .order_by("party_id", "provider", "metric", "-observed_on", "-id")
+                   .iterator(chunk_size=2000)):
         latest.setdefault((signal.party_id, signal.provider, signal.metric), signal)
         monitored_parties.add(signal.party_id)
 
     rows, overdue, due_soon, stale = [], 0, 0, 0
 
+    # A series against a party that has since lost its supplier role is not this board's business
+    # — the register still shows it, but nobody is being asked to refresh it. That test is now the
+    # ``party_id__in`` above, so every signal reaching this loop has a Party in ``parties_by_id``.
     for signal in latest.values():
-        # A series against a party that has since lost its supplier role is not this board's
-        # business — the register still shows it, but nobody is being asked to refresh it.
-        if signal.party_id not in party_ids:
-            continue
         due = signal.next_refresh_on
 
         if due is not None and due <= today:
@@ -406,7 +422,9 @@ def risksignal_refresh_board(request):
             continue  # comfortably fresh — not this board's business
 
         rows.append({
-            "party": signal.party,
+            # From the in-memory supplier list, never signal.party — reading the FK off a
+            # .only()-narrowed instance would fire one lazy query per row.
+            "party": parties_by_id[signal.party_id],
             "signal": signal,
             "provider_label": signal.get_provider_display(),
             "metric_label": signal.get_metric_display(),
