@@ -142,7 +142,7 @@
         </div>
       </div>
     {% endfor %}
-  {% elif obj.is_pending %}
+  {% elif obj.is_pending and not can_sign %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Nothing for you to do here</h2></div>
       <div class="card-body">
