@@ -235,15 +235,33 @@ def replenishmentrun_edit(request, pk):
     deletes and rebuilds every line from the new scope. What is NOT harmless is re-dating or
     re-scoping a run that already raised requisitions — that turns a record of what was decided
     into a claim about something else, so it is refused here.
+
+    **A PROPOSED run therefore lands back on its own detail page with a warning, not on the
+    register with "Updated successfully."** Its lines were computed against the OLD scope and are
+    now stale: they can name a location the header no longer covers, and ``release()`` stamps a
+    justification describing the NEW scope onto them. Generate is what reconciles the two, so the
+    page that offers Generate is where the buyer has to be put, and the warning says why.
     """
     obj = get_object_or_404(ReplenishmentRun.objects.filter(tenant=request.tenant), pk=pk)
     if not obj.can_generate:
         messages.error(request, f"{obj.number} is {obj.get_status_display().lower()} and its "
                                 f"header can no longer be changed.")
         return redirect("procurement:replenishmentrun_detail", pk=pk)
-    return crud_edit(request, model=ReplenishmentRun, pk=pk, form_class=ReplenishmentRunForm,
-                     template=TEMPLATE_FORM,
-                     success_url="procurement:replenishmentrun_list")
+
+    has_stale_lines = obj.status == "proposed"
+    response = crud_edit(request, model=ReplenishmentRun, pk=pk, form_class=ReplenishmentRunForm,
+                         template=TEMPLATE_FORM,
+                         success_url=(reverse("procurement:replenishmentrun_detail", args=[pk])
+                                      if has_stale_lines
+                                      else "procurement:replenishmentrun_list"))
+    # crud_edit redirects ONLY when the form saved, so the warning cannot fire on a re-rendered
+    # invalid form.
+    if has_stale_lines and response.status_code == 302:
+        messages.warning(request, f"{obj.number} was already proposed — its suggested lines were "
+                                  f"computed for the previous scope. Press Generate to rebuild "
+                                  f"them, or the run will release lines that do not match this "
+                                  f"header.")
+    return response
 
 
 @login_required
