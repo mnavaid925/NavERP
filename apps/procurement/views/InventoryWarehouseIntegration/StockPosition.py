@@ -243,8 +243,14 @@ def stock_position(request):
 
         allocations = _pair_map(
             SalesOrderAllocation.objects
-            .filter(status__in=SalesOrderAllocation.ACTIVE_STATUSES,
-                    sales_order_line__sales_order__tenant=tenant)
+            # Scoped on the allocation's OWN tenant column, not through
+            # sales_order_line__sales_order__tenant. The two-table join left no tenant predicate
+            # on the allocation table at all, so `scm_soa_tnt_status_idx` — an index on exactly
+            # (tenant, status), SalesOrderAllocations.py:44 — was unreachable and the planner
+            # read every workspace's active allocations, joined each up through the order line to
+            # its order, and threw the rest away. Identical rows, one fewer join, and it matches
+            # the direct form the reservation and stock-status queries below already use.
+            .filter(tenant=tenant, status__in=SalesOrderAllocation.ACTIVE_STATUSES)
             # The item sits on the ORDER LINE and both field names collide with the model's own
             # columns, so both halves of the pair key are aliased (StockLevels.py:93-97).
             .values(iid=F("sales_order_line__item_id"), loc=F("location_id"))
