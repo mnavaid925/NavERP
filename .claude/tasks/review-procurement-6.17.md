@@ -480,3 +480,143 @@ other badge reads a `*_css` value from a `_CSS` map in the model or view, and th
 the six real classes (78 occurrences in Python, zero semantic names). **A future contributor cannot
 reintroduce `badge-success` by editing a template — there is no ladder to edit.** Same discipline on
 `state_css` in every row-dict contract.
+
+---
+
+## Pass 5 — explorer (integration seam)
+
+Scoped to the seam — what a reviewer looking at 6.17 alone cannot see. The four earlier passes'
+ground was deliberately not re-audited.
+
+### [ ] I11 — Important — the `kind="risk"` hand-off to 6.1 was never completed
+`apps/procurement/models/RiskComplianceManagement/RiskSignals.py:206`
+
+This is the same defect as **I2** (pass 1) reached from the other side, and the explorer found three
+consequences pass 1 did not. `ALERT_KIND = "risk"` with its own comment block (lines 198-205)
+explicitly handing the `KIND_CHOICES` + `kind_css` + `AlterField` work to Integrate — none of which
+landed. **Both** alert raisers use it (`RiskSignals.py:689` and `Policies.py:469`, the latter
+importing `ALERT_KIND`), so *every* alert 6.17 creates is affected.
+
+The comment **understates** the damage as "the chip is simply the wrong colour". Actually:
+1. `views/DashboardPortal/ProcurementAlerts.py:40,44` passes `kind_choices = KIND_CHOICES` to the
+   filter — **no risk alert can ever be selected in the 6.1 inbox filter**.
+2. `get_kind_display()` returns the bare string `risk` (Django returns the raw value for a
+   non-choice), so 6.1's list and detail render an unlabelled kind.
+3. `forms/DashboardPortal/ProcurementAlerts.py:20` has `kind` in `Meta.fields`, so a 6.17-raised
+   alert **cannot be edited through 6.1's form** — the `<select>` has no `risk` option, so a save
+   either fails validation or silently re-kinds the alert.
+
+6.8 set the precedent correctly (`("contract","Contract")` + `0012_alter_procurementalert_kind`).
+6.17 is the one module that raises a kind it never registered. **Merge with I2 when fixing.**
+
+### [~] I12 — CORRECTED, NOT A DEFECT — "zero edits to 6.19's code" is accurate
+The reviewer reported that `views/DocumentKnowledgeManagement/Policies.py:205-214` now reads
+`obj.attestations.count()` and concluded the contract's "zero edits to 6.19's code" claim is false.
+**Verified and refuted:** `git log -S "attestations"` on that file returns exactly one commit,
+**`a093f2ae` "fix(procurement): gate policy delete and archive, and stop over-claiming what publish
+guarantees"** — a **6.19-authored** commit. 6.17 made zero edits to it; the 6.19 session added that
+guard themselves after `PolicyAttestation` landed.
+
+So the contract is correct as a statement about what 6.17 did. What *is* true, and worth recording,
+is the consequence the reviewer identified: **6.19 now hard-depends on 6.17** — removing 6.17 turns
+`ppolicy_delete` into an `AttributeError`. The guard is right and must be kept (a `CASCADE` delete
+of a policy would otherwise silently destroy every signature). No action for the fixer; recorded so
+a future reader does not "correct" a doc that is accurate.
+
+### [ ] I13 — Important — three 6.19 surfaces still say 6.17's ledger does not exist, one user-visible
+6.17 shipped the ledger but every "when it ships" claim on the 6.19 side still stands:
+- `models/DocumentKnowledgeManagement/Policies.py:22` — *"a bare flag with no machinery behind it …
+  6.17 should collect acknowledgements for this one when it ships"*.
+- `models/DocumentKnowledgeManagement/Policies.py:221-224` —
+  `help_text="A hook for 6.17 … no sign-off ledger is built here."` **This renders on 6.19's policy
+  form**, telling staff no ledger exists beside a checkbox that now governs one. (Changing it needs
+  an `AlterField`.)
+- `views/DocumentKnowledgeManagement/Policies.py:19-21` — *"3. No acknowledgement ledger exists."* —
+  contradicted by line 214 of the same file.
+- `templates/procurement/documentknowledge/policy/detail.html:89` — **user-visible**: *"collected by
+  Policy Management & Acknowledgment (6.17) when it ships — no sign-offs are recorded here"*.
+
+Also a **missed reciprocal link**: 6.17 links *to* `ppolicy_detail` eight times; 6.19's policy
+detail links back nowhere — yet `apps/core/navigation.py:1664` asserts *"The two pages link to each
+other"*. Only one direction is true.
+
+**These are 6.19's files.** 6.17 must not edit them (contract §6a). **Route to the 6.19 session by
+message**, and fix only the over-claim in 6.17's own `navigation.py` comment.
+
+### [ ] M23 — Minor — seal coverage and register scope disagree, and no page says so
+`AuditSeals.py:317-320` — `seal_now()` hashes `AuditLog.objects.filter(tenant=tenant, id__gt=…)`,
+i.e. **every** audit row in the workspace including `core`/`hrm`/`crm`/`accounting`. The register it
+sits on shows only `procurement_activity_qs()`. It **over**-covers, so it is not a false security
+claim — but `obj.row_count` will visibly exceed anything the register can show for the same window,
+with no explanation. One sentence on `audit_trail.html` / `auditseal/list.html`.
+
+### [ ] M24 — Minor — contradictory adjacent seeder comments
+`seed_procurement.py:343` says *"6.18 runs LAST because…"*; six lines later `_seed_risk_compliance`
+runs after it. 6.17 inserted itself **correctly** (the seal must be last), but did not amend 6.18's
+claim. The next sub-module appending here reads "6.18 runs LAST", inserts in the wrong place, and
+silently pushes its rows outside the seal.
+
+### [ ] M25 — Minor — stale sub-package docstring
+`models/RiskComplianceManagement/__init__.py` lists only `Screenings` as its entity module;
+`RiskSignals`, `FraudAlerts`, `Policies` and `AuditSeals` are missing.
+
+### Per-area verification record — what was checked and found clean
+
+**1. Spine duplication — CLEAN, the strongest result in the review.** `grep -rn "^class "` over all
+13 apps: 6.17 declares exactly six models, and `uniq -d` over every procurement model/form/view name
+returns **empty** — no duplicate class name anywhere in the repo.
+- **`ProcurementPolicy`:** no second model; FK'd **by string** with `related_name="attestations"`.
+  `requires_acknowledgment` **genuinely governs** the roster — refusal at `Policies.py:206`,
+  re-checked in the view (`:208`, `:368`) and reflected in templates that hide the button. Real, not
+  decorative.
+- **`VendorSuspension` (6.4):** no second block flag and, better than required, 6.17 **never writes
+  it at all** — only reads `blocking_for()` and links out to `vsu_create`.
+- **`MaverickSpendFinding` (6.14): zero overlap.** 6.17's six `RULE_CHOICES` intersect none of
+  6.14's eight `REASON_CHOICES`; `split_purchase` stays 6.14's and is explicitly deferred to
+  `maverick_dashboard`.
+- **`scm.SupplierRiskAssessment` (4.2), `scm.ComplianceRequirement` (4.12), 6.13 duplicate-invoice,
+  `hrm.HRPolicy`:** all cited, none duplicated.
+- **No `related_name` collisions:** the four `related_name="fraud_alerts"` sit on four *different*
+  target models.
+
+**2. Cross-links real, not decorative — CLEAN with one note.** All 57 distinct `{% url %}` names and
+15 `reverse()` targets resolved against actual `name=` declarations; **all 15 external targets
+exist** and are called with the correct object's pk. Non-obvious win: `audit_trail.html:196` →
+`activity_detail` is correct because `activity_detail` re-narrows to the *same*
+`procurement_activity_qs()` base 6.17's register uses, so no listed row can 404. **Note (not a
+defect):** the fraud *board* links to `dashboard`/`fraud_scan`/`fraudalert_list`/`vsu_list`, not to
+`supplierinvoice_list`/`maverick_dashboard` as the brief expected — those two integrations exist on
+`fraudalert/detail.html` and `fraud_scan.html` instead.
+
+**3. Writes outside its own tables — CLEAN.** Every write targets a 6.17 table except two
+`ProcurementAlert.objects.create(...)` calls, both permitted and matching the app-wide pattern
+(6.3/6.8/6.19 do the same). `FraudAlert.scan()` reads `core.Party`/`Address`/`ContactMethod`
+`filter(tenant=tenant)` read-only and **never edits, merges or deactivates a Party**. No
+`VendorSuspension` write. `AuditSeal` only reads `core.AuditLog`.
+
+**4. Sidebar staff-reachability (L32) — CLEAN.** All five destinations carry **`@login_required`
+only**, no `@tenant_admin_required`: `screening_list`, `risksignal_list`, `audit_trail`,
+`fraudalert_list`, `policy_list`. An ordinary tenant member reaches all five and sees data.
+`policy_mine` is `@login_required` and reachable from three template links — the staff self-service
+page works as intended. **No sidebar bullet redirects a non-admin.** Admin gating appears only on
+destructive/adjudicating verbs. Two harmless consistency notes: `auditseal_create` omits an explicit
+`@login_required` but `tenant_admin_required` wraps it internally (`core/decorators.py:15`) — **not
+a bug**; and `screeninghit_delete` lacking the admin gate is already I1.
+
+**5. Re-export completeness — CLEAN, verified by set-diff not by eye.** Models 6/6, forms 9/9,
+views **48 defined ↔ 48 imported ↔ 48 in `__all__`**, diffed **both** directions — no missing name
+and **no stale name**. `uniq -d` over all ~700 procurement view/model/form/`__all__` names: empty,
+so no collision with another session's work.
+
+**6. URL segments — CLEAN.** All 14 first segments grepped across the other 73 url modules: each is
+claimed by a `RiskComplianceManagement/` file **and nothing else**. Literal-before-`<int:pk>` holds
+in every module (`audit-seals/seal/`, `fraud-alerts/add/`, `risk-signals/add/`, `screenings/add/`).
+`procurement-policies/` vs `policies/` and `receipt-audit/` vs `audit-trail/` are whole distinct
+path components — Django anchors each `path()` prefix, so no prefix ambiguity. The app's one greedy
+converter (6.8's `contract-sign/<str:token>/`) is scoped behind a literal first segment.
+
+**7. Docs vs. reality — I12/I13/M23/M24/M25 above.** Verified *accurate*: contract §6's reuse list
+matches the built FKs exactly; the "not buildable" vendor bank-detail note is honestly surfaced on
+`fraud_scan.html`; the tamper-EVIDENT-not-tamper-proof framing is consistent across the model
+constant, the view and all three seal/trail templates; migration `0028` creates exactly the six
+models and nothing else.
