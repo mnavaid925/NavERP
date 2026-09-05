@@ -58,6 +58,15 @@
           <label class="form-label" for="bm_period">Period ending</label>
           <select id="bm_period" name="period" class="form-select">
             {% if not periods %}<option value="">No periods yet</option>{% endif %}
+            {% comment %}
+              A hand-typed ?period= that no scorecard falls in is HONOURED, not silently swapped
+              for the newest one — so it has to be offered here too. Without this option the
+              select would fall back to displaying periods[0] while the table below showed the
+              typed period's (empty) cohort: a picker disagreeing with the page it filters.
+            {% endcomment %}
+            {% if selected_period and selected_period not in periods %}
+              <option value="{{ selected_period|date:'Y-m-d' }}" selected>{{ selected_period|date:"d M Y" }} &mdash; no scorecards</option>
+            {% endif %}
             {% for p in periods %}
               <option value="{{ p|date:'Y-m-d' }}" {% if selected_period == p %}selected{% endif %}>{{ p|date:"d M Y" }}</option>
             {% endfor %}
