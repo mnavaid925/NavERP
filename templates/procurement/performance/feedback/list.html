@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Supplier Feedback{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — the 360 feedback register
+    (apps/procurement/views/SupplierPerformanceEvaluation/SupplierFeedback.py
+     :supplierfeedback_list — crud_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      status_choices, kind_choices, function_choices, rating_choices,
+      suppliers, kpis, scorecards,
+      stats{total, requested, submitted, declined, overdue}.
+
+    The view's crud_list filter tuple is exactly
+      (("supplier","supplier_id",True), ("status","status",False), ("kind","respondent_kind",False),
+       ("function","respondent_function",False), ("kpi","kpi_id",True), ("scorecard","scorecard_id",True))
+    with search_fields=("number","supplier__name","respondent_name","comment") — so the filter
+    bar offers exactly q, supplier, status, respondent kind, function, KPI and period document.
+    The three CHOICES filters compare plain strings; the three FK filters post a pk and compare
+    with |stringformat:"d" (never |slugify).
+
+    rating is deliberately NOT a filter: its choices are INTEGERS, which crud_list's enum guard
+    does not cover, so rating_choices rides this page as the scale's legend instead — the one
+    place a reader can see what a "3" was supposed to mean to the person who picked it.
+
+    Badge classes are COLOUR-NAMED only (L33): theme.css ships badge-green / -red / -amber /
+    -info / -muted / -slate and nothing else — badge-success / -warning / -danger render
+    completely unstyled. Every badge below takes its class from the model's own committed
+    mapping (obj.status_css / obj.rating_css / obj.kind_css), so a row can never disagree with
+    the model about what "declined" looks like.
+
+    Nullable-field discipline (L10): rating, kpi, scorecard, respondent and due_date are all
+    nullable and every read of them sits inside an explicit branch — never truthiness, because
+    an importance of 0 is a real weight and an unrated request is not a zero.
+
+    Delete is @require_POST, so it can only be a form. Only the system-assigned {{ obj.number }}
+    (SFB-#####) reaches the confirm() handler; supplier and respondent names are user-authored
+    and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier feedback</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <span>360 feedback</span>
+      </div>
+      <p class="text-muted">One row is one person&rsquo;s rating of one supplier for one period. Six people asked is six rows, not one averaged opinion &mdash; the average is computed from these, and these are the evidence it stands on.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierfeedback_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Request feedback</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="message-square"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Responses on file</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.requested }}</div><div class="stat-label">Awaiting an answer</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.submitted }}</div><div class="stat-label">Submitted</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="circle-slash"></i></div><div class="stat-value">{{ stats.declined }}</div><div class="stat-label">Declined</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Past due</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search responses" class="form-input" placeholder="Search number, supplier, respondent or comment…">
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Respondent kind" class="form-select">
+            <option value="">Both sides</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="function" aria-label="Respondent function" class="form-select">
+            <option value="">Any function</option>
+            {% for val, label in function_choices %}
+              <option value="{{ val }}" {% if request.GET.function == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kpi" aria-label="Survey KPI" class="form-select">
+            <option value="">Any KPI</option>
+            {% for k in kpis %}
+              <option value="{{ k.pk|stringformat:"d" }}" {% if request.GET.kpi == k.pk|stringformat:"d" %}selected{% endif %}>{{ k.code }} · {{ k.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="scorecard" aria-label="Period document" class="form-select">
+            <option value="">Any period</option>
+            {% for sc in scorecards %}
+              <option value="{{ sc.pk|stringformat:"d" }}" {% if request.GET.scorecard == sc.pk|stringformat:"d" %}selected{% endif %}>{{ sc.number }} · {{ sc.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Response</th>
+            <th>Supplier</th>
+            <th>Respondent</th>
+            <th>KPI</th>
+            <th>Rating</th>
+            <th class="text-right">Importance</th>
+            <th>Status</th>
+            <th>Period</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:supplierfeedback_detail' obj.pk %}">{{ obj.number }}</a>
+                {% if obj.scorecard %}<div class="text-muted">{{ obj.scorecard.number }}</div>{% else %}<div class="text-muted">ad-hoc</div>{% endif %}
+              </td>
+              <td>{{ obj.supplier.name }}</td>
+              <td>
+                {% if obj.respondent %}{{ obj.respondent.get_full_name|default:obj.respondent.email }}
+                {% elif obj.respondent_name %}{{ obj.respondent_name }}
+                {% else %}<span class="text-muted">Anonymous</span>{% endif %}
+                <div class="text-muted"><span class="badge {{ obj.kind_css }}">{{ obj.get_respondent_kind_display }}</span> {{ obj.get_respondent_function_display }}</div>
+              </td>
+              <td>{% if obj.kpi %}<a href="{% url 'procurement:supplierkpi_detail' obj.kpi_id %}">{{ obj.kpi.code }}</a>{% else %}<span class="text-muted">General commentary</span>{% endif %}</td>
+              <td>
+                {% if obj.rating is not None %}
+                  <span class="badge {{ obj.rating_css }}">{{ obj.get_rating_display }}</span>
+                {% else %}
+                  <span class="text-muted">Not rated</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ obj.importance }}</td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                {% if obj.is_overdue %}<div><span class="badge badge-red">Past due</span></div>{% endif %}
+              </td>
+              <td>
+                {{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }}
+                {% if obj.due_date %}<div class="text-muted">due {{ obj.due_date|date:"M d, Y" }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierfeedback_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. The lifecycle verbs
+                    (submit / decline / expire) live on the detail page, where the operator can
+                    read the comment before moving the response — a one-click status change from
+                    a register row is how the wrong response gets filed.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:supplierfeedback_delete' obj.pk %}">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete response {{ obj.number }}? If it has already been submitted it is evidence a survey KPI was computed from, and deleting it does NOT re-derive any scorecard line already generated. This cannot be undone.');"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="message-square"></i>
+                <h3>No feedback responses yet</h3>
+                <p>A survey KPI has nothing to average until people are asked. Request a handful of responses for a period &mdash; a buyer, a quality engineer, somebody in AP &mdash; and the importance-weighted mean of the submitted ones becomes that KPI&rsquo;s measured value. Ask the supplier to rate itself on the same scale and the gap between the two answers is the conversation worth having.</p>
+                <a href="{% url 'procurement:supplierfeedback_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Request feedback</a>
+                <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-body">
+      <p class="text-muted">
+        The scale:
+        {% for val, label in rating_choices %}
+          {% if val >= 4 %}<span class="badge badge-green">{{ label }}</span>
+          {% elif val == 3 %}<span class="badge badge-amber">{{ label }}</span>
+          {% else %}<span class="badge badge-red">{{ label }}</span>{% endif %}
+        {% endfor %}
+      </p>
+      <p class="form-help">Ratings become 0, 25, 50, 75 and 100 for the survey aggregate, weighted by each respondent&rsquo;s <span class="fw-600">importance</span> (0&ndash;10). A response filed at importance 0 still counts as a respondent and moves the number by nothing &mdash; so a page can honestly say eight people answered while reporting that six of them shaped the score. Only <span class="fw-600">submitted, internal</span> responses feed a KPI; a supplier&rsquo;s self-assessment is read next to our score, never folded into it.</p>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
