@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block title %}Supplier Trend{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — the trend board
+    (apps/procurement/views/SupplierPerformanceEvaluation/PerformanceBoards.py
+     :supplier_trend_board, computed by performance.trend_series()).
+
+    COMPUTED and READ-ONLY: one supplier across every period on record. Nothing here writes.
+
+    Context contract, and NOTHING else exists here:
+      suppliers, selected_supplier (or None), periods (list of date, oldest first),
+      series (period_end/period_start/scorecard_id/scorecard_number/composite/overall/grade/
+              delta/line_count),
+      kpi_series (kpi_id/kpi_code/kpi_name/kpi_category/unit/direction/points[]), where each
+              point is period_end/measured_value/score/band/band_css/target_at_time/
+              meets_target/delta,
+      kpis, selected_kpi (or None), row_cap (= PERIOD_CAP), truncated, benchmark_note.
+
+    The two selects post pks and compare with |stringformat:"d" — NEVER |slugify.
+
+    COMPOSITE against OVERALL are two different figures and the page says so rather than
+    quietly showing one as the other: composite is the weighted mean of every KPI line on the
+    scorecard, overall is scm.SupplierScorecard's own blend of its four dimension columns, and
+    a KPI mapped to no dimension moves the first without moving the second.
+
+    A None composite/measured value renders as an em dash or a "no data" badge, NEVER as 0 —
+    the whole no-phantom-zero rule of performance.py would be undone in the last inch by a
+    template that prints |default:0.
+
+    Badge classes are COLOUR-NAMED only (L33). Band badges take their class from the point's
+    own band_css (the committed BAND_CSS mapping), so a point can never disagree with the model
+    about what "critical" looks like.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier trend</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">&rsaquo;</span>
+        <span>Supplier Performance</span><span class="sep">&rsaquo;</span>
+        <span>Trend</span>
+      </div>
+      <p class="text-muted">One supplier, period by period &mdash; the composite score and every KPI underneath it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplier_benchmark_board' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Benchmarking</a>
+      <a href="{% url 'procurement:supplier_perception_gap' %}" class="btn btn-outline"><i data-lucide="git-compare-arrows"></i> Perception gap</a>
+      <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-primary"><i data-lucide="clipboard-list"></i> Scorecards</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="min-width:240px;">
+          <label class="form-label" for="tr_supplier">Supplier</label>
+          <select id="tr_supplier" name="supplier" class="form-select">
+            <option value="">Choose a supplier&hellip;</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if selected_supplier and selected_supplier.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:220px;">
+          <label class="form-label" for="tr_kpi">KPI</label>
+          <select id="tr_kpi" name="kpi" class="form-select">
+            <option value="">All KPIs</option>
+            {% for k in kpis %}
+              <option value="{{ k.pk|stringformat:"d" }}" {% if selected_kpi and selected_kpi.pk == k.pk %}selected{% endif %}>{{ k.code }} &mdash; {{ k.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplier_trend_board' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">Own supply base</span> {{ benchmark_note }}</p>
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Truncated</span> This supplier has more than {{ row_cap }} scorecards &mdash; the {{ row_cap }} most recent periods are plotted.</p>
+      {% endif %}
+      {% if selected_kpi %}
+        <p class="text-muted" style="margin-top:.5rem;">
+          <span class="badge badge-muted">{{ selected_kpi.code }}</span>
+          {{ selected_kpi.name }} &mdash; {{ selected_kpi.get_direction_display }}, measured in {{ selected_kpi.get_unit_display }}.
+          {% comment %}
+            industry_benchmark_value is a figure somebody typed into the KPI definition by hand.
+            It is labelled as such wherever it appears — there is no external feed behind it.
+          {% endcomment %}
+          {% if selected_kpi.industry_benchmark_value is not None %}
+            Reference figure <span class="fw-600">{{ selected_kpi.industry_benchmark_value|floatformat:2 }}</span> <span class="badge badge-slate">hand-entered</span>
+          {% endif %}
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not selected_supplier %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="trending-up"></i>
+          <h3>Pick a supplier</h3>
+          <p>A trend needs one supplier. Choose one above and every period they have been scored for is plotted, oldest to newest &mdash; or start from the cohort and drill in from there.</p>
+          <a href="{% url 'procurement:supplier_benchmark_board' %}" class="btn btn-primary">Open benchmarking</a>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{{ selected_supplier.name }} &mdash; composite by period</h2>
+        <span class="text-muted">{{ periods|length }} period{{ periods|length|pluralize }}, oldest first</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Scorecard</th>
+              <th class="text-right">Composite</th>
+              <th style="min-width:120px;">&nbsp;</th>
+              <th class="text-right">Change</th>
+              <th class="text-right">Overall</th>
+              <th>Grade</th>
+              <th class="text-right">Lines</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for point in series %}
+              <tr>
+                <td>{{ point.period_start|date:"d M Y" }} &ndash; {{ point.period_end|date:"d M Y" }}</td>
+                <td><a class="mono" href="{% url 'procurement:supplierevaluation_detail' point.scorecard_id %}">{{ point.scorecard_number }}</a></td>
+                <td class="text-right fw-600">
+                  {% if point.composite is None %}<span class="badge badge-slate">Not scored</span>{% else %}{{ point.composite|floatformat:2 }}{% endif %}
+                </td>
+                <td>
+                  {% if point.composite is not None %}
+                    <div class="progress" title="{{ point.composite|floatformat:2 }} of 100"><div class="progress-bar" style="width: {{ point.composite|floatformat:0 }}%;"></div></div>
+                  {% endif %}
+                </td>
+                <td class="text-right">
+                  {% comment %}
+                    delta is None on the first point and wherever either side never scored —
+                    "no comparison to make" is not "no change", and the two render differently.
+                  {% endcomment %}
+                  {% if point.delta is None %}<span class="text-muted">&mdash;</span>
+                  {% elif point.delta > 0 %}<span class="badge badge-green">+{{ point.delta|floatformat:2 }}</span>
+                  {% elif point.delta < 0 %}<span class="badge badge-red">{{ point.delta|floatformat:2 }}</span>
+                  {% else %}<span class="badge badge-slate">0.00</span>{% endif %}
+                </td>
+                <td class="text-right">{% if point.overall is None %}<span class="text-muted">&mdash;</span>{% else %}{{ point.overall|floatformat:2 }}{% endif %}</td>
+                <td>{% if point.grade %}<span class="badge badge-muted">{{ point.grade }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                <td class="text-right">{{ point.line_count }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="calendar-off"></i>
+                  <h3>No periods for {{ selected_supplier.name }}</h3>
+                  <p>This supplier has no scorecard yet, so there is nothing to trend. Generating one freezes the KPI lines this board plots.</p>
+                  <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-primary">Go to scorecards</a>
+                </div>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="form-help">
+          <strong>Composite</strong> is the weighted mean of every KPI line on that scorecard, re-weighted over the lines that actually scored &mdash; a KPI with no data in a period does not drag the number down. <strong>Overall</strong> is the scorecard's own blend of its four dimension columns. The two differ whenever a KPI feeds no dimension, and both are shown rather than one being passed off as the other. A period with no scored line reads "Not scored", never 0.00.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{% if selected_kpi %}{{ selected_kpi.code }} by period{% else %}KPIs across the window{% endif %}</h2>
+        <span class="text-muted">{{ kpi_series|length }} KPI{{ kpi_series|length|pluralize }} measured</span>
+      </div>
+      <div class="table-wrap">
+        {% if selected_kpi %}
+          {% comment %}
+            One KPI selected: the full per-period detail. kpi_series holds exactly one entry
+            because trend_series() was called with that KPI.
+          {% endcomment %}
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Period ending</th>
+                <th class="text-right">Measured</th>
+                <th class="text-right">Change</th>
+                <th class="text-right">Score</th>
+                <th>Band</th>
+                <th class="text-right">Target at the time</th>
+                <th>Met?</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for k in kpi_series %}
+                {% for pt in k.points %}
+                  <tr>
+                    <td>{{ pt.period_end|date:"d M Y" }}</td>
+                    <td class="text-right fw-600">{% if pt.measured_value is None %}<span class="badge badge-slate">No data</span>{% else %}{{ pt.measured_value|floatformat:2 }}{% endif %}</td>
+                    <td class="text-right">
+                      {% if pt.delta is None %}<span class="text-muted">&mdash;</span>
+                      {% elif pt.delta > 0 %}<span class="badge badge-muted">+{{ pt.delta|floatformat:2 }}</span>
+                      {% elif pt.delta < 0 %}<span class="badge badge-muted">{{ pt.delta|floatformat:2 }}</span>
+                      {% else %}<span class="badge badge-slate">0.00</span>{% endif %}
+                    </td>
+                    <td class="text-right">{% if pt.score is None %}<span class="text-muted">&mdash;</span>{% else %}{{ pt.score|floatformat:2 }}{% endif %}</td>
+                    <td>
+                      {% comment %}
+                        band_css comes from the model's committed BAND_CSS mapping; the LABEL is
+                        spelled out against BAND_CHOICES with an else-fallback, because a point
+                        is a dict and has no get_band_display.
+                      {% endcomment %}
+                      <span class="badge {{ pt.band_css }}">
+                        {% if pt.band == 'ok' %}On target
+                        {% elif pt.band == 'warning' %}Warning
+                        {% elif pt.band == 'critical' %}Critical
+                        {% elif pt.band == 'unknown' %}Not banded
+                        {% else %}{{ pt.band }}{% endif %}
+                      </span>
+                    </td>
+                    <td class="text-right">{% if pt.target_at_time is None %}<span class="text-muted">&mdash;</span>{% else %}{{ pt.target_at_time|floatformat:2 }}{% endif %}</td>
+                    <td>
+                      {% if pt.meets_target is None %}<span class="badge badge-slate">No target</span>
+                      {% elif pt.meets_target %}<span class="badge badge-green">Met</span>
+                      {% else %}<span class="badge badge-red">Missed</span>{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% empty %}
+                <tr><td colspan="7">
+                  <div class="empty-state">
+                    <i data-lucide="line-chart"></i>
+                    <h3>Nothing measured for this KPI</h3>
+                    <p>No scorecard in the window carries a line for {{ selected_kpi.code }} against this supplier. It may not apply to their tier, or the periods may pre-date the definition.</p>
+                    <a href="{% url 'procurement:supplier_trend_board' %}?supplier={{ selected_supplier.pk }}" class="btn btn-outline">Show all KPIs</a>
+                  </div>
+                </td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          {% comment %}
+            No KPI selected: one row per KPI, latest against first, with a link that focuses the
+            per-period detail above. The direction column is the frozen direction_at_time from
+            the lines, so re-tuning a KPI later cannot re-judge a closed period.
+          {% endcomment %}
+          <table class="table">
+            <thead>
+              <tr>
+                <th>KPI</th>
+                <th>Category</th>
+                <th>Direction</th>
+                <th class="text-right">Points</th>
+                <th class="text-right">First score</th>
+                <th class="text-right">Latest score</th>
+                <th class="text-right">Latest measured</th>
+                <th>Latest band</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for k in kpi_series %}
+                {% with first=k.points|first latest=k.points|last %}
+                  <tr>
+                    <td class="fw-600"><span class="mono">{{ k.kpi_code }}</span> {{ k.kpi_name }}</td>
+                    <td>{% if k.kpi_category %}<span class="badge badge-muted">{{ k.kpi_category }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                    <td>
+                      {% if k.direction == 'higher_is_better' %}<span class="badge badge-info">Higher is better</span>
+                      {% elif k.direction == 'lower_is_better' %}<span class="badge badge-info">Lower is better</span>
+                      {% else %}<span class="badge badge-slate">&mdash;</span>{% endif %}
+                    </td>
+                    <td class="text-right">{{ k.points|length }}</td>
+                    <td class="text-right">{% if first.score is None %}<span class="text-muted">&mdash;</span>{% else %}{{ first.score|floatformat:2 }}{% endif %}</td>
+                    <td class="text-right fw-600">{% if latest.score is None %}<span class="text-muted">&mdash;</span>{% else %}{{ latest.score|floatformat:2 }}{% endif %}</td>
+                    <td class="text-right">
+                      {% if latest.measured_value is None %}<span class="badge badge-slate">No data</span>{% else %}{{ latest.measured_value|floatformat:2 }} <span class="text-muted">{{ k.unit }}</span>{% endif %}
+                    </td>
+                    <td>
+                      <span class="badge {{ latest.band_css }}">
+                        {% if latest.band == 'ok' %}On target
+                        {% elif latest.band == 'warning' %}Warning
+                        {% elif latest.band == 'critical' %}Critical
+                        {% elif latest.band == 'unknown' %}Not banded
+                        {% else %}{{ latest.band }}{% endif %}
+                      </span>
+                    </td>
+                    <td class="text-right">
+                      <a class="btn btn-outline btn-sm" href="{% url 'procurement:supplier_trend_board' %}?supplier={{ selected_supplier.pk }}&amp;kpi={{ k.kpi_id }}">Periods</a>
+                    </td>
+                  </tr>
+                {% endwith %}
+              {% empty %}
+                <tr><td colspan="9">
+                  <div class="empty-state">
+                    <i data-lucide="line-chart"></i>
+                    <h3>No KPI lines in the window</h3>
+                    <p>{{ selected_supplier.name }} has no measured KPI line on any scorecard yet. Lines are written by Generate on a draft scorecard &mdash; never by hand &mdash; which is what freezes the figures this board plots.</p>
+                    <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-primary">Go to scorecards</a>
+                  </div>
+                </td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <p class="form-help">
+          Every column here is read from the line as it was FROZEN at generation &mdash; the target, the direction and the unit are the ones in force when the period was measured, so re-tuning a KPI today cannot re-judge a closed period. "No data" means the resolver found nothing to measure in that window, which is a different finding from a measured zero and is shown as one.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
