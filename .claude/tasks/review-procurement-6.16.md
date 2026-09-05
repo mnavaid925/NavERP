@@ -761,4 +761,158 @@ must cost the same as one without; **fails until P4 is fixed**, which is the poi
 
 ---
 
-*(remaining reviewers append below: qa-smoke-tester → security-reviewer)*
+### 5/6 - `qa-smoke-tester` (empirical confirmation pass - NOT a repeat sweep)
+
+The first smoke gate could only test what seeded data reaches. This pass **built the missing states**
+(all writes in rolled-back transactions) to confirm or refute what reviewers 1-4 predicted. **Two
+refutations, one severity upgrade, one new Critical.**
+
+| # | Finding | Verdict | Severity change |
+|---|---|---|---|
+| R2 | `manual_override` on an empty run | **CONFIRMED** | **-> CRITICAL** |
+| F1/F2 | selects default to first option | **CONFIRMED** | as filed |
+| X10 | never-rendered verbs/badges | **REFUTED as a code defect** | **-> Minor (seed note)** |
+| F3 | zero-response survey line | **CONFIRMED** | as filed |
+| X11 | 8 unexercised resolvers | **REFUTED - all 8 clean** | **-> note only** |
+| PB5/P11 | post-cap cohort statistics | **CONFIRMED** | **-> Important+** |
+| S1 | junk filter empties register | **CONFIRMED + 1 NEW 500** | new = Critical |
+| P4 | missing `scorecard__party` | **CONFIRMED** | as filed |
+
+#### N1 - NEW - CRITICAL - `supplierevaluation_list?year=0` is an uncaught 500
+
+Reproduced independently by the main session:
+
+```
+?year=0      -> 500        ?year=2026   -> 200
+?year=10000  -> 500        ?year=9999   -> 200
+?year=99999  -> 500        ?year=abc    -> 200
+ValueError: year 0 is out of range
+  django/db/backends/base/operations.py:615  first = datetime.date(value, 1, 1)
+```
+
+Reachable range: `0` and `[10000, MAX_DB_INT]`. **Mechanism:** `crud.py`'s zero-skip is gated on
+`_is_pk_lookup()`, which returns `False` for `period_end__year` - and its own comment states the
+assumption that is false here (*"`year` ... 0 is a perfectly good value"*). `as_db_int` range-checks
+against `MAX_DB_INT`, not the date-year range 1-9999. `ScorecardKpiScores.py:153` is the **only
+`__year` int filter in the app**, so 6.16 is the first place the shape appears - and the view's
+docstring claiming a hand-edited query string "cannot 500 the page (L11)" is provably false.
+
+**Fix:** clamp `year` to 1-9999 in the view before it reaches `filters=`; the general guard belongs in
+`apps/core/crud.py`.
+
+#### R2 - CONFIRMED, and understated. Raise to CRITICAL.
+
+Control vs victim, same supplier, same window:
+
+```
+CONTROL (never generated) -> recompute_from_signals fills it:
+        d=100.00 q=100.00 p=100.00 r=58.00  overall=93.70  grade='A'
+VICTIM  (Generate pressed, 0 KPIs) -> lines=0, manual_override=True
+        recompute_from_signals: all None, overall=None, grade=''
+```
+
+**A scorecard that would have graded A / 93.70 is now permanently unscoreable by either engine** - and
+the operator is told it worked, in a green success message: *"Generated 0 KPI line(s) ... This
+scorecard is now owned by Procurement."* On the SCM side the "Recompute from signals" button is gone.
+
+**Two reachable paths needing no empty library at all**, both measured: a brand-new supplier with no
+`scm.SupplierProfile` while KPIs are tier-scoped (`applicable_kpis() == []`), and a library mid-retune
+with every KPI deactivated. Recovery exists (untick `manual_override` on the SCM form) but **nothing
+anywhere tells the user recovery is needed.**
+
+#### F1 / F2 - CONFIRMED, with the distinction cleanly established
+
+Parsed the real rendered HTML and applied the UA rule (no `selected` => first non-disabled option):
+
+```
+F1  select has NO `required`, all five options selected=False
+    browser submits rating='1' -> STORED rating=1 (Poor), score_value()=Decimal('0')
+    CONTROL (no rating field at all) -> view refuses, stays 'requested'
+F2  select has NO `required`, all four selected=False
+    browser submits outcome='successful' -> STORED closed/successful, verified_by stamped
+    CONTROL (no outcome field) -> view refuses, stays 'monitoring'
+```
+
+So it is unambiguously **"the form submits the first option"**, not "the view rejects empty". The
+view's blank-refusal is real but sits on a path a browser never takes.
+
+#### PB5 / P11 - CONFIRMED and worse than filed
+
+`ROW_CAP` monkeypatched to 8, 12 extra scorecards (6 named `AAA...` scoring 10, 6 named `ZZZ...`
+scoring 95; `benchmark_rows` slices by `party__name`):
+
+```
+              TRUTH     SHOWN
+count         13        6        WRONG
+average       55.14     10.00    WRONG
+best          95.00     10.00    WRONG
+```
+
+A user filtering to `?tier=strategic` sees a 6-supplier cohort averaging 10.00 whose **best** scores
+10.00; the truth is 13 suppliers averaging 55.14 with a best of 95.00. All six top performers are
+absent. Second shape: with `ROW_CAP=2` on seeded data, `?tier=strategic` returns **`rows=0, count=0,
+truncated=True`** - a strategic supplier exists and the board says the cohort is empty.
+
+#### REFUTED - do NOT let the fixer touch these
+
+- **X11 REFUTED.** All 8 never-seeded resolvers were created, generated and rendered: **zero raises,
+  zero nonsense units, zero raw dicts, zero leak markers**; six correctly report "No data in the
+  period", two return a real `0.00` with a sensible breakdown. Reviewer 2 was right they were
+  unexercised and wrong to imply risk.
+- **X10 REFUTED as a code defect.** A `draft` and an un-acknowledged plan were created and both verbs
+  driven end to end - Activate and Acknowledge render and work, re-acknowledge is correctly refused,
+  and all four "never rendered" badge states resolve to real theme classes. It is a **seeder-coverage
+  note**, not an Important finding.
+
+#### More new findings
+
+- **N2 - Important-ish:** `breakdown['window']` renders as a **Python list literal** on 40 of 41 seeded
+  lines - under a column headed *Value* the user reads `['2026-05-11', '2026-08-09']`. The template
+  promises values are `str()`-ified so nothing prints as a repr; it prints as text, but that text *is*
+  a repr. One-line fix in the flattener: join lists as `"2026-05-11 to 2026-08-09"`.
+- **N3 - R7 has THREE symptoms, not one; re-grade R7 Important.** The 6.16 window is one day before
+  SCM's, which means: (1) *(filed)* the default board lands on SCM's period - 2 rows, both
+  `line_count=0`, a perfect-looking cohort avg 86.03 **with no 6.16 evidence behind it**; (2) *(new)*
+  both `GoodsReceiptNote`s fall outside the 6.16 window, so `otd` and `defect_rate` are unmeasured for
+  **all five suppliers - 16 of 30 seeded derived lines**, i.e. the flagship Delivery and Quality KPIs
+  read "No data" on every seeded scorecard; (3) *(new)* both `SupplierRiskAssessment` rows are dated
+  outside it too, so the quadrant column renders **"Unplaced" six times** and the risk axis has never
+  held a value on the correct period. Moving the window to match SCM's fixes all three.
+- **N4 - Minor:** the breakdown key `rows` means the **denominator** for `otd` but the **numerator** for
+  `ncr_rate` / `po_change_rate` / `backorder_rate` (e.g. `rows: 0` printed beside `po_lines: 3`) - same
+  key, opposite meaning, on an audit trail whose job is being arguable.
+- **N5 - dev-DB hygiene, NOT a 6.16 defect:** a third tenant sits in the shared MySQL - `id=70,
+  **slug=''**, name='SMOKETEST Acme'` - a peer session's throwaway that was never rolled back. An empty
+  slug means tenant-resolution edge cases. Left untouched; worth telling the other sessions.
+
+#### Filter audit - every param on every page
+
+Exactly **two** silent-empty holes and **one** 500:
+- `supplierkpiscore_list?source=` **UNGUARDED** (S1 confirmed; `?source=0` also empties it)
+- `supplier_benchmark_board?category=` **UNGUARDED** (R5 confirmed)
+- `supplierevaluation_list?year=` **500** (N1)
+
+Everything else guarded: all of `supplierkpi_list`'s five, `supplierfeedback_list`'s six,
+`improvementplan_list`'s six, the boards' `period`/`tier`/`supplier`/`kpi`. **Explicitly not holes:**
+`?is_active=0` filters correctly to inactive; the two boards render a "Pick a supplier" prompt rather
+than a wiped register. `page` junk on all five registers is 200 - L9 clean.
+
+#### Empirical confirmation of filed-but-unexercised findings
+
+- **R1 is worse than filed - ALL FIVE suppliers differ**, not one: Northwind 86.88 vs 89.17, Cascade
+  80.63 vs 81.37, Bidder One 75.00 vs 79.17, AeroParcel 40.38 vs 38.46, **Bidder Two 34.62 (grade F)
+  vs 69.87**.
+- **R3/R4** confirmed against the real non-admin `ops_acme`: both forms render, then `POST` gives a
+  bare **unthemed Django 403 page**, with no mutation.
+- **X3** confirmed: 4 of 4 critical task alerts have `assigned_to=None` and `due_at=None`.
+
+#### What was touched
+
+Every write went through `transaction.atomic()` + forced rollback. Post-run snapshot identical to
+opening: `kpi=9 score=41 fb=28 plan=4 card=7`, plan/feedback status distributions unchanged,
+5 `manual_override` scorecards, 4 critical alerts, zero residue, `ROW_CAP` restored to 500. No
+`makemigrations`, no `--flush`, no code edit, no git. All 18 throwaway scripts deleted.
+
+---
+
+*(remaining reviewer appends below: security-reviewer)*
