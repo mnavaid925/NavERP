@@ -33,6 +33,13 @@ class ProcurementAlert(TenantOwned):
         ("task", "Task"),
         # 6.8 Renewal & Expiration Alerts raise kind="contract" rows into this inbox.
         ("contract", "Contract"),
+        # 6.17 Risk & Compliance Management raises kind="risk" rows into this inbox, from both
+        # SupplierRiskSignal (a score deterioration) and PolicyAttestation (an overdue sign-off).
+        # Registering it here is what makes the value FILTERABLE (the 6.1 kind <select> is built
+        # from these choices), LABELLED (get_kind_display returns the raw value otherwise) and
+        # EDITABLE (ProcurementAlertForm has `kind` in Meta.fields, so an unregistered value has
+        # no option to select and saving would silently re-kind the alert).
+        ("risk", "Risk"),
     ]
     SEVERITY_CHOICES = [
         ("info", "Info"),
@@ -157,6 +164,7 @@ class ProcurementAlert(TenantOwned):
     def kind_css(self):
         return {"deadline": "badge-amber", "approval": "badge-info",
                 "delivery": "badge-muted", "task": "badge-slate",
+                "risk": "badge-red",
                 }.get(self.kind, "badge-slate")
 
     def __str__(self):
