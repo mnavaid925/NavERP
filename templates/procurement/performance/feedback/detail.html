@@ -47,7 +47,14 @@
       <p class="text-muted">{{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }} · {{ obj.get_respondent_kind_display|lower }} · {{ obj.get_respondent_function_display|lower }} · requested {{ obj.requested_at|date:"M d, Y H:i" }}.</p>
     </div>
     <div class="page-actions">
-      <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        Outstanding requests only — rating IS on the form, so an editable submitted response
+        would let anyone overwrite an answer somebody gave. The same gate supplierfeedback_edit
+        enforces.
+      {% endcomment %}
+      {% if obj.status == "requested" %}
+        <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
       <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All responses</a>
     </div>
   </div>
@@ -171,8 +178,12 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
+      {% if obj.status == "requested" %}
       <p class="text-muted">Editing corrects what was recorded &mdash; the window, the respondent, the rating, the weight, the comment. It can never move the response through its lifecycle: <span class="fw-600">status is not on the form</span>, and neither is the raise stamp, which would stop being evidence of anything if it could be typed over.</p>
       <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit response</a>
+      {% else %}
+      <p class="form-help"><i data-lucide="lock"></i> This response is {{ obj.get_status_display|lower }}, so its answer is frozen and it cannot be edited. What a respondent said is evidence, and both the survey aggregate and the perception-gap board are computed from it &mdash; raise a fresh request instead.</p>
+      {% endif %}
       <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to the register</a>
       <p class="text-muted" style="margin-top:.75rem;">Deleting a <span class="fw-600">submitted</span> response removes evidence a survey KPI was computed from, and it does <span class="fw-600">not</span> re-derive any scorecard line already generated: those were written by the generate run that read this row, and silently re-blending them from a hand-trimmed set would move a figure the supplier has already been shown. Re-press Generate on a draft period to rebuild it from what is actually there.</p>
       <form method="post" action="{% url 'procurement:supplierfeedback_delete' obj.pk %}">
