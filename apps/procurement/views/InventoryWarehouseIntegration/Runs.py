@@ -120,6 +120,24 @@ def _released_requisitions(run):
              "url": reverse("scm:requisition_detail", args=[r.pk])} for r in rows]
 
 
+def _decide_redirect(request, pk):
+    """Back to the run detail, on the page of the review board the buyer was working.
+
+    The board pages at 25 and a run caps at 500 suggestions, so a redirect that always lands on
+    page 1 throws a buyer working page 8 back to the top after EVERY save — twenty times in a
+    sitting. The decide form posts the page it was rendered on; this echoes it back.
+
+    Only a plain positive page number is echoed. ``Paginator.get_page`` already handles an
+    out-of-range or unparseable page by falling back, so the shape is the only thing worth
+    guarding — and guarding it keeps arbitrary text out of the redirect URL.
+    """
+    url = reverse("procurement:replenishmentrun_detail", args=[pk])
+    page = (request.POST.get("page") or "").strip()
+    if page.isdecimal() and page.strip("0") and len(page) <= 6:
+        return redirect(f"{url}?page={page}")
+    return redirect(url)
+
+
 @login_required
 def replenishmentrun_list(request):
     """The register of replenishment proposals — what was planned, when, and how far it got."""
@@ -330,11 +348,11 @@ def replenishmentsuggestion_decide(request, pk, line_id):
         messages.error(request, f"{line.item.sku} was already released into "
                                 f"{line.requisition.number} — change the quantity on that "
                                 f"requisition instead.")
-        return redirect("procurement:replenishmentrun_detail", pk=pk)
+        return _decide_redirect(request, pk)
     if not line.run.can_generate:   # draft or proposed; released/cancelled are records
         messages.error(request, f"{line.run.number} is {line.run.get_status_display().lower()} — "
                                 f"its lines are a record now and cannot be re-decided.")
-        return redirect("procurement:replenishmentrun_detail", pk=pk)
+        return _decide_redirect(request, pk)
 
     form = ReplenishmentSuggestionDecisionForm(request.POST, instance=line, tenant=request.tenant)
     if not form.is_valid():
@@ -342,10 +360,10 @@ def replenishmentsuggestion_decide(request, pk, line_id):
         # — losing the field association but never the reason, which is the part a buyer needs.
         messages.error(request, " ".join(
             f"{field}: {' '.join(errors)}" for field, errors in form.errors.items()))
-        return redirect("procurement:replenishmentrun_detail", pk=pk)
+        return _decide_redirect(request, pk)
 
     obj = form.save()
     write_audit_log(request.user, obj, "decide",
                     {"run": line.run.number, "decision": obj.decision})
     messages.success(request, f"{obj.item.sku} marked {obj.get_decision_display().lower()}.")
-    return redirect("procurement:replenishmentrun_detail", pk=pk)
+    return _decide_redirect(request, pk)
