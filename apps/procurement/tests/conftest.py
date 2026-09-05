@@ -2698,3 +2698,764 @@ def dk_resource_b(db, tenant_b, admin_b):
     return _dk_resource(tenant_b, title="Globex sourcing guide", resource_type="guide",
                         category="general", status="published", owner=admin_b,
                         created_by=admin_b)
+
+
+# =================================================================================================
+# 6.18 Inventory & Warehouse Integration
+# =================================================================================================
+#
+# Every fixture and helper below is prefixed ``invwarehouse_`` / ``_invwarehouse_`` so the four
+# 6.18 test lanes (test_invwarehouse_models / _forms / _views / _security) never collide with the
+# 6.1 - 6.19 records above, or with whatever a later sub-module appends next (L47). Dates derive
+# from ``timezone.localdate()`` / ``timezone.now()`` - never ``datetime.date.today()`` - so
+# exact-date assertions stay stable in the hours after local midnight (L16).
+#
+# Reused rather than re-minted: ``usd``, ``gl_expense_a`` / ``gl_expense_b``, ``org_unit_a`` /
+# ``org_unit_b`` (the accounting/core masters at the top of this file) and, for the receipt->bin
+# page, 6.11's ``receipt_grn_a`` / ``receipt_grn_line_a`` chain. 6.18 adds only the spine rows
+# nothing here already had: stock moves, reorder rules, lots, putaway and cycle-count records.
+#
+# FIVE THINGS TO KNOW BEFORE USING THESE:
+#
+# 1. ``ReplenishmentSuggestion``'s ELEVEN quantity columns are ``editable=False`` and are written
+#    only by ``ReplenishmentRun.generate()``. ``_invwarehouse_suggestion`` therefore sets every one
+#    of them EXPLICITLY - a fixture that leaves them at their defaults seeds a run whose lines are
+#    all zero and whose ``total_value`` / ``line_value`` assertions pass vacuously.
+# 2. ``MaterialIssueLine.unit_cost`` is stamped in ``save()`` from ``Item.average_cost``, and
+#    ``bulk_create()`` bypasses ``save()``. Every line below goes through ``.save()``; any test
+#    that bulk-creates lines must stamp ``unit_cost`` itself or it seeds a zero-value document.
+# 3. ``Model.objects.create()`` does NOT call ``clean()``. Cross-tenant rejection, the nullable-
+#    unique catch-all probe, the ``purpose == "other"`` notes rule and the snooze-date rule are all
+#    ``clean()`` behaviour - assert them through the MODEL or the FORM, never by reading a fixture.
+# 4. ``invwarehouse_run_released_a`` and ``invwarehouse_issue_posted_a`` are built by calling the
+#    REAL ``release()`` / ``post()`` verbs, the ``_dk_approve`` precedent: the fixture chain state
+#    is the production state, including the minted ``scm.PurchaseRequisition`` / draft
+#    ``scm.StockAdjustment`` and the audit rows. Neither verb writes a ``scm.StockMove`` - the
+#    ledger boundary is a property a test may assert against these two directly.
+# 5. On-hand is the LIVE ``scm.StockMove`` aggregate. A test that wants a shortfall must request
+#    the matching ``invwarehouse_stock*`` fixture (or deliberately not request it); no quantity in
+#    this sub-module is stored on a header.
+#
+# The shape the four lanes can rely on:
+#
+#   spine
+#     invwarehouse_item_a        SKU RPL-BOLT   avg cost 4.0000 / std 4.2500, uom EA
+#     invwarehouse_item2_a       SKU RPL-NUT    avg cost 2.5000
+#     invwarehouse_item3_a       SKU RPL-WASHER avg cost 1.0000
+#     invwarehouse_item_b        SKU GBX-BOLT   - tenant B, the crafted-FK target
+#     invwarehouse_location_a    WH-MAIN  (warehouse)
+#     invwarehouse_location2_a   WH-EAST  (warehouse) - the second scope for run/location filters
+#     invwarehouse_bin_a         WH-MAIN-A1 (bin, child of WH-MAIN)
+#     invwarehouse_location_b    GBX-MAIN - tenant B
+#     invwarehouse_vendor_a      core.Party + supplier PartyRole ("Fastener Wholesale")
+#     invwarehouse_vendor2_a     core.Party + vendor PartyRole   ("Second Source Fixings")
+#     invwarehouse_vendor_b      tenant B - the crafted-FK target for preferred_vendor / vendor
+#     invwarehouse_plain_party_a core.Party with NO role -> ReplenishmentPolicy.clean() must reject
+#     invwarehouse_lot_a         LotSerial LOT-2601 on item_a, available
+#     invwarehouse_stock_a       +100 of item_a  @ location_a  (receipt move, unit cost 4.0000)
+#     invwarehouse_stock2_a      + 10 of item2_a @ location_a  - the I10 shortfall basis
+#     invwarehouse_rule_a        scm.ReorderRule item_a @ location_a: point 150, safety 25,
+#                                lead 7, abc "A" (UPPERCASE - it is ReorderRule.abc_class)
+#     invwarehouse_rules_bulk_a  40 active rules at location2_a on 40 fresh items -> generate()
+#
+#   policies
+#     invwarehouse_policy_a          item_a @ location_a, buy, vendor_a, target 200,
+#                                    multiple 25, min 10, max 500, both netting toggles ON
+#     invwarehouse_policy_catchall_a item_a @ ANY location - same item as _policy_a, so
+#                                    resolve()'s specificity-first order is testable
+#     invwarehouse_policy_transfer_a item2_a @ location_a, source_method "transfer" -> raises no
+#                                    requisition, and the board shows a source_label not a URL
+#     invwarehouse_policy_b          tenant B - the IDOR / crafted-FK target
+#
+#   runs
+#     invwarehouse_run_a          DRAFT, whole network, run_date = today
+#     invwarehouse_run_proposed_a PROPOSED + 3 lines: pending / accepted / snoozed, in SKU order.
+#                                 totals -> line_count 3, accepted 1, snoozed 1, pending 1,
+#                                 dismissed 0, accepted_value 100.0000; run.total_value 520.0000
+#     invwarehouse_run_released_a RELEASED via the real release(): 2 accepted lines, ONE vendor
+#                                 group -> one draft scm.PurchaseRequisition (500.00), both lines
+#                                 stamped with it. The C1 (delete refused) and I5 (policy delete
+#                                 refused) target. Its lines carry invwarehouse_policy_a.
+#     invwarehouse_run_lines_a    PROPOSED with 30 lines across 3 items / 3 policies / 3 vendors
+#                                 -> the <= 12 query regression on replenishmentrun_detail
+#     invwarehouse_run_b          tenant B DRAFT - the IDOR target
+#
+#   material issues
+#     invwarehouse_issue_draft_a     DRAFT, TWO LINES OF THE SAME ITEM (item2_a, 6 + 6) against
+#                                    10 on hand. Finding I10: both rows must flag short BEFORE
+#                                    Post, and post() must refuse with one message per short item.
+#     invwarehouse_issue_submitted_a SUBMITTED, 1 line (item_a x5) against 100 on hand - postable
+#     invwarehouse_issue_posted_a    POSTED via the real post(): adjustment set (draft ADJ-),
+#                                    posted_at / issued_by stamped. Delete and cancel are REFUSED.
+#     invwarehouse_return_a          DRAFT movement_type "return" (item_a x3) - no availability
+#                                    guard applies, and reservation must be rejected on it
+#     invwarehouse_issue_lots_a      DRAFT with 20 lot-carrying lines -> the <= 14 query
+#                                    regression on materialissue_detail
+#     invwarehouse_issue_b           tenant B DRAFT with one line - the IDOR / crafted-FK target
+#
+#   the three derived pages
+#     invwarehouse_putaway_a      scm.PutawayTask on 6.11's receipt_grn_a -> bin WH-MAIN-A1,
+#                                 COMPLETED, qty 5 against 12 received = partially put away
+#     invwarehouse_count_task_a   scm.CycleCountTask at location_a, COUNTED, scheduled 7 days ago
+#                                 (inside the default 90-day window): 2 counted lines, 1 with a
+#                                 variance -> accuracy 50%, net -3, abs 3, value 7.5000
+#     invwarehouse_count_program_a inventory.CountProgram, weekly, abc_class "a" (LOWERCASE - it
+#                                 is CountProgram.abc_class, not ReorderRule's)
+
+#: Every quantity column ``generate()`` writes, so a fixture line cannot forget one. Held as a
+#: tuple rather than as defaults inside the helper so a test can assert the SET is still eleven -
+#: an added snapshot column that nothing stamps is how a run starts proposing zeros.
+_INVWAREHOUSE_SNAPSHOT_FIELDS = (
+    "on_hand_qty", "allocated_qty", "on_order_qty", "open_requisition_qty", "available_qty",
+    "reorder_point_snapshot", "target_level_snapshot", "raw_suggested_qty", "suggested_qty",
+    "unit_cost", "lead_time_days",
+)
+
+
+# -- helpers ---------------------------------------------------------------------------------------
+
+def _invwarehouse_uom(tenant):
+    """The workspace's ``EA`` unit. ``get_or_create`` on the same key ``uom_a`` uses, so requesting
+    both fixtures reuses one row instead of tripping ``UOM``'s unique constraint."""
+    from apps.scm.models import UOM
+    obj, _ = UOM.objects.get_or_create(tenant=tenant, code="EA",
+                                       defaults={"name": "Each", "factor": Decimal("1")})
+    return obj
+
+
+def _invwarehouse_item(tenant, sku, name, **overrides):
+    """One ``scm.Item``, always WITH a uom.
+
+    ``average_cost`` is ``editable=False`` on the model and is what ``MaterialIssueLine.save()``
+    snapshots, so it is set here explicitly. The uom is not decoration: ``generate()``'s
+    ``.only()`` deliberately omits ``item__uom``, so a lazy ``rule.item.uom.code`` would cost a
+    query per rule - and it can only cost one if ``uom_id`` is actually set.
+    """
+    from apps.scm.models import Item
+    fields = dict(tenant=tenant, sku=sku, name=name, uom=_invwarehouse_uom(tenant),
+                  item_type="stock", average_cost=Decimal("4.0000"),
+                  standard_cost=Decimal("4.2500"), is_active=True)
+    fields.update(overrides)
+    return Item.objects.create(**fields)
+
+
+def _invwarehouse_location(tenant, code, name, **overrides):
+    from apps.scm.models import Location
+    fields = dict(tenant=tenant, code=code, name=name, location_type="warehouse", is_active=True)
+    fields.update(overrides)
+    return Location.objects.create(**fields)
+
+
+def _invwarehouse_party(tenant, name, role="supplier"):
+    """A counterparty WITH its ``core.PartyRole``.
+
+    ``ReplenishmentPolicy.clean()`` refuses a ``preferred_vendor`` that holds neither a
+    ``supplier`` nor a ``vendor`` role, and ``_supplier_parties()`` - the vendor dropdown on the
+    policy register and the stock-position board - filters on exactly those two. A bare ``Party``
+    appears in neither and validates in neither. Pass ``role=None`` for the roleless party the
+    rejection test needs.
+    """
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    if role:
+        PartyRole.objects.create(tenant=tenant, party=party, role=role, status="active")
+    return party
+
+
+def _invwarehouse_stock(item, location, quantity, **overrides):
+    """One ``scm.StockMove``. On-hand in this sub-module is ALWAYS this aggregate, never a column.
+
+    Positive = into the location. ``moved_at`` derives from ``timezone.now()`` (L16).
+    """
+    from apps.scm.models import StockMove
+    fields = dict(tenant=item.tenant, item=item, location=location,
+                  quantity=Decimal(str(quantity)), unit_cost=item.average_cost,
+                  move_type="receipt", reference="OPEN-BAL", moved_at=timezone.now())
+    fields.update(overrides)
+    return StockMove.objects.create(**fields)
+
+
+def _invwarehouse_rule(tenant, item, location, **overrides):
+    """One ``scm.ReorderRule`` - the planning numbers 6.18 reads THROUGH rather than restates.
+
+    ``abc_class`` here is the UPPERCASE revenue rank ``A``/``B``/``C``, which is what
+    ``ReplenishmentRun.abc_class_filter`` filters. ``scm.Location.abc_class`` and
+    ``inventory.CountProgram.abc_class`` are the LOWERCASE bin-velocity attribute - a different
+    thing, and the gotcha the run's help_text calls out.
+    """
+    from apps.scm.models import ReorderRule
+    fields = dict(tenant=tenant, item=item, location=location,
+                  reorder_point=Decimal("150.00"), safety_stock=Decimal("25.00"),
+                  reorder_quantity=Decimal("100.00"), lead_time_days=7,
+                  avg_daily_demand=Decimal("4.0000"), abc_class="A", is_active=True)
+    fields.update(overrides)
+    return ReorderRule.objects.create(**fields)
+
+
+def _invwarehouse_policy(tenant, item, **overrides):
+    """One ``ReplenishmentPolicy``.
+
+    ``location`` defaults to ``None`` - the CATCH-ALL row, which is the one shape the database's
+    ``unique_together`` provably cannot police (SQL compares NULLs as distinct) and which
+    ``clean()`` probes for instead. Pass ``location=`` for a located policy.
+    """
+    from apps.procurement.models import ReplenishmentPolicy
+    fields = dict(tenant=tenant, item=item, source_method="buy", trigger_mode="review",
+                  include_on_order=True, include_open_requisitions=True, is_active=True)
+    fields.update(overrides)
+    return ReplenishmentPolicy.objects.create(**fields)
+
+
+def _invwarehouse_run(tenant, **overrides):
+    """One ``ReplenishmentRun`` [RPL-]. ``number`` is minted by ``TenantNumbered.save()``.
+
+    ``status`` / ``generated_at`` / ``released_at`` / ``generated_by`` belong to the verbs - pass
+    them only to BUILD a state a verb would have produced.
+    """
+    from apps.procurement.models import ReplenishmentRun
+    fields = dict(tenant=tenant, run_date=timezone.localdate(), trigger="manual", status="draft")
+    fields.update(overrides)
+    return ReplenishmentRun.objects.create(**fields)
+
+
+def _invwarehouse_suggestion(run, item, location, *, suggested="100", unit_cost="4.0000",
+                             **overrides):
+    """One ``ReplenishmentSuggestion`` with ALL ELEVEN snapshot columns set explicitly.
+
+    They are ``editable=False`` and are written only by ``generate()``, so leaving them at their
+    zero defaults would seed a proposal whose value assertions pass against nothing. The figures
+    default to a coherent story - 100 on hand against a point of 150 and a target of 200, so the
+    raw shortfall really is the suggested quantity - and any of them can be overridden by name.
+    """
+    from apps.procurement.models import ReplenishmentSuggestion
+    suggested = Decimal(str(suggested))
+    fields = dict(
+        run=run, item=item, location=location,
+        on_hand_qty=Decimal("100.0000"), allocated_qty=Decimal("0.0000"),
+        on_order_qty=Decimal("0.0000"), open_requisition_qty=Decimal("0.0000"),
+        available_qty=Decimal("100.0000"), reorder_point_snapshot=Decimal("150.0000"),
+        target_level_snapshot=Decimal("200.0000"), raw_suggested_qty=suggested,
+        suggested_qty=suggested, unit_cost=Decimal(str(unit_cost)), lead_time_days=7,
+        decision="pending",
+    )
+    fields.update(overrides)
+    return ReplenishmentSuggestion.objects.create(**fields)
+
+
+def _invwarehouse_issue(tenant, location, **overrides):
+    """One ``MaterialIssue`` [MIS-]. ``number`` is minted by ``TenantNumbered.save()``.
+
+    ``status`` / ``adjustment`` / ``posted_at`` / ``cancelled_at`` / ``issued_by`` belong to the
+    verbs. Build a posted document by calling ``post()``, not by passing ``status="posted"`` - the
+    stamps and the minted adjustment are the half that matters.
+    """
+    from apps.procurement.models import MaterialIssue
+    fields = dict(tenant=tenant, location=location, movement_type="issue", purpose="cost_centre",
+                  issue_date=timezone.localdate(), status="draft")
+    fields.update(overrides)
+    return MaterialIssue.objects.create(**fields)
+
+
+def _invwarehouse_line(issue, item, quantity="1", **overrides):
+    """One ``MaterialIssueLine``, saved through ``save()`` so ``unit_cost`` is really snapshotted.
+
+    ``unit_cost`` is ``editable=False`` and is stamped from ``item.average_cost`` on the way in -
+    ``bulk_create()`` skips that, which is why every line in this file goes through ``.save()``.
+    """
+    from apps.procurement.models import MaterialIssueLine
+    fields = dict(issue=issue, item=item, quantity=Decimal(str(quantity)))
+    fields.update(overrides)
+    line = MaterialIssueLine(**fields)
+    line.save()
+    return line
+
+
+# -- spine: items, locations, counterparties -------------------------------------------------------
+
+@pytest.fixture
+def invwarehouse_item_a(db, tenant_a):
+    """SKU ``RPL-BOLT`` - average cost 4.0000, the cost every material-issue line snapshots."""
+    return _invwarehouse_item(tenant_a, "RPL-BOLT", "Hex bolt M8 x 40")
+
+
+@pytest.fixture
+def invwarehouse_item2_a(db, tenant_a):
+    """SKU ``RPL-NUT`` - average cost 2.5000. The item the I10 duplicate-line story is told with."""
+    return _invwarehouse_item(tenant_a, "RPL-NUT", "Hex nut M8",
+                              average_cost=Decimal("2.5000"), standard_cost=Decimal("2.6000"))
+
+
+@pytest.fixture
+def invwarehouse_item3_a(db, tenant_a):
+    """SKU ``RPL-WASHER`` - average cost 1.0000. Sorts LAST of the three (Meta ordering is
+    ``item__sku``), which is what makes a line-order assertion mean something."""
+    return _invwarehouse_item(tenant_a, "RPL-WASHER", "Flat washer M8",
+                              average_cost=Decimal("1.0000"), standard_cost=Decimal("1.1000"))
+
+
+@pytest.fixture
+def invwarehouse_item_b(db, tenant_b):
+    """Tenant B's item - the crafted-POST target for every ``item`` field in this sub-module."""
+    return _invwarehouse_item(tenant_b, "GBX-BOLT", "Globex hex bolt")
+
+
+@pytest.fixture
+def invwarehouse_location_a(db, tenant_a):
+    return _invwarehouse_location(tenant_a, "WH-MAIN", "Main warehouse")
+
+
+@pytest.fixture
+def invwarehouse_location2_a(db, tenant_a):
+    """A second warehouse - the ``?location=`` filter's other answer, and where the 40 bulk
+    reorder rules live so a location-scoped run can select exactly them."""
+    return _invwarehouse_location(tenant_a, "WH-EAST", "East warehouse")
+
+
+@pytest.fixture
+def invwarehouse_bin_a(db, tenant_a, invwarehouse_location_a):
+    """A BIN is ``scm.Location(location_type="bin")`` - there is no Bin model (L36). The putaway
+    destination the receipt->bin map reports."""
+    return _invwarehouse_location(tenant_a, "WH-MAIN-A1", "Aisle A bin 1",
+                                  location_type="bin", parent=invwarehouse_location_a,
+                                  capacity=Decimal("50.00"))
+
+
+@pytest.fixture
+def invwarehouse_location_b(db, tenant_b):
+    """Tenant B's location - the crafted-POST target for ``location`` on both headers."""
+    return _invwarehouse_location(tenant_b, "GBX-MAIN", "Globex warehouse")
+
+
+@pytest.fixture
+def invwarehouse_vendor_a(db, tenant_a):
+    """A party with a ``supplier`` role - valid as ``preferred_vendor`` and as a line vendor."""
+    return _invwarehouse_party(tenant_a, "Fastener Wholesale")
+
+
+@pytest.fixture
+def invwarehouse_vendor2_a(db, tenant_a):
+    """A party with a ``vendor`` role. BOTH roles are accepted on purpose - hiding half the
+    counterparties would be a worse bug than the one the check prevents."""
+    return _invwarehouse_party(tenant_a, "Second Source Fixings", role="vendor")
+
+
+@pytest.fixture
+def invwarehouse_vendor_b(db, tenant_b):
+    """Tenant B's supplier - the crafted-POST target for ``preferred_vendor`` / ``vendor``."""
+    return _invwarehouse_party(tenant_b, "Globex Fixings")
+
+
+@pytest.fixture
+def invwarehouse_plain_party_a(db, tenant_a):
+    """Same workspace, NO ``PartyRole`` at all - ``ReplenishmentPolicy.clean()`` must refuse it as
+    a preferred vendor. Being in the right tenant is what makes this test the ROLE rule rather
+    than the cross-tenant one."""
+    return _invwarehouse_party(tenant_a, "Acme Legal Services", role=None)
+
+
+@pytest.fixture
+def invwarehouse_lot_a(db, tenant_a, invwarehouse_item_a):
+    """An AVAILABLE lot on ``item_a`` - the only status ``MaterialIssueLineForm`` offers."""
+    from apps.scm.models import LotSerial
+    return LotSerial.objects.create(tenant=tenant_a, item=invwarehouse_item_a, kind="lot",
+                                    number="LOT-2601", status="available")
+
+
+# -- spine: stock and reorder rules ----------------------------------------------------------------
+
+@pytest.fixture
+def invwarehouse_stock_a(db, invwarehouse_item_a, invwarehouse_location_a):
+    """+100 of ``item_a`` at WH-MAIN. Enough to post ``invwarehouse_issue_submitted_a``."""
+    return _invwarehouse_stock(invwarehouse_item_a, invwarehouse_location_a, "100")
+
+
+@pytest.fixture
+def invwarehouse_stock2_a(db, invwarehouse_item2_a, invwarehouse_location_a):
+    """+10 of ``item2_a`` at WH-MAIN - deliberately LESS than
+    ``invwarehouse_issue_draft_a``'s two 6-unit lines add up to. Finding I10 lives on this gap."""
+    return _invwarehouse_stock(invwarehouse_item2_a, invwarehouse_location_a, "10")
+
+
+@pytest.fixture
+def invwarehouse_rule_a(db, tenant_a, invwarehouse_item_a, invwarehouse_location_a):
+    """Point 150, safety 25, lead 7, ABC ``A``. The point is ABOVE ``invwarehouse_stock_a``'s 100
+    on purpose, so ``generate()`` proposes whether or not the stock fixture was requested:
+
+    * with ``invwarehouse_stock_a`` + ``invwarehouse_policy_a``: raw 100 -> suggested **100**
+      (min 10, rounded up to a multiple of 25, under the 500 cap)
+    * without the stock:                                          raw 200 -> suggested **200**
+    * with only ``invwarehouse_policy_catchall_a`` (no target):    target falls back to
+      point + safety = 175, and the catch-all rounds nothing -> raw == suggested (175, or 75 with
+      the stock fixture)
+    """
+    return _invwarehouse_rule(tenant_a, invwarehouse_item_a, invwarehouse_location_a)
+
+
+@pytest.fixture
+def invwarehouse_rules_bulk_a(db, tenant_a, invwarehouse_location2_a):
+    """40 ACTIVE reorder rules on 40 fresh items at WH-EAST - the ``generate()`` <= 15 query
+    regression (R5-I3 / M13: the rules queryset is ``.only()``-narrowed to nine columns and
+    ``select_related("item")`` alone).
+
+    No stock and no policy, so each rule proposes through the unsaved ``ReplenishmentPolicy()``
+    sentinel: target = point 20 + safety 5 = 25, raw 25, no rounding -> 40 lines of 25.
+    Every item carries a uom, so a lazy ``rule.item.uom.code`` really would cost 40 queries.
+    """
+    items = [_invwarehouse_item(tenant_a, f"RPL-BULK-{i:02d}", f"Bulk fastener {i:02d}")
+             for i in range(1, 41)]
+    return [_invwarehouse_rule(tenant_a, item, invwarehouse_location2_a,
+                               reorder_point=Decimal("20.00"), safety_stock=Decimal("5.00"),
+                               lead_time_days=3, abc_class="B")
+            for item in items]
+
+
+# -- replenishment policies ------------------------------------------------------------------------
+
+@pytest.fixture
+def invwarehouse_policy_a(db, tenant_a, invwarehouse_item_a, invwarehouse_location_a,
+                          invwarehouse_vendor_a, org_unit_a, gl_expense_a):
+    """The LOCATED buy policy: item_a @ WH-MAIN, target 200, multiple 25, min 10, max 500.
+
+    Carries the three requisition defaults (``default_org_unit``, ``default_gl_account``) that
+    ``release()`` stamps verbatim onto the ``scm.PurchaseRequisition`` it raises - which is why
+    the CRUD on this model is ``@tenant_admin_required`` (I4).
+    """
+    return _invwarehouse_policy(
+        tenant_a, invwarehouse_item_a, location=invwarehouse_location_a,
+        preferred_vendor=invwarehouse_vendor_a, target_level=Decimal("200.00"),
+        order_multiple=Decimal("25.00"), min_order_qty=Decimal("10.00"),
+        max_order_qty=Decimal("500.00"), lead_time_days_override=None,
+        default_org_unit=org_unit_a, default_gl_account=gl_expense_a,
+        notes="Case quantity is 25; the vendor will not split one.")
+
+
+@pytest.fixture
+def invwarehouse_policy_catchall_a(db, tenant_a, invwarehouse_item_a):
+    """``location=None`` on the SAME item as ``invwarehouse_policy_a``.
+
+    This is the pair that makes ``resolve()`` testable: at WH-MAIN the located policy wins, at any
+    OTHER location this one does, and a second catch-all for the same item must be refused by
+    ``clean()`` (the database's ``unique_together`` cannot see it - SQL compares NULLs as
+    distinct). No rounding and no vendor, so a line it shapes has ``raw == suggested``.
+    """
+    return _invwarehouse_policy(tenant_a, invwarehouse_item_a,
+                               notes="Any-location fallback for the M8 bolt.")
+
+
+@pytest.fixture
+def invwarehouse_policy_transfer_a(db, tenant_a, invwarehouse_item2_a, invwarehouse_location_a):
+    """``source_method="transfer"`` - ``raises_requisitions`` is False.
+
+    Two behaviours ride on it: ``generate()`` SKIPS the pair entirely (a transfer is SCM's
+    stock-transfer document, never a purchase), and the stock-position board renders a
+    ``source_label`` with an empty ``raise_requisition_url`` instead of offering a Buy button
+    (M4). Both read ``REQUISITIONABLE_SOURCE_METHODS``, never a hard-coded ``"buy"``.
+    """
+    return _invwarehouse_policy(tenant_a, invwarehouse_item2_a, location=invwarehouse_location_a,
+                               source_method="transfer", target_level=Decimal("60.00"))
+
+
+@pytest.fixture
+def invwarehouse_policy_b(db, tenant_b, invwarehouse_item_b, invwarehouse_location_b):
+    """Tenant B's policy - the cross-tenant 404 target on detail / edit / delete."""
+    return _invwarehouse_policy(tenant_b, invwarehouse_item_b, location=invwarehouse_location_b,
+                               target_level=Decimal("80.00"))
+
+
+# -- replenishment runs ------------------------------------------------------------------------------
+
+@pytest.fixture
+def invwarehouse_run_a(db, tenant_a):
+    """DRAFT, whole network (``location=None`` -> ``scope_label`` "Whole network"), no lines.
+
+    The Generate / Edit / Delete target: draft is the only status where everything is allowed.
+    """
+    return _invwarehouse_run(tenant_a, notes="Weekly network sweep.")
+
+
+@pytest.fixture
+def invwarehouse_run_proposed_a(db, tenant_a, invwarehouse_item_a, invwarehouse_item2_a,
+                                invwarehouse_item3_a, invwarehouse_location_a,
+                                invwarehouse_vendor_a, invwarehouse_policy_a):
+    """PROPOSED with three lines, one per interesting decision, in SKU order.
+
+    ===========  ========  ======  =========  ==========  ==========  ==========
+    line         item      qty     unit cost  line_value  decision    vendor
+    ===========  ========  ======  =========  ==========  ==========  ==========
+    1            RPL-BOLT     100     4.0000    400.0000  pending     vendor_a
+    2            RPL-NUT       40     2.5000    100.0000  accepted    vendor_a
+    3            RPL-WASHER    20     1.0000     20.0000  snoozed     (none)
+    ===========  ========  ======  =========  ==========  ==========  ==========
+
+    So ``totals`` reads line_count 3 / accepted 1 / snoozed 1 / dismissed 0 / pending 1 /
+    accepted_value 100.0000, and ``run.total_value`` is 520.0000. Line 1 carries
+    ``invwarehouse_policy_a``; lines 2 and 3 carry none, which is the "plain defaults, no
+    rounding" case the detail page reports. The snooze date is ``localdate() + 14`` so it is
+    genuinely in the future whatever hour the suite runs at (L16).
+    """
+    run = _invwarehouse_run(tenant_a, status="proposed", generated_at=timezone.now(),
+                            notes="Proposed from the weekly sweep.")
+    _invwarehouse_suggestion(run, invwarehouse_item_a, invwarehouse_location_a,
+                             suggested="100", unit_cost="4.0000",
+                             policy=invwarehouse_policy_a, vendor=invwarehouse_vendor_a)
+    _invwarehouse_suggestion(run, invwarehouse_item2_a, invwarehouse_location_a,
+                             suggested="40", unit_cost="2.5000", decision="accepted",
+                             vendor=invwarehouse_vendor_a,
+                             on_hand_qty=Decimal("10.0000"), available_qty=Decimal("10.0000"),
+                             reorder_point_snapshot=Decimal("30.0000"),
+                             target_level_snapshot=Decimal("50.0000"),
+                             raw_suggested_qty=Decimal("40.0000"), lead_time_days=5)
+    _invwarehouse_suggestion(run, invwarehouse_item3_a, invwarehouse_location_a,
+                             suggested="20", unit_cost="1.0000", decision="snoozed",
+                             snooze_until=timezone.localdate() + datetime.timedelta(days=14),
+                             decision_note="Revisit after the shutdown.",
+                             on_hand_qty=Decimal("0.0000"), available_qty=Decimal("0.0000"),
+                             reorder_point_snapshot=Decimal("10.0000"),
+                             target_level_snapshot=Decimal("20.0000"),
+                             raw_suggested_qty=Decimal("20.0000"), lead_time_days=3)
+    return run
+
+
+@pytest.fixture
+def invwarehouse_run_released_a(db, tenant_a, admin_user, invwarehouse_item_a,
+                                invwarehouse_item2_a, invwarehouse_location_a,
+                                invwarehouse_vendor_a, invwarehouse_policy_a):
+    """RELEASED by calling the REAL ``release(admin_user)`` - not by writing the status.
+
+    Two accepted lines under ONE vendor, so exactly one draft ``scm.PurchaseRequisition`` is
+    raised (100 x 4.00 + 40 x 2.50 = 500.00) and BOTH suggestion lines come back stamped with it.
+    ``released_at`` is set and an ``AuditLog`` "release" row exists.
+
+    This fixture is the regression target for two findings at once:
+
+    * **C1** - ``replenishmentrun_delete`` must refuse this run and BOTH its suggestions must
+      survive the refused POST (``ReplenishmentSuggestion.run`` is CASCADE, and the requisition
+      rows would outlive them, orphaned).
+    * **I5** - ``invwarehouse_policy_a`` now has a suggestion carrying a requisition, so
+      ``replenishmentpolicy_delete`` must refuse it and steer to deactivation.
+    """
+    run = _invwarehouse_run(tenant_a, status="proposed", generated_at=timezone.now(),
+                            generated_by=admin_user, notes="Released weekly sweep.")
+    _invwarehouse_suggestion(run, invwarehouse_item_a, invwarehouse_location_a,
+                             suggested="100", unit_cost="4.0000", decision="accepted",
+                             policy=invwarehouse_policy_a, vendor=invwarehouse_vendor_a)
+    _invwarehouse_suggestion(run, invwarehouse_item2_a, invwarehouse_location_a,
+                             suggested="40", unit_cost="2.5000", decision="accepted",
+                             vendor=invwarehouse_vendor_a, lead_time_days=5,
+                             on_hand_qty=Decimal("10.0000"), available_qty=Decimal("10.0000"),
+                             reorder_point_snapshot=Decimal("30.0000"),
+                             target_level_snapshot=Decimal("50.0000"),
+                             raw_suggested_qty=Decimal("40.0000"))
+    run.release(admin_user)
+    run.refresh_from_db()
+    return run
+
+
+@pytest.fixture
+def invwarehouse_run_lines_a(db, tenant_a, invwarehouse_location_a):
+    """PROPOSED with 30 lines across 3 items, 3 policies and 3 vendors - the ``<= 12`` query
+    regression on ``replenishmentrun_detail`` (lines paginate at 25, so page 1 renders 25).
+
+    Three DISTINCT policies is the point: ``replenishmentrun/detail.html`` renders
+    ``{{ line.policy.pk }}``, and ``_LINE_RELATIONS`` joins ``policy`` but not ``policy__item`` /
+    ``policy__location`` - so printing ``{{ line.policy }}`` instead would resolve
+    ``ReplenishmentPolicy.__str__`` -> ``item.sku`` AND ``scope_label`` -> ``location.code`` and
+    turn the page into 1+2N. The same trap sits on ``{{ line.lot_serial.number }}`` in
+    ``materialissue/detail.html`` (see ``invwarehouse_issue_lots_a``).
+    """
+    items = [_invwarehouse_item(tenant_a, f"RPL-PAGE-{i}", f"Paged fastener {i}") for i in range(3)]
+    vendors = [_invwarehouse_party(tenant_a, f"Paged Supplier {i}") for i in range(3)]
+    policies = [_invwarehouse_policy(tenant_a, items[i], location=invwarehouse_location_a,
+                                     preferred_vendor=vendors[i],
+                                     order_multiple=Decimal("10.00"))
+                for i in range(3)]
+    run = _invwarehouse_run(tenant_a, status="proposed", generated_at=timezone.now(),
+                            notes="Wide proposal for the query-count regression.")
+    for i in range(30):
+        _invwarehouse_suggestion(run, items[i % 3], invwarehouse_location_a,
+                                 suggested=str(10 + i), unit_cost="3.0000",
+                                 policy=policies[i % 3], vendor=vendors[i % 3])
+    return run
+
+
+@pytest.fixture
+def invwarehouse_run_b(db, tenant_b):
+    """Tenant B's run - the cross-tenant 404 target on detail / edit / delete / generate /
+    release / cancel, and the ``run__tenant`` boundary the decide verb reaches through."""
+    return _invwarehouse_run(tenant_b, notes="Globex sweep.")
+
+
+# -- material issues ---------------------------------------------------------------------------------
+
+@pytest.fixture
+def invwarehouse_issue_draft_a(db, tenant_a, admin_user, invwarehouse_location_a,
+                               invwarehouse_item2_a, invwarehouse_stock2_a, org_unit_a):
+    """DRAFT with **TWO LINES OF THE SAME ITEM** (6 + 6 of RPL-NUT) against 10 on hand.
+
+    Finding **I10**, and the combination must stay tested. There is no ``unique_together`` on
+    ``(issue, item)`` and the model says duplicate lines are expected; ``post()`` sums demand PER
+    ITEM across the document, so 12 against 10 is refused - and ``materialissue_detail`` has to
+    aggregate the same way, or both rows render unflagged and the refusal is a surprise.
+
+    Every other property a lane needs is here too: it is the editable / submittable / deletable
+    document, and its ``line_form`` renders because it is a draft.
+    """
+    issue = _invwarehouse_issue(tenant_a, invwarehouse_location_a, org_unit=org_unit_a,
+                               requested_by=admin_user, reference="JOB-0042",
+                               notes="Two draws for the same job, keyed separately.")
+    _invwarehouse_line(issue, invwarehouse_item2_a, "6", notes="Morning draw")
+    _invwarehouse_line(issue, invwarehouse_item2_a, "6", notes="Afternoon draw")
+    return issue
+
+
+@pytest.fixture
+def invwarehouse_issue_submitted_a(db, tenant_a, admin_user, invwarehouse_location_a,
+                                   invwarehouse_item_a, invwarehouse_stock_a):
+    """SUBMITTED with one line (5 of RPL-BOLT) against 100 on hand - genuinely postable.
+
+    Not editable and not deletable (both are ``draft``-only), still cancellable and still
+    postable: ``POSTABLE_STATUSES`` is ``("draft", "submitted")`` on purpose.
+    """
+    issue = _invwarehouse_issue(tenant_a, invwarehouse_location_a, status="submitted",
+                               requested_by=admin_user, purpose="maintenance",
+                               reference="WO-7781")
+    _invwarehouse_line(issue, invwarehouse_item_a, "5")
+    return issue
+
+
+@pytest.fixture
+def invwarehouse_issue_posted_a(db, tenant_a, admin_user, invwarehouse_location_a,
+                                invwarehouse_item_a, invwarehouse_stock_a):
+    """POSTED by calling the REAL ``post(admin_user)``.
+
+    So ``adjustment`` points at a **draft** ``scm.StockAdjustment`` (reason ``other``, notes
+    carrying the "Via material issue MIS-… " provenance marker), ``posted_at`` and ``issued_by``
+    are stamped, and **no ``scm.StockMove`` row was written** - the ledger boundary a test may
+    assert directly by counting moves across this fixture.
+
+    Delete, edit, cancel and a second post are all REFUSED from here; the correction is the mirror
+    document (``invwarehouse_return_a``'s shape), never a deletion.
+    """
+    issue = _invwarehouse_issue(tenant_a, invwarehouse_location_a, requested_by=admin_user,
+                               purpose="project", reference="PRJ-3300")
+    _invwarehouse_line(issue, invwarehouse_item_a, "12")
+    issue.post(admin_user)
+    issue.refresh_from_db()
+    return issue
+
+
+@pytest.fixture
+def invwarehouse_return_a(db, tenant_a, invwarehouse_location_a, invwarehouse_item_a):
+    """DRAFT ``movement_type="return"`` - unused material coming BACK to the shelf.
+
+    Two rules hang off it: the availability guard does not apply (a return adds stock, so there is
+    nothing to be short of, and it posts with no stock fixture at all), and ``clean()`` rejects a
+    ``reservation`` on it (a reservation is consumed by an issue, not released by a return).
+    Returning goods to a SUPPLIER is a different document entirely - 6.12 ``ReturnToVendor``.
+    """
+    issue = _invwarehouse_issue(tenant_a, invwarehouse_location_a, movement_type="return",
+                               purpose="project", reference="PRJ-3300",
+                               notes="Three bolts came back unused.")
+    _invwarehouse_line(issue, invwarehouse_item_a, "3")
+    return issue
+
+
+@pytest.fixture
+def invwarehouse_issue_lots_a(db, tenant_a, invwarehouse_location_a, invwarehouse_item_a):
+    """DRAFT with 20 LOT-CARRYING lines - the ``<= 14`` query regression on
+    ``materialissue_detail``.
+
+    ``_LINE_RELATIONS`` joins ``lot_serial`` but NOT ``lot_serial__item``, and the template prints
+    ``{{ line.lot_serial.number }}``. Printing ``{{ line.lot_serial }}`` instead would resolve
+    ``LotSerial.__str__`` -> ``self.item.sku`` once per row: 20 extra queries from a one-word
+    "tidy-up". The 20 lots are distinct rows, so the regression really does fan out.
+    """
+    from apps.scm.models import LotSerial
+    issue = _invwarehouse_issue(tenant_a, invwarehouse_location_a,
+                                notes="Lot-tracked draw for the query-count regression.")
+    for i in range(1, 21):
+        lot = LotSerial.objects.create(tenant=tenant_a, item=invwarehouse_item_a, kind="lot",
+                                       number=f"LOT-B{i:02d}", status="available")
+        _invwarehouse_line(issue, invwarehouse_item_a, "1", lot_serial=lot)
+    return issue
+
+
+@pytest.fixture
+def invwarehouse_issue_b(db, tenant_b, invwarehouse_location_b, invwarehouse_item_b):
+    """Tenant B's issue with one line - the cross-tenant 404 target on detail / edit / delete /
+    submit / post / cancel / line-add, and the ``issue__tenant`` boundary for the line verbs."""
+    issue = _invwarehouse_issue(tenant_b, invwarehouse_location_b, reference="GBX-JOB-1")
+    _invwarehouse_line(issue, invwarehouse_item_b, "2")
+    return issue
+
+
+# -- the three derived pages -----------------------------------------------------------------------
+
+@pytest.fixture
+def invwarehouse_putaway_a(db, tenant_a, receipt_grn_a, receipt_grn_line_a, receipt_item_a,
+                           receipt_location_a, invwarehouse_bin_a):
+    """A COMPLETED ``scm.PutawayTask`` on 6.11's ``receipt_grn_a``, landing 5 units in WH-MAIN-A1.
+
+    The receipt->bin trail is **GRN -> PutawayTask.goods_receipt -> to_location**, NOT
+    ``StockMove.reference == grn.number`` (that reference only ever finds the receipt into
+    STAGING and can never say which bin the goods reached). ``receipt_grn_line_a`` books 12
+    received, so 5 put away leaves 7 unputaway -> ``is_unputaway`` True, state "partial".
+
+    Only ``status="completed"`` tasks count as put away: a pending task has moved nothing.
+    """
+    from apps.scm.models import PutawayTask
+    return PutawayTask.objects.create(
+        tenant=tenant_a, goods_receipt=receipt_grn_a, item=receipt_item_a,
+        from_location=receipt_location_a, to_location=invwarehouse_bin_a,
+        quantity=Decimal("5.0000"), strategy="directed", status="completed",
+        completed_at=timezone.now())
+
+
+@pytest.fixture
+def invwarehouse_count_task_a(db, tenant_a, admin_user, invwarehouse_location_a,
+                              invwarehouse_item_a, invwarehouse_item2_a):
+    """A COUNTED ``scm.CycleCountTask`` scheduled 7 days ago - inside the default 90-day window.
+
+    Two counted lines, exactly one with a variance:
+
+    * RPL-BOLT expected 100, counted 100 -> no variance
+    * RPL-NUT  expected  10, counted   7 -> variance -3, valued 3 x 2.5000 = 7.5000
+
+    So ``stats`` reads lines_counted 2, lines_with_variance 1, accuracy_pct 50, net_variance_qty
+    -3, abs_variance_qty 3, variance_value 7.5000. ``CycleCountTaskLine.variance`` is a Python
+    property and CANNOT be aggregated - the page rolls it up as ``Sum(counted) - Sum(expected)``,
+    which is the arithmetic these figures pin.
+
+    Both dates derive from ``timezone.localdate()``, so a run just after local midnight still
+    lands the task inside the window (L16).
+    """
+    from apps.scm.models import CycleCountTask, CycleCountTaskLine
+    task = CycleCountTask.objects.create(
+        tenant=tenant_a, location=invwarehouse_location_a,
+        scheduled_date=timezone.localdate() - datetime.timedelta(days=7),
+        count_method="full", status="counted", assigned_to=admin_user,
+        counted_at=timezone.now())
+    CycleCountTaskLine.objects.create(cycle_count=task, item=invwarehouse_item_a,
+                                      expected_quantity=Decimal("100.0000"),
+                                      counted_quantity=Decimal("100.0000"))
+    CycleCountTaskLine.objects.create(cycle_count=task, item=invwarehouse_item2_a,
+                                      expected_quantity=Decimal("10.0000"),
+                                      counted_quantity=Decimal("7.0000"),
+                                      notes="Three short on the shelf.")
+    return task
+
+
+@pytest.fixture
+def invwarehouse_count_program_a(db, tenant_a, invwarehouse_location_a):
+    """An active weekly ``inventory.CountProgram`` [CTP-] - the ``program_rows`` schedule table.
+
+    ``abc_class`` here is **LOWERCASE** ``"a"``: this is ``CountProgram.abc_class``, the
+    bin-velocity attribute, not ``ReorderRule.abc_class``'s UPPERCASE revenue rank that
+    ``ReplenishmentRun.abc_class_filter`` filters. Getting the two the wrong way round silently
+    matches nothing.
+    """
+    from apps.inventory.models import CountProgram
+    return CountProgram.objects.create(
+        tenant=tenant_a, name="Aisle A weekly sweep", location=invwarehouse_location_a,
+        abc_class="a", frequency="weekly", weekday=0, count_method="zone", is_active=True,
+        last_run_date=timezone.localdate() - datetime.timedelta(days=7))
