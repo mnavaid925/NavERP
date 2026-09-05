@@ -368,6 +368,24 @@ def _score_qs(request):
             .select_related(*_SCORE_RELATIONS))
 
 
+def _breakdown_value(value):
+    """One ``breakdown`` value as display text, never as a Python repr.
+
+    ``str()`` on a list gives exactly that repr: ``window`` is stored as
+    ``[str(start), str(end)]`` by :func:`performance._breakdown`, so under a column headed
+    *Value* the user was reading ``['2026-05-11', '2026-08-09']`` on 40 of 41 seeded lines.
+    The page's own contract says every value is str()-ified so nothing prints as a repr — it
+    printed as text, but that text WAS a repr.
+
+    A two-item sequence reads as a range because that is what every one of them is today; any
+    other sequence falls back to a comma list rather than to brackets and quotes.
+    """
+    if isinstance(value, (list, tuple)):
+        parts = [str(part) for part in value]
+        return " to ".join(parts) if len(parts) == 2 else ", ".join(parts)
+    return str(value)
+
+
 def _score_stats(tenant):
     """``{total, ok, warning, critical, unknown}`` in ONE query, over the whole workspace.
 
@@ -446,8 +464,8 @@ def supplierkpiscore_detail(request, pk):
     """One measured line, with the arithmetic that produced it spelled out.
 
     ``breakdown`` is a JSONField the resolvers fill in; it is flattened to sorted ``{key, value}``
-    pairs here so the template never has to render a raw dict — and every value is ``str()``-ified
-    so a nested list prints as text rather than as a Django ``dict_items`` repr.
+    pairs here so the template never has to render a raw dict, and every value goes through
+    :func:`_breakdown_value` so a nested sequence reads as text rather than as a Python repr.
 
     The pre-fetch is a CHEAP PROBE — ``.only(…)`` on the four columns it actually reads, with no
     joins — because ``crud_detail`` fetches the row again a few lines later with the full
@@ -463,7 +481,7 @@ def supplierkpiscore_detail(request, pk):
         request, model=SupplierKpiScore, pk=pk, template=TEMPLATE_DETAIL,
         select_related=(*_SCORE_RELATIONS, "computed_by"),
         extra_context={
-            "breakdown_rows": [{"key": key, "value": str(breakdown[key])}
+            "breakdown_rows": [{"key": key, "value": _breakdown_value(breakdown[key])}
                                for key in sorted(breakdown)],
             # The Actions sidebar's Edit button. Same rule the edit VIEW enforces — the button is
             # the UX half of it, never the boundary.
