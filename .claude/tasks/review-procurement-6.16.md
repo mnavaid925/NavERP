@@ -276,5 +276,100 @@ Every contract §5 context key present in the real render context on all 18 page
 
 ## Reviewer findings
 
-*(appended as each of the six reviewers reports: code-reviewer → explorer → frontend-reviewer →
-performance-reviewer → qa-smoke-tester → security-reviewer)*
+### 1/6 — `code-reviewer` (verified against the running code and the live DB)
+
+**Verdict:** commit after fixing the four Important findings. No cross-tenant leak, no authorization
+bypass, no missing migration.
+
+#### R1 — Important — the two boards publish DIFFERENT composites under the same key
+
+```
+performance.py:725  (trend)      composite = _composite(lines)      # 6.16 KPI-line weighted mean
+performance.py:839  (benchmark)  composite = card.overall_score     # SCM 4-dimension blend
+```
+
+Same key, same supplier, same period, materially different numbers. Reproduced on seeded data at
+`2026-08-09`: *Bidder Two BV* ranks **34.62 (grade F, "Underperforming")** on the benchmark board and
+**69.87** on the trend board. Rank, percentile and the quadrant segment all ride the wrong figure.
+
+The trend row already carries both (`"composite": composite, "overall": card.overall_score`, line
+730), so the distinction was understood — the benchmark board then publishes the other one under the
+shared name. `performance.py:5-7` states the module premise is that the boards "can never hold two
+answers".
+
+**Fix:** fetch the cohort lines in one `scorecard_id__in` query and use `_composite()`; or rename the
+benchmark key to `overall` and change the column header and segment legend to match.
+
+#### R2 — Important — `manual_override = True` fires on an empty run
+
+`performance.py:674` sets it unconditionally, including when `applicable_kpis()` returned `[]` and
+`written == 0`. A tenant with no KPI library who presses Generate on a draft scorecard **permanently
+hands it to 6.16 with zero evidence written** — and `evaluation/detail.html:284` actively invites that
+press from the empty state. Recoverable only via the SCM scorecard form
+(`scm/forms/.../SupplierScorecards.py:16`), which is why this is Important rather than Critical.
+
+**Fix:** return the refusal shape when `kpis` is empty, or guard `manual_override = True` on `if written:`.
+
+#### R3 / R4 — Important — two admin-gated controls are offered to non-admins
+
+- `evaluation/detail.html:89` — the Generate button renders for every tenant member, but
+  `supplierevaluation_generate` is `@tenant_admin_required`. `can_generate`
+  (`views/.../ScorecardKpiScores.py:220`) is computed from status + tenant only. A non-admin gets a
+  bare 403 with no warning.
+- `improvementplan/detail.html:205` — same shape for Close (`can_close`,
+  `views/.../SupplierImprovementPlans.py:192`). The copy at line 223 even says "Closing is
+  admin-only" while still offering the control.
+
+**Fix:** add `request.user.is_superuser or request.user.is_tenant_admin` to both flags — the app own
+idiom in 18 other procurement templates (e.g. `goodsreceiptinspection/rtv/list.html:130`).
+
+#### R5–R11 — Minor
+
+- **R5** `PerformanceBoards.py:216` — `?category=` unvalidated while `?tier=` two lines above is
+  checked and reset on junk; `?category=zzz` silently empties the board. Same shape as S1.
+- **R6** `performance.py:690` — the alert `link_url` is a hand-built literal path, not
+  `reverse("procurement:supplierevaluation_detail", ...)`; re-spelling the route breaks every alert card.
+- **R7** `seed_procurement.py:2598` — dating the 6.16 window one day BEFORE the SCM one makes
+  `period_choices(tenant)[0]` always the SCM period, so the benchmark board **default view** lands on
+  2 suppliers with `line_count=0` while the 5 generated scorecards sit one period back. Reproduced.
+- **R8** `SupplierImprovementPlans.py:344` — the eight status verbs do unlocked check-then-act, unlike
+  `vsu_approve` (`VendorManagement/VendorSuspensions.py:163`) which wraps `select_for_update()` + the
+  re-check + the save in `transaction.atomic()`. Matters most for `acknowledge:310`, whose "first
+  acknowledgement is the date that counts" guard is racy.
+- **R9** `kpi/detail.html:113` — `row_cap` is 50 but two of the three lists it describes are capped at
+  `_RELATED_CAP` (20). Third instance of PB6.
+- **R10** `PerformanceBoards.py:232` — `quadrant_choices` passed but never iterated;
+  `benchmark_board.html:170-174` and `:203-206` hard-code the four labels twice.
+- **R11 — CONTRACT defect** `performance.py:694` — `skipped` counts KPIs with no measured value, but
+  every applicable KPI still gets a line, so `written` already includes each `skipped` one. Contract
+  section 6 says "applicable KPIs that produced **no line**". Amend the contract; code and message agree.
+
+#### Clean — coverage statement
+
+- **Multi-tenancy: clean.** All 33 views, five `_*_qs` helpers, four forms, 14 resolvers and six public
+  `performance.py` functions filter by tenant; **zero `.objects.all()`**; all four forms call
+  `_reject_foreign` on every FK they expose; the two tenant-less scm line models are correctly scoped
+  through their tenant-bearing parents.
+- **The 14 `DERIVED_RESOLVERS`: clean.** Every join executed against the live DB with no `FieldError`,
+  including the three counter-intuitive ones. **No phantom zeros** — `_pct`/`_mean` return `None` on an
+  empty denominator, `defect_rate` guards `total <= ZERO`, `suspension_incidents` gates its real zero
+  behind `_has_activity`.
+- **Freezing: clean.** All seven frozen/denormalised columns written once per `update_or_create`, all
+  `editable=False`, all excluded from the two-field edit form.
+- **Structure/migration: clean.** 4 models + 4 forms + 33 views re-exported and in `__all__`, 33/33 url
+  names reverse, `makemigrations --check` reports no changes.
+- **Templates: clean.** 22/22 POST forms carry `{% csrf_token %}`, zero `{# #}`, zero non-existent badge
+  classes (the five `badge-success` hits sit inside `{% comment %}` warnings), every FK filter uses
+  `|stringformat:"d"`, every `{% url %}` resolves.
+
+#### Done well
+
+`generate_scorecard_lines` snapshots the pre-run bands into `previous` **before** writing anything
+(`performance.py:601-603`), so "a NEW critical crossing" survives repeated presses — two presses
+refresh the figures and raise zero duplicate alerts. Correct shape for an idempotent action with a
+side effect.
+
+---
+
+*(remaining reviewers append below: explorer → frontend-reviewer → performance-reviewer →
+qa-smoke-tester → security-reviewer)*
