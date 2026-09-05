@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Replenishment Run {{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — ReplenishmentRun detail / review board
+    (apps/procurement/views/InventoryWarehouseIntegration/Runs.py, rendered directly).
+
+    Context contract, and NOTHING else exists here:
+      obj, lines, line_page_obj, decision_choices, vendors,
+      totals{line_count, accepted, snoozed, dismissed, pending, accepted_value},
+      can_generate, can_release, can_cancel, requisitions, truncated, sku_match_note.
+
+    `lines` is ONE page of line_page_obj (25 per page) already joined on item, uom, location,
+    vendor, policy and requisition — so nothing in the loop below reaches through an unjoined
+    FK. `requisitions` is a list of {requisition, url} dicts with the url reversed IN PYTHON,
+    because a {% url %} tag cannot express "only when this line was released" and a null pk in
+    one is a NoReverseMatch 500 rather than a blank cell.
+
+    The pagination partial reads `page_obj`, so it is included with page_obj=line_page_obj —
+    the page's own paginator is the LINES paginator and there is no second one.
+
+    Each row's decide form renders its own <select>s from the shared `vendors` and
+    `decision_choices` rather than from a bound form per line: 25 bound forms would each
+    evaluate the vendor queryset, which is 25 queries for one screen. The POST is still
+    validated by ReplenishmentSuggestionDecisionForm — the view builds exactly one.
+
+    Nullable-FK discipline (L10): location on the header, vendor, policy and requisition on
+    every line are all nullable, so each read sits inside an {% if %} branch.
+
+    Only the run number and the primary key reach a confirm() string. Notes, the location code
+    and every vendor name are user-authored, and the HTML attribute parser un-escapes an
+    escaped apostrophe back into the JS string literal before it is parsed.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <a href="{% url 'procurement:replenishmentrun_list' %}">Replenishment Runs</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">Planned for <span class="fw-600">{{ obj.scope_label }}</span> on {{ obj.run_date|date:"M d, Y" }}{% if obj.abc_class_filter %}, class {{ obj.abc_class_filter }} only{% endif %}. Every figure below is a snapshot taken when the run was generated — it is deliberately not re-read, so this page still explains a decision after the stock has moved on.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_generate %}
+        <a href="{% url 'procurement:replenishmentrun_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit header</a>
+        <form method="post" action="{% url 'procurement:replenishmentrun_generate' obj.pk %}" onsubmit="return confirm('Generate {{ obj.number }}? Every suggestion currently on this run is replaced by a fresh proposal — decisions already recorded on those lines are lost.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> {% if totals.line_count %}Re-generate{% else %}Generate{% endif %}</button>
+        </form>
+      {% endif %}
+      {% if can_release %}
+        <form method="post" action="{% url 'procurement:replenishmentrun_release' obj.pk %}" onsubmit="return confirm('Release {{ obj.number }}? This raises one DRAFT requisition per vendor from the accepted lines. Nothing is approved and nothing is ordered — each requisition still has to be submitted.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release accepted</button>
+        </form>
+      {% endif %}
+      {% if can_cancel %}
+        <form method="post" action="{% url 'procurement:replenishmentrun_cancel' obj.pk %}" onsubmit="return confirm('Cancel {{ obj.number }}? The lines are kept as the record of what was proposed and rejected.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x-circle"></i> Cancel run</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ totals.line_count }}</div><div class="stat-label">Suggested lines</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ totals.accepted }}</div><div class="stat-label">Accepted</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ totals.pending }}</div><div class="stat-label">Still to decide</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="banknote"></i></div><div class="stat-value">{{ totals.accepted_value|floatformat:2 }}</div><div class="stat-label">Accepted value</div></div>
+  </div>
+
+  {% if truncated %}
+    <div class="card">
+      <div class="card-body">
+        <p><span class="badge badge-amber">Truncated</span> This run hit its line cap. The highest-value shortfalls were kept and the rest were not proposed at all — narrow the location or the ABC class and generate again to see them. The omission is recorded on the run's notes rather than left silent.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Run</h2>
+      <span class="text-muted">{{ obj.get_trigger_display|lower }} run</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Run date</dt><dd>{{ obj.run_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Scope</dt>
+          <dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+              <div class="text-muted">{{ obj.location.name }}</div>
+            {% else %}<span class="fw-600">Whole network</span>
+              <div class="text-muted">Every active reorder rule in the workspace.</div>
+            {% endif %}</dd></div>
+        <div class="detail-item"><dt>Trigger</dt>
+          <dd><span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_display }}</span></dd></div>
+        <div class="detail-item"><dt>ABC class filter</dt>
+          <dd>{% if obj.abc_class_filter %}<span class="badge badge-info">Class {{ obj.abc_class_filter }}</span>
+              <div class="text-muted">The reorder rule's revenue rank — not the location's bin-velocity class.</div>
+            {% else %}<span class="text-muted">All classes</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Generated</dt>
+          <dd>{% if obj.generated_at %}{{ obj.generated_at|date:"M d, Y H:i" }}
+              <div class="text-muted">{% if obj.generated_by %}by {{ obj.generated_by.username }}{% else %}by a user since removed{% endif %}</div>
+            {% else %}<span class="text-muted">Not generated yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Released</dt>
+          <dd>{% if obj.released_at %}{{ obj.released_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not released</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Snoozed / dismissed</dt>
+          <dd>{{ totals.snoozed }} snoozed · {{ totals.dismissed }} dismissed</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if requisitions %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Requisitions raised</h2>
+        <span class="text-muted">one per vendor, all draft</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Released as <span class="fw-600">drafts</span> on purpose: approval routing, the budget check and purchase-order conversion all still run. Each one still has to be submitted by somebody.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Requisition</th><th>Title</th><th>Needed by</th><th class="text-right">Estimated total</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for row in requisitions %}
+                <tr>
+                  <td class="fw-600"><a href="{{ row.url }}">{{ row.requisition.number }}</a></td>
+                  <td>{{ row.requisition.title }}</td>
+                  <td>{% if row.requisition.required_by %}{{ row.requisition.required_by|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td class="text-right">{{ row.requisition.estimated_total|floatformat:2 }}</td>
+                  <td><span class="badge badge-muted">{{ row.requisition.get_status_display }}</span></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Suggested lines</h2>
+      <span class="text-muted">{{ totals.line_count }} line{{ totals.line_count|pluralize }} · accept what is worth buying</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ sku_match_note }}</p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Location</th>
+            <th class="text-right">On hand</th>
+            <th class="text-right">Incoming</th>
+            <th class="text-right">Point / target</th>
+            <th class="text-right">Suggested</th>
+            <th class="text-right">Value</th>
+            <th>Decision</th>
+            <th class="table-actions">Record</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'scm:item_detail' line.item.pk %}">{{ line.item.sku }}</a>
+                <div class="text-muted">{{ line.item.name }}{% if line.item.uom %} · {{ line.item.uom.code }}{% endif %}</div>
+                {% if line.policy %}
+                  <div class="text-muted"><a href="{% url 'procurement:replenishmentpolicy_detail' line.policy.pk %}">policy</a> shaped this line</div>
+                {% else %}
+                  <div class="text-muted">no policy — plain defaults, no rounding</div>
+                {% endif %}
+              </td>
+              <td><a href="{% url 'scm:location_detail' line.location.pk %}">{{ line.location.code }}</a></td>
+              <td class="text-right">
+                {{ line.on_hand_qty|floatformat:2 }}
+                {% if line.allocated_qty %}<div class="text-muted">{{ line.allocated_qty|floatformat:2 }} claimed</div>{% endif %}
+              </td>
+              <td class="text-right">
+                {{ line.on_order_qty|floatformat:2 }}
+                {% if line.open_requisition_qty %}<div class="text-muted">+{{ line.open_requisition_qty|floatformat:2 }} requested</div>{% endif %}
+              </td>
+              <td class="text-right">
+                {{ line.reorder_point_snapshot|floatformat:2 }}
+                <div class="text-muted">up to {{ line.target_level_snapshot|floatformat:2 }}</div>
+              </td>
+              <td class="text-right fw-600">
+                {{ line.suggested_qty|floatformat:2 }}
+                {% if line.raw_suggested_qty != line.suggested_qty %}
+                  <div class="text-muted">rounded from {{ line.raw_suggested_qty|floatformat:2 }}</div>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ line.line_value|floatformat:2 }}</td>
+              <td>
+                <span class="badge {{ line.decision_css }}">{{ line.get_decision_display }}</span>
+                {% if line.snooze_until %}<div class="text-muted">until {{ line.snooze_until|date:"M d, Y" }}</div>{% endif %}
+                {% if line.vendor %}<div class="text-muted">{{ line.vendor.name }}</div>{% else %}<div class="text-muted">unassigned vendor</div>{% endif %}
+                {% if line.decision_note %}<div class="text-muted">{{ line.decision_note }}</div>{% endif %}
+                {% if line.requisition %}<div class="text-muted">released into {{ line.requisition.number }}</div>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  One decide form per row, POST-only, each posting to its OWN line via
+                  lines/<line_id>/decide/. The <select>s are built from the shared `vendors`
+                  and `decision_choices` rather than from a bound form, so the page costs one
+                  vendor query instead of one per row. A released line has no form at all —
+                  its quantity is already on a requisition.
+                {% endcomment %}
+                {% if line.requisition or not can_generate %}
+                  <span class="text-muted">Locked</span>
+                {% else %}
+                  <form method="post" action="{% url 'procurement:replenishmentsuggestion_decide' obj.pk line.pk %}">
+                    {% csrf_token %}
+                    <select name="decision" aria-label="Decision for {{ line.item.sku }}" class="form-select">
+                      {% for value, label in decision_choices %}
+                        <option value="{{ value }}" {% if line.decision == value %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                    <select name="vendor" aria-label="Vendor for {{ line.item.sku }}" class="form-select">
+                      <option value="">- unassigned -</option>
+                      {% for v in vendors %}
+                        <option value="{{ v.pk|stringformat:"d" }}" {% if line.vendor_id == v.pk %}selected{% endif %}>{{ v.name }}</option>
+                      {% endfor %}
+                    </select>
+                    <input type="date" name="snooze_until" class="form-input" aria-label="Snooze until" value="{{ line.snooze_until|date:'Y-m-d' }}">
+                    <input type="text" name="decision_note" class="form-input" aria-label="Why" maxlength="255" value="{{ line.decision_note }}" placeholder="Why — the next reader has only this line">
+                    <button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Save</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="list-checks"></i>
+                <h3>Nothing proposed yet</h3>
+                {% if can_generate %}
+                  <p>Generate the run to read every active reorder rule in scope, net off stock on hand and everything already incoming, and propose what is still short. An empty result after generating is a good result, not a broken one.</p>
+                {% else %}
+                  <p>This run has no suggested lines, and it can no longer be generated. Start a new run if you need a fresh proposal — this one stays as the record of what happened.</p>
+                {% endif %}
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} page_obj is rebound to the LINES paginator — this page has no other one. {% endcomment %}
+    {% include "partials/pagination.html" with page_obj=line_page_obj %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What the four decisions mean</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><span class="badge badge-green">Accepted</span> is included in the release and becomes a requisition line under the vendor shown on the row. <span class="badge badge-amber">Snoozed</span> needs a future date and says "not now, ask me again then". <span class="badge badge-slate">Dismissed</span> says "we looked and decided no" — which is exactly the answer nothing in the system could record before this run existed. <span class="badge badge-muted">Pending</span> means nobody has looked yet.</p>
+      <p class="text-muted">The vendor on each line is a default taken from the replenishment policy, not a verdict. Change it here and the line moves into that vendor's requisition at release.</p>
+    </div>
+  </div>
+
+  {% if can_generate %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Deleting a run removes it and every suggestion on it. Nothing outside the run is touched — no requisition, no reorder rule, no policy and no stock. If the run has already been released, delete is not offered at all: those requisitions exist and this is the only record of where they came from.</p>
+        <form method="post" action="{% url 'procurement:replenishmentrun_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment run {{ obj.number }} and every suggestion on it? Nothing outside this run is touched.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete run</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
