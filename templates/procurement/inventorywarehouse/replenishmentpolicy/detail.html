@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Replenishment Policy{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — ReplenishmentPolicy detail
+    (apps/procurement/views/InventoryWarehouseIntegration/Policies.py, rendered directly).
+
+    Context contract, and NOTHING else exists here:
+      obj, rule, effective, recent_suggestions, rule_url.
+
+    `effective` is {name: {value, source}} for reorder_point, safety_stock, target_level and
+    lead_time_days — the view is the ONE place the override-versus-fallback rule is written
+    down, so this page never re-derives a number, it only labels one. `source` reads
+    "policy override" / "reorder rule" / "not configured"; a null value always carries the
+    last of those, because a blank cell with no explanation is how a reader concludes the
+    number is zero.
+
+    `rule` is a scm.ReorderRule or None, and `rule_url` is its detail URL reversed IN PYTHON
+    (a {% url %} tag on a null pk is a NoReverseMatch 500, not a blank cell). Nullable-FK
+    discipline (L10): location, preferred_vendor and the three requisition defaults are all
+    nullable, so every read of them sits inside an {% if %} branch.
+
+    The page's reason to exist is the comparison at the top: on its own a policy is a handful
+    of nullable numbers, and it only becomes readable next to the rule it overrides. The
+    planning numbers stay scm's (L36) — this page reads them through and links out to them.
+
+    Suggestion rows show the run NUMBER as text rather than a link on purpose: the run's
+    route belongs to this sub-module's second entity and this page must not carry a
+    {% url %} tag for a name that is not registered yet. Turning it into a link is a
+    one-line change once `procurement:replenishmentrun_detail` exists.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.item.sku }} <span class="text-muted">@</span> {{ obj.scope_label }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <a href="{% url 'procurement:replenishmentpolicy_list' %}">Replenishment Policies</a><span class="sep">›</span>
+        <span>{{ obj.item.sku }}</span>
+      </div>
+      <p class="text-muted">Procurement's overlay on the SCM reorder rule for <span class="fw-600">{{ obj.item.name }}</span>. The rule says <em>when</em> to reorder; this policy says who to buy from, how much to round to, and what the generated requisition carries.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:item_detail' obj.item.pk %}" class="btn btn-outline"><i data-lucide="package"></i> Item</a>
+      {% if rule_url %}<a href="{{ rule_url }}" class="btn btn-outline"><i data-lucide="gauge"></i> Reorder rule</a>{% endif %}
+      <a href="{% url 'procurement:replenishmentpolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Effective planning numbers</h2>
+      <span class="text-muted">what a run would actually use</span>
+    </div>
+    <div class="card-body">
+      {% if rule %}
+        <p class="text-muted">Read against reorder rule
+          {% if rule_url %}<a href="{{ rule_url }}">{{ rule.item.sku }} @ {{ rule.location.code }}</a>{% else %}{{ rule.item.sku }} @ {{ rule.location.code }}{% endif %}
+          <span class="badge {% if rule.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if rule.is_active %}Rule active{% else %}Rule inactive{% endif %}</span>
+          {% if not rule.is_active %}<br>An inactive rule still holds these numbers, but SCM will not alert on it — the figures below are what a run would read, not a promise that anything will trigger.{% endif %}
+        </p>
+      {% else %}
+        <p class="text-muted">
+          <span class="badge badge-amber">No matching reorder rule</span><br>
+          {% if obj.location %}
+            There is no SCM reorder rule for {{ obj.item.sku }} at {{ obj.location.code }} yet, so nothing supplies a reorder point or a safety stock. Until one exists, this policy has rounding and defaults but no trigger to apply them to.
+          {% else %}
+            This policy applies to any location, and a reorder rule is always per-location — so the fallback numbers resolve per location at run time. This panel only names them when the item has exactly one rule, because picking one at random and calling it "the" reorder point would be a lie.
+          {% endif %}
+          <a href="{% url 'scm:reorderrule_list' %}">Open reorder rules</a>
+        </p>
+      {% endif %}
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Figure</th><th class="text-right">Effective value</th><th>Source</th><th>What it means</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Reorder point</td>
+              <td class="text-right">{% if effective.reorder_point.value is not None %}{{ effective.reorder_point.value }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge badge-slate">{{ effective.reorder_point.source }}</span></td>
+              <td class="text-muted">Always the rule's. No column on this policy holds a reorder point — a second one would be a second reorder rule.</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Safety stock</td>
+              <td class="text-right">{% if effective.safety_stock.value is not None %}{{ effective.safety_stock.value }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge badge-slate">{{ effective.safety_stock.source }}</span></td>
+              <td class="text-muted">Always the rule's, and sized by SCM's own demand-planning calculation.</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Order-up-to level</td>
+              <td class="text-right">{% if effective.target_level.value is not None %}{{ effective.target_level.value }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {% if effective.target_level.source == 'policy override' %}badge-info{% else %}badge-slate{% endif %}">{{ effective.target_level.source }}</span></td>
+              <td class="text-muted">Blank on the policy falls back to the rule's reorder point plus safety stock — so a workspace that never sets one behaves exactly as it did before this policy existed.</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Lead time (days)</td>
+              <td class="text-right">{% if effective.lead_time_days.value is not None %}{{ effective.lead_time_days.value }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {% if effective.lead_time_days.source == 'policy override' %}badge-info{% else %}badge-slate{% endif %}">{{ effective.lead_time_days.source }}</span></td>
+              <td class="text-muted">Blank on the policy falls back to the rule's own lead time. A stored zero IS an override — an item collected the same day — not a blank.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Policy</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.status_label }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt>
+          <dd><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>
+            <div class="text-muted">{{ obj.item.name }}{% if obj.item.uom %} · {{ obj.item.uom }}{% endif %}</div>
+          </dd></div>
+        <div class="detail-item"><dt>Scope</dt>
+          <dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+              <div class="text-muted">{{ obj.location.name }}</div>
+            {% else %}<span class="fw-600">Any location</span>
+              <div class="text-muted">The catch-all. A policy naming a specific location overrides this one.</div>
+            {% endif %}</dd></div>
+        <div class="detail-item"><dt>Source method</dt>
+          <dd><span class="badge {{ obj.source_css }}">{{ obj.get_source_method_display }}</span>
+            <div class="text-muted">{% if obj.raises_requisitions %}A run may raise a requisition for this policy.{% else %}Recorded and reported, but a run never purchases it — a transfer is SCM's stock-transfer document and a manufacture is a work order.{% endif %}</div>
+          </dd></div>
+        <div class="detail-item"><dt>Trigger mode</dt>
+          <dd><span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_mode_display }}</span>
+            <div class="text-muted">Releasing the money is a human action either way — "automatic" only means a scheduled run may propose for it without anybody asking.</div>
+          </dd></div>
+        <div class="detail-item"><dt>Preferred vendor</dt>
+          <dd>{% if obj.preferred_vendor %}{{ obj.preferred_vendor.name }}{% else %}<span class="text-muted">Decided at release</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Minimum order quantity</dt>
+          <dd>{% if obj.min_order_qty is not None %}{{ obj.min_order_qty }}{% else %}<span class="text-muted">No minimum</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Order multiple</dt>
+          <dd>{% if obj.order_multiple is not None %}{{ obj.order_multiple }}{% else %}<span class="text-muted">Any quantity</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Maximum order quantity</dt>
+          <dd>{% if obj.max_order_qty is not None %}{{ obj.max_order_qty }}<div class="text-muted">Applied last, so the cap wins over the multiple.</div>{% else %}<span class="text-muted">No ceiling</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Net off open purchase orders</dt>
+          <dd><span class="badge {% if obj.include_on_order %}badge-green{% else %}badge-muted{% endif %}">{% if obj.include_on_order %}Yes{% else %}No{% endif %}</span>
+            <div class="text-muted">{% if obj.include_on_order %}Quantity already ordered is subtracted before a shortfall is proposed.{% else %}A shortfall is proposed on on-hand alone — the same behaviour that keeps re-proposing what has already been ordered.{% endif %}</div>
+          </dd></div>
+        <div class="detail-item"><dt>Net off open requisitions</dt>
+          <dd><span class="badge {% if obj.include_open_requisitions %}badge-green{% else %}badge-muted{% endif %}">{% if obj.include_open_requisitions %}Yes{% else %}No{% endif %}</span></dd></div>
+        <div class="detail-item"><dt>Requisition department</dt>
+          <dd>{% if obj.default_org_unit %}{{ obj.default_org_unit.name }}{% else %}<span class="text-muted">None — decided on the requisition</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requisition budget</dt>
+          <dd>{% if obj.default_budget %}<a href="{% url 'accounting:budget_detail' obj.default_budget.pk %}">{{ obj.default_budget }}</a>
+              {% if obj.default_budget.fiscal_period %}<div class="text-muted">{{ obj.default_budget.fiscal_period }}</div>{% endif %}
+            {% else %}<span class="text-muted">None — decided on the requisition</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requisition GL account</dt>
+          <dd>{% if obj.default_gl_account %}<a href="{% url 'accounting:glaccount_detail' obj.default_gl_account.pk %}">{{ obj.default_gl_account.code }}</a> · {{ obj.default_gl_account.name }}{% else %}<span class="text-muted">None — the requisition picks</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recently proposed</h2>
+      <span class="text-muted">the last {{ recent_suggestions|length }} suggestion{{ recent_suggestions|length|pluralize }} this policy shaped</span>
+    </div>
+    <div class="card-body">
+      {% if recent_suggestions %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Run</th><th>Item</th><th>Location</th><th class="text-right">Suggested</th><th>Vendor</th><th>Decision</th></tr>
+            </thead>
+            <tbody>
+              {% for s in recent_suggestions %}
+                <tr>
+                  <td class="fw-600">{{ s.run.number }}</td>
+                  <td>{{ s.item.sku }}</td>
+                  <td>{% if s.location %}{{ s.location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td class="text-right">{{ s.suggested_qty }}</td>
+                  <td>{% if s.vendor %}{{ s.vendor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>{{ s.get_decision_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted">No replenishment run has proposed anything under this policy yet. A policy only shapes a suggestion once a run reads it — until then it is configuration waiting to be used, not a sign that anything is wrong.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Deleting a policy does not touch the SCM reorder rule, the item or any requisition already raised. What it removes is procurement's glue: this item falls back to its any-location policy, or to no policy at all, and a run then has no vendor, no rounding and no requisition defaults for it. Deactivating is almost always the better move — an inactive policy is never resolved, and the history stays readable.</p>
+      {% comment %}
+        Delete is @require_POST, so it can only be a form. Only the primary key reaches the
+        confirm string: the SKU and the location code are user-authored, and the HTML attribute
+        parser un-escapes an escaped apostrophe back into the JS string literal.
+      {% endcomment %}
+      <form method="post" action="{% url 'procurement:replenishmentpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment policy #{{ obj.pk }}? This item falls back to its any-location policy, or to no procurement policy at all — the SCM reorder rule is untouched either way.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete policy</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
