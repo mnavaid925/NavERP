@@ -620,3 +620,117 @@ matches the built FKs exactly; the "not buildable" vendor bank-detail note is ho
 `fraud_scan.html`; the tamper-EVIDENT-not-tamper-proof framing is consistent across the model
 constant, the view and all three seal/trail templates; migration `0028` creates exactly the six
 models and nothing else.
+
+---
+
+## Pass 6 — qa-smoke-tester (RUNTIME)
+
+**188 assertions across 9 areas, run twice back to back, identical both times: 186 passed, 2 failed.**
+Every write ran inside one outer `transaction.atomic()` always rolled back via a sentinel exception,
+each area on its own savepoint; throwaway objects carried `uuid4`-suffixed identifiers.
+**Debris attributable to this pass: 0** (prefix sweep over 11 model/field pairs, all zero; acme's
+6.17 counts match baseline exactly). Rollback proven to cover `django_session` rows written by
+`force_login` (2495 → 2496 → 2495).
+
+| # | Area | Checks | Result |
+|---|---|---|---|
+| 1 | Screening lifecycle | 24 | PASS |
+| 2 | `FraudAlert.scan()` | 15 | 2 failed (F1/F2 below) |
+| 3 | `policy_raise_attestations` | 14 | PASS |
+| 4 | `attestation_sign` owner-only | 8 | PASS |
+| 5 | Audit seal | 20 | PASS |
+| 6 | Non-admin reachability | 17 | PASS |
+| 7 | Pagination | 56 | PASS |
+| 8 | CSV export | 12 | PASS |
+| 9 | Remaining write verbs | 22 | PASS |
+
+**The counter-bypass proof (area 1).** `UPDATE open_hit_count=0, hit_count=0` then re-POST `clear`
+→ **still refused**. The disposition guard genuinely consults a live query, not the cached counter.
+`block()` stamped `suspension_id=47` and created **no** `VendorSuspension` (count 3→3);
+`ComplianceScreening` has **zero BooleanFields**, so no second block flag exists anywhere.
+
+**The seal's core claim holds — four independent tamper shapes (area 5).** On two throwaway tenants
+with **interleaved** log ids: MODIFY `#6622` → `False`, *"BROKEN: audit entry #6622 has been
+MODIFIED"* — **names the exact id**; DELETE → names the id and reports *"1 of 2 sealed entries are
+missing"*; INSERT (moving a row into the sealed range) → names the id; and mutating tenant B's row
+**inside A's sealed id range** left A's seal **valid** — an independent proof of tenant isolation.
+Restoring the row made it valid again in both mutation cases (no false positive). Sealing twice with
+no new rows returns a no-op, not an empty seal. The real seeded `ASL-00001` (3,716 rows, `#1–#6383`)
+verifies read-only.
+
+**Pagination under forced ties (area 7).** Every register padded past **three** pages with
+deliberate ties on each primary sort column — including an `UPDATE` forcing an **exact `created_at`
+tie** across 36 policies and 36 attestations, the precise defect `_policy_qs` fixed. All eight
+registers: **0 repeats, 0 vanished** across every page walked (1,303 rows / 12 pages on
+`audit_trail`). **The `d046eaee` fix holds under a forced tie and no other register has the defect.**
+
+**Non-admin reachability proven, not reasoned (area 6).** A throwaway non-admin acme member got
+**200 with content** on all five `LIVE_LINKS["6.17"]` destinations plus `policy_mine` and eight more
+pages — not one redirect. Gates still hold for that user (`screening_clear` 403, `auditseal_create`
+403). L32 clean by execution.
+
+**Scan mutation proof (area 2).** Exact SHA-256 row-hash over every row of `core.Party`, `Address`,
+`ContactMethod`, `PartyRole`, `VendorSuspension`, `ComplianceScreening`, `ScreeningHit`,
+`scm.PurchaseOrder`, `scm.PurchaseRequisition` before/after → **0 drifted**; count-diff across every
+model in `core`/`scm`/`procurement`/`accounts` → `{FraudAlert: +9}` and nothing else. The 401-day
+window returned `{}` in **0 SQL queries** (`CaptureQueriesContext`) — refused arithmetically, range
+never materialised (L40 §1 confirmed at runtime).
+
+**CSV injection (area 8).** All five payloads neutralised with a leading apostrophe, including the
+**TAB-hidden** `\t=HYPERLINK(…)`; the user-authored `changes` JSON column also passes through
+`csv_safe` (14 cells).
+
+### [ ] M26 — Minor — three seeded fraud alerts are not reproducible by the rules that claim to have raised them
+Clearing acme's board and re-running `scan()` reproduces **9 of 12** keys. Missing in both tenants:
+`vem:*:tax_id` (both parties have `tax_id=''` and share no address or contact — yet the row's
+`matched_on` reads `"tax_id ****4821"`, a masked number **neither party has**), `dupven:*:name`
+("Bidder One GmbH" / "Bidder Two BV" share no normalised name, tax id or address), and `nvrush:*`
+(recognised invoices total 1,324.20 against a 25,000 / 30-day threshold).
+
+`seed_procurement.py:~4419` **states this is intentional** (hand-raised through the same model path
+the create form uses), so it is a demo-fidelity choice, not an oversight. Two consequences only
+execution shows: (a) an operator pressing **Run scan** over the window those three are dated in is
+told *"The rules ran and raised nothing new"* while three alerts on the board carry those rule
+labels; (b) M27 below. **Fix:** either seed supporting data so the three keys are genuinely
+reproducible, or mark hand-raised rows visibly as such on the board.
+
+### [ ] M27 — Minor — `fraudalert_delete`'s docstring makes a guarantee the code does not make
+`views/RiskComplianceManagement/FraudAlerts.py:341-342`: *"A re-scan would in any case re-raise a
+deleted OPEN alert on the next pass — the dedupe key is deterministic — which is why deletion is for
+mistakes, not for disagreement."* All three M26 alerts are `open` and therefore deletable, and a
+re-scan over their own window does **not** restore them — proven at runtime. The claim is true of
+rule-raised alerts and false of hand-raised ones; as written it is unconditional. Same class as
+commit `60759147`. **Fix:** qualify to "an alert the RULES raised", or drop the sentence.
+
+### Could not exercise — stated rather than glossed
+- **`self_approval` has zero runtime coverage from seed data** — acme has **0** `RequisitionApproval`
+  rows (the seeder skips the rule for that reason). The detector itself was proven correct with a
+  synthetic approval (`approver_id == requisition.requester_id` → fired `selfapp:143`), as were
+  `vendor_employee_match`, `duplicate_vendor` and `new_vendor_rush` when given supporting data.
+  **All six detectors are correct; only two of six are exercised by the seeded workspace** — a
+  coverage gap Phase 6 should close.
+- `audit_trail` pages 13+ (walked 12 of ~44 to bound runtime; no repeats or gaps in what was walked).
+- `MAX_SEAL_ROWS` (50,000) and `MAX_ROSTER_SIZE` (2,000) ceilings — refused to materialise that much
+  data on a shared DB; both guards are simple arithmetic/`len()` comparisons.
+
+---
+
+## All six passes complete — consolidated worklist for the fixer
+
+**Order: Critical, then Important, then Minor.**
+
+- **C1** hit deletable out of a decided screening (+ `screeninghit_edit`, + the two templates)
+- **C2** `auditseal_list` drags the previous seal 50k-pair JSON blob (drop the unused join)
+- **I1** `screeninghit_delete` has no admin gate (route + hide control in both list templates)
+- **I2 + I11 = ONE FIX** `kind="risk"` unregistered in `ProcurementAlert.KIND_CHOICES` (+ `kind_css` + `AlterField`)
+- **I3** ungated `policyattestation_edit` (route gate + disable `policy`/`user` on an existing row)
+- **I4** `risksignal_refresh_board` unbounded row load
+- **I5** `screening_rescreen_board` unbounded row load
+- **I6** `risksignal_list` N+1 on `reviewed_by`
+- **I7** `fraudalert_list` N+1 on `resolved_by`
+- **I8** `_screening_options` uncapped ledger dropdown (`[:200]`)
+- **I9** `SupplierRiskSignal` missing `(tenant, -observed_on)` index
+- **I10** three `confirm()` handlers need `|escapejs`
+- **I13** four 6.19 surfaces still say the ledger does not exist — **ROUTE TO 6.19 BY MESSAGE, do not edit their files**; fix only the over-claim in 6.17 `navigation.py`
+- **M1, M2, M4-M8, M9-M18, M19-M21, M23-M27** as listed in each pass
+- **Skipped by decision:** M3 and M22 (app-wide patterns, L18/L28), I12 (refuted — no defect)
