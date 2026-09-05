@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}My Policies{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the personal sign-off page
+    (apps/procurement/views/RiskComplianceManagement/Policies.py :: policy_mine). A standalone
+    sub-module-root page, not an entity CRUD page, so it lives at
+    templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract, and NOTHING else exists here:
+      rows, stats{pending, overdue, signed}, today.
+    THERE IS NO `is_admin` IN THIS CONTEXT AND NOTHING BELOW READS ONE. This page is nobody
+    administration surface — it is one person own homework.
+
+    ROW-DICT CONTRACT (L41 §1) — each row is a dict, NOT a model instance, and carries exactly:
+      row.attestation (the PolicyAttestation; .pk, .acknowledged_at, .exempt_reason,
+                       .exempted_by, .acknowledgement_note are read through it),
+      row.policy (the ProcurementPolicy; .number, .title, .version_number, .summary, .pk),
+      row.due_on, row.days_late (negative while still ahead, None with no deadline),
+      row.state (signed | exempt | overdue | due_soon | open), row.state_label, row.state_css,
+      row.can_sign.
+    (`sort_on` is the view own ordering key and is deliberately not rendered.)
+    A misspelt row-dict key renders an em-dash, returns 200 and passes every status-code test,
+    which is why the keys are frozen in the view docstring beside the code that builds them.
+
+    STAFF-FACING, AND THAT IS THE POINT (L32). This page is reached from the sidebar by ordinary
+    people who have policies to sign. The view carries no admin gate and no tenant-guard redirect,
+    so it renders 200 for every logged-in user — including a tenant-less one, who gets the empty
+    state below rather than a bounce to the dashboard. Nothing on this page is gated on being an
+    administrator, and no administrative action appears on it at all.
+
+    ONLY THE OWNER CAN SIGN, WHICH IS WHY THIS PAGE EXISTS. Every row here belongs to the signed-in
+    user, so `row.can_sign` is simply "is it still pending" — but the button posts to the same
+    owner-checked route an administrator would be refused by, and the model refuses a non-owner a
+    third time. There is no un-sign: the page says so before anybody presses anything.
+
+    `row.state_css` is already a real theme.css badge class straight off the view, used verbatim —
+    never re-derived in an {% if %} ladder here, because theme.css ships only badge-green /
+    badge-red / badge-amber / badge-info / badge-muted / badge-slate and a semantic badge-success
+    renders completely unstyled while passing every test (L33).
+
+    The Days column reads a different number per state on purpose: an overdue row is late by
+    row.days_late, a row still ahead of its date is that many days early (the same number with the
+    sign flipped, which is what the |cut:"-" does), and a row with no deadline has nothing true to
+    say about days at all.
+
+    No |safe anywhere — the policy summary is staff-authored text and goes through |linebreaks.
+    Every confirm() string quotes the POLICY system-assigned PPOL- number, never the title, and
+    avoids apostrophes entirely (L42).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Policies</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>My policies</span>
+      </div>
+      <p class="text-muted">The policies you have been asked to read and acknowledge, and the ones you already have. Nobody else can sign these for you — not an administrator, not a superuser — which is what makes a sign-off here worth anything. Dates are measured against {{ today|date:"M d, Y" }}.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:policy_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> All policies</a>
+      <a href="{% url 'procurement:ppolicy_list' %}" class="btn btn-outline"><i data-lucide="library"></i> Policy library</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Still to sign</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.signed }}</div><div class="stat-label">Signed</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Your sign-offs</h2>
+      <span class="text-muted">outstanding first, most overdue at the top</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Policy</th>
+            <th>Due</th>
+            <th class="text-right">Days</th>
+            <th>State</th>
+            <th>Settled</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:ppolicy_detail' row.policy.pk %}">{{ row.policy.number }}</a>
+                <div>{{ row.policy.title }} <span class="text-muted">v{{ row.policy.version_number }}</span></div>
+              </td>
+              <td>{% if row.due_on %}{{ row.due_on|date:"M d, Y" }}{% else %}<span class="text-muted">No deadline</span>{% endif %}</td>
+              <td class="text-right">
+                {% if row.days_late is None %}
+                  <span class="text-muted">—</span>
+                {% elif row.state == "overdue" %}
+                  <span class="text-danger">{{ row.days_late }} late</span>
+                {% elif row.state == "due_soon" %}
+                  <span class="text-warn">in {{ row.days_late|stringformat:"d"|cut:"-" }}</span>
+                {% elif row.can_sign %}
+                  <span class="text-muted">in {{ row.days_late|stringformat:"d"|cut:"-" }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
+              <td>
+                {% if row.attestation.acknowledged_at %}
+                  {{ row.attestation.acknowledged_at|date:"M d, Y" }}
+                  <div class="text-muted">Signed by you</div>
+                {% elif row.attestation.exempted_at %}
+                  {{ row.attestation.exempted_at|date:"M d, Y" }}
+                  {% if row.attestation.exempted_by %}<div class="text-muted">Excused by {{ row.attestation.exempted_by.get_full_name|default:row.attestation.exempted_by.username }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:ppolicy_detail' row.policy.pk %}" class="btn-icon" title="Read the policy" aria-label="Read the policy"><i data-lucide="book-open"></i></a>
+                  <a href="{% url 'procurement:policyattestation_detail' row.attestation.pk %}" class="btn-icon" title="Open the sign-off" aria-label="Open the sign-off"><i data-lucide="eye"></i></a>
+                  {% if row.can_sign %}
+                    <form method="post" action="{% url 'procurement:attestation_sign' row.attestation.pk %}" onsubmit="return confirm('Sign off {{ row.policy.number }}? This records that you have read it, and it cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Sign it off" aria-label="Sign it off"><i data-lucide="check"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="check-circle"></i>
+                <h3>Nothing is waiting for you</h3>
+                <p>You have not been asked to acknowledge any policy in this workspace. That is not the same as there being no policies — it means none of the published ones that ask for a sign-off has been put to you. The policy library is open to read whenever you want it.</p>
+                <a href="{% url 'procurement:ppolicy_list' %}" class="btn btn-outline"><i data-lucide="library"></i> Browse the policy library</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Before you sign</h2><span class="text-muted">there is no un-sign</span></div>
+    <div class="card-body">
+      <p class="text-muted">Signing records that <span class="fw-600">you</span> have read the policy, on today date, under your own account. It cannot be undone and nobody can do it for you — an administrator who tries is refused by the system, not by convention, because a signature somebody else could apply on your behalf would not be evidence that you read anything.</p>
+      <p class="text-muted">If you genuinely should not have to sign something on this list, ask an administrator to record an exemption. That is a different thing and it says so on the record: it keeps the fact that you were asked, names who decided you did not have to, and requires them to write down why. It is never counted as a signature.</p>
+      <p class="text-muted">Each version of a policy is signed separately. Signing version 1.0 says nothing about version 2.0, and when a new version is published you will be asked again — which is the point, because the thing you agreed to read was the text in front of you at the time.</p>
+    </div>
+  </div>
+{% endblock %}
