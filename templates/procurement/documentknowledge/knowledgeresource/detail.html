@@ -7,11 +7,11 @@
     render).
 
     Context contract, and NOTHING else exists here:
-      obj, library_note, document, is_review_due.
+      obj, library_note, document.
 
     `document` is obj.document, already fetched by the view's select_related, named in context
     so this page reads one name rather than hopping through the object for a nullable relation.
-    `is_review_due` is the model property lifted under the name the contract pins.
+    `is_review_due` is read off the object, as every other 6.19 surface reads it.
 
     Nullable-FK discipline (L10): document, owner, created_by, review_on and last_used_at are all
     nullable, so every read of them sits inside a conditional branch and renders an em dash or a
@@ -62,7 +62,7 @@
       <span class="badge-group">
         <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
         {% if obj.is_featured %}<span class="badge badge-info">Featured</span>{% endif %}
-        {% if is_review_due %}<span class="badge badge-amber">Review overdue</span>{% endif %}
+        {% if obj.is_review_due %}<span class="badge badge-amber">Review due</span>{% endif %}
       </span>
     </div>
     <div class="card-body">
@@ -77,21 +77,23 @@
           {% endcomment %}
           <dd>{{ obj.get_audience_display }} <span class="text-muted">a reading hint — nothing is hidden from anyone in this workspace</span></dd></div>
         <div class="detail-item"><dt>Owner</dt>
-          <dd>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Next review</dt>
-          <dd>{% if obj.review_on %}{{ obj.review_on|date:"M d, Y" }}{% if is_review_due %} <span class="badge badge-amber">overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <dd>{% if obj.review_on %}{{ obj.review_on|date:"M d, Y" }}{% if obj.is_review_due %} <span class="badge badge-amber">due</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Created</dt>
-          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name }}</span>{% endif %}</dd></div>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name|default:obj.created_by.username }}</span>{% endif %}</dd></div>
       </dl>
 
-      {% if obj.tag_list %}
-        <div class="badge-group" style="margin-top:.75rem;">
-          {% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}
-        </div>
-      {% endif %}
-
-      {% if obj.summary %}
-        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Summary</dt><dd>{{ obj.summary|linebreaksbr }}</dd></div>
+      {% if obj.tag_list or obj.summary %}
+        <dl class="detail-grid" style="margin-top:.75rem;">
+          {% if obj.tag_list %}
+            <div class="detail-item"><dt class="text-muted">Tags</dt>
+              <dd><span class="badge-group">{% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}</span></dd></div>
+          {% endif %}
+          {% if obj.summary %}
+            <div class="detail-item"><dt class="text-muted">Summary</dt><dd>{{ obj.summary|linebreaksbr }}</dd></div>
+          {% endif %}
+        </dl>
       {% endif %}
     </div>
   </div>
