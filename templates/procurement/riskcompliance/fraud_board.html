@@ -167,6 +167,16 @@
         {% endfor %}
       </ul>
       <p class="text-muted">Every one is a deterministic comparison over records this workspace already holds — nothing learns, scores by model or predicts. The thresholds they use are printed in full on the <a href="{% url 'procurement:fraud_scan' %}">scan page</a>, along with the one rule that cannot be built here at all.</p>
+      {% comment %}
+        is_admin mirrors @tenant_admin_required, which is what the scan page checks on its POST
+        leg. Everybody can READ the scan page; only an admin can run it, so the two audiences get
+        different sentences rather than one of them being pointed at a button that would refuse.
+      {% endcomment %}
+      {% if is_admin %}
+        <p class="text-muted">This board only counts what the rules have already found. If a stretch of time has never been scanned, it is blank here rather than clean — <a href="{% url 'procurement:fraud_scan' %}">run the rules</a> over the window before reading anything into an empty row.</p>
+      {% else %}
+        <p class="text-muted">This board only counts what the rules have already found. If a stretch of time has never been scanned, it is blank here rather than clean. Running the rules is restricted to workspace administrators, because a run writes alerts about named people — but what each rule looks for, and every threshold it uses, is on the scan page for anybody to read.</p>
+      {% endif %}
       <p class="text-muted">And none of them enforces anything. An alert is parked: it holds no purchase order, blocks no payment, refuses no award, and never edits, merges or deactivates a supplier record. The only place a vendor is actually blocked is the <a href="{% url 'procurement:vsu_list' %}">vendor suspension register</a>.</p>
     </div>
   </div>
