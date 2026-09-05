@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Audit Seals{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the audit seal register
+    (apps/procurement/views/RiskComplianceManagement/AuditTrail.py :: auditseal_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      stats{seals, verified, broken}, chain_status, is_admin.
+
+    crud_list renders `object_list` — never `objects` (L7/L8).
+
+    ROW-DICT CONTRACT (L41 §1) — every entry of `chain_status` carries these keys and no others:
+      pk, number, row_count, range, sealed_at, linked, link_detail, verified, verified_at,
+      verify_detail, state, state_css, state_label, digest_short.
+
+    THE THREE TILES DO NOT ADD UP, AND THE PAGE SAYS SO. `stats.verified` and `stats.broken`
+    count the STORED verification stamps; a seal nobody has verified since it was taken is in
+    neither, which is a third state and the one most worth noticing. Two tiles you had to
+    subtract from a total to find the interesting number would be the wrong pair to print.
+
+    NO EDIT BUTTON AND NO DELETE BUTTON ANYWHERE ON THIS PAGE — the sub-module's one documented
+    deviation from the CRUD-completeness rule, and a decision rather than an omission: a seal
+    whose digest can be edited proves nothing, and deleting a seal breaks exactly the chain it
+    exists to protect. The closing card states that where a reviewer would look for the buttons,
+    and no view exists that would accept such a POST either.
+
+    THE SEAL FORM IS RENDERED BY HAND, not from a `form` context key, because there is no create
+    page: sealing is one POST button with one optional note beside it. The input is named `note`
+    to match AuditSealForm's single field, which is what validates it — every other column on a
+    seal is derived, and a digest anybody can type is not evidence.
+
+    No confirm() dialog on either verb, deliberately: sealing adds a record and verifying only
+    re-reads one, so neither is destructive and neither needs a dialog people learn to dismiss.
+    (The one dialog rule that would apply here — never interpolate a user-typed value, escape an
+    apostrophe as \' and never as &#39; (L42) — is moot with no dialogs on the page.)
+
+    Badge classes come from the model (obj.verify_css) and the view (link.state_css) and are used
+    VERBATIM — never re-derived in an {% if %} ladder here, because theme.css ships only
+    badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate and a semantic
+    badge-success renders completely unstyled while passing every test (L33).
+
+    Nullable-FK discipline (L10): sealed_by and prev_seal are both nullable, so every read of
+    either sits inside an {% if %} branch before any default: filter argument.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Audit Seals</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Audit seals</span>
+      </div>
+      <p class="text-muted">A seal is a SHA-256 digest over one range of the audit trail, chained onto the seal before it. It cannot stop an entry being changed or deleted — it makes the change detectable afterwards, and the verifier names the entry it happened to.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:audit_trail' %}" class="btn btn-outline"><i data-lucide="file-search"></i> Audit trail</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="shield-check"></i></div><div class="stat-value">{{ stats.seals }}</div><div class="stat-label">Seals taken</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.verified }}</div><div class="stat-label">Passed their last check</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ stats.broken }}</div><div class="stat-label">Failed their last check</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The chain</h2>
+      <span class="text-muted">newest first — each seal links onto the one before it</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        This strip answers a different question from the table below. The table reports each
+        seal's own last verification; this reports the STRUCTURAL links BETWEEN seals, which is
+        checked live on every render and needs no re-hashing: a seal deleted out of the middle,
+        or a stored previous-digest that no longer matches what it points at, shows up here and
+        nowhere else.
+      {% endcomment %}
+      <div class="badge-group">
+        {% for link in chain_status %}
+          <span class="badge {{ link.state_css }}">{{ link.number }} · {{ link.state_label }}</span>
+        {% empty %}
+          <span class="text-muted">No seals yet, so there is no chain to check.</span>
+        {% endfor %}
+      </div>
+      {% for link in chain_status %}
+        {% if not link.linked %}
+          <p class="text-danger" style="margin-top:.5rem;">{{ link.link_detail }}</p>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if is_admin %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Seal the trail up to now</h2>
+        <span class="text-muted">covers every entry written since the last seal</span>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{% url 'procurement:auditseal_create' %}" class="filter-bar">
+          {% csrf_token %}
+          <div class="form-group" style="flex:1; min-width:260px;">
+            <input type="text" name="note" maxlength="255" class="form-input" aria-label="Why this seal is being taken" placeholder="Why this seal is being taken (optional) — e.g. month-end close">
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="shield-plus"></i> Seal now</button>
+        </form>
+        <p class="text-muted" style="margin-top:.5rem;">Only the note is typed. The range, the entry count, the digest and the link to the previous seal are all computed — there is no field on this page that can reach a digest. Sealing when nothing new has been written does nothing and says so, because an empty seal proves nothing.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search seals" class="form-input" placeholder="Search seal number or note…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:auditseal_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Seal</th>
+            <th>Covers</th>
+            <th>First and last entry</th>
+            <th>Sealed</th>
+            <th>Last check</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:auditseal_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.digest_short }}…</div>
+              </td>
+              <td>
+                {{ obj.range_label }}
+                <div class="text-muted">{{ obj.row_count }} entries</div>
+              </td>
+              <td>
+                {{ obj.period_start|date:"M d, Y H:i" }}
+                <div class="text-muted">to {{ obj.period_end|date:"M d, Y H:i" }}</div>
+              </td>
+              <td>
+                {{ obj.sealed_at|date:"M d, Y H:i" }}
+                {% if obj.sealed_by %}
+                  <div class="text-muted">{{ obj.sealed_by.get_full_name|default:obj.sealed_by.username }}</div>
+                {% else %}
+                  <div class="text-muted">System</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.verify_css }}">{{ obj.verify_label }}</span>
+                {% if obj.last_verified_at %}
+                  <div class="text-muted">{{ obj.last_verified_at|date:"M d, Y H:i" }}</div>
+                {% else %}
+                  <div class="text-muted">Never re-hashed</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:auditseal_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Verify is available to everybody who can read the page, not just an
+                    administrator: it is read-mostly (its only write is this seal's three
+                    verification stamps), and a tamper check only an administrator can run is a
+                    check nobody runs. There is deliberately no Edit and no Delete beside it.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:auditseal_verify' obj.pk %}">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="Verify" aria-label="Verify"><i data-lucide="shield-check"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="shield-off"></i>
+                <h3>No seals taken yet</h3>
+                <p>Until a range is sealed, a change to the audit trail leaves no evidence at all: the log has no hash and no sequence number of its own. Sealing takes a digest over everything written so far, so a later modification, deletion or insertion becomes detectable — and the verifier names the entry it happened to.</p>
+                <a href="{% url 'procurement:audit_trail' %}" class="btn btn-outline"><i data-lucide="file-search"></i> Read the trail</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page` (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Why a seal has no Edit and no Delete</h2>
+      <span class="text-muted">a deliberate deviation, not a missing feature</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Every other register in this application ships Edit and Delete, and this one deliberately does not. A seal whose digest can be edited proves nothing — "the digest matches" would only mean the last person to press Save made it match. And deleting a seal breaks exactly the chain it exists to protect; it is the first move somebody covering their tracks would make. So there is no button here, and no view that would accept the request either.</p>
+      <p class="text-muted">The honest limit of the control: this trail is tamper-EVIDENT, not tamper-proof. The log is an ordinary database table with no immutability of its own, and the verification stamps above are ordinary columns. A seal proves its range is unchanged <em>since it was sealed</em> — it can say nothing about a row altered before the first seal covered it, and it cannot stop anybody with database access from changing one. Append-only storage and off-box log streaming are infrastructure controls and are not implemented here. Seal regularly, and verify a seal before you rely on the range it covers.</p>
+    </div>
+  </div>
+{% endblock %}
