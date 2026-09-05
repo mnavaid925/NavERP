@@ -219,7 +219,15 @@
           {% csrf_token %}
           <div class="form-group" style="max-width:360px;">
             <label class="form-label" for="close-outcome">Outcome <span class="req">*</span></label>
-            <select name="outcome" id="close-outcome" class="form-select">
+            {% comment %}
+              The neutral first option is load-bearing, and more so here than on a rating: with
+              none, nothing is `selected`, so the BROWSER picks the first option — "Successful" —
+              and an admin who pressed Close without opening the select signed the plan
+              successful, stamped verified_by/verified_at against it and could not edit it
+              afterwards. improvementplan_close already refuses an empty outcome with a message.
+            {% endcomment %}
+            <select name="outcome" id="close-outcome" class="form-select" required>
+              <option value="" selected>Choose how it ended…</option>
               {% for val, label in outcome_choices %}
                 <option value="{{ val }}">{{ label }}</option>
               {% endfor %}
