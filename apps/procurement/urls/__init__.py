@@ -16,12 +16,20 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 `supplier-invoice-lines/`, `payment-schedule/`, `match-variances/`, `match-board/`,
 `invoice-disputes/`, `spend/`, `spend-rules/`, `maverick-findings/`, `spend-reports/`,
 `spend-report-snapshots/`, `budget-mappings/`, `budget-availability/`, `commitments/`,
-`budget-variance/`, `cost-forecasts/`) is a distinct whole component — no greedy
-``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
-about.
+`budget-variance/`, `cost-forecasts/`, `delegations/`, `eauc/`, `po-changes/`,
+`po-generation/`, `po-tracking/`, `documents/`, `document-revisions/`,
+`procurement-policies/`, `knowledge/`) is a distinct whole component.
+
+No route in this app uses a converter in its FIRST path component — every first segment is a
+literal — so no module can shadow another's namespace. (A ``<str:token>`` converter DOES exist,
+at 6.8's ``contract-sign/<str:token>/``, but it sits behind a literal first segment and shadows
+nothing outside it. The earlier wording here claimed the app had no ``<str:…>`` converter at
+all, which was false and was being copy-pasted forward into each new sub-module. Keeping the
+first-segment-is-always-a-literal invariant is what actually makes the guarantee hold.)
 """
 from .ApprovalWorkflowEngine import urlpatterns as _awe_approvalengine
 from .BudgetCostManagement import urlpatterns as _bcm_budgetcost
+from .DocumentKnowledgeManagement import urlpatterns as _dkm_documentknowledge
 from .CatalogManagement import urlpatterns as _cat_catalogmanagement
 from .OrderFulfillment import urlpatterns as _of_orderfulfillment
 from .DashboardPortal.ActivityFeed import urlpatterns as _dp_activity
@@ -96,4 +104,12 @@ urlpatterns = [
     # claiming one of them.
     *_bcm_budgetcost,           # 6.15 budget mappings CRUD, availability checker, commitment
                                 #      register, variance report (+ CSV), frozen cost forecasts
+    # 6.19 LAST for the same reason 6.13-6.15 were: all four first segments it claims are new
+    # (``documents/``, ``document-revisions/``, ``procurement-policies/``, ``knowledge/``), and
+    # appended-last is belt-and-braces against a future module claiming one of them. The names
+    # dodge segments already taken: ``templates/`` is 6.2's and the whole contract family
+    # (``contracts/``, ``clauses/``, ``contract-sign/``, ``contract-amendments/``) is 6.8's —
+    # which is why the policy library is ``procurement-policies/`` and not ``policies/``.
+    *_dkm_documentknowledge,    # 6.19 document register + revision chain, policy library,
+                                #      knowledge resources (32 routes, 32 distinct names)
 ]
