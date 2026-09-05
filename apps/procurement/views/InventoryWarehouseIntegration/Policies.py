@@ -16,9 +16,11 @@ Discipline a reviewer will otherwise go looking for:
   ``inactive`` is derived in Python from ``total - active`` because a fourth branch would buy
   nothing the subtraction does not already give.
 * **The detail page reads the planning numbers THROUGH ``scm.ReorderRule``** rather than
-  restating them (L36). :func:`_effective_numbers` is the one place the override-versus-fallback
-  rule is written down, and it labels every figure with where it came from, so nobody has to
-  guess whether a reorder point on this page is the policy's or the rule's.
+  restating them (L36). ``ReplenishmentPolicy.effective_numbers()`` is the one place the
+  override-versus-fallback rule is written down — on the MODEL, so this page and
+  ``ReplenishmentRun.generate()`` read the same definition without the run having to import
+  upward into the views layer — and it labels every figure with where it came from, so nobody has
+  to guess whether a reorder point on this page is the policy's or the rule's.
 * **Writes are audited** through ``write_audit_log`` (create/edit via the ``crud_*`` helpers,
   delete via ``crud_delete``).
 """
@@ -109,53 +111,6 @@ def _matching_rule(request, policy):
     return candidates[0] if len(candidates) == 1 else None
 
 
-def _effective_numbers(policy, rule):
-    """The four planning figures a run would actually use, each labelled with its source.
-
-    The SINGLE place the override-versus-fallback rule is written down, and it matches the model
-    docstring exactly:
-
-    * ``reorder_point`` / ``safety_stock`` are the rule's, always — no column on this policy
-      holds either, and adding one would be the second reorder rule L36 forbids.
-    * ``target_level`` is the policy's when set, else ``reorder_point + safety_stock``.
-    * ``lead_time_days`` is the policy's override when set, else the rule's own lead time.
-
-    ``lead_time_days_override`` is tested with ``is not None`` rather than truthiness: a genuine
-    override of ``0`` (an item collected the same day) is falsy and would otherwise silently fall
-    back to the rule's figure.
-
-    Returns ``{name: {"value": ..., "source": ...}}``. ``value`` is ``None`` exactly when nothing
-    supplies the figure, and ``source`` then reads "not configured" — a blank cell with no
-    explanation is how a reader concludes the number is zero.
-    """
-    POLICY, RULE, NONE = "policy override", "reorder rule", "not configured"
-
-    def entry(value, source):
-        return {"value": value, "source": NONE if value is None else source}
-
-    reorder_point = rule.reorder_point if rule else None
-    safety_stock = rule.safety_stock if rule else None
-
-    if policy.target_level is not None:
-        target = entry(policy.target_level, POLICY)
-    elif reorder_point is not None:
-        target = entry((reorder_point or 0) + (safety_stock or 0), RULE)
-    else:
-        target = entry(None, NONE)
-
-    if policy.lead_time_days_override is not None:
-        lead_time = entry(policy.lead_time_days_override, POLICY)
-    else:
-        lead_time = entry(rule.lead_time_days if rule else None, RULE)
-
-    return {
-        "reorder_point": entry(reorder_point, RULE),
-        "safety_stock": entry(safety_stock, RULE),
-        "target_level": target,
-        "lead_time_days": lead_time,
-    }
-
-
 def _recent_suggestions(request, policy, limit=_RECENT_SUGGESTION_LIMIT):
     """The last few replenishment suggestions this policy shaped, newest run first.
 
@@ -244,7 +199,7 @@ def replenishmentpolicy_detail(request, pk):
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
         "rule": rule,
-        "effective": _effective_numbers(obj, rule),
+        "effective": obj.effective_numbers(rule),
         "recent_suggestions": _recent_suggestions(request, obj),
         # Reversed in Python, never in the template: the rule is optional, and a ``{% url %}``
         # tag on a null pk is a NoReverseMatch 500 rather than a blank cell.
