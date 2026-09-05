@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Replenishment Policy{% else %}New Replenishment Policy{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — ReplenishmentPolicy create-or-edit. ONE template
+    for both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit
+    passes is_edit=True and obj).
+
+    The form carries exactly the seventeen editable fields: item, location, source_method,
+    trigger_mode, preferred_vendor, target_level, order_multiple, min_order_qty,
+    max_order_qty, include_on_order, include_open_requisitions, lead_time_days_override,
+    default_org_unit, default_budget, default_gl_account, is_active, notes. tenant is
+    system-stamped by the view and created_at/updated_at are the base timestamps — none of
+    the three has an input here, and none is accepted from a POST.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and
+    every {% if %} branch falls through to field.help_text — the model's own help text is
+    already written and a silent blank would be worse than a duplicate. Each label is bound
+    to its widget with for="{{ field.id_for_label }}".
+
+    The explainer card at the bottom is not decoration: the min / multiple / cap interaction
+    is the one thing about this form that is genuinely non-obvious, and the ORDER those three
+    are applied in is a model contract (round_quantity), not a rendering detail.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit policy — {{ obj.item.sku }} @ {{ obj.scope_label }}{% else %}New replenishment policy{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <a href="{% url 'procurement:replenishmentpolicy_list' %}">Replenishment Policies</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">A policy is procurement's overlay on an SCM reorder rule. The rule owns <span class="fw-600">when</span> to reorder — the reorder point and the safety stock — and nothing here restates either. This form owns what the rule cannot say: who to buy from, how much to round the quantity to, and what the generated requisition carries.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Policy</h2><span class="text-muted">one item, at one location or anywhere</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "item" %}
+                <div class="form-help">The item this policy replenishes. Only active items are offered. Deleting an item a policy still governs is blocked until the policy is removed or re-pointed — otherwise its replenishment would be silently un-configured.</div>
+              {% elif field.name == "location" %}
+                <div class="form-help">Leave blank for the any-location catch-all, which a policy naming a specific location overrides. An item can have only ONE catch-all: a second would make the resolved policy ambiguous, and it is refused here rather than left for a run to guess at.</div>
+              {% elif field.name == "source_method" %}
+                <div class="form-help">Only “Buy” raises a requisition. “Transfer” and “Manufacture” are recorded and reported on, but a run will not quietly purchase something that should have been moved between warehouses or made in-house.</div>
+              {% elif field.name == "trigger_mode" %}
+                <div class="form-help">“Review then release” proposes and waits for a person. “Automatic” only marks this policy as one a scheduled run may propose for — releasing the money is a human action either way.</div>
+              {% elif field.name == "preferred_vendor" %}
+                <div class="form-help">Optional. The vendor a generated requisition is grouped under. Only parties carrying a supplier or vendor role are offered — leave it blank to decide at release.</div>
+              {% elif field.name == "target_level" %}
+                <div class="form-help">Optional order-up-to level, and an OVERRIDE rather than a copy: blank falls back to the reorder rule's reorder point plus safety stock, so a workspace that never sets one behaves exactly as it did before this policy existed.</div>
+              {% elif field.name == "order_multiple" %}
+                <div class="form-help">Optional. Round the suggested quantity UP to a multiple of this — a case, a pallet, a reel. You cannot buy two thirds of a pallet.</div>
+              {% elif field.name == "min_order_qty" %}
+                <div class="form-help">Optional. The vendor's minimum: a smaller shortfall is raised to this before the multiple is applied.</div>
+              {% elif field.name == "max_order_qty" %}
+                <div class="form-help">Optional hard ceiling on one suggested line. Applied LAST, so it wins over the multiple — and it cannot be set below the minimum, because the cap would then silently undo it.</div>
+              {% elif field.name == "include_on_order" %}
+                <div class="form-help">Subtract quantity already on open purchase orders before proposing. Leave this on: the SCM reorder alert tests on-hand alone, which is exactly why it keeps re-proposing what has already been ordered.</div>
+              {% elif field.name == "include_open_requisitions" %}
+                <div class="form-help">Also subtract quantity already sitting on requisitions that have not been converted into orders yet.</div>
+              {% elif field.name == "lead_time_days_override" %}
+                <div class="form-help">Optional, and an OVERRIDE rather than a copy: blank falls back to the reorder rule's own lead time. A deliberate zero — an item collected the same day — is a real value here, not a blank.</div>
+              {% elif field.name == "default_org_unit" %}
+                <div class="form-help">Optional. The department or cost centre stamped on a requisition this policy generates, so nobody has to re-key it.</div>
+              {% elif field.name == "default_budget" %}
+                <div class="form-help">Optional. The budget stamped on the generated requisition. The amounts themselves stay in the accounting module — this is a pointer.</div>
+              {% elif field.name == "default_gl_account" %}
+                <div class="form-help">Optional. Pre-filled on the generated requisition line, so a requester does not have to know the chart of accounts.</div>
+              {% elif field.name == "is_active" %}
+                <div class="form-help">Inactive policies are never resolved. Prefer deactivating over deleting when an item is phased out — the history stays readable and no run silently changes behaviour.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Optional. Worth writing when the policy exists for a reason that is not obvious from the numbers alone — a vendor's pallet rule, a seasonal cap, a one-off minimum.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create policy{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:replenishmentpolicy_detail' obj.pk %}{% else %}{% url 'procurement:replenishmentpolicy_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How the quantity is rounded</h2><span class="text-muted">the order is the contract</span></div>
+    <div class="card-body">
+      <p class="text-muted">A shortfall becomes a suggested quantity in exactly this order, and the order matters:</p>
+      <ol class="text-muted">
+        <li><span class="fw-600">Never negative.</span> A shortfall of zero or less is not an order.</li>
+        <li><span class="fw-600">Floor at the minimum</span> order quantity.</li>
+        <li><span class="fw-600">Round up to the next multiple.</span></li>
+        <li><span class="fw-600">Cap at the maximum</span> order quantity.</li>
+      </ol>
+      <p class="text-muted">Because the cap is applied last, it wins over the multiple: with a multiple of 30 and a cap of 100, a shortfall of 95 comes back as <span class="fw-600">100</span>, not 120. That is deliberate — a ceiling a caller can exceed is not a ceiling — and it is why a maximum below the minimum is refused rather than left for the two rules to fight over.</p>
+    </div>
+  </div>
+{% endblock %}
