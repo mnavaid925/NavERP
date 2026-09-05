@@ -57,6 +57,11 @@ from .models import (
     SupplierFeedback,
     SupplierImprovementPlan,
     SupplierKpi,
+    MaterialIssue,
+    MaterialIssueLine,
+    ReplenishmentPolicy,
+    ReplenishmentRun,
+    ReplenishmentSuggestion,
     SupplierKpiScore,
     VendorInvoiceSubmission,
     VendorPortalAccess,
@@ -911,3 +916,69 @@ class SupplierImprovementPlanAdmin(admin.ModelAdmin):
     # writable here only because it is a plain choice column the close verb sets from its POST.
     readonly_fields = ("number", "actual_close_date", "acknowledged_by", "acknowledged_at",
                        "verified_by", "verified_at", "closure_note", "created_at", "updated_at")
+
+
+# ---------------------------------------------------------------------------
+# 6.18 Inventory & Warehouse Integration
+# ---------------------------------------------------------------------------
+
+@admin.register(ReplenishmentPolicy)
+class ReplenishmentPolicyAdmin(admin.ModelAdmin):
+    list_display = ("item", "location", "preferred_vendor", "source_method", "trigger_mode",
+                    "target_level", "include_on_order", "is_active", "tenant")
+    list_filter = ("tenant", "is_active", "source_method", "trigger_mode", "include_on_order")
+    search_fields = ("item__sku", "item__name", "location__code", "location__name",
+                     "preferred_vendor__name", "notes")
+    raw_id_fields = ("item", "location", "preferred_vendor", "default_org_unit",
+                     "default_budget", "default_gl_account")
+    readonly_fields = ("created_at", "updated_at")
+
+
+class ReplenishmentSuggestionInline(admin.TabularInline):
+    model = ReplenishmentSuggestion
+    extra = 0
+    raw_id_fields = ("item", "location", "reorder_rule", "policy", "vendor", "requisition")
+    # Every quantity here is a SNAPSHOT taken at generate() time — editable=False on the model so
+    # the row still explains the decision after stock has moved on. Listing them here would offer
+    # an edit the model refuses.
+    readonly_fields = ("on_hand_qty", "allocated_qty", "on_order_qty", "open_requisition_qty",
+                       "available_qty", "reorder_point_snapshot", "target_level_snapshot",
+                       "raw_suggested_qty", "suggested_qty", "unit_cost", "lead_time_days",
+                       "requisition")
+
+
+@admin.register(ReplenishmentRun)
+class ReplenishmentRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "run_date", "location", "trigger", "status", "abc_class_filter",
+                    "generated_by", "tenant")
+    list_filter = ("tenant", "status", "trigger", "abc_class_filter")
+    search_fields = ("number", "notes", "location__code", "location__name")
+    raw_id_fields = ("location", "generated_by")
+    inlines = [ReplenishmentSuggestionInline]
+    readonly_fields = ("number", "generated_at", "released_at", "generated_by",
+                       "created_at", "updated_at")
+
+
+class MaterialIssueLineInline(admin.TabularInline):
+    model = MaterialIssueLine
+    extra = 0
+    raw_id_fields = ("item", "lot_serial", "gl_account")
+    # unit_cost is an Item.average_cost snapshot stamped in save(), not an input.
+    readonly_fields = ("unit_cost",)
+
+
+@admin.register(MaterialIssue)
+class MaterialIssueAdmin(admin.ModelAdmin):
+    list_display = ("number", "issue_date", "movement_type", "purpose", "location", "org_unit",
+                    "status", "adjustment", "tenant")
+    list_filter = ("tenant", "status", "movement_type", "purpose")
+    search_fields = ("number", "reference", "notes", "location__code", "location__name",
+                     "org_unit__name")
+    raw_id_fields = ("location", "org_unit", "gl_account", "requested_by", "issued_by",
+                     "adjustment", "reservation")
+    inlines = [MaterialIssueLineInline]
+    # `adjustment` is provenance written by post() — the DRAFT scm.StockAdjustment this document
+    # minted. Pointing it at another adjustment by hand would forge the audit trail between a
+    # procurement document and the stock ledger.
+    readonly_fields = ("number", "adjustment", "issued_by", "posted_at", "cancelled_at",
+                       "created_at", "updated_at")
