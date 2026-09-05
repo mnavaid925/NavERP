@@ -338,9 +338,25 @@ class ReplenishmentRun(TenantNumbered):
             tenant_id = locked.tenant_id
 
             # --- Q1: the rules in scope ------------------------------------------------------
+            # NINE columns, because nine are all this method reads: the rule's own pk (it becomes
+            # `reorder_rule` on the suggestion), the two halves of the pair key, and the four
+            # planning numbers; plus the item's sku (the on-order/open-requisition maps join on it)
+            # and its two cost columns (the unit-cost snapshot).
+            #
+            # Row WIDTH is the lever, because MAX_SUGGESTIONS caps the OUTPUT, not the input: this
+            # queryset is materialised inside the atomic() + select_for_update() opened above, so a
+            # workspace with 40,000 active rules holds the run's row lock for the whole fetch. That
+            # is the exact scenario this model's own docstring names, and the cap does not prevent
+            # the second half of its own sentence.
+            #
+            # select_related is `item` alone. `item__uom` and `location` were both dead joins —
+            # traced attribute by attribute, the loop below reads neither.
             rules = (ReorderRule.objects
                      .filter(tenant_id=tenant_id, is_active=True)
-                     .select_related("item", "item__uom", "location"))
+                     .select_related("item")
+                     .only("id", "item_id", "location_id",
+                           "reorder_point", "safety_stock", "lead_time_days",
+                           "item__sku", "item__standard_cost", "item__average_cost"))
             if self.location_id:
                 rules = rules.filter(location_id=self.location_id)
             if self.abc_class_filter:
