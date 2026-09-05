@@ -2,6 +2,12 @@
 from django.contrib import admin
 
 from .models import (
+    AuditSeal,
+    ComplianceScreening,
+    FraudAlert,
+    PolicyAttestation,
+    ScreeningHit,
+    SupplierRiskSignal,
     KnowledgeResource,
     ProcurementDocument,
     ProcurementDocumentRevision,
@@ -982,3 +988,121 @@ class MaterialIssueAdmin(admin.ModelAdmin):
     # procurement document and the stock ledger.
     readonly_fields = ("number", "adjustment", "issued_by", "posted_at", "cancelled_at",
                        "created_at", "updated_at")
+
+
+# ---------------------------------------------------------------------------------------------
+# 6.17 Risk & Compliance Management
+#
+# Every derived, workflow-set or digest column below is readonly here for the same reason it is
+# absent from the corresponding ModelForm (L20/L22): a status, a disposition, a band, a counter
+# and a hash are all things the system decides, and an admin text box that lets a human retype
+# one is a quieter version of the bug the forms were written to avoid.
+# ---------------------------------------------------------------------------------------------
+
+
+class ScreeningHitInline(admin.TabularInline):
+    model = ScreeningHit
+    extra = 0
+    # The disposition is a recorded adjudication with a mandatory note; it moves through the
+    # dispose verb, which audits it, never through an inline edit.
+    readonly_fields = ("disposition", "disposition_note", "disposed_by", "disposed_at",
+                       "created_at")
+
+
+@admin.register(ComplianceScreening)
+class ComplianceScreeningAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "list_source", "checkpoint", "screened_on", "result",
+                    "status", "hit_count", "open_hit_count", "next_rescreen_on", "tenant")
+    list_filter = ("tenant", "status", "result", "list_source", "checkpoint", "method")
+    search_fields = ("number", "party__name", "reference", "notes", "threshold_rationale")
+    raw_id_fields = ("party", "evidence", "suspension", "screened_by", "decided_by")
+    inlines = [ScreeningHitInline]
+    # hit_count/open_hit_count are recomputed by recount_hits() from the live rows; status and the
+    # decision stamps move only through the clear/escalate/block verbs, each of which writes an
+    # audit row. `suspension` is provenance - the 6.4 block this screening caused.
+    readonly_fields = ("number", "status", "hit_count", "open_hit_count", "suspension",
+                       "screened_by", "decided_by", "decided_at", "decision_note",
+                       "created_at", "updated_at")
+
+
+@admin.register(ScreeningHit)
+class ScreeningHitAdmin(admin.ModelAdmin):
+    list_display = ("matched_name", "screening", "matched_list", "match_score", "match_type",
+                    "disposition", "disposed_at")
+    list_filter = ("disposition", "matched_list", "match_type")
+    search_fields = ("matched_name", "entry_reference", "program", "country", "remarks",
+                     "screening__number")
+    raw_id_fields = ("screening", "disposed_by")
+    readonly_fields = ("disposition", "disposition_note", "disposed_by", "disposed_at",
+                       "created_at")
+
+
+@admin.register(SupplierRiskSignal)
+class SupplierRiskSignalAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "provider", "metric", "observed_on", "value", "band",
+                    "trend", "review_status", "next_refresh_on", "tenant")
+    list_filter = ("tenant", "band", "trend", "review_status", "provider", "metric")
+    search_fields = ("number", "party__name", "source_ref", "notes")
+    raw_id_fields = ("party", "evidence", "captured_by", "reviewed_by", "alert")
+    # The whole model exists to say what a number MEANS on its own scale - FHR 100 is healthy,
+    # D&B SER 9 is dangerous. scale_min/scale_max/higher_is_better/risk_position/band/trend and
+    # previous_value are all derived in save() from METRIC_SCALES; a hand-edited band would be a
+    # figure with no provenance sitting next to ones that have it.
+    readonly_fields = ("number", "scale_min", "scale_max", "higher_is_better", "risk_position",
+                       "band", "previous_value", "trend", "review_status", "review_note",
+                       "reviewed_by", "reviewed_at", "captured_by", "alert",
+                       "created_at", "updated_at")
+
+
+@admin.register(FraudAlert)
+class FraudAlertAdmin(admin.ModelAdmin):
+    list_display = ("number", "rule", "severity", "status", "vendor", "document_date", "amount",
+                    "assigned_to", "detected_at", "tenant")
+    list_filter = ("tenant", "rule", "severity", "status")
+    search_fields = ("number", "detail", "matched_on", "vendor__name")
+    raw_id_fields = ("vendor", "related_party", "requisition", "purchase_order",
+                     "supplier_invoice", "approval", "screening", "assigned_to", "resolved_by",
+                     "suspension")
+    # dedupe_key is what makes scan() idempotent - editing it would let the same finding be
+    # raised twice, which is the one failure a detector must not have.
+    readonly_fields = ("number", "dedupe_key", "status", "detected_at", "resolution_note",
+                       "resolved_by", "resolved_at", "suspension", "created_at", "updated_at")
+
+
+@admin.register(PolicyAttestation)
+class PolicyAttestationAdmin(admin.ModelAdmin):
+    list_display = ("policy", "user", "status", "due_on", "acknowledged_at", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("policy__number", "policy__title", "user__username", "user__first_name",
+                     "user__last_name", "acknowledgement_note", "exempt_reason")
+    raw_id_fields = ("policy", "user", "alert")
+    # A sign-off is evidence that a NAMED person acknowledged a policy. Letting an administrator
+    # stamp acknowledged_at from here would forge exactly the record the ledger exists to hold -
+    # the same reason attestation_sign is owner-only and refuses a tenant admin.
+    readonly_fields = ("status", "acknowledged_at", "acknowledgement_note", "exempt_reason",
+                       "exempted_by", "exempted_at", "alert", "created_at", "updated_at")
+
+
+@admin.register(AuditSeal)
+class AuditSealAdmin(admin.ModelAdmin):
+    list_display = ("number", "sealed_at", "from_log_id", "to_log_id", "row_count",
+                    "last_verify_ok", "last_verified_at", "sealed_by", "tenant")
+    list_filter = ("tenant", "last_verify_ok", "algorithm")
+    search_fields = ("number", "note", "chain_digest", "digest")
+    raw_id_fields = ("sealed_by", "prev_seal")
+    # EVERY column except the note is a computed digest, a derived boundary or a system stamp.
+    # A seal whose range or digest can be retyped proves nothing whatsoever, so the admin gets no
+    # add and no delete either - the same reason there is no auditseal_edit/auditseal_delete route.
+    # row_fingerprints in particular is the per-row evidence verify() uses to name WHICH log id
+    # broke the chain; editing it would let a tamperer relocate the blame.
+    readonly_fields = ("number", "sealed_at", "from_log_id", "to_log_id", "period_start",
+                       "period_end", "row_count", "digest", "prev_seal", "prev_digest",
+                       "chain_digest", "algorithm", "row_fingerprints", "sealed_by",
+                       "last_verified_at", "last_verify_ok", "last_verify_detail",
+                       "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
