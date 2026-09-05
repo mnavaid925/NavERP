@@ -152,6 +152,13 @@ def _policy_qs(request):
     Four conditional aggregates over ONE left join, so a page of 15 policies costs the same number
     of queries as a page of one. No percentage is annotated: integer division in SQL would round
     differently per backend, and "12 of 30 signed" reads better than "40%" anyway.
+
+    The ``order_by`` is NOT redundant with ``ProcurementPolicy.Meta.ordering``, which says the same
+    thing. Django DROPS the model's default ordering on an aggregate query — the ordering columns
+    would otherwise have to join the GROUP BY — so the annotated queryset above arrives at the
+    paginator UNORDERED, and MySQL is then free to return rows in a different order per page. The
+    visible symptom is a policy repeating on page 2 or vanishing entirely, which no status-code
+    check can see. ``-id`` makes the order TOTAL so equal ``created_at`` values cannot tie.
     """
     return (ProcurementPolicy.objects.filter(tenant=request.tenant)
             .select_related("applies_to", "owner")
@@ -163,7 +170,8 @@ def _policy_qs(request):
                                    filter=Q(attestations__status="exempt")),
                 pending_count=Count("attestations", distinct=True,
                                     filter=Q(attestations__status=PENDING_STATUS)),
-            ))
+            )
+            .order_by("-created_at", "-id"))
 
 
 def _org_units(tenant):
