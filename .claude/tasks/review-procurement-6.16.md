@@ -199,6 +199,81 @@ top of this file) → `code-fixer` on findings PB1–PB6 → tests → SKILL.md 
 
 ---
 
+## Smoke gate — 123 assertions, 2 Important + 1 Minor (all reproduced independently)
+
+Run as `admin_acme` against MySQL with `0026` applied. All 33 routes exercised (20 GET + 13 POST).
+Empty branch exercised on all five registers with every `{% empty %}` href resolved AND fetched;
+cross-tenant IDOR run in full (9/9 GET + 13/13 POST -> 404, zero mutation proven by snapshot).
+
+### S1 — Important — `supplierkpiscore_list`: `?source=<junk>` silently empties the register
+
+```
+(no params)   -> 41 rows | empty-state False
+?source=zzz   -> 0  rows | empty-state True    <-- register wiped
+?band=zzz     -> 41 rows | empty-state False   <-- correct fallback, SAME PAGE
+```
+
+A tenant with 41 generated lines is told it has none. The two dropdowns on one register disagree.
+
+**Root cause, verified:** `crud_list`'s L11 enum guard (`apps/core/crud.py::_enum_values`) disables
+itself for a field with no `choices` — and `SupplierKpiScore.source_at_time` is
+`CharField(max_length=8, blank=True, editable=False)` with **no choices**
+(`ScorecardKpiScores.py:99`), while the filter tuple `("source", "source_at_time", False)`
+(`views/.../ScorecardKpiScores.py:325`) passes the raw GET value into `.filter()`.
+
+Contract §5.7 anticipated this and accepted it — "the template's `source_choices` dropdown is the
+ONLY thing keeping the values legal". That holds only for a user who never edits the URL, which is
+precisely the L11 case. **Not drift against the contract; drift against L11.**
+
+**Fix (zero-migration preferred):** validate `source` in the view against `SupplierKpi.SOURCE_CHOICES`
+and drop it from `filters=` when unrecognised. Adding `choices=` to the model field would engage the
+existing guard but costs an `AlterField` migration.
+
+### S2 — Important — `supplierevaluation_list` paginates an UNORDERED queryset
+
+Django raises `UnorderedObjectListWarning` from `apps/core/crud.py:23` on **every** request.
+Reproduced directly:
+
+```
+with    annotate(): qs.ordered = False   ORDER BY present in SQL: False
+without annotate(): qs.ordered = True
+```
+
+`_evaluation_qs()` (`views/.../ScorecardKpiScores.py:104-108`) adds
+`.annotate(line_count=Count("procurement_kpi_scores"))`, whose GROUP BY makes Django drop
+`SupplierScorecard.Meta.ordering = ["-period_end","-id"]`. The view docstring still claims "newest
+period first"; the register actually renders in pk order. **On MySQL, LIMIT/OFFSET over an unordered
+GROUP BY is undefined**, so page 2 may repeat or drop rows once a tenant exceeds 15 periods. Only
+this one of the five registers is affected — the other four report `ordered=True`.
+
+Invisible to a status-only check: 7 seeded scorecards fit on one page, so page 2 was unreachable.
+
+**Fix:** append `.order_by("-period_end", "-id")` to `_evaluation_qs()`. One line, no migration.
+
+### S3 — Minor — the literal word "None" as human copy where `&mdash;` is used elsewhere
+
+Five `{% else %}` branches print the English word "None". Verified in source to be template
+literals, **not** leaked Python `None` — so not defects — but indistinguishable from a leak to a
+reader or a reviewer, and the first is a bare unstyled token:
+
+| File | Line |
+|---|---|
+| `performance/evaluation/detail.html` | 158 (bare, no `text-muted`) |
+| `performance/improvementplan/detail.html` | 134, 154 |
+| `performance/feedback/detail.html` | 68 |
+| `performance/kpiscore/detail.html` | 131 |
+
+### Confirmed working (not exhaustive — see the run for the full 123)
+
+Generate is idempotent (9 -> 9 -> 9 over two presses) and **refuses on a published scorecard** with
+the reason rendered on the page, not just logged. All 13 POST verbs 405 on GET. `improvementplan_close`
+403s a non-admin with no mutation. Boards carry real rows at the demo period: benchmark ranks 5 with
+cohort avg 63.50, trend plots 2 periods x 9 KPI series, perception-gap shows 2 rows with both sides.
+Zero leak markers, zero raw-Python repr, zero non-existent badge classes, reflected `q` escaped.
+Every contract §5 context key present in the real render context on all 18 pages.
+
+---
+
 ## Reviewer findings
 
 *(appended as each of the six reviewers reports: code-reviewer → explorer → frontend-reviewer →
