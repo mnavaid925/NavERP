@@ -218,12 +218,17 @@
                     Also gated on the PARENT still being open: once this screening is cleared or
                     blocked its hits are the evidence that decision was reasoned against, and
                     both views refuse to amend or delete them.
+
+                    Delete is additionally admin-only, matching @tenant_admin_required on
+                    screeninghit_delete -- deleting the last open hit is what unlocks Clear.
                   {% endcomment %}
                   {% if hit.is_open and not obj.is_terminal %}
                     <a href="{% url 'procurement:screeninghit_edit' hit.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% if is_admin %}
                     <form method="post" action="{% url 'procurement:screeninghit_delete' hit.pk %}" onsubmit="return confirm('Delete this hit from screening {{ obj.number }}? Deleting an unadjudicated match removes it from the record entirely.');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
