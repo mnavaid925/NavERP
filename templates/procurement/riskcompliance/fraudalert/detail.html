@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Fraud Alert {{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — FraudAlert detail
+    (apps/procurement/views/RiskComplianceManagement/FraudAlerts.py :: fraudalert_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, sources, allowed_actions, disposition_form, blocking_suspensions, is_admin.
+
+    ROW-DICT CONTRACTS (L41 §1) — the two lists carry these keys and no others:
+      sources         → src.label, src.value, src.url (url may be None)
+      allowed_actions → act.key, act.label, act.css, act.icon, act.note_required
+
+    A pointer that is NULL is simply ABSENT from `sources`; the page says "no documents
+    attached" rather than rendering a grid of em-dashes, which is exactly what a mismatched
+    row-dict key produces — 200, and blank.
+
+    Nullable-FK discipline (L10): vendor, related_party, assigned_to, resolved_by and suspension
+    are all nullable, so every read of them sits inside an {% if %} branch — a `default:` filter
+    argument on a None FK raises VariableDoesNotExist and 500s.
+
+    `amount` uses `{% if obj.amount is not None %}` rather than a truthiness test, so a genuine
+    0.00 still renders while a NULL shows an em-dash. An overlap between a supplier and an
+    employee is not a transaction and has no amount at all.
+
+    THE FOUR DISPOSITION BUTTONS EACH POST THEIR OWN FORM to the ONE fraudalert_disposition
+    route, carrying `action` as a hidden input. The view re-validates that action against
+    FraudDispositionForm's whitelist and each model verb re-checks its own guard, so a direct
+    POST is exactly as safe as a click. `allowed_actions` is empty for a non-admin and for a
+    disposed alert, which is precisely when the view would refuse — a hidden button and a
+    refused POST always agree.
+
+    `disposition_form.suspension` is rendered ONLY inside the substantiate form, because that is
+    the only action the form accepts a block link on. Linking a block RECORDS one somebody
+    already raised in the 6.4 register; it never raises, lifts or edits one.
+
+    No |safe anywhere: detail, matched_on and resolution_note are rule- or staff-authored text.
+    Only the SYSTEM-ASSIGNED number reaches a confirm() string (L42) — never the supplier name,
+    never matched_on, never the evidence sentence. The copy avoids apostrophes entirely.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:fraudalert_list' %}">Fraud alerts</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        {{ obj.get_rule_display }}{% if obj.vendor %} — <span class="fw-600">{{ obj.vendor.name }}</span>{% endif %}, on a fact dated {{ obj.document_date|date:"M d, Y" }}.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      <a href="{% url 'procurement:fraudalert_list' %}?rule={{ obj.rule }}" class="btn btn-outline"><i data-lucide="filter"></i> Same rule</a>
+      {% if not obj.is_terminal %}
+        <a href="{% url 'procurement:fraudalert_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What the rule found</h2>
+      <span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      </span>
+    </div>
+    <div class="card-body">
+      {% if obj.detail %}
+        <p>{{ obj.detail|linebreaksbr }}</p>
+      {% else %}
+        <p class="text-muted">No evidence sentence was recorded on this alert.</p>
+      {% endif %}
+
+      {% if obj.matched_on %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <i data-lucide="crosshair"></i> Matched on <span class="fw-600">{{ obj.matched_on }}</span>
+        </p>
+        <p class="text-muted">The value is shown masked on purpose. The rule compares the whole thing in memory and stores only enough of it to recognise which record matched, so an identifier does not end up copied across the register.</p>
+      {% endif %}
+
+      {% if obj.rule == "duplicate_vendor" %}
+        <p class="text-warn" style="margin-top:.75rem;">
+          <i data-lucide="git-merge"></i> FLAGGED, NOT MERGED. Nothing here has edited, deactivated or combined either supplier record, and nothing will. Deciding that two records are one company, and merging them, stays a deliberate act on the supplier master.
+        </p>
+      {% elif obj.rule == "backdated_po" %}
+        <p class="text-muted" style="margin-top:.75rem;">This is not the maverick-spend finding for an invoice with no order at all — that one belongs to <a href="{% url 'procurement:maverick_dashboard' %}">spend analytics</a>. Here there IS an order, and it was dated after the invoice it is supposed to authorise.</p>
+      {% elif obj.rule == "vendor_employee_match" %}
+        <p class="text-muted" style="margin-top:.75rem;">A shared attribute is a question, not a finding. A family business the company already knows about looks exactly like this from the data, which is why the alert names both parties and asks rather than concluding.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The alert</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Rule</dt><dd class="fw-600">{{ obj.get_rule_display }}</dd></div>
+        <div class="detail-item"><dt>Severity</dt>
+          <dd><span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span></dd></div>
+        <div class="detail-item"><dt>Status</dt>
+          <dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Fact dated</dt>
+          <dd>{{ obj.document_date|date:"M d, Y" }}
+            {% comment %} age_days is measured from the FACT, so a bucket does not reset when somebody re-runs the scan. {% endcomment %}
+            {% if obj.age_days %}<div class="text-muted">{{ obj.age_days }} days ago</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Amount</dt>
+          <dd>{% if obj.amount is not None %}<span class="fw-600">{{ obj.amount }}</span>{% else %}<span class="text-muted">Not a transaction — this rule has no amount</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Matched on</dt>
+          <dd>{% if obj.matched_on %}{{ obj.matched_on }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Assigned to</dt>
+          <dd>{% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}{% else %}<span class="text-muted">Nobody yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Detected at</dt>
+          <dd>{% if obj.detected_at %}{{ obj.detected_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The evidence</h2>
+      <span class="text-muted">every record this alert points at</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>What</th><th>Record</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for src in sources %}
+            <tr>
+              <td class="fw-600">{{ src.label }}</td>
+              <td>{{ src.value }}</td>
+              <td>
+                {% comment %} src.url is None for a pointer with no page of its own — the row still shows, without a link. {% endcomment %}
+                {% if src.url %}
+                  <a href="{{ src.url }}" class="btn-icon" title="Open" aria-label="Open"><i data-lucide="external-link"></i></a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">
+              <div class="empty-state">
+                <i data-lucide="file-question"></i>
+                <h3>No documents attached</h3>
+                <p>Every alert is supposed to point at something — a supplier, a requisition, an order, an invoice, an approval or a screening. This one points at nothing, which means the records behind it have since been deleted.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if blocking_suspensions %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">This supplier is currently blocked</h2><span class="badge badge-red">Active block</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Block</th><th>Kind</th><th>From</th><th>To</th><th>Status</th><th class="table-actions">Open</th></tr></thead>
+          <tbody>
+            {% for s in blocking_suspensions %}
+              <tr>
+                <td class="fw-600">{{ s.number }}</td>
+                <td>{{ s.get_kind_display }}</td>
+                <td>{{ s.starts_on|date:"M d, Y" }}</td>
+                <td>{% if s.ends_on %}{{ s.ends_on|date:"M d, Y" }}{% else %}<span class="text-muted">Open ended</span>{% endif %}</td>
+                <td><span class="badge badge-red">{{ s.get_status_display }}</span></td>
+                <td><a href="{% url 'procurement:vsu_detail' s.pk %}" class="btn-icon" title="Open block" aria-label="Open block"><i data-lucide="external-link"></i></a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">This block was raised in the vendor suspension register, not here. This alert did not cause it and cannot lift it — it is shown so a decision about the alert is made knowing the supplier is already stopped.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The decision</h2><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Closed by</dt>
+            <dd>{% if obj.resolved_by %}{{ obj.resolved_by.get_full_name|default:obj.resolved_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Closed at</dt>
+            <dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Linked block</dt>
+            <dd>{% if obj.suspension %}<a href="{% url 'procurement:vsu_detail' obj.suspension.pk %}">{{ obj.suspension.number }}</a>{% else %}<span class="text-muted">None linked</span>{% endif %}</dd></div>
+        </dl>
+        {% if obj.resolution_note %}
+          <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Reasoning</dt><dd>{{ obj.resolution_note|linebreaksbr }}</dd></div>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">A disposed alert cannot be edited, deleted or re-opened, and a re-scan will never re-open it either — the rules refresh the facts on a settled row and leave the decision alone. If there is new evidence, raise a new alert rather than rewriting the record this one rests on.</p>
+      </div>
+    </div>
+  {% elif allowed_actions %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Decide</h2><span class="text-muted">an alert nobody closed is the finding an audit writes up</span></div>
+      <div class="card-body">
+        {% for act in allowed_actions %}
+          <form method="post" action="{% url 'procurement:fraudalert_disposition' obj.pk %}" style="margin-bottom:1.25rem;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ act.key }}">
+            <div class="form-group">
+              <label class="form-label" for="note-{{ act.key }}">
+                {% if act.key == "investigate" %}Anything worth noting as you pick it up? <span class="text-muted">(optional)</span>
+                {% elif act.key == "substantiate" %}What did you find? <span class="req">*</span>
+                {% elif act.key == "unsubstantiate" %}Why is this a false positive? <span class="req">*</span>
+                {% else %}What is being referred, and to whom? <span class="req">*</span>{% endif %}
+              </label>
+              <textarea class="form-textarea" rows="2" id="note-{{ act.key }}" name="resolution_note" {% if act.note_required %}required{% endif %} placeholder="{% if act.note_required %}A closure with no stated reasoning is indistinguishable from an alert nobody looked at.{% else %}Optional.{% endif %}"></textarea>
+            </div>
+            {% if act.key == "substantiate" %}
+              <div class="form-group">
+                <label class="form-label" for="{{ disposition_form.suspension.id_for_label }}">{{ disposition_form.suspension.label }}</label>
+                {{ disposition_form.suspension }}
+                <div class="form-help">{{ disposition_form.suspension.help_text }}</div>
+              </div>
+            {% endif %}
+            <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
+          </form>
+        {% endfor %}
+        <p class="text-muted">Closing an alert records what a person decided and nothing else. None of these four buttons holds a purchase order, blocks a payment or stops a supplier trading — substantiating can LINK a block somebody already raised in the vendor suspension register, and even that only records that the other decision happened.</p>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Decide</h2></div>
+      <div class="card-body">
+        <p class="text-muted">This alert is still open, and closing one is restricted to workspace administrators. This register holds questions about named people, so a disposition is a decision with consequences rather than daily triage. Ask an administrator to look at it.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if is_admin and not obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Delete</h2><span class="text-muted">admin only</span></div>
+      <div class="card-body">
+        <p class="text-muted">Deleting an alert erases the evidence and the reasoning together. It is for a mistake, not for a disagreement: if the underlying fact is still true, the next scan raises the alert again with the same identity, because the rules are deterministic. Disagreeing is what the false-positive button is for, and it leaves a record behind.</p>
+        <form method="post" action="{% url 'procurement:fraudalert_delete' obj.pk %}" onsubmit="return confirm('Delete fraud alert {{ obj.number }}? The evidence and the reasoning go with it, and the next scan will raise it again if the underlying fact is still true.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete fraud alert</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
