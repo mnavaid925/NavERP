@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Perception Gap{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — the perception-gap board
+    (apps/procurement/views/SupplierPerformanceEvaluation/PerformanceBoards.py
+     :supplier_perception_gap, computed by performance.perception_gap_rows()).
+
+    COMPUTED and READ-ONLY: what WE rate a supplier against what the supplier rates itself,
+    per KPI, for one window. Nothing here writes; the responses are collected on the 360
+    feedback register.
+
+    Context contract, and NOTHING else exists here:
+      suppliers, selected_supplier (or None),
+      periods (list of {period_start, period_end, label}), selected_period (one of them, or None),
+      gap_rows (kpi_id/kpi_code/kpi_name/internal_avg/internal_count/self_avg/self_count/
+                delta/delta_css),
+      row_cap, truncated, gap_note.
+
+    delta = self_avg - internal_avg, so a POSITIVE delta is the supplier rating itself HIGHER
+    than we rate it. The sign convention is stated on the page, not just in the code — a reader
+    who has it backwards reads every row backwards.
+
+    delta_css arrives from performance._delta_css() rather than being decided here, so the badge
+    thresholds cannot drift away from the ones the tests pin. Colour-named classes only (L33).
+
+    The supplier select posts a pk and compares with |stringformat:"d" — never |slugify. The
+    period select posts YYYY-MM-DD and compares date to date.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Perception gap</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">&rsaquo;</span>
+        <span>Supplier Performance</span><span class="sep">&rsaquo;</span>
+        <span>Perception gap</span>
+      </div>
+      <p class="text-muted">How we rate a supplier against how they rate themselves, KPI by KPI.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplier_benchmark_board' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Benchmarking</a>
+      <a href="{% url 'procurement:supplier_trend_board' %}{% if selected_supplier %}?supplier={{ selected_supplier.pk }}{% endif %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Trend</a>
+      <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-primary"><i data-lucide="messages-square"></i> 360 feedback</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="min-width:240px;">
+          <label class="form-label" for="pg_supplier">Supplier</label>
+          <select id="pg_supplier" name="supplier" class="form-select">
+            <option value="">Choose a supplier&hellip;</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if selected_supplier and selected_supplier.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:240px;">
+          <label class="form-label" for="pg_period">Window</label>
+          <select id="pg_period" name="period" class="form-select">
+            {% if not periods %}<option value="">No submitted responses yet</option>{% endif %}
+            {% for p in periods %}
+              <option value="{{ p.period_end|date:'Y-m-d' }}" {% if selected_period and selected_period.period_end == p.period_end %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplier_perception_gap' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">How the figures are built</span> {{ gap_note }}</p>
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} responses fall in this window &mdash; the first {{ row_cap }} are averaged.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not selected_supplier %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="git-compare-arrows"></i>
+          <h3>Pick a supplier</h3>
+          <p>A perception gap compares two sides of one supplier's survey. Choose one above and the window picker fills with the periods they actually have submitted responses for.</p>
+          <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-primary">Open 360 feedback</a>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{{ selected_supplier.name }}</h2>
+        <span class="text-muted">
+          {% if selected_period %}{{ selected_period.label }}{% else %}no window selected{% endif %}
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>KPI</th>
+              <th class="text-right">We rate them</th>
+              <th class="text-right">Responses</th>
+              <th class="text-right">They rate themselves</th>
+              <th class="text-right">Responses</th>
+              <th class="text-right">Gap</th>
+              <th>Reading</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in gap_rows %}
+              <tr>
+                <td class="fw-600">
+                  {% if row.kpi_id %}
+                    <a href="{% url 'procurement:supplierkpi_detail' row.kpi_id %}"><span class="mono">{{ row.kpi_code }}</span> {{ row.kpi_name }}</a>
+                  {% else %}
+                    {% comment %}
+                      Responses filed against no KPI at all are grouped under one row rather than
+                      dropped — a board whose rows do not add up to the responses collected sends
+                      the reader hunting for the missing ones.
+                    {% endcomment %}
+                    <span class="mono">{{ row.kpi_code }}</span> {{ row.kpi_name }}
+                  {% endif %}
+                </td>
+                <td class="text-right fw-600">
+                  {% if row.internal_avg is None %}<span class="badge badge-slate">No rating</span>{% else %}{{ row.internal_avg|floatformat:1 }}{% endif %}
+                </td>
+                <td class="text-right">{{ row.internal_count }}</td>
+                <td class="text-right fw-600">
+                  {% if row.self_avg is None %}<span class="badge badge-slate">No rating</span>{% else %}{{ row.self_avg|floatformat:1 }}{% endif %}
+                </td>
+                <td class="text-right">{{ row.self_count }}</td>
+                <td class="text-right">
+                  {% comment %}
+                    delta_css is decided in performance._delta_css(), never here — the badge and
+                    the thresholds the tests pin stay one thing.
+                  {% endcomment %}
+                  <span class="badge {{ row.delta_css }}">
+                    {% if row.delta is None %}&mdash;
+                    {% elif row.delta > 0 %}+{{ row.delta|floatformat:1 }}
+                    {% else %}{{ row.delta|floatformat:1 }}{% endif %}
+                  </span>
+                </td>
+                <td class="text-muted">
+                  {% if row.delta is None %}Only one side answered &mdash; nothing to compare.
+                  {% elif row.delta >= 20 %}They rate themselves far higher than we do.
+                  {% elif row.delta >= 10 %}They rate themselves somewhat higher than we do.
+                  {% elif row.delta <= -10 %}They are harder on themselves than we are.
+                  {% else %}Both sides broadly agree.{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="message-square-off"></i>
+                  <h3>Nothing to compare</h3>
+                  <p>
+                    {% if not selected_period %}
+                      {{ selected_supplier.name }} has no submitted 360 responses at all, so there is no window to pick. Request feedback on the 360 register &mdash; only submitted responses count.
+                    {% else %}
+                      No submitted response falls in {{ selected_period.label }} for {{ selected_supplier.name }}, or every response in it was left unrated. A requested-but-unanswered survey is not a score.
+                    {% endif %}
+                  </p>
+                  <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-primary">Open 360 feedback</a>
+                </div>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-header">
+        <h2 class="card-title">Reading the gap</h2>
+        <span class="text-muted">gap = their self-rating &minus; our rating</span>
+      </div>
+      <div class="card-body">
+        <p>
+          <span class="badge badge-red">+20 or more</span> <span class="text-muted">a wide gap &mdash; they believe they are performing far better than we think.</span><br>
+          <span class="badge badge-amber">+10 to +20</span> <span class="text-muted">a real gap, worth raising at the next review.</span><br>
+          <span class="badge badge-green">within 10</span> <span class="text-muted">both sides broadly agree.</span><br>
+          <span class="badge badge-info">&minus;10 or lower</span> <span class="text-muted">they are harder on themselves than we are &mdash; often where an improvement plan is already working.</span><br>
+          <span class="badge badge-slate">no gap shown</span> <span class="text-muted">only one side answered, or nobody rated &mdash; not a zero gap.</span>
+        </p>
+        <p class="form-help" style="margin-top:.75rem;">
+          {{ gap_note }} Each side is averaged separately and a side with no rated response stays blank rather than counting as zero, so a KPI only one team answered cannot manufacture a gap. Response counts are shown next to each average because a 40-point gap built on one reply and a 40-point gap built on twelve are different conversations.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
