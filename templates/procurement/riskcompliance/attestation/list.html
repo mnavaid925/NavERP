@@ -150,16 +150,16 @@
                   <a href="{% url 'procurement:policyattestation_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   {% comment %}
                     Edit and Delete disappear once the row is signed or exempted, because both
-                    views refuse a settled row. Delete is additionally admin-gated, matching
-                    @tenant_admin_required.
+                    views refuse a settled row. BOTH are admin-gated, matching
+                    @tenant_admin_required on policyattestation_edit and _delete: pushing a
+                    deadline out takes a row off the overdue board, which is the same withdrawal
+                    delete restricts.
                   {% endcomment %}
-                  {% if not obj.is_terminal %}
+                  {% if not obj.is_terminal and is_admin %}
                     <a href="{% url 'procurement:policyattestation_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
-                    {% if is_admin %}
-                      <form method="post" action="{% url 'procurement:policyattestation_delete' obj.pk %}" onsubmit="return confirm('Withdraw this sign-off for {{ obj.policy.number }}? The person will no longer be asked to acknowledge it.');">
-                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Withdraw" aria-label="Withdraw"><i data-lucide="trash-2"></i></button>
-                      </form>
-                    {% endif %}
+                    <form method="post" action="{% url 'procurement:policyattestation_delete' obj.pk %}" onsubmit="return confirm('Withdraw this sign-off for {{ obj.policy.number }}? The person will no longer be asked to acknowledge it.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Withdraw" aria-label="Withdraw"><i data-lucide="trash-2"></i></button>
+                    </form>
                   {% endif %}
                 </div>
               </td>
