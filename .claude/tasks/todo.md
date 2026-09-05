@@ -3437,6 +3437,12 @@ Numbers by **arrival**, not by sub-module. **Announce to the other sessions imme
 names one you did not write, that is a coordination event (L51 §2). 6.17's models are **not re-exported yet**, so
 they are currently invisible to everyone else's sweep — that safety ends the moment step 1 above runs.
 
+**Do not wait for 6.19's `0026`.** Confirmed by that session 2026-09-05: their `makemigrations` is refused by
+their own permission classifier and needs their user, so `0026` has been free for hours and may still be. Take
+the next free number when you are ready. Their models are on disk and registered, so **your** `makemigrations`
+will capture 6.19's four and 6.16's four along with 6.17's — that is expected under a registry-wide sweep, but
+`--dry-run` and read the list before you commit to it, and tell both sessions what you swept in.
+
 ## Phases 4-7 — NOT started
 Review (6 reviewers, serial) → `code-fixer` → tests → skill + README.
 
