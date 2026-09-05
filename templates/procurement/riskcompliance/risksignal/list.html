@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Supplier Risk Signals{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — SupplierRiskSignal register
+    (apps/procurement/views/RiskComplianceManagement/RiskSignals.py :: risksignal_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      provider_choices, metric_choices, band_choices, trend_choices, review_status_choices,
+      parties, stats{critical, deteriorating, unreviewed, refresh_due}, is_admin.
+
+    crud_list renders `object_list` — never `objects` (L7/L8: a mismatched name renders a
+    silently blank region and still returns 200).
+
+    The view's filter tuple is exactly (("party","party_id",True), ("provider","provider",False),
+    ("metric","metric",False), ("band","band",False), ("trend","trend",False),
+    ("review_status","review_status",False)), so the bar offers exactly q, party, provider,
+    metric, band, trend and review_status — no dead <select> posting a param the view ignores.
+    The FK dropdown compares with |stringformat:"d", never |slugify; the five enum dropdowns
+    compare against the raw choice value.
+
+    THE VALUE COLUMN IS NOT SORTABLE ACROSS ROWS AND THE PAGE DOES NOT PRETEND IT IS. An FHR of
+    100 is excellent and a D&B SER of 9 is dangerous, so a raw number means nothing without the
+    metric beside it. The comparable column is Band, which the model derives from the metric's
+    own scale (0 = safest, whatever the provider's convention).
+
+    Band / trend / review colours come from the model's own BAND_CSS / TREND_CSS / REVIEW_CSS
+    through obj.band_css, obj.trend_css and obj.review_css — never from an {% if %} ladder here,
+    because theme.css ships only badge-green / badge-red / badge-amber / badge-info /
+    badge-muted / badge-slate and a semantic badge-success renders unstyled (L33).
+
+    `previous_value` is None exactly when `trend` is "new", so the "was" line is gated on the
+    trend rather than on the value — a legitimate previous reading of 0.00 must not vanish.
+
+    Edit and Delete disappear on a terminal (actioned / dismissed) row because both views refuse
+    one; Delete is additionally admin-gated, matching @tenant_admin_required. Only the
+    SYSTEM-ASSIGNED number reaches a confirm() string — the supplier name, source_ref and notes
+    are staff-authored and never do (L42). The copy avoids apostrophes entirely.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supplier Risk Signals</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Risk signals</span>
+      </div>
+      <p class="text-muted">Every observation of a supplier financial-health metric: who published the number, which metric it is, and what it means on that metric own scale. Bureau numbers run in opposite directions, so the register bands them rather than ranking them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:screening_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Screenings</a>
+      <a href="{% url 'procurement:risksignal_refresh_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Refresh due</a>
+      <a href="{% url 'procurement:risksignal_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Capture observation</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ stats.critical }}</div><div class="stat-label">Critical band</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="trending-down"></i></div><div class="stat-value">{{ stats.deteriorating }}</div><div class="stat-label">Deteriorated</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.unreviewed }}</div><div class="stat-label">Awaiting review</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.refresh_due }}</div><div class="stat-label">Refresh due</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search risk signals" class="form-input" placeholder="Search number, supplier, reference or notes…">
+        </div>
+        <div class="form-group">
+          <select name="party" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for p in parties %}
+              <option value="{{ p.pk|stringformat:"d" }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="provider" aria-label="Provider" class="form-select">
+            <option value="">All providers</option>
+            {% for value, label in provider_choices %}
+              <option value="{{ value }}" {% if request.GET.provider == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="metric" aria-label="Metric" class="form-select">
+            <option value="">All metrics</option>
+            {% for value, label in metric_choices %}
+              <option value="{{ value }}" {% if request.GET.metric == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="band" aria-label="Band" class="form-select">
+            <option value="">Any band</option>
+            {% for value, label in band_choices %}
+              <option value="{{ value }}" {% if request.GET.band == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="trend" aria-label="Trend" class="form-select">
+            <option value="">Any trend</option>
+            {% for value, label in trend_choices %}
+              <option value="{{ value }}" {% if request.GET.trend == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="review_status" aria-label="Review status" class="form-select">
+            <option value="">Any review state</option>
+            {% for value, label in review_status_choices %}
+              <option value="{{ value }}" {% if request.GET.review_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:risksignal_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Signal</th>
+            <th>Supplier</th>
+            <th>Provider &amp; metric</th>
+            <th>Observed</th>
+            <th class="text-right">Value</th>
+            <th>Band</th>
+            <th>Trend</th>
+            <th>Review</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:risksignal_detail' obj.pk %}">{{ obj.number }}</a>
+                {% comment %} source_ref renders as TEXT and never as an href — it is a staff-typed report reference, not a URL. {% endcomment %}
+                {% if obj.source_ref %}<div class="text-muted">Ref {{ obj.source_ref }}</div>{% endif %}
+              </td>
+              <td><a href="{% url 'core:party_detail' obj.party.pk %}">{{ obj.party.name }}</a></td>
+              <td>
+                {{ obj.get_provider_display }}
+                <div class="text-muted">{{ obj.get_metric_display }}</div>
+              </td>
+              <td>
+                {{ obj.observed_on|date:"M d, Y" }}
+                {% if obj.next_refresh_on %}<div class="text-muted">Refresh {{ obj.next_refresh_on|date:"M d, Y" }}</div>{% endif %}
+                {% if obj.is_stale %}<div class="text-warn">Stale observation</div>{% endif %}
+              </td>
+              <td class="text-right">
+                {{ obj.value }}
+                {% comment %} previous_value is None exactly when trend is "new" — gate on the trend so a real previous reading of 0.00 still shows. {% endcomment %}
+                {% if obj.trend != "new" %}<div class="text-muted">was {{ obj.previous_value }}</div>{% endif %}
+                {% if obj.breaches_minimum %}<div class="text-danger">Below the accepted floor</div>{% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.band_css }}">{{ obj.get_band_display }}</span>
+                {% if obj.is_banded %}<div class="text-muted">Risk {{ obj.risk_position }}/100</div>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.trend_css }}">{{ obj.get_trend_display }}</span></td>
+              <td>
+                <span class="badge {{ obj.review_css }}">{{ obj.get_review_status_display }}</span>
+                {% if obj.reviewed_by %}<div class="text-muted">{{ obj.reviewed_by.get_full_name|default:obj.reviewed_by.username }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:risksignal_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete disappear once the signal is actioned or dismissed, because
+                    both views refuse a terminal row — a hidden button and a refused POST always
+                    agree. Delete is additionally admin-gated, matching @tenant_admin_required.
+                  {% endcomment %}
+                  {% if not obj.is_terminal %}
+                    <a href="{% url 'procurement:risksignal_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% if is_admin %}
+                      <form method="post" action="{% url 'procurement:risksignal_delete' obj.pk %}" onsubmit="return confirm('Delete risk signal {{ obj.number }}? The observation goes with it, and this supplier monitoring history loses a data point.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="activity"></i>
+                <h3>No risk signals found</h3>
+                <p>Nothing matches these filters. A risk signal records one financial-health number for one supplier, from one provider, on one date — and the metric it was measured on is what tells the system which way is up.</p>
+                <a href="{% url 'procurement:risksignal_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Capture observation</a>
+                <a href="{% url 'procurement:risksignal_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Why the Band column, and not the Value column</h2><span class="text-muted">the scales run in opposite directions</span></div>
+    <div class="card-body">
+      <p class="text-muted">RapidRatings FHR runs 1 to 100 where 100 is healthy. Dun &amp; Bradstreet Supplier Evaluation Risk runs 1 to 9 where 9 is dangerous. Sorting a shared score column would put the two safest suppliers in this workspace at opposite ends of the register, so each row carries its own metric and the system converts the raw number to a risk position where 0 is always the safest end. The Band column is the only column comparable across providers.</p>
+      <p class="text-muted">A metric with no registered scale bands as <span class="badge badge-muted">Not banded</span> rather than as low. Saying that nothing is known is honest; defaulting to a clean band would be a fabricated all-clear. And a band is advisory throughout — it colours a badge, raises an inbox item at worst, and blocks nothing. The only place a vendor is actually blocked is the vendor suspension register.</p>
+    </div>
+  </div>
+{% endblock %}
