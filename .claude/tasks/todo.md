@@ -3370,6 +3370,94 @@ the views stay thin and every figure is unit-testable. **Do not edit `analytics.
 (filled in at the end)
 
 ---
+
+---
+
+# 6.17 HANDOFF — state at 2026-09-05 12:47 (read this before resuming)
+
+**Do NOT restart from Phase 1.** Phases 1-2 (research, plan) and Phase 3 step 1 (frozen contract) are done and
+committed. Build is ~70% complete. Resume at **Entity 4, views onward**.
+
+## Read first
+`.claude/tasks/contract-procurement-6.17.md` — **including the amended §0 drift row and the new §6a "Ownership
+call"**, which changed Entity 4's scope mid-build. The plan below in this file is stale where §6a contradicts it.
+
+## Done and committed
+
+| | state |
+|---|---|
+| Phase 1 research | `.claude/tasks/research-procurement-6.17.md` |
+| Phase 2 plan | this file, above |
+| Phase 3.1 contract | `.claude/tasks/contract-procurement-6.17.md` (amended `48b578e5`) |
+| **Entity 1** `ComplianceScreening` + `ScreeningHit` | **COMPLETE** — 4 backend files + 7 templates, 15 url names |
+| **Entity 2** `SupplierRiskSignal` | **COMPLETE** — 4 backend files + 4 templates, 7 url names |
+| **Entity 3** `FraudAlert` | **COMPLETE** — 6 backend files + 5 templates, 8 url names; 6-rule `scan()` proven idempotent (37/37 checks, twice) |
+| **Entity 4** `PolicyAttestation` | **PART-BUILT** — model (`14a6327b`) + form (`8a82980d`) committed |
+
+## Entity 4 — what is LEFT (scope changed, read §6a)
+
+`procurement.ProcurementPolicy` **already exists** — 6.19 shipped it (`models/DocumentKnowledgeManagement/
+Policies.py:152`, prefix `[PPOL-]`). Declaring a second raises `RuntimeError: Conflicting 'procurementpolicy'
+models in application 'procurement'` and breaks `manage.py check` for every session in this checkout.
+**Settled with 6.19 by message and confirmed both ways: 6.19 owns the policy table, 6.17 owns the ledger.**
+6.19 keeps `requires_acknowledgment` unchanged; 6.17 reads it.
+
+Still to write:
+- `views/RiskComplianceManagement/Policies.py` — `policy_list`, `policy_detail`, `policy_mine`,
+  `policy_overdue_board`, `policy_raise_attestations`
+- `views/RiskComplianceManagement/Attestations.py` — attestation CRUD + `attestation_sign` (**OWNER-ONLY**, a
+  tenant admin signing for someone else must be refused) + `attestation_exempt`
+- `urls/RiskComplianceManagement/{Policies,Attestations}.py` + the splice into that package's `__init__.py`
+  (**re-read it first — 6.19 corrected its first-segment inventory, which was missing five entries**)
+- 7 templates: `policy/{list,detail}.html`, `attestation/{list,detail,form}.html`, `my_policies.html`,
+  `policy_overdue.html`. **No `policy/form.html`** — 6.19 owns authoring; link to their `ppolicy_*` routes.
+
+**Do NOT build** `policy_create/_edit/_delete/_publish/_archive/_new_version`. `policy_raise_attestations` is the
+6.17-owned, admin-gated, `@require_POST`, **idempotent** verb that raises the roster for an already-published
+policy — it exists so "publish raises the roster" needs zero edits to 6.19's code.
+
+## Entity 5 `AuditSeal` — NOT started, and CUTTABLE
+Bullet 3 ships as the `audit_trail` register over `core.AuditLog` regardless; that page is what `LIVE_LINKS`
+points at. If the next session is short, cut `AuditSeal` and ship the register alone, stating on the page that
+sealing is not yet available.
+
+## Phase 3.4 Integrate — NOT started (single writer, main session only)
+1. `models/__init__.py` + `forms/` + `views/` + `urls/__init__.py` re-export blocks — **targeted `Edit`, never
+   `Write`** (three other sessions append to these same four files).
+2. `admin.py`, extend `seed_procurement.py` (idempotent; **never `--flush`**), append 6.17's model names to
+   `PROCUREMENT_CONTENT_MODELS` in `views/_helpers.py` so the activity feed sees them.
+3. `LIVE_LINKS["6.17"]` — five bullets to five **distinct** staff pages (L30/L32).
+4. `makemigrations` **last**.
+
+### Migration protocol — the reserved-number queue was WITHDRAWN
+Numbers by **arrival**, not by sub-module. **Announce to the other sessions immediately before running
+`makemigrations`**, then verify a single leaf:
+`MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes()` filtered to `procurement`.
+`makemigrations` sweeps the **whole app registry** — run `--dry-run` first and read every model it lists; if it
+names one you did not write, that is a coordination event (L51 §2). 6.17's models are **not re-exported yet**, so
+they are currently invisible to everyone else's sweep — that safety ends the moment step 1 above runs.
+
+## Phases 4-7 — NOT started
+Review (6 reviewers, serial) → `code-fixer` → tests → skill + README.
+
+**The reviewers CANNOT use `BASE...HEAD`.** Four sessions commit to `main` in this one tree, so that range
+contains 6.16's, 6.18's and 6.19's work and reviewers would file findings against the wrong sub-module. Scope
+them to explicit paths, and **use `**` not `*`** — `templates/procurement/riskcompliance/*` matches only the
+entity directories and none of the `.html` files, so a reviewer given it reads nothing and reports clean (L51 §5):
+```
+apps/procurement/models/RiskComplianceManagement/**
+apps/procurement/forms/RiskComplianceManagement/**
+apps/procurement/views/RiskComplianceManagement/**
+apps/procurement/urls/RiskComplianceManagement/**
+templates/procurement/riskcompliance/**
+```
+Expected counts to check the glob against before trusting a clean report: **14 `.py`** under the four
+`RiskComplianceManagement/` dirs (incl. `__init__.py`), **16 `.html`** under `riskcompliance/` once Entity 4 lands.
+
+## Commit discipline in this tree
+`git add 'path'; git commit --only 'path' -m 'msg'` — one file per commit. Plain `git add` + `git commit` sweeps
+peers' staged files into your commit (it already happened once, `8262b645`). Never `git add -A`/`.`. Never push.
+
 # Sub-module 6.19 - Document & Knowledge Management (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.19.md  (2026-09-05)
 
 > Built AHEAD of 6.16/6.17/6.18 (no `LIVE_LINKS` key exists for any of them). Scope is the research's
