@@ -340,16 +340,21 @@ class Command(BaseCommand):
             # created - the supplier party, the contract, the purchase order and the sourcing
             # event. Run earlier it would file a repository of records that point at nothing.
             self._seed_document_knowledge(tenant)
-            # 6.18 runs LAST because its replenishment run is COMPUTED, not written: generate()
-            # reads this workspace's stock, its open purchase orders and its open requisitions at
-            # the moment it is called, so it has to see everything the blocks above have created.
-            # It writes into no other module - no requisition is released and no material issue is
-            # posted, so a re-seed never touches the scm stock ledger.
+            # 6.18 runs after everything that WRITES stock-affecting rows, because its
+            # replenishment run is COMPUTED, not written: generate() reads this workspace's stock,
+            # its open purchase orders and its open requisitions at the moment it is called, so it
+            # has to see everything the blocks above have created. It writes into no other module
+            # - no requisition is released and no material issue is posted, so a re-seed never
+            # touches the scm stock ledger.
             self._seed_inventory_warehouse(tenant)
-            # 6.17 runs after EVERY block above, and the ordering is load-bearing twice over.
-            # Its fraud scan reads the invoices and orders those blocks created, and its audit
-            # seal hashes the core.AuditLog range that exists at the end of the run - a seal
+            # 6.17 runs LAST, after EVERY block above, and the ordering is load-bearing twice
+            # over. Its fraud scan reads the invoices and orders those blocks created, and its
+            # audit seal hashes the core.AuditLog range that exists at the end of the run - a seal
             # taken earlier would leave everything seeded afterwards outside the chain.
+            #
+            # ==> ADDING A NEW SUB-MODULE? Insert its call ABOVE this line, never below it. A
+            #     block seeded after _seed_risk_compliance writes audit rows that no seal covers,
+            #     which silently costs the demo workspace the one property 6.17 exists to give it.
             self._seed_risk_compliance(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
