@@ -61,7 +61,7 @@ from apps.procurement.models.SupplierPerformanceEvaluation.ScorecardKpiScores im
 from apps.procurement.models.SupplierPerformanceEvaluation.SupplierKpis import (
     DIMENSION_CHOICES, SOURCE_CHOICES, SupplierKpi)
 from apps.procurement.performance import (
-    HANDOVER_NOTE, ROW_CAP, generate_scorecard_lines)
+    DETAIL_ROW_CAP, HANDOVER_NOTE, ROW_CAP, generate_scorecard_lines)
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 TEMPLATE_EVALUATION_LIST = "procurement/performance/evaluation/list.html"
@@ -234,6 +234,27 @@ def supplierevaluation_detail(request, pk):
     truncated = len(lines) > ROW_CAP
     lines = lines[:ROW_CAP]
 
+    # The two SUPPORTING tables get the same treatment ``lines`` already had. They were
+    # UNCAPPED: measured 109 ms -> 924 ms and 427 KB -> 2.28 MB of HTML on a scorecard carrying
+    # 1,500 responses and 500 plans, which a supplier running a real 360 programme reaches
+    # without anything unusual happening. Both models carry a deterministic ``Meta.ordering``
+    # (``-start_date, -id`` and ``-period_end, -id``), so the slice takes the newest rows rather
+    # than an arbitrary page — the sibling ``supplierkpi_detail`` caps its three lists the same
+    # way. ``DETAIL_ROW_CAP``, not ``ROW_CAP``: these are supporting context on a page about the
+    # KPI lines, and each register shows the full set.
+    plans = list(SupplierImprovementPlan.objects
+                 .filter(tenant=request.tenant, scorecard_id=obj.pk)
+                 .select_related("supplier", "kpi")[:DETAIL_ROW_CAP + 1])
+    feedback_rows = list(SupplierFeedback.objects
+                         .filter(tenant=request.tenant, scorecard_id=obj.pk)
+                         .select_related("kpi", "respondent")[:DETAIL_ROW_CAP + 1])
+    # Kept SEPARATE from ``truncated`` rather than OR'd into it: the KPI-line warning says the
+    # composite was computed over a cut list, which is not true when only the plans were cut.
+    # Two flags, two honest sentences.
+    related_truncated = (len(plans) > DETAIL_ROW_CAP or len(feedback_rows) > DETAIL_ROW_CAP)
+    plans = plans[:DETAIL_ROW_CAP]
+    feedback_rows = feedback_rows[:DETAIL_ROW_CAP]
+
     scored = [line for line in lines if line.score is not None]
     weight_total = sum(line.weight_applied for line in scored)
     weighted_total = None
@@ -283,16 +304,14 @@ def supplierevaluation_detail(request, pk):
         "dimension_map": dimension_map,
         "can_generate": can_generate,
         "refusal_reason": refusal_reason,
-        "plans": list(SupplierImprovementPlan.objects
-                      .filter(tenant=request.tenant, scorecard_id=obj.pk)
-                      .select_related("supplier", "kpi")),
-        "feedback_rows": list(SupplierFeedback.objects
-                              .filter(tenant=request.tenant, scorecard_id=obj.pk)
-                              .select_related("kpi", "respondent")),
+        "plans": plans,
+        "feedback_rows": feedback_rows,
         "band_choices": BAND_CHOICES,
         "handover_note": HANDOVER_NOTE,
         "row_cap": ROW_CAP,
         "truncated": truncated,
+        "related_cap": DETAIL_ROW_CAP,
+        "related_truncated": related_truncated,
     })
 
 
