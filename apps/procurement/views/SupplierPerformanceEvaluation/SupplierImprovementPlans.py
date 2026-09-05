@@ -250,10 +250,24 @@ def improvementplan_edit(request, pk):
     Granting an extension IS an edit, not a verb: ``extended_close_date`` is on the form, and the
     model refuses one that does not fall strictly after the original target.
 
+    **OPEN plans only.** "Editing cannot move the lifecycle" was true and beside the point: the
+    payload is not the status. A closed plan carries ``verified_by``/``verified_at`` against the
+    finding, the root cause, the corrective actions and the dates — so leaving it editable let
+    any member rewrite the content a signature sits beside. The same ``OPEN_STATUSES`` gate
+    ``ContractsManagement/Milestones.py`` puts on its own edit and delete.
+
     ``crud_edit`` hands ``success_url`` straight to ``redirect()`` with no arguments, so a route
     taking a pk must be an already-reversed PATH: passing the url NAME here would raise
     ``NoReverseMatch`` at save time, not at import time.
     """
+    obj = get_object_or_404(SupplierImprovementPlan.objects.only("pk", "tenant_id", "status"),
+                            pk=pk, tenant=request.tenant)
+    if obj.status not in OPEN_STATUSES:
+        messages.error(request, f"This plan is {obj.get_status_display().lower()} and its "
+                                "record is frozen — a closed plan is signed, and a cancelled one "
+                                "is history. Neither can be edited.")
+        return redirect("procurement:improvementplan_detail", pk=pk)
+
     return crud_edit(
         request, model=SupplierImprovementPlan, pk=pk, form_class=SupplierImprovementPlanForm,
         template=TEMPLATE_FORM,
@@ -430,8 +444,21 @@ def improvementplan_delete(request, pk):
     means nothing once the plans are gone. Cancel an open plan instead of deleting it, and leave
     a closed one where it is. The templates say so at the point of deletion.
 
+    **OPEN plans only**, which is what makes the paragraph above enforceable rather than advice:
+    a closed plan is the record that a supplier was put on one, signed by whoever verified it,
+    and the page told the reader to cancel an open plan instead — while still offering the bin
+    on the closed one to every member.
+
     The ``escalated_suspension`` pointer is only a pointer: deleting the plan leaves 6.4's block
     register untouched, so a vendor that is blocked stays blocked.
     """
+    obj = get_object_or_404(SupplierImprovementPlan.objects.only("pk", "tenant_id", "status"),
+                            pk=pk, tenant=request.tenant)
+    if obj.status not in OPEN_STATUSES:
+        messages.error(request, f"This plan is {obj.get_status_display().lower()} and is part of "
+                                "the supplier's history — exactly what an escalation stands on. "
+                                "It cannot be deleted.")
+        return redirect("procurement:improvementplan_detail", pk=pk)
+
     return crud_delete(request, model=SupplierImprovementPlan, pk=pk,
                        success_url="procurement:improvementplan_list")
