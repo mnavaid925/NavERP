@@ -326,8 +326,18 @@ def pdocument_delete(request, pk):
 
 
 def _get_document(request, pk):
-    return get_object_or_404(ProcurementDocument.objects.select_related("checked_out_by"),
-                             pk=pk, tenant=request.tenant)
+    """The single fetch every verb uses — tenant-scoped AND narrowed by the read rule.
+
+    A document somebody may not read is not a document they may act on: without the second
+    filter a guessed pk would let a non-owner take the advisory checkout on a confidential
+    record, or archive one, from a page they cannot open. Narrowing the QUERY means every verb
+    404s exactly where the detail page 404s, with no separate rule to keep in step.
+    """
+    return get_object_or_404(
+        ProcurementDocument.objects
+        .filter(readable_document_q(request.user))
+        .select_related("checked_out_by"),
+        pk=pk, tenant=request.tenant)
 
 
 @login_required
