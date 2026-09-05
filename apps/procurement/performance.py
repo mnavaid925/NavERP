@@ -111,7 +111,18 @@ def _num(value):
 
 
 def _breakdown(metric, start, end, rows, **extra):
-    """The shape every resolver returns as its second element."""
+    """The shape every resolver returns as its second element.
+
+    ``rows`` is ALWAYS the POPULATION the resolver examined — the denominator of a rate, or the
+    number of source rows read where there is no ratio. It is never the numerator.
+
+    That had drifted: five of the rate resolvers passed the numerator instead, so a reader of
+    the audit trail met ``rows: 0`` printed beside ``po_lines: 3`` on one line and ``rows: 12``
+    meaning "twelve receipts considered" on the next — the same key, opposite meanings, on the
+    one structure whose whole job is being arguable. Every numerator already has its own named
+    key (``discrepancies``, ``returns``, ``disputes``, ``backorders``, ``changes``), so nothing
+    is lost by making ``rows`` mean one thing.
+    """
     data = {"metric": metric, "window": [str(start), str(end)], "rows": rows}
     data.update(extra)
     return data
@@ -263,7 +274,7 @@ def _resolve_ncr_rate(tenant, party, start, end):
         goods_receipt__receipt_date__range=(start, end)).count()
     receipts = _received_notes(tenant, party, start, end).count()
     return _pct(discrepancies, receipts), _breakdown(
-        "ncr_rate", start, end, discrepancies,
+        "ncr_rate", start, end, receipts,
         discrepancies=discrepancies, receipts=receipts)
 
 
@@ -277,7 +288,7 @@ def _resolve_rtv_rate(tenant, party, start, end):
         tenant=tenant, vendor=party, created_at__date__range=(start, end)).count()
     receipts = _received_notes(tenant, party, start, end).count()
     return _pct(returns, receipts), _breakdown(
-        "rtv_rate", start, end, returns, returns=returns, receipts=receipts,
+        "rtv_rate", start, end, receipts, returns=returns, receipts=receipts,
         note="Windowed on when the return was raised (created_at) — shipped_on is blank until "
              "the return actually ships.")
 
@@ -312,7 +323,7 @@ def _resolve_dispute_rate(tenant, party, start, end):
     invoices = SupplierInvoice.objects.filter(
         tenant=tenant, vendor=party, invoice_date__range=(start, end)).count()
     return _pct(disputes, invoices), _breakdown(
-        "dispute_rate", start, end, disputes, disputes=disputes, invoices=invoices)
+        "dispute_rate", start, end, invoices, disputes=disputes, invoices=invoices)
 
 
 def _resolve_dispute_days(tenant, party, start, end):
@@ -359,7 +370,7 @@ def _resolve_backorder_rate(tenant, party, start, end):
         purchase_order__tenant=tenant, purchase_order__vendor=party,
         purchase_order__order_date__range=(start, end)).count()
     return _pct(backorders, lines), _breakdown(
-        "backorder_rate", start, end, backorders, backorders=backorders, po_lines=lines)
+        "backorder_rate", start, end, lines, backorders=backorders, po_lines=lines)
 
 
 def _resolve_po_change_rate(tenant, party, start, end):
@@ -377,7 +388,7 @@ def _resolve_po_change_rate(tenant, party, start, end):
     orders = PurchaseOrder.objects.filter(
         tenant=tenant, vendor=party, order_date__range=(start, end)).count()
     return _pct(changes, orders), _breakdown(
-        "po_change_rate", start, end, changes, changes=changes, purchase_orders=orders,
+        "po_change_rate", start, end, orders, changes=changes, purchase_orders=orders,
         note="Both sides ride the purchase order's order_date — a change row carries no "
              "business date of its own.")
 
