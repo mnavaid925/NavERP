@@ -575,6 +575,10 @@ def generate_scorecard_lines(scorecard, user):
     closed period, and silently rewriting one would change a number somebody has already acted
     on.
 
+    **Refuses an empty run too**, writing nothing: with no applicable KPI there is no measurement
+    to hand over, and setting ``manual_override`` on the strength of nothing would take SCM's
+    signal engine off a scorecard it was scoring perfectly well.
+
     **History is frozen at write time.** ``weight_applied``, ``target_at_time``,
     ``direction_at_time``, ``source_at_time``, ``unit_at_time``, ``kpi_name`` and
     ``kpi_category`` are copied onto the line, so re-tuning or renaming a KPI later changes the
@@ -594,6 +598,23 @@ def generate_scorecard_lines(scorecard, user):
     tenant = scorecard.tenant
     start, end = scorecard.period_start, scorecard.period_end
     kpis = applicable_kpis(tenant, scorecard.party)
+
+    # REFUSES an empty run, and this guard is load-bearing. Setting ``manual_override`` below
+    # stops ``recompute_from_signals()`` for good, so a run that writes NO line would hand the
+    # scorecard to 6.16 with zero evidence AND take SCM's engine off it — a card that graded
+    # A/93.70 from signals becomes permanently unscoreable by either engine, and the operator is
+    # told it worked. Two paths reach here with no applicable KPI and neither needs an empty
+    # library: a supplier with no ``scm.SupplierProfile`` while the KPIs are tier-scoped, and a
+    # library mid-retune with everything deactivated. Refusing writes nothing at all, which is
+    # the same answer a published scorecard gets.
+    if not kpis:
+        return {"refused": True,
+                "refusal_reason": (
+                    "No active KPI applies to this supplier, so there is nothing to generate. "
+                    "Generating an empty scorecard would hand it to Procurement with no "
+                    "measurement behind it and stop SCM's signal engine from scoring it at all. "
+                    "Activate a KPI — or one that applies to this supplier's tier — first."),
+                "written": 0, "skipped": 0, "dimensions": {}, "alerts": 0}
 
     # Snapshot the bands already on the scorecard BEFORE anything is rewritten. This is what
     # makes "a NEW critical crossing" mean something — a KPI that was already critical last run
