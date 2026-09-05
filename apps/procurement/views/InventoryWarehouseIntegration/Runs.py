@@ -231,6 +231,21 @@ def replenishmentrun_edit(request, pk):
 @login_required
 @require_POST
 def replenishmentrun_delete(request, pk):
+    """Delete a run and its suggestions — draft or proposed only.
+
+    Gated on ``can_generate`` for the same reason :func:`replenishmentrun_edit` is, only harder:
+    ``ReplenishmentSuggestion.run`` is ``CASCADE``, so deleting a RELEASED run destroys every line
+    that says which requisition came from which proposal while the requisition rows themselves
+    survive, orphaned. Both templates already hide the button behind ``can_generate`` and say the
+    view refuses it anyway — this is what makes that true, and it mirrors
+    :func:`materialissue_delete`, which guards its own posted documents the same way.
+    """
+    obj = get_object_or_404(ReplenishmentRun.objects.filter(tenant=request.tenant), pk=pk)
+    if not obj.can_generate:
+        messages.error(request, f"{obj.number} is {obj.get_status_display().lower()} and cannot be "
+                                f"deleted. Its suggestions are the only record of which "
+                                f"requisitions came from which proposal.")
+        return redirect("procurement:replenishmentrun_detail", pk=pk)
     return crud_delete(request, model=ReplenishmentRun, pk=pk,
                        success_url="procurement:replenishmentrun_list")
 
