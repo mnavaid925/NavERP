@@ -851,7 +851,14 @@ class FraudAlert(TenantNumbered):
                 key = _norm_address(line1, city)
                 if not key.strip("|"):
                     continue
-                shown = f"{line1}, {city}" if city else line1
+                # MASKED, like tax_id and contact above it. `key` still carries the full
+                # normalised address, so the MATCH is unaffected — this is only what gets stored
+                # in `matched_on` and rendered on the register. For vendor_employee_match the
+                # matched value is by definition an employee's HOME address, and writing it
+                # verbatim into an accusation record breaks this module's own stated invariant
+                # (enough of the value to recognise it, not enough to leak it). The city is
+                # recognisable on its own; with no city, the tail of line1 is.
+                shown = city or _mask_tail(line1)
                 addresses.setdefault(party_id, []).append((key, shown))
         if "vendor_employee_match" in wanted and parties:
             for party_id, kind, value in (
