@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Receipt → Bin Map{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — the Receipt → Bin map
+    (apps/procurement/views/InventoryWarehouseIntegration/ReceiptBinMap.py).
+
+    READ-ONLY. No model, no form, no migration. It follows each goods receipt past the staging
+    location the GRN detail page shows, to the bin the goods actually reached.
+
+    THE TRAIL, because it is the one thing easy to get wrong here: a goods receipt's stock moves
+    carry the GRN's number and land in STAGING; the bin is reached later by a putaway task, whose
+    moves carry the TASK's number. So the bins below come from each receipt's putaway tasks (the
+    task's to_location IS the bin) and never from a GRN-number stock lookup, which could only ever
+    find staging. Stock received but never put away has no bin — it is still in staging, which is
+    what the unputaway figure reports.
+
+    Context consumed: page_obj, object_list (row dicts), q, locations, status_choices,
+    selected_location, selected_status, date_from, date_to,
+    stats{receipts, fully_putaway, partially_putaway, in_staging}, row_cap, truncated,
+    reference_note, links.
+
+    Row keys: grn, grn_url, staging_location, received_qty,
+    bins[{location, path, quantity, capacity, fullness_pct, capacity_css}],
+    putaway_tasks[{task, url, status, status_css, to_location}], unputaway_qty, is_unputaway,
+    putaway_css.
+
+    Every row url is ALREADY reversed in the view. The status select compares selected_status
+    against the exact GoodsReceiptNote.STATUS_CHOICES values; the location select compares with
+    |stringformat:"d" (never |slugify).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Receipt → Bin Map</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse</span><span class="sep">›</span>
+        <span>Receipt → Bin</span>
+      </div>
+      <p class="text-muted">Where your received goods actually landed. A receipt books stock into staging; this follows the putaway trail the rest of the way to the bin — and flags what never left staging.</p>
+    </div>
+    <div class="page-actions">
+      {% for link in links %}
+        <a href="{{ link.url }}" class="btn btn-outline"><i data-lucide="{{ link.icon }}"></i> {{ link.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{{ stats.receipts }}</div>
+      <div class="stat-label">Receipts in scope{% if truncated %} (capped at {{ row_cap }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{{ stats.fully_putaway }}</div>
+      <div class="stat-label">Fully put away</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="package-open"></i></div>
+      <div class="stat-value">{{ stats.partially_putaway }}</div>
+      <div class="stat-label">Partly put away</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="forklift"></i></div>
+      <div class="stat-value">{{ stats.in_staging }}</div>
+      <div class="stat-label">Still entirely in staging</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search receipts" class="form-input" placeholder="Search receipt, order, delivery note or supplier…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Receipt status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Staging location" class="form-select">
+            <option value="">All staging locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk|stringformat:"d" }}" {% if selected_location and selected_location.pk == l.pk %}selected{% endif %}>{{ l.code }} — {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" aria-label="Received from" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" aria-label="Received to" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:receipt_bin_map' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} receipts match these filters — the {{ row_cap }} most recent are shown, and the counters above cover those rather than the whole workspace. Narrow by date or location for a complete picture.</p>
+      {% endif %}
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Receipt</th>
+            <th>Staging</th>
+            <th class="text-right">Received</th>
+            <th>Landed in these bins</th>
+            <th>Putaway tasks</th>
+            <th class="text-right">Still in staging</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{{ row.grn_url }}">{{ row.grn.number }}</a>
+                <div class="text-muted">
+                  {{ row.grn.receipt_date|date:"d M Y" }}
+                  {% if row.grn.purchase_order %} · {{ row.grn.purchase_order.number }}{% endif %}
+                  {% if row.grn.purchase_order.vendor %} · {{ row.grn.purchase_order.vendor.name }}{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if row.staging_location %}{{ row.staging_location.code }}<div class="text-muted">{{ row.staging_location.name }}</div>
+                {% else %}<span class="text-muted">Not booked to a location</span>{% endif %}
+              </td>
+              <td class="text-right">{{ row.received_qty|floatformat:2 }}</td>
+              <td>
+                {% for b in row.bins %}
+                  <div style="margin-bottom:.35rem;">
+                    <span class="fw-600">{{ b.location.code }}</span>
+                    <span class="badge {{ b.capacity_css }}">
+                      {% if b.fullness_pct is None %}capacity not set{% else %}{{ b.fullness_pct|floatformat:0 }}% full{% endif %}
+                    </span>
+                    <div class="text-muted">{{ b.path }} · {{ b.quantity|floatformat:2 }} put here{% if b.capacity %} · bin holds {{ b.capacity|floatformat:0 }}{% endif %}</div>
+                  </div>
+                {% empty %}
+                  <span class="text-muted">No bin yet — nothing has been put away from this receipt.</span>
+                {% endfor %}
+              </td>
+              <td>
+                {% for t in row.putaway_tasks %}
+                  <div style="margin-bottom:.35rem;">
+                    <a href="{{ t.url }}">{{ t.task.number }}</a>
+                    <span class="badge {{ t.status_css }}">{{ t.task.get_status_display }}</span>
+                    <div class="text-muted">
+                      {{ t.task.quantity|floatformat:2 }} →
+                      {% if t.to_location %}{{ t.to_location.code }}{% else %}no destination{% endif %}
+                    </div>
+                  </div>
+                {% empty %}
+                  <span class="text-muted">None raised</span>
+                {% endfor %}
+              </td>
+              <td class="text-right fw-600">
+                {% if row.is_unputaway %}
+                  <span class="badge {{ row.putaway_css }}">{{ row.unputaway_qty|floatformat:2 }}</span>
+                {% else %}
+                  <span class="badge {{ row.putaway_css }}">All binned</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="map-pin-off"></i>
+                <h3>No goods receipts</h3>
+                <p>Nothing matches these filters. This page reads the goods receipts your workspace has booked — receive against a purchase order and its putaway trail appears here.</p>
+                <a href="{% url 'procurement:receipt_bin_map' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body">
+      <p class="form-help"><span class="badge badge-amber">How the trail works — and where it stops</span> {{ reference_note }}</p>
+      <p class="form-help">Directed putaway itself is not re-implemented here: the putaway rules that choose a bin, the bin-capacity register and cross-docking all live in the warehouse module, linked at the top of this page. This board only reports what they did.</p>
+    </div>
+  </div>
+{% endblock %}
