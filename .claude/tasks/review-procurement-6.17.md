@@ -286,7 +286,7 @@ freshly broken seal → **1 row**; 9 further presses → **0 more rows**, seal s
 `auditseal_detail` genuinely needs the ROOT's fingerprint map for `_entries_covered`. M14's
 version (defer the PREVIOUS seal's copy) is the correct form and is applied under M14.
 
-### [~] M11 — SKIPPED (needs a migration) — verification stamps have no actor, and a passing verify leaves no record
+### [x] M11 — SKIPPED (needs a migration) — verification stamps have no actor, and a passing verify leaves no record
 `apps/procurement/models/RiskComplianceManagement/AuditSeals.py:216-218` (surfaced at
 `AuditTrail.py:523-526`) — no `last_verified_by`, and a pass writes no `AuditLog` row, so
 `auditseal/detail.html` renders "Last full verification passed on …" with nobody's name on it, on a
@@ -1031,3 +1031,6 @@ see the OUTSTANDING MIGRATION table above. The one finding that could NOT be spl
 
 **One file per commit throughout**, each with `git add '<path>'; git commit --only '<path>'` so a
 concurrent session's staged work could never be swept in.
+
+
+> **M11 closed after the fixer's run** (commits `f6afc92a` / `88646e7b` / `25651e8b` / `095c36db`). The fixer correctly deferred it because the `last_verified_by` column and its migration cannot be split — without the column every seal page raised `OperationalError 1054`. Both landed together in migration `0030`, which the main session generated under the cross-session announce protocol. Smoke sweep re-run afterwards: **253 checks, 0 failures**.
