@@ -98,7 +98,14 @@
           only when can_generate is true, so this branch always has something to say.
         {% endcomment %}
         <p class="form-help"><i data-lucide="lock"></i> {{ refusal_reason }}</p>
-        <p class="text-muted">Nothing on this page can be recomputed while the period is closed. The lines below read exactly as they read when they were generated &mdash; that is what makes a published scorecard something a supplier can be held to.</p>
+        {% comment %}
+          Only true when it IS the period that refused. A draft scorecard a non-admin is looking
+          at is not closed and CAN still be recomputed — by an admin — so saying otherwise here
+          would send the reader away from the one thing that would work.
+        {% endcomment %}
+        {% if obj.status != "draft" %}
+          <p class="text-muted">Nothing on this page can be recomputed while the period is closed. The lines below read exactly as they read when they were generated &mdash; that is what makes a published scorecard something a supplier can be held to.</p>
+        {% endif %}
       {% endif %}
     </div>
   </div>
