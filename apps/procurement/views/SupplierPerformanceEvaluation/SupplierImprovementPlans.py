@@ -48,9 +48,12 @@ Discipline a reviewer will otherwise go looking for:
 2. ``core.Party`` is imported INSIDE the function that needs it, so this module imports cleanly
    on its own and cannot start a cycle.
 """
+import os
+
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
 from django.db.models.functions import Coalesce
+from django.http import FileResponse
 from django.urls import reverse
 
 # NOT-YET-WIRED entity of this SAME sub-module: import the entity MODULES directly — see the
@@ -272,6 +275,54 @@ def improvementplan_edit(request, pk):
         request, model=SupplierImprovementPlan, pk=pk, form_class=SupplierImprovementPlanForm,
         template=TEMPLATE_FORM,
         success_url=reverse("procurement:improvementplan_detail", args=[pk]))
+
+
+@login_required
+def improvementplan_evidence(request, pk):
+    """Hand back this plan's uploaded evidence — authenticated, tenant-scoped, as an attachment.
+
+    WARNING, and the reason this view exists: ``evidence.url`` is a raw ``MEDIA_URL`` path served
+    by the web server, so linking it hands the file to anybody who can guess a filename under the
+    month's folder — no login, no session, no tenant. An NCR pack or an audit report attached to
+    a supplier's plan is exactly what must not be readable that way. The upload validation is
+    already correct (``clean_evidence`` applies the extension allow-list and the size cap); the
+    gap was purely in SERVING. Mirrors ``DocumentKnowledgeManagement/Revisions.py``'s
+    ``pdocrevision_download``, which is the app's precedent for this.
+
+    Two headers do the rest:
+
+    * ``Content-Disposition: attachment`` — the bytes are handed to the browser to save, never
+      rendered on this origin. An uploaded ``.html`` served inline would be stored XSS against
+      every logged-in member of the workspace.
+    * ``X-Content-Type-Options: nosniff`` — ``SECURE_CONTENT_TYPE_NOSNIFF`` only applies outside
+      DEBUG, so it is set here rather than assumed.
+    """
+    obj = get_object_or_404(
+        SupplierImprovementPlan.objects.only("pk", "tenant_id", "number", "evidence"),
+        pk=pk, tenant=request.tenant)
+    if not obj.evidence:
+        messages.error(request, f"{obj.number} has no uploaded evidence file — its proof may be "
+                                "the linked one instead.")
+        return redirect("procurement:improvementplan_detail", pk=pk)
+
+    try:
+        handle = obj.evidence.open("rb")
+    except (OSError, ValueError):
+        # The row can outlive its bytes: a file removed from MEDIA_ROOT behind Django's back has
+        # to be a message on the page it was linked from, never a 500 on a download click.
+        messages.error(request, f"The evidence stored against {obj.number} could not be read "
+                                "back from storage.")
+        return redirect("procurement:improvementplan_detail", pk=pk)
+
+    # The stored basename, with any CR/LF removed: it is user-supplied and it is about to be
+    # written into a response header. Django refuses a header carrying a newline outright
+    # (BadHeaderError); stripping is what keeps that correct refusal from becoming a 500.
+    filename = os.path.basename(obj.evidence.name) or f"{obj.number}-evidence"
+    filename = filename.replace("\r", " ").replace("\n", " ")
+
+    response = FileResponse(handle, as_attachment=True, filename=filename)
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def _plan_in(request, pk, statuses, verb):
