@@ -473,6 +473,7 @@ from .SupplierPerformanceEvaluation.SupplierImprovementPlans import (
     improvementplan_delete,
     improvementplan_detail,
     improvementplan_edit,
+    improvementplan_evidence,
     improvementplan_list,
     improvementplan_monitor,
 )
