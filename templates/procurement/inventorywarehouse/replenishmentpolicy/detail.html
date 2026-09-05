@@ -39,7 +39,14 @@
     <div class="page-actions">
       <a href="{% url 'scm:item_detail' obj.item.pk %}" class="btn btn-outline"><i data-lucide="package"></i> Item</a>
       {% if rule_url %}<a href="{{ rule_url }}" class="btn btn-outline"><i data-lucide="gauge"></i> Reorder rule</a>{% endif %}
-      <a href="{% url 'procurement:replenishmentpolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        Writing a policy is @tenant_admin_required — it presets the vendor, cost centre, budget
+        and GL coding of the requisitions a release raises. The decorator is the enforcement;
+        this test only stops the page offering a button that is guaranteed to 403.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'procurement:replenishmentpolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
     </div>
   </div>
 
@@ -191,18 +198,21 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
-    <div class="card-body">
-      <p class="text-muted">Deleting a policy does not touch the SCM reorder rule, the item or any requisition already raised. What it removes is procurement's glue: this item falls back to its any-location policy, or to no policy at all, and a run then has no vendor, no rounding and no requisition defaults for it. Deactivating is almost always the better move — an inactive policy is never resolved, and the history stays readable.</p>
-      {% comment %}
-        Delete is @require_POST, so it can only be a form. Only the primary key reaches the
-        confirm string: the SKU and the location code are user-authored, and the HTML attribute
-        parser un-escapes an escaped apostrophe back into the JS string literal.
-      {% endcomment %}
-      <form method="post" action="{% url 'procurement:replenishmentpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment policy #{{ obj.pk }}? This item falls back to its any-location policy, or to no procurement policy at all — the SCM reorder rule is untouched either way.');">
-        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete policy</button>
-      </form>
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Deleting a policy does not touch the SCM reorder rule, the item or any requisition already raised. What it removes is procurement's glue: this item falls back to its any-location policy, or to no policy at all, and a run then has no vendor, no rounding and no requisition defaults for it. Deactivating is almost always the better move — an inactive policy is never resolved, and the history stays readable.</p>
+        <p class="text-muted">Once this policy has shaped a suggestion that was <strong>released into a requisition</strong>, delete is refused outright: the suggestion's link to it is <code>SET_NULL</code>, so removing the policy would leave those lines claiming they were built on plain defaults when their rounded quantities prove otherwise. Deactivate it instead.</p>
+        {% comment %}
+          Delete is @require_POST, so it can only be a form. Only the primary key reaches the
+          confirm string: the SKU and the location code are user-authored, and the HTML attribute
+          parser un-escapes an escaped apostrophe back into the JS string literal.
+        {% endcomment %}
+        <form method="post" action="{% url 'procurement:replenishmentpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment policy #{{ obj.pk }}? This item falls back to its any-location policy, or to no procurement policy at all — the SCM reorder rule is untouched either way.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete policy</button>
+        </form>
+      </div>
     </div>
-  </div>
+  {% endif %}
 {% endblock %}
