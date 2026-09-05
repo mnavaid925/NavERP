@@ -68,11 +68,11 @@
       <dl class="detail-grid">
         <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_doc_type_display }}</dd></div>
         <div class="detail-item"><dt>Owner</dt>
-          <dd>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Current revision</dt>
           <dd>{% if current_revision %}<a href="{% url 'procurement:pdocrevision_detail' current_revision.pk %}">r{{ current_revision.revision_no }}</a>{% else %}<span class="text-muted">No approved revision yet</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Checked out</dt>
-          <dd>{% if lock_holder %}{{ lock_holder.get_full_name }} <span class="text-muted">since {{ obj.checked_out_at|date:"M d, Y H:i" }}</span>{% else %}<span class="text-muted">Not checked out</span>{% endif %}</dd></div>
+          <dd>{% if lock_holder %}{{ lock_holder.get_full_name|default:lock_holder.username }} <span class="text-muted">since {{ obj.checked_out_at|date:"M d, Y H:i" }}</span>{% else %}<span class="text-muted">Not checked out</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Effective</dt>
           <dd>{% if obj.effective_date %}{{ obj.effective_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Expires</dt>
@@ -84,15 +84,19 @@
         <div class="detail-item"><dt>Visible to vendors</dt>
           <dd>{% if obj.supplier_visible %}<span class="badge badge-info">Flagged for the vendor portal</span>{% else %}<span class="text-muted">Internal only</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Created</dt>
-          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name }}</span>{% endif %}</dd></div>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name|default:obj.created_by.username }}</span>{% endif %}</dd></div>
       </dl>
 
-      {% if obj.description %}
-        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Description</dt><dd>{{ obj.description|linebreaksbr }}</dd></div>
-      {% endif %}
-      {% if obj.tag_list %}
-        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Tags</dt>
-          <dd><span class="badge-group">{% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}</span></dd></div>
+      {% if obj.description or obj.tag_list %}
+        <dl class="detail-grid" style="margin-top:.75rem;">
+          {% if obj.description %}
+            <div class="detail-item"><dt class="text-muted">Description</dt><dd>{{ obj.description|linebreaksbr }}</dd></div>
+          {% endif %}
+          {% if obj.tag_list %}
+            <div class="detail-item"><dt class="text-muted">Tags</dt>
+              <dd><span class="badge-group">{% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}</span></dd></div>
+          {% endif %}
+        </dl>
       {% endif %}
     </div>
   </div>
@@ -116,7 +120,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Revision chain</h2>
-      <span class="text-muted">newest first · only the approved revision the document points at is the current one</span>
+      <span class="text-muted">the 50 most recent, newest first · only the approved revision the document points at is the current one</span>
       {% if can_upload %}
         <a class="btn btn-outline btn-sm" href="{% url 'procurement:pdocument_revision_upload' obj.pk %}"><i data-lucide="upload"></i> Upload revision</a>
       {% endif %}
@@ -149,7 +153,7 @@
               <td class="fw-600">
                 <a href="{% url 'procurement:pdocrevision_detail' r.pk %}">r{{ r.revision_no }}</a>
                 <div>
-                  {% if r.is_current %}<span class="badge badge-green">Current</span>
+                  {% if r.is_current and r.is_approved %}<span class="badge badge-green">Current</span>
                   {% elif r.is_approved %}<span class="badge badge-amber">Superseded</span>
                   {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
                 </div>
@@ -162,12 +166,12 @@
               <td>{% if r.change_note %}{{ r.change_note }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>
                 {{ r.created_at|date:"M d, Y H:i" }}
-                {% if r.uploaded_by %}<div class="text-muted">{{ r.uploaded_by.get_full_name }}</div>{% endif %}
+                {% if r.uploaded_by %}<div class="text-muted">{{ r.uploaded_by.get_full_name|default:r.uploaded_by.username }}</div>{% endif %}
               </td>
               <td>
                 {% if r.is_approved %}
                   <span class="text-ok">Approved {{ r.approved_at|date:"M d, Y" }}</span>
-                  {% if r.approved_by %}<div class="text-muted">{{ r.approved_by.get_full_name }}</div>{% endif %}
+                  {% if r.approved_by %}<div class="text-muted">{{ r.approved_by.get_full_name|default:r.approved_by.username }}</div>{% endif %}
                 {% else %}
                   <span class="text-muted">Not approved</span>
                 {% endif %}
@@ -186,9 +190,11 @@
                         {% csrf_token %}<button class="btn-icon" type="submit" title="Approve" aria-label="Approve"><i data-lucide="check"></i></button>
                       </form>
                     {% endif %}
-                    <form method="post" action="{% url 'procurement:pdocrevision_delete' r.pk %}" onsubmit="return confirm('Delete r{{ r.revision_no }} of {{ obj.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
-                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                    </form>
+                    {% if not r.is_current %}
+                      <form method="post" action="{% url 'procurement:pdocrevision_delete' r.pk %}" onsubmit="return confirm('Delete r{{ r.revision_no }} of {{ obj.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
@@ -241,11 +247,21 @@
     <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">every one is recorded in the audit trail</span></div>
     <div class="card-body">
       <div class="page-actions">
+        {% comment %}
+          can_release is the view's own holder-or-administrator rule, so the button appears only
+          for somebody pdocument_release would actually let through; everybody else reads who
+          holds it in the card above. Check out is hidden on an archived document because
+          pdocument_checkout refuses one. Both are re-checked in the view.
+        {% endcomment %}
         {% if obj.is_checked_out %}
-          <form method="post" action="{% url 'procurement:pdocument_release' obj.pk %}" onsubmit="return confirm('Release the checkout on {{ obj.number }}?');">
-            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="unlock"></i> Release checkout</button>
-          </form>
-        {% else %}
+          {% if can_release %}
+            <form method="post" action="{% url 'procurement:pdocument_release' obj.pk %}" onsubmit="return confirm('Release the checkout on {{ obj.number }}?');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="unlock"></i> Release checkout</button>
+            </form>
+          {% else %}
+            <span class="text-muted">{{ lock_holder.get_full_name|default:lock_holder.username }} holds this checkout — only they or a workspace administrator can release it.</span>
+          {% endif %}
+        {% elif obj.status != 'archived' %}
           <form method="post" action="{% url 'procurement:pdocument_checkout' obj.pk %}">
             {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Check out</button>
           </form>
@@ -272,6 +288,7 @@
       </div>
 
       <p class="text-muted" style="margin-top:.75rem;">{{ search_note }}</p>
+      <p class="text-muted">{{ classification_note }}</p>
     </div>
   </div>
 
@@ -279,9 +296,15 @@
     <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
     <div class="card-body">
       <p class="text-muted">Deleting removes this document and every revision RECORD it holds. The stored files themselves are not reclaimed from disk here — reclaiming them is a supervised job, not a side effect of a button. If the document is simply out of use, archive it instead: an archived document keeps its revisions and stays searchable.</p>
-      <form method="post" action="{% url 'procurement:pdocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }} and every revision record it holds? The stored files are not reclaimed from disk here.');">
-        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete document</button>
-      </form>
+      {% if obj.current_revision_no %}
+        <p class="text-muted">{{ obj.number }} has an approved revision chain, so it cannot be deleted — approved history is never rewritten here. Archive it instead.</p>
+      {% elif request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'procurement:pdocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }} and every revision record it holds? The stored files are not reclaimed from disk here.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete document</button>
+        </form>
+      {% else %}
+        <p class="text-muted">Only a workspace administrator can delete a document.</p>
+      {% endif %}
     </div>
   </div>
 {% endblock %}
