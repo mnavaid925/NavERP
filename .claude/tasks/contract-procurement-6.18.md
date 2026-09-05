@@ -3,7 +3,31 @@
 **Status: FROZEN.** Every name below is the interface. A name that drifts is a silently blank
 page region or a `NoReverseMatch` (L7) — the smoke step arbitrates against THIS file, not against
 the code. Build plan: `.claude/tasks/todo.md` § `6.18-A`…`6.18-M`. Research:
-`.claude/tasks/research-procurement-6.18.md`. Base sha for review: `56ae21a9`.
+`.claude/tasks/research-procurement-6.18.md`.
+
+**Phase 4 review scope — path globs, NOT a commit range.** The session-start sha was `56ae21a9`,
+but `56ae21a9..HEAD` is **useless as a review range**: four sessions commit to `main` in this one
+working tree, so that range interleaves 6.16's `SupplierPerformanceEvaluation/`, 6.17's
+`RiskComplianceManagement/` and 6.19's `DocumentKnowledgeManagement/` with ours. Six reviewers
+handed it would file findings against other sub-modules, and the `code-fixer` phase would then
+"fix" another session's code against a contract it has never read. Scope every reviewer to:
+
+```
+apps/procurement/models/InventoryWarehouseIntegration/**
+apps/procurement/forms/InventoryWarehouseIntegration/**
+apps/procurement/views/InventoryWarehouseIntegration/**
+apps/procurement/urls/InventoryWarehouseIntegration/**
+templates/procurement/inventorywarehouse/**
+```
+
+**Note the `**`** — `templates/procurement/inventorywarehouse/*` is one level too shallow and
+would miss every `<entity>/<page>.html` file, i.e. all nine CRUD templates. This sub-module adds
+**no flat app-root module** (no `apps/procurement/<something>.py`), so the five globs are complete.
+
+The shared files touched at Integrate (`apps/core/navigation.py`, `admin.py`,
+`seed_procurement.py`, the four app-level `__init__.py`, `README.md`) are **not** reviewable by
+glob — a glob pulls in three peers' hunks too. Point reviewers at the **`6.18` / `InventoryWarehouse`
+blocks within those files only**, by name.
 
 Scope is **3 entities / 5 model classes + 3 derived no-model pages**. `CountVarianceReview`
 [CVR-] is **dropped** this pass (its only consumer is 6.16's scorecard; building a producer
@@ -25,6 +49,17 @@ before the consumer ships a table nobody reads).
   Never `git add`, never edit.
 - **Commits carry NO `Co-Authored-By` trailer** (user preference, confirmed this session).
   One `git add` + one `git commit` per file, PowerShell-safe with `;`.
+- **Name checks must run against peers' frozen contracts, not just `apps/`.** In a shared tree,
+  absence from disk is NOT absence from a peer's contract: 6.17 and 6.19 both grepped
+  `^class ProcurementPolicy` , both correctly found nothing, and both froze a `ProcurementPolicy`
+  in `app_label="procurement"` — which raises `RuntimeError: Conflicting 'procurementpolicy'
+  models` at startup and breaks `manage.py check` for **every** session sharing this checkout.
+  Verified clear for 6.18 against `.claude/tasks/contract-procurement-{6.9,6.13,6.16,6.17,6.19}.md`:
+  all five model names (`ReplenishmentPolicy`, `ReplenishmentRun`, `ReplenishmentSuggestion`,
+  `MaterialIssue`, `MaterialIssueLine`), all six url segments, and the url names. **Re-run that
+  check before adding any name this contract does not already list.**
+- If `manage.py check` starts failing with a conflicting-model error touching policies, it is the
+  6.17/6.19 collision above — **not ours**. Do not debug it as ours.
 
 ---
 
