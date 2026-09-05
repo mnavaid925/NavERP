@@ -124,10 +124,20 @@ def _supplier_parties(request):
 
 
 def _evaluation_qs(request):
-    """Tenant-scoped scorecards with their 6.16 line count annotated."""
+    """Tenant-scoped scorecards with their 6.16 line count annotated, newest period first.
+
+    The explicit ``order_by`` is NOT redundant with ``SupplierScorecard.Meta.ordering``:
+    ``annotate()`` adds a GROUP BY, and Django DROPS the model ordering from a grouped query —
+    so the register paginated an unordered queryset, raising ``UnorderedObjectListWarning`` on
+    every request, and on MySQL a LIMIT/OFFSET over an unordered GROUP BY is undefined, meaning
+    page 2 may repeat or drop rows once a tenant passes 15 periods. Restating the model's own
+    ordering is the fix the app already documents twice (``AdvancedShipmentNotice``,
+    ``EAuctionManagement/Auctions``).
+    """
     return (_scorecard_model().objects.filter(tenant=request.tenant)
             .select_related("party")
-            .annotate(line_count=Count("procurement_kpi_scores")))
+            .annotate(line_count=Count("procurement_kpi_scores"))
+            .order_by("-period_end", "-id"))
 
 
 def _evaluation_years(tenant):
