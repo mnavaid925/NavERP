@@ -306,6 +306,88 @@ condition. Fix the contract line too, or the next builder reintroduces it.
    `TenantUniqueMixin` first in MRO on the three header forms and correctly absent from the two
    child forms whose models carry no `tenant` column; colour-named badges only.
 
+### Pass 3 — `frontend-reviewer`
+
+12 templates confirmed read. One Critical, four Important, six Minor. **Critical reproduced by the
+main session.**
+
+#### R3-C1 — the `count_accuracy` window dropdown is permanently inert, and R1-C2 is the only exit
+
+**Files:** `templates/…/count_accuracy.html:91,94` with `CountAccuracy.py:180-182`.
+
+The template renders the **resolved** dates back into the inputs
+(`value="{{ date_from|date:'Y-m-d' }}"`), so after the first render both boxes are populated and
+every subsequent submit carries them — at which point `if date_from is None and date_to is None:`
+is False and the window is never applied. Selecting "Last 30 days" / "Last 180 days" / "Last 12
+months" **changes nothing**: the dropdown shows the new label as selected, the prose prints the old
+dates, and every figure stays on the first window.
+
+**These two Criticals trap the user between them.** The only way to escape the inert window is to
+clear a box — which is exactly R1-C2 and 500s. Fix both together.
+
+**Fix (template-only):** pre-fill from the **raw GET** value (`{{ request.GET.date_from }}`) so the
+boxes are empty unless the user typed a date, and let the prose keep printing the resolved window.
+Also: the `aria-label`s say "Counted from/to" but the view filters `scheduled_date__gte/lte` — and
+these inputs have no visible `<label>`, so the aria-label is the only name a screen reader gets.
+
+#### R3-I1 — `replenishmentpolicy/detail.html:56` inactive-rule caveat is backwards
+
+Says an inactive rule's figures "are what a run would read". `generate()` opens with
+`filter(..., is_active=True)` — an inactive rule is **never read by a run at all**. A buyer told
+otherwise expects the next run to propose against these numbers and gets silence.
+
+#### R3-I2 — the "no surprise at Post" promise fails for two lines of the same item
+
+`materialissue/detail.html:162` promises a shortfall is visible before Post. But
+`MaterialIssues.py:164` flags **per line**, while `post()` sums demand **per item across the
+document**. There is no `unique_together` on `(issue, item)` and the model comment says duplicates
+are expected. Two lines of 6 against 10 on hand: neither row shows the `badge-red Short` chip, and
+Post is refused with "only 10 available … cannot issue 12". **Fix view-side so the copy can
+stand** — mirror `post()`'s per-item aggregation in the detail view.
+
+#### R3-I3 — `stock_position.html:197` "can never disagree" is a guarantee the code does not make
+
+The same drift as R2-I1, seen from the template. Wording must admit that a policy which turns off
+either netting toggle, or sources by transfer/manufacture, makes its run disagree **on purpose**.
+
+#### R3-I4 — recording a decision throws the buyer back to page 1
+
+`replenishmentrun/detail.html:219` posts no `page`, and `replenishmentsuggestion_decide` redirects
+without one. Lines page at 25 and a run caps at 500, so a buyer working page 8 is bounced to page 1
+after **every** Save. Fix: hidden `page` field + append it on redirect.
+
+#### R3-M1…M6 (condensed)
+
+- `count_accuracy.html:101` — "so the ranking is intact" is true of the item table but not the
+  location table, which caps on `-variance_lines` and only then re-sorts by accuracy; a 0%-accurate
+  location can be cut in favour of a 95% one. Bites only above 500 counted locations.
+- `count_accuracy.html:99` vs `:53` — "Cancelled counts are left out" is unqualified, but
+  `tasks_total` counts them. Say "left out of the accuracy figures below".
+- `materialissue/detail.html:102` vs `:75` — page reads "Document value 900.00" and two cards down
+  "valued at -900.00" for the same document (`value_impact()` is signed, `total_value` is not).
+  Explain inline rather than hiding the sign.
+- `replenishmentpolicy/detail.html:165` — renders "the last **0** suggestions" when empty.
+- `stock_position.html:175` — the only icon-only control in the 12 files with `title` but no
+  `aria-label`.
+- `replenishmentrun/detail.html:121` — "one per vendor, all draft" is a state claim that goes stale
+  the moment one is submitted; "raised as drafts" reads correctly forever.
+
+#### Verified clean by this pass
+
+Zero `{#` leaks across all 12 files (every note uses `{% comment %}`). Every `badge-*` is
+colour-named and every `stat-icon` variant valid — **including the ones injected from Python**
+(`SOURCE_CSS`, `TRIGGER_CSS`, `STATUS_CSS`, `DECISION_CSS`, `MOVEMENT_CSS`, `PUTAWAY_TASK_CSS`,
+`_CAPACITY_CSS_BANDS`, `_ACCURACY_BANDS`); no semantic variant anywhere (L33). All 20 `{% url %}`
+names resolve. No `|slugify`; all six pk dropdowns use `|stringformat:"d"` and re-select on reload.
+All four paginated pages delegate to the shared partial and replay every GET param except `page`.
+13/13 tables in `.table-wrap`; every empty-state `colspan` matches its header count; 12/12 extend
+`base.html`.
+
+**Called out as done well:** `receipt_bin_map.html:106` is the sentence `stock_position.html:111`
+should have been — same 500-row cap, same need to explain it, and its version is *provably* true of
+the view's `order_by(...)[:ROW_CAP+1]` + stats-over-capped-pks pipeline. Written the same week as
+R1-M2, against a harder pipeline, and correct.
+
 ---
 
 **Called out as done well:** `MaterialIssue.post()` implements all four properties of the
