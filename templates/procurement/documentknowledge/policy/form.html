@@ -78,7 +78,7 @@
               {% elif field.name == "effective_from" %}
                 <div class="form-help">When the rule starts to apply. It is a date people read, not a switch — nothing begins or stops enforcing anything on it.</div>
               {% elif field.name == "next_review_on" %}
-                <div class="form-help">When somebody should read this again. Once the date arrives the policy is badged "Review overdue" on the register and counted in the tile above it.</div>
+                <div class="form-help">When somebody should read this again. Once the date arrives the policy is badged "Review due" on the register and counted in the tile above it.</div>
               {% elif field.name == "threshold_amount" %}
                 <div class="form-help">The guideline figure the written rule quotes — for example the value above which three quotes are expected. It is documentation. Nothing in this module reads it to stop, route or approve anything; approval bands are the routing rules in Approval Workflow Engine (6.3). Set it together with the basis below, or leave both blank.</div>
               {% elif field.name == "threshold_basis" %}
@@ -107,7 +107,7 @@
     <div class="card-header"><h2 class="card-title">What happens next</h2><span class="text-muted">draft, publish, supersede</span></div>
     <div class="card-body">
       <p class="text-muted">{{ advisory_note }}</p>
-      <p class="text-muted">Saving creates the policy as a draft — visible in the library, not yet stated as in force. A workspace administrator publishes it, which stamps the publication time and, when this version replaces a published one, archives that predecessor in the same moment so the register never shows two live versions of the same rule. Archiving is available to anyone and deletes nothing.</p>
+      <p class="text-muted">Saving creates the policy as a draft — visible in the library, not yet stated as in force. A workspace administrator publishes it, which stamps the publication time and, when this version is LINKED to a published predecessor, archives that predecessor in the same moment. A version published without that link sits alongside its predecessor rather than retiring it, so filling in "previous version" is what keeps the library saying which rule is in force. Archiving is a workspace-administrator action too, and deletes nothing.</p>
     </div>
   </div>
 {% endblock %}
