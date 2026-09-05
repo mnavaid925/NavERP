@@ -123,6 +123,14 @@ from .SpendAnalyticsReporting.SpendReports import SpendReportForm
 from .BudgetCostManagement.BudgetMappings import BudgetMappingForm
 from .BudgetCostManagement.CostForecasts import CostForecastForm
 
+# 6.19 Document & Knowledge Management. Four form classes; the revision upload form is named
+# for the ACTION rather than the model because a revision is only ever created through the parent
+# document's upload route - there is no create-or-edit pair for it.
+from .DocumentKnowledgeManagement.Documents import ProcurementDocumentForm
+from .DocumentKnowledgeManagement.Revisions import ProcurementDocumentRevisionUploadForm
+from .DocumentKnowledgeManagement.Policies import ProcurementPolicyForm
+from .DocumentKnowledgeManagement.KnowledgeResources import KnowledgeResourceForm
+
 __all__ = [
     "EaucBidForm",
     "EaucInviteForm",
@@ -203,4 +211,8 @@ __all__ = [
     "SpendReportForm",
     "BudgetMappingForm",
     "CostForecastForm",
+    "ProcurementDocumentForm",
+    "ProcurementDocumentRevisionUploadForm",
+    "ProcurementPolicyForm",
+    "KnowledgeResourceForm",
 ]
