@@ -156,7 +156,7 @@
                     {% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}
                   </div>
                 {% endif %}
-                {% if obj.is_review_due %}<div><span class="badge badge-amber">Review overdue</span></div>{% endif %}
+                {% if obj.is_review_due %}<div><span class="badge badge-amber">Review due</span></div>{% endif %}
               </td>
               <td>{{ obj.get_resource_type_display }}</td>
               <td>{{ obj.get_category_display }}</td>
