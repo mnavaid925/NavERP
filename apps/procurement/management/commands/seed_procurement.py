@@ -2619,403 +2619,409 @@ class Command(BaseCommand):
         period_end = (anchor or NOW.date()) - timedelta(days=1)
         period_start = period_end - timedelta(days=90)
 
-        # -- 1. the KPI library --------------------------------------------------------------------
-        # One KPI per ``CATEGORY_CHOICES`` value plus a second service one, spanning all three
-        # sources: six derived, two 360-survey, one hand-entered. Every ``metric`` below is a key
-        # that EXISTS in ``performance.DERIVED_RESOLVERS`` - that registry is CLOSED, and a KPI
-        # naming a key with no resolver is one that can never produce a number however long anyone
-        # waits for it.
-        #
-        # ``bands`` is (target, warning, critical) in the order ``SupplierKpi.clean()`` walks them,
-        # so each triple is ordered the way its own ``direction`` requires: descending for
-        # higher-is-better, ascending for lower-is-better. ``linear`` additionally needs the target
-        # and the critical line to point the same way, or it silently falls back to the band table.
-        kpi_specs = [
-            dict(code="OTD-01", name="On-time delivery", category="delivery", unit="pct",
-                 direction="higher_is_better", source="derived", metric="otd", weight=20,
-                 bands=("95", "90", "85"), scoring="linear", dimension="delivery",
-                 benchmark="94", order=10,
-                 description="Share of this supplier's booked goods receipts that arrived on or "
-                             "before the purchase order's expected date. A PO with no expected "
-                             "date cannot be late and is excluded from both sides."),
-            dict(code="QLT-01", name="Defect and reject rate", category="quality", unit="pct",
-                 direction="lower_is_better", source="derived", metric="defect_rate", weight=15,
-                 bands=("0.5", "2", "5"), scoring="linear", dimension="quality",
-                 benchmark="1.8", order=20,
-                 description="Rejected quantity as a share of everything inspected across this "
-                             "supplier's goods-receipt lines."),
-            dict(code="CST-01", name="Price competitiveness", category="cost", unit="pct",
-                 direction="higher_is_better", source="derived", metric="price_competitiveness",
-                 weight=15, bands=("98", "95", "90"), scoring="linear", dimension="price",
-                 benchmark="96", order=30,
-                 description="How close this supplier quoted to the best price received on the "
-                             "same RFQs. 100% means it WAS the cheapest quote every time."),
-            dict(code="SRV-01", name="Quote turnaround", category="service", unit="days",
-                 direction="lower_is_better", source="derived", metric="quote_turnaround",
-                 weight=10, bands=("3", "5", "10"), scoring="linear",
-                 dimension="responsiveness", order=40,
-                 description="Mean days from RFQ issue to quote received. Quotes whose RFQ was "
-                             "never issue-dated are excluded - there is nothing to measure from."),
-            dict(code="CMP-01", name="Invoice dispute rate", category="compliance", unit="pct",
-                 direction="lower_is_better", source="derived", metric="dispute_rate", weight=10,
-                 bands=("0", "5", "15"), scoring="linear", order=50,
-                 description="Disputes raised against this supplier's invoices as a share of the "
-                             "invoices it sent. Measured, but deliberately feeds no scorecard "
-                             "dimension - it is a paperwork signal, not a delivery one."),
-            dict(code="RSK-01", name="Suspension incidents", category="risk", unit="count",
-                 direction="lower_is_better", source="derived", metric="suspension_incidents",
-                 weight=5, bands=("0", "1", "2"), scoring="band", order=60,
-                 description="Blocks that came into force against this supplier in the period. "
-                             "The one metric whose honest answer can be a real zero - but only "
-                             "for a supplier we actually transacted with."),
-            dict(code="SRV-02", name="360: communication and responsiveness", category="service",
-                 unit="score", direction="higher_is_better", source="survey", weight=10,
-                 bands=("80", "65", "50"), scoring="direct", dimension="responsiveness", order=70,
-                 description="The importance-weighted mean of internal 360 responses about how "
-                             "this supplier communicates. The supplier's own self-assessment sits "
-                             "beside it on the perception-gap board and is never folded in."),
-            dict(code="ESG-01", name="360: sustainability and ESG commitment", category="esg",
-                 unit="score", direction="higher_is_better", source="survey", weight=5,
-                 bands=("75", "60", "45"), scoring="direct", frequency="annual", order=80,
-                 description="The importance-weighted mean of internal 360 responses about this "
-                             "supplier's environmental and social commitments."),
-            dict(code="INV-01", name="Innovation and continuous improvement",
-                 category="innovation", unit="score", direction="higher_is_better",
-                 source="manual", weight=5, bands=("80", "65", "50"), scoring="band",
-                 tier="strategic", frequency="annual", order=90,
-                 description="Hand-scored at the annual review: what this supplier brought us "
-                             "that we never asked for. Strategic suppliers only."),
-        ]
-
-        kpis, made_kpis = {}, 0
-        for spec in kpi_specs:
-            target, warning, critical = spec["bands"]
-            kpi, was_created = SupplierKpi.objects.get_or_create(
-                tenant=tenant, code=spec["code"],
-                defaults={
-                    "name": spec["name"],
-                    "description": spec["description"],
-                    "category": spec["category"],
-                    "unit": spec["unit"],
-                    "direction": spec["direction"],
-                    "source": spec["source"],
-                    # Blank on anything but a derived KPI - clean() refuses a stale metric key on
-                    # a manual or survey row, because it reads like a computation that is not
-                    # happening.
-                    "derived_metric": spec.get("metric", ""),
-                    "weight": spec["weight"],
-                    "target_value": Decimal(target),
-                    "warning_threshold": Decimal(warning),
-                    "critical_threshold": Decimal(critical),
-                    "scoring_method": spec["scoring"],
-                    "maps_to_dimension": spec.get("dimension", ""),
-                    "applies_to": "tier" if spec.get("tier") else "all",
-                    "applies_to_tier": spec.get("tier", ""),
-                    "review_frequency": spec.get("frequency", "quarterly"),
-                    # Hand-entered reference figure. There is no external benchmark feed in this
-                    # system and no page may imply there is.
-                    "industry_benchmark_value": (Decimal(spec["benchmark"])
-                                                 if spec.get("benchmark") else None),
-                    "owner": owner,
-                    "display_order": spec["order"],
-                    "notes": "Seeded KPI definition.",
-                })
-            kpis[spec["code"]] = kpi
-            made_kpis += int(was_created)
-
-        # -- 2. one DRAFT scorecard per cohort supplier ---------------------------------------------
-        # Keyed on the period, never on ``number``: SCR- numbers are allocated at save time and a
-        # get_or_create on one would open a second card every run.
-        cards, made_cards = [], 0
-        for party in cohort:
-            card, was_created = SupplierScorecard.objects.get_or_create(
-                tenant=tenant, party=party, period_start=period_start, period_end=period_end,
-                defaults={
-                    "status": "draft",
-                    "notes": ("Seeded 6.16 evaluation period. Scored from the procurement KPI "
-                              "library rather than from SCM's four-dimension signal engine."),
-                })
-            cards.append(card)
-            made_cards += int(was_created)
-
-        # -- 3. the 360 responses --------------------------------------------------------------------
-        # Ratings fall away down the cohort so the benchmark board has something to rank, and every
-        # supplier's self-assessment is filed at or above what we said - which is exactly what gives
-        # the perception-gap board a delta worth discussing. ``survey_aggregate`` reads only
-        # SUBMITTED, INTERNAL rows; the self-assessments sit next to them and never fold in.
-        #
-        # (SRV-02 internal A, SRV-02 internal B, SRV-02 self, ESG-01 internal, ESG-01 self)
-        survey_profile = [
-            (5, 4, 5, 4, 5),
-            (4, 3, 5, 3, 4),
-            (3, 2, 4, 3, 4),
-            (4, 4, 5, 2, 4),
-            (2, 3, 4, 3, 3),
-        ]
-        rating_comment = {
-            5: "Consistently ahead of what we asked for.",
-            4: "Reliable; the occasional slip gets flagged early.",
-            3: "Meets the contract and nothing beyond it.",
-            2: "Chasing has become routine and it costs us time.",
-            1: "Repeated failures with no plan behind them.",
-        }
-        made_feedback = 0
-        for index, (party, card) in enumerate(zip(cohort, cards)):
-            ratings = survey_profile[index % len(survey_profile)]
-            contact = f"{party.name} account manager"
-            # ``zip`` truncates to the shortest leg, which IS the guard: a workspace with one user
-            # files one internal voice, and one with none files no internal rows at all rather than
-            # a pile of respondent=NULL rows that would collide with each other and with the
-            # self-assessment under the model's own uniqueness rule.
-            survey_plan = [
-                ("SRV-02", list(zip(members, ("procurement", "quality"), ratings[0:2], (8, 5))),
-                 ratings[2], 5),
-                ("ESG-01", list(zip(members, ("operations",), ratings[3:4], (6,))),
-                 ratings[4], 4),
+        # ONE transaction for steps 1-6. The re-entry guard above is ``SupplierKpi.objects
+        # .filter(tenant=tenant).exists()``, so a crash after step 1 would leave the tenant
+        # holding a KPI library and no scorecards, feedback or plans - and that guard would
+        # then PRESERVE the broken state forever. Same wrap, for the same reason, as
+        # ``_seed_templates`` above.
+        with transaction.atomic():
+            # -- 1. the KPI library ----------------------------------------------------------------
+            # One KPI per ``CATEGORY_CHOICES`` value plus a second service one, spanning all three
+            # sources: six derived, two 360-survey, one hand-entered. Every ``metric`` below is a key
+            # that EXISTS in ``performance.DERIVED_RESOLVERS`` - that registry is CLOSED, and a KPI
+            # naming a key with no resolver is one that can never produce a number however long anyone
+            # waits for it.
+            #
+            # ``bands`` is (target, warning, critical) in the order ``SupplierKpi.clean()`` walks them,
+            # so each triple is ordered the way its own ``direction`` requires: descending for
+            # higher-is-better, ascending for lower-is-better. ``linear`` additionally needs the target
+            # and the critical line to point the same way, or it silently falls back to the band table.
+            kpi_specs = [
+                dict(code="OTD-01", name="On-time delivery", category="delivery", unit="pct",
+                     direction="higher_is_better", source="derived", metric="otd", weight=20,
+                     bands=("95", "90", "85"), scoring="linear", dimension="delivery",
+                     benchmark="94", order=10,
+                     description="Share of this supplier's booked goods receipts that arrived on or "
+                                 "before the purchase order's expected date. A PO with no expected "
+                                 "date cannot be late and is excluded from both sides."),
+                dict(code="QLT-01", name="Defect and reject rate", category="quality", unit="pct",
+                     direction="lower_is_better", source="derived", metric="defect_rate", weight=15,
+                     bands=("0.5", "2", "5"), scoring="linear", dimension="quality",
+                     benchmark="1.8", order=20,
+                     description="Rejected quantity as a share of everything inspected across this "
+                                 "supplier's goods-receipt lines."),
+                dict(code="CST-01", name="Price competitiveness", category="cost", unit="pct",
+                     direction="higher_is_better", source="derived", metric="price_competitiveness",
+                     weight=15, bands=("98", "95", "90"), scoring="linear", dimension="price",
+                     benchmark="96", order=30,
+                     description="How close this supplier quoted to the best price received on the "
+                                 "same RFQs. 100% means it WAS the cheapest quote every time."),
+                dict(code="SRV-01", name="Quote turnaround", category="service", unit="days",
+                     direction="lower_is_better", source="derived", metric="quote_turnaround",
+                     weight=10, bands=("3", "5", "10"), scoring="linear",
+                     dimension="responsiveness", order=40,
+                     description="Mean days from RFQ issue to quote received. Quotes whose RFQ was "
+                                 "never issue-dated are excluded - there is nothing to measure from."),
+                dict(code="CMP-01", name="Invoice dispute rate", category="compliance", unit="pct",
+                     direction="lower_is_better", source="derived", metric="dispute_rate", weight=10,
+                     bands=("0", "5", "15"), scoring="linear", order=50,
+                     description="Disputes raised against this supplier's invoices as a share of the "
+                                 "invoices it sent. Measured, but deliberately feeds no scorecard "
+                                 "dimension - it is a paperwork signal, not a delivery one."),
+                dict(code="RSK-01", name="Suspension incidents", category="risk", unit="count",
+                     direction="lower_is_better", source="derived", metric="suspension_incidents",
+                     weight=5, bands=("0", "1", "2"), scoring="band", order=60,
+                     description="Blocks that came into force against this supplier in the period. "
+                                 "The one metric whose honest answer can be a real zero - but only "
+                                 "for a supplier we actually transacted with."),
+                dict(code="SRV-02", name="360: communication and responsiveness", category="service",
+                     unit="score", direction="higher_is_better", source="survey", weight=10,
+                     bands=("80", "65", "50"), scoring="direct", dimension="responsiveness", order=70,
+                     description="The importance-weighted mean of internal 360 responses about how "
+                                 "this supplier communicates. The supplier's own self-assessment sits "
+                                 "beside it on the perception-gap board and is never folded in."),
+                dict(code="ESG-01", name="360: sustainability and ESG commitment", category="esg",
+                     unit="score", direction="higher_is_better", source="survey", weight=5,
+                     bands=("75", "60", "45"), scoring="direct", frequency="annual", order=80,
+                     description="The importance-weighted mean of internal 360 responses about this "
+                                 "supplier's environmental and social commitments."),
+                dict(code="INV-01", name="Innovation and continuous improvement",
+                     category="innovation", unit="score", direction="higher_is_better",
+                     source="manual", weight=5, bands=("80", "65", "50"), scoring="band",
+                     tier="strategic", frequency="annual", order=90,
+                     description="Hand-scored at the annual review: what this supplier brought us "
+                                 "that we never asked for. Strategic suppliers only."),
             ]
-            for kpi_code, voices, self_rating, self_importance in survey_plan:
-                kpi = kpis[kpi_code]
-                for respondent, function, rating, importance in voices:
+
+            kpis, made_kpis = {}, 0
+            for spec in kpi_specs:
+                target, warning, critical = spec["bands"]
+                kpi, was_created = SupplierKpi.objects.get_or_create(
+                    tenant=tenant, code=spec["code"],
+                    defaults={
+                        "name": spec["name"],
+                        "description": spec["description"],
+                        "category": spec["category"],
+                        "unit": spec["unit"],
+                        "direction": spec["direction"],
+                        "source": spec["source"],
+                        # Blank on anything but a derived KPI - clean() refuses a stale metric key on
+                        # a manual or survey row, because it reads like a computation that is not
+                        # happening.
+                        "derived_metric": spec.get("metric", ""),
+                        "weight": spec["weight"],
+                        "target_value": Decimal(target),
+                        "warning_threshold": Decimal(warning),
+                        "critical_threshold": Decimal(critical),
+                        "scoring_method": spec["scoring"],
+                        "maps_to_dimension": spec.get("dimension", ""),
+                        "applies_to": "tier" if spec.get("tier") else "all",
+                        "applies_to_tier": spec.get("tier", ""),
+                        "review_frequency": spec.get("frequency", "quarterly"),
+                        # Hand-entered reference figure. There is no external benchmark feed in this
+                        # system and no page may imply there is.
+                        "industry_benchmark_value": (Decimal(spec["benchmark"])
+                                                     if spec.get("benchmark") else None),
+                        "owner": owner,
+                        "display_order": spec["order"],
+                        "notes": "Seeded KPI definition.",
+                    })
+                kpis[spec["code"]] = kpi
+                made_kpis += int(was_created)
+
+            # -- 2. one DRAFT scorecard per cohort supplier -----------------------------------------
+            # Keyed on the period, never on ``number``: SCR- numbers are allocated at save time and a
+            # get_or_create on one would open a second card every run.
+            cards, made_cards = [], 0
+            for party in cohort:
+                card, was_created = SupplierScorecard.objects.get_or_create(
+                    tenant=tenant, party=party, period_start=period_start, period_end=period_end,
+                    defaults={
+                        "status": "draft",
+                        "notes": ("Seeded 6.16 evaluation period. Scored from the procurement KPI "
+                                  "library rather than from SCM's four-dimension signal engine."),
+                    })
+                cards.append(card)
+                made_cards += int(was_created)
+
+            # -- 3. the 360 responses ----------------------------------------------------------------
+            # Ratings fall away down the cohort so the benchmark board has something to rank, and every
+            # supplier's self-assessment is filed at or above what we said - which is exactly what gives
+            # the perception-gap board a delta worth discussing. ``survey_aggregate`` reads only
+            # SUBMITTED, INTERNAL rows; the self-assessments sit next to them and never fold in.
+            #
+            # (SRV-02 internal A, SRV-02 internal B, SRV-02 self, ESG-01 internal, ESG-01 self)
+            survey_profile = [
+                (5, 4, 5, 4, 5),
+                (4, 3, 5, 3, 4),
+                (3, 2, 4, 3, 4),
+                (4, 4, 5, 2, 4),
+                (2, 3, 4, 3, 3),
+            ]
+            rating_comment = {
+                5: "Consistently ahead of what we asked for.",
+                4: "Reliable; the occasional slip gets flagged early.",
+                3: "Meets the contract and nothing beyond it.",
+                2: "Chasing has become routine and it costs us time.",
+                1: "Repeated failures with no plan behind them.",
+            }
+            made_feedback = 0
+            for index, (party, card) in enumerate(zip(cohort, cards)):
+                ratings = survey_profile[index % len(survey_profile)]
+                contact = f"{party.name} account manager"
+                # ``zip`` truncates to the shortest leg, which IS the guard: a workspace with one user
+                # files one internal voice, and one with none files no internal rows at all rather than
+                # a pile of respondent=NULL rows that would collide with each other and with the
+                # self-assessment under the model's own uniqueness rule.
+                survey_plan = [
+                    ("SRV-02", list(zip(members, ("procurement", "quality"), ratings[0:2], (8, 5))),
+                     ratings[2], 5),
+                    ("ESG-01", list(zip(members, ("operations",), ratings[3:4], (6,))),
+                     ratings[4], 4),
+                ]
+                for kpi_code, voices, self_rating, self_importance in survey_plan:
+                    kpi = kpis[kpi_code]
+                    for respondent, function, rating, importance in voices:
+                        _row, was_created = SupplierFeedback.objects.get_or_create(
+                            tenant=tenant, supplier=party, scorecard=card, kpi=kpi,
+                            respondent=respondent,
+                            defaults={
+                                "period_start": period_start, "period_end": period_end,
+                                "respondent_kind": "internal",
+                                "respondent_function": function,
+                                "rating": rating,
+                                "importance": importance,
+                                "status": "submitted",
+                                "due_date": period_end + timedelta(days=10),
+                                "requested_by": owner,
+                                "requested_at": NOW - timedelta(days=21),
+                                "submitted_at": NOW - timedelta(days=14),
+                                "comment": rating_comment[rating],
+                            })
+                        made_feedback += int(was_created)
+                    # The supplier's own answer, filed on its behalf: ``respondent`` stays NULL (an
+                    # external respondent has no internal account) and ``respondent_name`` carries who
+                    # said it. That NULL is also what keeps this a distinct row from the internal ones
+                    # under the (supplier, scorecard, kpi, respondent) rule clean() enforces.
                     _row, was_created = SupplierFeedback.objects.get_or_create(
-                        tenant=tenant, supplier=party, scorecard=card, kpi=kpi,
+                        tenant=tenant, supplier=party, scorecard=card, kpi=kpi, respondent=None,
+                        defaults={
+                            "period_start": period_start, "period_end": period_end,
+                            "respondent_kind": "supplier_self",
+                            "respondent_name": contact,
+                            "respondent_function": "other",
+                            "rating": self_rating,
+                            "importance": self_importance,
+                            "status": "submitted",
+                            "due_date": period_end + timedelta(days=10),
+                            "requested_by": owner,
+                            "requested_at": NOW - timedelta(days=21),
+                            "submitted_at": NOW - timedelta(days=12),
+                            "comment": "Filed by the supplier as part of the joint review.",
+                        })
+                    made_feedback += int(was_created)
+
+                # The rest of the lifecycle, so the register is not four columns of green: a request
+                # still open and long past its due date (the overdue stat), one somebody declined, and
+                # one that timed out. All three are GENERAL commentary (``kpi=None``), so they cannot
+                # collide with the KPI rows above, and the expired one hangs off no scorecard at all -
+                # which is what ad-hoc feedback outside any period document looks like.
+                extras = []
+                if index == 0 and reviewer is not None:
+                    extras = [(card, owner, "finance", "requested", -18),
+                              (card, reviewer, "engineering", "declined", -12)]
+                elif index == 1 and owner is not None:
+                    extras = [(None, owner, "logistics", "expired", -30)]
+                for extra_card, respondent, function, status, due_offset in extras:
+                    _row, was_created = SupplierFeedback.objects.get_or_create(
+                        tenant=tenant, supplier=party, scorecard=extra_card, kpi=None,
                         respondent=respondent,
                         defaults={
                             "period_start": period_start, "period_end": period_end,
                             "respondent_kind": "internal",
                             "respondent_function": function,
-                            "rating": rating,
-                            "importance": importance,
-                            "status": "submitted",
-                            "due_date": period_end + timedelta(days=10),
+                            # No rating on purpose: only a SUBMITTED response needs one, and an
+                            # unanswered request scored as a zero would punish the supplier for
+                            # somebody's unopened inbox.
+                            "rating": None,
+                            "importance": 5,
+                            "status": status,
+                            "due_date": NOW.date() + timedelta(days=due_offset),
                             "requested_by": owner,
-                            "requested_at": NOW - timedelta(days=21),
-                            "submitted_at": NOW - timedelta(days=14),
-                            "comment": rating_comment[rating],
+                            "requested_at": NOW + timedelta(days=due_offset - 14),
+                            "comment": "",
                         })
                     made_feedback += int(was_created)
-                # The supplier's own answer, filed on its behalf: ``respondent`` stays NULL (an
-                # external respondent has no internal account) and ``respondent_name`` carries who
-                # said it. That NULL is also what keeps this a distinct row from the internal ones
-                # under the (supplier, scorecard, kpi, respondent) rule clean() enforces.
-                _row, was_created = SupplierFeedback.objects.get_or_create(
-                    tenant=tenant, supplier=party, scorecard=card, kpi=kpi, respondent=None,
+
+            # -- 4. the score lines ------------------------------------------------------------------
+            # THE one-way door, driven through the application's own path rather than by writing rows:
+            # generate writes one line per applicable KPI, freezes each definition beside its figure,
+            # blends the dimension-mapped ones into the four scm columns, sets ``manual_override`` so
+            # SCM's signal engine leaves these cards alone from here on, and raises a 6.1 alert on every
+            # fresh critical crossing. Safe to press twice - every line is an update_or_create.
+            written, scored_cards, refused = 0, 0, 0
+            for card in cards:
+                result = generate_scorecard_lines(card, owner)
+                if result["refused"]:
+                    refused += 1
+                    continue
+                written += result["written"]
+                if card.overall_score is not None:
+                    scored_cards += 1
+            if refused:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: {refused} scorecard(s) refused generation (not draft)."))
+
+            # -- 5. the one figure generate never writes -----------------------------------------------
+            # A manual KPI's number is a human's, so generate deliberately re-uses whatever is already on
+            # the line and writes a new one empty. Hand-enter it once here, THROUGH ``score_and_band``
+            # and with the exact ``breakdown`` shape ``SupplierKpiScoreForm.save()`` writes, so the
+            # manual path shows a real banded number instead of an empty row that reads like a bug -
+            # and so a later re-generate is seen PRESERVING it, which is the contract that behaviour
+            # exists to keep.
+            manual_kpi = kpis["INV-01"]
+            manual_value = Decimal("78.0000")
+            manual_score, manual_band = manual_kpi.score_and_band(manual_value)
+            made_manual = 0
+            for line in SupplierKpiScore.objects.filter(
+                    tenant=tenant, kpi=manual_kpi, scorecard__in=cards, measured_value__isnull=True):
+                line.measured_value = manual_value
+                line.score = manual_score
+                line.band = manual_band
+                line.breakdown = {
+                    "source": "manual entry",
+                    "measured_value": str(manual_value),
+                    "scoring_method": manual_kpi.scoring_method,
+                    "direction": manual_kpi.direction,
+                    "entered_at": NOW.isoformat(),
+                }
+                line.comment = "Scored at the annual review; two accepted improvement proposals."
+                line.save(update_fields=["measured_value", "score", "band", "breakdown", "comment",
+                                         "updated_at"])
+                made_manual += 1
+
+            # -- 6. improvement plans ------------------------------------------------------------------
+            # The work that follows a bad number: one running, one overdue and under monitoring, one
+            # closed and signed off - and, when 6.4 already holds a block against the same supplier, one
+            # that ESCALATED to that block rather than inventing a second blocking mechanism. Keyed on
+            # ``(supplier, title)``, never on the auto-allocated SIP- number.
+            plan_specs = []
+            if len(cohort) > 0:
+                plan_specs.append(dict(
+                    supplier=cohort[0], scorecard=cards[0], kpi=kpis["OTD-01"],
+                    title=f"On-time delivery recovery - {cohort[0].name}",
+                    severity="major", status="active", start=7, target=67, review=37,
+                    finding=("Late instalments clustered in the last four weeks of the period, with "
+                             "no dispatch confirmation on any of them."),
+                    root_cause=("Supplier schedules our orders against a shared line and does not "
+                                "re-sequence when an upstream job overruns."),
+                    actions=("Weekly dispatch confirmation by Wednesday; a named planner on our "
+                             "account; a 10-day rolling commit re-issued every Monday."),
+                    support="Firm 90-day forecast shared, and a standing slot in our planning call.",
+                    criteria="On-time delivery back above 95% for two consecutive months.",
+                    acknowledge=25))
+            if len(cohort) > 1:
+                plan_specs.append(dict(
+                    supplier=cohort[1], scorecard=cards[1], kpi=kpis["CMP-01"],
+                    title=f"Invoice dispute reduction - {cohort[1].name}",
+                    # target_close is deliberately in the PAST with no extension granted, so the
+                    # register's overdue stat and the row badge have an honest row to light up.
+                    severity="critical", status="monitoring", start=-30, target=14, review=7,
+                    finding=("Disputes were raised on a quarter of this supplier's invoices, almost "
+                             "all of them price or unit-of-measure mismatches against the order."),
+                    root_cause="Invoices are keyed from the quote, not from the confirmed order.",
+                    actions=("Invoice from the confirmed PO only; quote the PO number and line on "
+                             "every invoice; monthly reconciliation call until three clean cycles."),
+                    support="AP contact named on every PO, and a worked example of a clean invoice.",
+                    criteria="Dispute rate under 5% for three consecutive months.",
+                    acknowledge=20,
+                    evidence_url="https://example.com/quality/dispute-log"))
+            if len(cohort) > 2:
+                plan_specs.append(dict(
+                    supplier=cohort[2], scorecard=cards[2], kpi=kpis["SRV-02"],
+                    title=f"Service responsiveness improvement - {cohort[2].name}",
+                    severity="minor", status="closed", outcome="successful",
+                    start=-60, target=-5, extended=6, review=-20, closed=4,
+                    finding=("The 360 review scored responsiveness lowest of every dimension: "
+                             "queries went unanswered for days at a time."),
+                    root_cause="No named account contact; queries landed in a shared inbox.",
+                    actions="Named account manager, and a 24-hour acknowledgement commitment.",
+                    support="Single point of contact on our side too, so escalation is one hop.",
+                    criteria="Next review's 360 responsiveness score above 80.",
+                    acknowledge=45, verify=10,
+                    closure_note=("Closed successfully: acknowledgement inside 24 hours on every "
+                                  "query in the monitoring window, and the follow-up 360 agreed.")))
+            # The escalation, only if 6.4 actually holds a block against a cohort supplier -
+            # ``clean()`` insists the pointer is same-tenant AND same-supplier, and a plan pointing at
+            # somebody else's block is worse than a plan with no pointer at all.
+            blocks = dict(VendorSuspension.objects
+                          .filter(tenant=tenant, supplier__in=cohort)
+                          .order_by("supplier_id", "id").values_list("supplier_id", "id"))
+            blocked = next(((party, card) for party, card in zip(cohort, cards)
+                            if party.pk in blocks), None)
+            if blocked is not None:
+                party, card = blocked
+                plan_specs.append(dict(
+                    supplier=party, scorecard=card, kpi=kpis["QLT-01"],
+                    title=f"Quality escalation - {party.name}",
+                    severity="critical", status="closed", outcome="escalated",
+                    start=-80, target=-35, closed=-30, review=-55,
+                    suspension_id=blocks[party.pk],
+                    finding=("Two consecutive batches failed goods-in inspection on the same "
+                             "characteristic."),
+                    root_cause="An unvalidated change of sub-supplier, notified to nobody.",
+                    actions="Full first-article re-approval and a change-notification undertaking.",
+                    support="Our quality engineer walked the line and shared the inspection plan.",
+                    criteria="Two consecutive batches accepted with no concession.",
+                    acknowledge=90,
+                    closure_note=("Closed as escalated: the plan did not hold and the supplier was "
+                                  "blocked through the 6.4 suspension register, which is where "
+                                  "enforcement actually lives.")))
+
+            made_plans = 0
+            for spec in plan_specs:
+                _plan, was_created = SupplierImprovementPlan.objects.get_or_create(
+                    tenant=tenant, supplier=spec["supplier"], title=spec["title"],
                     defaults={
-                        "period_start": period_start, "period_end": period_end,
-                        "respondent_kind": "supplier_self",
-                        "respondent_name": contact,
-                        "respondent_function": "other",
-                        "rating": self_rating,
-                        "importance": self_importance,
-                        "status": "submitted",
-                        "due_date": period_end + timedelta(days=10),
-                        "requested_by": owner,
-                        "requested_at": NOW - timedelta(days=21),
-                        "submitted_at": NOW - timedelta(days=12),
-                        "comment": "Filed by the supplier as part of the joint review.",
+                        "scorecard": spec["scorecard"],
+                        "kpi": spec["kpi"],
+                        "severity": spec["severity"],
+                        "finding": spec["finding"],
+                        "root_cause": spec["root_cause"],
+                        "corrective_actions": spec["actions"],
+                        "support_provided": spec["support"],
+                        "success_criteria": spec["criteria"],
+                        "start_date": period_end + timedelta(days=spec["start"]),
+                        "target_close_date": period_end + timedelta(days=spec["target"]),
+                        "next_review_date": (period_end + timedelta(days=spec["review"])
+                                             if spec.get("review") is not None else None),
+                        # An extension has to fall STRICTLY after the original target or clean()
+                        # refuses it - granting one on or before the agreed date would be a way to
+                        # quietly rewrite what was agreed and make is_overdue read clean.
+                        "extended_close_date": (period_end + timedelta(days=spec["extended"])
+                                                if spec.get("extended") is not None else None),
+                        "actual_close_date": (period_end + timedelta(days=spec["closed"])
+                                              if spec.get("closed") is not None else None),
+                        "status": spec["status"],
+                        # Outcome and "closed" live and die together - clean() refuses an outcome on
+                        # an open plan and a closed plan with none.
+                        "outcome": spec.get("outcome", ""),
+                        "owner": owner,
+                        "supplier_owner_name": f"{spec['supplier'].name} quality lead",
+                        "supplier_owner_email": "quality@example.com",
+                        "escalated_suspension_id": spec.get("suspension_id"),
+                        "evidence_url": spec.get("evidence_url", ""),
+                        # Stamps, not fields: acknowledgement records that the supplier was told,
+                        # verification records who signed the closure off.
+                        "acknowledged_by": reviewer or owner,
+                        "acknowledged_at": (NOW - timedelta(days=spec["acknowledge"])
+                                            if spec.get("acknowledge") is not None else None),
+                        "verified_by": owner if spec.get("verify") is not None else None,
+                        "verified_at": (NOW - timedelta(days=spec["verify"])
+                                        if spec.get("verify") is not None else None),
+                        "closure_note": spec.get("closure_note", ""),
                     })
-                made_feedback += int(was_created)
-
-            # The rest of the lifecycle, so the register is not four columns of green: a request
-            # still open and long past its due date (the overdue stat), one somebody declined, and
-            # one that timed out. All three are GENERAL commentary (``kpi=None``), so they cannot
-            # collide with the KPI rows above, and the expired one hangs off no scorecard at all -
-            # which is what ad-hoc feedback outside any period document looks like.
-            extras = []
-            if index == 0 and reviewer is not None:
-                extras = [(card, owner, "finance", "requested", -18),
-                          (card, reviewer, "engineering", "declined", -12)]
-            elif index == 1 and owner is not None:
-                extras = [(None, owner, "logistics", "expired", -30)]
-            for extra_card, respondent, function, status, due_offset in extras:
-                _row, was_created = SupplierFeedback.objects.get_or_create(
-                    tenant=tenant, supplier=party, scorecard=extra_card, kpi=None,
-                    respondent=respondent,
-                    defaults={
-                        "period_start": period_start, "period_end": period_end,
-                        "respondent_kind": "internal",
-                        "respondent_function": function,
-                        # No rating on purpose: only a SUBMITTED response needs one, and an
-                        # unanswered request scored as a zero would punish the supplier for
-                        # somebody's unopened inbox.
-                        "rating": None,
-                        "importance": 5,
-                        "status": status,
-                        "due_date": NOW.date() + timedelta(days=due_offset),
-                        "requested_by": owner,
-                        "requested_at": NOW + timedelta(days=due_offset - 14),
-                        "comment": "",
-                    })
-                made_feedback += int(was_created)
-
-        # -- 4. the score lines ----------------------------------------------------------------------
-        # THE one-way door, driven through the application's own path rather than by writing rows:
-        # generate writes one line per applicable KPI, freezes each definition beside its figure,
-        # blends the dimension-mapped ones into the four scm columns, sets ``manual_override`` so
-        # SCM's signal engine leaves these cards alone from here on, and raises a 6.1 alert on every
-        # fresh critical crossing. Safe to press twice - every line is an update_or_create.
-        written, scored_cards, refused = 0, 0, 0
-        for card in cards:
-            result = generate_scorecard_lines(card, owner)
-            if result["refused"]:
-                refused += 1
-                continue
-            written += result["written"]
-            if card.overall_score is not None:
-                scored_cards += 1
-        if refused:
-            self.stdout.write(self.style.WARNING(
-                f"  {tenant.name}: {refused} scorecard(s) refused generation (not draft)."))
-
-        # -- 5. the one figure generate never writes ---------------------------------------------------
-        # A manual KPI's number is a human's, so generate deliberately re-uses whatever is already on
-        # the line and writes a new one empty. Hand-enter it once here, THROUGH ``score_and_band``
-        # and with the exact ``breakdown`` shape ``SupplierKpiScoreForm.save()`` writes, so the
-        # manual path shows a real banded number instead of an empty row that reads like a bug -
-        # and so a later re-generate is seen PRESERVING it, which is the contract that behaviour
-        # exists to keep.
-        manual_kpi = kpis["INV-01"]
-        manual_value = Decimal("78.0000")
-        manual_score, manual_band = manual_kpi.score_and_band(manual_value)
-        made_manual = 0
-        for line in SupplierKpiScore.objects.filter(
-                tenant=tenant, kpi=manual_kpi, scorecard__in=cards, measured_value__isnull=True):
-            line.measured_value = manual_value
-            line.score = manual_score
-            line.band = manual_band
-            line.breakdown = {
-                "source": "manual entry",
-                "measured_value": str(manual_value),
-                "scoring_method": manual_kpi.scoring_method,
-                "direction": manual_kpi.direction,
-                "entered_at": NOW.isoformat(),
-            }
-            line.comment = "Scored at the annual review; two accepted improvement proposals."
-            line.save(update_fields=["measured_value", "score", "band", "breakdown", "comment",
-                                     "updated_at"])
-            made_manual += 1
-
-        # -- 6. improvement plans ----------------------------------------------------------------------
-        # The work that follows a bad number: one running, one overdue and under monitoring, one
-        # closed and signed off - and, when 6.4 already holds a block against the same supplier, one
-        # that ESCALATED to that block rather than inventing a second blocking mechanism. Keyed on
-        # ``(supplier, title)``, never on the auto-allocated SIP- number.
-        plan_specs = []
-        if len(cohort) > 0:
-            plan_specs.append(dict(
-                supplier=cohort[0], scorecard=cards[0], kpi=kpis["OTD-01"],
-                title=f"On-time delivery recovery - {cohort[0].name}",
-                severity="major", status="active", start=7, target=67, review=37,
-                finding=("Late instalments clustered in the last four weeks of the period, with "
-                         "no dispatch confirmation on any of them."),
-                root_cause=("Supplier schedules our orders against a shared line and does not "
-                            "re-sequence when an upstream job overruns."),
-                actions=("Weekly dispatch confirmation by Wednesday; a named planner on our "
-                         "account; a 10-day rolling commit re-issued every Monday."),
-                support="Firm 90-day forecast shared, and a standing slot in our planning call.",
-                criteria="On-time delivery back above 95% for two consecutive months.",
-                acknowledge=25))
-        if len(cohort) > 1:
-            plan_specs.append(dict(
-                supplier=cohort[1], scorecard=cards[1], kpi=kpis["CMP-01"],
-                title=f"Invoice dispute reduction - {cohort[1].name}",
-                # target_close is deliberately in the PAST with no extension granted, so the
-                # register's overdue stat and the row badge have an honest row to light up.
-                severity="critical", status="monitoring", start=-30, target=14, review=7,
-                finding=("Disputes were raised on a quarter of this supplier's invoices, almost "
-                         "all of them price or unit-of-measure mismatches against the order."),
-                root_cause="Invoices are keyed from the quote, not from the confirmed order.",
-                actions=("Invoice from the confirmed PO only; quote the PO number and line on "
-                         "every invoice; monthly reconciliation call until three clean cycles."),
-                support="AP contact named on every PO, and a worked example of a clean invoice.",
-                criteria="Dispute rate under 5% for three consecutive months.",
-                acknowledge=20,
-                evidence_url="https://example.com/quality/dispute-log"))
-        if len(cohort) > 2:
-            plan_specs.append(dict(
-                supplier=cohort[2], scorecard=cards[2], kpi=kpis["SRV-02"],
-                title=f"Service responsiveness improvement - {cohort[2].name}",
-                severity="minor", status="closed", outcome="successful",
-                start=-60, target=-5, extended=6, review=-20, closed=4,
-                finding=("The 360 review scored responsiveness lowest of every dimension: "
-                         "queries went unanswered for days at a time."),
-                root_cause="No named account contact; queries landed in a shared inbox.",
-                actions="Named account manager, and a 24-hour acknowledgement commitment.",
-                support="Single point of contact on our side too, so escalation is one hop.",
-                criteria="Next review's 360 responsiveness score above 80.",
-                acknowledge=45, verify=10,
-                closure_note=("Closed successfully: acknowledgement inside 24 hours on every "
-                              "query in the monitoring window, and the follow-up 360 agreed.")))
-        # The escalation, only if 6.4 actually holds a block against a cohort supplier -
-        # ``clean()`` insists the pointer is same-tenant AND same-supplier, and a plan pointing at
-        # somebody else's block is worse than a plan with no pointer at all.
-        blocks = dict(VendorSuspension.objects
-                      .filter(tenant=tenant, supplier__in=cohort)
-                      .order_by("supplier_id", "id").values_list("supplier_id", "id"))
-        blocked = next(((party, card) for party, card in zip(cohort, cards)
-                        if party.pk in blocks), None)
-        if blocked is not None:
-            party, card = blocked
-            plan_specs.append(dict(
-                supplier=party, scorecard=card, kpi=kpis["QLT-01"],
-                title=f"Quality escalation - {party.name}",
-                severity="critical", status="closed", outcome="escalated",
-                start=-80, target=-35, closed=-30, review=-55,
-                suspension_id=blocks[party.pk],
-                finding=("Two consecutive batches failed goods-in inspection on the same "
-                         "characteristic."),
-                root_cause="An unvalidated change of sub-supplier, notified to nobody.",
-                actions="Full first-article re-approval and a change-notification undertaking.",
-                support="Our quality engineer walked the line and shared the inspection plan.",
-                criteria="Two consecutive batches accepted with no concession.",
-                acknowledge=90,
-                closure_note=("Closed as escalated: the plan did not hold and the supplier was "
-                              "blocked through the 6.4 suspension register, which is where "
-                              "enforcement actually lives.")))
-
-        made_plans = 0
-        for spec in plan_specs:
-            _plan, was_created = SupplierImprovementPlan.objects.get_or_create(
-                tenant=tenant, supplier=spec["supplier"], title=spec["title"],
-                defaults={
-                    "scorecard": spec["scorecard"],
-                    "kpi": spec["kpi"],
-                    "severity": spec["severity"],
-                    "finding": spec["finding"],
-                    "root_cause": spec["root_cause"],
-                    "corrective_actions": spec["actions"],
-                    "support_provided": spec["support"],
-                    "success_criteria": spec["criteria"],
-                    "start_date": period_end + timedelta(days=spec["start"]),
-                    "target_close_date": period_end + timedelta(days=spec["target"]),
-                    "next_review_date": (period_end + timedelta(days=spec["review"])
-                                         if spec.get("review") is not None else None),
-                    # An extension has to fall STRICTLY after the original target or clean()
-                    # refuses it - granting one on or before the agreed date would be a way to
-                    # quietly rewrite what was agreed and make is_overdue read clean.
-                    "extended_close_date": (period_end + timedelta(days=spec["extended"])
-                                            if spec.get("extended") is not None else None),
-                    "actual_close_date": (period_end + timedelta(days=spec["closed"])
-                                          if spec.get("closed") is not None else None),
-                    "status": spec["status"],
-                    # Outcome and "closed" live and die together - clean() refuses an outcome on
-                    # an open plan and a closed plan with none.
-                    "outcome": spec.get("outcome", ""),
-                    "owner": owner,
-                    "supplier_owner_name": f"{spec['supplier'].name} quality lead",
-                    "supplier_owner_email": "quality@example.com",
-                    "escalated_suspension_id": spec.get("suspension_id"),
-                    "evidence_url": spec.get("evidence_url", ""),
-                    # Stamps, not fields: acknowledgement records that the supplier was told,
-                    # verification records who signed the closure off.
-                    "acknowledged_by": reviewer or owner,
-                    "acknowledged_at": (NOW - timedelta(days=spec["acknowledge"])
-                                        if spec.get("acknowledge") is not None else None),
-                    "verified_by": owner if spec.get("verify") is not None else None,
-                    "verified_at": (NOW - timedelta(days=spec["verify"])
-                                    if spec.get("verify") is not None else None),
-                    "closure_note": spec.get("closure_note", ""),
-                })
-            made_plans += int(was_created)
+                made_plans += int(was_created)
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {made_kpis} supplier KPI(s), {made_cards} draft scorecard(s) for "
