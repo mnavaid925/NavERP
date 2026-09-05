@@ -284,7 +284,12 @@ def supplier_trend_board(request):
         "kpi_series": kpi_series,
         "kpis": kpis,
         "selected_kpi": selected_kpi,
-        "row_cap": performance.PERIOD_CAP,
+        # ``period_cap``, NOT ``row_cap``. This board truncates at ``PERIOD_CAP`` (24) while the
+        # other two truncate at ``ROW_CAP`` (500), and publishing both under one key meant the
+        # same name carried two different numbers across three boards — an editor reading
+        # "row_cap" here would reasonably print "more than 500 scorecards" for a cut that
+        # happened at 24. The name now says which cap it is.
+        "period_cap": performance.PERIOD_CAP,
         "truncated": truncated,
         "benchmark_note": performance.BENCHMARK_NOTE,
     })
