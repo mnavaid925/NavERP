@@ -438,11 +438,26 @@ def supplierkpiscore_delete(request, pk):
     subset would change a published figure behind the operator's back. Re-press Generate on a
     draft to rebuild them from what is actually there.
 
+    **Draft periods only.** Writing a line takes an admin AND a draft scorecard; deleting one
+    was ``@login_required`` and nothing else, so any member could POST away the measured
+    evidence behind a PUBLISHED grade — leaving the four dimension columns and ``overall_score``
+    standing with nothing under them, which is the invariant ``generate_scorecard_lines``
+    refuses on a published card to protect. A closed period is closed for the delete route too.
+
     Redirects back to the period document the line belonged to — the scorecard id is captured
     BEFORE the delete, because the row is gone by the time ``crud_delete`` returns.
     """
-    obj = get_object_or_404(SupplierKpiScore.objects.only("pk", "scorecard_id", "tenant_id"),
-                            pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        SupplierKpiScore.objects.select_related("scorecard")
+        .only("pk", "tenant_id", "scorecard__status", "scorecard__number"),
+        pk=pk, tenant=request.tenant)
+    if obj.scorecard.status != "draft":
+        messages.error(
+            request,
+            f"{obj.scorecard.number} is {obj.scorecard.get_status_display().lower()} — its "
+            "measured lines are the evidence behind a figure the supplier has already been "
+            "shown, so they cannot be deleted. Only a draft period's lines can.")
+        return redirect("procurement:supplierevaluation_detail", pk=obj.scorecard_id)
     return crud_delete(
         request, model=SupplierKpiScore, pk=pk,
         success_url=reverse("procurement:supplierevaluation_detail", args=[obj.scorecard_id]))
