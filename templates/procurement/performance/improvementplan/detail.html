@@ -222,6 +222,13 @@
           <button class="btn btn-primary" type="submit" onclick="return confirm('Close plan {{ obj.number }} with the outcome selected above? This signs the closure with your name, stamps the close date and stops the overdue clock. Only an admin can do it.');"><i data-lucide="circle-check"></i> Close plan</button>
           <div class="form-help">Closing is admin-only: it writes the ending the supplier will be shown and signs it, which is a sign-off rather than an edit.</div>
         </form>
+      {% elif close_refusal %}
+        {% comment %}
+          Set by the view ONLY when the admin rule is what hid the form — a plan that is still
+          closable, being read by somebody who may not close it. Saying so beats a control that
+          silently is not there, and beats one that renders and then 403s.
+        {% endcomment %}
+        <p class="form-help" style="margin-top:.75rem;"><i data-lucide="lock"></i> {{ close_refusal }}</p>
       {% endif %}
     </div>
   </div>
