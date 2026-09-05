@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Stock Position{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — the Stock Position board
+    (apps/procurement/views/InventoryWarehouseIntegration/StockPosition.py).
+
+    READ-ONLY. No model, no form, no migration. Every column is a live grouped aggregate over
+    scm/inventory data; a row appears and disappears purely as the ledger, orders and rules move.
+
+    Context consumed: page_obj, object_list, q, items, locations, vendors, view_choices,
+    selected_view, stats{rows, below_point, shortage, no_cover}, row_cap, truncated,
+    sku_match_note.
+
+    Row keys: item, location, on_hand, allocated, held, available, on_order, expected_date,
+    expected_vendor, expected_po_number, expected_po_url, open_requisition_qty, reorder_point,
+    avg_daily_demand, days_of_cover, below_point, policy_vendor, raise_requisition_url.
+
+    Every row url is ALREADY reversed in the view — this template never calls {% templatetag openblock %} url {% templatetag closeblock %}
+    on a row. The `view` select compares selected_view against the exact frozen values in
+    view_choices; the FK selects compare with |stringformat:"d" (never |slugify).
+
+    `days_of_cover` and `reorder_point` may legitimately be None — None means UNMEASURED (no
+    demand rate / no reorder rule), not zero, so both print a dash rather than a 0 that would
+    read as an emergency.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Position</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse</span><span class="sep">›</span>
+        <span>Stock Position</span>
+      </div>
+      <p class="text-muted">What you hold, what is already spoken for, and what is on its way — item by location, with the inbound order that covers it. Derived on read and stored nowhere.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:replenishmentrun_list' %}" class="btn btn-outline"><i data-lucide="refresh-cw"></i> Replenishment runs</a>
+      <a href="{% url 'procurement:replenishmentpolicy_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Policies</a>
+      <a href="{% url 'inventory:stocklevels' %}" class="btn btn-outline"><i data-lucide="layers"></i> Warehouse stock levels</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="grid-3x3"></i></div>
+      <div class="stat-value">{{ stats.rows }}</div>
+      <div class="stat-label">Item × location rows{% if truncated %} (capped at {{ row_cap }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
+      <div class="stat-value">{{ stats.below_point }}</div>
+      <div class="stat-label">Below reorder point</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.shortage }}</div>
+      <div class="stat-label">In shortage (available ≤ 0)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ stats.no_cover }}</div>
+      <div class="stat-label">Below point, nothing on the way</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search items" class="form-input" placeholder="Search SKU or item name…">
+        </div>
+        <div class="form-group">
+          <select name="view" aria-label="View" class="form-select">
+            <option value="">All positions</option>
+            {% for val, label in view_choices %}
+              <option value="{{ val }}" {% if selected_view == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk|stringformat:"d" }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }} — {{ i.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk|stringformat:"d" }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }} — {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Preferred supplier" class="form-select">
+            <option value="">Any preferred supplier</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:stock_position' %}" class="btn btn-outline">Reset</a>
+      </form>
+
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} positions match these filters — the first {{ row_cap }} are shown, and the counters above cover the rows shown rather than the whole workspace. Narrow by item or location for a complete picture.</p>
+      {% endif %}
+      {% if request.GET.vendor %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">Narrowed</span> The supplier filter matches the row's <strong>preferred supplier</strong> — the one its replenishment policy names. The supplier on an inbound order belongs to that order, not to the position, so it is shown in the Expected column but is not filtered on.</p>
+      {% endif %}
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Location</th>
+            <th class="text-right">On hand</th>
+            <th class="text-right">Allocated</th>
+            <th class="text-right">Held</th>
+            <th class="text-right">Available</th>
+            <th class="text-right">On order</th>
+            <th class="text-right">On requisition</th>
+            <th>Expected</th>
+            <th class="text-right">Reorder point</th>
+            <th class="text-right">Days of cover</th>
+            <th>Preferred supplier</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td class="fw-600">
+                {% if row.item %}{{ row.item.sku }}<div class="text-muted">{{ row.item.name }}</div>
+                {% else %}<span class="text-muted">Unknown item</span>{% endif %}
+              </td>
+              <td>{% if row.location %}{{ row.location.code }}<div class="text-muted">{{ row.location.name }}</div>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right">{{ row.on_hand|floatformat:2 }}</td>
+              <td class="text-right">{{ row.allocated|floatformat:2 }}</td>
+              <td class="text-right">{{ row.held|floatformat:2 }}</td>
+              <td class="text-right fw-600">
+                {% if row.available <= 0 %}<span class="badge badge-red">{{ row.available|floatformat:2 }}</span>
+                {% else %}{{ row.available|floatformat:2 }}{% endif %}
+              </td>
+              <td class="text-right">{{ row.on_order|floatformat:2 }}</td>
+              <td class="text-right">{{ row.open_requisition_qty|floatformat:2 }}</td>
+              <td>
+                {% if row.expected_po_number %}
+                  <a href="{{ row.expected_po_url }}">{{ row.expected_po_number }}</a>
+                  <div class="text-muted">
+                    {% if row.expected_date %}{{ row.expected_date|date:"d M Y" }}{% else %}no promised date{% endif %}
+                    {% if row.expected_vendor %} · {{ row.expected_vendor }}{% endif %}
+                  </div>
+                {% else %}<span class="text-muted">Nothing inbound</span>{% endif %}
+              </td>
+              <td class="text-right">
+                {% if row.reorder_point is None %}<span class="text-muted">—</span>
+                {% elif row.below_point %}<span class="badge badge-amber">{{ row.reorder_point|floatformat:2 }}</span>
+                {% else %}{{ row.reorder_point|floatformat:2 }}{% endif %}
+              </td>
+              <td class="text-right">
+                {% if row.days_of_cover is None %}<span class="text-muted">—</span>
+                {% else %}{{ row.days_of_cover|floatformat:1 }}{% endif %}
+              </td>
+              <td>{% if row.policy_vendor %}{{ row.policy_vendor.name }}{% else %}<span class="text-muted">No policy</span>{% endif %}</td>
+              <td class="text-right">
+                {% if row.below_point %}
+                  <a href="{{ row.raise_requisition_url }}" class="btn btn-sm btn-outline" title="Raise a requisition"><i data-lucide="file-plus"></i></a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13">
+              <div class="empty-state">
+                <i data-lucide="package-search"></i>
+                <h3>No stock positions</h3>
+                <p>Nothing matches these filters. A row exists where stock has actually moved — an item with open orders but an empty ledger has no position to show yet, and a workspace that has never posted a stock move has none at all.</p>
+                <a href="{% url 'procurement:stock_position' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body">
+      <p class="form-help"><span class="badge badge-info">How available is calculated</span> Available = on hand − (sales-order allocations + inventory reservations) − non-sellable stock. It is the same formula the warehouse stock-levels page and the reservation check use, and it is deliberately not floored at zero: a negative figure means more has been promised than is held, which is the thing worth seeing.</p>
+      <p class="form-help"><span class="badge badge-info">How below-point is decided</span> On hand <em>plus everything inbound</em> (open orders and open requisitions) against the reorder point — the same trigger a replenishment run uses, so this board and the run it links to can never disagree about whether an item is short.</p>
+      <p class="form-help"><span class="badge badge-amber">Known limitation</span> {{ sku_match_note }}</p>
+    </div>
+  </div>
+{% endblock %}
