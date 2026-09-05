@@ -2583,6 +2583,8 @@ class Command(BaseCommand):
         # The compute layer is a flat app-root service module, not a model - imported here, in the
         # one block that calls it, rather than at file top (the ``compute_forecast_amounts``
         # precedent one level up is a re-exported model helper; this one is not).
+        from django.core.files.base import ContentFile
+
         from apps.procurement.performance import generate_scorecard_lines
         from apps.scm.models import SupplierScorecard
 
@@ -2920,12 +2922,29 @@ class Command(BaseCommand):
                 line.save(update_fields=["measured_value", "score", "band", "breakdown", "comment",
                                          "updated_at"])
                 made_manual += 1
+            if not made_manual:
+                # The WHOLE manual-score path hangs off this one line landing. INV-01 is
+                # tier-scoped, so if seed_scm's tiering ever stops producing a cohort supplier on
+                # that tier, ``supplierkpiscore_edit``, ``kpiscore/form.html`` and ``can_edit``
+                # become unreachable on seeded data - silently, and looking exactly like a
+                # working demo. Say so rather than let it pass.
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: no hand-entered score line was written - {manual_kpi.code} "
+                    f"applies to the '{manual_kpi.applies_to_tier}' tier and no cohort supplier "
+                    f"carries that scm.SupplierProfile tier. The manual-entry edit path has no "
+                    f"row to demonstrate on this workspace."))
 
             # -- 6. improvement plans ------------------------------------------------------------------
             # The work that follows a bad number: one running, one overdue and under monitoring, one
             # closed and signed off - and, when 6.4 already holds a block against the same supplier, one
             # that ESCALATED to that block rather than inventing a second blocking mechanism. Keyed on
             # ``(supplier, title)``, never on the auto-allocated SIP- number.
+            #
+            # Plus, below, the four states the demo could not previously show: an un-acknowledged
+            # DRAFT (the only shape that renders Activate and Acknowledge), a CANCELLED plan, and
+            # closures with the FAILED and EXTENDED outcomes. Together with the two above, all
+            # five statuses and all four outcomes now have a row, so every badge and every
+            # ?status= / ?outcome= filter value lands on something.
             plan_specs = []
             if len(cohort) > 0:
                 plan_specs.append(dict(
@@ -2971,7 +2990,19 @@ class Command(BaseCommand):
                     criteria="Next review's 360 responsiveness score above 80.",
                     acknowledge=45, verify=10,
                     closure_note=("Closed successfully: acknowledgement inside 24 hours on every "
-                                  "query in the monitoring window, and the follow-up 360 agreed.")))
+                                  "query in the monitoring window, and the follow-up 360 agreed."),
+                    # The ONE seeded upload - see the write below. A .txt because it is a real
+                    # readable payload with no binary fixture committed to the repository, and
+                    # because it sits inside ALLOWED_DOC_EXTENSIONS, so the page renders exactly
+                    # what an operator's own upload would.
+                    evidence_name="responsiveness-closure-evidence.txt",
+                    evidence_body=(
+                        "Responsiveness improvement plan - closure evidence\n"
+                        "==================================================\n\n"
+                        "Monitoring window: every query acknowledged inside 24 hours (32 of 32).\n"
+                        "Named account manager appointed and introduced to both of our sites.\n"
+                        "Follow-up 360 responsiveness score: 84 (was 41).\n\n"
+                        "Signed off at the quarterly supplier review.\n")))
             # The escalation, only if 6.4 actually holds a block against a cohort supplier -
             # ``clean()`` insists the pointer is same-tenant AND same-supplier, and a plan pointing at
             # somebody else's block is worse than a plan with no pointer at all.
@@ -2998,6 +3029,66 @@ class Command(BaseCommand):
                     closure_note=("Closed as escalated: the plan did not hold and the supplier was "
                                   "blocked through the 6.4 suspension register, which is where "
                                   "enforcement actually lives.")))
+            # The four states the register could never show. Without these, ``can_activate`` and
+            # ``can_acknowledge`` are False on every seeded plan - so the Activate and Acknowledge
+            # buttons never rendered at all - and ?status=draft, ?status=cancelled,
+            # ?outcome=failed and ?outcome=extended each returned an empty page. Both verbs and
+            # all nine badge states resolve correctly; they simply had no row to appear on.
+            #
+            # The draft one deliberately carries NO ``acknowledge``: ``can_acknowledge`` keys on
+            # the stamp being absent, not on the status, so an always-acknowledged demo hides it.
+            if len(cohort) > 3:
+                plan_specs.append(dict(
+                    supplier=cohort[3], scorecard=cards[3], kpi=kpis["QLT-01"],
+                    title=f"Goods-in rejection review - {cohort[3].name}",
+                    severity="major", status="draft", start=14, target=104, review=59,
+                    finding=("Rejections at goods-in doubled over the period, concentrated on one "
+                             "part family."),
+                    root_cause="Not yet established - drafted ahead of the supplier review call.",
+                    actions=("To be agreed at the review: containment, a corrective action plan "
+                             "and a re-inspection regime."),
+                    support="Our quality engineer will attend the review and share the reject data.",
+                    criteria="Rejection rate back under 2% for two consecutive months."))
+                plan_specs.append(dict(
+                    supplier=cohort[3], scorecard=cards[3], kpi=kpis["SRV-01"],
+                    title=f"Quote turnaround recovery - {cohort[3].name}",
+                    severity="minor", status="closed", outcome="failed",
+                    start=-75, target=-15, review=-45, closed=-10,
+                    finding="Quotes came back outside the agreed five working days all quarter.",
+                    root_cause="Quoting sits with one estimator who covers three of our sites.",
+                    actions="A second trained estimator, and a same-day acknowledgement of every RFQ.",
+                    support="We consolidated our RFQs into one weekly batch to smooth their load.",
+                    criteria="Median quote turnaround under five working days for a full quarter.",
+                    acknowledge=70,
+                    closure_note=("Closed as failed: the second estimator was never put in place "
+                                  "and turnaround did not move. Re-opening as a commercial issue "
+                                  "at the next review.")))
+            if len(cohort) > 4:
+                plan_specs.append(dict(
+                    supplier=cohort[4], scorecard=cards[4], kpi=kpis["CST-01"],
+                    title=f"Price competitiveness review - {cohort[4].name}",
+                    severity="minor", status="cancelled", start=-40, target=50, review=-10,
+                    finding=("Quoted prices sat above the awarded benchmark on most lines in the "
+                             "period."),
+                    root_cause="Suspected index-linked escalation applied outside the agreed clause.",
+                    actions="Line-by-line price review against the contracted index.",
+                    support="We shared the awarded comparison so the gap could be checked jointly.",
+                    criteria="Quoted prices within 3% of the awarded benchmark.",
+                    acknowledge=30))
+                plan_specs.append(dict(
+                    supplier=cohort[4], scorecard=cards[4], kpi=kpis["CMP-01"],
+                    title=f"Invoice accuracy programme - {cohort[4].name}",
+                    severity="major", status="closed", outcome="extended",
+                    start=-70, target=-20, extended=15, review=-40, closed=-8,
+                    finding="Invoice mismatches persisted after the first corrective round.",
+                    root_cause="The billing change landed on one entity only, not the group.",
+                    actions="Roll the confirmed-PO billing rule out to every invoicing entity.",
+                    support="A worked example per entity, and a named AP contact for each.",
+                    criteria="Three consecutive clean invoicing cycles across all entities.",
+                    acknowledge=60, verify=8,
+                    closure_note=("Closed as extended: real progress, but the roll-out needs one "
+                                  "more cycle, so this plan is superseded by a fresh one running "
+                                  "to the extended date.")))
 
             made_plans = 0
             for spec in plan_specs:
@@ -3033,8 +3124,12 @@ class Command(BaseCommand):
                         "escalated_suspension_id": spec.get("suspension_id"),
                         "evidence_url": spec.get("evidence_url", ""),
                         # Stamps, not fields: acknowledgement records that the supplier was told,
-                        # verification records who signed the closure off.
-                        "acknowledged_by": reviewer or owner,
+                        # verification records who signed the closure off. The WHO and the WHEN
+                        # are set together - a plan with an acknowledger and no acknowledgement
+                        # time is a stamp that records nothing, and ``can_acknowledge`` reads the
+                        # time.
+                        "acknowledged_by": ((reviewer or owner)
+                                            if spec.get("acknowledge") is not None else None),
                         "acknowledged_at": (NOW - timedelta(days=spec["acknowledge"])
                                             if spec.get("acknowledge") is not None else None),
                         "verified_by": owner if spec.get("verify") is not None else None,
@@ -3043,6 +3138,16 @@ class Command(BaseCommand):
                         "closure_note": spec.get("closure_note", ""),
                     })
                 made_plans += int(was_created)
+                # ``evidence`` (the FileField) had never been seeded - only ``evidence_url`` -
+                # so the upload branch of improvementplan/detail.html and the authenticated
+                # download route had no row to render on. Written ONLY for a plan this run just
+                # created: Django's storage layer RENAMES on collision rather than overwriting,
+                # so a re-run that reached here would pile up duplicates under MEDIA_ROOT that
+                # nobody ever looks at (the rule the 6.19 revision block states at length).
+                if was_created and spec.get("evidence_body"):
+                    _plan.evidence.save(
+                        spec["evidence_name"],
+                        ContentFile(spec["evidence_body"].encode("utf-8")), save=True)
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {made_kpis} supplier KPI(s), {made_cards} draft scorecard(s) for "
