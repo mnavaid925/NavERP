@@ -21,16 +21,18 @@ invariant that actually holds, and the one worth stating.) Verify it with::
 
 which returns nothing.
 
-**Build order.** ``Policies`` and ``Runs`` are concatenated so far. ``MaterialIssues``,
+**Build order.** ``Policies``, ``Runs`` and ``MaterialIssues`` are concatenated so far.
 ``StockPosition``, ``ReceiptBinMap`` and ``CountAccuracy`` are the same sub-module's remaining
-entity/page modules and each appends its own line here as it lands, rather than this file
+page modules and each appends its own line here as it lands, rather than this file
 importing a module that does not exist yet and taking the whole URLconf down with it.
 """
+from .MaterialIssues import urlpatterns as _iwi_materialissues
 from .Policies import urlpatterns as _iwi_policies
 from .Runs import urlpatterns as _iwi_runs
 
 
 urlpatterns = [
-    *_iwi_policies,   # replenishment-policies/ CRUD
-    *_iwi_runs,       # replenishment-runs/ CRUD + generate/release/cancel + line decide
+    *_iwi_policies,         # replenishment-policies/ CRUD
+    *_iwi_runs,             # replenishment-runs/ CRUD + generate/release/cancel + line decide
+    *_iwi_materialissues,   # material-issues/ CRUD + submit/post/cancel + line add/delete
 ]
