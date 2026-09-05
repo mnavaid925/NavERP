@@ -15,7 +15,8 @@
       kpi_series (kpi_id/kpi_code/kpi_name/kpi_category/unit/direction/points[]), where each
               point is period_end/measured_value/score/band/band_css/target_at_time/
               meets_target/delta,
-      kpis, selected_kpi (or None), row_cap (= PERIOD_CAP), truncated, benchmark_note.
+      kpis, selected_kpi (or None), period_cap (= PERIOD_CAP, NOT the boards' ROW_CAP of 500),
+      truncated, benchmark_note.
 
     The two selects post pks and compare with |stringformat:"d" — NEVER |slugify.
 
@@ -77,7 +78,7 @@
 
       <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">Own supply base</span> {{ benchmark_note }}</p>
       {% if truncated %}
-        <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Truncated</span> This supplier has more than {{ row_cap }} scorecards &mdash; the {{ row_cap }} most recent periods are plotted.</p>
+        <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Truncated</span> This supplier has more than {{ period_cap }} scorecards &mdash; the {{ period_cap }} most recent periods are plotted.</p>
       {% endif %}
       {% if selected_kpi %}
         <p class="text-muted" style="margin-top:.5rem;">
