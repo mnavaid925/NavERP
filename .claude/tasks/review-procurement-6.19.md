@@ -305,3 +305,111 @@ blocks land, the sidebar offers two policy registers and one PPOL- row has two d
 6.19 scope — flagged so the second integrator decides deliberately.
 
 **No 6.19 test suite exists** — expected, Phase 6 has not run. Noted for the test-writer.
+
+---
+
+## Pass 3 — `frontend-reviewer` (the 12 templates)
+
+Scope confirmed: exactly 12 files, checked against the four view modules. **Verdict: no Critical,
+one Important, four Minor.** Two of pass 2's three handed-over leads do **not** survive
+verification (recorded below so nobody re-files them).
+
+### Critical
+
+None — and the two classes that have shipped here repeatedly are both clean.
+`grep -rn '{#' templates/procurement/documentknowledge/` returns **nothing**; all 12 use
+`{% comment %}`. Every literal class in the 12 files was diffed against `theme.css` and **every one
+exists**; the model-side maps (`Documents.py:112-123`, `Policies.py:84-88`,
+`KnowledgeResources.py:116-120`) are all colour-named with a `badge-slate` `.get()` default. The
+sub-module's only inert modifier is the already-filed item 8.
+
+### Important
+
+**[ ] F1 — `document/detail.html:242-245` offers "Release checkout" to every viewer; the view refuses most of them.**
+The guard is only `{% if obj.is_checked_out %}`, but `pdocument_release`
+(`views/…/Documents.py:288-296`) computes `forced = obj.checked_out_by_id != request.user.pk` and
+refuses with `messages.error` when `forced and not is_admin`.
+*What the user sees:* colleague A checks out DOC-00007. Every other non-admin member opening that
+page sees an enabled **Release checkout** button, clicks through a confirm reading only "Release the
+checkout on DOC-00007?", and gets a red banner saying they are not allowed. The holder's name is
+already rendered two cards above (line 74-75), so the page has what it needs to hide the button.
+*Same class as item 10, but the dominant case rather than the edge case* — item 10 needs an archived
+document, this needs only a second user. Different button, view and condition; fix both together.
+*Fix:* the view already computes `can_upload` for exactly this purpose — add a `can_release` sibling
+key (holder-or-admin) and gate the form at line 243 on it.
+
+### Minor
+
+**[ ] F2 — `revision/detail.html:128` uses `class="table-actions"` for its Actions row** (pass 2's
+lead, **confirmed**). `theme.css:305` is `justify-content:flex-end; gap:.25rem`; `.page-actions`
+(`theme.css:248`) is `gap:.5rem` with no justify. So the revision detail's Approve/Delete/Back
+buttons sit hard against the right edge with half the gap, while the same Actions card on the other
+three detail pages renders left-aligned and normally spaced. *Fix:* `class="page-actions"`.
+
+**[ ] F3 — `<dt>`/`<dd>` used outside any `<dl>` — 4 occurrences in 3 files.**
+`document/detail.html:91,94` (the `<dl class="detail-grid">` opened at 68 closes at 88),
+`policy/detail.html:95` (closes at 92), `knowledgeresource/detail.html:94` (closes at 85). It looks
+right because `theme.css:356-357` scopes on `.detail-item dt`/`dd` rather than on the list, so
+nothing visibly breaks — but a `dt`/`dd` outside a `dl` has no defined role: validators flag it and
+assistive tech gets a term/definition pair with no list to attach it to (WCAG 1.3.1). Every other
+`<dt>` in the sub-module is correctly nested. *Fix:* wrap each stray block in its own
+`<dl class="detail-grid">`, or drop to a plain `detail-item` div.
+
+**[ ] F4 — the revision Delete guard is spelled three different ways across three surfaces.**
+`pdocrevision_delete` (`views/…/Revisions.py:432-437`) checks **two** conditions — `is_approved`
+**and** `revision_no == document.current_revision_no` — and its docstring says both are deliberate
+so "a pointer left dangling by any future path must not become a route to deleting the row it
+points at". `revision/detail.html:129,135` mirrors both (correct); `revision/list.html:150` and
+`document/detail.html:181` test only `not r.is_approved`.
+Today the conditions overlap by construction so nothing is reachable — but the view deliberately
+defends the dangling-pointer state that **item 3 and E2 both describe as reachable**, and in exactly
+that state the two registers would offer a trash icon the view rejects.
+*Fix:* add `and not r.is_current` at both sites. `is_current` reads through `r.document`, which both
+views already `select_related`, so it costs no query.
+
+**[ ] F5 — `knowledgeresource/detail.html:87-91` renders tags as unlabelled pills** where
+`document/detail.html:94` labels the same thing "Tags". A reader sees a row of grey pills with
+nothing saying what they are, sitting next to the `badge-muted` used for real statuses. *Fix:* give
+it the same labelled `detail-item` shell as the document page (folds into F3 if taken together).
+
+### Pass-2 leads that do NOT hold up — do not file
+
+**"Use this renders twice on `knowledgeresource/detail.html` (:51, :147)" — not a defect, it is the
+sub-module's own pattern.** Every 6.19 detail page promotes its primary verb into
+`.page-header .page-actions` *and* repeats it in the Actions card: `policy/detail.html` has Publish
+at :51 and :173; `document/detail.html` has Edit at :51 and :268 and Upload revision at :49 and
+:121. No duplicate `id` attributes involved. Consistent — leave it.
+
+**"`document/detail.html:247` Check out is the only POST form with no `onsubmit` confirm" — the
+premise is factually wrong.** There are three unconfirmed POST forms, not one (checkout, and Use at
+both :51 and :147), and the split is principled: those three are the only reversible,
+non-destructive verbs in 6.19 (checkout is undone by the Release button beside it; Use increments a
+counter). All 13 destructive or state-transitioning verbs — 5 deletes, 3 approves, 2 publishes, 3
+archives, supersede, activate, release and both Runs — carry a confirm. A defensible rule, not an
+omission. (Item 10's fix is still needed; that is about the guard, not the confirm.)
+
+### Verified clean
+
+**The filter contract is exact on all four registers** — the recurring defect class in this project,
+and there is nothing wrong with it here. Every control maps to a real filter and every filter has a
+control: document 8/8, revision 3/3, policy 5/5, knowledge resource 6/6. Both FK dropdowns use
+`|stringformat:"d"` on **both sides** of the comparison; `|slugify` appears nowhere; every `<select>`
+re-selects from `request.GET` after submit; every search placeholder matches its view's
+`search_fields` word for word.
+All 37 distinct `{% url %}` names resolve, including `procurement:event_detail`. All four registers
+include `partials/pagination.html`, which replays every GET param except `page`. **No `|safe`, no
+`{% autoescape off %}` anywhere** — the two grep hits are prose inside `{% comment %}` explaining
+why not. All five tables wrapped in `.table-wrap`; zero raw Tailwind colour utilities, so dark mode
+comes free; every icon-only button carries `title` **and** `aria-label`; every field bound with
+`for="{{ field.id_for_label }}"`. `id="search"` present and unique at `document/list.html:72`,
+matching `navigation.py:1678` — wired end to end. Every `colspan` matches its header count.
+
+### Done well
+
+**The "one constant, three surfaces" discipline is the best thing in this sub-module and should be
+copied.** `SEARCH_NOTE`, `ADVISORY_NOTE`, `LIBRARY_NOTE`, `REVISION_NOTE`, `upload_note` and
+`threshold_label` are each defined once in Python and printed on register, form and detail — so the
+three places a user could learn what a threshold does, or what search can and cannot find inside a
+PDF, are structurally incapable of disagreeing. `upload_note` is the standout: `revision/form.html:63`
+prints a limit built in the view from `ALLOWED_DOC_EXTENSIONS` and `MAX_UPLOAD_BYTES`, so the page
+physically cannot promise a size the form will then reject.
