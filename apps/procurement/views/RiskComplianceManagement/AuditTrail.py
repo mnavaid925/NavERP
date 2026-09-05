@@ -561,8 +561,15 @@ def auditseal_detail(request, pk):
     if guard is not None:
         return guard
 
+    # The ROOT's row_fingerprints is genuinely needed here - _entries_covered calls
+    # seal.fingerprint_map to mark each entry and reconstruct the missing ids - so deferring it
+    # would only trade a column read for a lazy re-fetch. What the page does NOT need is the
+    # PREVIOUS seal's copy of the same column: it renders prev_seal.number, .pk and
+    # .chain_digest only, while the unrestricted join drags up to 50,000 pairs (~1.4 MB) with
+    # them. defer() reaches a select_related model through its path, so name it explicitly.
     obj = get_object_or_404(
-        AuditSeal.objects.select_related("prev_seal", "sealed_by"),
+        AuditSeal.objects.select_related("prev_seal", "sealed_by")
+        .defer("prev_seal__row_fingerprints"),
         pk=pk, tenant=request.tenant)
     entries = _entries_covered(obj)
     return render(request, TEMPLATE_SEAL_DETAIL, {
