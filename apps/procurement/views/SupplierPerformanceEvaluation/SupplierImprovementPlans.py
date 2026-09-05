@@ -85,6 +85,11 @@ _ROW_RELATIONS = ("supplier", "kpi", "owner", "scorecard", "scorecard__party",
 #: rather than trusting the request, because close does not go through a form at all.
 _OUTCOME_VALUES = dict(OUTCOME_CHOICES)
 
+#: Ceiling on the closure narrative the close verb accepts. The field is ``editable=False``, so
+#: no form and no ``full_clean()`` stands between the POST body and the column — see the cap at
+#: the write itself. Mirrors CRM's sibling.
+_CLOSURE_NOTE_MAX = 4000
+
 
 def _is_admin(request):
     """Mirrors ``@tenant_admin_required`` exactly, so a hidden button and a refused POST agree.
@@ -454,7 +459,13 @@ def improvementplan_close(request, pk):
 
     obj.status = "closed"
     obj.outcome = outcome
-    obj.closure_note = (request.POST.get("closure_note") or "").strip()
+    # CAPPED. ``closure_note`` is ``editable=False``, so it never passes a form or
+    # ``full_clean()`` and goes straight from the POST body into ``save(update_fields=…)``. A
+    # >64 KB body would hit MySQL's ``TEXT`` ceiling of 65,535 bytes — an uncaught ``DataError``
+    # under strict mode, or a SILENTLY TRUNCATED signed closure narrative under non-strict. Admin
+    # only, hence low severity, but a signature over content the server quietly shortened is
+    # exactly the thing this field exists to prevent. 4,000 is the cap CRM's sibling uses.
+    obj.closure_note = (request.POST.get("closure_note") or "").strip()[:_CLOSURE_NOTE_MAX]
     obj.actual_close_date = timezone.localdate()
     obj.verified_by = request.user if request.user.is_authenticated else None
     obj.verified_at = timezone.now()
