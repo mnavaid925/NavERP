@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Material Issue{% else %}New Material Issue{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — MaterialIssue create-or-edit. ONE template for
+    both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj).
+
+    The form carries exactly the ten editable header fields: location, movement_type, purpose,
+    reference, issue_date, org_unit, gl_account, requested_by, reservation, notes. Everything
+    the document PRODUCES is excluded and none of it is accepted from a POST — number is minted
+    by TenantNumbered.save(), and status, adjustment, issued_by, posted_at and cancelled_at are
+    stamped by submit() / post() / cancel() alone. A document whose "posted" flag could be typed
+    in would not be evidence of anything.
+
+    Lines are NOT on this form. They are added one at a time on the detail page, because each
+    one needs the item's current on-hand figure beside it — which only exists once the document
+    knows its location.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and every
+    {% if %} branch falls through to field.help_text — the model's own help text is already
+    written and a silent blank would be worse than a duplicate. Each label is bound to its
+    widget with for="{{ field.id_for_label }}".
+
+    The return-to-stock / return-to-vendor distinction gets its own explainer card rather than a
+    line of help text: it is the one thing on this form that is expensive to get wrong, and the
+    two read almost identically in a dropdown.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit — {{ obj.number }}{% else %}New material issue{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <a href="{% url 'procurement:materialissue_list' %}">Material Issues</a><span class="sep">›</span>
+        <span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">This form sets the <span class="fw-600">header</span> — where the material moves, which way, and what it is for. Add the actual items on the next page, where each one shows what the location holds right now. Nothing moves until the document is posted, and even then only a draft adjustment is minted.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Document</h2><span class="text-muted">what moves, which way, and why</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "location" %}
+                <div class="form-help">The shelf the material leaves from, or comes back to. Both directions use the same location — a return puts stock back where it came from, and sending goods to a supplier is a different document entirely.</div>
+              {% elif field.name == "movement_type" %}
+                <div class="form-help">“Issue” takes stock out; “Return to stock” puts unused material back in. Posting an issue is refused if the location does not hold enough; a return has no such check, because it adds stock rather than drawing it.</div>
+              {% elif field.name == "purpose" %}
+                <div class="form-help">What consumed the material — it drives where the cost lands. “Other” requires a note, because a consumption nobody can categorise is exactly the one that needs explaining.</div>
+              {% elif field.name == "reference" %}
+                <div class="form-help">Free text: the job, project or work-order number this was drawn for. Deliberately not a link to a work order — a store issue is not a production draw, and anything you issue against, including a purely external job number, can be keyed here.</div>
+              {% elif field.name == "issue_date" %}
+                <div class="form-help">The date the material actually moved. The minted stock adjustment carries this date, not today's — so a back-dated issue is recorded as one.</div>
+              {% elif field.name == "org_unit" %}
+                <div class="form-help">The cost centre or department the consumption belongs to. Worth setting even when the expense account is: the account says what kind of cost it was, this says whose.</div>
+              {% elif field.name == "gl_account" %}
+                <div class="form-help">Default expense account for the whole document. Any line can override it — useful when one issue covers two kinds of cost.</div>
+              {% elif field.name == "requested_by" %}
+                <div class="form-help">Who asked for the material. Not necessarily who hands it over — whoever posts the document is stamped separately and automatically.</div>
+              {% elif field.name == "reservation" %}
+                <div class="form-help">Optional: the stock lock this issue draws against. Only reservations that still hold stock are offered. A <em>return</em> cannot name one — a reservation is consumed by an issue, not released by a return.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Required when the purpose is “Other”. Worth writing whenever the reference does not explain itself to the next reader.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create document{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:materialissue_detail' obj.pk %}{% else %}{% url 'procurement:materialissue_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Which kind of return is this?</h2><span class="text-muted">two documents, two very different outcomes</span></div>
+    <div class="card-body">
+      <p class="text-muted">Choose <span class="fw-600">Return to stock</span> here when material that was drawn for a job comes back unused and goes onto the same shelf it came off. Stock at the location goes up; nothing leaves the building; no money changes hands.</p>
+      <p class="text-muted">Choose <a href="{% url 'procurement:rtv_list' %}" class="fw-600">Return to vendor</a> instead — a different document, 6.12's [RMA-] — when goods are going back to the supplier. Those ship off site and expect a credit note against the purchase. Filing one as the other leaves either stock on hand nobody can find, or a vendor credit nobody ever claims.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2><span class="text-muted">stock does not move here</span></div>
+    <div class="card-body">
+      <ol class="text-muted">
+        <li><span class="fw-600">Create</span> the document — this form. It starts as a draft with no lines.</li>
+        <li><span class="fw-600">Add lines</span> on the document itself. Each shows what the location holds right now, so a shortfall is visible before you post rather than only as a refusal afterwards. Every line is valued automatically at the item's moving-average cost — nobody types a price.</li>
+        <li><span class="fw-600">Submit</span> (optional) marks it finished and freezes the lines. A draft can be posted directly; a one-person store issue does not need a second pair of eyes to become a movement.</li>
+        <li><span class="fw-600">Post</span> mints a <span class="fw-600">draft</span> stock adjustment in SCM, signed for this document's direction. <span class="fw-600">Stock changes when that adjustment is posted there</span>, not here — one code path writes the stock ledger and it lives in the app that owns it.</li>
+      </ol>
+      <p class="text-muted">A posted document can never be cancelled or deleted. The correction is a mirror document — a return against the same location for the same items — which is why the direction lives on this form rather than in two separate models.</p>
+    </div>
+  </div>
+{% endblock %}
