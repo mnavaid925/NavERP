@@ -120,7 +120,7 @@
             as safe as a click.
           {% endcomment %}
           {% if act.key == "sign" %}
-            <form method="post" action="{% url 'procurement:attestation_sign' obj.pk %}" onsubmit="return confirm('{{ act.confirm }}');">
+            <form method="post" action="{% url 'procurement:attestation_sign' obj.pk %}" onsubmit="return confirm('{{ act.confirm|escapejs }}');">
               {% csrf_token %}
               <div class="form-group">
                 <label class="form-label" for="attestation_note">{{ act.note_label }}{% if act.note_required %} <span class="req">*</span>{% endif %}</label>
@@ -129,7 +129,7 @@
               <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
             </form>
           {% else %}
-            <form method="post" action="{% url 'procurement:attestation_exempt' obj.pk %}" onsubmit="return confirm('{{ act.confirm }}');">
+            <form method="post" action="{% url 'procurement:attestation_exempt' obj.pk %}" onsubmit="return confirm('{{ act.confirm|escapejs }}');">
               {% csrf_token %}
               <div class="form-group">
                 <label class="form-label" for="attestation_reason">{{ act.note_label }}{% if act.note_required %} <span class="req">*</span>{% endif %}</label>
