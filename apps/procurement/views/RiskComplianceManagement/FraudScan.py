@@ -55,6 +55,10 @@ DEFAULT_SCAN_DAYS = 90
 #: ``(key, label, lower bound in days, upper bound in days or None, badge class)`` — bounds are
 #: half-open on the age, so a 7-day-old alert is in the first bucket and an 8-day-old in the
 #: second, and no alert can fall into two.
+#: Where a completed scan's outcome waits for the redirected GET (PRG). Popped on read, so the
+#: numbers are shown once and a later visit to the page is an honest "not run yet".
+_SCAN_RESULT_KEY = "procurement_617_fraud_scan_result"
+
 AGE_BUCKETS = [
     ("fresh", "0-7 days", 0, 8, "badge-green"),
     ("week", "8-30 days", 8, 31, "badge-info"),
@@ -96,11 +100,13 @@ def fraud_scan(request):
 
     GET renders the form, the eight tuning constants read-only, and the not-buildable note.
     POST runs the scan — **admin only**, checked inside the function so the read-only half of
-    the page stays visible to everybody.
+    the page stays visible to everybody — then **redirects** (PRG), so refreshing the results
+    page cannot re-run the rules.
 
-    ``results`` is ``{rule_value: newly_raised_count}`` on POST and ``None`` on GET, which is what
-    lets the template tell "not run yet" from "ran and found nothing" — two very different
-    things to say on a fraud page.
+    ``results`` is ``{rule_value: newly_raised_count}`` on the GET that follows a scan and
+    ``None`` on any other GET, which is what lets the template tell "not run yet" from "ran and
+    found nothing" — two very different things to say on a fraud page. The outcome crosses the
+    redirect in a POP-ONCE session key, so it renders exactly once.
 
     ``skipped_groups`` and ``capped`` come back from ``scan()``'s ``diagnostics`` out-parameter
     and carry these EXACT keys (L41 §1), which the template renders and nothing else::
@@ -117,6 +123,7 @@ def fraud_scan(request):
 
     is_admin = _is_admin(request)
     results, diagnostics = None, {"skipped_groups": [], "capped": []}
+    initial = _default_window()
 
     if request.method == "POST":
         if not is_admin:
@@ -153,8 +160,31 @@ def fraud_scan(request):
                     request,
                     "The rules ran and raised nothing new. Alerts that already existed for this "
                     "window were refreshed in place, and none was re-opened.")
+            # POST/redirect/GET, like every other write verb in this sub-module. The scan is
+            # idempotent — a second pass raises 0 and writes no audit row — but a browser refresh
+            # re-running it is still a surprise on a page whose button says "Run scan". The
+            # outcome is handed to the redirected GET through a POP-ONCE session key, so it is
+            # shown exactly once and a later plain visit to the page is a clean "not run yet".
+            request.session[_SCAN_RESULT_KEY] = {
+                "results": results,
+                "skipped_groups": diagnostics["skipped_groups"],
+                "capped": diagnostics["capped"],
+                "start": form.cleaned_data["start"].isoformat(),
+                "end": form.cleaned_data["end"].isoformat(),
+                "rules": form.cleaned_data.get("rules") or [],
+            }
+            return redirect("procurement:fraud_scan")
     else:
-        form = FraudScanForm(initial=_default_window(), tenant=request.tenant)
+        stashed = request.session.pop(_SCAN_RESULT_KEY, None)
+        if stashed:
+            # Re-render exactly what was scanned, so the window and the rule boxes on the page
+            # still describe the numbers beside them.
+            results = stashed["results"]
+            diagnostics = {"skipped_groups": stashed["skipped_groups"],
+                           "capped": stashed["capped"]}
+            initial = {"start": stashed["start"], "end": stashed["end"],
+                       "rules": stashed["rules"]}
+        form = FraudScanForm(initial=initial, tenant=request.tenant)
 
     return render(request, TEMPLATE_SCAN, {
         "form": form,
