@@ -162,6 +162,15 @@ class SupplierImprovementPlan(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="prc_sip_tnt_status_idx"),
             models.Index(fields=["tenant", "supplier"], name="prc_sip_tnt_supp_idx"),
             models.Index(fields=["tenant", "severity"], name="prc_sip_tnt_sev_idx"),
+            # The register's DEFAULT SORT, covered. ``EXPLAIN`` on the register reported
+            # ``type=ALL key=None … filesort`` — none of the three above matches ``ordering``.
+            # This is a LOW-VOLUME table by nature (one row per supplier per real problem), so
+            # the win is small today; it is indexed because the cost of a covering index on a
+            # small table is negligible and the register is the page most likely to be opened
+            # with a filter that returns everything. ``SupplierKpi`` has the same gap on a
+            # 10-100-row catalogue and is deliberately left alone.
+            models.Index(fields=["tenant", "-start_date", "-id"],
+                         name="prc_sip_tnt_start_idx"),
         ]
         verbose_name = "Supplier Improvement Plan"
         verbose_name_plural = "Supplier Improvement Plans"
