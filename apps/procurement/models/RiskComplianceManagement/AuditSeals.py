@@ -216,6 +216,14 @@ class AuditSeal(TenantNumbered):
     last_verified_at = models.DateTimeField(null=True, blank=True, editable=False)
     last_verify_ok = models.BooleanField(null=True, editable=False)
     last_verify_detail = models.CharField(max_length=255, blank=True, editable=False)
+    # WHO ran the last check. The three stamps above are the cached RESULT of a machine
+    # comparison, and on an evidence-grade record a result with nobody's name on it is a weaker
+    # claim than it looks: the detail page renders "Last full verification passed on <date>", and
+    # without this an auditor cannot tell whether a responsible person ran it or whether it was a
+    # drive-by click. SET_NULL so removing a user never destroys the verification history.
+    last_verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        editable=False, related_name="procurement_audit_seal_verifications")
 
     class Meta:
         ordering = ["-to_log_id", "-id"]
@@ -362,7 +370,7 @@ class AuditSeal(TenantNumbered):
 
     # -- verification ----------------------------------------------------------------------------
 
-    def verify(self, stamp=True):
+    def verify(self, stamp=True, user=None):
         """Re-read the sealed range, re-hash it, and report ``(ok, detail)``.
 
         On failure ``detail`` **names the first offending entry id** - modified, deleted or
@@ -392,11 +400,17 @@ class AuditSeal(TenantNumbered):
         if stamp:
             now = timezone.now()
             detail = detail[:255]
+            # An unauthenticated/absent caller stamps NULL rather than a placeholder: "nobody is
+            # recorded" is the honest answer, and a fake actor on an evidence record is worse than
+            # none. A seeder or management command therefore leaves the column null by default.
+            actor = user if getattr(user, "is_authenticated", False) else None
             type(self).objects.filter(pk=self.pk).update(
-                last_verified_at=now, last_verify_ok=ok, last_verify_detail=detail)
+                last_verified_at=now, last_verify_ok=ok, last_verify_detail=detail,
+                last_verified_by=actor)
             self.last_verified_at = now
             self.last_verify_ok = ok
             self.last_verify_detail = detail
+            self.last_verified_by = actor
         return ok, detail
 
     def _compare(self, rows):
