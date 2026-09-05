@@ -209,6 +209,21 @@ def stock_position(request):
     rows, truncated = [], False
 
     if tenant is not None:
+        # --- resolve every pk filter to a REAL row of this workspace first ----------------------
+        # `as_db_int` deliberately lets `0` through (it is decimal and in range), and an AutoField
+        # starts at 1 — so filtering on the raw id let `?item=0`, `?location=0` or `?vendor=0` take
+        # the board from every row to none, which a buyer reads as "you hold no stock" rather than
+        # as "that filter matched nothing". Contract §6 rule 6: a junk GET param narrows NOTHING.
+        # A pk this workspace does not own resolves to None here for the same reason, and both
+        # sibling derived pages already do it this way (ReceiptBinMap.py:181, CountAccuracy.py:205)
+        # — three pages, one behaviour.
+        selected_item = (Item.objects.filter(tenant=tenant, pk=item_id).first()
+                         if item_id is not None else None)
+        selected_location = (Location.objects.filter(tenant=tenant, pk=location_id).first()
+                             if location_id is not None else None)
+        selected_vendor = (_supplier_parties(tenant).filter(pk=vendor_id).first()
+                           if vendor_id is not None else None)
+
         # --- the sources, each ONE grouped query (the on-order map is two, on purpose) ----------
         # Narrow the ledger IN THE DATABASE wherever the filter names a real column: item,
         # location and the text search are all real columns on the join, so pushing them down
@@ -217,10 +232,10 @@ def stock_position(request):
         moves = StockMove.objects.filter(tenant=tenant)
         if q:
             moves = moves.filter(Q(item__sku__icontains=q) | Q(item__name__icontains=q))
-        if item_id is not None:
-            moves = moves.filter(item_id=item_id)
-        if location_id is not None:
-            moves = moves.filter(location_id=location_id)
+        if selected_item is not None:
+            moves = moves.filter(item_id=selected_item.pk)
+        if selected_location is not None:
+            moves = moves.filter(location_id=selected_location.pk)
         combos = list(moves
                       .values("item_id", "location_id", "item__sku")
                       .annotate(on_hand=Sum("quantity"))
@@ -313,9 +328,10 @@ def stock_position(request):
         # The supplier filter is a PREFERRED-VENDOR filter: it is the only vendor a position row
         # owns of its own (the inbound PO's vendor belongs to that order, not to the row). Applied
         # after the merge because the policy that carries it is resolved after the merge.
-        if vendor_id is not None:
+        if selected_vendor is not None:
             rows = [row for row in rows
-                    if row["policy_vendor"] is not None and row["policy_vendor"].pk == vendor_id]
+                    if row["policy_vendor"] is not None
+                    and row["policy_vendor"].pk == selected_vendor.pk]
 
     # --- stats are computed over the FILTERED-but-unsliced population -----------------------------
     # (i.e. after q/item/location/vendor, before the `view` slice) so the three view tabs can show
