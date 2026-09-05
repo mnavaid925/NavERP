@@ -154,14 +154,27 @@ def materialissue_detail(request, pk):
 
     lines = list(obj.lines.select_related(*_LINE_RELATIONS))
     availability = obj.on_hand_at_location([line.item_id for line in lines])
-    # The figure is ALSO attached to each line, because a Django template cannot index a dict by a
-    # variable key — ``{{ availability[line.item_id] }}`` has no template equivalent. The dict stays
-    # in the context (it is the contract's key, and it is what a test asserts against); the
+
+    # The shortfall flag is computed PER ITEM ACROSS THE DOCUMENT, not per line — the same
+    # aggregation ``post()`` does before it refuses (``MaterialIssues.py:322-325``). There is no
+    # unique_together on (issue, item) and the model says duplicate lines are expected, so two
+    # lines of 6 against 10 on hand each look fine on their own while the document as a whole
+    # wants 12. Flagging per line left both rows unmarked and then had Post refuse with "only 10
+    # available … cannot issue 12", which is exactly the surprise the On-hand column exists to
+    # prevent.
+    demand = {}
+    for line in lines:
+        demand[line.item_id] = demand.get(line.item_id, 0) + (line.quantity or 0)
+
+    # The figures are ALSO attached to each line, because a Django template cannot index a dict by
+    # a variable key — ``{{ availability[line.item_id] }}`` has no template equivalent. The dict
+    # stays in the context (it is the contract's key, and it is what a test asserts against); the
     # per-line attributes are how the table actually renders. A return has no shortfall by
     # definition: it ADDS stock, so ``is_short`` is only ever meaningful on an issue.
     for line in lines:
         line.on_hand = availability.get(line.item_id, 0)
-        line.is_short = obj.is_issue and (line.quantity or 0) > line.on_hand
+        line.document_demand = demand.get(line.item_id, 0)
+        line.is_short = obj.is_issue and line.document_demand > line.on_hand
 
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
