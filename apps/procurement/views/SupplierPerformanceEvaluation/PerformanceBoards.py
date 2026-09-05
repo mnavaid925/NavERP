@@ -147,18 +147,23 @@ def _as_date(raw):
         return None
 
 
-def _supplier_parties(tenant):
+def _supplier_parties(request):
     """Supplier/vendor-role parties for the ``?supplier=`` pickers.
 
     A LOCAL copy, matching every other procurement sub-module (``ReceiptBoards._supplier_parties``).
     ``.distinct()`` is load-bearing: a party carrying BOTH roles would otherwise appear twice in
     the picker and, worse, twice in any queryset joined through it.
+
+    Takes the REQUEST, like the three other copies inside 6.16. This one took a ``tenant`` and
+    was otherwise identical, so the first person to copy a call between the two files would have
+    got an ``AttributeError`` on ``tenant.GET`` or a silently empty picker. Four copies is house
+    style; four copies with two signatures is not.
     """
     from apps.core.models import Party
 
-    if tenant is None:
+    if request.tenant is None:
         return Party.objects.none()
-    return (Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor"))
+    return (Party.objects.filter(tenant=request.tenant, roles__role__in=("supplier", "vendor"))
             .distinct().order_by("name"))
 
 
@@ -301,7 +306,7 @@ def supplier_trend_board(request):
     one query per period. Measured flat from three periods to ten.
     """
     tenant = request.tenant
-    suppliers = _supplier_parties(tenant)
+    suppliers = _supplier_parties(request)
     kpis = _active_kpis(tenant)
 
     supplier_id = as_db_int(request.GET.get("supplier"))
@@ -345,7 +350,7 @@ def supplier_perception_gap(request):
     exists at all rather than a second average on the scorecard.
     """
     tenant = request.tenant
-    suppliers = _supplier_parties(tenant)
+    suppliers = _supplier_parties(request)
 
     supplier_id = as_db_int(request.GET.get("supplier"))
     selected_supplier = (suppliers.filter(pk=supplier_id).first()
