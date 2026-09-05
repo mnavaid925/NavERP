@@ -251,19 +251,21 @@
               <td><span class="badge {{ s.trend_css }}">{{ s.get_trend_display }}</span></td>
               <td>{% if s.captured_by %}{{ s.captured_by.get_full_name|default:s.captured_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             </tr>
-          {% empty %}
-            <tr><td colspan="7">
-              <div class="empty-state">
-                <i data-lucide="line-chart"></i>
-                <h3>No series yet</h3>
-                <p>This is the only observation of this metric for this supplier from this provider. A second one gives the trend something to compare against.</p>
-              </div>
-            </td></tr>
+          {% comment %}
+            No {% templatetag openblock %} empty {% templatetag closeblock %} branch here, and
+            there must not be one: `series` filters on this row's own party_id, provider and
+            metric, so it ALWAYS contains at least `obj` itself and an empty branch could never
+            render. The single-row case is the real "nothing to compare against" state, and it is
+            said below the table where it is actually true.
+          {% endcomment %}
           {% endfor %}
         </tbody>
       </table>
     </div>
     <div class="card-body">
+      {% if series|length == 1 %}
+        <p class="text-muted">This is the only observation of this metric for this supplier from this provider. A second one gives the trend something to compare against.</p>
+      {% endif %}
       <p class="text-muted">Trend is judged on the risk position, never on the raw number. A Supplier Evaluation Risk falling from 7 to 4 is an improvement and an FHR falling from 70 to 40 is a deterioration — both numbers went down, and comparing the raw values would call one of them backwards whichever convention you picked.</p>
     </div>
   </div>
