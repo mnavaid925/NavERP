@@ -46,7 +46,7 @@
     <div class="stat-card">
       <div class="stat-icon blue"><i data-lucide="grid-3x3"></i></div>
       <div class="stat-value">{{ stats.rows }}</div>
-      <div class="stat-label">Item × location rows{% if truncated %} (capped at {{ row_cap }}){% endif %}</div>
+      <div class="stat-label">Item × location rows{% if truncated %} · first {{ row_cap }} listed below{% endif %}</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
@@ -108,7 +108,7 @@
       </form>
 
       {% if truncated %}
-        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} positions match these filters — the first {{ row_cap }} are shown, and the counters above cover the rows shown rather than the whole workspace. Narrow by item or location for a complete picture.</p>
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} positions match these filters — the <strong>table</strong> shows the first {{ row_cap }}, while the <strong>counters above cover every matching row</strong>, so they will read higher than the rows you can scroll. Narrow by item or location to bring the rest of them into the table.</p>
       {% endif %}
       {% if request.GET.vendor %}
         <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">Narrowed</span> The supplier filter matches the row's <strong>preferred supplier</strong> — the one its replenishment policy names. The supplier on an inbound order belongs to that order, not to the position, so it is shown in the Expected column but is not filtered on.</p>
@@ -172,7 +172,7 @@
               <td>{% if row.policy_vendor %}{{ row.policy_vendor.name }}{% else %}<span class="text-muted">No policy</span>{% endif %}</td>
               <td class="text-right">
                 {% if row.below_point %}
-                  <a href="{{ row.raise_requisition_url }}" class="btn btn-sm btn-outline" title="Raise a requisition"><i data-lucide="file-plus"></i></a>
+                  <a href="{{ row.raise_requisition_url }}" class="btn btn-sm btn-outline" title="Raise a requisition" aria-label="Raise a requisition for {{ row.sku }}"><i data-lucide="file-plus"></i></a>
                 {% endif %}
               </td>
             </tr>
