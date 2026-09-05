@@ -288,6 +288,22 @@ class Command(BaseCommand):
             ProcurementPolicy.objects.all().delete()
             KnowledgeResource.objects.all().delete()
             ProcurementDocument.objects.all().delete()
+            # 6.18 inventory & warehouse rows: children first. All three sub-blocks of
+            # ``_seed_inventory_warehouse`` are exists()-guarded, so without these the guards
+            # survive a --flush, the re-seed prints "already present, skipping" and the demo data
+            # can never be regenerated. ReplenishmentSuggestion needs no line of its own: it
+            # CASCADEs from its run, and it is the one 6.18 model this command deliberately never
+            # imports because only ``ReplenishmentRun.generate()`` ever writes it. Runs go before
+            # policies so a suggestion is never left pointing at a policy that has just been
+            # SET_NULL out from under it.
+            #
+            # NOTE: the ``scm.StockAdjustment`` rows a posted material issue would mint are SCM's,
+            # not ours, and are deliberately left alone — same rule as 6.16's scorecards. In
+            # practice there are none to consider: this command never calls ``post()``.
+            MaterialIssueLine.objects.all().delete()
+            MaterialIssue.objects.all().delete()
+            ReplenishmentRun.objects.all().delete()
+            ReplenishmentPolicy.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
