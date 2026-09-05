@@ -198,8 +198,14 @@ def supplier_benchmark_board(request):
     """Every supplier in one period, ranked against each other. Reads; writes nothing.
 
     Five queries, whatever the size of the supply base — see the module docstring. The composite
-    each row is ranked on is the scorecard's own frozen ``overall_score``, so this board and the
-    evaluation detail page can never disagree about what a supplier scored.
+    each row is ranked on is the weighted mean of the scorecard's own KPI lines, exactly as the
+    trend board computes it, so the two boards can never disagree about what a supplier scored.
+    SCM's ``overall_score`` rides along beside it under ``overall``, never instead of it.
+
+    Both narrowing params are validated before they reach the compute layer: ``tier`` against
+    ``TIER_CHOICES`` and ``category`` against the tenant's own distinct profile categories — the
+    same list the picker is built from, so a value the dropdown cannot offer cannot silently
+    empty the board either.
     """
     tenant = request.tenant
     periods = performance.period_choices(tenant) if tenant is not None else []
@@ -213,7 +219,16 @@ def supplier_benchmark_board(request):
     tier = (request.GET.get("tier") or "").strip()
     if tier not in dict(TIER_CHOICES):
         tier = ""
+    # Same guard as ``tier`` one line up, and it was missing here: ``?category=zzz`` reached the
+    # compute layer and silently emptied the whole board, while ``?tier=zzz`` on the same filter
+    # bar reset itself and rendered the full cohort. ``category`` is free text on
+    # ``scm.SupplierProfile`` rather than a CHOICES enum, so the legal set is the tenant's own
+    # distinct values — computed once here and reused as ``category_choices`` below, so the
+    # filter and the dropdown that offers it cannot drift apart.
+    categories = _profile_categories(tenant)
     category = (request.GET.get("category") or "").strip()[:120]
+    if category not in categories:
+        category = ""
 
     rows, cohort, truncated = [], _empty_cohort(), False
     if tenant is not None and selected_period is not None:
@@ -226,7 +241,7 @@ def supplier_benchmark_board(request):
         "selected_period": selected_period,
         "cohort": cohort,
         "tier_choices": TIER_CHOICES,
-        "category_choices": _profile_categories(tenant),
+        "category_choices": categories,
         "selected_tier": tier,
         "selected_category": category,
         "quadrant_choices": QUADRANT_CHOICES,
