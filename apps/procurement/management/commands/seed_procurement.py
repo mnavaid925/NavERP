@@ -73,6 +73,14 @@ from apps.procurement.models import (
     EscalationPolicy,
     EventCriterion,
     ProcurementAlert,
+    # 6.19 Document & Knowledge Management. ``extract_document_text`` comes with them because the
+    # seeded revisions read their own stored text back off disk rather than carrying a hand-typed
+    # constant - see ``_seed_document_knowledge``.
+    KnowledgeResource,
+    ProcurementDocument,
+    ProcurementDocumentRevision,
+    ProcurementPolicy,
+    extract_document_text,
     PunchOutEndpoint,
     PurchaseOrderChange,
     PurchaseOrderChangeLine,
@@ -260,6 +268,10 @@ class Command(BaseCommand):
             # recognised invoices the blocks above just created, so the stored amounts are real
             # figures rather than zeros.
             self._seed_budget_cost(tenant)
+            # 6.19 runs after everything above because its documents LINK to what those blocks
+            # created - the supplier party, the contract, the purchase order and the sourcing
+            # event. Run earlier it would file a repository of records that point at nothing.
+            self._seed_document_knowledge(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -2449,3 +2461,565 @@ class Command(BaseCommand):
             made += 1
             self.stdout.write(self.style.SUCCESS(
                 f"  {tenant.name}: {made} frozen cost forecast(s)."))
+
+    # -- 6.19 Document & Knowledge Management -----------------------------------------------------
+
+    def _seed_document_knowledge(self, tenant):
+        """6.19 Document & Knowledge Management - a controlled repository with a live revision
+        chain, a policy library with a real supersession, and the guidance shelf.
+
+        REUSES the spine rows the blocks above have already created and creates NONE of its own:
+        the supplier is an existing ``core.Party`` carrying a supplier/vendor ``PartyRole`` (the
+        exact narrowing ``ProcurementDocumentForm`` applies to its own <select>), the contract,
+        the order and the sourcing event are the first ``scm.SupplierContract`` /
+        ``scm.PurchaseOrder`` / ``procurement.SourcingEvent`` in the workspace, and the department
+        and currency come from core and accounting. Every one of those links is nullable, so a
+        thin workspace still gets a repository; a workspace with NO supplier party at all (the
+        SMOKETEST tenant) is skipped with a warning rather than crashed, exactly like the budget
+        block above.
+
+        Minted through the application's OWN paths wherever there is one: ``next_revision_no``
+        allocates the revision number, ``file_sha256`` checksums the bytes before they are stored,
+        ``extract_document_text`` reads the text back off disk, the approve helper moves the
+        parent pointer / copies the search text up / lifts a draft document to active the way
+        ``pdocrevision_approve`` does, and the publish helper stamps ``published_at`` and archives
+        the predecessor the way ``ppolicy_publish`` does. Nothing here hand-stamps a checksum, a
+        file size, a revision pointer, an ``archived`` status or a publication date.
+
+        Idempotent, one existence guard per block - documents, policies, resources. Revisions are
+        minted ONLY for a document this run just created, so every ``ContentFile`` lives inside
+        the documents guard's ``else`` branch and a second run reaches none of them: no second
+        copy of any file is written under MEDIA_ROOT. That guard, not the filename, is what keeps
+        the media folder clean - Django's storage layer RENAMES on collision
+        (``hvac-warranty-r1_a3f9c1x.txt``) instead of overwriting, so a block that re-ran would
+        quietly pile up duplicates nobody ever looks at.
+        """
+        from django.core.files.base import ContentFile
+
+        # Deep imports into the entity modules: ``normalize_tags``, ``next_revision_no``,
+        # ``file_sha256`` and ``EXTRACT_MAX_CHARS`` are deliberately NOT re-exported from
+        # ``apps.procurement.models`` (the 6.14/6.15 rule that keeps the package __init__ a model
+        # registry), and the two scm classes follow ``_seed_contracts``' function-local precedent
+        # rather than widening this command's shared import block.
+        from apps.procurement.models.DocumentKnowledgeManagement.Documents import normalize_tags
+        from apps.procurement.models.DocumentKnowledgeManagement.Revisions import (
+            EXTRACT_MAX_CHARS, file_sha256, next_revision_no)
+        from apps.scm.models import PurchaseOrder, SupplierContract
+
+        # The EXACT narrowing ProcurementDocumentForm applies to its supplier <select>: a
+        # workspace files the same company under either role, so both are accepted and the
+        # ``distinct()`` keeps a party holding both roles from arriving twice.
+        supplier = (Party.objects
+                    .filter(tenant=tenant, roles__role__in=("supplier", "vendor"))
+                    .distinct().order_by("name").first())
+        if supplier is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no supplier parties (run seed_scm first) - skipping document "
+                f"& knowledge management."))
+            return
+
+        # All four of these may legitimately be None on a thin workspace - every link on
+        # ProcurementDocument/ProcurementPolicy is nullable, so a missing contract costs one
+        # populated column, never a crash.
+        contract = SupplierContract.objects.filter(tenant=tenant).order_by("id").first()
+        order = PurchaseOrder.objects.filter(tenant=tenant).order_by("id").first()
+        event = SourcingEvent.objects.filter(tenant=tenant).order_by("id").first()
+        # DEPARTMENTS are units with a parent - the company root is where the tree hangs from,
+        # and scoping a policy to the root would say nothing the blank default does not.
+        department = (OrgUnit.objects.filter(tenant=tenant, parent__isnull=False)
+                      .order_by("id").first()
+                      or OrgUnit.objects.filter(tenant=tenant).order_by("id").first())
+        # accounting.Currency is a GLOBAL table with no tenant column (L29) - it is a display
+        # label on the advisory threshold and nothing converts, rates or posts anything here.
+        currency = Currency.objects.filter(is_active=True).order_by("code").first()
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        owner = members[0] if members else None
+        approver = (User.objects.filter(tenant=tenant, is_tenant_admin=True).order_by("id").first()
+                    or owner)
+        today = timezone.localdate()
+
+        def _mint_revision(document, filename, change_note, body):
+            """Create the next revision of ``document`` the way ``pdocument_revision_upload`` does.
+
+            The checksum and the size are measured from the payload BEFORE ``save()`` consumes the
+            file pointer, the number comes from ``next_revision_no``, and the text is read back
+            off disk by ``extract_document_text`` AFTER the row exists - so ``sha256``,
+            ``file_size`` and ``extracted_text`` are values these bytes actually produced rather
+            than constants typed into a seeder. The view allocates under a
+            ``select_for_update()`` on the parent because two uploaders can race; a management
+            command is the single writer, so the lock has nothing to serialize against here.
+
+            The payload is a ``.txt`` on purpose: it is in ``PLAIN_TEXT_EXTENSIONS``, so the
+            extractor genuinely reads it and full-text search is demonstrably working on a fresh
+            workspace - without committing a binary PDF fixture to the repository.
+
+            WARNING: this WRITES A FILE under MEDIA_ROOT. It is reachable only from inside the
+            documents block's ``else`` branch, i.e. only for a document this run just created, so
+            a second run never calls it and never leaves a renamed duplicate behind.
+            """
+            payload = ContentFile(body.encode("utf-8"), name=filename)
+            digest = file_sha256(payload)
+            size = payload.size
+            revision = ProcurementDocumentRevision(
+                tenant=tenant,
+                document=document,
+                revision_no=next_revision_no(document),
+                file=payload,
+                original_filename=filename,
+                file_size=size,
+                sha256=digest,
+                change_note=change_note,
+                uploaded_by=owner,
+            )
+            revision.save()
+            # After the save, exactly as the upload view does it: there is nothing on disk to
+            # read until the storage layer has written it. Never raises - a missing extractor or
+            # an unreadable path comes back as ("", note).
+            text, note = extract_document_text(revision)
+            revision.extracted_text = (text or "")[:EXTRACT_MAX_CHARS]
+            revision.extraction_note = note
+            revision.save(update_fields=["extracted_text", "extraction_note"])
+            return revision
+
+        def _approve_revision(document, revision):
+            """Approve one revision the way ``pdocrevision_approve`` does.
+
+            Stamp the revision, move the parent's integer pointer, copy the revision's text up
+            into the parent's denormalized SEARCH COPY, and lift a still-draft document to active
+            - its first approved file is what puts it in force. Earlier approved revisions are
+            deliberately left approved: they were, and "only the latest approved version is
+            current" is expressed by the pointer landing on exactly one row, never by rewriting
+            history. That is what gives the chain its amber Superseded badge below.
+            """
+            revision.is_approved = True
+            revision.approved_by = approver
+            revision.approved_at = NOW
+            revision.save(update_fields=["is_approved", "approved_by", "approved_at"])
+
+            document.current_revision_no = revision.revision_no
+            document.extracted_text = (revision.extracted_text or "")[:EXTRACT_MAX_CHARS]
+            if document.status == "draft":
+                document.status = "active"
+            document.save(update_fields=["current_revision_no", "extracted_text", "status",
+                                         "updated_at"])
+            write_audit_log(None, document, "revision_approve",
+                            {"revision_no": revision.revision_no,
+                             "sha256": revision.sha256[:16]})
+            return revision
+
+        def _publish_policy(policy, at):
+            """Publish a draft policy the way ``ppolicy_publish`` does, on a supplied clock.
+
+            Stamp ``status`` and ``published_at``, then archive the predecessor WHEN THE
+            PREDECESSOR IS ITSELF PUBLISHED - which is how the seeded supersession chain gets its
+            archived v1.0 without anybody hand-writing the word "archived": v1.0 is created and
+            published first, and v2.0's publish retires it. The predecessor is re-fetched with an
+            explicit tenant filter rather than read off the FK for the same reason the view does
+            it: FK traversal bypasses every tenant filter.
+
+            ``at`` exists so v1.0 can be published two years ago and v2.0 last month. It is the
+            one thing the view takes from ``timezone.now()`` instead of an argument, and a library
+            whose whole history happened in the same millisecond reads as fixture data.
+            """
+            if policy.status != "draft":
+                return policy
+            policy.status = "published"
+            policy.published_at = at
+            policy.save(update_fields=["status", "published_at", "updated_at"])
+            predecessor = None
+            if policy.previous_version_id:
+                predecessor = (ProcurementPolicy.objects
+                               .filter(pk=policy.previous_version_id, tenant=tenant).first())
+            retired = None
+            if predecessor is not None and predecessor.status == "published":
+                predecessor.status = "archived"
+                predecessor.save(update_fields=["status", "updated_at"])
+                retired = predecessor
+            write_audit_log(None, policy, "policy_publish",
+                            {"number": policy.number, "version": policy.version_number,
+                             "from": "draft", "to": "published",
+                             "superseded": retired.number if retired is not None else None})
+            return policy
+
+        # -- 1. the repository (and, inside it, every revision) ---------------------------------
+        if ProcurementDocument.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: procurement documents already present, skipping.")
+        else:
+            # One transaction for the documents AND their revisions: a partial failure must roll
+            # back together, or the guard above would see the half-built repository on the next
+            # run and skip this tenant for ever. WARNING: a rollback does NOT reclaim any file
+            # already written to MEDIA_ROOT - Django's storage layer is not transactional, and
+            # deleting a stored path from an error handler is the operation that turns one bug
+            # into an arbitrary-file-delete. Orphaned bytes with no row are the safe failure.
+            with transaction.atomic():
+                # (a) A live warranty about to lapse: INSIDE ``EXPIRY_WARN_DAYS``, so it is what
+                #     the "Expiring soon" facet, the expiring stat tile and the reminder Run all
+                #     pick up. Created as a draft and lifted to active by approving its first
+                #     revision, the same way the application does it.
+                warranty = ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="Rooftop HVAC units - 5 year parts & labour warranty",
+                    doc_type="warranty",
+                    description=("Manufacturer warranty covering the two rooftop air handling "
+                                 "units installed under the facilities refit. Claims go through "
+                                 "the supplier's service desk quoting the unit serial numbers."),
+                    tags=normalize_tags("Warranty, HVAC, facilities, warranty"),
+                    classification="internal",
+                    owner=owner,
+                    supplier_visible=True,
+                    effective_date=today - timedelta(days=320),
+                    expires_on=today + timedelta(days=21),
+                    supplier=supplier,
+                    purchase_order=order,
+                )
+                # (b) An EXPIRED certificate of insurance that is also overdue for review - the
+                #     honest row behind the Expired facet, the review badge and the critical
+                #     alert the reminder scan raises.
+                insurance = ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="Certificate of insurance - public & employers liability",
+                    doc_type="insurance",
+                    description=("Broker-issued certificate held against the master supply "
+                                 "agreement. Chase the renewal certificate before releasing any "
+                                 "further site work."),
+                    tags=normalize_tags("Insurance, compliance, certificate"),
+                    classification="confidential",
+                    owner=owner,
+                    effective_date=today - timedelta(days=385),
+                    expires_on=today - timedelta(days=20),
+                    review_on=today - timedelta(days=5),
+                    supplier=supplier,
+                    contract=contract,
+                )
+                # (c) A DRAFT specification with no revision at all, so the "no revision yet"
+                #     empty state on the detail page is a real row rather than a claim. Its
+                #     review date is already past and it carries no expiry, which is what makes
+                #     the reminder scan take its ``review`` branch rather than its ``expires``
+                #     one - both reasons are exercised across this workspace.
+                ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="Technical specification - server room UPS replacement",
+                    doc_type="specification",
+                    description=("Draft specification circulated with the sourcing event. Not "
+                                 "issued: no revision has been uploaded or approved yet."),
+                    tags=normalize_tags("Specification, IT, UPS"),
+                    classification="internal",
+                    owner=owner,
+                    review_on=today - timedelta(days=3),
+                    sourcing_event=event,
+                )
+                # (d) An ARCHIVED correspondence pack past its retention date - the row behind
+                #     the "Past retention" facet. ``retention_until`` is a FLAG a human reads:
+                #     nothing in 6.19 deletes anything on a schedule, and this row proves it by
+                #     still being here.
+                ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="Tender correspondence pack - 2023 facilities retender",
+                    doc_type="correspondence",
+                    description=("Closed-out correspondence from a retender that has since been "
+                                 "awarded and delivered. Past its retention date and kept until "
+                                 "somebody decides otherwise - nothing here destroys it."),
+                    tags=normalize_tags("Correspondence, tender, archive"),
+                    classification="internal",
+                    status="archived",
+                    owner=owner,
+                    effective_date=today - timedelta(days=800),
+                    expires_on=today - timedelta(days=400),
+                    retention_until=today - timedelta(days=10),
+                    supplier=supplier,
+                )
+                # (e) The RFP template pack. This is the artifact the featured knowledge resource
+                #     points at, so the library's one downloadable file goes through the
+                #     repository's revision chain and approval step instead of being a second,
+                #     unversioned copy hanging off the library row.
+                template_pack = ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="RFP template pack - goods & services",
+                    doc_type="template",
+                    description=("The current request-for-proposal skeleton: instructions to "
+                                 "bidders, the response schedule and the evaluation criteria "
+                                 "table."),
+                    tags=normalize_tags("RFP, template, sourcing"),
+                    classification="public",
+                    owner=owner,
+                    effective_date=today - timedelta(days=120),
+                    review_on=today + timedelta(days=150),
+                )
+                # (f) The signed policy PDF - what the published policy below links to, for the
+                #     same reason: one artifact, one place, one history.
+                policy_pdf = ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="Competitive bidding policy v2.0 - signed",
+                    doc_type="policy",
+                    description=("The countersigned copy of the competitive bidding policy "
+                                 "currently in force."),
+                    tags=normalize_tags("Policy, bidding, governance"),
+                    classification="internal",
+                    owner=owner,
+                    effective_date=today - timedelta(days=30),
+                )
+                # (g) A SUPERSEDED drawing set, carrying the fourth status badge and the
+                #     restricted classification. No revision: the file itself never made it into
+                #     the repository, which is exactly why the record was replaced.
+                ProcurementDocument.objects.create(
+                    tenant=tenant,
+                    title="Chiller plant layout - drawing set rev B",
+                    doc_type="drawing",
+                    description=("Superseded by rev C issued with the commissioning pack. Kept "
+                                 "so the order it was issued against still reads sensibly."),
+                    tags=normalize_tags("Drawing, HVAC, superseded"),
+                    classification="restricted",
+                    status="superseded",
+                    owner=owner,
+                    effective_date=today - timedelta(days=500),
+                    purchase_order=order,
+                )
+
+                documents = list(ProcurementDocument.objects.filter(tenant=tenant))
+                for document in documents:
+                    write_audit_log(None, document, "create")
+
+                # -- the revision chain -----------------------------------------------------
+                # The warranty ends up on r2: r1 was approved and is now SUPERSEDED (amber), r2
+                # is approved and CURRENT (green).
+                _approve_revision(warranty, _mint_revision(
+                    warranty, "hvac-warranty-r1.txt", "First issue as supplied at handover.",
+                    "ROOFTOP HVAC UNIT WARRANTY - ISSUE 1\n\n"
+                    "Coverage: parts and labour on both rooftop air handling units for sixty "
+                    "(60) months from the commissioning date.\n"
+                    "Excluded: filters, belts and any consumable replaced at routine service.\n"
+                    "Compressor: covered for the first twenty-four (24) months only.\n"
+                    "Claims: raise a service ticket quoting the unit serial numbers. A site "
+                    "visit is promised within two working days.\n"))
+                _approve_revision(warranty, _mint_revision(
+                    warranty, "hvac-warranty-r2.txt",
+                    "Compressor cover extended to 60 months; response tightened to 1 day.",
+                    "ROOFTOP HVAC UNIT WARRANTY - ISSUE 2\n\n"
+                    "Supersedes issue 1.\n"
+                    "Compressor: now covered for the full sixty (60) months rather than the "
+                    "first twenty-four.\n"
+                    "Response: a site visit within one working day of a logged fault.\n"
+                    "Everything else is unchanged - filters, belts and consumables remain "
+                    "excluded.\n"))
+                # The certificate ends up on r1 with an UNAPPROVED r2 waiting behind it, which is
+                # the pending (muted) badge, the live target for the approve verb, and the one
+                # revision in the workspace the delete verb will actually accept.
+                _approve_revision(insurance, _mint_revision(
+                    insurance, "certificate-of-insurance-r1.txt",
+                    "Certificate as issued by the broker for the expiring period.",
+                    "CERTIFICATE OF INSURANCE\n\n"
+                    "Public liability: 5,000,000 any one occurrence.\n"
+                    "Employers liability: 10,000,000 any one occurrence.\n"
+                    "Professional indemnity: 2,000,000 in the aggregate.\n"
+                    "This certificate is evidence of cover only and does not amend the policy "
+                    "wording or the master supply agreement.\n"))
+                _mint_revision(
+                    insurance, "certificate-of-insurance-r2-draft.txt",
+                    "Renewal certificate - awaiting the broker's countersignature.",
+                    "CERTIFICATE OF INSURANCE - RENEWAL DRAFT\n\n"
+                    "Public liability: 5,000,000 any one occurrence.\n"
+                    "Employers liability: 10,000,000 any one occurrence.\n"
+                    "Professional indemnity: 5,000,000 in the aggregate.\n"
+                    "DRAFT - not yet countersigned by the broker, so it is not the certificate "
+                    "of record and must not be relied on.\n")
+                _approve_revision(template_pack, _mint_revision(
+                    template_pack, "rfp-template-pack-r1.txt",
+                    "Current issue of the RFP skeleton.",
+                    "REQUEST FOR PROPOSAL - TEMPLATE PACK\n\n"
+                    "1. Instructions to bidders - submission channel, deadline, clarification "
+                    "window.\n"
+                    "2. Scope of requirement - written by the requesting department.\n"
+                    "3. Response schedule - commercial, technical and compliance sections.\n"
+                    "4. Evaluation criteria - weighted, published to bidders before the close.\n"
+                    "5. Standard terms - reference the pre-approved clause library.\n"))
+                _approve_revision(policy_pdf, _mint_revision(
+                    policy_pdf, "competitive-bidding-policy-v2-signed-r1.txt",
+                    "Countersigned copy of v2.0.",
+                    "COMPETITIVE BIDDING POLICY v2.0\n\n"
+                    "Requisitions above the published guideline figure are expected to be "
+                    "supported by three written quotations, or by a sole-source justification "
+                    "approved under the sole-source policy.\n"
+                    "This document records the rule. It enforces nothing on its own: how many "
+                    "signatures a spend needs is decided by the approval routing rules.\n"))
+
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {len(documents)} procurement documents + "
+                f"{ProcurementDocumentRevision.objects.filter(tenant=tenant).count()} revisions "
+                f"(r1 superseded / r2 current on the warranty, one pending on the certificate)."))
+
+        # -- 2. the policy library ----------------------------------------------------------------
+        if ProcurementPolicy.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: procurement policies already present, skipping.")
+        else:
+            # Re-QUERIED rather than carried down from the block above, so the library still
+            # links correctly on a workspace whose documents were seeded by an earlier run.
+            policy_document = (ProcurementDocument.objects
+                               .filter(tenant=tenant, doc_type="policy").order_by("id").first())
+            bidding_title = "Competitive bidding thresholds"
+            made = 0
+            with transaction.atomic():
+                # v1.0 is created as a DRAFT and published on an old clock. Nothing writes the
+                # word "archived" anywhere in this block - v2.0's publish does that, which is the
+                # whole point of seeding the chain through the real verb.
+                v1, was_created = ProcurementPolicy.objects.get_or_create(
+                    tenant=tenant, title=bidding_title, version_number="1.0",
+                    defaults={
+                        "policy_type": "competitive_bidding",
+                        "summary": ("Three written quotations above the guideline figure, or a "
+                                    "sole-source justification."),
+                        "body": ("Requisitions above the guideline figure are expected to be "
+                                 "supported by three written quotations. Where only one supplier "
+                                 "can meet the requirement, raise a sole-source justification "
+                                 "instead and say why.\n\nThis is the first issue of the rule."),
+                        "effective_from": today - timedelta(days=700),
+                        "threshold_amount": Decimal("5000.00"),
+                        "threshold_basis": "per_requisition",
+                        "threshold_currency": currency,
+                        "applies_to": department,
+                        "owner": owner,
+                    },
+                )
+                made += int(was_created)
+                _publish_policy(v1, NOW - timedelta(days=700))
+
+                v2, was_created = ProcurementPolicy.objects.get_or_create(
+                    tenant=tenant, title=bidding_title, version_number="2.0",
+                    defaults={
+                        "policy_type": "competitive_bidding",
+                        "summary": ("Guideline raised to 10,000 per requisition; sole-source "
+                                    "route unchanged."),
+                        "body": ("Requisitions above the guideline figure are expected to be "
+                                 "supported by three written quotations. Where only one supplier "
+                                 "can meet the requirement, raise a sole-source justification "
+                                 "instead and say why.\n\nThis version raises the guideline "
+                                 "figure and replaces v1.0."),
+                        "previous_version": v1,
+                        "effective_from": today - timedelta(days=30),
+                        "next_review_on": today + timedelta(days=180),
+                        # WARNING: advisory documentation, not a control. Nothing in 6.19 reads
+                        # this number to gate, block, route or approve anything - the enforceable
+                        # equivalent is a 6.3 ApprovalRoutingRule band.
+                        "threshold_amount": Decimal("10000.00"),
+                        "threshold_basis": "per_requisition",
+                        "threshold_currency": currency,
+                        "applies_to": department,
+                        # A hook for 6.17, which owns the acknowledgement ledger. It records the
+                        # INTENTION to collect sign-offs, never the fact that any were collected.
+                        "requires_acknowledgment": True,
+                        "document": policy_document,
+                        "owner": owner,
+                    },
+                )
+                made += int(was_created)
+                # This is the call that archives v1.0 and completes the visible chain.
+                _publish_policy(v2, NOW - timedelta(days=30))
+
+                # A DRAFT whose review date is already past, so the review-overdue facet and its
+                # badge both have an honest row. No threshold: the two threshold columns are set
+                # together or not at all, and this rule quotes no figure.
+                _draft, was_created = ProcurementPolicy.objects.get_or_create(
+                    tenant=tenant, title="Sole-source justification", version_number="1.0",
+                    defaults={
+                        "policy_type": "sole_source",
+                        "summary": ("When a single supplier may be used without competing the "
+                                    "requirement, and what has to be written down."),
+                        "body": ("A sole-source award needs a written justification naming the "
+                                 "reason - proprietary technology, a compatibility constraint, a "
+                                 "genuine emergency - the alternatives considered, and the buyer "
+                                 "who accepted it.\n\nStill in draft: circulated for comment and "
+                                 "not yet in force."),
+                        "effective_from": None,
+                        "next_review_on": today - timedelta(days=12),
+                        "applies_to": department,
+                        "owner": owner,
+                    },
+                )
+                made += int(was_created)
+
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} procurement policies "
+                f"(v2.0 published, v1.0 archived by that publish, 1 draft overdue for review)."))
+
+        # -- 3. the knowledge library -------------------------------------------------------------
+        if KnowledgeResource.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: knowledge resources already present, skipping.")
+        else:
+            # Re-QUERIED for the same reason the policy document is - the shelf has to link
+            # correctly whether or not this run created the repository.
+            template_document = (ProcurementDocument.objects
+                                 .filter(tenant=tenant, doc_type="template")
+                                 .order_by("id").first())
+            rows = [
+                # The featured RFP template, carrying the one downloadable artifact. There is no
+                # FileField on this model on purpose: the workbook is a ProcurementDocument, so
+                # it inherits the revision chain, the approval step and the text search.
+                {"title": "RFP template - goods & services",
+                 "resource_type": "rfp_template", "category": "general", "audience": "buyer",
+                 "status": "published", "is_featured": True, "document": template_document,
+                 "summary": ("How to run a request for proposal end to end, with the current "
+                             "template pack attached."),
+                 "body": ("Start from the attached pack. Fill in the scope with the requesting "
+                          "department, agree the weighted criteria BEFORE the event opens, and "
+                          "publish them to bidders - criteria invented after the close are not "
+                          "defensible.\n\nThe event itself is raised in Sourcing & Tendering; "
+                          "this is the guidance, not the machinery."),
+                 "tags": "RFP, template, sourcing, evaluation",
+                 "review_on": today + timedelta(days=150)},
+                # Featured too, so the shelf reads as a shelf rather than a single starred row -
+                # and it carries the only non-zero usage count in the workspace, which is what
+                # gives the "most used" surface something to rank.
+                {"title": "Negotiation playbook - freight & logistics",
+                 "resource_type": "negotiation_playbook", "category": "logistics",
+                 "audience": "buyer", "status": "published", "is_featured": True,
+                 "summary": ("Openers, concessions and walk-away positions for freight and "
+                             "third-party logistics renewals."),
+                 "body": ("Anchor on total landed cost, never the line rate. Trade volume "
+                          "commitment for rate protection rather than for a one-off discount, "
+                          "and hold fuel surcharge mechanics back as the last concession.\n\n"
+                          "Know the walk-away before the first call: a position discovered "
+                          "during a negotiation is a position the other side sets."),
+                 "tags": "Negotiation, logistics, freight, playbook",
+                 "usage_count": 7, "last_used_at": NOW - timedelta(days=2),
+                 "review_on": today + timedelta(days=60)},
+                {"title": "Bid evaluation scorecard - weighted criteria",
+                 "resource_type": "evaluation_scorecard", "category": "general",
+                 "audience": "approver", "status": "published",
+                 "summary": ("A worked weighted scorecard, with the arithmetic the award board "
+                             "actually uses."),
+                 "body": ("Weights are agreed and published before bids open, and they total "
+                          "100. Each panel member scores independently before the panel meets - "
+                          "scoring together produces one opinion three times.\n\nRecord the "
+                          "reason for every score: the score is the decision, the reason is the "
+                          "audit trail."),
+                 "tags": "Evaluation, scorecard, bids",
+                 "review_on": today + timedelta(days=90)},
+                # A DRAFT that is already overdue for review, so the draft badge and the
+                # review-due badge both appear on the register.
+                {"title": "New supplier onboarding checklist",
+                 "resource_type": "checklist", "category": "general", "audience": "requester",
+                 "status": "draft",
+                 "summary": ("What has to be in place before a new supplier can be paid."),
+                 "body": ("Company details and registration number. Bank details verified by "
+                          "call-back to a number you looked up, never one supplied on the "
+                          "invoice. Insurance certificates in date. Signed code of conduct. "
+                          "Payment terms agreed in writing.\n\nDraft: still being reconciled "
+                          "against the supplier onboarding workflow."),
+                 "tags": "Onboarding, checklist, supplier",
+                 "review_on": today - timedelta(days=6)},
+            ]
+            made = 0
+            for row in rows:
+                fields = dict(row)
+                title = fields.pop("title")
+                # Tags normalized through the SAME function the form uses, so one tag typed on a
+                # document and one seeded on a guide really are one tag to the ?tag= facet.
+                fields["tags"] = normalize_tags(fields.get("tags", ""))
+                fields["owner"] = owner
+                _obj, was_created = KnowledgeResource.objects.get_or_create(
+                    tenant=tenant, title=title, defaults=fields)
+                made += int(was_created)
+
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} knowledge resources "
+                f"(2 featured on the shelf, 1 used 7 times, 1 draft overdue for review)."))
