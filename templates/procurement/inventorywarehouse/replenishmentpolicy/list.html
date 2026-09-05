@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Replenishment Policies{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — ReplenishmentPolicy register
+    (apps/procurement/views/InventoryWarehouseIntegration/Policies.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      stats{total, active, inactive, auto},
+      items, locations, vendors, source_choices, trigger_choices.
+    The view's crud_list filter tuple is exactly (("item","item_id",True),
+    ("location","location_id",True), ("vendor","preferred_vendor_id",True),
+    ("source_method","source_method",False), ("trigger_mode","trigger_mode",False),
+    ("is_active","is_active",False)) with search_fields over item sku/name, location
+    code/name, preferred-vendor name and notes — so the filter bar offers exactly q, item,
+    location, vendor, source_method, trigger_mode and is_active. No <select> here posts a
+    param the view ignores, and no filter the view accepts is missing from the bar.
+
+    The three FK dropdowns post pks and compare with |stringformat:"d" (never |slugify);
+    the two enum dropdowns compare against source_choices / trigger_choices, which ARE the
+    model's CHOICES, so a badge and a filter option can never disagree; is_active posts the
+    literal strings True / False, which crud_list maps.
+
+    A policy has NO system-assigned number (config master, not a document), so the delete
+    confirm interpolates the PRIMARY KEY and nothing else. obj.item.sku, the location code
+    and the vendor name are all user-authored: Django escapes them for HTML, but the HTML
+    attribute parser un-escapes &#x27; back to a quote BEFORE the JS string is parsed, so a
+    SKU containing an apostrophe would break out of the confirm() literal. The readable
+    identification lives in the row, where escaping actually holds.
+
+    Rows link out, never restate (L36): the item and location cells link into scm, and the
+    page header links to the reorder rules this policy overlays — the planning numbers stay
+    scm's and this register only holds procurement's glue.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Replenishment Policies</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <span>Replenishment Policies</span>
+      </div>
+      <p class="text-muted">How this workspace turns a "below the reorder point" signal into a purchase: who to buy from, how much to round the quantity to, and what defaults the generated requisition carries. The reorder point and safety stock themselves stay on the SCM reorder rule — a policy overrides, it never restates.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Reorder rules</a>
+      <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="sliders-horizontal"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Policies</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="zap"></i></div><div class="stat-value">{{ stats.auto }}</div><div class="stat-label">Active &amp; automatic</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pause-circle"></i></div><div class="stat-value">{{ stats.inactive }}</div><div class="stat-label">Inactive</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search policies" class="form-input" placeholder="Search item, location, vendor or notes…">
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk|stringformat:"d" }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }} · {{ i.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk|stringformat:"d" }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }} · {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Preferred vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source_method" aria-label="Source method" class="form-select">
+            <option value="">All source methods</option>
+            {% for value, label in source_choices %}
+              <option value="{{ value }}" {% if request.GET.source_method == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="trigger_mode" aria-label="Trigger mode" class="form-select">
+            <option value="">All trigger modes</option>
+            {% for value, label in trigger_choices %}
+              <option value="{{ value }}" {% if request.GET.trigger_mode == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Status" class="form-select">
+            <option value="">Active and inactive</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:replenishmentpolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Scope</th>
+            <th>Source</th>
+            <th>Trigger</th>
+            <th>Preferred vendor</th>
+            <th class="text-right">Order-up-to</th>
+            <th>Quantity rules</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>
+                <div class="text-muted">{{ obj.item.name }}</div>
+              </td>
+              <td>
+                {% if obj.location %}
+                  <a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+                  <div class="text-muted">{{ obj.location.name }}</div>
+                {% else %}
+                  <span class="text-muted">Any location</span>
+                  <div class="text-muted">catch-all — a located policy overrides it</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.source_css }}">{{ obj.get_source_method_display }}</span>
+                {% if not obj.raises_requisitions %}<div class="text-muted">no requisition raised</div>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_mode_display }}</span></td>
+              <td>{% if obj.preferred_vendor %}{{ obj.preferred_vendor.name }}{% else %}<span class="text-muted">Decided at release</span>{% endif %}</td>
+              <td class="text-right">
+                {% if obj.target_level is not None %}{{ obj.target_level }}{% else %}<span class="text-muted">from rule</span>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  All three are nullable and "no rule" is the common case, so each is guarded
+                  individually rather than behind one {% if %} that would hide the other two.
+                  is not None, never truthiness: a stored 0 is a real (if pointless) value and
+                  reading as blank would be a lie about the row.
+                {% endcomment %}
+                {% if obj.min_order_qty is not None %}<div>min {{ obj.min_order_qty }}</div>{% endif %}
+                {% if obj.order_multiple is not None %}<div>×{{ obj.order_multiple }} multiple</div>{% endif %}
+                {% if obj.max_order_qty is not None %}<div>cap {{ obj.max_order_qty }}</div>{% endif %}
+                {% if obj.min_order_qty is None and obj.order_multiple is None and obj.max_order_qty is None %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.status_label }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:replenishmentpolicy_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:replenishmentpolicy_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. Only the primary key
+                    reaches the confirm string — the SKU, the location code and the vendor name
+                    are all user-authored text and never do.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:replenishmentpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment policy #{{ obj.pk }}? This item falls back to its any-location policy, or to no procurement policy at all — the SCM reorder rule is untouched either way.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="sliders-horizontal"></i>
+                <h3>No replenishment policies found</h3>
+                <p>Nothing matches these filters. A policy is procurement's overlay on an SCM reorder rule — it adds the vendor, the rounding and the requisition defaults that turn a reorder signal into something somebody can actually buy.</p>
+                <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+                <a href="{% url 'procurement:replenishmentpolicy_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How a policy is chosen</h2><span class="text-muted">specificity, then nothing else</span></div>
+    <div class="card-body">
+      <p class="text-muted">When a replenishment run needs the policy for an item at a location, the most specific active policy wins: a policy naming that location beats the item's any-location catch-all, and if neither exists the run falls back to the SCM reorder rule alone. Inactive policies are never resolved — keep one inactive rather than deleting it when an item is phased out, so the history stays readable.</p>
+      <p class="text-muted">Only <span class="fw-600">Buy</span> raises a requisition. <span class="fw-600">Transfer</span> and <span class="fw-600">Manufacture</span> are recorded and reported on, but a run will not quietly purchase something that should have been moved between warehouses or made in-house.</p>
+    </div>
+  </div>
+{% endblock %}
