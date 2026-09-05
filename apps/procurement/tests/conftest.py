@@ -2123,3 +2123,578 @@ def invoice_dispute_b(db, tenant_b, admin_b, invoice_b):
     """Tenant B's dispute - the cross-tenant 404 target on detail / edit / delete / every verb."""
     return _invoice_dispute(tenant_b, invoice_b, description="Globex-only argument.",
                             raised_by=admin_b)
+
+
+# =================================================================================================
+# 6.19 Document & Knowledge Management
+# =================================================================================================
+#
+# Every fixture and helper below is prefixed ``dk_`` / ``_dk_`` so the four 6.19 test lanes
+# (test_dk_models / test_dk_forms / test_dk_views / test_dk_security) never collide with the
+# 6.1 / 6.2 / 6.4 / 6.5 / 6.9 / 6.11 / 6.12 / 6.13 / 6.14 / 6.15 records above, or with whatever
+# 6.16-6.18 append next (L47). Dates derive from ``timezone.localdate()`` / ``timezone.now()`` -
+# never ``datetime.date.today()`` - so exact-date assertions stay stable after local midnight (L16).
+#
+# THREE THINGS TO KNOW BEFORE USING THESE:
+#
+# 1. ``Model.objects.create()`` does NOT call ``clean()``. Tags on ``dk_*`` documents and
+#    resources are therefore pre-normalised (lower case, ", "-joined) - assert ``normalize_tags``
+#    and ``clean()`` through the MODEL/FORM directly, never by reading a fixture back.
+# 2. Anything that stores a FILE depends on ``dk_media_root``, which points ``settings.MEDIA_ROOT``
+#    at pytest's per-test ``tmp_path``. Nothing is left under the real ``media/`` when the test DB
+#    tears down. Request it (directly or transitively) before writing any file in a test.
+# 3. ``_dk_revision`` runs the REAL ``extract_document_text`` over the stored ``.txt`` bytes, and
+#    ``_dk_approve`` performs exactly the writes ``pdocrevision_approve`` performs (stamp, move the
+#    pointer, copy the text up, draft -> active). The fixture chain state is the production state.
+#
+# The shape the lanes can rely on:
+#
+#   dk_media_root              settings.MEDIA_ROOT -> tmp_path/media (auto-cleaned)
+#   dk_supplier_a / dk_supplier_b   core.Party + supplier PartyRole (the ?supplier= facet + IDOR)
+#
+#   dk_document_draft_a        draft / internal / ZERO revisions      -> delete IS allowed
+#   dk_document_active_a       active / internal / supplier + owner   -> supersede/archive source
+#   dk_document_superseded_a   superseded / internal
+#   dk_document_archived_a     archived / internal   -> checkout + upload are REFUSED on it
+#   dk_document_public_a       public      / no owner -> member_user CAN read
+#   dk_document_confidential_a confidential / owner=admin_user  -> member_user CANNOT (I5)
+#   dk_document_restricted_a   restricted   / owner=admin_user  -> member_user CANNOT (I5)
+#   dk_document_confidential_member_a  confidential / owner=member_user -> member_user CAN (I5)
+#   dk_document_expiring_a     expires_on = today + 7   (inside EXPIRY_WARN_DAYS)
+#   dk_document_expired_a      expires_on = today - 3
+#   dk_document_review_due_a   review_on  = today - 1
+#   dk_document_over_retention_a  retention_until = today - 1
+#   dk_document_locked_a       checked_out_by = member_user -> admin_user is refused / may force
+#   dk_document_chain_a        active, pointer = 1, r1 APPROVED + r2 PENDING
+#   dk_documents_page2_a       16 public active rows -> forces page 2 at per_page=15
+#   dk_document_b              tenant B - the IDOR / crafted-FK target
+#
+#   dk_revision_approved_a     r1 of dk_document_chain_a (is_approved=True, is_current=True)
+#   dk_revision_pending_a      r2 of dk_document_chain_a (pending -> approvable, deletable)
+#   dk_revision_confidential_a r1 of dk_document_confidential_a, approved (classification via FK)
+#   dk_revision_no_file_a      r1 of dk_document_superseded_a with file="" (download guard)
+#   dk_revision_b              r1 of dk_document_b - the IDOR / download target
+#
+#   dk_policy_v1_archived_a    "Competitive Bidding Threshold" v1.0 ARCHIVED (published_at set)
+#   dk_policy_published_a      same title v2.0 PUBLISHED, previous_version = v1.0, threshold set
+#   dk_policy_draft_a          same title v3.0 DRAFT, previous_version = v2.0
+#                              -> publishing it ARCHIVES dk_policy_published_a
+#   dk_policy_review_due_a     "Supplier Code of Conduct" v1.0 published, next_review_on = today-1
+#   dk_attestation_a           6.17 PolicyAttestation on dk_policy_published_a -> delete REFUSED
+#   dk_policy_b                tenant B - the IDOR / crafted-FK target
+#
+#   dk_resource_featured_a     published + is_featured -> the "start here" shelf
+#   dk_resource_published_a    published, not featured
+#   dk_resource_draft_a        draft            -> publish verb target
+#   dk_resource_archived_a     archived         -> "use" is REFUSED, publish is allowed
+#   dk_resource_used_a         published, usage_count = 7 (the stats.used tile + increment)
+#   dk_resource_review_due_a   published, review_on = today - 1 (is_review_due badge)
+#   dk_resource_b              tenant B - the IDOR / crafted-FK target
+
+#: Distinctive file/search text for the two documents a non-admin must not be able to reach.
+#: A ``?q=`` for either phrase is the SEARCH-ORACLE probe: it must return 200 with zero rows for
+#: ``member_client`` and the row for ``client_a``. Both are >= 4 characters, so they cross
+#: ``FILE_TEXT_SEARCH_MIN_CHARS`` and really do sweep ``extracted_text``.
+_DK_CONFIDENTIAL_TEXT = ("Settlement schedule: zephyrindemnity ceiling of 2,400,000 payable in "
+                         "four instalments. Not for circulation.")
+_DK_RESTRICTED_TEXT = ("Board minute: quillbaseline pricing floor agreed with the incumbent "
+                       "supplier. Named readers only.")
+#: The public counterpart - every member may match this one, which is what makes the pair a test
+#: of the RULE rather than of an empty database.
+_DK_PUBLIC_TEXT = "Standard warranty terms: harborcoverage runs for 24 months from delivery."
+
+
+@pytest.fixture
+def dk_media_root(settings, tmp_path):
+    """Point MEDIA_ROOT at pytest's per-test tmp_path so no fixture leaves bytes behind.
+
+    ``FileSystemStorage`` connects ``setting_changed`` in ``__init__`` and drops its cached
+    ``base_location`` / ``location``, so overriding the setting really does move where a
+    ``FileField`` writes. ``tmp_path`` is removed by pytest; the real ``media/`` is never touched.
+    """
+    root = tmp_path / "media"
+    root.mkdir(parents=True, exist_ok=True)
+    settings.MEDIA_ROOT = str(root)
+    return str(root)
+
+
+# -- helpers --------------------------------------------------------------------------------------
+
+def _dk_party(tenant, name, role="supplier"):
+    """A counterparty WITH its PartyRole - the document register's ?supplier= facet and the form's
+    ``_supplier_parties`` dropdown both filter ``roles__role__in=("supplier", "vendor")``, so a
+    bare Party would not appear in either."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role=role, status="active")
+    return party
+
+
+def _dk_document(tenant, **overrides):
+    """One ProcurementDocument [PDOC-].
+
+    ``number`` is allocated by ``TenantNumbered.save()`` and ``current_revision_no`` is moved only
+    by the approve path - never pass either. ``tags`` here is stored VERBATIM (``objects.create``
+    skips ``clean()``), so fixtures pass it already normalised.
+    """
+    from apps.procurement.models import ProcurementDocument
+    fields = dict(tenant=tenant, title="Boiler maintenance warranty", doc_type="warranty",
+                  description="Manufacturer cover for the plant-room boiler.",
+                  tags="warranty, facilities", classification="internal", status="draft")
+    fields.update(overrides)
+    return ProcurementDocument.objects.create(**fields)
+
+
+def _dk_documents(tenant, count, **overrides):
+    """``count`` register rows, newest last - the page-2 / pagination filler."""
+    return [_dk_document(tenant, title=f"Bulk register row {i:02d}", **overrides)
+            for i in range(1, count + 1)]
+
+
+def _dk_revision(document, *, body=b"", filename="revision.txt", change_note="",
+                 uploaded_by=None, **overrides):
+    """One ProcurementDocumentRevision, minted exactly the way ``pdocument_revision_upload`` does.
+
+    ``revision_no`` comes from ``next_revision_no``; the checksum, size and original filename are
+    measured from the payload BEFORE the save; the REAL ``extract_document_text`` then runs over
+    the stored file and its ``(text, note)`` is stamped on the row. Pass ``body=None`` for the
+    file-less row the download guard needs (``file=""``).
+    """
+    import hashlib
+
+    from django.core.files.base import ContentFile
+
+    from apps.procurement.models import ProcurementDocumentRevision
+    from apps.procurement.models.DocumentKnowledgeManagement.Revisions import (
+        EXTRACT_MAX_CHARS, extract_document_text, next_revision_no)
+
+    payload = body if body is None or isinstance(body, bytes) else body.encode("utf-8")
+    fields = dict(tenant=document.tenant, document=document,
+                  revision_no=next_revision_no(document), change_note=change_note,
+                  uploaded_by=uploaded_by)
+    if payload is None:
+        # The row can outlive its bytes: no file at all, which is the branch
+        # ``pdocrevision_download`` answers with a message and a redirect rather than a 500.
+        fields.update(file="", original_filename="", file_size=0, sha256="")
+        fields.update(overrides)
+        return ProcurementDocumentRevision.objects.create(**fields)
+
+    fields.update(original_filename=filename, file_size=len(payload),
+                  sha256=hashlib.sha256(payload).hexdigest())
+    fields.update(overrides)
+    revision = ProcurementDocumentRevision(**fields)
+    revision.file.save(filename, ContentFile(payload), save=False)
+    revision.save()
+
+    text, note = extract_document_text(revision)
+    revision.extracted_text = (text or "")[:EXTRACT_MAX_CHARS]
+    revision.extraction_note = note
+    revision.save(update_fields=["extracted_text", "extraction_note"])
+    return revision
+
+
+def _dk_approve(revision, user):
+    """Approve a revision exactly as ``pdocrevision_approve`` does - the four writes, in order.
+
+    Stamps the revision, moves the parent's pointer, copies the revision's text up into the
+    parent's denormalised SEARCH COPY, and lifts a still-draft document to ``active``. The parent
+    is refreshed in place so the caller's object is not stale.
+    """
+    from apps.procurement.models.DocumentKnowledgeManagement.Revisions import EXTRACT_MAX_CHARS
+
+    revision.is_approved = True
+    revision.approved_by = user
+    revision.approved_at = timezone.now()
+    revision.save(update_fields=["is_approved", "approved_by", "approved_at"])
+
+    document = revision.document
+    document.current_revision_no = revision.revision_no
+    document.extracted_text = (revision.extracted_text or "")[:EXTRACT_MAX_CHARS]
+    if document.status == "draft":
+        document.status = "active"
+    document.save(update_fields=["current_revision_no", "extracted_text", "status", "updated_at"])
+    return revision
+
+
+def _dk_policy(tenant, **overrides):
+    """One ProcurementPolicy [PPOL-].
+
+    ``number`` is allocated in ``save()`` and ``status`` / ``published_at`` are verb-driven - pass
+    them here only to BUILD a state the verbs would have produced. The review column is
+    ``next_review_on`` on this model (``review_on`` is the document's and the resource's).
+    """
+    from apps.procurement.models import ProcurementPolicy
+    fields = dict(tenant=tenant, title="Competitive Bidding Threshold",
+                  policy_type="competitive_bidding",
+                  summary="Purchases above the threshold need three written quotes.",
+                  body="Three written quotes are required for any purchase order above the "
+                       "stated figure. The figure is a guideline; routing is decided by 6.3.",
+                  version_number="1.0", status="draft")
+    fields.update(overrides)
+    return ProcurementPolicy.objects.create(**fields)
+
+
+def _dk_resource(tenant, **overrides):
+    """One KnowledgeResource [PKR-].
+
+    ``usage_count`` / ``last_used_at`` belong to the "use this" verb - pass them only to build a
+    state that verb would have produced. ``tags`` is stored verbatim (no ``clean()`` on create).
+    """
+    from apps.procurement.models import KnowledgeResource
+    fields = dict(tenant=tenant, title="RFP template - professional services",
+                  resource_type="rfp_template", category="professional_services",
+                  audience="buyer", summary="Start here for a services RFP.",
+                  body="Sections 1-9 with the evaluation grid already weighted.",
+                  tags="rfp, services", status="draft")
+    fields.update(overrides)
+    return KnowledgeResource.objects.create(**fields)
+
+
+# -- counterparties --------------------------------------------------------------------------------
+
+@pytest.fixture
+def dk_supplier_a(db, tenant_a):
+    return _dk_party(tenant_a, "Ironclad Filing Systems")
+
+
+@pytest.fixture
+def dk_supplier_b(db, tenant_b):
+    """Tenant B's supplier - the crafted-POST target for ``ProcurementDocumentForm.supplier``."""
+    return _dk_party(tenant_b, "Globex Records Depot")
+
+
+# -- documents: one per status, one per classification ---------------------------------------------
+
+@pytest.fixture
+def dk_document_draft_a(db, tenant_a, admin_user):
+    """Draft, NO revisions and ``current_revision_no == 0`` - the one document
+    ``pdocument_delete`` will actually delete."""
+    return _dk_document(tenant_a, title="Draft specification - server rack",
+                        doc_type="specification", tags="specification, it",
+                        owner=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def dk_document_active_a(db, tenant_a, admin_user, dk_supplier_a):
+    """Active with a supplier and an owner - the supersede / archive source row."""
+    return _dk_document(tenant_a, title="Grounds maintenance statement of work",
+                        doc_type="sow", status="active", supplier=dk_supplier_a,
+                        owner=admin_user, created_by=admin_user,
+                        tags="sow, facilities",
+                        effective_date=timezone.localdate() - datetime.timedelta(days=30),
+                        review_on=timezone.localdate() + datetime.timedelta(days=180))
+
+
+@pytest.fixture
+def dk_document_superseded_a(db, tenant_a, admin_user):
+    return _dk_document(tenant_a, title="Superseded insurance certificate",
+                        doc_type="insurance", status="superseded", owner=admin_user,
+                        created_by=admin_user, tags="insurance")
+
+
+@pytest.fixture
+def dk_document_archived_a(db, tenant_a, admin_user):
+    """Archived - checkout and revision upload are both REFUSED against this one."""
+    return _dk_document(tenant_a, title="Archived drawing pack", doc_type="drawing",
+                        status="archived", owner=admin_user, created_by=admin_user,
+                        tags="drawing")
+
+
+@pytest.fixture
+def dk_document_public_a(db, tenant_a):
+    """Public, owned by nobody - visible to every member, and the control row that proves an
+    empty confidential search is the RULE and not an empty database."""
+    return _dk_document(tenant_a, title="Public warranty summary", doc_type="warranty",
+                        classification="public", status="active", tags="warranty, public",
+                        extracted_text=_DK_PUBLIC_TEXT)
+
+
+@pytest.fixture
+def dk_document_confidential_a(db, tenant_a, admin_user):
+    """Confidential, owned and created by the ADMIN - ``member_user`` must not see it in the
+    register, on the detail page, through ``?q=zephyrindemnity`` or through any verb (I5)."""
+    return _dk_document(tenant_a, title="Settlement schedule - confidential",
+                        doc_type="correspondence", classification="confidential",
+                        status="active", owner=admin_user, created_by=admin_user,
+                        tags="legal, confidential", extracted_text=_DK_CONFIDENTIAL_TEXT)
+
+
+@pytest.fixture
+def dk_document_restricted_a(db, tenant_a, admin_user):
+    """Restricted, owned and created by the ADMIN - the tier above confidential, same rule (I5).
+    ``?q=quillbaseline`` is its search-oracle probe."""
+    return _dk_document(tenant_a, title="Board pricing minute - restricted",
+                        doc_type="correspondence", classification="restricted",
+                        status="active", owner=admin_user, created_by=admin_user,
+                        tags="legal, restricted", extracted_text=_DK_RESTRICTED_TEXT)
+
+
+@pytest.fixture
+def dk_document_confidential_member_a(db, tenant_a, member_user):
+    """Confidential but OWNED BY ``member_user`` - the positive half of ``readable_document_q``:
+    the rule is owner/creator/administrator, not a blanket ban on the tier."""
+    return _dk_document(tenant_a, title="Member-owned confidential note",
+                        doc_type="correspondence", classification="confidential",
+                        status="active", owner=member_user, tags="confidential")
+
+
+@pytest.fixture
+def dk_document_expiring_a(db, tenant_a, admin_user):
+    """``expires_on`` seven days out - inside ``EXPIRY_WARN_DAYS`` (30), so ``is_expiring`` is
+    True, ``?expiry=expiring`` matches it and the reminder scan raises "expires" for it."""
+    return _dk_document(tenant_a, title="Expiring certificate of insurance",
+                        doc_type="insurance", status="active", owner=admin_user,
+                        created_by=admin_user,
+                        expires_on=timezone.localdate() + datetime.timedelta(days=7))
+
+
+@pytest.fixture
+def dk_document_expired_a(db, tenant_a, admin_user):
+    """``expires_on`` three days PAST - ``is_expired`` True, ``is_expiring`` False."""
+    return _dk_document(tenant_a, title="Expired public liability cover",
+                        doc_type="insurance", status="active", owner=admin_user,
+                        created_by=admin_user,
+                        expires_on=timezone.localdate() - datetime.timedelta(days=3))
+
+
+@pytest.fixture
+def dk_document_review_due_a(db, tenant_a, admin_user):
+    """``review_on`` yesterday - ``is_review_due`` True and ``?expiry=review_due`` matches."""
+    return _dk_document(tenant_a, title="Policy document overdue for review",
+                        doc_type="policy", status="active", owner=admin_user,
+                        created_by=admin_user,
+                        review_on=timezone.localdate() - datetime.timedelta(days=1))
+
+
+@pytest.fixture
+def dk_document_over_retention_a(db, tenant_a, admin_user):
+    """``retention_until`` yesterday - a FLAG only. Nothing in 6.19 deletes it."""
+    return _dk_document(tenant_a, title="Past-retention correspondence",
+                        doc_type="correspondence", status="active", owner=admin_user,
+                        created_by=admin_user,
+                        retention_until=timezone.localdate() - datetime.timedelta(days=1))
+
+
+@pytest.fixture
+def dk_document_locked_a(db, tenant_a, admin_user, member_user):
+    """Checked out by ``member_user``: ``admin_user`` is refused an ordinary checkout, MAY force
+    the release (tenant admin), and the upload page refuses them by naming the holder."""
+    return _dk_document(tenant_a, title="Checked-out quote pack", doc_type="quote",
+                        status="active", owner=admin_user, created_by=admin_user,
+                        checked_out_by=member_user, checked_out_at=timezone.now())
+
+
+@pytest.fixture
+def dk_document_chain_a(db, tenant_a, admin_user, dk_media_root):
+    """The two-revision document: r1 APPROVED (pointer = 1, status lifted to active) and r2
+    PENDING. Both revisions carry a real ``.txt`` file whose text was really extracted."""
+    document = _dk_document(tenant_a, title="Boiler maintenance contract", doc_type="sow",
+                            owner=admin_user, created_by=admin_user, tags="sow, facilities")
+    first = _dk_revision(document, filename="boiler-r1.txt", uploaded_by=admin_user,
+                         change_note="First issue",
+                         body=b"Boiler maintenance contract, first issue. Cover includes "
+                              b"quarterly servicing and a soleplate inspection.")
+    _dk_approve(first, admin_user)
+    _dk_revision(document, filename="boiler-r2.txt", uploaded_by=admin_user,
+                 change_note="Section 4 rewritten",
+                 body=b"Boiler maintenance contract, second issue. Section 4 rewritten to add "
+                      b"an out-of-hours callout window.")
+    document.refresh_from_db()
+    return document
+
+
+@pytest.fixture
+def dk_documents_page2_a(db, tenant_a):
+    """16 rows - one more than ``crud_list``'s per_page of 15, so page 2 exists on its own."""
+    return _dk_documents(tenant_a, 16, classification="public", status="active")
+
+
+@pytest.fixture
+def dk_document_b(db, tenant_b, admin_b):
+    """Tenant B's document - the cross-tenant 404 target on detail / edit / delete / every verb,
+    and the crafted-FK target for the policy and knowledge-resource ``document`` fields."""
+    return _dk_document(tenant_b, title="Globex-only master agreement", doc_type="sow",
+                        status="active", owner=admin_b, created_by=admin_b)
+
+
+# -- revisions ------------------------------------------------------------------------------------
+
+@pytest.fixture
+def dk_revision_approved_a(dk_document_chain_a):
+    """r1 - approved AND current (``is_current`` True). Delete refuses it on BOTH guards."""
+    return dk_document_chain_a.revisions.get(revision_no=1)
+
+
+@pytest.fixture
+def dk_revision_pending_a(dk_document_chain_a):
+    """r2 - pending, not current: the one revision approve accepts and delete removes."""
+    return dk_document_chain_a.revisions.get(revision_no=2)
+
+
+@pytest.fixture
+def dk_revision_confidential_a(db, dk_document_confidential_a, admin_user, dk_media_root):
+    """An approved revision of a CONFIDENTIAL document. ``member_client`` must 404 on its detail
+    page, on its download and on the revision register row (the parent's classification governs
+    the child through ``readable_document_q(user, "document__")``)."""
+    revision = _dk_revision(dk_document_confidential_a, filename="settlement.txt",
+                            uploaded_by=admin_user, change_note="Signed settlement",
+                            body=_DK_CONFIDENTIAL_TEXT.encode("utf-8"))
+    return _dk_approve(revision, admin_user)
+
+
+@pytest.fixture
+def dk_revision_no_file_a(db, dk_document_superseded_a, admin_user):
+    """A revision row with NO stored bytes - ``pdocrevision_download`` answers with a message and
+    a redirect to its detail page, never a 500."""
+    return _dk_revision(dk_document_superseded_a, body=None, uploaded_by=admin_user,
+                        change_note="Row kept, bytes never arrived")
+
+
+@pytest.fixture
+def dk_revision_b(db, dk_document_b, admin_b, dk_media_root):
+    """Tenant B's approved revision - the cross-tenant 404 target on detail, download, approve
+    and delete."""
+    revision = _dk_revision(dk_document_b, filename="globex-r1.txt", uploaded_by=admin_b,
+                            change_note="Globex first issue",
+                            body=b"Globex master agreement, first issue.")
+    return _dk_approve(revision, admin_b)
+
+
+# -- policies -------------------------------------------------------------------------------------
+
+@pytest.fixture
+def dk_policy_v1_archived_a(db, tenant_a, admin_user):
+    """v1.0, ARCHIVED and stamped ``published_at`` - it WAS in force once, which is why archiving
+    never clears the stamp. Publishing it again is refused."""
+    return _dk_policy(tenant_a, version_number="1.0", status="archived", owner=admin_user,
+                      created_by=admin_user,
+                      published_at=timezone.now() - datetime.timedelta(days=400),
+                      effective_from=timezone.localdate() - datetime.timedelta(days=400))
+
+
+@pytest.fixture
+def dk_policy_published_a(db, tenant_a, admin_user, usd, org_unit_a, dk_policy_v1_archived_a,
+                          dk_document_active_a):
+    """v2.0, PUBLISHED, pointing back at the archived v1.0 - "a published policy with an archived
+    predecessor". Carries the advisory threshold (25,000 USD per purchase order), an org-unit
+    scope and the controlled PDF, so the register's four joins all have something to read."""
+    return _dk_policy(tenant_a, version_number="2.0", status="published",
+                      previous_version=dk_policy_v1_archived_a, owner=admin_user,
+                      created_by=admin_user, applies_to=org_unit_a,
+                      document=dk_document_active_a,
+                      published_at=timezone.now() - datetime.timedelta(days=30),
+                      effective_from=timezone.localdate() - datetime.timedelta(days=30),
+                      next_review_on=timezone.localdate() + datetime.timedelta(days=180),
+                      threshold_amount=Decimal("25000.00"),
+                      threshold_basis="per_purchase_order", threshold_currency=usd,
+                      requires_acknowledgment=True)
+
+
+@pytest.fixture
+def dk_policy_draft_a(db, tenant_a, admin_user, dk_policy_published_a):
+    """v3.0, DRAFT, pointing at the PUBLISHED v2.0. Publishing this one must archive v2.0 - the
+    predecessor-retirement regression - and write two audit rows."""
+    return _dk_policy(tenant_a, version_number="3.0", status="draft",
+                      previous_version=dk_policy_published_a, owner=admin_user,
+                      created_by=admin_user,
+                      effective_from=timezone.localdate() + datetime.timedelta(days=7))
+
+
+@pytest.fixture
+def dk_policy_review_due_a(db, tenant_a, admin_user):
+    """``next_review_on`` yesterday - ``is_review_due`` True, counted by ``stats.review_due`` and
+    matched by ``?review=due``. A different TITLE, so the (tenant, title, version) constraint
+    stays clear of the v1/v2/v3 chain."""
+    return _dk_policy(tenant_a, title="Supplier Code of Conduct",
+                      policy_type="supplier_code_of_conduct", version_number="1.0",
+                      status="published", owner=admin_user, created_by=admin_user,
+                      published_at=timezone.now() - datetime.timedelta(days=365),
+                      next_review_on=timezone.localdate() - datetime.timedelta(days=1))
+
+
+@pytest.fixture
+def dk_attestation_a(db, tenant_a, admin_user, dk_policy_published_a):
+    """One 6.17 ``PolicyAttestation`` against the published policy. It CASCADEs, which is why
+    ``ppolicy_delete`` refuses while any exists - the guard this fixture is here to prove."""
+    from apps.procurement.models import PolicyAttestation
+    return PolicyAttestation.objects.create(
+        tenant=tenant_a, policy=dk_policy_published_a, user=admin_user,
+        due_on=timezone.localdate() + datetime.timedelta(days=14))
+
+
+@pytest.fixture
+def dk_policy_b(db, tenant_b, admin_b):
+    """Tenant B's policy - the cross-tenant 404 target on detail / edit / delete / publish /
+    archive, and the crafted-POST target for ``previous_version``."""
+    return _dk_policy(tenant_b, title="Globex Purchasing Rule", policy_type="purchasing_rule",
+                      status="published", owner=admin_b, created_by=admin_b,
+                      published_at=timezone.now())
+
+
+# -- knowledge resources ---------------------------------------------------------------------------
+
+@pytest.fixture
+def dk_resource_featured_a(db, tenant_a, admin_user, dk_document_active_a):
+    """Published AND featured - the only state that reaches the "start here" shelf."""
+    return _dk_resource(tenant_a, title="RFP template - IT services", resource_type="rfp_template",
+                        category="it_software", audience="buyer", status="published",
+                        is_featured=True, owner=admin_user, created_by=admin_user,
+                        document=dk_document_active_a, tags="rfp, it")
+
+
+@pytest.fixture
+def dk_resource_published_a(db, tenant_a, admin_user):
+    """Published, NOT featured - the ``?featured=False`` half of the facet."""
+    return _dk_resource(tenant_a, title="Sourcing checklist - facilities",
+                        resource_type="checklist", category="facilities", audience="all",
+                        status="published", owner=admin_user, created_by=admin_user,
+                        tags="checklist, facilities")
+
+
+@pytest.fixture
+def dk_resource_draft_a(db, tenant_a, admin_user):
+    """Draft - the publish verb's target."""
+    return _dk_resource(tenant_a, title="Negotiation playbook - draft",
+                        resource_type="negotiation_playbook", category="general",
+                        audience="buyer", owner=admin_user, created_by=admin_user,
+                        tags="playbook")
+
+
+@pytest.fixture
+def dk_resource_archived_a(db, tenant_a, admin_user):
+    """Archived - the "use this" verb REFUSES it (and leaves the counter alone); publish is
+    still allowed, because guidance comes back into circulation."""
+    return _dk_resource(tenant_a, title="Retired evaluation scorecard",
+                        resource_type="evaluation_scorecard", category="other",
+                        audience="approver", status="archived", owner=admin_user,
+                        created_by=admin_user, tags="scorecard")
+
+
+@pytest.fixture
+def dk_resource_used_a(db, tenant_a, admin_user):
+    """Published with ``usage_count == 7`` - one press must make it exactly 8, and it is one of
+    the rows behind ``stats.used`` (rows WITH a press, not the sum of presses)."""
+    return _dk_resource(tenant_a, title="Freight negotiation playbook",
+                        resource_type="negotiation_playbook", category="logistics",
+                        audience="buyer", status="published", owner=admin_user,
+                        created_by=admin_user, tags="playbook, logistics",
+                        usage_count=7, last_used_at=timezone.now() - datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def dk_resource_review_due_a(db, tenant_a, admin_user):
+    """``review_on`` yesterday - ``is_review_due`` True. This register offers NO ``?review=``
+    facet and no review stat tile; the badge is the whole surface."""
+    return _dk_resource(tenant_a, title="How-to guide overdue for review", resource_type="guide",
+                        category="general", audience="all", status="published",
+                        owner=admin_user, created_by=admin_user,
+                        review_on=timezone.localdate() - datetime.timedelta(days=1))
+
+
+@pytest.fixture
+def dk_resource_b(db, tenant_b, admin_b):
+    """Tenant B's resource - the cross-tenant 404 target on detail / edit / delete / publish /
+    archive / use."""
+    return _dk_resource(tenant_b, title="Globex sourcing guide", resource_type="guide",
+                        category="general", status="published", owner=admin_b,
+                        created_by=admin_b)
