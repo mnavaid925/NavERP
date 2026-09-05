@@ -533,7 +533,17 @@ issue__tenant=request.tenant`.
 **Row dict keys:** `item`, `location`, `on_hand`, `allocated`, `held`, `available`, `on_order`,
 `expected_date`, `expected_vendor`, `expected_po_number`, `expected_po_url`,
 `open_requisition_qty`, `reorder_point`, `avg_daily_demand`, `days_of_cover`, `below_point`,
-`policy_vendor`, `raise_requisition_url`.
+`policy_vendor`, `raise_requisition_url`, `source_label`.
+
+`raise_requisition_url` is **conditional, not a constant** (review 6.18 M4): it is
+`reverse("scm:requisition_create")` only when the row's governing policy
+`raises_requisitions` — i.e. its `source_method` is in
+`ReplenishmentPolicy.REQUISITIONABLE_SOURCE_METHODS`, read as the property, never hard-coded to
+`"buy"`. A `transfer`- or `manufacture`-sourced row gets `""` and a `source_label`
+(`get_source_method_display()`) instead, so the board cannot offer a purchase `generate()`
+explicitly refuses to propose (`models/…/Runs.py:413`). A pair with **no** policy keeps the URL:
+the `ReplenishmentPolicy()` sentinel sources by `buy`. `source_label` is `""` whenever the URL is
+set. **Pinning this key unconditionally is what shipped the defect — leave the condition here.**
 `view` ∈ `all` | `below_point` | `shortage` | `no_cover`. `ROW_CAP = 500`.
 Availability formula is **reused verbatim** from
 `apps/inventory/views/InventoryTrackingControl/StockLevels.py:124` —
