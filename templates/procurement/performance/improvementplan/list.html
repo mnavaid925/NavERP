@@ -171,15 +171,20 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:improvementplan_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
+                    Edit and Delete are OPEN-plan controls, tested against the model's own
+                    OPEN_STATUSES so a row cannot drift from what the two views enforce: a
+                    closed plan is signed and a cancelled one is history, and both are frozen.
                     Delete is @require_POST, so it can only be a form. The five lifecycle verbs
                     live on the detail page, where the operator can read the finding before
                     moving the plan — see the header comment.
                   {% endcomment %}
-                  <form method="post" action="{% url 'procurement:improvementplan_delete' obj.pk %}">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete plan {{ obj.number }}? A closed plan is the record that this supplier was ever put on one — the history an escalation stands on. Cancel an open plan instead of deleting it. This cannot be undone.');"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if obj.status in obj.OPEN_STATUSES %}
+                    <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:improvementplan_delete' obj.pk %}">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete plan {{ obj.number }}? This removes the record that the supplier was ever put on a plan. Cancelling keeps that record and is usually what you want. This cannot be undone.');"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
