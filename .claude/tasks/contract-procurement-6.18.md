@@ -30,18 +30,30 @@ glob — a glob pulls in three peers' hunks too, and a commit range pulls in the
 our own hunks mechanically instead, since every session tags its sub-module in the commit subject:
 
 ```bash
-git log --format=%H --grep='6\.18' -- apps/core/navigation.py \
+git log --format='%H%x09%s' -- apps/core/navigation.py \
+  | grep -E $'\t[a-z]+\\(procurement\\): 6\\.18 ' \
+  | cut -f1 \
   | xargs -I{} git show {} -- apps/core/navigation.py
 ```
 
 Hand the reviewer **that output**, not the file. Same shape for `admin.py`,
 `seed_procurement.py`, the four app-level `__init__.py` and `README.md`.
 
-**Caveat — this is better than eyeballing, not airtight.** `git add <file>` stages the whole
-file, so if one of our commits swept in a peer's in-flight hunk, that hunk appears inside *our*
-commit and this query hands it to the reviewer as ours. Mitigations: commit shared files in the
-same breath as the edit (narrow window), and sanity-check the output for blocks that aren't ours
-before handing it over.
+**Anchor on `%s` (the subject), never `--grep`.** `git log --grep` searches the **whole commit
+message including the body**, and every coordination commit in this tree names other sessions'
+sub-module numbers in its body — so `--grep='6\.18'` returns peer commits and hands a reviewer
+exactly the cross-contamination the query exists to prevent. Reproduced: `--grep='6\.16'` returns
+`6f607a31`, which is one of **ours**, because its body says "the three sessions building 6.16".
+The `%s`-anchored form above requires the `type(scope): 6.18 ` prefix at the **start of the
+subject**, which a body mention cannot satisfy.
+
+**Two caveats remain — this is better than eyeballing, not airtight.**
+1. `git add <file>` stages the whole file, so if one of our commits swept in a peer's in-flight
+   hunk, that hunk appears inside *our* commit and this query hands it to the reviewer as ours.
+   Mitigation: commit shared files in the same breath as editing them (a narrow window is what
+   keeps this query honest), and scan the output for blocks that aren't ours before handing over.
+2. It trusts our own subject-line discipline. A 6.18 commit whose subject omits `6.18` is
+   invisible to it.
 
 Scope is **3 entities / 5 model classes + 3 derived no-model pages**. `CountVarianceReview`
 [CVR-] is **dropped** this pass (its only consumer is 6.16's scorecard; building a producer
@@ -78,7 +90,10 @@ before the consumer ships a table nobody reads).
   grep -rhoE "name=[\"'][a-z_0-9]+[\"']" apps/procurement/urls/ | tr -d "\"'" | sed 's/name=//' | sort | uniq -d
   ```
   Empty = clean. Verified clean at contract time (401 url names registered in `apps/procurement`;
-  `crm`/`accounting`/`hrm`/`scm`/`inventory` also clean). **Re-run at Integrate.** A duplicate url
+  `crm`/`accounting`/`hrm`/`scm`/`inventory` also clean — 2,792 across the repo). The quote-class
+  match is defensive only: **this repo is uniformly double-quoted, with zero single-quoted `name=`
+  anywhere**, so a single-quoted route would be the anomaly rather than business as usual.
+  **Re-run at Integrate.** A duplicate url
   *name* is the quietest of all these failures: Django raises nothing, `reverse()` simply resolves
   to whichever pattern registered last, so buttons silently point into another sub-module's page —
   and a smoke test that only asserts status 200 will pass.
