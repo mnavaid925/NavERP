@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Sign-off — {{ policy.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — one person's obligation to one policy
+    (apps/procurement/views/RiskComplianceManagement/Attestations.py ::
+    policyattestation_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, policy, can_sign, allowed_actions, is_admin.
+
+    ROW-DICT CONTRACT (L41 §1) — allowed_actions entries carry these keys and no others:
+      act.key, act.label, act.icon, act.css, act.help,
+      act.note_name, act.note_label, act.note_placeholder, act.note_required, act.confirm.
+    A misspelt row-dict key renders an em-dash, returns 200 and passes every status-code test,
+    which is why the keys are frozen in the view docstring beside the code that builds them.
+
+    THE LIST HOLDS AT MOST ONE ENTRY, and which one it is decides which form renders. The two
+    verbs post to two different routes with two different bodies, so the loop branches on
+    `act.key`: "sign" posts to attestation_sign with a `note`, "exempt" posts to
+    attestation_exempt with a `reason`. The gates are mutually exclusive by construction — sign
+    needs you to BE the person, exempt needs you to be an administrator excusing somebody else —
+    so an administrator looking at their own row is offered Sign and not Exempt. Excusing
+    yourself is not a thing this ledger offers.
+
+    ONLY THE OWNER MAY SIGN, ADMINISTRATORS INCLUDED. `can_sign` is True only for the row's own
+    user while it is still pending, the view re-checks the same expression, and
+    PolicyAttestation.acknowledge() refuses a non-owner a third time in the model. Nothing here
+    renders a sign button for anybody else, so a hidden button and a refused POST always agree.
+
+    Nullable-FK discipline (L10): exempted_by and alert are nullable, so every read of them sits
+    inside an {% if %} branch. `policy` and `obj.user` are NOT nullable and are select_related by
+    the view.
+
+    No |safe anywhere. `acknowledgement_note`, `exempt_reason` and the policy `summary` are all
+    typed by people; `summary` goes through |linebreaks, which escapes first and adds paragraphs
+    second.
+
+    Detail rows use <dl class="detail-grid"><div class="detail-item"><dt>/<dd> — .detail-label and
+    .detail-value DO NOT EXIST in theme.css (L40 §2). Badge classes come from obj.status_css and
+    policy.status_css so only real classes reach the page (L33). Every confirm() string quotes the
+    POLICY's system-assigned PPOL- number — this ledger has no number of its own — and never the
+    person's name or the policy title, which are user-typed. The copy avoids apostrophes entirely,
+    because an escaped &#39; is decoded back to a bare quote by the HTML parser, the handler
+    throws, and the form then submits with NO confirmation at all (L42).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ policy.number }} — {{ obj.user.get_full_name|default:obj.user.username }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:policyattestation_list' %}">Sign-off ledger</a><span class="sep">›</span>
+        <span>{{ policy.number }}</span>
+      </div>
+      <p class="text-muted">{{ policy.title }} <span class="text-muted">v{{ policy.version_number }}</span></p>
+    </div>
+    <div class="page-actions">
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      <a href="{% url 'procurement:ppolicy_detail' policy.pk %}" class="btn btn-outline"><i data-lucide="book-open"></i> Read the policy</a>
+      <a href="{% url 'procurement:policy_detail' policy.pk %}" class="btn btn-outline"><i data-lucide="users"></i> Whole roster</a>
+      <a href="{% url 'procurement:policyattestation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The obligation</h2><span class="text-muted">one person, one published policy</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Policy</dt><dd><a href="{% url 'procurement:policy_detail' policy.pk %}">{{ policy.number }}</a> — {{ policy.title }} v{{ policy.version_number }}</dd></div>
+        <div class="detail-item"><dt>Policy status</dt><dd><span class="badge {{ policy.status_css }}">{{ policy.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ policy.get_policy_type_display }}</dd></div>
+        <div class="detail-item"><dt>Applies to</dt><dd>{% if policy.applies_to %}{{ policy.applies_to.name }}{% else %}<span class="text-muted">Whole workspace</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Person</dt><dd>{{ obj.user.get_full_name|default:obj.user.username }}</dd></div>
+        <div class="detail-item"><dt>State</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Due</dt><dd>{% if obj.due_on %}{{ obj.due_on|date:"M d, Y" }}{% if obj.is_overdue %} <span class="text-danger">{{ obj.days_late }} day(s) late</span>{% endif %}{% else %}<span class="text-muted">No deadline set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Assigned</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Signed</dt><dd>{% if obj.acknowledged_at %}{{ obj.acknowledged_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not signed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Exempted</dt><dd>{% if obj.exempted_at %}{{ obj.exempted_at|date:"M d, Y" }}{% if obj.exempted_by %} by {{ obj.exempted_by.get_full_name|default:obj.exempted_by.username }}{% endif %}{% else %}<span class="text-muted">Not exempted</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.acknowledgement_note %}
+        <div style="margin-top:1rem;">
+          <div class="text-muted fw-600">Note left with the signature</div>
+          {{ obj.acknowledgement_note|linebreaks }}
+        </div>
+      {% endif %}
+      {% if obj.exempt_reason %}
+        <div style="margin-top:1rem;">
+          <div class="text-muted fw-600">Reason for the exemption</div>
+          <p>{{ obj.exempt_reason }}</p>
+        </div>
+      {% endif %}
+      {% if obj.alert %}
+        <p class="text-muted" style="margin-top:1rem;">This sign-off has been chased once already — an item was raised in the Task and Alert Center. Chasing again never sends a second copy.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if policy.summary %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the policy says</h2><span class="text-muted">the summary only — read the full text before signing</span></div>
+      <div class="card-body">
+        {{ policy.summary|linebreaks }}
+        <p class="text-muted"><a href="{% url 'procurement:ppolicy_detail' policy.pk %}">Open the full policy in the library</a> — this is a summary, and signing records that you have read the rule itself.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if allowed_actions %}
+    {% for act in allowed_actions %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">{{ act.label }}</h2><span class="text-muted">this cannot be undone</span></div>
+        <div class="card-body">
+          <p class="text-muted">{{ act.help }}</p>
+          {% comment %}
+            The two verbs post to two different routes with two different bodies, so the loop
+            branches on act.key rather than carrying a url in the row-dict. Each view re-checks
+            its own gate and each model verb re-checks its own guard, so a direct POST is exactly
+            as safe as a click.
+          {% endcomment %}
+          {% if act.key == "sign" %}
+            <form method="post" action="{% url 'procurement:attestation_sign' obj.pk %}" onsubmit="return confirm('{{ act.confirm }}');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="attestation_note">{{ act.note_label }}{% if act.note_required %} <span class="req">*</span>{% endif %}</label>
+                <textarea class="form-input" id="attestation_note" name="{{ act.note_name }}" rows="3" placeholder="{{ act.note_placeholder }}"{% if act.note_required %} required{% endif %}></textarea>
+              </div>
+              <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
+            </form>
+          {% else %}
+            <form method="post" action="{% url 'procurement:attestation_exempt' obj.pk %}" onsubmit="return confirm('{{ act.confirm }}');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="attestation_reason">{{ act.note_label }}{% if act.note_required %} <span class="req">*</span>{% endif %}</label>
+                <textarea class="form-input" id="attestation_reason" name="{{ act.note_name }}" rows="3" maxlength="255" placeholder="{{ act.note_placeholder }}"{% if act.note_required %} required{% endif %}></textarea>
+                <div class="form-help">Required, and kept to 255 characters. An exemption with no stated reason is the first thing an audit asks about and the last thing anybody can answer months later.</div>
+              </div>
+              <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% elif obj.is_pending %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Nothing for you to do here</h2></div>
+      <div class="card-body">
+        <p class="text-muted">This sign-off is still owed, but it is not yours to give. <span class="fw-600">Only the person named on a sign-off can sign it, and that includes administrators and superusers.</span> There is no override and no acting on somebody else behalf, because a signature an administrator could apply for you would record nothing anybody would testify to — which is the entire evidentiary value of this ledger.</p>
+        {% if is_admin %}
+          <p class="text-muted">If they genuinely should not have to sign it, record an exemption instead: a different verb, with a written reason and your name stamped on it, and one that is never counted as a signature anywhere.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Settled</h2><span class="text-muted">no edit, no delete, no re-open</span></div>
+      <div class="card-body">
+        <p class="text-muted">This row has been {{ obj.get_status_display|lower }} and is now evidence rather than a task. It cannot be edited, withdrawn or re-opened, and neither verb has an inverse — there is no un-sign and no un-exempt, because a withdrawn signature is not a correction, it is a second and contradictory claim about the same day.</p>
+        <p class="text-muted">If the rule itself has changed, the honest move is to publish the new version in the policy library and raise its own roster. A signature stays a true statement about the version it was given against.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if is_admin and not obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Administration</h2><span class="text-muted">only while the row is still pending</span></div>
+      <div class="card-body">
+        <div class="table-actions">
+          <a href="{% url 'procurement:policyattestation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Change the deadline</a>
+          <form method="post" action="{% url 'procurement:policyattestation_delete' obj.pk %}" onsubmit="return confirm('Withdraw this sign-off for {{ policy.number }}? The person will no longer be asked to acknowledge it.');">
+            {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Withdraw the assignment</button>
+          </form>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">Withdrawing an assignment says the person should never have been asked. It is a correction, not an excuse — if they were rightly asked but should not have to sign, the exemption is the honest record, because it keeps the fact that they were asked and says who decided otherwise.</p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
