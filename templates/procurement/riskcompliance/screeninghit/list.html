@@ -139,9 +139,11 @@
                   {% comment %}
                     Edit and Delete disappear once a hit is adjudicated, because both views
                     refuse it — the matched name and score are what the disposition was reasoned
-                    against, so changing them afterwards would rewrite the record.
+                    against, so changing them afterwards would rewrite the record. They also
+                    disappear once the PARENT screening is decided: its hits are the evidence
+                    that clearance or block was reasoned against.
                   {% endcomment %}
-                  {% if obj.is_open %}
+                  {% if obj.is_open and not obj.screening.is_terminal %}
                     <a href="{% url 'procurement:screeninghit_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                     <form method="post" action="{% url 'procurement:screeninghit_delete' obj.pk %}" onsubmit="return confirm('Delete this hit from screening {{ obj.screening.number }}? Deleting an unadjudicated match removes it from the record entirely.');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
