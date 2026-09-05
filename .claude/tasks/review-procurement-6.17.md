@@ -259,3 +259,129 @@ no before-image is app-wide `apps/core/crud.py` behaviour. Checked and correct a
 `Policies.py:385-387`, correctly refusing tenant admins *and* superusers), both suspension links
 verifying the counterparty rather than only the tenant, the seeder's exclusive use of verb methods,
 and `editable=False` on every derived column in migration 0028.
+
+---
+
+## Pass 3 — performance-reviewer
+
+Backend is **MySQL** — no `DISTINCT ON`.
+
+### [ ] C2 — Critical — `auditseal_list` drags the *previous* seal's 50k-pair JSON blob on every page
+`apps/procurement/views/RiskComplianceManagement/AuditTrail.py:396`
+
+`defer()` scopes to the **root model only**. `select_related("prev_seal")` is an unrestricted
+self-join pulling the previous seal's full row **including its `row_fingerprints` JSONField**, which
+the `defer("row_fingerprints")` beside it does not touch. And `auditseal/list.html` **never renders
+`obj.prev_seal` at all** (its only occurrence, line 44, is a comment).
+
+**Cost:** 15 rows/page × up to `MAX_SEAL_ROWS` = 50,000 `[id, 16-hex]` pairs per blob ≈ 1.4 MB per
+seal → **up to ~21 MB fetched and JSON-decoded per page render**, for a column nothing on that page
+reads. Query count unaffected (still 2) — this is pure payload, which is why no
+`assert_max_num_queries` can catch it.
+**Fix:** drop `"prev_seal"` from the list `select_related` entirely.
+
+### [ ] I4 — Important — `risksignal_refresh_board` loads every signal in the workspace (CONFIRMED)
+`RiskSignals.py:380-385` — `filter(tenant=…).select_related("party")`, **no slice, no `.only()`, no
+`.iterator()`**, iterated in a `for` loop so `_result_cache` keeps every row resident.
+**Not an N+1 — an unbounded row load.** At 5,000 signals: 5,000 instances (22 columns incl. the
+`notes`/`review_note` TextFields) **plus** 5,000 joined `core.Party`. With ~200 suppliers × ~3
+metrics ≈ 600 distinct series, **~88% of fetched rows are discarded by the next `setdefault()`**.
+The only uncapped read in a module that caps everything else.
+**Fix:** the view already builds `parties`/`party_ids` — index them by pk, push
+`party_id__in=party_ids` into SQL, drop the join, add `.only(...)` (9 columns) and
+`.iterator(chunk_size=2000)`, then read `parties_by_id[signal.party_id]` at line 409.
+
+### [ ] I5 — Important — `screening_rescreen_board` loads every cleared screening (CONFIRMED)
+`Screenings.py:428-431` — same shape. At 5,000 cleared screenings: 5,000 instances × 20 columns
+incl. two TextFields, ~200 survive `setdefault`. Secondary: `party__in=parties` passes **Party
+objects**, so Django inlines every pk into the `IN (…)` SQL text (a 5,000-element IN list —
+`max_allowed_packet` exposure). Same `.only()` + `.iterator()` + `party_id__in` fix.
+
+**Refuted sub-point (leave as is):** the missing `select_related("party")` here is **correct**.
+`rescreening_due.html` takes `row.party` from the already-fetched `parties` list and never touches
+`screening.party`; adding the join would be pure waste.
+
+### [ ] I6 — Important — `risksignal_list` N+1 on `reviewed_by`
+`RiskSignals.py:59` vs `risksignal/list.html:171` — `_ROW_RELATIONS = ("party",)` but the template
+renders `obj.reviewed_by`. **+1 query per reviewed row**: a mature 15-row page goes from ~7 to ~22
+queries. The module docstring at line 23 reasons about exactly this for `party` and then does not
+extend it. **Fix:** `_ROW_RELATIONS = ("party", "reviewed_by")`; drop the now-duplicate from
+`_DETAIL_RELATIONS`.
+
+### [ ] I7 — Important — `fraudalert_list` N+1 on `resolved_by`
+`FraudAlerts.py:55` vs `fraudalert/list.html:188` — identical shape; `resolved_by` is in
+`_DETAIL_RELATIONS` but not the row set. **+1 query per terminal row**, up to +15 on a settled
+register.
+
+### [ ] I8 — Important — `_screening_options` is an uncapped dropdown over an append-only ledger
+`ScreeningHits.py:101` — the parent-screening filter `<select>` returns **every**
+`ComplianceScreening` in the workspace. This **forks** the app-wide pattern rather than following
+it: *party* dropdowns are uncapped app-wide (bounded master — correct, leave alone), but
+*transactional/ledger* dropdowns are capped app-wide —
+`GoodsReceiptInspection/ReceiptBoards.py:163` and `ReturnsToVendor.py:77` both use `[:200]`.
+Screenings grow forever. At 5,000: 5,000 instances + 5,000 joined parties + 5,000 `<option>`
+elements per hit-queue render. **Fix:** append `[:200]` and note the cap in the docstring.
+
+### [ ] I9 — Important — `SupplierRiskSignal` is missing its `(tenant, ordering)` index
+`RiskSignals.py:362-373` — `Meta.ordering = ["-observed_on", "-id"]` drives every unfiltered page,
+but `prc_srs_series_idx` and `prc_srs_tnt_party_obs_idx` both put `party` **between** `tenant` and
+`observed_on`, so MySQL can use neither for `WHERE tenant_id=? ORDER BY observed_on DESC` — page 1
+is a **full filesort over every signal in the workspace**. It is the only one of the five 6.17
+models missing this (`ComplianceScreening` ✓, `FraudAlert` ✓, `PolicyAttestation` ✓, `AuditSeal` ✓).
+**Fix:** `models.Index(fields=["tenant", "-observed_on"], name="prc_srs_tnt_obs_idx")` + migration.
+
+### [ ] M14 — Minor — `auditseal_detail`: the security pass's flag is half right
+`AuditTrail.py:560-562`. **Refuted:** the page genuinely needs the root's `row_fingerprints` —
+`_entries_covered` calls `seal.fingerprint_map` to mark entries and reconstruct `missing` ids;
+deferring it would trade a column read for a lazy re-fetch and be strictly worse. **Confirmed
+(different column):** `select_related("prev_seal")` again pulls the *previous* seal's
+`row_fingerprints` while the page needs only `prev_seal.number`/`.pk`/`.chain_digest` — ~1.4 MB of
+dead payload. **Fix:** `.defer("prev_seal__row_fingerprints")`.
+
+### [ ] M15 — Minor — three dead-weight indexes and one missing hot one
+- `FraudAlerts.py:371` — `document_date = DateField(db_index=True)` creates a **standalone** index
+  in addition to `prc_frd_tnt_docdate_idx` on `(tenant, document_date)`. Every query here is
+  tenant-scoped, so nothing can ever lead on bare `document_date`. Dead weight on the write path of
+  the fastest-growing, append-only table (`scan()` bulk-upserts into it). Drop `db_index=True`.
+- `AuditSeals.py:225` — `prc_asl_tnt_sealed_idx` on `(tenant, sealed_at)`: nothing filters or orders
+  by `sealed_at`. Low-volume table, flagged for completeness.
+- `Policies.py:312` — `prc_patt_tnt_policy_idx` on `(tenant, policy)` is a strict prefix of
+  `unique_together ("tenant","policy","user")`, which MySQL already backs with a unique index.
+- **Missing:** `fraudalert_list` offers five filters; four have a `(tenant, col)` index,
+  `assigned_to` does not. Add `prc_frd_tnt_assignee_idx` in the same migration.
+
+### [ ] M16 — Minor — `seal_now`/`verify` materialize full `AuditLog` instances
+`AuditSeals.py:315-317`, `371-374` — `canonical_line` reads 8 columns but `list(...)` pulls full
+instances, up to 50,000. `.only(...)` would cut row width with zero behaviour change.
+**The cap itself is correct and confirmed:** `[:MAX_SEAL_ROWS]` compiles to SQL `LIMIT`, so
+discovering you are over the cap costs the same on a 10-row backlog as a 10-million-row one — L40 §1
+satisfied. **`.iterator()` is NOT applicable and must not be suggested:** `seal_now` needs
+`rows[0]`/`rows[-1]`/`len(rows)`, `verify` needs `len()` and random access `rows[position]`.
+
+### [ ] M17 — Minor — `attestation_list` N+1 on `exempted_by`
+`Attestations.py:76` vs `attestation/list.html:143` — same shape as I6/I7; Minor only because
+exemptions are rare.
+
+### [ ] M18 — Minor — seeder block 2 is the only one not wrapped in `transaction.atomic()`
+`seed_procurement.py:4222-4260`. **No `bulk_create` finding:** `TenantNumbered.save()` mints the
+number and `derive()` stamps seven columns from the *preceding* row, so per-row `.save()` is correct
+and `bulk_create` would break both.
+
+### Verified correct — explicitly refuted, do not "fix"
+- **`FraudAlert.scan()` is well built.** `_scan_context` issues a bounded **≤8 queries regardless of
+  row count**; every source list carries a `[:SCAN_ROW_LIMIT]` slice compiling to SQL `LIMIT`, so
+  the cap is enforced **before** rows are materialized. `MAX_SCAN_WINDOW_DAYS` is checked
+  arithmetically before any query. All six `_detect_*` read only from `ctx` dicts — **zero
+  per-candidate queries**. `_existing_by_key` chunks at 1000 keys/`IN`. `_emit_pairs` is O(n²)
+  within a group but `MAX_GROUP_SIZE = 25` bounds it at 300 pairs.
+- **Pagination total ordering — all eight registers checked, seven refuted.** Every register carries
+  a tie-break; `_policy_qs` is the only `annotate()` queryset and already fixed in `d046eaee`. **No
+  second instance of the bug.**
+- **`count()`/`len()` discipline correct throughout**, including `{{ open_hits|length }}` on an
+  already-materialized list (a `.count()` there would be a second round trip).
+- **All five `_stats` helpers are one `.aggregate()`** with conditional `Count(filter=Q(...))` — no
+  per-status count-per-card. `_by_rule`/`_by_severity` are one grouped `values().annotate()` each;
+  `_ageing` is one conditional aggregate for all four buckets.
+- **Zero DB work in any of the 26 templates** — no `.count`/`.all` on a related manager inside any
+  `{% for %}`. All row-dicts precomputed in the views.
+- **All seven detail-page `select_related` sets are complete**; no chained-`__str__` misses.
