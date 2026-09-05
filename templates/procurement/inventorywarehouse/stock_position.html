@@ -194,7 +194,7 @@
 
     <div class="card-body">
       <p class="form-help"><span class="badge badge-info">How available is calculated</span> Available = on hand − (sales-order allocations + inventory reservations) − non-sellable stock. It is the same formula the warehouse stock-levels page and the reservation check use, and it is deliberately not floored at zero: a negative figure means more has been promised than is held, which is the thing worth seeing.</p>
-      <p class="form-help"><span class="badge badge-info">How below-point is decided</span> On hand <em>plus everything inbound</em> (open orders and open requisitions) against the reorder point — the same trigger a replenishment run uses, so this board and the run it links to can never disagree about whether an item is short.</p>
+      <p class="form-help"><span class="badge badge-info">How below-point is decided</span> On hand <em>plus whatever the governing replenishment policy counts as inbound</em>, against the reorder point — the run's own trigger, applied here with the same two policy switches the run applies. A policy that turns off <em>Include on-order</em> or <em>Include open requisitions</em> makes this column ignore that supply, deliberately, so an item can read below point while an order for it is already outstanding. The On-order and Open-requisition columns beside it are never gated: they always show what actually exists.</p>
       <p class="form-help"><span class="badge badge-amber">Known limitation</span> {{ sku_match_note }}</p>
     </div>
   </div>
