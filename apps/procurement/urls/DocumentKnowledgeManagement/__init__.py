@@ -10,8 +10,10 @@ other segment in the app — Django matches path components, not strings — and
 chosen around segments already taken: ``templates/`` is 6.2's, and ``contracts/`` /
 ``clauses/`` / ``milestones/`` / ``renewals/`` are 6.8's.
 
-This app registers no greedy ``<str:…>`` converter anywhere, so there is no cross-module
-shadowing surface to reason about. Inside each module the literal routes are declared before
+No route in this app uses a converter in its FIRST path component — all 63+ first segments are
+literals — so no module can shadow another's namespace. (A ``<str:token>`` converter exists at
+6.8's ``contract-sign/<str:token>/``, scoped under a literal segment; it shadows nothing outside
+it. Keeping the first-segment-is-always-a-literal invariant is what makes this guarantee hold.) Inside each module the literal routes are declared before
 the ``<int:pk>/`` ones, because Django is first-match-wins.
 
 ``documents/<int:pk>/revisions/add/`` sits in ``Documents`` rather than ``Revisions``: url
