@@ -77,7 +77,7 @@
             <div class="text-muted">frozen at generation &mdash; a later re-tune must not rewrite a closed period</div>
           </dd></div>
         <div class="detail-item"><dt>Contribution</dt>
-          <dd>{% if obj.contribution is not None %}{{ obj.contribution|floatformat:2 }}<div class="text-muted">score &times; weight applied &mdash; the numerator this line adds to the composite</div>{% else %}<span class="text-muted">None &mdash; an unscored line drops out of both sides of the composite rather than counting as zero</span>{% endif %}</dd></div>
+          <dd>{% if obj.contribution is not None %}{{ obj.contribution|floatformat:2 }}<div class="text-muted">score &times; weight applied &mdash; the numerator this line adds to the composite</div>{% else %}<span class="text-muted">Not scored &mdash; an unscored line drops out of both sides of the composite rather than counting as zero</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Period</dt>
           <dd><a href="{% url 'procurement:supplierevaluation_detail' obj.scorecard_id %}">{{ obj.scorecard.number }}</a>
             <div class="text-muted">{{ obj.scorecard.party.name }} · {{ obj.scorecard.get_status_display|lower }}</div>
