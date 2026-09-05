@@ -170,7 +170,15 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:supplierfeedback_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Outstanding requests only — rating IS on the form, so a submitted response
+                    must not be editable from a register row either. Delete stays available: a
+                    request raised by mistake is still removable, and the confirm names what
+                    that costs once it has been answered.
+                  {% endcomment %}
+                  {% if obj.status == "requested" %}
+                    <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
                   {% comment %}
                     Delete is @require_POST, so it can only be a form. The lifecycle verbs
                     (submit / decline / expire) live on the detail page, where the operator can
