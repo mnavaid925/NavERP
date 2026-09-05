@@ -411,6 +411,7 @@ from .DocumentKnowledgeManagement.Revisions import (
     pdocrevision_approve,
     pdocrevision_delete,
     pdocrevision_detail,
+    pdocrevision_download,
     pdocrevision_list,
     pdocument_revision_upload,
 )
