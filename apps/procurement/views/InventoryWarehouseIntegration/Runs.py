@@ -76,13 +76,22 @@ def _run_qs(request):
     The two ``Count``s and the ``Sum`` all ride the SAME ``lines`` join, so there is no fan-out to
     worry about — that only happens across two DIFFERENT multi-valued relations. See the module
     docstring for why they cannot be named ``line_count`` / ``accepted_count``.
+
+    **The explicit ``order_by`` is not redundant — it is load-bearing.** Since Django 3.1
+    ``Meta.ordering`` is deliberately NOT applied to a GROUP BY query, and ``annotate()`` over a
+    multi-valued relation makes this one. Without it the register's SQL carries no ``ORDER BY``
+    at all, ``qs.ordered`` is ``False``, ``Paginator`` warns about an unordered object list, and
+    the database is free to return rows in a different order per page — so a run can appear on
+    page 1 and again on page 2 while another is never shown. It repeats ``Meta.ordering``
+    verbatim; keep the two in step.
     """
     return (ReplenishmentRun.objects.filter(tenant=request.tenant)
             .select_related("location")
             .annotate(
                 annotated_line_count=Count("lines"),
                 annotated_accepted_count=Count("lines", filter=Q(lines__decision="accepted")),
-                annotated_total_value=Sum(F("lines__suggested_qty") * F("lines__unit_cost"))))
+                annotated_total_value=Sum(F("lines__suggested_qty") * F("lines__unit_cost")))
+            .order_by("-run_date", "-id"))
 
 
 def _vendor_options(request):
