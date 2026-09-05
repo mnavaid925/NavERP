@@ -480,6 +480,25 @@ from .SupplierPerformanceEvaluation.PerformanceBoards import (
     supplier_perception_gap,
     supplier_trend_board,
 )
+# 6.18 Inventory & Warehouse Integration — three CRUD entities plus three DERIVED pages that own
+# no model at all (stock_position, receipt_bin_map, count_accuracy).
+from .InventoryWarehouseIntegration.Policies import (
+    replenishmentpolicy_list, replenishmentpolicy_detail, replenishmentpolicy_create,
+    replenishmentpolicy_edit, replenishmentpolicy_delete,
+)
+from .InventoryWarehouseIntegration.Runs import (
+    replenishmentrun_list, replenishmentrun_detail, replenishmentrun_create,
+    replenishmentrun_edit, replenishmentrun_delete, replenishmentrun_generate,
+    replenishmentrun_release, replenishmentrun_cancel, replenishmentsuggestion_decide,
+)
+from .InventoryWarehouseIntegration.MaterialIssues import (
+    materialissue_list, materialissue_detail, materialissue_create, materialissue_edit,
+    materialissue_delete, materialissue_submit, materialissue_post, materialissue_cancel,
+    materialissueline_add, materialissueline_delete,
+)
+from .InventoryWarehouseIntegration.StockPosition import stock_position
+from .InventoryWarehouseIntegration.ReceiptBinMap import receipt_bin_map
+from .InventoryWarehouseIntegration.CountAccuracy import count_accuracy
 
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
@@ -677,4 +696,14 @@ __all__ = [
     "improvementplan_acknowledge", "improvementplan_close", "improvementplan_cancel",
     "improvementplan_delete",
     "supplier_benchmark_board", "supplier_trend_board", "supplier_perception_gap",
+    # 6.18 Inventory & Warehouse Integration
+    "replenishmentpolicy_list", "replenishmentpolicy_detail", "replenishmentpolicy_create",
+    "replenishmentpolicy_edit", "replenishmentpolicy_delete",
+    "replenishmentrun_list", "replenishmentrun_detail", "replenishmentrun_create",
+    "replenishmentrun_edit", "replenishmentrun_delete", "replenishmentrun_generate",
+    "replenishmentrun_release", "replenishmentrun_cancel", "replenishmentsuggestion_decide",
+    "materialissue_list", "materialissue_detail", "materialissue_create", "materialissue_edit",
+    "materialissue_delete", "materialissue_submit", "materialissue_post", "materialissue_cancel",
+    "materialissueline_add", "materialissueline_delete",
+    "stock_position", "receipt_bin_map", "count_accuracy",
 ]
