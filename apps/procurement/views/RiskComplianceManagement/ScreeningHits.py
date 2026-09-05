@@ -247,6 +247,7 @@ def screeninghit_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def screeninghit_delete(request, pk):
     """Remove a hit that should never have been captured, and re-count the parent.
@@ -254,6 +255,12 @@ def screeninghit_delete(request, pk):
     Refused once the parent screening is decided: ``block()`` only requires an OPEN status, not
     disposed hits, so a blocked screening routinely still carries open hits — and deleting one
     would leave the block standing with no match behind it.
+
+    **Admin-gated**, unlike capture and amend, and unlike the app-wide CRUD default. Deleting the
+    last open hit is what unlocks ``clear()`` — the model refuses a clearance while any hit is
+    open — so an ungated delete lets a non-admin hand an administrator a clean-looking screening
+    with nothing on the record showing a match was ever returned. Capturing a match is analyst
+    work; destroying one is not. Every sibling delete in this sub-module is gated the same way.
     """
     obj = _get_hit(request, pk)
     screening = obj.screening
