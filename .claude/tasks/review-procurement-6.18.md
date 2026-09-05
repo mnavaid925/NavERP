@@ -669,3 +669,226 @@ a provenance marker doubling as the note `StockAdjustment.clean()` demands for `
 and the availability guard running *before* anything is minted so a refused post leaves no orphan
 draft. The per-item demand aggregation at `:324-325` (summing two lines of the same item before
 comparing to on-hand) is the kind of thing that normally ships broken.
+
+---
+
+# Phase 6 — test contract
+
+**Written by Phase 6 step 1, which also wrote the fixtures. FROZEN for the four later lanes.**
+Everything below was read off the code and then *executed* — the query counts and the fixture
+figures in this section are measured, not asserted from the docstrings.
+
+## 0. Rules for the four lanes
+
+* **Subslug is `invwarehouse`.** Every test function is `test_invwarehouse_*`; every module-level
+  helper is `_invwarehouse_*`. No exceptions — this is what stops the next sub-module appending
+  nearby from shadowing us (L47).
+* **Files, in this order, one at a time, each committed on its own:**
+  `apps/procurement/tests/test_invwarehouse_models.py` → `test_invwarehouse_forms.py` →
+  `test_invwarehouse_views.py` → `test_invwarehouse_security.py`.
+* **`apps/procurement/tests/conftest.py` is OWNED BY STEP 1 and is now committed
+  (`88c55376`).** A later lane must not edit it. If a lane truly needs a record no fixture
+  provides, build it *in that lane's module* with an `_invwarehouse_*` helper. Three other
+  sessions append to that file; a rewrite from a later step is how a peer's block gets deleted.
+* **Run scoped and unfiltered:** `venv\Scripts\python.exe -m pytest -q apps/procurement`.
+  Iterate with `--nomigrations` (≈10× faster; `--reuse-db` is inert against `:memory:`), but it
+  stays OUT of `pytest.ini`. Never `-k`-filter the final run (L47).
+* **Determinism (L16):** derive every date from `timezone.localdate()` / `timezone.now()`, the
+  same basis the views use. `datetime.date.today()` flakes for the hours after local midnight.
+* Baseline at the time of writing: **3,493 procurement tests green**, `apps/` collects **22,496**.
+
+## 1. Names — the exact interface
+
+**Models** (`from apps.procurement.models import …` — the app-level `__init__.py` re-exports all
+five; never import through `InventoryWarehouseIntegration.…` from a test):
+
+| model | key | notes |
+|---|---|---|
+| `ReplenishmentPolicy` | `TenantOwned`, **no** number | `unique_together ("tenant","item","location")`; `location=None` = any location |
+| `ReplenishmentRun` | `TenantNumbered`, `NUMBER_PREFIX="RPL"` | `unique_together ("tenant","number")` |
+| `ReplenishmentSuggestion` | plain `Model`, `related_name="lines"` | **no tenant column** — tenant is reached via `run__tenant` |
+| `MaterialIssue` | `TenantNumbered`, `NUMBER_PREFIX="MIS"` | `unique_together ("tenant","number")` |
+| `MaterialIssueLine` | plain `Model`, `related_name="lines"` | **no tenant column** — via `issue__tenant` |
+
+**CHOICES (assert against these constants, never against re-typed literals):**
+`ReplenishmentPolicy.SOURCE_METHOD_CHOICES` buy/transfer/manufacture (default `buy`) ·
+`TRIGGER_MODE_CHOICES` review/auto (default `review`) · `REQUISITIONABLE_SOURCE_METHODS == ("buy",)`.
+`ReplenishmentRun.TRIGGER_CHOICES` manual/scheduled · `STATUS_CHOICES` draft/proposed/released/
+cancelled · `ABC_CHOICES` **UPPERCASE** A/B/C · `EDITABLE_STATUSES ("draft",)` ·
+`GENERATABLE_STATUSES ("draft","proposed")` · `RELEASABLE_STATUSES ("proposed",)` ·
+`CANCELLABLE_STATUSES ("draft","proposed")` · `MAX_SUGGESTIONS 500` · `TRUNCATION_PREFIX "[Truncated:"`.
+`ReplenishmentSuggestion.DECISION_CHOICES` pending/accepted/snoozed/dismissed.
+`MaterialIssue.MOVEMENT_TYPE_CHOICES` issue/return · `PURPOSE_CHOICES` cost_centre/project/
+work_order/maintenance/sample/other · `STATUS_CHOICES` draft/submitted/posted/cancelled ·
+`EDITABLE_STATUSES`/`SUBMITTABLE_STATUSES`/`CANCELLABLE_STATUSES` as contracted, and
+**`POSTABLE_STATUSES ("draft","submitted")`** — a draft posts directly, on purpose.
+
+**Forms** (`from apps.procurement.forms import …`; **all five take `tenant=`**):
+
+| form | `Meta.fields` |
+|---|---|
+| `ReplenishmentPolicyForm` | `item, location, source_method, trigger_mode, preferred_vendor, target_level, order_multiple, min_order_qty, max_order_qty, include_on_order, include_open_requisitions, lead_time_days_override, default_org_unit, default_budget, default_gl_account, is_active, notes` |
+| `ReplenishmentRunForm` | `location, run_date, trigger, abc_class_filter, notes` |
+| `ReplenishmentSuggestionDecisionForm` | `decision, snooze_until, vendor, decision_note` |
+| `MaterialIssueForm` | `location, movement_type, purpose, reference, issue_date, org_unit, gl_account, requested_by, reservation, notes` |
+| `MaterialIssueLineForm` | `item, lot_serial, quantity, gl_account, notes` |
+
+**The absences the forms lane must assert (L20/L22)** — every one of these is a system stamp, and
+its presence in `Meta.fields` would be the bug: `tenant` (all five) · `number`, `status`,
+`created_at`, `updated_at` (both headers) · `generated_by`, `generated_at`, `released_at` (run) ·
+**all eleven snapshot columns plus `requisition`** (decision form) · `adjustment`, `issued_by`,
+`posted_at`, `cancelled_at` (issue) · **`unit_cost`** (line form — it is the `Item.average_cost`
+snapshot, stamped in `save()`, and a form field would let the person consuming the stock type what
+it cost). `TenantUniqueMixin` is FIRST in the MRO on the three header forms and correctly absent
+from the two child forms.
+
+**URL names** — 27, namespace `procurement:`, all verified registered:
+`stock_position` · `receipt_bin_map` · `count_accuracy` ·
+`replenishmentpolicy_{list,create,detail,edit,delete}` ·
+`replenishmentrun_{list,create,detail,edit,delete,generate,release,cancel}` ·
+`replenishmentsuggestion_decide` (`args=[pk, line_id]`) ·
+`materialissue_{list,create,detail,edit,delete,submit,post,cancel}` ·
+`materialissueline_add` (`args=[pk]`) · `materialissueline_delete` (`args=[pk, line_id]`).
+
+**Templates** (for `assertTemplateUsed`):
+`procurement/inventorywarehouse/{replenishmentpolicy,replenishmentrun,materialissue}/{list,detail,form}.html`
+and `procurement/inventorywarehouse/{stock_position,receipt_bin_map,count_accuracy}.html`.
+
+**Context keys** — § 5 of `contract-procurement-6.18.md` is still accurate after the fix pass; read
+it there rather than duplicating it here. Two amendments the fixes made, already folded into that
+file: `raise_requisition_url` on a stock-position row is **conditional** (empty, with a
+`source_label`, when the governing policy does not `raises_requisitions` — M4), and `can_release` /
+`can_post` are `obj.can_* and _is_admin(request)` (M12).
+
+**Decorators the security lane pins:** every view `@login_required`; every verb `@require_POST`;
+**`@tenant_admin_required`** on `replenishmentrun_release`, `materialissue_post` and — added by
+fix I4 — `replenishmentpolicy_create` / `_edit` / `_delete`.
+
+## 2. Fixtures available (committed, `apps/procurement/tests/conftest.py`)
+
+11 helpers + 46 fixtures. The block's own header comment is the long-form version; this is the
+index. Reused rather than duplicated: `usd`, `gl_expense_a`/`_b`, `org_unit_a`/`_b`, and 6.11's
+`receipt_grn_a` / `receipt_grn_line_a` chain.
+
+**Helpers** `_invwarehouse_uom · _item · _location · _party · _stock · _rule · _policy · _run ·
+_suggestion · _issue · _line`. Two matter: `_invwarehouse_suggestion` sets **all eleven**
+`editable=False` snapshot columns explicitly (a defaulted line makes every value assertion pass
+vacuously), and `_invwarehouse_line` goes through `.save()` so `unit_cost` is really snapshotted —
+`bulk_create()` bypasses that and seeds a zero-value document.
+
+**Spine** — `invwarehouse_item_a` (RPL-BOLT, avg 4.0000) · `_item2_a` (RPL-NUT, avg 2.5000) ·
+`_item3_a` (RPL-WASHER, avg 1.0000, sorts last) · `_item_b` · `_location_a` (WH-MAIN) ·
+`_location2_a` (WH-EAST) · `_bin_a` (WH-MAIN-A1, `location_type="bin"`) · `_location_b` ·
+`_vendor_a` (supplier role) · `_vendor2_a` (**vendor** role — both are accepted) · `_vendor_b` ·
+`_plain_party_a` (same tenant, **no role** — the `preferred_vendor` rejection is the ROLE rule, not
+the tenant rule) · `_lot_a` · `_stock_a` (+100 of item_a @ WH-MAIN) · `_stock2_a` (+10 of item2_a)
+· `_rule_a` (point 150 / safety 25 / lead 7 / ABC `"A"`) · `_rules_bulk_a` (40 active rules).
+
+`_rule_a`'s point is above `_stock_a`'s 100 deliberately, so `generate()` proposes either way:
+with stock + `_policy_a` → raw 100, suggested **100**; without the stock → raw 200, suggested
+**200**; with only `_policy_catchall_a` → target falls back to 150+25=175 and nothing rounds.
+
+**Policies** — `invwarehouse_policy_a` (located, buy, vendor_a, target 200, multiple 25, min 10,
+max 500, org unit + GL defaults) · `_policy_catchall_a` (**same item, `location=None`**) ·
+`_policy_transfer_a` (`source_method="transfer"`) · `_policy_b` (tenant B).
+
+**Runs** — `invwarehouse_run_a` (draft, whole network, no lines) · `_run_proposed_a` (3 lines:
+pending 100×4.00, accepted 40×2.50, snoozed 20×1.00 → `totals` 3/1/1/0/1, `accepted_value`
+100.0000, `run.total_value` 520.0000) · `_run_released_a` (**built by calling the real
+`release()`** — 2 accepted lines, one vendor group, one draft `PR-` of 500.00, both lines stamped)
+· `_run_lines_a` (30 lines / 3 items / 3 policies / 3 vendors) · `_run_b` (tenant B).
+
+**Material issues** — `invwarehouse_issue_draft_a` (**two lines of the SAME item**, 6+6, against 10
+on hand) · `_issue_submitted_a` (postable) · `_issue_posted_a` (**built by calling the real
+`post()`** — draft `ADJ-`, `reason="other"`, provenance marker, `posted_at`/`issued_by` stamped,
+**zero `scm.StockMove` rows**) · `_return_a` · `_issue_lots_a` (20 lot-carrying lines) ·
+`_issue_b` (tenant B).
+
+**Derived pages** — `invwarehouse_putaway_a` (completed `PutawayTask` on 6.11's GRN → WH-MAIN-A1,
+5 of 12 → `unputaway_qty` 7, state "partial") · `_count_task_a` (counted task 7 days ago; 2 counted
+lines, 1 with a variance → `lines_counted` 2, `lines_with_variance` 1, `accuracy_pct` 50,
+`net_variance_qty` −3, `abs_variance_qty` 3, `variance_value` 7.5000) · `_count_program_a`
+(`abc_class="a"` — **LOWERCASE**; that is `CountProgram.abc_class`, not `ReorderRule`'s UPPERCASE
+rank that `ReplenishmentRun.abc_class_filter` filters).
+
+## 3. THE REGRESSION LIST — the fixes that must not come back
+
+Every row below is a finding from the `CONSOLIDATED FIX LIST` above that is fixed *now* and would
+regress silently. **Each one needs a named test.** All eleven were executed against the committed
+fixtures before this section was written, so the fixture support is proven, not assumed.
+
+| # | Lane | Test it as | Fixtures |
+|---|---|---|---|
+| **C1** | views | POST `replenishmentrun_delete` on a RELEASED run → 302 **and the run survives AND both its suggestions survive** (`ReplenishmentSuggestion.run` is CASCADE, so asserting only the run is not enough) | `invwarehouse_run_released_a` |
+| **C2** | views | `count_accuracy?date_from=…&date_to=` → **200**, and `?date_from=&date_to=…` → **200**. Both directions; one alone leaves the other half of the `ValueError` live | `invwarehouse_count_task_a` |
+| **C3** | views | `?window=30` and `?window=365` must produce **different** `date_from` in the context. Asserting 200 proves nothing here — the inert dropdown returned 200 the whole time | `invwarehouse_count_task_a` |
+| **I1** | views | `stock_position?item=0`, `?location=0`, `?vendor=0` → 200 **and `stats.rows` equal to the unfiltered count**. `as_db_int` passes `0` through and an `AutoField` starts at 1, so the old code emptied the board | `_stock_a`, `_rule_a`, `_policy_a` |
+| **I2** | views | a policy with `include_on_order=False` (point 100, on hand 50, on order 80) must make the board's `below_point` **True**, agreeing with the run. Build the policy in the test — both flags default True, which is why this hid | `_stock_a`, `_rule_a` + an in-test policy |
+| **I5** | security | POST `replenishmentpolicy_delete` on a policy with a released suggestion → 302 and the policy **survives** (`SET_NULL` means the unguarded delete does not fail — it silently rewrites history) | `invwarehouse_run_released_a` + `invwarehouse_policy_a` |
+| **I10** | views | `materialissue_detail` on the two-same-item document → **every** line `is_short` True, and `post()` raises with the SKU in `.messages`. The flag is per ITEM across the document, not per line | `invwarehouse_issue_draft_a` |
+| **I13** | models | `seed_procurement --flush` deletes the five 6.18 tables children-first (assert on the delete list, or skip — do not run `--flush` against a shared dev DB) | — |
+| **M4** | views | a `transfer`-sourced row gets `raise_requisition_url == ""` and a non-empty `source_label`; a `buy` row gets the URL and `source_label == ""` | `invwarehouse_policy_transfer_a` |
+| **M11** | models | a line with an absurd `unit_cost` (e.g. `9999999999.9999`) posts, and the minted `StockAdjustmentLine.unit_cost` is clamped to **`999999.9999`** — SCM's own `MaxValueValidator`, which `bulk_create` skips. **Read the ceiling off SCM's field**, do not restate the literal | in-test issue + `_stock_a` |
+| **M12** | security | `member_client` on `replenishmentrun_detail` → `can_release is False`; on `materialissue_detail` → `can_post is False`; and the POST is still a `PermissionDenied` (the decorator, not the flag, is the enforcement) | `_run_proposed_a`, `_issue_submitted_a` |
+
+Plus the standing obligations from the brief, all fixture-supported: cross-tenant **404** on every
+detail/edit/delete for `_policy_b` / `_run_b` / `_issue_b`; A's lists never containing B's rows; a
+crafted POST carrying B's pk in an FK field rejected; anonymous → login redirect; CSRF enforced
+with `Client(enforce_csrf_checks=True)`; junk FK filter params → 200; page 2 and page-past-the-end.
+
+## 4. Query-count regressions — MEASURED, and two of the requested numbers are wrong
+
+The performance pass asked for three `django_assert_max_num_queries` guards. They protect real
+behaviour and must be written — but **two of the three ceilings it named do not hold as stated**,
+because `django_assert_max_num_queries` counts everything on the connection, including the
+auth/session/tenant middleware, the branding lookup, the session write-back and the
+`SAVEPOINT`/`RELEASE SAVEPOINT` pair that pytest-django's transaction wrapper adds. The reviewer's
+figures counted only the view's or the model's own SQL. Measured under `config.settings_test` on
+SQLite, cold and warm, with the committed fixtures:
+
+| path | asked for | **measured** | use | breakdown |
+|---|---|---|---|---|
+| `replenishmentrun_detail`, 30 lines / 3 policies / 3 vendors | ≤ 12 | **13** (cold = warm) | **`≤ 13`** | 6 view queries (run, paginator COUNT, totals aggregate, lines, vendors, requisitions) + 7 harness (session, user, tenant, branding, SAVEPOINT, session UPDATE, RELEASE) |
+| `materialissue_detail`, 20 lot-carrying lines | ≤ 14 | **14** (cold = warm) | **`≤ 14`** | 7 view (issue, lines, availability, total_value, + the line form's item / lot / GL querysets) + 7 harness |
+| `ReplenishmentRun.generate()`, 40 active rules | ≤ 15 | **17** cold / **16** warm | **`≤ 17`** | the 9 grouped reads the docstring claims, verified one by one + lock SELECT, DELETE, bulk INSERT, header UPDATE, ContentType SELECT, audit INSERT + 2 savepoints. The 16/17 split is Django's per-process ContentType cache |
+
+**Do not "fix" these by loosening them further** — the ceilings are one query above nothing, and
+every regression they guard is worth ≥ 20 queries at these fixture sizes, so a `+1` of slack
+cannot hide one:
+
+* `replenishmentrun/detail.html:176` renders `{{ line.policy.pk }}`. `_LINE_RELATIONS` joins
+  `policy` but **not** `policy__item` / `policy__location`, so `{{ line.policy }}` would resolve
+  `ReplenishmentPolicy.__str__` → `item.sku` **and** `scope_label` → `location.code`: 1+2N, i.e.
+  +50 on a 25-row page. `invwarehouse_run_lines_a` carries three distinct policies for exactly this.
+* `materialissue/detail.html:191` renders `{{ line.lot_serial.number }}`. `lot_serial__item` is not
+  joined, so `{{ line.lot_serial }}` → `LotSerial.__str__` → `self.item.sku`: +20.
+  `invwarehouse_issue_lots_a` carries 20 distinct lots for exactly this.
+* `generate()`'s rules queryset is `.only()`-narrowed to nine columns with
+  `select_related("item")` alone (I8 + M13). A lazy `rule.item.uom.code` would be +40 — which is
+  why every fixture item is created **with** a uom, so the regression can actually fire.
+
+**Write the guard on the SECOND request** (`client.get(url)` once, then measure) so a cold
+ContentType cache cannot make the assertion flap between a full run and a single-test run.
+
+## 5. Traps worth knowing before writing a line of test
+
+1. **`Model.objects.create()` does not call `clean()`.** Cross-tenant rejection, the nullable-unique
+   catch-all probe, `purpose == "other"` requiring notes, the snooze-date rule and the lot↔item rule
+   are all `clean()` behaviour. Assert them through the model's `full_clean()` or through the FORM
+   — never by reading a fixture back.
+2. **On-hand is always the live `scm.StockMove` aggregate.** No quantity is stored on a header. A
+   shortfall test must control the stock fixtures, not a column.
+3. **Tenant on the two child models is reached through the parent** (`run__tenant`,
+   `issue__tenant`). The IDOR boundary for `replenishmentsuggestion_decide`,
+   `materialissueline_add` and `materialissueline_delete` is that join, and all three legs
+   (`pk=line_id`, `<parent>__pk=pk`, `<parent>__tenant=request.tenant`) must be present.
+4. **`request.tenant is None`** (the superuser) must render an empty page, never a 500, and
+   `crud_create` deliberately refuses a tenant-less creator with a redirect.
+5. **The ledger boundary is assertable**: `apps/procurement` writes **zero** `scm.StockMove` rows.
+   Count moves across `invwarehouse_issue_posted_a` — `post()` mints only a **draft**
+   `scm.StockAdjustment`.
+6. **`abc_class` is two different fields.** `ReorderRule.abc_class` / `ReplenishmentRun
+   .abc_class_filter` are UPPERCASE `A/B/C`; `scm.Location.abc_class` and
+   `inventory.CountProgram.abc_class` are lowercase `a/b/c`. Crossing them matches nothing, quietly.
+7. **`ReplenishmentPolicy.round_quantity` applies the cap LAST**, so the cap wins over the
+   multiple: multiple 30, cap 100, shortfall 95 → **100**, not 120.
