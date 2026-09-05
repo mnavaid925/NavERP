@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Correct Measurement — {{ obj.kpi_name|default:obj.kpi.name }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — correct a manual-entry score line
+    (apps/procurement/views/SupplierPerformanceEvaluation/ScorecardKpiScores.py
+     :supplierkpiscore_edit — crud_edit).
+
+    Context contract: form, obj, is_edit — and NOTHING else exists here.
+
+    EDIT ONLY. There is no supplierkpiscore_create route and no create form: lines are written by
+    supplierevaluation_generate, and a hand-created line would be a measurement with no
+    computation behind it. crud_edit always sets is_edit=True and always passes obj, so unlike
+    kpi/form.html (which is shared with a create view) every obj.* read below is unconditional
+    and safe.
+
+    THE GATE IS THE VIEW, NOT THIS PAGE. supplierkpiscore_edit fetches the row first and refuses
+    anything but source_at_time == "manual" — messages.error plus a redirect back to the detail
+    page — before any form work happens. So a crafted POST against a derived or survey line's pk
+    never reaches this template or its form. A two-field form and a read-only card are UX; they
+    are not the authorization boundary.
+
+    TWO FIELDS, and the card below the form says why the rest is missing rather than leaving a
+    reader to guess: everything else on a score line is either the line's identity, a
+    frozen-at-generation column or derived in save(). Score and band in particular are NOT
+    fields — the form re-derives them through the KPI's own score_and_band(), so a typed figure
+    goes through exactly the same scale a resolver's does and the two can never disagree about
+    what "critical" means.
+
+    Field help is keyed off field.name so it stays correct if the form's field order changes, and
+    each label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Correct measurement &mdash; {{ obj.kpi_name|default:obj.kpi.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierkpiscore_list' %}">Score lines</a><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierkpiscore_detail' obj.pk %}">{{ obj.scorecard.number }}</a><span class="sep">›</span>
+        <span>Correct</span>
+      </div>
+      <p class="text-muted">{{ obj.scorecard.party.name }} · {{ obj.scorecard.period_start|date:"M d, Y" }} &ndash; {{ obj.scorecard.period_end|date:"M d, Y" }} · manual-entry line, last measured {{ obj.computed_at|date:"M d, Y H:i" }}.</p>
+      <p class="text-muted">Saving re-bands and re-scores the figure through this KPI's own scoring method, re-stamps when it was measured, and rewrites the working behind it to say plainly that the number was typed rather than computed.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The figure</h2>
+        <div>
+          <span class="badge {{ obj.band_css }}">{{ obj.get_band_display }}</span>
+          <span class="badge badge-muted">Manual</span>
+        </div>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "measured_value" %}
+                <div class="form-help">What this KPI actually came back at for the period, in the unit frozen on the line{% if obj.unit_at_time %} ({{ obj.unit_at_time }}){% endif %}. Leave it blank if there genuinely was no figure &mdash; an empty measurement bands as <span class="fw-600">Not banded</span> and drops out of both sides of the composite, which is honest; typing a 0 instead would drag the supplier&rsquo;s score down with a number nobody measured.</div>
+              {% elif field.name == "comment" %}
+                <div class="form-help">Where the figure came from and why it is being corrected. This is the only place a reader of a closed period can find out that a number was typed by a person &mdash; worth a sentence, not a word.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Everything else on this line is not editable</h2>
+        <span class="text-muted">and this is why</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">A score line is <span class="fw-600">evidence produced by a generate run</span>, not a form somebody fills in. Only a manual-source KPI has a figure that exists nowhere but in a person&rsquo;s head, which is why exactly two fields are offered above and why the view refuses to open this page at all for a derived or 360-survey line.</p>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Score and band</dt>
+            <dd>Derived on save
+              <div class="text-muted">re-computed from the figure you type through this KPI&rsquo;s own scoring method, so a hand entry can never mean one thing here and another on a board</div>
+            </dd></div>
+          <div class="detail-item"><dt>KPI and period</dt>
+            <dd>The line&rsquo;s identity
+              <div class="text-muted">changing either would be creating a different line &mdash; which is exactly what the (tenant, scorecard, KPI) uniqueness rule exists to prevent</div>
+            </dd></div>
+          <div class="detail-item"><dt>Weight applied</dt>
+            <dd>{{ obj.weight_applied }} &mdash; frozen at generation
+              <div class="text-muted">a re-weight next quarter must not rewrite a closed period</div>
+            </dd></div>
+          <div class="detail-item"><dt>Target at the time</dt>
+            <dd>{% if obj.target_at_time is not None %}{{ obj.target_at_time|floatformat:"-4" }}{% else %}<span class="text-muted">Not set</span>{% endif %}
+              <div class="text-muted">the line you are being measured against &mdash; frozen, so the correction is scored on the same terms the original was</div>
+            </dd></div>
+          <div class="detail-item"><dt>Direction at the time</dt>
+            <dd>{% if obj.direction_at_time == "higher_is_better" %}Higher is better
+              {% elif obj.direction_at_time == "lower_is_better" %}Lower is better
+              {% elif obj.direction_at_time %}{{ obj.direction_at_time }}
+              {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              <div class="text-muted">which way the bands read</div>
+            </dd></div>
+          <div class="detail-item"><dt>Working behind the figure</dt>
+            <dd>Rewritten on save
+              <div class="text-muted">replaced with a manual-entry record naming the value, the scoring method and when it was typed &mdash; a reader must never mistake a hand entry for a resolver&rsquo;s output</div>
+            </dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save measurement</button>
+      <a href="{% url 'procurement:supplierkpiscore_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
