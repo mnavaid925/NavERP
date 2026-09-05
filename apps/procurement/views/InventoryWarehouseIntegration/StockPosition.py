@@ -287,8 +287,8 @@ def stock_position(request):
         locations = sorted(location_map.values(), key=lambda obj: obj.code)
         vendors = _supplier_parties(tenant)
 
-        # `raise_requisition_url` is the same target on every row, so it is reversed ONCE here
-        # rather than 500 times inside the loop.
+        # `raise_requisition_url` is the same target on every row that gets one, so it is reversed
+        # ONCE here rather than 500 times inside the loop. Which rows get one is decided below.
         requisition_url = reverse("scm:requisition_create")
 
         # One unsaved instance carrying the model's own defaults, reused for every pair with no
@@ -401,6 +401,17 @@ def stock_position(request):
             # there is one. A purchase order can sit in a receivable status long after every line
             # on it was received; naming it here would promise a delivery that already arrived.
             supply = inbound.get(row["sku"]) if row["on_order"] > ZERO else None
+
+            # The board offers Buy only on rows the RUN would buy. `generate()` skips any policy
+            # whose `source_method` is outside `REQUISITIONABLE_SOURCE_METHODS` (``Runs.py:413``) —
+            # a transfer is scm's stock-transfer document and a manufacture is a work order —
+            # so a transfer- or manufacture-sourced item that renders below point must not also
+            # render a requisition button beside it, inviting precisely the purchase the model
+            # refuses to propose. `raises_requisitions` is READ rather than `"buy"` hard-coded,
+            # which is what the model asks callers to do. The unconfigured sentinel sources by
+            # "buy", so a pair with no policy at all keeps its button.
+            shaping = policy or unconfigured
+            buyable = shaping.raises_requisitions
             row.update({
                 "item": item_map.get(row["item_id"]),
                 "location": location_map.get(row["location_id"]),
@@ -412,7 +423,11 @@ def stock_position(request):
                 "days_of_cover": _days_of_cover(row["available"], row["avg_daily_demand"]),
                 "policy_vendor": (policy.preferred_vendor
                                   if policy is not None and policy.preferred_vendor_id else None),
-                "raise_requisition_url": requisition_url,
+                # Empty string, not None: the template tests it for truth, and an empty href would
+                # otherwise render a link that reloads the board.
+                "raise_requisition_url": requisition_url if buyable else "",
+                # Only set when there is no button, so the cell says WHY instead of being blank.
+                "source_label": "" if buyable else shaping.get_source_method_display(),
             })
 
     page_obj = paginate(request, rows, per_page=_PER_PAGE)
