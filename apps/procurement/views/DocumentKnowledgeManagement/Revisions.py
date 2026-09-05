@@ -46,6 +46,7 @@ from apps.procurement.models.DocumentKnowledgeManagement.Revisions import (
     EXTRACT_MAX_CHARS, ProcurementDocumentRevision, extract_document_text, file_sha256,
     next_revision_no)
 from apps.procurement.views._common import *  # noqa: F401,F403
+from apps.procurement.views._helpers import holder_name, readable_document_q
 
 TEMPLATE_LIST = "procurement/documentknowledge/revision/list.html"
 TEMPLATE_DETAIL = "procurement/documentknowledge/revision/detail.html"
@@ -115,14 +116,26 @@ def _revision_qs(request):
     through ``document`` for a number, a title and the pointer that decides its badge, so a
     child whose parent belongs elsewhere would print another workspace's data through a
     correctly-scoped child. Scoping both ends means such a row cannot appear at all.
+
+    The parent's CLASSIFICATION governs the child for the same reason. A revision carries the
+    stored file, its checksum and the text read out of it, so a confidential document whose rows
+    were listed here would be readable through its own revision register — and the download view
+    below fetches through this same queryset, which is what makes one rule cover the page and
+    the bytes. ``readable_document_q`` is the single definition; the prefix reaches it through
+    the FK.
     """
     return (ProcurementDocumentRevision.objects
             .filter(tenant=request.tenant, document__tenant=request.tenant)
+            .filter(readable_document_q(request.user, "document__"))
             .select_related(*_ROW_RELATIONS))
 
 
-def _documents(tenant):
+def _documents(request):
     """The document facet's options — three columns, capped, ordered by the number people cite.
+
+    Narrowed by the same read rule as the register itself. A ``<select>`` listing every document
+    number and title in the workspace is an enumeration of the confidential ones even when their
+    rows never render — the facet has to answer the same question the page does.
 
     ``.only()`` here is load-bearing rather than a micro-optimisation. ``ProcurementDocument``
     carries ``extracted_text``, a machine-written TextField that runs to 200,000 characters, and
@@ -131,9 +144,11 @@ def _documents(tenant):
     4.9 s of a 4.9 s request at 2,007 documents, against 0.19 s for the register itself). Three
     columns and a cap make it kilobytes.
     """
-    if tenant is None:
+    if request.tenant is None:
         return ProcurementDocument.objects.none()
-    return (ProcurementDocument.objects.filter(tenant=tenant)
+    return (ProcurementDocument.objects
+            .filter(tenant=request.tenant)
+            .filter(readable_document_q(request.user))
             .only("pk", "number", "title")
             .order_by("number")[:DOCUMENT_FACET_CAP])
 
@@ -161,7 +176,13 @@ def pdocrevision_list(request):
         pending=Count("pk", filter=Q(is_approved=False)),
     )
     return crud_list(
-        request, _revision_qs(request), TEMPLATE_LIST,
+        # .defer, not a narrower select_related: the joins are what keep this page's query count
+        # at 4 whatever the row count, and the payload is what has to go. Neither the revision's
+        # own text of record nor the parent's search copy is rendered on a register row, and at
+        # 30 KB average per document a 15-row page was hauling ~900 KB (measured 6,057 KB) of
+        # TextField to draw a table of filenames and dates.
+        request, _revision_qs(request).defer("extracted_text", "document__extracted_text"),
+        TEMPLATE_LIST,
         # sha256 is searchable on purpose: a checksum quoted in an audit note or an email is
         # exactly the thing somebody arrives here holding.
         search_fields=("document__number", "document__title", "change_note", "sha256"),
@@ -172,7 +193,7 @@ def pdocrevision_list(request):
         filters=(("document", "document_id", True),
                  ("approved", "is_approved", False)),
         extra_context={
-            "documents": _documents(request.tenant),
+            "documents": _documents(request),
             "approval_choices": APPROVAL_CHOICES,
             "stats": stats,
             "revision_note": REVISION_NOTE,
@@ -255,11 +276,6 @@ def pdocrevision_download(request, pk):
 # ---------------------------------------------------------------------------------------------
 
 
-def _holder_name(user):
-    """A person's name for a refusal message — never a bare pk."""
-    return (user.get_full_name() or user.username) if user is not None else "someone else"
-
-
 @login_required
 def pdocument_revision_upload(request, pk):
     """Mint the next revision of one document from an uploaded file.
@@ -300,7 +316,7 @@ def pdocument_revision_upload(request, pk):
                                 f"revisions. Re-activate it first if it is back in use.")
         return redirect("procurement:pdocument_detail", pk=document.pk)
     if document.checked_out_by_id not in (None, request.user.pk):
-        messages.error(request, f"{_holder_name(document.checked_out_by)} has {document.number} "
+        messages.error(request, f"{holder_name(document.checked_out_by)} has {document.number} "
                                 f"checked out. Ask them to release it, or have a workspace "
                                 f"administrator force the release.")
         return redirect("procurement:pdocument_detail", pk=document.pk)
@@ -481,6 +497,14 @@ def pdocrevision_delete(request, pk):
     revision — and both are checked anyway: a pointer left dangling by any future path must not
     become a route to deleting the row it points at.)
 
+    **Both guards run under a lock on the PARENT row, exactly as approve does.** Reading them off
+    an unlocked snapshot was the whole defect: pointer=2 with r3 pending, one person POSTs delete
+    on r3 (reads is_approved=False, pointer=2 — both guards pass) while an administrator approves
+    r3, and the delete then destroys an APPROVED revision and leaves the document pointing at a
+    row that no longer exists, reporting success. The revision is therefore re-read inside the
+    transaction and re-checked against the locked parent; a row that changed underneath us is
+    refused with the same message it would have been refused with a moment earlier.
+
     WARNING: deleting the row does NOT remove the stored file from ``MEDIA_ROOT``. Django never
     has, and that is deliberate here rather than an oversight — reclaiming the disk means
     deleting a path derived from stored user input, which is exactly the operation that turns
@@ -492,23 +516,40 @@ def pdocrevision_delete(request, pk):
     """
     revision = _get_revision(request, pk)
     document = revision.document
-
-    if revision.is_approved:
-        messages.error(request, f"r{revision.revision_no} of {document.number} is approved, so "
-                                f"it stays on the record. Upload a new revision to supersede "
-                                f"it — approved history is never rewritten here.")
-        return redirect("procurement:pdocument_detail", pk=document.pk)
-    if revision.revision_no == document.current_revision_no:
-        messages.error(request, f"{document.number} currently points at r{revision.revision_no},"
-                                f" so it cannot be deleted. Approve a newer revision first.")
-        return redirect("procurement:pdocument_detail", pk=document.pk)
-
     label = f"r{revision.revision_no}"
-    # Audited BEFORE the delete, while the row still has a pk to record — the same order
-    # ``crud_delete`` uses.
-    write_audit_log(request.user, document, "revision_delete",
-                    {"revision_no": revision.revision_no, "sha256": revision.sha256[:16]})
-    revision.delete()
+
+    refusal = None
+    with transaction.atomic():
+        locked = (ProcurementDocument.objects.select_for_update()
+                  .get(pk=document.pk, tenant=request.tenant))
+        # Re-read the revision INSIDE the lock and scoped to the locked parent: approve stamps
+        # is_approved and moves the pointer in one transaction, so a snapshot taken before it is
+        # stale in exactly the window that matters.
+        fresh = (ProcurementDocumentRevision.objects
+                 .filter(pk=revision.pk, tenant=request.tenant, document_id=locked.pk)
+                 .first())
+        if fresh is None:
+            refusal = (f"{label} of {locked.number} is no longer there — somebody removed it "
+                       f"while the page was open.")
+        elif fresh.is_approved:
+            refusal = (f"{label} of {locked.number} is approved, so it stays on the record. "
+                       f"Upload a new revision to supersede it — approved history is never "
+                       f"rewritten here.")
+        elif fresh.revision_no == locked.current_revision_no:
+            refusal = (f"{locked.number} currently points at {label}, so it cannot be deleted. "
+                       f"Approve a newer revision first.")
+        else:
+            # Audited BEFORE the delete, while the row still has a pk to record — the same order
+            # ``crud_delete`` uses — and inside the same transaction, so a rolled-back delete
+            # cannot leave an audit row claiming it happened.
+            write_audit_log(request.user, locked, "revision_delete",
+                            {"revision_no": fresh.revision_no, "sha256": fresh.sha256[:16]})
+            fresh.delete()
+
+    if refusal is not None:
+        messages.error(request, refusal)
+        return redirect("procurement:pdocument_detail", pk=document.pk)
+
     messages.success(request, f"{label} of {document.number} removed. The record is gone; the "
                               f"stored file is not reclaimed from disk here.")
     return redirect("procurement:pdocument_detail", pk=document.pk)
