@@ -359,8 +359,15 @@ class ReplenishmentRun(TenantNumbered):
             on_hand = ReorderRule.on_hand_map(locked.tenant, rules)                       # Q2
             allocations = _pair_map(                                                     # Q3
                 SalesOrderAllocation.objects
-                .filter(status__in=SalesOrderAllocation.ACTIVE_STATUSES,
-                        sales_order_line__sales_order__tenant_id=tenant_id)
+                # Scoped on the allocation's OWN tenant column, not through
+                # sales_order_line__sales_order__tenant. The two-table join produced no tenant
+                # predicate on the allocation table at all, so `scm_soa_tnt_status_idx` — an
+                # index on exactly (tenant, status), SalesOrderAllocations.py:44 — was
+                # unreachable and the planner read every workspace's active allocations before
+                # discarding them. Identical rows, one fewer join, and the same direct form the
+                # next two queries already use.
+                .filter(tenant_id=tenant_id,
+                        status__in=SalesOrderAllocation.ACTIVE_STATUSES)
                 # The item sits on the ORDER LINE and both field names collide with the model's
                 # own columns, so both halves of the pair key are aliased.
                 .values(iid=F("sales_order_line__item_id"), loc=F("location_id"))
