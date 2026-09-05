@@ -476,6 +476,161 @@ nothing, against 178 templates repo-wide that do gate. Narrow `can_post` / `can_
 cross-tenant by construction — pre-existing across ~100 admin classes, `is_staff` defaults False,
 **not a 6.18 regression.**
 
+### Pass 5 — `performance-reviewer`
+
+Told not to re-tread ground two passes had already cleared, and given six measured claims to
+attack instead. **Four of the six hold as stated; one is only partly true; one exposed a real
+defect.** No N+1 anywhere in the sub-module.
+
+#### R5-I1 — `SalesOrderAllocation` is reached through a 2-table join, so its `(tenant, status)` index is unreachable
+
+`models/…/Runs.py:364` and `views/…/StockPosition.py:232` both filter
+`sales_order_line__sales_order__tenant`. But `SalesOrderAllocation` is `TenantOwned` with its own
+`tenant` column **and** `scm_soa_tnt_status_idx` on exactly `(tenant, status)`
+(`SalesOrderAllocations.py:44`) — **confirmed by the main session.** Measured SQL shows **no tenant
+predicate on the allocation table at all**: the planner reads every workspace's
+`reserved`/`released` allocations, joins each up through `scm_salesorderline` → `scm_salesorder`,
+and discards the rest. At 500k allocations across 50 workspaces one `stock_position` render scans
+~500k rows to keep ~10k — on a page any logged-in user can open, and again on every `generate()`.
+
+Self-inconsistent within the same function: the two lines below it (`InventoryReservation`
+`Runs.py:372`, `StockStatus` `:375`) both use the direct `tenant_id=` form.
+
+**Fix:** `filter(tenant_id=tenant_id, status__in=…)` at both sites. Identical results, one fewer
+join, lands on the index.
+
+**Third site is NOT ours** — inherited verbatim from
+`apps/inventory/views/InventoryTrackingControl/StockLevels.py:92`, which has the same defect.
+**Route it; do not fix another module's file here.**
+
+#### R5-I2 — `stock_position` applies `ROW_CAP` *after* building every row
+
+`StockPosition.py:224-227` (`combos` — an uncapped GROUP BY over the whole tenant ledger), `:267`
+(builds a 17-key dict for **every** pair), `:323-329` (`stats` over all of them), `:339` (cap
+finally bites). Query count is flat — which is why the 11× measurement passed — but the *work* is
+O(all item×location pairs), not O(page). At 5,000 SKUs × 20 locations with moves on 30% of pairs
+that is ~30,000 dicts built to render 25, plus `item_map` loading every `Item` **including
+`description`, a `TextField` this page never renders**.
+
+The sibling page in the same sub-module already does it right — `ReceiptBinMap.py:202-204` probes
+`[:ROW_CAP + 1]`, sets `truncated`, and builds nothing past the cap. Same constant, same author,
+opposite order. **(Third instance of the two-of-three drift pattern.)**
+
+#### R5-I3 — `generate()` materialises every active rule while holding the row lock
+
+`Runs.py:342-349` inside the `atomic()` + `select_for_update()` opened at `:330-333`.
+`MAX_SUGGESTIONS = 500` caps the **output**, not the input. The model's own docstring at `:176-178`
+names the scenario — *"a workspace with 40,000 rules would render a page nobody can read **and hold
+a row lock while it did**"* — and the cap it then introduces does not prevent the second half of
+its own sentence. Fix is row *width*: `.only(...)` the nine columns the loop actually reads.
+
+#### R5-M1…M4 (condensed)
+
+- `Runs.py:344` — `select_related("item", "item__uom", "location")` carries **two dead joins**;
+  neither `item.uom` nor `location` is read in the loop (traced attribute by attribute). Fold into
+  R5-I3's `.only()`.
+- `CountAccuracy.py:287-291` — the location roll-up splats `**_ROLLUP_ANNOTATIONS`, dragging a
+  `scm_item` join and two aggregates (`value_sum`, `abs_sum`) the template never renders.
+- `forms/…/MaterialIssues.py:161-163` — the lot dropdown is unbounded and grows with every goods
+  receipt; rebuilt on every `materialissue_detail` render. At 50k available lots that is a 50k-row
+  fetch and a 50k-option `<select>` on a page showing ~5 lines.
+- `Runs.py:106-107` + `replenishmentrun/detail.html:228-230` — the vendor `<option>` list is
+  correct on the *query* side (one QuerySet, `_result_cache` reused) but is **re-rendered inside
+  all 25 row forms**: 25 × 500 parties ≈ 12,500 `<option>` elements (~0.5 MB) for a 25-row table.
+
+#### Claim corrections (asked for verification, not restatement)
+
+- **Claim 3 is only 3/5 true.** `received_map` (`ReceiptBinMap.py:208-213`) and `putaway_done_map`
+  (`:217-223`) run over the whole 500-pk cap **before** `paginate()`, not over the page — deliberate
+  and documented at `:198-201`, because the four stats are specified to cover the capped
+  population. Query count genuinely flat; row volume on those two is up to 25× the page. Leave it,
+  but the claim as I stated it was stronger than the code.
+- **Claim 5 (templates) is clean, and closer than it looks.** Two 1+N traps are avoided *only by
+  the exact phrasing chosen*: `materialissue/detail.html:191` renders `{{ line.lot_serial.number }}`
+  — had it printed `{{ line.lot_serial }}`, `LotSerial.__str__` resolves `self.item.sku` and
+  `_LINE_RELATIONS` does not join `lot_serial__item` → 1+N. `replenishmentrun/detail.html:176`
+  renders `{{ line.policy.pk }}` — `{{ line.policy }}` would resolve `item.sku` **and**
+  `location.code` → 1+2N on a 25-row page. **Anyone "tidying" either template to print the object
+  silently doubles or triples the page's query count.** This is the strongest argument for the
+  query-count regression tests below.
+- **Claim 6 (indexes) — nothing missing.** All seven of `0027`'s indexes match real query patterns,
+  and every upstream table these pages hammer is already covered. The only index problem in the
+  sub-module is R5-I1: an index that exists and cannot be reached.
+- **Not raised, app-wide by design:** `_run_qs`/`_issue_qs` hand `crud_list` an annotated queryset,
+  so `Paginator.count` is a `COUNT(*)` over a GROUP BY subquery. 103 files repo-wide do this;
+  changing it here would fork a deliberate `apps/core/crud.py` contract.
+
+#### Requested for Phase 6
+
+Three `django_assert_max_num_queries` regressions, all guarding behaviour that is correct **now**
+and would regress silently: `replenishmentrun_detail` ≤ 12 with 30 lines across ≥3 policies/vendors
+(catches the `{{ line.policy }}` regression), `materialissue_detail` ≤ 14 with 20 lot-carrying
+lines, and `generate()` ≤ 15 with 40 active rules (pins the nine-query claim permanently — a lazy
+`rule.item.uom.code` would take it past 40).
+
+---
+
+# CONSOLIDATED FIX LIST
+
+All six passes complete. Deduped, sorted, IDs assigned. **Hand this section to `code-fixer`.**
+
+## Critical — 3
+
+| ID | Source | File | Issue |
+|---|---|---|---|
+| **C1** | R1-C1 | `views/…/Runs.py:234` | `replenishmentrun_delete` has no status guard: a POST deletes a **released** run and CASCADE-destroys every suggestion, orphaning the requisitions it raised. Both templates claim the view refuses this. Mirror `materialissue_delete`. |
+| **C2** | R1-C2 | `views/…/CountAccuracy.py:180-182` | Half-filled date range → `ValueError: Cannot use None as a query value` → **500**. Reachable from the filter bar. |
+| **C3** | R3-C1 | `templates/…/count_accuracy.html:91,94` | Window dropdown **permanently inert** — the resolved dates are rendered back into the inputs, so the `both are None` guard never fires. **Fix with C2: the only escape from C3 is clearing a box, which is C2.** Also fix the two `aria-label`s (say "Counted", filter is `scheduled_date`). |
+
+## Important — 13
+
+| ID | Source | File | Issue |
+|---|---|---|---|
+| **I1** | S1 | `views/…/StockPosition.py:220-222` | `?item=0` / `?location=0` / `?vendor=0` silently empties the board. Siblings resolve the pk to an object first. |
+| **I2** | R2-I1 | `views/…/StockPosition.py:276-283` | Re-derives the run's trigger but **drops both policy toggles**, while the comment claims "verbatim". Board and run disagree once either flag is off. |
+| **I3** | R2-I2 | `models/…/Runs.py:326` | The **only model→views import in the repo**. Move `_effective_numbers` down as `ReplenishmentPolicy.effective_numbers()`. |
+| **I4** | R4-I1 | `views/…/Policies.py:255-273` | Policy CRUD is login-only; the config steers vendor/GL/budget/quantity onto requisitions the admin-gated Release raises. Its own docstring names a precedent that gates all three. |
+| **I5** | R4-I2 | `views/…/Policies.py:268-272` | Policy delete has no reference guard; `SET_NULL` erases the provenance of **released** suggestions, unaudited. |
+| **I6** | R5-I1 | `models/…/Runs.py:364`, `views/…/StockPosition.py:232` | `SalesOrderAllocation` reached via 2-table join; its `(tenant, status)` index unreachable. Two sites (ours only). |
+| **I7** | R5-I2 | `views/…/StockPosition.py:224-267,339` | `ROW_CAP` applied after building every row; `item_map` loads a `TextField` never rendered. |
+| **I8** | R5-I3 | `models/…/Runs.py:342-349` | Every active rule materialised **while holding the row lock** — the docstring names this scenario and the cap does not prevent it. `.only()` it. |
+| **I9** | R3-I1 | `templates/…/replenishmentpolicy/detail.html:56` | Inactive-rule caveat is backwards — runs filter `is_active=True`, so those figures are what a run would **not** read. |
+| **I10** | R3-I2 | `views/…/MaterialIssues.py:164` | Shortfall flagged **per line** while `post()` sums **per item**; two lines of one item show no warning then Post refuses. Fix view-side so the copy stands. |
+| **I11** | R3-I3 | `templates/…/stock_position.html:197` | "can never disagree" — same drift as I2, from the template. |
+| **I12** | R3-I4 | `templates/…/replenishmentrun/detail.html:219` | Decide form posts no `page`; a buyer on page 8 is bounced to page 1 on **every** save. |
+| **I13** | R1-I1 | `seed_procurement.py:290` | `--flush` misses all five 6.18 tables, so demo data can never be regenerated. This file has been patched for exactly this twice before. |
+
+## Minor — 12
+
+`M1` R1-M1 proposed-run scope edit leaves stale lines with no re-generate prompt ·
+`M2` R1-M2 `stock_position.html:111`/`:49` truncation copy inverted ·
+`M3` R1-M3 `CountAccuracy.py:317` program roll-up truncates without setting `truncated` ·
+`M4` R2-M1 board offers "Raise requisition" on transfer/manufacture rows the run refuses — **also
+fix contract § 5, which pins the key unconditionally** ·
+`M5` R3-M1 "ranking is intact" untrue of the location table ·
+`M6` R3-M2 "cancelled counts left out" unqualified but `tasks_total` counts them ·
+`M7` R3-M3 signed `value_impact()` vs unsigned `total_value` shown as contradictory figures ·
+`M8` R3-M4 "the last **0** suggestions" when empty ·
+`M9` R3-M5 `stock_position.html:175` icon-only control missing `aria-label` ·
+`M10` R3-M6 "one per vendor, all draft" is a state claim that goes stale ·
+`M11` R4-M1 `bulk_create` bypasses SCM's `unit_cost` `MaxValueValidator` ·
+`M12` R4-M2 admin-gated Post/Release buttons rendered for every member (guaranteed 403) ·
+`M13` R5-M1 two dead joins in `generate()`'s rules queryset ·
+`M14` R5-M2 location roll-up drags `scm_item` + two unrendered aggregates ·
+`M15` R5-M3 unbounded lot dropdown rebuilt every detail render ·
+`M16` R5-M4 vendor `<option>` list re-rendered inside all 25 row forms (~0.5 MB)
+
+## OUT OF SCOPE — route, do not fix here — 3
+
+| ID | File | Owner |
+|---|---|---|
+| **X1** | `apps/scm/management/commands/seed_scm.py` (~469, ~545) | `PutawayTask.goods_receipt` NULL on 8/8 rows, so `receipt_bin_map`'s bins column is blank in every demo. **The 6.18 join is proven correct.** SCM's seeder. |
+| **X2** | `apps/procurement/views/BudgetCostManagement/BudgetMappings.py:85/91/98` | Same missing `@tenant_admin_required` as I4, on 6.15's config master. |
+| **X3** | `apps/inventory/views/InventoryTrackingControl/StockLevels.py:92` | Same index-bypassing join as I6. Module 5's file. |
+
+**Rule for the fixer:** X1–X3 are other modules' or other sessions' files in a shared checkout.
+Mark each `[~] skipped — out of scope, routed` and do not touch them.
+
 ---
 
 **Called out as done well:** `MaterialIssue.post()` implements all four properties of the
