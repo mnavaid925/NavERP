@@ -58,6 +58,12 @@ _LINE_RELATIONS = ("item", "item__uom", "location", "vendor", "policy", "requisi
 #: in one sitting and every extra page is another round of context-switching.
 _LINES_PER_PAGE = 25
 
+#: Ceiling on the supplier ``<select>`` OFFERED on each review-board row. The list is repeated
+#: inside all 25 row forms, so it is the one dropdown on this page whose length is multiplied by
+#: the page size. See :func:`_vendor_options` for why the cap is safe (the vendors already on the
+#: page are always kept) and why it bounds only what is offered, never what may be submitted.
+_VENDOR_OPTION_CAP = 200
+
 #: Said on the detail page, in the view, once. Open purchase orders and open requisitions match
 #: an item by its free-text ``sku_hint`` (L28 — 4.1's lines predate the item spine) and carry no
 #: location, so a network figure is netted off every location's shortfall. A run scoped to one
@@ -103,17 +109,44 @@ def _is_admin(request):
     return bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
 
 
-def _vendor_options(request):
-    """Parties this workspace can actually buy from — empty for a tenant-less user.
+def _vendor_options(request, keep_ids=()):
+    """``(vendors, capped)`` — parties this workspace can buy from, bounded for the review board.
 
     The same supplier-or-vendor rule the policy and decision forms use: ``core.PartyRole``
     distinguishes ``supplier`` from ``vendor`` and workspaces use both interchangeably, so a line
     can only be re-pointed at a party it could have been pointed at in the first place.
+
+    **Why it is bounded.** One QuerySet is evaluated for the whole page, but the board REPEATS its
+    ``<option>`` list inside every one of its 25 row forms — the markup is per row even though the
+    query is not. An unbounded register is therefore 25 × N options for one page: at 500 suppliers
+    that is 12,500 elements, roughly half a megabyte, to render a 25-row table. The first
+    :data:`_VENDOR_OPTION_CAP` by name are offered.
+
+    ``keep_ids`` is the half that makes the cap safe: the vendors already assigned to the lines ON
+    THIS PAGE are always included. Without it, a line whose vendor sorts past the cap would render
+    a ``<select>`` with nothing selected, and the next Save on that row would silently unassign a
+    vendor the buyer never touched. It costs one extra query, and only when the cap actually bit.
+
+    The decision FORM's own queryset is deliberately left unbounded
+    (``ReplenishmentSuggestionDecisionForm``): this bounds what is OFFERED, never what may be
+    submitted, so the cap can never turn a legitimate POST into a validation error.
     """
     if request.tenant is None:
-        return Party.objects.none()
-    return (Party.objects.filter(tenant=request.tenant, roles__role__in=("supplier", "vendor"))
-            .distinct().order_by("name"))
+        return Party.objects.none(), False
+
+    qs = (Party.objects.filter(tenant=request.tenant, roles__role__in=("supplier", "vendor"))
+          .distinct().order_by("name"))
+    # One row past the cap, so "was it cut?" needs no second COUNT.
+    vendors = list(qs[:_VENDOR_OPTION_CAP + 1])
+    capped = len(vendors) > _VENDOR_OPTION_CAP
+    if not capped:
+        return vendors, False
+
+    vendors = vendors[:_VENDOR_OPTION_CAP]
+    missing = set(keep_ids) - {vendor.pk for vendor in vendors}
+    if missing:
+        vendors = sorted(vendors + list(qs.filter(pk__in=missing)), key=lambda v: v.name)
+    return vendors, True
 
 
 def _released_requisitions(run):
@@ -212,12 +245,19 @@ def replenishmentrun_detail(request, pk):
     )
     totals["accepted_value"] = totals["accepted_value"] or 0
 
+    # The vendors already on THIS page are kept whatever the cap does, so no row can render a
+    # <select> that has lost its own selection.
+    vendors, vendors_capped = _vendor_options(
+        request, keep_ids={line.vendor_id for line in line_page_obj.object_list if line.vendor_id})
+
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
         "lines": line_page_obj.object_list,
         "line_page_obj": line_page_obj,
         "decision_choices": ReplenishmentSuggestion.DECISION_CHOICES,
-        "vendors": _vendor_options(request),
+        "vendors": vendors,
+        "vendors_capped": vendors_capped,
+        "vendor_option_cap": _VENDOR_OPTION_CAP,
         "totals": totals,
         # Read from the model so the button and the verb can never disagree about what is allowed.
         "can_generate": obj.can_generate,
