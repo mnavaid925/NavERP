@@ -176,7 +176,7 @@
         <div class="detail-item"><dt>Weight in play</dt><dd>{{ composite.weight_total }}</dd></div>
         <div class="detail-item"><dt>Lines scored</dt><dd>{{ composite.scored_lines }} of {{ composite.total_lines }}</dd></div>
         <div class="detail-item"><dt>Lines with no figure</dt>
-          <dd>{% if composite.unscored_lines %}<span class="fw-600">{{ composite.unscored_lines }}</span><div class="text-muted">no data in the window &mdash; dropped from BOTH sides of the division, never scored zero</div>{% else %}None{% endif %}</dd></div>
+          <dd>{% if composite.unscored_lines %}<span class="fw-600">{{ composite.unscored_lines }}</span><div class="text-muted">no data in the window &mdash; dropped from BOTH sides of the division, never scored zero</div>{% else %}<span class="text-muted">&mdash; every line carries a figure</span>{% endif %}</dd></div>
       </dl>
       <p class="form-help">The two figures above are computed differently and are meant to be read together, not reconciled. The composite is the weighted mean of every KPI actually scored this period; the overall is SCM's blend of the four dimension columns. They agree when every KPI maps to a dimension and every dimension has data &mdash; and when they disagree, the dimension map below says exactly where the difference went.</p>
     </div>
