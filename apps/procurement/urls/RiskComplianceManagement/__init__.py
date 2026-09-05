@@ -47,13 +47,32 @@ None is a prefix of any existing segment. ``fraud-scan/`` is deliberately not ``
 its GET leg writes nothing and renders the thresholds and the not-buildable-rule note that
 everybody should be able to read, so only the POST leg is admin-gated, inside the view.
 
-Later entities of this sub-module append their own modules here (``Policies``, ``Attestations``,
-``AuditTrail``) with their own segments; the splat list below grows, it is never rewritten.
+**Entity 4 (PolicyAttestation) claims four more**, checked the same way and against Entity 1's,
+Entity 2's and Entity 3's eight:
+
+* ``policies/`` — the policy ACKNOWLEDGMENT register and one detail page, plus the roster verb
+  ``policies/<int:pk>/raise-attestations/``
+* ``policy-attestations/`` — the sign-off ledger, its CRUD, and the two verbs
+* ``my-policies/`` — the staff page: what the signed-in person still owes (L32, sidebar-reachable)
+* ``policy-overdue/`` — the chase board
+
+None is a prefix of any existing segment, and none collides with 6.19's ``procurement-policies/``:
+Django matches path COMPONENTS, so those are simply different components. **Entity 4 registers NO
+policy authoring** — ``ppolicy_create`` / ``_edit`` / ``_delete`` / ``_publish`` / ``_archive``
+belong to 6.19, which owns ``procurement.ProcurementPolicy`` itself; 6.17 owns only the
+acknowledgement ledger (contract §6a). ``policy-overdue/`` follows ``fraud-scan/`` in being
+deliberately not ``@require_POST``: its GET leg writes nothing, and only its POST leg — which
+raises one inbox item per overdue person — is admin-gated, inside the view.
+
+Later entities of this sub-module append their own modules here (``AuditTrail``) with their own
+segments; the splat list below grows, it is never rewritten.
 
 ``screening_batch`` is deliberately unregistered — see the note in ``Screenings.py``.
 """
+from .Attestations import urlpatterns as _rcm_attestations
 from .FraudAlerts import urlpatterns as _rcm_fraud_alerts
 from .FraudScan import urlpatterns as _rcm_fraud_scan
+from .Policies import urlpatterns as _rcm_policies
 from .RiskSignals import urlpatterns as _rcm_risk_signals
 from .Screenings import urlpatterns as _rcm_screenings
 from .ScreeningHits import urlpatterns as _rcm_screening_hits
@@ -65,4 +84,6 @@ urlpatterns = [
     *_rcm_risk_signals,    # risk-signals/ CRUD + review/ + risk-refresh-due/
     *_rcm_fraud_alerts,    # fraud-alerts/ CRUD + disposition/
     *_rcm_fraud_scan,      # fraud-scan/ runner + fraud-board/
+    *_rcm_policies,        # policies/ register + raise-attestations/ + my-policies/ + policy-overdue/
+    *_rcm_attestations,    # policy-attestations/ CRUD + sign/ + exempt/
 ]
