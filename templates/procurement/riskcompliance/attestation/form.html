@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Amend Sign-off{% else %}Assign a Sign-off{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — assign or amend ONE policy sign-off. ONE template for both
+    routes, driven by `is_edit`
+    (apps/procurement/views/RiskComplianceManagement/Attestations.py ::
+    policyattestation_create / policyattestation_edit, both through crud_create / crud_edit).
+
+    Context contract: `form` + `is_edit` on both paths, plus `obj` on the EDIT path only — the
+    same shape crud_create / crud_edit supply, so nothing here reads a name the view does not
+    pass (L7). Every `obj.` read below therefore sits inside an `{% if is_edit %}` branch.
+
+    The form carries exactly three fields: policy, user and due_on. Everything else on the model
+    is excluded and every exclusion is the same rule — THE LEDGER CONTENTS ARE WRITTEN BY THE
+    VERBS, NEVER TYPED. `status` moves only through acknowledge() and mark_exempt();
+    acknowledged_at, acknowledgement_note, exempt_reason, exempted_by, exempted_at and alert are
+    stamps those verbs make. A form field for "acknowledged at" would let anybody type a
+    signature, which is the one thing this ledger exists to prevent.
+
+    THE POLICY DROPDOWN OFFERS PUBLISHED POLICIES ONLY. A draft is not yet the rule and an
+    archived one no longer is, so a sign-off against either would record agreement to something
+    nobody is being asked to follow — refused in the form's clean_policy() against the RESOLVED
+    object, so a policy archived between this page rendering and the form posting is caught too,
+    and backstopped again in PolicyAttestation.clean().
+
+    L39, THE DEAD-END CHECK: if a workspace has no published policy at all, the dropdown would be
+    an empty <select> on a form nobody can submit. That is a real precondition rather than a bug,
+    so the page SAYS so and links to 6.19's library instead of rendering a silent empty box.
+
+    This page is the SINGLE-ROW companion to the roster raiser on the policy acknowledgment page.
+    Both exist because they answer different questions: the raiser puts a policy to everybody it
+    applies to, this puts it to one person a rule did not reach. The raiser obeys the policy's
+    requires_acknowledgment flag strictly; this form deliberately does not, because an
+    administrator naming one person is making an individual decision and there is no reason for a
+    bulk-intent flag to veto it. The two rules are not in tension — they answer different
+    questions, and the note at the foot of the page says which is which.
+
+    Field help is keyed off field.name so it stays correct if the field order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}". No |safe anywhere.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Amend a sign-off{% else %}Assign a sign-off{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:policyattestation_list' %}">Sign-off ledger</a><span class="sep">›</span>
+        <span>{% if is_edit %}Amend{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">Puts one published policy to one named person for acknowledgment. Whoever is named here is the only person who can sign it off — not you, and not an administrator. If they should not have to, record an exemption on the row instead.</p>
+    </div>
+  </div>
+
+  {% if not form.fields.policy.queryset %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">No published policy to assign</h2></div>
+      <div class="card-body">
+        <p class="text-muted">This workspace has no published policy, so there is nothing anybody can be asked to acknowledge yet. That is a precondition rather than a fault: a policy has to be written and published in the library before a sign-off against it means anything, because a signature is a statement about a rule that is actually in force.</p>
+        <a href="{% url 'procurement:ppolicy_list' %}" class="btn btn-primary"><i data-lucide="book-open"></i> Go to the policy library</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The assignment</h2><span class="text-muted">one policy, one person, one deadline</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "policy" %}
+                <div class="form-help">Published policies only. A draft is not yet the rule and an archived one no longer is, so neither collects sign-offs — and a policy archived between this page loading and your saving it is refused too, not filed quietly against a withdrawn rule.</div>
+              {% elif field.name == "user" %}
+                <div class="form-help">The person who has to read it and sign it off. They are the ONLY person who can: an administrator cannot sign on somebody behalf, and neither can a superuser. That refusal is in the model as well as the view, so it holds for a hand-crafted request too.</div>
+              {% elif field.name == "due_on" %}
+                <div class="form-help">When the sign-off is due. Leave it blank for no deadline — a row with no deadline is still owed, it simply never becomes overdue and never appears on the chase board. The bulk roster raiser uses fourteen days from the day it runs.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Assign sign-off{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:policyattestation_detail' obj.pk %}{% else %}{% url 'procurement:policyattestation_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{% if is_edit %}What amending does{% else %}What happens when you save{% endif %}</h2></div>
+    <div class="card-body">
+      {% if is_edit %}
+        <p class="text-muted">Saving changes the assignment and nothing else. It records no signature, moves nothing into a signed state and stamps nobody name on anything. An assignment can only be amended while it is still pending: once it has been signed or exempted it is evidence, and the honest way to deal with a rule that has changed is to publish the new version and collect its own sign-offs.</p>
+      {% else %}
+        <p class="text-muted">Saving files the obligation as pending and puts it in the ledger. It sends no email — no mail sender is wired anywhere in this system — so the person sees it on their My Policies page, and the chase board raises an inbox item for them if the deadline passes.</p>
+      {% endif %}
+      <p class="text-muted">One obligation per person per policy: assigning the same policy to the same person twice is refused with a sentence rather than an error page, and the existing row is the one to open. That constraint is also what makes the bulk roster raiser safe to press repeatedly.</p>
+      <p class="text-muted">To put a policy to everybody it applies to at once, use the raise button on the <a href="{% url 'procurement:policy_list' %}">policy acknowledgment page</a> instead. That route obeys the policy own acknowledgment flag strictly, because it acts on the workspace stated intent for the policy; naming one person here is an individual decision and is deliberately not vetoed by it.</p>
+    </div>
+  </div>
+{% endblock %}
