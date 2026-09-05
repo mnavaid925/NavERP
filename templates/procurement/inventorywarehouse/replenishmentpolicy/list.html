@@ -45,6 +45,7 @@
       <p class="text-muted">How this workspace turns a "below the reorder point" signal into a purchase: who to buy from, how much to round the quantity to, and what defaults the generated requisition carries. The reorder point and safety stock themselves stay on the SCM reorder rule — a policy overrides, it never restates.</p>
     </div>
     <div class="page-actions">
+      <a href="{% url 'procurement:replenishmentrun_list' %}" class="btn btn-outline"><i data-lucide="refresh-cw"></i> Replenishment runs</a>
       <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Reorder rules</a>
       <a href="{% url 'procurement:replenishmentpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
     </div>
