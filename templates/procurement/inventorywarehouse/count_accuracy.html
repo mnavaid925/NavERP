@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Count Accuracy{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — the Count Accuracy read-out
+    (apps/procurement/views/InventoryWarehouseIntegration/CountAccuracy.py).
+
+    READ-ONLY. No model, no form, no migration. Counting itself lives in SCM 4.4 (cycle count
+    tasks and their lines) and Module 5.11 (count programmes, physical inventory); this page only
+    reads what they produced.
+
+    Every variance figure is built from the COLUMNS, never from CycleCountTaskLine.variance, which
+    is a Python property the ORM cannot aggregate. Uncounted lines are excluded throughout — a
+    null counted quantity means "not counted yet", not "counted zero".
+
+    Context consumed: stats{tasks_total, tasks_scheduled, tasks_counted, tasks_reconciled,
+    tasks_cancelled, lines_counted, lines_with_variance, variance_rate_pct, net_variance_qty,
+    abs_variance_qty, variance_value, accuracy_pct}, item_rows, location_rows, program_rows,
+    locations, window_choices, selected_window, selected_location, date_from, date_to, row_cap,
+    truncated, attribution_note, links.
+
+    item_rows keys: item, count_lines, variance_lines, net_variance, abs_variance,
+    variance_value, accuracy_pct, repeat_offender.
+    location_rows keys: location, path, count_lines, variance_lines, net_variance, accuracy_pct,
+    accuracy_css.
+    program_rows keys: program, cadence_label, last_run_date, is_due, location, abc_class, url.
+
+    Percentages may legitimately be None — None means UNMEASURED (nothing counted in the window),
+    so they print a dash rather than a flattering 100%.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Count Accuracy</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse</span><span class="sep">›</span>
+        <span>Count Accuracy</span>
+      </div>
+      <p class="text-muted">How far the book figures you order against have drifted from what is actually on the shelf — by item, by location, and against the counting schedule that is supposed to catch it.</p>
+    </div>
+    <div class="page-actions">
+      {% for link in links %}
+        <a href="{{ link.url }}" class="btn btn-outline"><i data-lucide="{{ link.icon }}"></i> {{ link.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+      <div class="stat-value">{{ stats.tasks_total }}</div>
+      <div class="stat-label">Counts in window · {{ stats.tasks_scheduled }} open, {{ stats.tasks_counted }} counted, {{ stats.tasks_reconciled }} reconciled{% if stats.tasks_cancelled %}, {{ stats.tasks_cancelled }} cancelled{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="target"></i></div>
+      <div class="stat-value">{% if stats.accuracy_pct is None %}—{% else %}{{ stats.accuracy_pct|floatformat:1 }}%{% endif %}</div>
+      <div class="stat-label">Line accuracy · {{ stats.lines_counted }} lines counted</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="git-compare-arrows"></i></div>
+      <div class="stat-value">{{ stats.lines_with_variance }}</div>
+      <div class="stat-label">Lines with a variance{% if stats.variance_rate_pct is not None %} · {{ stats.variance_rate_pct|floatformat:1 }}% of counted{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="scale"></i></div>
+      <div class="stat-value">{{ stats.variance_value|floatformat:2 }}</div>
+      <div class="stat-label">Value at stake · net {{ stats.net_variance_qty|floatformat:2 }}, absolute {{ stats.abs_variance_qty|floatformat:2 }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="window" aria-label="Window" class="form-select">
+            {% for val, label in window_choices %}
+              <option value="{{ val }}" {% if selected_window == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk|stringformat:"d" }}" {% if selected_location and selected_location.pk == l.pk %}selected{% endif %}>{{ l.code }} — {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" aria-label="Counted from" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" aria-label="Counted to" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:count_accuracy' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="text-muted" style="margin-top:.75rem;">Counts scheduled between <strong>{{ date_from|date:"d M Y" }}</strong> and <strong>{{ date_to|date:"d M Y" }}</strong>. Setting an explicit date pair overrides the named window. Cancelled counts are left out: a count that was called off measured nothing.</p>
+      {% if truncated %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} rows qualify in one of the tables below — the worst {{ row_cap }} are shown, so the ranking is intact but the tables are not a complete inventory of the window.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Worst items</h2><p class="text-muted">Ranked by absolute variance quantity — an over-count and an under-count of the same size are two errors, not none.</p></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="text-right">Lines counted</th>
+            <th class="text-right">With variance</th>
+            <th class="text-right">Net</th>
+            <th class="text-right">Absolute</th>
+            <th class="text-right">Value</th>
+            <th class="text-right">Accuracy</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in item_rows %}
+            <tr>
+              <td class="fw-600">
+                {% if row.item %}{{ row.item.sku }}
+                  {% if row.repeat_offender %}<span class="badge badge-red">Repeat</span>{% endif %}
+                  <div class="text-muted">{{ row.item.name }}</div>
+                {% else %}<span class="text-muted">Unknown item</span>{% endif %}
+              </td>
+              <td class="text-right">{{ row.count_lines }}</td>
+              <td class="text-right">{{ row.variance_lines }}</td>
+              <td class="text-right">{{ row.net_variance|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ row.abs_variance|floatformat:2 }}</td>
+              <td class="text-right">{{ row.variance_value|floatformat:2 }}</td>
+              <td class="text-right">{% if row.accuracy_pct is None %}<span class="text-muted">—</span>{% else %}{{ row.accuracy_pct|floatformat:1 }}%{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="check-circle"></i>
+                <h3>Nothing counted in this window</h3>
+                <p>No cycle-count lines were counted between these dates, so there is no accuracy to report. Widen the window, or schedule a count from the programmes below.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Accuracy by location</h2><p class="text-muted">Least accurate first. 98% is the usual cycle-count target; below 95% is the band worth acting on.</p></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Location</th>
+            <th class="text-right">Lines counted</th>
+            <th class="text-right">With variance</th>
+            <th class="text-right">Net</th>
+            <th class="text-right">Accuracy</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in location_rows %}
+            <tr>
+              <td class="fw-600">
+                {% if row.location %}{{ row.location.code }}<div class="text-muted">{{ row.path }}</div>
+                {% else %}<span class="text-muted">No location</span>{% endif %}
+              </td>
+              <td class="text-right">{{ row.count_lines }}</td>
+              <td class="text-right">{{ row.variance_lines }}</td>
+              <td class="text-right">{{ row.net_variance|floatformat:2 }}</td>
+              <td class="text-right">
+                <span class="badge {{ row.accuracy_css }}">{% if row.accuracy_pct is None %}not measured{% else %}{{ row.accuracy_pct|floatformat:1 }}%{% endif %}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="map-pin-off"></i>
+                <h3>No counted locations</h3>
+                <p>No location was counted in this window.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Counting schedule</h2><p class="text-muted">The programmes that are supposed to keep the figures above honest — and whether they are running.</p></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Programme</th>
+            <th>Cadence</th>
+            <th>Scope</th>
+            <th>Class</th>
+            <th>Last run</th>
+            <th>Due</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in program_rows %}
+            <tr>
+              <td class="fw-600"><a href="{{ row.url }}">{{ row.program.name }}</a><div class="text-muted">{{ row.program.number }}</div></td>
+              <td>{{ row.cadence_label }}</td>
+              <td>{% if row.location %}{{ row.location.code }} — {{ row.location.name }}{% else %}<span class="text-muted">Whole network</span>{% endif %}</td>
+              <td>{% if row.abc_class %}<span class="badge badge-info">{{ row.abc_class }}</span>{% else %}<span class="text-muted">Any</span>{% endif %}</td>
+              <td>{% if row.last_run_date %}{{ row.last_run_date|date:"d M Y" }}{% else %}<span class="text-muted">Never</span>{% endif %}</td>
+              <td>
+                {% if row.is_due %}<span class="badge badge-amber">Due today</span>
+                {% elif row.program.is_active %}<span class="badge badge-green">On schedule</span>
+                {% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="calendar-off"></i>
+                <h3>No counting programme</h3>
+                <p>Nothing is scheduled to count this workspace. Without a programme, accuracy is only ever measured when somebody remembers to raise a count by hand.</p>
+                <a href="{% url 'inventory:countprogram_list' %}" class="btn btn-outline">Set up a programme</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help"><span class="badge badge-amber">What this page does not know</span> {{ attribution_note }}</p>
+      <p class="form-help">Net versus absolute: net variance is the sum of counted minus the sum of expected, so a +5 and a −5 cancel; absolute variance adds their sizes instead. Read net for the effect on stock value and absolute for how much counting actually disagreed.</p>
+    </div>
+  </div>
+{% endblock %}
