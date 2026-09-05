@@ -76,7 +76,7 @@
           <dd>
             {% if obj.score_value is not None %}<span class="fw-600">{{ obj.score_value|floatformat:0 }}</span> <span class="text-muted">/ 100</span>
               <div class="text-muted">the 1&ndash;5 rating on the 0&ndash;100 scale the survey aggregate averages</div>
-            {% else %}<span class="text-muted">None &mdash; an unanswered request is not a zero, and scoring one would punish the supplier for an unopened inbox</span>{% endif %}
+            {% else %}<span class="text-muted">Not answered &mdash; an unanswered request is not a zero, and scoring one would punish the supplier for an unopened inbox</span>{% endif %}
           </dd></div>
         <div class="detail-item"><dt>Importance</dt>
           <dd><span class="fw-600">{{ obj.importance }}</span> <span class="text-muted">/ 10</span>
