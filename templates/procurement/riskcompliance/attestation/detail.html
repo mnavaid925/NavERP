@@ -124,7 +124,7 @@
               {% csrf_token %}
               <div class="form-group">
                 <label class="form-label" for="attestation_note">{{ act.note_label }}{% if act.note_required %} <span class="req">*</span>{% endif %}</label>
-                <textarea class="form-input" id="attestation_note" name="{{ act.note_name }}" rows="3" placeholder="{{ act.note_placeholder }}"{% if act.note_required %} required{% endif %}></textarea>
+                <textarea class="form-textarea" id="attestation_note" name="{{ act.note_name }}" rows="3" placeholder="{{ act.note_placeholder }}"{% if act.note_required %} required{% endif %}></textarea>
               </div>
               <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
             </form>
@@ -133,7 +133,7 @@
               {% csrf_token %}
               <div class="form-group">
                 <label class="form-label" for="attestation_reason">{{ act.note_label }}{% if act.note_required %} <span class="req">*</span>{% endif %}</label>
-                <textarea class="form-input" id="attestation_reason" name="{{ act.note_name }}" rows="3" maxlength="255" placeholder="{{ act.note_placeholder }}"{% if act.note_required %} required{% endif %}></textarea>
+                <textarea class="form-textarea" id="attestation_reason" name="{{ act.note_name }}" rows="3" maxlength="255" placeholder="{{ act.note_placeholder }}"{% if act.note_required %} required{% endif %}></textarea>
                 <div class="form-help">Required, and kept to 255 characters. An exemption with no stated reason is the first thing an audit asks about and the last thing anybody can answer months later.</div>
               </div>
               <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
