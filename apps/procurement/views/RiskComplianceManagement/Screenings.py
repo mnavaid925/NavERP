@@ -411,8 +411,10 @@ def screening_rescreen_board(request):
     """Which suppliers are due — or overdue — a re-screen, and which were never screened at all.
 
     Two queries and no stored "due" flag: the supplier list, then the latest CLEARED screening
-    per supplier. Rows are built only for suppliers that need attention, so the page's length
-    tracks the size of the PROBLEM rather than the size of the vendor master.
+    per supplier — narrowed to 7 columns and streamed, because that second read follows the
+    append-only ledger and only ~one row per supplier survives the ``setdefault()``. Rows are
+    built only for suppliers that need attention, so the page's length tracks the size of the
+    PROBLEM rather than the size of the vendor master.
     """
     guard = _need_tenant(request, "review the re-screening board")
     if guard is not None:
@@ -421,13 +423,28 @@ def screening_rescreen_board(request):
     today = timezone.localdate()
     soon = today + timedelta(days=RESCREEN_DUE_SOON_DAYS)
     parties = list(_screenable_parties(request.tenant))
+    party_ids = [party.pk for party in parties]
 
     # The most recent CLEARED screening per supplier. Ordered newest-first within each party, so
     # the first row setdefault() sees is the one that counts.
+    #
+    # Three deliberate narrowings, because screenings are an append-only ledger that grows forever
+    # while the supplier list does not — only ~one row per supplier survives ``setdefault()``:
+    #  * ``party_id__in=party_ids`` sends pks rather than ``party__in=parties``, which hands Django
+    #    model INSTANCES and makes it inline every pk into the ``IN (...)`` SQL text;
+    #  * ``.only(...)`` fetches the 7 columns the board and ``rescreening_due.html`` read, not the
+    #    26-column row with its three TextFields (``notes``/``decision_note``/
+    #    ``threshold_rationale``);
+    #  * ``.iterator()`` keeps the rows that lose to ``setdefault()`` out of ``_result_cache``.
+    # No ``select_related("party")``: the row-dict takes its Party from ``parties`` above, and the
+    # template never touches ``screening.party``, so the join would be pure waste.
     latest = {}
     for screening in (ComplianceScreening.objects
-                      .filter(tenant=request.tenant, status="cleared", party__in=parties)
-                      .order_by("party_id", "-screened_on", "-id")):
+                      .filter(tenant=request.tenant, status="cleared", party_id__in=party_ids)
+                      .only("party_id", "screened_on", "next_rescreen_on", "list_source",
+                            "number", "status", "tenant_id")
+                      .order_by("party_id", "-screened_on", "-id")
+                      .iterator(chunk_size=2000)):
         latest.setdefault(screening.party_id, screening)
 
     rows, overdue, due_soon = [], 0, 0
