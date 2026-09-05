@@ -98,3 +98,112 @@ Six reviewers run **one after another**, each appending here as it reports:
 
 _(appended below as each reports; IDs assigned and sorted Critical → Important → Minor once all
 six are in)_
+
+### Pass 1 — `code-reviewer`
+
+Scope counts verified 4/4/7/7/12 before starting. Verdict: needs rework — two Critical, one
+Important, three Minor. **Both Criticals independently reproduced by the main session** before
+being recorded here.
+
+#### R1-C1 — `replenishmentrun_delete` has no status guard: a released run can be destroyed
+
+**File:** `apps/procurement/views/InventoryWarehouseIntegration/Runs.py:234`
+
+It calls `crud_delete` directly with nothing in front of it. A direct POST to
+`/procurement/replenishment-runs/<pk>/delete/` therefore deletes a **released** run, and
+`ReplenishmentSuggestion.run` is `on_delete=CASCADE` (`Runs.py:645`) — so every suggestion line goes
+with it, destroying the only record of which `scm.PurchaseRequisition` came from which proposal,
+while the requisition rows survive orphaned.
+
+The protection is **only in the templates, which state the opposite of the truth**:
+`replenishmentrun/detail.html:268` wraps the danger zone in `{% if can_generate %}` and line 272
+promises *"If the run has already been released, delete is not offered at all"*;
+`replenishmentrun/list.html:146-149` asserts *"the view refuses both anyway"*. It does not.
+
+**Confirmed by the main session** — `sed -n '232,236p' Runs.py` shows a bare `crud_delete`, while
+the sibling `MaterialIssues.py:218-227` re-checks `obj.can_edit`, messages, and redirects before
+delegating. The model already refuses this transition for `cancel()` (`Runs.py:595-599`), so the
+rule exists and only the delete path skips it.
+
+**Fix:** mirror `materialissue_delete` — guard on `obj.can_generate`, `messages.error`, redirect to
+detail. Then the two template comments become true again.
+
+#### R1-C2 — `count_accuracy` 500s on a half-filled date range (reachable from the filter bar)
+
+**File:** `apps/procurement/views/InventoryWarehouseIntegration/CountAccuracy.py:180-182`
+
+The fallback is `if date_from is None and date_to is None:`, so supplying **one** date leaves the
+other `None`, and `:208` / `:231-232` then pass `None` into `scheduled_date__gte` / `__lte`.
+
+**Reproduced by the main session against the live database as `admin_acme`:**
+
+```
+?date_from=2026-01-01&date_to=    -> ValueError: Cannot use None as a query value
+?date_from=&date_to=2026-09-01    -> ValueError: Cannot use None as a query value
+?date_from=2026-01-01&date_to=2026-09-01 -> 200
+(no params)                        -> 200
+```
+
+Not merely a hand-edited-URL case: `count_accuracy.html:91-95` renders two independent
+`<input type="date">` fields, so clearing one and pressing Apply submits `date_to=` (empty →
+`None`). The in-module sibling already handles it correctly — `ReceiptBinMap.py:193-196` applies
+each bound behind its own `is not None`.
+
+**Fix:** resolve the missing half from the window, or apply each bound conditionally as
+`ReceiptBinMap` does.
+
+#### R1-I1 — `seed_procurement --flush` cannot regenerate 6.18 data
+
+**File:** `apps/procurement/management/commands/seed_procurement.py:290`
+
+The `--flush` block ends at `ProcurementDocument.objects.all().delete()` with no 6.18 deletes. All
+three sub-blocks of `_seed_inventory_warehouse` are `exists()`-guarded (`:3669`, `:3744`, `:3789`),
+so `--flush` leaves every 6.18 row in place and the re-seed prints "already present, skipping" —
+the demo data can never be regenerated. This file has been patched for exactly this twice before
+(`808dfccc` for 6.19, `4e9a09de` for 6.13) and the 6.13/6.15/6.16/6.19 blocks each carry a comment
+saying so.
+
+**Fix:** append children-first before line 291 — `MaterialIssueLine`, `MaterialIssue`,
+`ReplenishmentSuggestion`, `ReplenishmentRun`, `ReplenishmentPolicy`.
+
+#### R1-M1 — editing a *proposed* run's scope leaves stale lines with no prompt to re-generate
+
+`Runs.py:222` — `replenishmentrun_edit` gates on `can_generate` (draft **or** proposed), so
+re-scoping an already-proposed run leaves lines that no longer match the header's location/ABC
+filter, and `crud_edit` redirects to the list with a bare "Updated successfully". `release()` then
+stamps a justification naming the *new* scope onto lines computed for the *old* one
+(`Runs.py:543-546`). **Fix:** on a proposed run redirect to detail with a `messages.warning` naming
+Generate.
+
+#### R1-M2 — `stock_position` truncation copy says the opposite of what the view computes
+
+`templates/.../stock_position.html:111` claims the counters "cover those rather than the whole
+workspace", but `StockPosition.py:323-329` computes `stats` **before** both the view slice and the
+`ROW_CAP` slice — so they cover *more* rows than are rendered. The "(capped at {{ row_cap }})"
+suffix at `:49` also sits beside a number that is not capped. **Fix:** reword to say the counters
+cover the full filtered population while the table shows the first `row_cap`.
+
+#### R1-M3 — `count_accuracy` program roll-up truncates silently
+
+`CountAccuracy.py:317` — `programs[:ROW_CAP]` drops rows without setting `truncated`, unlike the two
+roll-ups above it which both use the `[:ROW_CAP + 1]` probe (`:264`, `:291`). **Fix:** same probe
+shape, or say in the card that the schedule table is capped.
+
+#### Verified clean by this pass (recorded so later passes need not redo it)
+
+Every `{% url %}` name and Python `reverse()` target resolves across ~30 cross-app targets in
+`scm`, `inventory`, `accounting` and `procurement`; every context key in all six views matches its
+template's reads; all four package `__init__.py` re-export blocks complete (5 models / 5 forms /
+27 views / urls included as one unit); migration `0027` carries all five tables with indexes and
+both `unique_together`s; every tenant-scoped queryset filters `tenant=request.tenant`, and both
+tenant-less child models reach it through `run__tenant` / `issue__tenant`; every form excludes
+`tenant`, `number`, `status` and every `editable=False` stamp; `@require_POST` +
+`@tenant_admin_required` sit on `release` and `post` as contracted.
+
+**Called out as done well:** `MaterialIssue.post()` implements all four properties of the
+`CountProgram.generate_tasks()` precedent rather than merely citing it — `select_for_update` on the
+header, the `adjustment_id` reuse branch that closes the double-mint window the status gate cannot,
+a provenance marker doubling as the note `StockAdjustment.clean()` demands for `reason="other"`,
+and the availability guard running *before* anything is minted so a refused post leaves no orphan
+draft. The per-item demand aggregation at `:324-325` (summing two lines of the same item before
+comparing to on-hand) is the kind of thing that normally ships broken.
