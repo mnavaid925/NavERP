@@ -103,9 +103,12 @@ EXPIRY_WARN_DAYS = 30
 #: other.
 REMINDER_WINDOW_DAYS = 30
 
-#: Ceiling on one re-index Run. The verb re-reads files off disk one at a time; an unbounded
-#: sweep over a large workspace is a request timeout, so the Run is capped and repeatable.
-REINDEX_ROW_CAP = 200
+#: Ceiling on one re-index Run, sized to a REQUEST rather than to "a lot of documents". The
+#: verb parses files off disk one at a time and a PDF parse runs 0.1-2 s, so 200 rows is 30-400
+#: seconds — through both the gunicorn worker timeout (30 s) and nginx proxy_read_timeout
+#: (60 s). 25 keeps the worst case inside a request; the Run is repeatable and reports how many
+#: candidates remain, which is what makes a small cap the right answer rather than a limitation.
+REINDEX_ROW_CAP = 25
 
 #: theme.css ships ONLY badge-green / badge-red / badge-amber / badge-info / badge-muted /
 #: badge-slate (L33) — a semantic badge-success/-warning/-danger renders completely unstyled.
@@ -217,6 +220,10 @@ class ProcurementDocument(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="prc_pdoc_tnt_status_idx"),
             models.Index(fields=["tenant", "doc_type"], name="prc_pdoc_tnt_type_idx"),
             models.Index(fields=["tenant", "expires_on"], name="prc_pdoc_tnt_expiry_idx"),
+            # Filtered by the ?expiry=review_due facet and by the review branch of the reminder
+            # scan. Without it EXPLAIN reports type=ALL, key=None, rows=2021, Using filesort on
+            # both paths — a full tenant scan every time either is used.
+            models.Index(fields=["tenant", "review_on"], name="prc_pdoc_tnt_review_idx"),
             models.Index(fields=["tenant", "supplier"], name="prc_pdoc_tnt_sup_idx"),
         ]
         verbose_name = "Procurement Document"
@@ -280,10 +287,20 @@ class ProcurementDocument(TenantNumbered):
 
         Resolved through the ``revisions`` REVERSE accessor, so this module never imports its
         own child model — the pointer stays an integer and there is no import cycle to unpick.
+
+        ``is_approved=True`` is part of the question, not belt-and-braces. The pointer is only
+        ever moved by the approve verb, so the two agree by construction on every path that
+        exists today; but a pointer that has been left naming an UNAPPROVED row (a revision
+        deleted out from under it and the number re-allocated by the next upload, an admin
+        reparent) must not make that row the document of record. Resolving it here means every
+        read surface — the detail page, the re-index sweep, and any vendor-portal view that
+        later filters ``supplier_visible`` — gets ``None`` and says "no approved revision yet"
+        rather than presenting a file nobody approved.
         """
         if not self.current_revision_no:
             return None
-        return self.revisions.filter(revision_no=self.current_revision_no).first()
+        return self.revisions.filter(revision_no=self.current_revision_no,
+                                     is_approved=True).first()
 
     # -- validation -----------------------------------------------------------------------
 
@@ -353,7 +370,12 @@ def expiring_documents(tenant, *, on=None):
     qs = (ProcurementDocument.objects
           .filter(tenant=tenant, status__in=("draft", "active"))
           .filter(Q(expires_on__lte=horizon) | Q(review_on__lte=horizon))
-          .select_related("supplier", "owner")
+          # No select_related and no full rows: neither this function nor the engine below
+          # reads supplier or owner, and a document carries a machine-written extracted_text
+          # that runs to 200,000 characters — 800 in-window rows would be ~24 MB resident to
+          # answer a question about two dates. The alert text is built from a freshly locked
+          # row, so these columns only have to carry the scan itself and identify the document.
+          .only("id", "tenant_id", "number", "title", "status", "expires_on", "review_on")
           .order_by("expires_on", "review_on", "id"))
     for document in qs:
         if document.expires_on is not None and document.expires_on <= horizon:
@@ -373,21 +395,46 @@ def run_document_reminders(tenant, user):
     Returns ``{"raised": n, "skipped_open": n}`` — the same shape as the 6.3 escalation engine
     and the 6.8 renewal engine, so all three Run buttons report identically.
 
+    The open-alert set is read ONCE, before the loop, and the row lock is taken only where a
+    write is actually going to happen. A second press over an unchanged workspace is therefore
+    two queries and no locks rather than four queries per in-window document.
+
     ``user`` is accepted for signature parity with those engines; the audit row is written by
     :func:`run_document_reminders_audited`, which is what the view verb actually calls.
     """
     from apps.procurement.models import ProcurementAlert
 
+    rows = expiring_documents(tenant)
+    if not rows:
+        return {"raised": 0, "skipped_open": 0}
+
+    # ONE query for the whole dedupe instead of an EXISTS per row. The button advertises that it
+    # is safe to press twice, so the all-skipped path is the COMMON one: a workspace where every
+    # in-window document already has an open alert used to cost 4 queries per row (savepoint,
+    # locking SELECT, EXISTS, release) and write nothing — ~3,200 of them at 800 documents. It
+    # now costs the scan plus this set: two queries, and no row lock is taken where no row will
+    # be written. ``link_url`` is this module's own /procurement/documents/<pk>/ path, which is
+    # what makes one open-alert set answer the question for every document at once.
+    open_links = set(ProcurementAlert.objects
+                     .filter(tenant=tenant, kind="deadline",
+                             status__in=ProcurementAlert.OPEN_STATUSES)
+                     .values_list("link_url", flat=True))
+
     raised = skipped = 0
-    for row in expiring_documents(tenant):
+    for row in rows:
         document = row["document"]
+        link = _alert_link(document.pk)
+        if link in open_links:
+            skipped += 1
+            continue
         # Dedupe is check-then-create, so two concurrent Runs could both find no open alert and
         # both raise. Taking the DOCUMENT row lock makes one document's check+create sequential
-        # against every other Run scanning that row (the 6.8 posture, verbatim).
+        # against every other Run scanning that row (the 6.8 posture, verbatim). The set above
+        # is a snapshot taken before the loop, so the authoritative check stays INSIDE the lock
+        # — the set removes the queries that would have found nothing, never the guarantee.
         with transaction.atomic():
             locked = (ProcurementDocument.objects.select_for_update()
                       .get(pk=document.pk, tenant=tenant))
-            link = _alert_link(locked.pk)
             if ProcurementAlert.objects.filter(
                     tenant=tenant, kind="deadline", link_url=link,
                     status__in=ProcurementAlert.OPEN_STATUSES).exists():
@@ -413,6 +460,9 @@ def run_document_reminders(tenant, user):
                 due_at=None,
             )
             raised += 1
+        # Recorded only after the transaction that wrote it committed, so a rolled-back attempt
+        # cannot make the rest of this Run think an alert exists.
+        open_links.add(link)
     return {"raised": raised, "skipped_open": skipped}
 
 
