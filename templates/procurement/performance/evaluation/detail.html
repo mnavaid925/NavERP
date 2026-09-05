@@ -39,16 +39,12 @@
     literal chain appears: band_choices is a list of (value, label) 2-tuples with no css hook to
     read, and the four branches there mirror BAND_CSS exactly.
 
-    HAND-OFF, HALF DONE. `feedback_rows` now links: Entity 3 landed, so
-    supplierfeedback_detail resolves and the 360 table below carries a linked number cell and an
-    Actions column with the eye.
-
-    `plans` is still rendered WITHOUT links, because improvementplan_detail does not exist until
-    Entity 4 lands. When it does, wrap that table's number cell in a
-    {% url 'procurement:improvementplan_detail' p.pk %} anchor and give it the same Actions
-    column. Emitting that route now would be a NoReverseMatch 500 on every render of this page,
-    empty tables included — a url tag in an {% empty %} branch fires precisely when there is
-    nothing to link to.
+    HAND-OFF, DONE. Both related tables now link. `feedback_rows` linked when Entity 3 landed;
+    `plans` linked when Entity 4 landed, so improvementplan_detail resolves and that table
+    carries a linked number cell and the same Actions column with the eye (colspan 7 to match).
+    Nothing on this page emits a route that does not exist — a url tag in an {% empty %} branch
+    fires precisely when there is nothing to link to, so a missing route would have been a
+    NoReverseMatch 500 on every render, empty tables included.
   {% endcomment %}
 
   <div class="page-header">
@@ -329,12 +325,13 @@
             <th>Status</th>
             <th>Started</th>
             <th>Target close</th>
+            <th class="table-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for p in plans %}
             <tr>
-              <td class="fw-600">{{ p.title }}<div class="text-muted">{{ p.number }}</div></td>
+              <td class="fw-600">{{ p.title }}<div class="text-muted"><a href="{% url 'procurement:improvementplan_detail' p.pk %}">{{ p.number }}</a></div></td>
               <td>{% if p.kpi %}{{ p.kpi.name }}{% else %}<span class="text-muted">General</span>{% endif %}</td>
               <td>
                 {% if p.severity == "critical" %}<span class="badge badge-red">{{ p.get_severity_display }}</span>
@@ -350,9 +347,14 @@
               </td>
               <td>{{ p.start_date|date:"M d, Y" }}</td>
               <td>{{ p.target_close_date|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:improvementplan_detail' p.pk %}" class="btn-icon" title="View plan" aria-label="View plan"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6">
+            <tr><td colspan="7">
               <div class="empty-state">
                 <i data-lucide="clipboard-check"></i>
                 <h3>No improvement plans cite this period</h3>
