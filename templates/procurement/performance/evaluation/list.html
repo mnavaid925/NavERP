@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Evaluation Periods{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — the evaluation register
+    (apps/procurement/views/SupplierPerformanceEvaluation/ScorecardKpiScores.py
+     :supplierevaluation_list).
+
+    A row here is scm.SupplierScorecard — SCM's model, FK'd and never re-declared (L36).
+    Procurement 6.16 ships NO scorecard form and NO scorecard create route, so "New period"
+    links straight out to scm:scorecard_create and each row links out to scm:scorecard_detail
+    for the SCM-side view of the same document.
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list (each row carries .line_count from the view's annotate), page_obj, q,
+      status_choices, suppliers, year_choices, stats{total, draft, published, archived,
+      generated}, handover_note.
+
+    The view's crud_list filter tuple is exactly
+      (("supplier","party_id",True), ("status","status",False), ("year","period_end__year",True))
+    with search_fields=("number","party__name") — so the filter bar offers exactly q, supplier,
+    status and period year. supplier and year post integers and compare with |stringformat:"d"
+    (never |slugify); status compares a plain string against SupplierScorecard.STATUS_CHOICES.
+
+    handover_note (performance.HANDOVER_NOTE) is printed ON THIS PAGE, not only on the detail
+    page and not only in the Generate confirm dialog: an operator must have read what generating
+    does before they open a scorecard, never after.
+
+    Badge classes are COLOUR-NAMED only (L33): theme.css ships badge-green / -red / -amber /
+    -info / -muted / -slate and nothing else — badge-success / -warning / -danger render
+    completely unstyled.
+
+    There is no delete and no edit action on this register. The period document belongs to SCM;
+    6.16 measures onto it and never owns its lifecycle.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Evaluation periods</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <span>Evaluation periods</span>
+      </div>
+      <p class="text-muted">One row is one supplier scorecard for one period. Open it to generate the KPI lines, read the composite and see which measurements fed each of the four dimension columns. The period documents themselves are SCM records &mdash; this register measures onto them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:scorecard_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New period</a>
+      <a href="{% url 'procurement:supplierkpiscore_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All score lines</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Periods</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="pencil-line"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft &mdash; can still be generated</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.published }}</div><div class="stat-label">Published</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="archive"></i></div><div class="stat-value">{{ stats.archived }}</div><div class="stat-label">Archived</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calculator"></i></div><div class="stat-value">{{ stats.generated }}</div><div class="stat-label">Carrying KPI lines</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="form-help"><i data-lucide="alert-triangle"></i> {{ handover_note }}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search evaluation periods" class="form-input" placeholder="Search scorecard number or supplier…">
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk|stringformat:"d" }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            year_choices is a list of plain ints (values_list("year", flat=True)), not 2-tuples —
+            so it is iterated as scalars and compared with |stringformat:"d", exactly like a pk.
+          {% endcomment %}
+          <select name="year" aria-label="Period year" class="form-select">
+            <option value="">Any year</option>
+            {% for y in year_choices %}
+              <option value="{{ y|stringformat:"d" }}" {% if request.GET.year == y|stringformat:"d" %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Supplier</th>
+            <th>Window</th>
+            <th class="text-right">Overall</th>
+            <th>Grade</th>
+            <th class="text-right">KPI lines</th>
+            <th>Owned by</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:supplierevaluation_detail' obj.pk %}">{{ obj.number }}</a>
+              </td>
+              <td>{{ obj.party.name }}</td>
+              <td>{{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }}</td>
+              <td class="text-right fw-600">{% if obj.overall_score is not None %}{{ obj.overall_score|floatformat:2 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if obj.grade %}<span class="badge badge-info">{{ obj.grade }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td class="text-right">
+                {% if obj.line_count %}
+                  <span class="fw-600">{{ obj.line_count }}</span>
+                {% else %}
+                  <span class="text-muted">Not generated</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  manual_override is the hand-over flag itself. Once it is set, SCM's
+                  recompute_from_signals() returns immediately on this row — so this column is
+                  literally "which engine writes the four dimension columns from now on".
+                {% endcomment %}
+                {% if obj.manual_override %}
+                  <span class="badge badge-info">Procurement</span>
+                {% else %}
+                  <span class="badge badge-slate">SCM signals</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.status == "draft" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "published" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "archived" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierevaluation_detail' obj.pk %}" class="btn-icon" title="Open evaluation" aria-label="Open evaluation"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:scorecard_detail' obj.pk %}" class="btn-icon" title="Open in SCM" aria-label="Open in SCM"><i data-lucide="external-link"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="clipboard-list"></i>
+                <h3>No evaluation periods yet</h3>
+                <p>A period document is an SCM scorecard: one supplier, one window. Open one for the quarter you want to review, then come back here and generate &mdash; every KPI that applies to that supplier gets a measured line with the arithmetic behind it.</p>
+                <a href="{% url 'scm:scorecard_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Open a period</a>
+                <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
