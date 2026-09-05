@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit 360 Response{% else %}Request Supplier Feedback{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — 360 feedback create-or-edit. ONE template for both,
+    driven by `is_edit` (the hand-rolled create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj). EVERY obj.* read below is inside an is_edit branch — on create there
+    is no obj and an unguarded read is a silently blank region (L8).
+
+    Context contract:
+      form, is_edit, and on EDIT ONLY obj.
+    The create view also passes title / submit_label / cancel_url (the costforecast_create page
+    furniture). This page deliberately IGNORES all three and drives its heading, its button and
+    its cancel link from `is_edit` alone — the contract's preferred option — so there is exactly
+    one place the two modes differ and no key that exists on one render and not the other.
+
+    The form carries thirteen fields: supplier, scorecard, kpi, period_start, period_end,
+    respondent_kind, respondent_function, respondent, respondent_name, rating, importance,
+    due_date, comment. `status` is NOT one of them: the lifecycle belongs to the submit /
+    decline / expire verbs on the detail page, and a typed status would be a claim with nothing
+    behind it. `number` (auto SFB-#####), `tenant`, `requested_by`, `requested_at` and
+    `submitted_at` are system-set and have no input either.
+
+    Five rules are enforced by the MODEL, not by anything here, and are raised together so this
+    page shows every problem at once: one response per (supplier, period document, KPI,
+    respondent); a chosen KPI must be a survey KPI; the period must not end before it starts; a
+    submitted response needs a rating; and a supplier self-assessment carries a name and no
+    internal user. The help text below explains each of them where the field renders.
+
+    Field help is keyed off field.name so it stays correct if the form order changes.
+    Each label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit response — {{ obj.number }}{% else %}Request supplier feedback{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierfeedback_list' %}">360 feedback</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">One row is one person&rsquo;s rating of one supplier for one period. Ask six people and raise six requests &mdash; the average is computed from them, and they are the evidence it stands on.</p>
+      {% if is_edit %}
+        <p class="text-muted">Editing corrects what was recorded. It cannot move the response through its lifecycle: <span class="fw-600">status is not on this form</span>, and neither is the raise stamp. Use Submit, Declined or Expired on the response page for that.</p>
+      {% else %}
+        <p class="text-muted">A new request starts as <span class="fw-600">Requested</span> and is stamped with your name as the requester. Fill the rating in now only if you are filing an answer collected offline &mdash; the ordinary flow is to leave it blank and submit the rating later.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The request</h2><span class="text-muted">who is being rated, over what window, by whom</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "supplier" %}
+                <div class="form-help">Who is being rated. The list is this workspace&rsquo;s supplier and vendor parties.</div>
+              {% elif field.name == "scorecard" %}
+                <div class="form-help">The period document this response belongs to. Leave it blank for ad-hoc feedback &mdash; but a response tied to a period is the one a scorecard can actually average, because generate reads the responses whose window falls inside it.</div>
+              {% elif field.name == "kpi" %}
+                <div class="form-help">Which survey question this answers. Only <span class="fw-600">active 360-survey KPIs</span> are offered: a derived KPI is computed from the transaction spine and never looks at feedback, so a response attached to one would be filed where nothing reads it &mdash; and the model refuses it outright. Leave blank for general commentary.</div>
+              {% elif field.name == "period_start" %}
+                <div class="form-help">The start of the window being rated. Respondents answer about a period, not about today.</div>
+              {% elif field.name == "period_end" %}
+                <div class="form-help">The end of the window. It must not fall before the start &mdash; and it is what decides which scorecard period this response is averaged into.</div>
+              {% elif field.name == "respondent_kind" %}
+                <div class="form-help">Internal is what we think of the supplier. A supplier self-assessment is what the supplier thinks of itself, filed on its behalf. Only <span class="fw-600">internal</span> responses feed a KPI&rsquo;s measured value; a self-assessment is read next to our score, never folded into it &mdash; and the gap between the two is the whole point of collecting both.</div>
+              {% elif field.name == "respondent_function" %}
+                <div class="form-help">Which function is answering. A buyer, a quality engineer and an AP clerk see very different suppliers through the same purchase order, and being able to slice the survey by function is what stops one loud department speaking for the whole business.</div>
+              {% elif field.name == "respondent" %}
+                <div class="form-help">The internal user answering, when there is one. Leave it blank for an external respondent &mdash; and it <span class="fw-600">must</span> be blank on a supplier self-assessment, which is not filed by anyone on our side.</div>
+              {% elif field.name == "respondent_name" %}
+                <div class="form-help">Required on a supplier self-assessment, which has no internal user account. Otherwise optional &mdash; useful for naming an external respondent, or for recording who answered on behalf of a shared mailbox.</div>
+              {% elif field.name == "rating" %}
+                <div class="form-help">1 to 5, and the labels are on the options so a &ldquo;3&rdquo; cannot mean &ldquo;average&rdquo; to one respondent and &ldquo;barely acceptable&rdquo; to the next. Optional here because the ordinary flow is to request now and rate later through Submit &mdash; but a response that is <span class="fw-600">submitted</span> must carry one.</div>
+              {% elif field.name == "importance" %}
+                <div class="form-help">How much this answer counts in the weighted mean, 0&ndash;10. A response filed at 0 still counts as a respondent and moves the number by nothing, so a page can honestly say eight people answered while reporting that six of them shaped the score.</div>
+              {% elif field.name == "due_date" %}
+                <div class="form-help">When you need the answer by. Optional &mdash; but a request with no deadline can never show up as past due, and an outstanding request nobody chases is one nobody answers.</div>
+              {% elif field.name == "comment" %}
+                <div class="form-help">Why the rating is what it is. Optional, and the most valuable field on the form: a number with no sentence behind it is something nobody can act on.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="form-help">One response per supplier, period document, KPI and respondent &mdash; asking the same person the same question twice for the same period would double their vote in the weighted mean, so the second one is refused.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Send request{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:supplierfeedback_detail' obj.pk %}{% else %}{% url 'procurement:supplierfeedback_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
