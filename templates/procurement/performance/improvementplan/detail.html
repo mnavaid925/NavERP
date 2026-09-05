@@ -56,6 +56,12 @@
       {% if obj.status in obj.OPEN_STATUSES %}
         <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       {% endif %}
+      {% comment %}
+        A plan exists because a number went wrong; the trend board is where you see whether it
+        is coming back. The board accepts ?supplier=, and this page always knows the supplier,
+        so the link is emitted unconditionally.
+      {% endcomment %}
+      <a href="{% url 'procurement:supplier_trend_board' %}?supplier={{ obj.supplier_id }}" class="btn btn-outline"><i data-lucide="trending-up"></i> Supplier trend</a>
       <a href="{% url 'procurement:improvementplan_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All plans</a>
     </div>
   </div>
