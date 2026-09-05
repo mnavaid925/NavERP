@@ -64,8 +64,11 @@ _ROW_RELATIONS = ("applies_to", "owner", "document", "threshold_currency")
 _DETAIL_RELATIONS = _ROW_RELATIONS + ("previous_version", "created_by")
 
 #: The review facet. ONE option, and it is an allow-list of one: an unrecognised ``?review=``
-#: leaves the register alone rather than emptying it (L11).
-REVIEW_CHOICES = [("due", "Review overdue")]
+#: leaves the register alone rather than emptying it (L11). The label is "Review due", the same
+#: words ``EXPIRY_FILTER_CHOICES`` uses on the document register and the same words the badge
+#: prints on all three registers — one concept had been reading as two ("due" in amber on one
+#: page, "overdue" in red on the next), which teaches a user that the second one is worse.
+REVIEW_CHOICES = [("due", "Review due")]
 
 #: How many successors the detail page lists. A policy with more than ten direct successors is
 #: already a data problem; the slice is what keeps the panel — and the query behind it — bounded.
@@ -80,7 +83,7 @@ def _policy_qs(request):
     paginates, which is the only ordering that gives honest page counts.
 
     The comparison is exactly the one ``ProcurementPolicy.is_review_due`` makes in Python, so the
-    rows this facet returns are precisely the rows that carry the "Review overdue" badge and are
+    rows this facet returns are precisely the rows that carry the "Review due" badge and are
     counted by the ``review_due`` stat tile.
     """
     qs = (ProcurementPolicy.objects.filter(tenant=request.tenant)
