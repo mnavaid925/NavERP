@@ -100,6 +100,17 @@
           <span class="badge {% if adjustment.status == 'posted' %}badge-green{% elif adjustment.status == 'cancelled' %}badge-slate{% else %}badge-amber{% endif %}">{{ adjustment.get_status_display }}</span>
           This document minted <a href="{{ adjustment_url }}" class="fw-600">{{ adjustment.number }}</a>
           on {{ adjustment.adjustment_date|date:"M d, Y" }}, valued at {{ adjustment.value_impact|floatformat:2 }}.
+          {% comment %}
+            The two figures on this page are the SAME money with different signs, and saying so
+            beats hiding it: `total_value` (the Document value card) is Σ quantity × unit_cost and
+            unsigned — direction belongs to the document, not to its value — while the
+            adjustment's `value_impact()` is Σ quantity_delta × unit_cost, and Post signs the delta
+            by movement type. An issue therefore reads negative here and positive up there, for
+            the same lines.
+          {% endcomment %}
+          That is the <em>signed</em> effect on stock value, so an issue reads negative against the
+          unsigned {{ total_value|floatformat:2 }} on the Document value card above — the same
+          lines, with the direction applied.
           {% if adjustment.status == 'draft' %}
             It is still a <span class="fw-600">draft</span> — the stock ledger has not changed yet.
           {% elif adjustment.status == 'posted' %}
