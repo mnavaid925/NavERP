@@ -149,7 +149,7 @@
             {% endcomment %}
             {% if obj.evidence %}<a href="{% url 'procurement:improvementplan_evidence' obj.pk %}">Download the attached file</a>{% endif %}
             {% if obj.evidence_url %}<div><a href="{{ obj.evidence_url }}" target="_blank" rel="noopener noreferrer">Evidence held elsewhere</a></div>{% endif %}
-            {% if not obj.has_evidence %}<span class="text-muted">None attached</span>
+            {% if not obj.has_evidence %}<span class="text-muted">Nothing attached</span>
               <div class="text-muted">a link to a QMS or a shared drive counts &mdash; proof does not have to be re-uploaded to be proof</div>{% endif %}
           </dd></div>
         <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
@@ -169,7 +169,7 @@
       <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Corrective actions</dt>
         <dd>{% if obj.corrective_actions %}{{ obj.corrective_actions|linebreaksbr }}{% else %}<span class="text-muted">Not recorded yet.</span>{% endif %}</dd></div>
       <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Support we are providing</dt>
-        <dd>{% if obj.support_provided %}{{ obj.support_provided|linebreaksbr }}{% else %}<span class="text-muted">None recorded. A supplier told to improve with no help is being managed, not developed.</span>{% endif %}</dd></div>
+        <dd>{% if obj.support_provided %}{{ obj.support_provided|linebreaksbr }}{% else %}<span class="text-muted">Nothing recorded. A supplier told to improve with no help is being managed, not developed.</span>{% endif %}</dd></div>
       <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Success criteria</dt>
         <dd>{% if obj.success_criteria %}{{ obj.success_criteria|linebreaksbr }}{% else %}<span class="text-muted">Not recorded. Without a measurable definition of &ldquo;fixed&rdquo;, closing this plan is an opinion.</span>{% endif %}</dd></div>
       {% if obj.closure_note %}
