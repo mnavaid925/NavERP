@@ -38,6 +38,16 @@ PROCUREMENT_CONTENT_MODELS = (
     "rfxresponse",
     "eauction",
     "eaucbid",
+    # 6.17 Risk & Compliance Management. These belong on the procurement activity feed precisely
+    # because they are the integrity records: a screening decision, a fraud disposition, a policy
+    # sign-off and a seal are exactly the actions an auditor comes looking for. ``auditseal`` is
+    # included for its CREATE rows — the seal itself is never edited or deleted.
+    "compliancescreening",
+    "screeninghit",
+    "supplierrisksignal",
+    "fraudalert",
+    "policyattestation",
+    "auditseal",
 )
 
 #: Printed on both feed surfaces. One constant so the two cannot explain the trail differently.
