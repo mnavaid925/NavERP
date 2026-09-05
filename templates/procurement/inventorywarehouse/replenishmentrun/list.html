@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Replenishment Runs{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — ReplenishmentRun register
+    (apps/procurement/views/InventoryWarehouseIntegration/Runs.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      stats{total, draft, proposed, released},
+      locations, status_choices, trigger_choices, abc_choices.
+    The view's crud_list filter tuple is exactly (("status","status",False),
+    ("trigger","trigger",False), ("location","location_id",True),
+    ("abc","abc_class_filter",False)) with search_fields over number, notes and the location
+    code/name — so the filter bar offers exactly q, status, trigger, location and abc. No
+    <select> here posts a param the view ignores, and no filter the view accepts is missing
+    from the bar.
+
+    Row COUNTS come from the view's annotations (annotated_line_count /
+    annotated_accepted_count / annotated_total_value), never from obj.line_count or
+    obj.accepted_count. Those two are @property — a data descriptor — so an annotation of the
+    same name would be silently ignored on read and every row would quietly cost two extra
+    queries. The names differ on purpose.
+
+    The location dropdown posts pks and compares with |stringformat:"d" (never |slugify); the
+    three enum dropdowns compare against status_choices / trigger_choices / abc_choices, which
+    ARE the model's CHOICES, so a badge and a filter option can never disagree.
+
+    Only the run NUMBER reaches the delete confirm() string. The location code and the notes
+    are user-authored, and the HTML attribute parser un-escapes an escaped apostrophe back
+    into the JS string literal before it is parsed — the number is system-minted (RPL-#####)
+    and cannot carry one.
+
+    The ABC filter is the reorder rule's UPPERCASE revenue rank, NOT the location's lowercase
+    bin-velocity class. The explainer card at the bottom says so, because the two look
+    identical in a dropdown and mean completely different things.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Replenishment Runs</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <span>Replenishment Runs</span>
+      </div>
+      <p class="text-muted">A run is a batch proposal that gets <em>kept</em>: what was below its reorder point, by how much, and what a buyer decided about each line. Accepting lines and releasing raises draft requisitions — approval routing, the budget check and PO conversion all still run afterwards.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:replenishmentpolicy_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Policies</a>
+      <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Reorder rules</a>
+      <a href="{% url 'procurement:replenishmentrun_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New run</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="refresh-cw"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Runs</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ stats.proposed }}</div><div class="stat-label">Awaiting review</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="send"></i></div><div class="stat-value">{{ stats.released }}</div><div class="stat-label">Released</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search runs" class="form-input" placeholder="Search run number, location or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="trigger" aria-label="Trigger" class="form-select">
+            <option value="">Manual and scheduled</option>
+            {% for value, label in trigger_choices %}
+              <option value="{{ value }}" {% if request.GET.trigger == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk|stringformat:"d" }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }} · {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="abc" aria-label="ABC class" class="form-select">
+            <option value="">All ABC classes</option>
+            {% for value, label in abc_choices %}
+              <option value="{{ value }}" {% if request.GET.abc == value %}selected{% endif %}>Class {{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:replenishmentrun_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Run date</th>
+            <th>Scope</th>
+            <th>Trigger</th>
+            <th class="text-right">Lines</th>
+            <th class="text-right">Accepted</th>
+            <th class="text-right">Proposed value</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:replenishmentrun_detail' obj.pk %}">{{ obj.number }}</a>
+                {% if obj.abc_class_filter %}<div class="text-muted">class {{ obj.abc_class_filter }} only</div>{% endif %}
+              </td>
+              <td>{{ obj.run_date|date:"M d, Y" }}</td>
+              <td>
+                {% if obj.location %}
+                  <a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+                  <div class="text-muted">{{ obj.location.name }}</div>
+                {% else %}
+                  <span class="text-muted">Whole network</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_display }}</span></td>
+              <td class="text-right">{{ obj.annotated_line_count }}</td>
+              <td class="text-right">{{ obj.annotated_accepted_count }}</td>
+              <td class="text-right">{% if obj.annotated_total_value %}{{ obj.annotated_total_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:replenishmentrun_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete are hidden once a run is released or cancelled — the view
+                    refuses both anyway (crud_delete is POST-only and self-defending, and the
+                    edit view redirects with a message), so this is the honest affordance
+                    rather than the enforcement.
+                  {% endcomment %}
+                  {% if obj.can_generate %}
+                    <a href="{% url 'procurement:replenishmentrun_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:replenishmentrun_delete' obj.pk %}" onsubmit="return confirm('Delete replenishment run {{ obj.number }} and every suggestion on it? Nothing outside this run is touched — no requisition, no reorder rule, no stock.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="refresh-cw"></i>
+                <h3>No replenishment runs found</h3>
+                <p>Nothing matches these filters. A run reads every active reorder rule in scope, nets off stock on hand and everything already incoming, and proposes what is still short — then keeps that proposal so a decision made today can still be explained next month.</p>
+                <a href="{% url 'procurement:replenishmentrun_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New run</a>
+                <a href="{% url 'procurement:replenishmentrun_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How a run moves</h2><span class="text-muted">draft → proposed → released</span></div>
+    <div class="card-body">
+      <p class="text-muted"><span class="fw-600">Generate</span> reads every active reorder rule in scope and proposes what is short after netting off stock on hand, open purchase orders and open requisitions. It can be pressed again as often as you like — each press replaces the previous set of lines rather than adding to it.</p>
+      <p class="text-muted"><span class="fw-600">Release</span> turns the accepted lines into one <span class="fw-600">draft</span> requisition per vendor. Draft is the point: approval routing, the budget check and purchase-order conversion all still run afterwards, so nothing here buys anything on its own.</p>
+      <p class="text-muted">The <span class="fw-600">ABC class</span> filter is the reorder rule's revenue rank — the uppercase A/B/C that SCM's demand planning assigns. It is <em>not</em> the location's lowercase bin-velocity class, which is a different attribute of a different thing that happens to use the same three letters.</p>
+    </div>
+  </div>
+{% endblock %}
