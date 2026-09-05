@@ -141,6 +141,13 @@ from .SupplierPerformanceEvaluation.SupplierKpis import SupplierKpi
 from .SupplierPerformanceEvaluation.ScorecardKpiScores import SupplierKpiScore
 from .SupplierPerformanceEvaluation.SupplierFeedback import SupplierFeedback
 from .SupplierPerformanceEvaluation.SupplierImprovementPlans import SupplierImprovementPlan
+# 6.18 Inventory & Warehouse Integration — the procurement-side bridge onto the scm stock spine.
+# Nothing here re-declares an Item, Location, StockMove, LotSerial or ReorderRule (L36); every
+# quantity is derived from scm.StockMove, and MaterialIssue.post() mints a DRAFT
+# scm.StockAdjustment rather than moving stock itself.
+from .InventoryWarehouseIntegration.Policies import ReplenishmentPolicy
+from .InventoryWarehouseIntegration.Runs import ReplenishmentRun, ReplenishmentSuggestion
+from .InventoryWarehouseIntegration.MaterialIssues import MaterialIssue, MaterialIssueLine
 
 __all__ = [
     "EaucBid",
@@ -231,4 +238,10 @@ __all__ = [
     "SupplierKpiScore",
     "SupplierFeedback",
     "SupplierImprovementPlan",
+    # 6.18 Inventory & Warehouse Integration
+    "ReplenishmentPolicy",
+    "ReplenishmentRun",
+    "ReplenishmentSuggestion",
+    "MaterialIssue",
+    "MaterialIssueLine",
 ]
