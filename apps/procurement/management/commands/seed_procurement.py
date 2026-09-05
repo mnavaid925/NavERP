@@ -242,6 +242,22 @@ class Command(BaseCommand):
             # above. Without these two the 6.15 block's exists() guard survives a --flush.
             CostForecast.objects.all().delete()
             BudgetMapping.objects.all().delete()
+            # 6.19 document & knowledge rows: children first. A revision CASCADEs from its
+            # document, but deleting it explicitly clears the register in one pass and — more to
+            # the point — a document's current_revision_no pointer must never outlive the
+            # revisions it points at. Policies and resources SET_NULL their document FK, so they
+            # only need to precede the documents to keep the flush reading top-down. Without
+            # these four the 6.19 block's exists() guard survives a --flush and the demo
+            # repository can never be regenerated.
+            #
+            # NOTE: this deletes the rows, not the uploaded files under MEDIA_ROOT. Django never
+            # reclaims a FileField's storage on delete, and a seeder is the wrong place to walk a
+            # media tree deleting paths derived from stored data. The seeded payloads are small
+            # .txt blobs; a re-seed after a flush writes fresh ones under new names.
+            ProcurementDocumentRevision.objects.all().delete()
+            ProcurementPolicy.objects.all().delete()
+            KnowledgeResource.objects.all().delete()
+            ProcurementDocument.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
