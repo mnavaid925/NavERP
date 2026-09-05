@@ -21,6 +21,159 @@ reads nothing and reports clean, which is the answer you were hoping for. And no
 
 ---
 
+## THE FIX LIST - deduped, sorted, IDs assigned (all six reviewers in)
+
+**This is what the `code-fixer` works from.** Every item below is a distinct defect; the per-reviewer
+sections beneath carry the evidence. Fix in ID order: C -> H -> I -> M. Mark each `[x] fixed` or
+`[~] skipped - reason`.
+
+### REFUTED - do NOT "fix" these. Touching them breaks working code.
+
+- **X10** (never-rendered plan verbs) - **REFUTED as a code defect.** A draft and an un-acknowledged
+  plan were created and both verbs driven end to end; all four "never rendered" badge states resolve to
+  real theme classes. It is a **seeder-coverage note only** (folded into I13).
+- **X11** (8 unexercised derived resolvers) - **REFUTED outright.** All eight were created, generated
+  and rendered: zero raises, zero nonsense units, zero raw dicts. Unexercised, not broken.
+- **R8 on seven of eight plan verbs** - not a security finding (racing buys nothing; `acknowledge` can
+  only write a later timestamp). Only **generate** is worth locking - see C4.
+- **R3/R4 are NOT an authorization bypass** - the server-side gate holds and the 403 leaks nothing.
+  They are a UX-of-authorization item, fixed via I2's single helper.
+- **`SupplierFeedback.score_value()` called twice** in a template - a pure dict lookup, no DB. Leave it.
+- **`stat-icon red`, the NOT-YET-WIRED import comments, and the `*Form` suffix family** are app-wide
+  convention, not drift.
+
+### CRITICAL
+
+- [ ] **C1 - `?year=0` (and `>=10000`) is an uncaught 500.** `views/.../ScorecardKpiScores.py:153`.
+  `crud.py`'s zero-skip is gated on `_is_pk_lookup()`, false for `period_end__year`; `as_db_int`
+  range-checks against `MAX_DB_INT`, not 1-9999. Reproduced. **`DEBUG` defaults to `True`
+  (`settings.py:16`)**, so a deployment without a `.env` renders a full technical 500 from a typed URL.
+  Clamp `year` to 1-9999 in the view; the general guard belongs in `apps/core/crud.py`. *(N1, SEC-confirmed)*
+- [ ] **C2 - Generate on an empty KPI library sets `manual_override` and destroys a derivable score.**
+  `performance.py:674`. A scorecard that would grade **A / 93.70** becomes permanently unscoreable by
+  either engine, and the operator sees a **green success message**. Two reachable paths need no empty
+  library: a supplier with no `scm.SupplierProfile` while KPIs are tier-scoped, and a library mid-retune.
+  Guard on `if written:` or return the refusal shape when `kpis` is empty. *(R2, upgraded by reviewer 5)*
+- [ ] **C3 - `SupplierKpiScore` has no index covering its `Meta.ordering`.** `ScorecardKpiScores.py:119-128`.
+  Measured: **130 ms -> 1,484 ms at 60,041 rows**, query count flat - a filesort over the tenant
+  partition. Add `Index(["tenant","kpi_category","kpi_name","id"], name="prc_sks_tnt_cat_name_idx")`.
+  **Needs a migration** - coordinate the number with the peer sessions. *(P1)*
+- [ ] **C4 - over-long `rating` POST is an uncaught 500.** `views/.../SupplierFeedback.py:302` -
+  `isdecimal()` passes on 5,000 digits, then `int()` raises. Reproduced. The only unguarded `int()` on
+  request input in the repo. Use `as_db_int`. *(SEC1)*
+
+### IMPORTANT
+
+- [ ] **I1 - the two boards publish DIFFERENT composites under the same key.** `performance.py:725` vs
+  `:839`. **All five suppliers differ**; Bidder Two BV reads 34.62 (grade F) on one board and 69.87 on
+  the other, and rank/percentile/quadrant all ride the wrong figure. *(R1)*
+- [ ] **I2 - add `_is_admin(request)` once and fold it into `can_generate` and `can_close`.** 6.16 has
+  no notion of admin anywhere; twelve sibling modules define this helper. Fixes R3+R4 at the root, and
+  extend `refusal_reason` so the page still says *why*. *(X5, R3, R4, SEC7)*
+- [ ] **I3 - score lines are deletable off a PUBLISHED scorecard by any member** while writing them is
+  admin-only and draft-only. Gate the delete on `scorecard.status == "draft"` and hide the bin icon.
+  *(SEC2)*
+- [ ] **I4 - closed+signed plans and submitted responses stay editable/deletable by any member.**
+  Gate `improvementplan_edit`/`_delete` on `OPEN_STATUSES` (already defined) and
+  `supplierfeedback_edit` on `status == "requested"`, per `Milestones.py:102,139`. *(SEC3)*
+- [ ] **I5 - `evidence` served as a raw unauthenticated `MEDIA_URL` link.** Route through an
+  authenticated view per `Revisions.py:226`. **Do NOT sweep the five sibling clones** - carry that up
+  as an app-wide item. *(SEC4)*
+- [ ] **I6 - both `<select>`s submit their first option.** Feedback submit files **rating 1 "Poor"**;
+  plan close files **"Successful"** irreversibly, stamping `verified_by`. Add a neutral
+  `<option value="" selected>` + `required` to each; both views already refuse blank. *(F1, F2)*
+- [ ] **I7 - benchmark cohort statistics are computed POST-cap.** Filter tier/category in the queryset
+  **before** the slice. Measured: a 13-supplier cohort averaging 55.14 (best 95.00) displayed as
+  6 suppliers averaging 10.00 with a best of 10.00. *(PB5, P11)*
+- [ ] **I8 - `supplierevaluation_list` paginates an unordered queryset.** `annotate()`'s GROUP BY drops
+  `Meta.ordering`; `UnorderedObjectListWarning` on every request. Append
+  `.order_by("-period_end","-id")`. The app documents this fix twice already. *(S2, P3 - one fix)*
+- [ ] **I9 - `generate_scorecard_lines` writes row-by-row: 4 round-trips per line** (54 q at 9 KPIs ->
+  195 at 29; 39 of the first 54 are write plumbing). It already builds an `existing` dict before the
+  loop - use `bulk_update` + `bulk_create`. **`bulk_update` does not fire `auto_now`**, so set
+  `updated_at` explicitly. Same shape for the alert `create()` in a loop. *(P5)*
+- [ ] **I10 - the seeder is not atomic and its guard preserves a crash.** Wrap `_seed_supplier_performance`
+  steps 1-6 in `transaction.atomic()`. *(P6)*
+- [ ] **I11 - `supplierevaluation_detail` caps `lines` but not `plans`/`feedback_rows`** - 109 ms ->
+  924 ms, 427 KB -> 2.28 MB HTML. Cap both and OR into `truncated`. *(P8)*
+- [ ] **I12 - the seeder window sits one day before SCM's, with THREE symptoms:** the default board
+  lands on SCM's period showing a perfect cohort with **no 6.16 evidence**; both goods receipts fall
+  outside the window so **16 of 30 derived lines are unmeasured** (Delivery and Quality read "No data"
+  on every seeded scorecard); and both risk assessments fall outside it, so the quadrant column has
+  **never held a value** on the correct period. Move the window to match SCM's. *(R7, N3)*
+- [ ] **I13 - seeder coverage gaps** (one edit, several holes): no `draft` or `cancelled` plan, all four
+  always acknowledged, `evidence` FileField never populated, `applies_to_tier` only ever `strategic`,
+  and the whole manual-score path hangs off **one** strategic profile with no warning if it becomes 0.
+  *(X10 downgraded, X12, X13)*
+- [ ] **I14 - `?source=` and `?category=` pass unvalidated into a filter and silently empty the page.**
+  Validate both in their views. *(S1, R5)*
+- [ ] **I15 - two `_ROW_RELATIONS` miss `scorecard__party`** while both detail templates hop it.
+  Measured +1 query each; becomes 1+N the day a list template prints it. *(P4)*
+- [ ] **I16 - `manual_override` is invisible from the SCM side.** The scm scorecard page shows the
+  effect and hides the cause. **Cross-app edit - confirm before touching `apps/scm`.** *(X2)*
+- [ ] **I17 - the critical-crossing alert is raised unassigned**, and the dashboard's personal queue
+  filters on `assigned_to` - so it reaches nobody. `SupplierKpi.owner` is the obvious assignee and is
+  never read. *(X3)*
+- [ ] **I18 - a zero-response survey line contradicts itself** - branch on `source_at_time`, not on
+  `respondent_count`'s truthiness. *(F3)*
+- [ ] **I19 - no entity page links to any board**, though both boards accept `?supplier=`. *(X1)*
+- [ ] **I20 - `SupplierFeedback` missing ordering index** - 113 ms -> 822 ms at 50,028 rows. Same
+  migration as C3. *(P2)*
+- [ ] **I21 - uncapped scorecard/KPI `<select>` pickers pulling whole rows** - +197 KB of `<option>` in
+  one select at 2,007 scorecards. Slice and `.only(...)`. *(P7, P12)*
+
+### MINOR
+
+- [ ] **M1** `supplierkpiscore_detail` double-fetches the joined row (2 of 9 queries). *(PB1, P10)*
+- [ ] **M2** normalise the confirm idiom to `onclick` in Entity 1's two KPI templates. *(PB2)*
+- [ ] **M3** `SupplierFeedback.__str__` renders literal `"None"` on an unsaved instance. *(PB3)*
+- [ ] **M4** five templates print the English word "None" where siblings use an em dash. *(S3)*
+- [ ] **M5** `breakdown['window']` renders as a **Python list literal** under a column headed *Value*.
+  Join as `"2026-05-11 to 2026-08-09"` in the flattener. *(N2)*
+- [ ] **M6** the alert's `link_url` is hand-built rather than `reverse()`d. *(R6, X4)*
+- [ ] **M7** `row_cap` carries two different caps across boards/details (three instances). *(PB6, R9)*
+- [ ] **M8** `quadrant_choices` passed but never iterated; labels hard-coded twice. *(R10)*
+- [ ] **M9** `_supplier_parties` duplicated four times with **two different signatures**. *(X6)*
+- [ ] **M10** `_feedback_stats` omits `expired` while double-counting `requested`. *(X7)*
+- [ ] **M11** one of nine `write_audit_log` calls omits `tenant=` (harmless, inconsistent). *(X8)*
+- [ ] **M12** supplier linked to `core:party_detail` on two detail pages, plain text on two; empty-state
+  heading wording drift. *(X9)*
+- [ ] **M13** breakdown key `rows` means the denominator for `otd` and the numerator for three others.
+  *(N4)*
+- [ ] **M14** unbounded `closure_note` from POST -> `DataError` or silent truncation. Cap at 4000.
+  *(SEC5)*
+- [ ] **M15** generate's draft check reads a row fetched outside the transaction; use
+  `select_for_update()`. *(SEC6, R8-generate-only)*
+- [ ] **M16** `SupplierImprovementPlan` ordering index missing (low-volume table). *(P13)*
+- [ ] **M17** seeder step 5 does per-row `.save()` where `bulk_update` fits (5 rows). *(P14)*
+- [ ] **M18** `benchmark_rows` streams 2,402 risk rows to keep 302; fold into a `Subquery`. *(M1/P9)*
+- [ ] **M19** the `?source=` docstring still asserts the safety S1 disproved. Must change with I14.
+  *(X15)*
+- [ ] **M20** `--flush` leaves scm scorecards flagged `manual_override` with their justifying lines
+  gone. *(X14)*
+- [ ] **M21** one `.stat-grid` nested in a `.card` needing an inline padding override. *(F5)*
+- [ ] **M22** seven badge chains hand-rolled where the model already exposes `*_css` (all agree today).
+  *(F4)*
+
+### CONTRACT DEFECTS - amend `.claude/tasks/contract-procurement-6.16.md`, not the code
+
+- [ ] **CD1** §3.1 specifies `supplierkpi_delete` with no `ProtectedError` guard, which would 500 on any
+  KPI with measured history. The code's guard is correct; **the contract is wrong.** *(PB4)*
+- [ ] **CD2** §6 describes `skipped` as "applicable KPIs that produced no line", but every applicable
+  KPI gets a line. Code and message agree; the contract does not. *(R11)*
+
+### NOTES - out of scope for this fixer
+
+- **`scm.SupplierScorecard` has no `(tenant, period_end)` index** and 6.16 makes that a hot filter.
+  **Do not fork an index onto SCM's model from 6.16.** *(M7/perf)*
+- **The `.file.url` / `.evidence.url` family** - five more unauthenticated media links in procurement.
+  App-wide item. *(SEC4)*
+- **Dev-DB hygiene:** a third tenant `id=70, slug='', name='SMOKETEST Acme'` is a peer's un-rolled-back
+  throwaway. An **empty slug** risks tenant-resolution edge cases. Tell the other sessions; do not
+  delete another session's rows. *(N5)*
+
+---
+
 ## Pre-review findings (found during the build, before the six reviewers run)
 
 These were surfaced by the build agents themselves or by a peer session. They are recorded now so
@@ -915,4 +1068,144 @@ opening: `kpi=9 score=41 fb=28 plan=4 card=7`, plan/feedback status distribution
 
 ---
 
-*(remaining reviewer appends below: security-reviewer)*
+### 6/6 - `security-reviewer`
+
+**Verdict: one High, three Medium, three Low. No cross-tenant leak, no authorization bypass, no
+injection.** The High and two Mediums are new; the rest sharpen or refute earlier passes.
+
+#### SEC1 - HIGH - `supplierfeedback_submit`: an over-long `rating` is an uncaught 500 (NEW)
+
+`views/.../SupplierFeedback.py:302`. Reproduced independently by the main session:
+
+```python
+if not posted.isdecimal() or int(posted) not in _RATING_VALUES:   # <- int() on the right of `or`
+```
+```
+isdecimal('1'*5000) -> True        # so the short-circuit FALLS THROUGH to int()
+int('1'*5000)       -> ValueError: Exceeds the limit (4300) for integer string conversion
+```
+
+Any authenticated tenant member with one open response's pk can 500 the page at will. **This is the
+only unguarded `int()` on request input in the whole repo** - every sibling wraps it (crm Surveys,
+accounting CashForecast, hrm Celebrations/Budget), and `apps/core/crud.py:53-56` documents this exact
+trap by name, which is why the GET filters here are safe and this POST verb is not. The smoke gate's
+junk-param sweep is GET-only by construction and could not have found it.
+
+**Fix:** use `as_db_int(posted)`, which length-checks before `int()`.
+
+#### SEC2 - MEDIUM - score lines can be deleted off a PUBLISHED scorecard by any member (NEW)
+
+`views/.../ScorecardKpiScores.py:391-408`. Writing a score line requires `@tenant_admin_required` **and**
+a draft scorecard; **deleting one requires only `@login_required`**. So any ordinary member can POST away
+the measured evidence behind a published or archived scorecard, from the register's own bin icon
+(offered unconditionally). The four scm dimension columns and `overall_score` are left standing, so the
+published grade survives with nothing behind it - the view's own docstring concedes it, and
+`generate_scorecard_lines` refuses to touch a published card precisely because "a closed period is
+closed". **The delete route is the hole in that invariant.**
+
+#### SEC3 - MEDIUM - closed+signed plans and submitted responses stay editable by any member (NEW)
+
+`SupplierImprovementPlans.py:214-233, 396-410`; `SupplierFeedback.py:245-260`. Neither edit nor delete
+carries a status gate. After an admin closes a plan - stamping `verified_by`/`verified_at` and the
+outcome the supplier is shown - **any member can rewrite `finding`, `root_cause`,
+`corrective_actions`, the dates and the supplier, leaving the signature beside altered content**, or
+delete the closed plan outright. Same on feedback: `rating` is in `Meta.fields`, so a **submitted**
+response's rating can be overwritten through the ordinary edit form, bypassing the submit verb's guard
+and silently moving the survey aggregate and the perception-gap board.
+
+The module docstrings state the wrong invariant ("status and outcome are not on the form, so editing
+can never move a plan through its lifecycle") - true, and beside the point: **the payload is not the
+status.** Forks from a direct analogue in the same app, `ContractsManagement/Milestones.py:102,139`,
+which gates both verbs on the identical `OPEN_STATUSES` tuple. `SupplierImprovementPlan.OPEN_STATUSES`
+already exists and is used by three other helpers - just not by edit or delete.
+
+#### SEC4 - MEDIUM - `evidence` is served as a raw unauthenticated `MEDIA_URL` link
+
+`improvementplan/detail.html:132` renders `{{ obj.evidence.url }}` -> `/media/procurement/
+improvement_evidence/YYYY/MM/<original-filename>`, served with **no session check and no tenant check**.
+An audit report or NCR pack is readable by anyone who can guess a plausible filename under the current
+month's folder.
+
+**The upload validation itself is correct** - `clean_evidence` applies `ALLOWED_DOC_EXTENSIONS` then
+`MAX_UPLOAD_BYTES`, `.svg` is correctly absent, and Django handles traversal in `upload_to`. The gap is
+purely *serving*. `evidence_url` is **clean**: `URLField` rejects `javascript:` and `data:` at validation.
+
+**Fix precedent is in this same app**, added by the 6.19 session five days ago -
+`DocumentKnowledgeManagement/Revisions.py:226` routes downloads through an authenticated view. Mirror it.
+
+**Pattern-clone family (L28), NOT for this fixer to sweep:**
+`grep -rn "\.file\.url\|\.evidence\.url\|\.attachment\.url" templates/` finds **five more** in
+procurement alone (catalogmanagement, goodsreceiptinspection, rfxmanagement, invoicevouchermanagement x2).
+Only 6.19 routes through an authenticated view. Filed against 6.16 as the new instance; **carry the
+family up as an app-wide item, do not silently edit the peers' files.**
+
+#### SEC5 - LOW - unbounded `closure_note` written straight from the POST body
+
+`SupplierImprovementPlans.py:357`. `closure_note` is `editable=False`, so it never passes a form or
+`full_clean()`, and is written with `save(update_fields=[...])`. A >64 KB POST hits MySQL `TEXT`'s
+65,535-byte ceiling -> uncaught `DataError` (500), or silently truncates a signed closure narrative
+under non-strict SQL mode. Admin-only, hence Low. CRM's sibling already caps at `[:4000]`.
+
+#### SEC6 - LOW - generate's draft check reads a row fetched OUTSIDE the transaction (verdict on R8)
+
+`ScorecardKpiScores.py:270-272` -> `performance.py:588`. The view fetches the scorecard unlocked;
+`generate_scorecard_lines`'s `@transaction.atomic` then re-checks `status` against that **stale
+in-memory instance** and never re-reads. A scorecard published concurrently can still be generated
+onto - writing the dimension columns and `manual_override` onto a **closed period**, the exact
+invariant the guard exists to protect. Fix with `select_for_update()` per
+`VendorManagement/VendorSuspensions.py:104-112`.
+
+**Explicit disagreement with R8 on the other seven verbs:** `activate`/`monitor`/`cancel`/`close` are
+last-writer-wins races between two actors who each already hold the right to make that transition, so
+racing buys nothing; `acknowledge`'s race can only write a *later* timestamp than the one it
+overwrites. **Correctness/audit-fidelity, not an exploit. Generate is the one worth locking.**
+
+#### SEC7 - LOW - verdict on R3/R4/X5: agreed, not a bypass
+
+The server-side gate holds completely - `@require_POST` sits outside `@tenant_admin_required`, whose
+inner `@login_required` runs first, so anonymous GET is 405, anonymous POST redirects to login, and a
+non-admin POST raises `PermissionDenied` with zero mutation. **One correction to the earlier framing:
+the 403 is NOT a stack-trace leak even with `DEBUG=True`** - Django routes `PermissionDenied` to the
+`permission_denied` handler, which never renders the technical page. It is unthemed, not disclosive.
+Agrees with X5 that the fix is one `_is_admin` helper, not two template patches.
+
+#### Clean - coverage statement
+
+- **`breakdown` JSONField: clean, no user-controlled value can reach it.** All four writers traced -
+  the 14 resolvers build it from computed integers and `str()`-ified Decimals plus hard-coded notes;
+  the unknown-key branch echoes a `choices`-validated field; the edit form writes only
+  choice-constrained or numeric values. Rendered `{{ row.key }}`/`{{ row.value }}`, flattened and
+  `str()`-ified by the view, **autoescaping intact, no `|safe`-adjacent filter**. No stored-XSS path.
+- **XSS/CSS injection: clean, unusually so.** Zero `|safe`, zero `mark_safe`, zero
+  `{% autoescape off %}`, zero `escapejs`, zero `json_script`, **zero `<script>` blocks** across all 17
+  templates. The eleven `|linebreaksbr` uses are on plain `TextField`s never marked safe. Every
+  `style="..."` is literal except one guarded computed `Decimal`.
+- **Inline handlers: clean, all 18 `confirm()` sites checked.** Only system-assigned identifiers reach
+  a handler - no `title`, `supplier.name`, `finding` or `kpi_name`. Independently reproduces reviewer 3.
+- **Mass assignment: clean, enumerated field by field.** `manual_override` is on no 6.16 form. All
+  seven frozen columns plus 12 others are `editable=False` so a ModelForm cannot bind them;
+  `status`/`outcome`/`score`/`band`/`weight_applied` are kept out by explicit `Meta.fields` allowlists.
+  **`SupplierKpiScoreEditForm` specifically: a crafted POST cannot edit a derived line** - the view
+  refuses `source_at_time != "manual"` and redirects *before* `crud_edit`, on GET and POST alike.
+- **Cross-tenant disclosure: clean, and `_reject_foreign` produces no oracle** - it is in practice
+  unreachable because `ModelChoiceField.to_python()` queries the already-narrowed queryset first and
+  fails with Django's generic message, so "another tenant's row" and "no such row" are observationally
+  identical. No count, aggregate, `<select>` option or window picker escapes the tenant filter.
+- **Audit trail: clean; no 6.16 field belongs on `_SENSITIVE_AUDIT_FIELDS`.** `closure_note` is
+  deliberately absent from the close verb's `changes` dict - correct. X8 confirmed harmless.
+- **N1 gains a disclosure dimension:** `crud.py`'s `is_int=True` branch has **no try/except at all**, so
+  the `ValueError` surfaces during `Paginator` evaluation, outside `crud_list`. `DEBUG` **defaults to
+  `True`** at `settings.py:16`, so a deployment shipping without a `.env` renders the full technical
+  500 - traceback, locals, `META`/`COOKIES` - from a URL anyone can type.
+- **S1/R5 carry no injection risk:** `?source=` is ORM-parameterised; `?category=` never reaches the
+  database at all (Python-side comparison over a 120-char-truncated value). Silent-empty UX bugs only.
+- **Also clean:** zero `.raw()`/`.extra()`/`cursor.execute`; 22/22 POST forms carry `{% csrf_token %}`
+  (the GET filter forms are correctly tokenless); no `@csrf_exempt`; **no `?next=` or any user-supplied
+  redirect**; all 33 views decorated with `require_POST` correctly outside the auth decorator so no
+  ordering bypass exists; no raw `request.GET` echoed into markup (all 26 reflections are `{% if %}`
+  comparisons); the tenant trust root is sound (`TenantMiddleware` reads `user.tenant` from the
+  database, never a header); the alert's `link_url` is built from an integer pk and cannot become an
+  open redirect.
+
+---
+
