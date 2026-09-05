@@ -128,24 +128,45 @@
         {% if obj.disposition_note %}
           <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Reasoning</dt><dd>{{ obj.disposition_note|linebreaksbr }}</dd></div>
         {% endif %}
-        <p class="text-muted" style="margin-top:.75rem;">An adjudicated hit cannot be edited or re-opened — the matched name and score are what this decision was reasoned against. If it was captured wrongly, delete it and record it again.</p>
+        {% comment %}
+          The remedy sentence names only the control this page is actually rendering right now
+          (the Danger zone below, which needs an admin and an undecided parent) — pointing at a
+          delete that is not on the page is what made this copy wrong before.
+        {% endcomment %}
+        {% if screening.is_terminal %}
+          <p class="text-muted" style="margin-top:.75rem;">An adjudicated hit cannot be edited or re-opened — the matched name and score are what this decision was reasoned against. {{ screening.number }} has since been decided, so this hit is now part of the evidence behind that decision and cannot be removed either. A correction is a new screening.</p>
+        {% elif is_admin %}
+          <p class="text-muted" style="margin-top:.75rem;">An adjudicated hit cannot be edited or re-opened — the matched name and score are what this decision was reasoned against. If it was captured wrongly, delete it below and record it again, for as long as this screening is still open.</p>
+        {% else %}
+          <p class="text-muted" style="margin-top:.75rem;">An adjudicated hit cannot be edited or re-opened — the matched name and score are what this decision was reasoned against. If it was captured wrongly, ask a workspace administrator to delete it so it can be recorded again, while this screening is still open.</p>
+        {% endif %}
       </div>
     </div>
   {% endif %}
 
   {% comment %}
-    Both destructive controls also require the PARENT screening to still be open. Once it is
-    cleared or blocked its hits are the evidence that decision was reasoned against, and
-    screeninghit_edit / screeninghit_delete refuse them — the page must not offer what the view
-    refuses. Delete is additionally admin-only (@tenant_admin_required on screeninghit_delete):
-    deleting the last open hit is what unlocks Clear, so destroying a match is not analyst work.
+    The destructive controls require the PARENT screening to still be open. Once it is cleared or
+    blocked its hits are the evidence that decision was reasoned against, and screeninghit_edit /
+    screeninghit_delete refuse them — the page must not offer what the view refuses. Delete is
+    additionally admin-only (@tenant_admin_required on screeninghit_delete): deleting the last
+    open hit is what unlocks Clear, so destroying a match is not analyst work.
+
+    Delete is offered for an ADJUDICATED hit too, not only an open one, because that is exactly
+    what screeninghit_delete allows and what the disposition card above points at:
+    delete-and-recapture is this module's stated correction for a hit captured wrongly, since the
+    matched name and score are what the disposition was reasoned against and amending them would
+    rewrite the record. The copy below branches so it describes the row actually on screen.
   {% endcomment %}
-  {% if obj.is_open and not screening.is_terminal and is_admin %}
+  {% if not screening.is_terminal and is_admin %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
       <div class="card-body">
-        <p class="text-muted">Deleting a hit removes it from the record entirely. Do this only for a match that should never have been captured — an adjudication, including a false positive, is the honest way to close one that was.</p>
-        <form method="post" action="{% url 'procurement:screeninghit_delete' obj.pk %}" onsubmit="return confirm('Delete this hit from screening {{ screening.number }}? Deleting an unadjudicated match removes it from the record entirely.');">
+        {% if obj.is_open %}
+          <p class="text-muted">Deleting a hit removes it from the record entirely. Do this only for a match that should never have been captured — an adjudication, including a false positive, is the honest way to close one that was.</p>
+        {% else %}
+          <p class="text-muted">This hit has been adjudicated, so it can no longer be edited. Deleting it removes it and its disposition from the record entirely, which is the honest correction only for a match that was captured wrongly in the first place — then record it again. The deletion is audited.</p>
+        {% endif %}
+        <form method="post" action="{% url 'procurement:screeninghit_delete' obj.pk %}" onsubmit="return confirm('Delete this hit from screening {{ screening.number }}? It is removed from the record entirely.');">
           {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete hit</button>
         </form>
       </div>
