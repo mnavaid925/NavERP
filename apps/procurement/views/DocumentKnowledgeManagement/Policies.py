@@ -151,16 +151,25 @@ def ppolicy_detail(request, pk):
     # down with the select_related above, so it costs nothing; the successors are a single
     # bounded reverse slice over local columns (number, title, version_number, status), so no
     # select_related is needed for what the panel renders.
-    superseded_by_rows = list(obj.superseded_by.all()[:SUPERSEDED_BY_CAP])
+    #
+    # WARNING: the reverse slice is re-scoped to this policy's tenant, for the same reason the
+    # publish verb below re-fetches its predecessor with an explicit filter. FK traversal bypasses
+    # every tenant filter: a ``previous_version_id`` written before the model's cross-tenant
+    # backstop existed - or through the admin, or a shell - would print another workspace's
+    # number, title, version and status here and link to it. No write path in this codebase
+    # creates such a row today, which is what makes this defence in depth rather than a fix;
+    # putting the tenancy in the QUERY is what keeps it true whatever writes the column next.
+    superseded_by_rows = list(
+        obj.superseded_by.filter(tenant_id=obj.tenant_id)[:SUPERSEDED_BY_CAP])
 
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
         "advisory_note": ADVISORY_NOTE,
         "supersedes": obj.previous_version,
         "superseded_by_rows": superseded_by_rows,
-        # The model property lifted into context under the name the contract pins, so the
-        # template reads one name rather than reaching through the object for a computed value.
-        "is_review_due": obj.is_review_due,
+        # ``is_review_due`` is deliberately NOT lifted into context. It is a property of ``obj``,
+        # every register template already reads it as ``obj.is_review_due``, and a context key of
+        # the same name meant one fact reachable by two names inside one sub-module.
     })
 
 
@@ -180,12 +189,32 @@ def ppolicy_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def ppolicy_delete(request, pk):
-    # Nothing cascades. ``previous_version`` is SET_NULL, so deleting v1.0 leaves v2.0 in force
-    # with its back-pointer cleared — the history loses a link, never a live rule. There is no
-    # stored file to reclaim either: a policy's PDF is a ProcurementDocument and stays where it
-    # is, still versioned and still searchable.
+    """Remove a policy nobody has signed. Administrator-gated.
+
+    ``previous_version`` is SET_NULL, so deleting v1.0 leaves v2.0 in force with its back-pointer
+    cleared - the history loses a link, never a live rule. There is no stored file to reclaim
+    either: a policy's PDF is a ProcurementDocument and stays where it is, still versioned and
+    still searchable.
+
+    What DOES cascade is 6.17's acknowledgement ledger. ``PolicyAttestation.policy`` is declared
+    ``on_delete=models.CASCADE``, deliberately and by that sub-module, so deleting a published
+    policy silently destroys every signature and every exemption grant recorded against it - the
+    compliance evidence 6.17 exists to hold. This verb therefore refuses while any attestation
+    exists, and only a workspace administrator may call it at all: publishing a rule needs an
+    administrator, so unpublishing it by deletion cannot need less. Archiving is the way to
+    retire a policy that has history; it keeps the text, the version chain and the sign-offs.
+    """
+    obj = _get_policy(request, pk)
+    signed = obj.attestations.count()
+    if signed:
+        messages.error(request, f"{obj.number} v{obj.version_number} has {signed} "
+                                f"acknowledgement record(s) against it, and deleting the policy "
+                                f"would delete them with it. Archive it instead - it keeps its "
+                                f"text, its version history and every sign-off.")
+        return redirect("procurement:ppolicy_detail", pk=obj.pk)
     return crud_delete(request, model=ProcurementPolicy, pk=pk,
                        success_url="procurement:ppolicy_list")
 
@@ -222,8 +251,12 @@ def ppolicy_publish(request, pk):
     leaves open, taken the conservative way — archive the predecessor **when the predecessor is
     itself published**. A draft predecessor is untouched (it was never in force, and archiving
     somebody's work in progress is destructive); an archived one is untouched (already done).
-    Both writes share one transaction, so the library can never be left showing two published
-    versions of the same rule, and never zero.
+    Both writes share one transaction, so a version and the predecessor it names can never be
+    left both published, and never both retired. Note the limit of that guarantee: it reaches
+    only the predecessor this row POINTS AT. Publish v1.0, then create v2.0 leaving
+    ``previous_version`` blank and publish that too, and the library shows two published versions
+    of the same title - nothing here can archive a predecessor it was never told about. Linking
+    each version to the one it replaces is what makes the chain say which rule is in force.
 
     The status re-check happens INSIDE the lock because the first one is a read another publish
     can interleave with. Lock order follows the chain — successor first, then predecessor — and
@@ -300,13 +333,20 @@ def ppolicy_publish(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def ppolicy_archive(request, pk):
-    """Retire a policy. Allowed from any state — nothing is deleted.
+    """Retire a policy. Allowed from any state - nothing is deleted.
 
-    Not administrator-gated, unlike publish: taking a rule OUT of the library is the safe
-    direction. Nothing is destroyed, the row keeps its text and its version history, and it can
-    be superseded by a new version afterwards exactly as before.
+    Administrator-gated, exactly like publish. "Taking a rule OUT of the library is the safe
+    direction" does not survive the asymmetry: publishing needs an administrator because it makes
+    a rule the workspace's stated position, and un-making that position changes what every member
+    reads as authoritative just as much. It is also not reversible by the person who did it -
+    ``ppolicy_publish`` refuses to re-publish an archived row on purpose, so restoring the
+    workspace's stated rule means an administrator authoring a new version.
+
+    Nothing is destroyed: the row keeps its text and its version history, and it can be superseded
+    by a new version afterwards exactly as before.
     """
     obj = _get_policy(request, pk)
     if obj.status == "archived":
