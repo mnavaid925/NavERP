@@ -48,6 +48,30 @@ from apps.core.utils import write_audit_log
 from apps.procurement.models._base import *  # noqa: F401,F403
 
 
+def _adjustment_cost_ceiling():
+    """The largest ``unit_cost`` SCM will accept on one ``StockAdjustmentLine``.
+
+    READ off that field's own ``MaxValueValidator`` rather than restated here, so raising or
+    lowering SCM's cap can never leave a stale copy behind in procurement. Falls back to the widest
+    value the column itself can hold if SCM ever drops the validator, which keeps the clamp a
+    clamp rather than turning it into a silent zero.
+
+    This exists because :meth:`MaterialIssue.post` writes its adjustment lines with
+    ``bulk_create()``, and ``bulk_create()`` skips ``full_clean()`` — so the validator SCM put
+    there never runs on this path.
+    """
+    from django.core.validators import MaxValueValidator
+    from apps.scm.models import StockAdjustmentLine
+
+    field = StockAdjustmentLine._meta.get_field("unit_cost")
+    limit = next((v.limit_value for v in field.validators
+                  if isinstance(v, MaxValueValidator)), None)
+    if limit is None:
+        limit = (Decimal(10) ** (field.max_digits - field.decimal_places)
+                 - Decimal(10) ** -field.decimal_places)
+    return limit
+
+
 class MaterialIssue(TenantNumbered):
     """One goods issue out of a location, or one return of unused material back into it [MIS-]."""
 
@@ -358,6 +382,15 @@ class MaterialIssue(TenantNumbered):
                 # Issue removes stock, return adds it. The direction lives in this sign and
                 # nowhere else — which is why both directions can share one reason code.
                 sign = -1 if locked.is_issue else 1
+                # bulk_create() bypasses full_clean(), so StockAdjustmentLine's own
+                # MaxValueValidator on unit_cost never runs on this path — and SCM's comment on
+                # that validator describes exactly this route: a tenant member drafts the line and
+                # a tenant-admin posts it, so an absurd cost would otherwise ride a bulk approval
+                # straight into the valuation report. Our snapshot column is DecimalField(14, 4),
+                # four orders of magnitude wider than SCM's ceiling, so the gap is real: without
+                # the clamp the write either lands an unvalidated figure in the ledger or raises a
+                # raw database error mid-post. Resolved ONCE per post, not per line.
+                cost_ceiling = _adjustment_cost_ceiling()
                 StockAdjustmentLine.objects.bulk_create([
                     StockAdjustmentLine(
                         adjustment=adjustment, item_id=line.item_id,
@@ -367,7 +400,7 @@ class MaterialIssue(TenantNumbered):
                         # here. StockAdjustmentLine derives nothing in save() today, and unit_cost
                         # is read straight off our own line's snapshot — a zero here would total
                         # to a zero value_impact() on a document full of real stock.
-                        unit_cost=line.unit_cost or ZERO)
+                        unit_cost=min(line.unit_cost or ZERO, cost_ceiling))
                     for line in lines])
                 created = True
 
