@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Policy Acknowledgment{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the policy ACKNOWLEDGMENT register
+    (apps/procurement/views/RiskComplianceManagement/Policies.py :: policy_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      category_choices, status_choices, org_units,
+      stats{published, draft, attestation_due}, is_admin.
+
+    crud_list renders `object_list` — never `objects` (L7/L8: a mismatched name renders a
+    silently blank region and still returns 200).
+
+    EACH ROW ALSO CARRIES FOUR ANNOTATIONS built by the view's _policy_qs(), which exist only on
+    that queryset and nowhere on the model:
+      obj.roster_size, obj.signed_count, obj.exempt_count, obj.pending_count.
+
+    THIS IS NOT A SECOND POLICY LIBRARY. 6.19 Document & Knowledge Management owns
+    procurement.ProcurementPolicy — the table, the version chain, and the publish and archive
+    verbs — and its register lives at procurement:ppolicy_list. This page asks the SAME table a
+    different question: not what the rule says, but whether anybody has signed it. So there is no
+    New / Edit / Delete / Publish here, and every authoring link points at 6.19 by its own url
+    names (ppolicy_list, ppolicy_detail, ppolicy_create).
+
+    The view's filter tuple is exactly (("category","policy_type",False),
+    ("status","status",False), ("org_unit","applies_to_id",True)), so the bar offers exactly q,
+    category, status and org_unit — no dead <select> posting a param the view ignores. The FK
+    dropdown compares with |stringformat:"d", never |slugify; the two enum dropdowns compare
+    against the raw choice value.
+
+    Status colour comes from the model's own STATUS_CSS through obj.status_css — never from an
+    {% if %} ladder here, because theme.css ships only badge-green / badge-red / badge-amber /
+    badge-info / badge-muted / badge-slate and a semantic badge-success renders completely
+    unstyled while passing every test (L33).
+
+    Nullable-FK discipline (L10): applies_to and owner are both nullable, so every read of them
+    sits inside an {% if %} branch — a `default:` filter argument on a None FK raises
+    VariableDoesNotExist and 500s.
+
+    The Raise button is shown only when the view would accept the POST: administrator, published,
+    and requires_acknowledgment on. A hidden button and a refused POST always agree. Only the
+    SYSTEM-ASSIGNED number reaches the confirm() string — never the title, which is staff-typed
+    (L42). The copy avoids apostrophes entirely, because an escaped &#39; is decoded back to a
+    bare quote by the HTML parser, the handler throws, and the form then submits with NO
+    confirmation at all.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Policy Acknowledgment</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Policy acknowledgment</span>
+      </div>
+      <p class="text-muted">Every written procurement rule in this workspace, seen through its sign-off coverage rather than its contents. A published policy that asks for acknowledgment needs a roster; a roster with people still on it needs chasing. The policies themselves are written and versioned in the policy library.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:policy_mine' %}" class="btn btn-outline"><i data-lucide="user-check"></i> My policies</a>
+      <a href="{% url 'procurement:policy_overdue_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Overdue board</a>
+      <a href="{% url 'procurement:policyattestation_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Sign-off ledger</a>
+      {% comment %} Authoring belongs to 6.19 — this links out to their register rather than shipping a second one. {% endcomment %}
+      <a href="{% url 'procurement:ppolicy_list' %}" class="btn btn-primary"><i data-lucide="book-open"></i> Policy library</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.published }}</div><div class="stat-label">Published</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-text"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="user-check"></i></div><div class="stat-value">{{ stats.attestation_due }}</div><div class="stat-label">Sign-offs outstanding</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search policies" class="form-input" placeholder="Search number, title, summary or text…">
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Policy category" class="form-select">
+            <option value="">All categories</option>
+            {% for value, label in category_choices %}
+              <option value="{{ value }}" {% if request.GET.category == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Applies to" class="form-select">
+            <option value="">Whole workspace and all units</option>
+            {% for unit in org_units %}
+              <option value="{{ unit.pk|stringformat:"d" }}" {% if request.GET.org_unit == unit.pk|stringformat:"d" %}selected{% endif %}>{{ unit.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:policy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Policy</th>
+            <th>Category</th>
+            <th>Applies to</th>
+            <th>Status</th>
+            <th>Acknowledgment</th>
+            <th class="text-right">Signed</th>
+            <th class="text-right">Outstanding</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:policy_detail' obj.pk %}">{{ obj.number }}</a>
+                <div>{{ obj.title }} <span class="text-muted">v{{ obj.version_number }}</span></div>
+                {% if obj.effective_from %}<div class="text-muted">Effective {{ obj.effective_from|date:"M d, Y" }}</div>{% endif %}
+              </td>
+              <td>{{ obj.get_policy_type_display }}</td>
+              <td>
+                {% if obj.applies_to %}
+                  {{ obj.applies_to.name }}
+                {% else %}
+                  <span class="text-muted">Whole workspace</span>
+                {% endif %}
+                {% if obj.owner %}<div class="text-muted">Owner {{ obj.owner.get_full_name|default:obj.owner.username }}</div>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                {% if obj.requires_acknowledgment %}
+                  {% if obj.roster_size %}
+                    <span class="badge badge-info">Roster raised</span>
+                    <div class="text-muted">{{ obj.roster_size }} on the roster</div>
+                  {% else %}
+                    <span class="badge badge-amber">No roster yet</span>
+                    <div class="text-muted">Nobody has been asked</div>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-muted">Not required</span>
+                  <div class="text-muted">No sign-offs collected</div>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                {% comment %}
+                  "signed of roster" rather than a percentage: a share computed in SQL would round
+                  differently per backend, and 12 of 30 is the number somebody actually acts on.
+                  Exemptions are shown separately and never folded into the signed count.
+                {% endcomment %}
+                {% if obj.roster_size %}
+                  <span class="fw-600">{{ obj.signed_count }}</span> <span class="text-muted">of {{ obj.roster_size }}</span>
+                  {% if obj.exempt_count %}<div class="text-muted">{{ obj.exempt_count }} exempt</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                {% if obj.pending_count %}
+                  <span class="text-warn">{{ obj.pending_count }}</span>
+                {% elif obj.roster_size %}
+                  <span class="text-ok">All settled</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:policy_detail' obj.pk %}" class="btn-icon" title="Sign-off coverage" aria-label="Sign-off coverage"><i data-lucide="eye"></i></a>
+                  {% comment %} Read the rule itself in 6.19's library — this module never edits it. {% endcomment %}
+                  <a href="{% url 'procurement:ppolicy_detail' obj.pk %}" class="btn-icon" title="Read the policy" aria-label="Read the policy"><i data-lucide="book-open"></i></a>
+                  {% if is_admin and obj.status == "published" and obj.requires_acknowledgment %}
+                    <form method="post" action="{% url 'procurement:policy_raise_attestations' obj.pk %}" onsubmit="return confirm('Raise policy attestations for {{ obj.number }}? Everybody this policy applies to will be asked to sign it off.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Raise attestations" aria-label="Raise attestations"><i data-lucide="user-check"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="book-open"></i>
+                <h3>No policies found</h3>
+                <p>Nothing matches these filters. Policies are written and versioned in the policy library; this page tracks who has signed them. A policy has to be published, and marked as requiring acknowledgment, before anybody can be asked to sign it.</p>
+                <a href="{% url 'procurement:ppolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Write a policy</a>
+                <a href="{% url 'procurement:policy_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Who owns what on this page</h2><span class="text-muted">one policy library, one sign-off ledger</span></div>
+    <div class="card-body">
+      <p class="text-muted">The policies themselves — writing them, versioning them, publishing and archiving them — belong to the <a href="{% url 'procurement:ppolicy_list' %}">policy library</a>. This page owns the other half: the roster of people asked to acknowledge each one, their signatures, the chase, and the exemptions. There is one table behind both, so a policy cannot exist in one place and not the other, and there is no second register competing for the same idea.</p>
+      <p class="text-muted">Raising attestations is safe to press again at any time. It assigns the policy to everybody it applies to who is not already on the roster, and it creates nothing for the people who are — no deadline is moved, and no signature already on file can be disturbed. That is what makes it the repair button for somebody who joined the department after the policy went out, as well as the button that starts the roster in the first place.</p>
+      <p class="text-muted">A policy with acknowledgment switched off collects no sign-offs at all, deliberately: the flag is the workspace statement of intent for that policy, and a flag the ledger ignored would be decorative. Turn it on in the library first, then raise the roster here.</p>
+    </div>
+  </div>
+{% endblock %}
