@@ -113,7 +113,7 @@
       <div class="card-body">
         {% for act in allowed_actions %}
           <p class="text-muted">{{ act.help }}</p>
-          <form method="post" action="{% url 'procurement:policy_raise_attestations' obj.pk %}" onsubmit="return confirm('{{ act.confirm }}');">
+          <form method="post" action="{% url 'procurement:policy_raise_attestations' obj.pk %}" onsubmit="return confirm('{{ act.confirm|escapejs }}');">
             {% csrf_token %}
             <div class="form-group" style="max-width:260px;">
               <label class="form-label" for="due_days_{{ act.key }}">Days to sign (optional)</label>
