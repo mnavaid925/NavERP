@@ -3041,11 +3041,15 @@ class Command(BaseCommand):
         """
         from django.core.files.base import ContentFile
 
-        # Deep imports into the entity modules: ``normalize_tags``, ``next_revision_no``,
-        # ``file_sha256`` and ``EXTRACT_MAX_CHARS`` are deliberately NOT re-exported from
-        # ``apps.procurement.models`` (the 6.14/6.15 rule that keeps the package __init__ a model
-        # registry), and the two scm classes follow ``_seed_contracts``' function-local precedent
-        # rather than widening this command's shared import block.
+        # Deep imports into the entity modules. The stated reason matters, because the package
+        # __init__ is NOT a model-only registry - it re-exports 25+ callables, four of them from
+        # this same sub-module, and ``extract_document_text`` is imported through the package
+        # path at the top of this file. These four are the COLLISION cases: ``normalize_tags``,
+        # ``next_revision_no``, ``file_sha256`` and ``EXTRACT_MAX_CHARS`` all have rival
+        # definitions elsewhere in this app (CatalogManagement carries its own constants of the
+        # same shape), so they are reached by their entity module and never through a name that
+        # could resolve to somebody else's. The two scm classes follow ``_seed_contracts``'
+        # function-local precedent rather than widening this command's shared import block.
         from apps.procurement.models.DocumentKnowledgeManagement.Documents import normalize_tags
         from apps.procurement.models.DocumentKnowledgeManagement.Revisions import (
             EXTRACT_MAX_CHARS, file_sha256, next_revision_no)
@@ -3242,7 +3246,7 @@ class Command(BaseCommand):
                 #     review date is already past and it carries no expiry, which is what makes
                 #     the reminder scan take its ``review`` branch rather than its ``expires``
                 #     one - both reasons are exercised across this workspace.
-                ProcurementDocument.objects.create(
+                specification = ProcurementDocument.objects.create(
                     tenant=tenant,
                     title="Technical specification - server room UPS replacement",
                     doc_type="specification",
@@ -3258,7 +3262,7 @@ class Command(BaseCommand):
                 #     the "Past retention" facet. ``retention_until`` is a FLAG a human reads:
                 #     nothing in 6.19 deletes anything on a schedule, and this row proves it by
                 #     still being here.
-                ProcurementDocument.objects.create(
+                correspondence = ProcurementDocument.objects.create(
                     tenant=tenant,
                     title="Tender correspondence pack - 2023 facilities retender",
                     doc_type="correspondence",
@@ -3307,7 +3311,7 @@ class Command(BaseCommand):
                 # (g) A SUPERSEDED drawing set, carrying the fourth status badge and the
                 #     restricted classification. No revision: the file itself never made it into
                 #     the repository, which is exactly why the record was replaced.
-                ProcurementDocument.objects.create(
+                drawing_set = ProcurementDocument.objects.create(
                     tenant=tenant,
                     title="Chiller plant layout - drawing set rev B",
                     doc_type="drawing",
@@ -3321,7 +3325,11 @@ class Command(BaseCommand):
                     purchase_order=order,
                 )
 
-                documents = list(ProcurementDocument.objects.filter(tenant=tenant))
+                # The seven rows just created, not a re-query of the table that would also
+                # drag their description and extracted_text columns back out of the database to
+                # write an audit row that needs neither.
+                documents = [warranty, insurance, specification, correspondence, template_pack,
+                             policy_pdf, drawing_set]
                 for document in documents:
                     write_audit_log(None, document, "create")
 
