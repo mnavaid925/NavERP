@@ -208,20 +208,66 @@ def replenishmentpolicy_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def replenishmentpolicy_create(request):
+    """Add a policy. **Tenant admins only** — see :func:`replenishmentpolicy_edit`."""
     return crud_create(request, form_class=ReplenishmentPolicyForm, template=TEMPLATE_FORM,
                        success_url="procurement:replenishmentpolicy_list")
 
 
 @login_required
+@tenant_admin_required
 def replenishmentpolicy_edit(request, pk):
+    """Amend a policy. **Tenant admins only.**
+
+    This is a configuration master that steers real spend: ``release()`` stamps a policy
+    verbatim onto the ``scm.PurchaseRequisition`` rows it raises — ``default_org_unit`` becomes
+    the requisition's org unit, ``default_budget`` its budget, ``default_gl_account`` the line's
+    GL code, ``preferred_vendor`` the vendor the lines are grouped under, and the rounding
+    columns the quantity. Login-only, a non-admin could pre-load the supplier, cost centre,
+    budget and GL coding of a document the admin-gated Release then raises IN THE ADMIN'S NAME.
+
+    The gate matches the precedent this model is built on: ``ReceiptTolerancePolicy`` carries
+    ``@tenant_admin_required`` on all three write verbs
+    (``views/GoodsReceiptInspection/ReceiptTolerances.py:213,223,233``), as does ``RoutingRule``.
+    Reading a policy stays open to every member — it explains what a run will do.
+    """
     return crud_edit(request, model=ReplenishmentPolicy, pk=pk,
                      form_class=ReplenishmentPolicyForm, template=TEMPLATE_FORM,
                      success_url="procurement:replenishmentpolicy_list")
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def replenishmentpolicy_delete(request, pk):
+    """Delete a policy — refused once it has shaped a RELEASED suggestion.
+
+    **Tenant admins only** — see :func:`replenishmentpolicy_edit`.
+
+    ``ReplenishmentSuggestion.policy`` is ``SET_NULL``, so an unguarded delete does not fail: it
+    silently nulls the FK on every historical line this policy shaped, including lines already
+    released into real ``scm.PurchaseRequisition`` rows. The run detail page then prints "no
+    policy — plain defaults, no rounding" beside a line whose ``raw_suggested_qty`` differs from
+    its ``suggested_qty``, which is proof it WAS rounded. One ``AuditLog`` row records the policy
+    delete and none of the N lines it rewrote.
+
+    So a policy that shaped a committed document is kept and DEACTIVATED instead — which is what
+    ``is_active``'s own help_text already recommends
+    (``models/…/Policies.py``: "Prefer deactivating over deleting … the history stays readable").
+    Unreleased lines are still proposals and stay deletable: nothing outside the run depends on
+    them.
+    """
+    obj = get_object_or_404(ReplenishmentPolicy.objects.filter(tenant=request.tenant), pk=pk)
+    released = obj.suggestions.filter(requisition__isnull=False).count()
+    if released:
+        messages.error(
+            request,
+            f"This policy shaped {released} suggestion line"
+            f"{'' if released == 1 else 's'} that {'has' if released == 1 else 'have'} already "
+            f"been released into a requisition, so deleting it would erase how those quantities "
+            f"were arrived at. Deactivate it instead — an inactive policy is never resolved by a "
+            f"run, and the history stays readable.")
+        return redirect("procurement:replenishmentpolicy_detail", pk=pk)
     return crud_delete(request, model=ReplenishmentPolicy, pk=pk,
                        success_url="procurement:replenishmentpolicy_list")
