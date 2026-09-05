@@ -67,6 +67,15 @@ LEDGER_NOTE_TEXT = (
     "path writes the stock ledger and it lives in the app that owns it.")
 
 
+def _is_admin(request):
+    """Mirrors @tenant_admin_required exactly, so a hidden button and a refused POST agree.
+
+    The local-copy convention: every peer sub-module in this app carries its own one-line copy
+    rather than importing another entity module's private name.
+    """
+    return bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+
+
 def _issue_qs(request):
     """The register's base queryset: tenant-scoped, joined and counted in ONE query.
 
@@ -190,7 +199,11 @@ def materialissue_detail(request, pk):
         "availability": availability,
         # Read from the model so a button and its verb can never disagree about what is allowed.
         "can_submit": obj.can_submit,
-        "can_post": obj.can_post,
+        # Post is the one verb here that is @tenant_admin_required, so the flag carries that term
+        # too: on the status flag alone a plain member saw the button, confirmed the dialog and
+        # got a PermissionDenied. The decorator stays the enforcement — this only stops the page
+        # OFFERING an action that is guaranteed to be refused.
+        "can_post": obj.can_post and _is_admin(request),
         "can_cancel": obj.can_cancel,
         "can_edit": obj.can_edit,
         "boundary_note": {"text": BOUNDARY_NOTE_TEXT,
