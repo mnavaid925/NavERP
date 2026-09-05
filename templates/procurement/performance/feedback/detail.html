@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — 360 Response{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — one 360 response
+    (apps/procurement/views/SupplierPerformanceEvaluation/SupplierFeedback.py
+     :supplierfeedback_detail — crud_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, can_submit, can_decline, can_expire.
+
+    The three can_* flags are all obj.status == "requested" today and are read SEPARATELY rather
+    than as one flag, because they gate three different verbs whose rules may diverge later. They
+    are the UX half of the rule: each verb re-checks the status itself, so a crafted POST against
+    an already-submitted response is refused there too.
+
+    THE RATING SELECT BELONGS TO THE SUBMIT FORM, not to an edit. supplierfeedback_submit takes
+    the rating from the row when it has one and from this POST when it does not, validating the
+    posted value against the model's own RATING_CHOICES keyed by int. That is why the options
+    are hard-coded to the 1-5 scale here: rating_choices is a LIST-PAGE context key and does not
+    exist on this page, and inventing a wider scale in a template would be inventing one the view
+    then rejects.
+
+    Nullable-field discipline (L10): rating, kpi, scorecard, respondent, due_date, submitted_at
+    and requested_by are all nullable, and every read of them sits inside an explicit branch —
+    never truthiness, because an importance of 0 is a real weight and an unrated request is not
+    a zero.
+
+    Badge classes are COLOUR-NAMED only (L33) and every one below comes from the model's own
+    committed mapping — obj.status_css / obj.rating_css / obj.kind_css — so this page cannot
+    disagree with the register about what "declined" looks like.
+
+    Confirm dialogs sit on the BUTTON as onclick="return confirm(...)", matching the rest of
+    6.16. Only the system-assigned {{ obj.number }} reaches a handler; supplier and respondent
+    names are user-authored and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.supplier.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierfeedback_list' %}">360 feedback</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }} · {{ obj.get_respondent_kind_display|lower }} · {{ obj.get_respondent_function_display|lower }} · requested {{ obj.requested_at|date:"M d, Y H:i" }}.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All responses</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The response</h2>
+      <div>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.kind_css }}">{{ obj.get_respondent_kind_display }}</span>
+        {% if obj.is_overdue %}<span class="badge badge-red">Past due</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Rating</dt>
+          <dd>{% if obj.rating is not None %}<span class="badge {{ obj.rating_css }}">{{ obj.get_rating_display }}</span>{% else %}<span class="text-muted">Not rated yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Weighted score</dt>
+          <dd>
+            {% if obj.score_value is not None %}<span class="fw-600">{{ obj.score_value|floatformat:0 }}</span> <span class="text-muted">/ 100</span>
+              <div class="text-muted">the 1&ndash;5 rating on the 0&ndash;100 scale the survey aggregate averages</div>
+            {% else %}<span class="text-muted">None &mdash; an unanswered request is not a zero, and scoring one would punish the supplier for an unopened inbox</span>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Importance</dt>
+          <dd><span class="fw-600">{{ obj.importance }}</span> <span class="text-muted">/ 10</span>
+            <div class="text-muted">how much this answer moves the weighted mean. 0 still counts as a respondent and shifts the number by nothing</div>
+          </dd></div>
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd><a href="{% url 'core:party_detail' obj.supplier_id %}">{{ obj.supplier.name }}</a></dd></div>
+        <div class="detail-item"><dt>Respondent</dt>
+          <dd>
+            {% if obj.respondent %}{{ obj.respondent.get_full_name|default:obj.respondent.email }}
+            {% elif obj.respondent_name %}{{ obj.respondent_name }}
+            {% else %}<span class="text-muted">Anonymous</span>{% endif %}
+            <div class="text-muted">{{ obj.get_respondent_kind_display }} · {{ obj.get_respondent_function_display }}</div>
+          </dd></div>
+        <div class="detail-item"><dt>KPI</dt>
+          <dd>
+            {% if obj.kpi %}<a href="{% url 'procurement:supplierkpi_detail' obj.kpi_id %}">{{ obj.kpi.code }}</a> {{ obj.kpi.name }}
+              <div class="text-muted">this response feeds that survey KPI&rsquo;s measured value</div>
+            {% else %}<span class="text-muted">General commentary</span>
+              <div class="text-muted">not attached to a KPI, so it is read rather than averaged</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Period document</dt>
+          <dd>
+            {% if obj.scorecard %}<a href="{% url 'procurement:supplierevaluation_detail' obj.scorecard_id %}">{{ obj.scorecard.number }}</a>
+              <div class="text-muted">{{ obj.scorecard.party.name }} · {{ obj.scorecard.get_status_display|lower }}</div>
+            {% else %}<span class="text-muted">Ad-hoc &mdash; not tied to a period</span>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Period covered</dt>
+          <dd>{{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Due</dt>
+          <dd>{% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Past due</span>{% endif %}{% else %}<span class="text-muted">No deadline set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requested by</dt>
+          <dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.email }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+            <div class="text-muted">{{ obj.requested_at|date:"M d, Y H:i" }}</div>
+          </dd></div>
+        <div class="detail-item"><dt>Submitted at</dt>
+          <dd>{% if obj.submitted_at %}{{ obj.submitted_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not submitted</span>{% endif %}
+            <div class="text-muted">stamped by the submit verb alone, so it always means the moment the answer arrived</div>
+          </dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.comment %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Comment</dt><dd>{{ obj.comment|linebreaksbr }}</dd></div>
+      {% else %}
+        <p class="form-help">No comment was left. A rating with no sentence behind it is a number nobody can act on &mdash; worth asking for next time.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Move this response</h2>
+      <span class="text-muted">the three verbs — status is never typed</span>
+    </div>
+    <div class="card-body">
+      {% if can_submit or can_decline or can_expire %}
+        <p class="form-help">A response is <span class="fw-600">requested</span> until one of these three closes it: <span class="fw-600">submitted</span> means an answer arrived, <span class="fw-600">declined</span> means the respondent said no, and <span class="fw-600">expired</span> means the window closed with nobody answering. The three are kept apart on purpose &mdash; collapsing them would make the response rate unreadable.</p>
+      {% else %}
+        {% comment %}
+          The controls are not hidden silently — the page says why. The can_* flags are the UX
+          half of the rule; each verb re-checks the status itself and refuses a crafted POST.
+        {% endcomment %}
+        <p class="form-help"><i data-lucide="lock"></i> This response is already {{ obj.get_status_display|lower }}, so it cannot be moved again. Only an outstanding request can be submitted, declined or expired &mdash; a status that could be re-set would stop meaning anything. Correct the rating or the comment with Edit if it was filed wrong.</p>
+      {% endif %}
+
+      {% if can_submit %}
+        <form method="post" action="{% url 'procurement:supplierfeedback_submit' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group" style="max-width:320px;">
+            <label class="form-label" for="submit-rating">Rating</label>
+            <select name="rating" id="submit-rating" class="form-select">
+              <option value="1" {% if obj.rating == 1 %}selected{% endif %}>1 — Poor</option>
+              <option value="2" {% if obj.rating == 2 %}selected{% endif %}>2 — Below expectations</option>
+              <option value="3" {% if obj.rating == 3 %}selected{% endif %}>3 — Meets expectations</option>
+              <option value="4" {% if obj.rating == 4 %}selected{% endif %}>4 — Above expectations</option>
+              <option value="5" {% if obj.rating == 5 %}selected{% endif %}>5 — Excellent</option>
+            </select>
+            <div class="form-help">The submitted answer. A response filed without one is refused &mdash; &ldquo;submitted, unrated&rdquo; measures nothing.</div>
+          </div>
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Submit response {{ obj.number }} with the rating selected above? The submitted-at stamp is taken now and the response stops being outstanding.');"><i data-lucide="check"></i> Submit response</button>
+        </form>
+      {% endif %}
+
+      <div style="margin-top:.75rem;">
+        {% if can_decline %}
+          <form method="post" action="{% url 'procurement:supplierfeedback_decline' obj.pk %}" style="display:inline;">
+            {% csrf_token %}<button class="btn btn-outline" type="submit" onclick="return confirm('Record that the respondent declined to answer {{ obj.number }}? A declined response is never scored — it is not a bad rating, it is no rating.');"><i data-lucide="circle-slash"></i> Declined to answer</button>
+          </form>
+        {% endif %}
+        {% if can_expire %}
+          <form method="post" action="{% url 'procurement:supplierfeedback_expire' obj.pk %}" style="display:inline;">
+            {% csrf_token %}<button class="btn btn-outline" type="submit" onclick="return confirm('Close request {{ obj.number }} as expired? Nobody answered inside the window. This is kept distinct from declined so the response rate stays readable.');"><i data-lucide="alarm-clock"></i> Close as expired</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Editing corrects what was recorded &mdash; the window, the respondent, the rating, the weight, the comment. It can never move the response through its lifecycle: <span class="fw-600">status is not on the form</span>, and neither is the raise stamp, which would stop being evidence of anything if it could be typed over.</p>
+      <a href="{% url 'procurement:supplierfeedback_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit response</a>
+      <a href="{% url 'procurement:supplierfeedback_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to the register</a>
+      <p class="text-muted" style="margin-top:.75rem;">Deleting a <span class="fw-600">submitted</span> response removes evidence a survey KPI was computed from, and it does <span class="fw-600">not</span> re-derive any scorecard line already generated: those were written by the generate run that read this row, and silently re-blending them from a hand-trimmed set would move a figure the supplier has already been shown. Re-press Generate on a draft period to rebuild it from what is actually there.</p>
+      <form method="post" action="{% url 'procurement:supplierfeedback_delete' obj.pk %}">
+        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete response {{ obj.number }}? If it has already been submitted it is evidence a survey KPI was computed from, and deleting it does NOT re-derive any scorecard line already generated. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete response</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
