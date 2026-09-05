@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Policy Sign-offs Overdue{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the policy chase board
+    (apps/procurement/views/RiskComplianceManagement/Policies.py :: policy_overdue_board). A
+    standalone sub-module-root page, not an entity CRUD page, so it lives at
+    templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract, and NOTHING else exists here:
+      rows, stats{overdue, due_soon}, today, is_admin.
+
+    ROW-DICT CONTRACT (L41 §1) — each row is a dict, NOT a model instance, and carries exactly:
+      row.attestation (the PolicyAttestation; .pk and .alert are read through it),
+      row.policy (the ProcurementPolicy; .number, .title, .version_number, .pk),
+      row.user (who owes the signature),
+      row.due_on (never None — an undated row is not late and never reaches this board),
+      row.days_late (negative on a due-soon row, positive on an overdue one),
+      row.state (overdue | due_soon), row.state_label, row.state_css,
+      row.chased (an alert has already been raised for this row).
+    (`sort_on` is the view own ordering key and is deliberately not rendered.)
+    A misspelt row-dict key renders an em-dash, returns 200 and passes every status-code test,
+    which is why the keys are frozen in the view docstring beside the code that builds them.
+
+    GET WRITES NOTHING AND IS OPEN TO ANY MEMBER OF THE WORKSPACE; only the chase button is
+    administrator-gated, and the gate is inside the view rather than on the route — the same shape
+    fraud-scan/ uses next door. Seeing who is late is ordinary compliance work; sending everybody
+    on the list an inbox item is not.
+
+    THE CHASE BUTTON POSTS TO THIS SAME PAGE. It raises one alert per overdue row through
+    PolicyAttestation.raise_chase_alert, which is idempotent per person per policy: it refuses a
+    row that is not overdue, one that already stamped an alert, and one where an OPEN alert is
+    already chasing the same person about the same policy. So pressing it weekly produces one
+    inbox item per person per policy, not one per press. The `row.chased` column is what that
+    looks like from the outside.
+
+    NOTHING HERE SIGNS ANYTHING. An administrator cannot sign a row from this board, and there is
+    no button that would — only the person named on a sign-off can sign it. The two things this
+    page can do are chase and exempt, and exempting happens on the row own page where the reason
+    can be written down.
+
+    `row.state_css` is already a real theme.css badge class straight off the view, used verbatim —
+    never re-derived in an {% if %} ladder here, because theme.css ships only badge-green /
+    badge-red / badge-amber / badge-info / badge-muted / badge-slate and a semantic badge-warning
+    renders completely unstyled while passing every test (L33).
+
+    The stat tiles are counted over the WHOLE workspace while the table is capped at two hundred
+    rows, so the numbers above stay true whatever the table is showing.
+
+    No |safe anywhere. Every confirm() string quotes only counts and the POLICY system-assigned
+    PPOL- number — never a person name, never a policy title — and avoids apostrophes entirely
+    (L42).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Policy Sign-offs Overdue</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Overdue board</span>
+      </div>
+      <p class="text-muted">Who has not signed what, and how late they are. Computed live from the ledger as at {{ today|date:"M d, Y" }} — there is no stored overdue flag to go stale overnight. Rows still ahead of their date are shown too, so a deadline can be met rather than only missed.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:policy_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Policy acknowledgment</a>
+      <a href="{% url 'procurement:policyattestation_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Sign-off ledger</a>
+      <a href="{% url 'procurement:policy_mine' %}" class="btn btn-outline"><i data-lucide="user-check"></i> My policies</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.due_soon }}</div><div class="stat-label">Due within 7 days</div></div>
+  </div>
+
+  {% if is_admin %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Chase the overdue sign-offs</h2><span class="text-muted">one inbox item per person per policy, however often you press it</span></div>
+      <div class="card-body">
+        <p class="text-muted">Raises an item in the Task and Alert Center for each person with an overdue sign-off, telling them which policy it is and that nobody else can sign it for them. It never sends a second copy: a row already being chased is skipped, so this is safe to press weekly and safe to press twice by accident.</p>
+        <form method="post" onsubmit="return confirm('Raise chase alerts for every overdue policy sign-off? Anybody already being chased is skipped, so nobody gets a second copy.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="bell"></i> Chase {{ stats.overdue }} overdue sign-off(s)</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Needs attention</h2>
+      <span class="text-muted">worst first — the earliest deadline at the top</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Person</th>
+            <th>Policy</th>
+            <th>Due</th>
+            <th class="text-right">Days</th>
+            <th>State</th>
+            <th>Chased</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">{{ row.user.get_full_name|default:row.user.username }}</td>
+              <td>
+                <a href="{% url 'procurement:policy_detail' row.policy.pk %}">{{ row.policy.number }}</a>
+                <div>{{ row.policy.title }} <span class="text-muted">v{{ row.policy.version_number }}</span></div>
+              </td>
+              <td>{{ row.due_on|date:"M d, Y" }}</td>
+              <td class="text-right">
+                {% if row.state == "overdue" %}
+                  <span class="text-danger">{{ row.days_late }} late</span>
+                {% else %}
+                  <span class="text-warn">in {{ row.days_late|stringformat:"d"|cut:"-" }}</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
+              <td>
+                {% if row.chased %}
+                  <span class="badge badge-info">Alert raised</span>
+                {% else %}
+                  <span class="text-muted">Not yet</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:policyattestation_detail' row.attestation.pk %}" class="btn-icon" title="Open the sign-off" aria-label="Open the sign-off"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:ppolicy_detail' row.policy.pk %}" class="btn-icon" title="Read the policy" aria-label="Read the policy"><i data-lucide="book-open"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="calendar-check"></i>
+                <h3>Nobody is late</h3>
+                <p>No sign-off in this workspace is past its date or falling due inside the next week. A row with no deadline never appears here — it is still owed, it simply has no date to be late for, which is a different thing and is shown as such on the ledger.</p>
+                <a href="{% url 'procurement:policyattestation_list' %}" class="btn btn-outline">Go to the ledger</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board can and cannot do</h2><span class="text-muted">it chases; it does not sign</span></div>
+    <div class="card-body">
+      <p class="text-muted">There is no button here that signs somebody sign-off for them, and there never will be: only the person named on a row can sign it, an administrator included. What an administrator can do is chase — which puts the request in front of the person who owes it — or, on the row own page, record an exemption with a written reason and their name on it. An exemption is not a signature and is never counted as one.</p>
+      <p class="text-muted">Chasing is idempotent per person per policy. The alert is linked back to the row that raised it, so a second press finds the existing one and does nothing; that is what the Chased column is showing. There is no mail sender wired anywhere in this system, so the alert IS the chase — it appears in the person Task and Alert Center and on their My Policies page.</p>
+      <p class="text-muted">A row with no deadline is not on this board. It is still owed, but nobody promised a date for it, so it cannot be late for one — saying otherwise would be inventing a deadline nobody agreed to. Set one on the row if it needs chasing.</p>
+    </div>
+  </div>
+{% endblock %}
