@@ -25,7 +25,8 @@
     reads those numbers to gate or route anything. Approval bands are 6.3's routing rules.
 
     Badges are colour-named theme.css classes only (L33): status_css comes off the model, and
-    the review cell is red when the row is overdue, muted otherwise.
+    the review cell is amber when the review date has arrived, muted otherwise — the same
+    "Review due" wording and the same colour the other two registers use for the same fact.
 
     Only the SYSTEM-ASSIGNED number reaches a confirm() handler — obj.title, obj.summary and
     obj.version_number are user-authored and never do.
@@ -50,7 +51,7 @@
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scroll-text"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Policies</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.published }}</div><div class="stat-label">Published</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pencil-line"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
-    <div class="stat-card"><div class="stat-icon red"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.review_due }}</div><div class="stat-label">Review overdue</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.review_due }}</div><div class="stat-label">Review due</div></div>
   </div>
 
   <div class="card">
@@ -135,7 +136,7 @@
               <td>
                 {% if obj.next_review_on %}
                   {% if obj.is_review_due %}
-                    <span class="badge badge-red">Review overdue {{ obj.next_review_on|date:"M d, Y" }}</span>
+                    <span class="badge badge-amber">Review due {{ obj.next_review_on|date:"M d, Y" }}</span>
                   {% else %}
                     <span class="badge badge-muted">{{ obj.next_review_on|date:"M d, Y" }}</span>
                   {% endif %}
@@ -148,13 +149,18 @@
                   <a href="{% url 'procurement:ppolicy_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'procurement:ppolicy_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
-                    Delete is @require_POST, so it can only be a form. The confirm is honest
-                    about what deletion does: nothing cascades — a later version that points at
-                    this one simply loses its back-pointer and stays in force.
+                    Delete is @require_POST, so it can only be a form, and it is tenant-admin
+                    gated in the view - so it is hidden rather than offered and refused. The
+                    confirm says what deletion does and does not do: a later version that points
+                    at this one keeps its text and stays in force, but 6.17's acknowledgement
+                    records against this policy CASCADE, which is why the view refuses while any
+                    exist and says so.
                   {% endcomment %}
-                  <form method="post" action="{% url 'procurement:ppolicy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any later version that points back at it keeps its own text and stays in force, but the link to this one is lost.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'procurement:ppolicy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any later version that points back at it keeps its own text and stays in force, but the link to this one is lost, and any acknowledgement records against it are deleted with it.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -182,7 +188,7 @@
     <div class="card-body">
       <p class="text-muted">{{ advisory_note }}</p>
       <p class="text-muted">A guideline figure on a policy is the number the written rule quotes, so a buyer can read it next to the rule it belongs to. It is documentation. The approval bands that actually decide how many signatures a requisition needs are the routing rules in Approval Workflow Engine (6.3), which resolve department, commodity and amount to a required tier count and are enforced when an approval is recorded.</p>
-      <p class="text-muted">Publishing a version puts it in force and archives the version it replaces, so the register never shows two published versions of the same rule. Archiving takes a policy out of use without deleting anything — it keeps its text and its place in the version history.</p>
+      <p class="text-muted">Publishing a version puts it in force and archives the version it replaces — the one it is linked to as its previous version. A new version created without that link publishes alongside its predecessor rather than retiring it, so linking each version to the one it replaces is what makes the library say which rule is in force. Publishing and archiving are both workspace-administrator actions; archiving takes a policy out of use without deleting anything, keeping its text and its place in the version history.</p>
       <p class="text-muted">Where a policy is flagged for acknowledgment, that is a marker for Policy Management &amp; Acknowledgment (6.17), which owns assignment and sign-off. Nothing here records who has read a policy.</p>
     </div>
   </div>
