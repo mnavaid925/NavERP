@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Acknowledgment{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — one policy's sign-off coverage
+    (apps/procurement/views/RiskComplianceManagement/Policies.py :: policy_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, attestations, attestation_stats{target, attested, outstanding, rate},
+      supersedes, superseded_by, allowed_actions, is_admin.
+
+    ROW-DICT CONTRACT (L41 §1) — allowed_actions entries carry these keys and no others:
+      act.key, act.label, act.icon, act.css, act.help, act.confirm.
+    A misspelt row-dict key renders an em-dash, returns 200 and passes every status-code test,
+    which is why the keys are frozen in the view docstring beside the code that builds them.
+
+    `attestations` and `superseded_by` are lists of MODEL INSTANCES, not row-dicts — every field
+    read off them below is a real column or property on PolicyAttestation / ProcurementPolicy.
+
+    THIS PAGE DOES NOT EDIT THE POLICY. 6.19 owns procurement.ProcurementPolicy — authoring, the
+    version chain, publish and archive — so Edit, Publish and Archive here point at 6.19's own
+    routes (ppolicy_detail, ppolicy_edit, ppolicy_publish, ppolicy_archive) by their exact url
+    names. The only write this page offers is 6.17's own idempotent roster verb.
+
+    THE COVERAGE RATE COUNTS SIGNATURES AND NOT EXEMPTIONS, and the page says so rather than
+    leaving somebody to work it out from two numbers that do not add up. An exemption is a
+    decision to stop asking somebody; folding it into the rate would let a workspace reach 100%
+    coverage without a single person having read the policy.
+
+    Nullable-FK discipline (L10): applies_to, owner, previous_version, exempted_by and alert are
+    all nullable, so every read of them sits inside an {% if %} branch — a `default:` filter
+    argument on a None FK raises VariableDoesNotExist and 500s.
+
+    No |safe anywhere, least of all on `summary` and `body`: those are staff-authored policy text
+    and go through |linebreaks, which escapes first and then adds paragraphs.
+
+    Detail rows use <dl class="detail-grid"><div class="detail-item"><dt>/<dd> — .detail-label and
+    .detail-value DO NOT EXIST in theme.css (L40 §2). Badge classes come from obj.status_css and
+    att.status_css so only real classes reach the page (L33). The confirm() strings quote only the
+    SYSTEM-ASSIGNED number and avoid apostrophes entirely (L42).
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:policy_list' %}">Policy acknowledgment</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.title }} <span class="text-muted">v{{ obj.version_number }}</span></p>
+    </div>
+    <div class="page-actions">
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      {% comment %} Reading and editing the rule itself is 6.19's surface — linked, never duplicated. {% endcomment %}
+      <a href="{% url 'procurement:ppolicy_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="book-open"></i> Read the policy</a>
+      <a href="{% url 'procurement:policyattestation_list' %}?policy={{ obj.pk|stringformat:"d" }}" class="btn btn-outline"><i data-lucide="list-checks"></i> Full roster</a>
+      <a href="{% url 'procurement:policy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ attestation_stats.target }}</div><div class="stat-label">On the roster</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ attestation_stats.attested }}</div><div class="stat-label">Signed</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ attestation_stats.outstanding }}</div><div class="stat-label">Still owed</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="percent"></i></div><div class="stat-value">{{ attestation_stats.rate }}%</div><div class="stat-label">Signed of roster</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The policy</h2><span class="text-muted">written and versioned in the policy library</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+        <div class="detail-item"><dt>Version</dt><dd>v{{ obj.version_number }}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_policy_type_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Applies to</dt><dd>{% if obj.applies_to %}{{ obj.applies_to.name }}{% else %}<span class="text-muted">Whole workspace</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Nobody named</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Effective from</dt><dd>{% if obj.effective_from %}{{ obj.effective_from|date:"M d, Y" }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Published</dt><dd>{% if obj.published_at %}{{ obj.published_at|date:"M d, Y" }}{% else %}<span class="text-muted">Not published</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Next review</dt><dd>{% if obj.next_review_on %}{{ obj.next_review_on|date:"M d, Y" }}{% if obj.is_review_due %} <span class="badge badge-amber">Review due</span>{% endif %}{% else %}<span class="text-muted">Not scheduled</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Acknowledgment</dt><dd>{% if obj.requires_acknowledgment %}<span class="badge badge-info">Required</span>{% else %}<span class="badge badge-muted">Not required</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Replaces</dt><dd>{% if supersedes %}<a href="{% url 'procurement:policy_detail' supersedes.pk %}">{{ supersedes.number }}</a> <span class="text-muted">v{{ supersedes.version_number }}</span>{% else %}<span class="text-muted">First version</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.summary %}
+        <div style="margin-top:1rem;">
+          <div class="text-muted fw-600">Summary</div>
+          {{ obj.summary|linebreaks }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if superseded_by %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Replaced by</h2><span class="text-muted">a signature on this version stays a statement about this version</span></div>
+      <div class="card-body">
+        <ul>
+          {% for later in superseded_by %}
+            <li><a href="{% url 'procurement:policy_detail' later.pk %}">{{ later.number }}</a> — {{ later.title }} <span class="text-muted">v{{ later.version_number }}</span> <span class="badge {{ later.status_css }}">{{ later.get_status_display }}</span></li>
+          {% endfor %}
+        </ul>
+        <p class="text-muted" style="margin-top:.75rem;">Each version carries its own roster. Signatures never transfer between them, because a signature is a statement about the text somebody actually read — so the people who signed this version are still recorded as having signed this version, and the newer one collects its own sign-offs.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if allowed_actions %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Raise the roster</h2><span class="text-muted">safe to press again at any time</span></div>
+      <div class="card-body">
+        {% for act in allowed_actions %}
+          <p class="text-muted">{{ act.help }}</p>
+          <form method="post" action="{% url 'procurement:policy_raise_attestations' obj.pk %}" onsubmit="return confirm('{{ act.confirm }}');">
+            {% csrf_token %}
+            <div class="form-group" style="max-width:260px;">
+              <label class="form-label" for="due_days_{{ act.key }}">Days to sign (optional)</label>
+              <input class="form-input" id="due_days_{{ act.key }}" type="number" name="due_days" min="0" max="365" placeholder="14">
+              <div class="form-help">Leave blank for the standard fourteen-day window. A value entered here applies only to the people this run adds; nobody already on the roster has their deadline moved.</div>
+            </div>
+            <button class="btn {{ act.css }}" type="submit"><i data-lucide="{{ act.icon }}"></i> {{ act.label }}</button>
+          </form>
+        {% endfor %}
+      </div>
+    </div>
+  {% elif is_admin %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">No roster can be raised for this policy</h2></div>
+      <div class="card-body">
+        {% if obj.status != "published" %}
+          <p class="text-muted">This policy is {{ obj.get_status_display|lower }}. Only a published policy has a roster worth collecting: a draft is not yet the rule, and an archived one is no longer it, so a sign-off against either would record agreement to something nobody is being asked to follow. Publish it in the <a href="{% url 'procurement:ppolicy_detail' obj.pk %}">policy library</a> first.</p>
+        {% elif not obj.requires_acknowledgment %}
+          <p class="text-muted">This policy is not marked as requiring acknowledgment, so no sign-offs are collected for it and none can be. That flag is the workspace statement of intent for this policy — a flag the ledger ignored would be decorative — so turn it on in the <a href="{% url 'procurement:ppolicy_edit' obj.pk %}">policy library</a> first, then come back and raise the roster.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The roster</h2>
+      <span class="text-muted">still owed first, then the earliest deadline</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Person</th>
+            <th>State</th>
+            <th>Due</th>
+            <th>Signed / excused</th>
+            <th>Note</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for att in attestations %}
+            <tr>
+              <td class="fw-600">{{ att.user.get_full_name|default:att.user.username }}</td>
+              <td>
+                <span class="badge {{ att.status_css }}">{{ att.get_status_display }}</span>
+                {% if att.is_overdue %}<div class="text-danger">{{ att.days_late }} day(s) late</div>{% endif %}
+              </td>
+              <td>{% if att.due_on %}{{ att.due_on|date:"M d, Y" }}{% else %}<span class="text-muted">No deadline</span>{% endif %}</td>
+              <td>
+                {% if att.acknowledged_at %}
+                  {{ att.acknowledged_at|date:"M d, Y" }}
+                {% elif att.exempted_at %}
+                  {{ att.exempted_at|date:"M d, Y" }}
+                  {% if att.exempted_by %}<div class="text-muted">by {{ att.exempted_by.get_full_name|default:att.exempted_by.username }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if att.acknowledgement_note %}
+                  {{ att.acknowledgement_note }}
+                {% elif att.exempt_reason %}
+                  {{ att.exempt_reason }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:policyattestation_detail' att.pk %}" class="btn-icon" title="View sign-off" aria-label="View sign-off"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="users"></i>
+                <h3>Nobody has been asked to sign this policy</h3>
+                <p>No roster has been raised yet, so there is nothing to chase and nobody to count. A published policy that requires acknowledgment gets its roster from the button above; everyone the policy applies to who has an active account in this workspace is added at once.</p>
+                <a href="{% url 'procurement:policyattestation_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Assign one person</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if attestation_stats.target > attestations|length %}
+      <div class="card-body">
+        <p class="text-muted">Showing the first {{ attestations|length }} of {{ attestation_stats.target }} roster rows. Every number above is counted over the whole roster, not this table, so the coverage figures are true whatever the table is showing — the <a href="{% url 'procurement:policyattestation_list' %}?policy={{ obj.pk|stringformat:"d" }}">full roster</a> is one click away.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How the coverage figure is worked out</h2><span class="text-muted">an exemption is not a signature</span></div>
+    <div class="card-body">
+      <p class="text-muted">The percentage counts <span class="fw-600">signatures</span> against the size of the roster. Exemptions are excluded from it on purpose: an exemption is a decision to stop asking somebody, made by an administrator with their name and reason on the record, and counting it as a signature would let a workspace reach a hundred per cent without a single person having read the policy. If a number of exemptions looks high, that is a fact worth seeing rather than one worth rounding away.</p>
+      <p class="text-muted">Only the person named on a sign-off can sign it — not an administrator, not a superuser, not anybody acting on their behalf. That is the whole evidentiary value of the ledger. The administrative answer to somebody who genuinely should not have to sign is the exemption, which is a different word with a different meaning and its own audit trail.</p>
+      <p class="text-muted">Nothing on this page is a control. Signing a policy grants no access and blocks no purchase, and no page or spend anywhere in this system is gated on whether somebody has acknowledged a policy. Approval routing is decided by the approval workflow engine, and that is the only thing that actually enforces anything.</p>
+    </div>
+  </div>
+{% endblock %}
