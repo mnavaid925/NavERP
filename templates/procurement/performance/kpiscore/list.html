@@ -170,9 +170,11 @@
                     never does. Literal apostrophes inside that handler would need \' — there are
                     none.
                   {% endcomment %}
-                  <form method="post" action="{% url 'procurement:supplierkpiscore_delete' obj.pk %}">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete this measured line from {{ obj.scorecard.number }}? The scorecard keeps the four dimension figures the generate run wrote — a delete does NOT re-blend them. Re-press Generate on a draft period to rebuild them from what is actually left.');"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if obj.scorecard.status == "draft" %}
+                    <form method="post" action="{% url 'procurement:supplierkpiscore_delete' obj.pk %}">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete this measured line from {{ obj.scorecard.number }}? The scorecard keeps the four dimension figures the generate run wrote — a delete does NOT re-blend them. Re-press Generate on a draft period to rebuild them from what is actually left.');"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
