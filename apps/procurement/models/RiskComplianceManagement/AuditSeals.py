@@ -221,8 +221,13 @@ class AuditSeal(TenantNumbered):
         ordering = ["-to_log_id", "-id"]
         unique_together = (("tenant", "number"),)
         indexes = [
+            # (tenant, to_log_id) is the only index this table needs: it backs Meta.ordering
+            # above, the "seal after this one" chain walk and every range lookup.
+            #
+            # There is deliberately NO (tenant, sealed_at) index. sealed_at is DISPLAYED on the
+            # register and the detail page but nothing filters or orders by it, and an index on a
+            # column only ever read back off an already-fetched row is cost with no return.
             models.Index(fields=["tenant", "to_log_id"], name="prc_asl_tnt_tolog_idx"),
-            models.Index(fields=["tenant", "sealed_at"], name="prc_asl_tnt_sealed_idx"),
         ]
 
     def __str__(self):
