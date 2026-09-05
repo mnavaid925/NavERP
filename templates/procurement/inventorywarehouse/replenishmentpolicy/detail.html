@@ -23,11 +23,6 @@
     The page's reason to exist is the comparison at the top: on its own a policy is a handful
     of nullable numbers, and it only becomes readable next to the rule it overrides. The
     planning numbers stay scm's (L36) — this page reads them through and links out to them.
-
-    Suggestion rows show the run NUMBER as text rather than a link on purpose: the run's
-    route belongs to this sub-module's second entity and this page must not carry a
-    {% url %} tag for a name that is not registered yet. Turning it into a link is a
-    one-line change once `procurement:replenishmentrun_detail` exists.
   {% endcomment %}
 
   <div class="page-header">
@@ -179,7 +174,7 @@
             <tbody>
               {% for s in recent_suggestions %}
                 <tr>
-                  <td class="fw-600">{{ s.run.number }}</td>
+                  <td class="fw-600"><a href="{% url 'procurement:replenishmentrun_detail' s.run.pk %}">{{ s.run.number }}</a></td>
                   <td>{{ s.item.sku }}</td>
                   <td>{% if s.location %}{{ s.location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                   <td class="text-right">{{ s.suggested_qty }}</td>
