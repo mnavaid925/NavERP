@@ -829,9 +829,16 @@ class ProcurementDocumentRevisionAdmin(admin.ModelAdmin):
     # A revision is immutable by design: every column but change_note is editable=False on the
     # model, and the whole point of the chain is that history is never rewritten. Listing them
     # here too keeps the reason visible where the form is built.
-    readonly_fields = ("revision_no", "file", "sha256", "file_size", "original_filename",
-                       "extracted_text", "extraction_note", "is_approved", "approved_by",
-                       "approved_at", "uploaded_by", "created_at", "updated_at")
+    #
+    # ``document`` is in this tuple even though it is NOT editable=False on the model, because
+    # the parent FK has to be settable on the create path the upload view uses. Re-parenting an
+    # EXISTING revision is a different thing entirely: clean() refuses a cross-tenant move, but
+    # a same-tenant one leaves the source document pointing at a row that is no longer its
+    # child, so current_revision goes None, the register still prints "r3", and the next upload
+    # re-allocates r3 - which approve then refuses as 3 <= 3. Two clicks, no race.
+    readonly_fields = ("document", "revision_no", "file", "sha256", "file_size",
+                       "original_filename", "extracted_text", "extraction_note", "is_approved",
+                       "approved_by", "approved_at", "uploaded_by", "created_at", "updated_at")
 
 
 @admin.register(ProcurementPolicy)
@@ -839,7 +846,11 @@ class ProcurementPolicyAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "policy_type", "status", "effective_from",
                     "requires_acknowledgment", "owner")
     list_filter = ("tenant", "policy_type", "status", "requires_acknowledgment")
-    search_fields = ("number", "title", "summary", "body", "tags")
+    # "tags" was copied from KnowledgeResourceAdmin, where that column exists. ProcurementPolicy
+    # has no tags column, so any search here raised FieldError -> HTTP 500; manage.py check does
+    # not validate search_fields, so nothing caught it. version_number is what people actually
+    # arrive quoting.
+    search_fields = ("number", "title", "summary", "body", "version_number")
     raw_id_fields = ("document", "applies_to", "previous_version", "owner")
     # published_at is stamped once by the publish verb, which also archives the predecessor in
     # the same transaction. Setting it by hand would put a policy "in force" with no supersession
