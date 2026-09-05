@@ -1169,3 +1169,91 @@ serve it.
 
 Related: L45 (a dirty tree is another session's, not yours), L43 (migrations are where concurrent
 work collides) — both are about the same underlying preference: fewer things happening at once.
+
+---
+
+## L51 — In a shared checkout the *index* collides even when the file contents never do; and `makemigrations` is scoped to the app REGISTRY, not to your files
+
+**Context (2026-09-05, procurement 6.17).** Four sessions built 6.16 / 6.17 / 6.18 / 6.19 concurrently in one
+working tree on one branch. L43 covers concurrent *writes to the same file*. Three failures this session were
+something else entirely: in every one, no two sessions ever touched the same file, and the collision happened
+anyway — in the git index, in the model registry, and in a peer's frozen plan.
+
+### 1. `git add` + `git commit` is not atomic when sessions share one index
+
+Commit `8262b645` ("6.17 fraud scan page and fraud board") contains 6.16's
+`views/SupplierPerformanceEvaluation/SupplierImprovementPlans.py`. My agent ran `git add '<my file>'`, 6.16's
+`git add` landed in the gap, and my `git commit` swept up everything staged. It became that file's *only*
+commit, so 6.16's work now sits under my message.
+
+The one-file-per-commit rule is not enforceable with `git add` + `git commit`: it makes the file list a property
+of **the index at that instant** rather than of the command. Committing "quickly" only narrows the window.
+
+**Rule:** `git add 'path'; git commit --only 'path' -m 'msg'`. `--only` commits exactly that pathspec whatever
+else is staged. The `git add` is still needed for an untracked file (pathspec matching cannot see it otherwise),
+but the sweep becomes impossible rather than unlikely. 6.16 tested the matrix: `git commit -- path -m msg` fails
+(`-m` parses as a pathspec) and `git commit -m msg -- path` works but is order-sensitive — **`--only` is the only
+form with no argument-order trap.**
+
+**Do not rebase to fix a sweep.** With four live sessions on one branch, unpicking history costs far more than a
+wrong message; `git log --follow` still tells the truth. Say so to the owner instead, and never re-write their
+reasoning in first person (L45 §3).
+
+### 2. `makemigrations <app>` captures every registered unmigrated model in the app, including ones you did not write
+
+`makemigrations procurement --dry-run` listed 6.19's four models *and* 6.16's four in one file. There is no
+per-model or per-path flag: it reads the **app model registry**. Whoever runs it first authors a migration
+creating other sessions' tables — settling by accident design questions still under discussion.
+
+This is §1 one layer down: the *files* never collide, the *registry* does. Arrival-order protocols handle
+simultaneity and say **nothing** about scope.
+
+**Rules:** before generating, run `--dry-run` and read *every* model it lists; if it names a model you did not
+write, that is a coordination event, not a formality. A sub-module whose models are **not yet re-exported** from
+`models/__init__.py` is invisible to the registry and therefore safe from someone else's sweep — which makes
+"integrate last" a concurrency feature, not just a hook workaround (L12). And the corollary: **your decision
+window is bounded by other sessions' restraint, not by your own timeline.**
+
+### 3. Absence from disk is not absence from a peer's frozen contract
+
+6.17 and 6.19 independently froze contracts each declaring a class `ProcurementPolicy` in `apps/procurement`.
+Both had grepped, both correctly found nothing, and both were right *at the time they looked*. Two models of one
+name under one `app_label` raise `RuntimeError: Conflicting 'procurementpolicy' models in application
+'procurement'` at startup — breaking `manage.py check` for **all four** sessions, not just the two involved.
+
+Grep sees what has been **written**, not what has been **committed to on paper**. In a shared tree the planning
+artifacts are part of the state.
+
+**Rules:** when several sessions build one app, diff the *contracts* (`.claude/tasks/contract-*.md`), not only
+the code, before freezing a model name. And resolve an overlap by the **ships-first** rule (L36/L29/L37) —
+whoever's model is on disk owns it, the other extends by FK — rather than by whichever plan was written first.
+
+### 4. What actually resolved it, and the reasoning trap underneath
+
+A peer argued from migration ordering that 6.17 should own the table; then the numbering scheme that argument
+rested on was withdrawn, **inverting the conclusion**, and the inverted conclusion had already been relayed. The
+thing that settled it was durable and local: 6.19's model docstring *already* said the acknowledgement ledger was
+6.17's, and its `requires_acknowledgment` field was documented as a hook for exactly that. The split had been
+designed; only 6.17's plan, frozen earlier, was stale.
+
+**Rule:** prefer the argument that rests on something written **in the code** over one that rests on a protocol
+the group can revise. When a premise you argued from is withdrawn, re-derive the conclusion — do not let it stand
+because it was already relayed. (Also: a reserved-number queue is worse than useless for migrations — the
+`NNNN_` prefix has no ordering semantics, ordering lives in the explicit `dependencies` edge, and making everyone
+wait on one disk event releases them all simultaneously onto the operation that must not be concurrent.)
+
+### 5. Two instrument errors worth keeping
+
+* **`grep name="…"` cannot see generated route names.** `apps/core/urls.py` builds routes from a factory
+  (`name=f"{name}_detail"`), so grep sees 4 names where Django registers 49. A duplicate-name check must be a
+  resolver walk after `django.setup()` (`namespace_dict`/`reverse_dict`). Grep is a pre-check, never the gate.
+* **A review glob needs `**`, not `*`.** `templates/procurement/riskcompliance/*` matches the entity
+  *directories* and none of the `.html` inside them — a reviewer handed that reads nothing and reports **clean**.
+  Expand the glob and check the count against a pinned number first. An over-matching scope yields findings you
+  can discard; an under-matching one yields silence you will believe (the L44 family).
+* **PowerShell 5.1:** a `@'…'@` here-string containing double quotes is re-tokenized when passed to a native
+  exe, and `git commit -m` explodes into pathspec errors. Apostrophes are fine. Use `git commit -F <file>`.
+
+Related: [[concurrent-sessions-same-tree]], L43 (concurrent writes to a shared *file* — this is the same tree,
+different resource), L45 (a dirty tree is not yours), L41 §3 (a subagent's report of its own cleanup is not
+evidence), L36 (ships-first ownership), L12 (wire up last).
