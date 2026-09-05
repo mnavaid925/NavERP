@@ -317,8 +317,14 @@ class AuditSeal(TenantNumbered):
             prev = (cls.objects.select_for_update()
                     .filter(tenant=tenant).order_by("-to_log_id", "-id").first())
             last_id = prev.to_log_id if prev else 0
+            # .only() the EXACT eight columns canonical_line reads (plus tenant_id, which the
+            # filter uses), so a 50,000-row seal does not materialise 50,000 full instances of a
+            # wide table. NOT .iterator(): the code below needs rows[0], rows[-1] and len(rows),
+            # so the list is the point - this narrows each row, it does not stream them.
             rows = list(AuditLog.objects
                         .filter(tenant=tenant, id__gt=last_id)
+                        .only("id", "at", "user_id", "content_type_id", "object_id", "action",
+                              "target", "changes", "tenant_id")
                         .order_by("id")[:MAX_SEAL_ROWS])
             if not rows:
                 if prev is None:
@@ -373,9 +379,14 @@ class AuditSeal(TenantNumbered):
         """
         from apps.core.models import AuditLog
 
+        # Same eight columns as seal_now, for the same reason and with the same constraint:
+        # _compare needs len(rows) and random access rows[position], so this is a narrowed list
+        # and never an .iterator().
         rows = list(AuditLog.objects
                     .filter(tenant_id=self.tenant_id,
                             id__gte=self.from_log_id, id__lte=self.to_log_id)
+                    .only("id", "at", "user_id", "content_type_id", "object_id", "action",
+                              "target", "changes", "tenant_id")
                     .order_by("id")[:MAX_SEAL_ROWS + 1])
         ok, detail = self._compare(rows)
         if stamp:
