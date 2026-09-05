@@ -159,7 +159,7 @@
     <div class="card-body">
       <p class="text-muted">
         {% if obj.is_issue %}
-          <span class="fw-600">On hand</span> is what {{ obj.location.code }} holds right now, from the live stock ledger — shown here so a shortfall is visible <em>before</em> anybody presses Post rather than only as a refusal afterwards. Posting is refused outright if any item is short.
+          <span class="fw-600">On hand</span> is what {{ obj.location.code }} holds right now, from the live stock ledger — shown here so a shortfall is visible <em>before</em> anybody presses Post rather than only as a refusal afterwards. Posting is refused outright if any item is short. Two lines for the <em>same</em> item are added together first, exactly as the posting check adds them, so both rows are marked short when the document as a whole asks for more than the location holds.
         {% else %}
           This is a <span class="fw-600">return</span>: it adds stock back to {{ obj.location.code }}, so there is nothing to be short of and no availability check applies.
         {% endif %}
@@ -194,6 +194,9 @@
                 {{ line.on_hand|floatformat:2 }}
                 {% if line.is_short %}
                   <div><span class="badge badge-red">Short</span></div>
+                  {% if line.document_demand != line.quantity %}
+                    <div class="text-muted">{{ line.document_demand|floatformat:4 }} wanted across this document</div>
+                  {% endif %}
                 {% endif %}
               </td>
               <td class="text-right">{{ line.unit_cost|floatformat:4 }}</td>
