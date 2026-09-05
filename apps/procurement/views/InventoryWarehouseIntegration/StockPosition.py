@@ -207,6 +207,9 @@ def stock_position(request):
     locations = Location.objects.none()
     vendors = Party.objects.none()
     rows, truncated = [], False
+    # Zeroed up here so a tenant-less user renders an EMPTY board rather than a 500 — the whole
+    # merge, its stats and its two passes live inside the `tenant is not None` guard below.
+    stats = {"rows": 0, "below_point": 0, "shortage": 0, "no_cover": 0}
 
     if tenant is not None:
         # --- resolve every pk filter to a REAL row of this workspace first ----------------------
@@ -269,9 +272,13 @@ def stock_position(request):
         inbound = _inbound_po_map(tenant)
         rules = _reorder_rule_map(tenant)
 
+        # Only the three columns the board and the filter dropdown actually print. The full
+        # fetch dragged `description` — a TextField — plus a `select_related("uom")` join whose
+        # result this page never reads, once per item in the workspace.
         item_map = {obj.pk: obj for obj in
-                    Item.objects.filter(tenant=tenant).select_related("uom")}
-        location_map = {obj.pk: obj for obj in Location.objects.filter(tenant=tenant)}
+                    Item.objects.filter(tenant=tenant).only("id", "sku", "name")}
+        location_map = {obj.pk: obj for obj in
+                        Location.objects.filter(tenant=tenant).only("id", "code", "name")}
         # ONE query for every policy that could govern any row on this board.
         policies = ReplenishmentPolicy.resolve_map(
             tenant, [(combo["item_id"], combo["location_id"]) for combo in combos])
@@ -289,7 +296,17 @@ def stock_position(request):
         # is what stops "no policy" quietly meaning "different arithmetic" on the two pages.
         unconfigured = ReplenishmentPolicy()
 
-        # --- merge (pure Python; not one query lives inside this loop) --------------------------
+        # --- merge, PASS 1 (pure Python; not one query lives inside this loop) ------------------
+        # This pass computes only what the stats strip and the three view tabs need in order to
+        # decide which rows matter. It has to run over the WHOLE filtered population: `below_point`
+        # and `available` are derived, so neither the tabs nor the counters can be pushed into SQL
+        # or capped early without the tabs quietly becoming "the below-point rows among the first
+        # 500 pairs by SKU", which is useless on the workspace that needs them.
+        #
+        # PRESENTATION is pass 2, below, and runs only over the rows that survived the view filter
+        # and ROW_CAP: the item and location objects, the expected-delivery block, days of cover
+        # and the reversed requisition URL. At 5,000 SKUs across 20 locations that is 25 rows'
+        # worth of that work instead of ~30,000.
         for combo in combos:
             key = (combo["item_id"], combo["location_id"])
             sku = combo["item__sku"] or ""
@@ -324,31 +341,20 @@ def stock_position(request):
             below_point = (reorder_point is not None
                            and (on_hand + netted) <= reorder_point)
 
-            # The Expected block describes the OUTSTANDING quantity, so it is attached only when
-            # there is one. A purchase order can sit in a receivable status long after every line
-            # on it was received; naming it here would promise a delivery that already arrived.
-            supply = inbound.get(sku) if ordered > ZERO else None
             rows.append({
-                "item": item_map.get(combo["item_id"]),
-                "location": location_map.get(combo["location_id"]),
+                "item_id": combo["item_id"],
+                "location_id": combo["location_id"],
+                "sku": sku,
                 "on_hand": on_hand,
                 "allocated": allocated,
                 "held": held,
                 "available": available,
                 "on_order": ordered,
-                "expected_date": supply["date"] if supply else None,
-                "expected_vendor": supply["vendor"] if supply else "",
-                "expected_po_number": supply["number"] if supply else "",
-                "expected_po_url": (reverse("scm:purchaseorder_detail", args=[supply["po_id"]])
-                                    if supply else ""),
                 "open_requisition_qty": requested,
                 "reorder_point": reorder_point,
                 "avg_daily_demand": avg_daily_demand,
-                "days_of_cover": _days_of_cover(available, avg_daily_demand),
                 "below_point": below_point,
-                "policy_vendor": policy.preferred_vendor if policy is not None
-                and policy.preferred_vendor_id else None,
-                "raise_requisition_url": requisition_url,
+                "policy": policy,
             })
 
         # The supplier filter is a PREFERRED-VENDOR filter: it is the only vendor a position row
@@ -356,31 +362,58 @@ def stock_position(request):
         # after the merge because the policy that carries it is resolved after the merge.
         if selected_vendor is not None:
             rows = [row for row in rows
-                    if row["policy_vendor"] is not None
-                    and row["policy_vendor"].pk == selected_vendor.pk]
+                    if row["policy"] is not None
+                    and row["policy"].preferred_vendor_id == selected_vendor.pk]
 
-    # --- stats are computed over the FILTERED-but-unsliced population -----------------------------
-    # (i.e. after q/item/location/vendor, before the `view` slice) so the three view tabs can show
-    # how many rows each of them would hold. That is what makes them navigable rather than blind.
-    stats = {
-        "rows": len(rows),
-        "below_point": sum(1 for row in rows if row["below_point"]),
-        "shortage": sum(1 for row in rows if row["available"] <= ZERO),
-        "no_cover": sum(1 for row in rows if row["below_point"]
-                        and not row["on_order"] and not row["open_requisition_qty"]),
-    }
+        # --- stats are computed over the FILTERED-but-unsliced population --------------------
+        # (i.e. after q/item/location/vendor, before the `view` slice) so the three view tabs can
+        # show how many rows each of them would hold. That is what makes them navigable rather
+        # than blind, and it is why the counters describe MORE rows than the table shows — the
+        # card under the table says so.
+        stats = {
+            "rows": len(rows),
+            "below_point": sum(1 for row in rows if row["below_point"]),
+            "shortage": sum(1 for row in rows if row["available"] <= ZERO),
+            "no_cover": sum(1 for row in rows if row["below_point"]
+                            and not row["on_order"] and not row["open_requisition_qty"]),
+        }
 
-    if selected_view == "below_point":
-        rows = [row for row in rows if row["below_point"]]
-    elif selected_view == "shortage":
-        rows = [row for row in rows if row["available"] <= ZERO]
-    elif selected_view == "no_cover":
-        rows = [row for row in rows if row["below_point"]
-                and not row["on_order"] and not row["open_requisition_qty"]]
+        if selected_view == "below_point":
+            rows = [row for row in rows if row["below_point"]]
+        elif selected_view == "shortage":
+            rows = [row for row in rows if row["available"] <= ZERO]
+        elif selected_view == "no_cover":
+            rows = [row for row in rows if row["below_point"]
+                    and not row["on_order"] and not row["open_requisition_qty"]]
 
-    if len(rows) > ROW_CAP:
-        rows = rows[:ROW_CAP]
-        truncated = True
+        if len(rows) > ROW_CAP:
+            rows = rows[:ROW_CAP]
+            truncated = True
+
+        # --- merge, PASS 2: presentation, over the <= ROW_CAP rows that survived ---------------
+        # Everything here is per-RENDERED-row work — two dict lookups into the object maps, the
+        # expected-delivery block with its reversed PO url, and a Decimal division for days of
+        # cover. Doing it in pass 1 meant doing it for every item x location pair in the ledger
+        # and throwing almost all of it away.
+        for row in rows:
+            policy = row.pop("policy")
+            # The Expected block describes the OUTSTANDING quantity, so it is attached only when
+            # there is one. A purchase order can sit in a receivable status long after every line
+            # on it was received; naming it here would promise a delivery that already arrived.
+            supply = inbound.get(row["sku"]) if row["on_order"] > ZERO else None
+            row.update({
+                "item": item_map.get(row["item_id"]),
+                "location": location_map.get(row["location_id"]),
+                "expected_date": supply["date"] if supply else None,
+                "expected_vendor": supply["vendor"] if supply else "",
+                "expected_po_number": supply["number"] if supply else "",
+                "expected_po_url": (reverse("scm:purchaseorder_detail", args=[supply["po_id"]])
+                                    if supply else ""),
+                "days_of_cover": _days_of_cover(row["available"], row["avg_daily_demand"]),
+                "policy_vendor": (policy.preferred_vendor
+                                  if policy is not None and policy.preferred_vendor_id else None),
+                "raise_requisition_url": requisition_url,
+            })
 
     page_obj = paginate(request, rows, per_page=_PER_PAGE)
     return render(request, TEMPLATE, {
