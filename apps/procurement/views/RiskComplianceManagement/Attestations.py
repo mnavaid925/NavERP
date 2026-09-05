@@ -44,8 +44,8 @@ not a correction; it is a second, contradictory claim about the same day.
   In particular no page or purchase is EVER gated on an attestation — 6.19's own model warns about
   exactly that, and authorising on the strength of a sign-off is a control people believe in.
 * **Query shape.** The register select_relateds ``policy`` and ``user`` — a row's own ``__str__``
-  walks both, so without the hint a page of 15 rows is 31 queries. The detail page adds
-  ``exempted_by`` and ``alert``.
+  walks both, so without the hint a page of 15 rows is 31 queries — plus ``exempted_by``, which
+  the list names on every exempted row. The detail page adds ``alert`` and the two policy hops.
 
 **Context contracts pinned by ``.claude/tasks/contract-procurement-6.17.md`` §1:**
 
@@ -72,11 +72,14 @@ TEMPLATE_LIST = "procurement/riskcompliance/attestation/list.html"
 TEMPLATE_DETAIL = "procurement/riskcompliance/attestation/detail.html"
 TEMPLATE_FORM = "procurement/riskcompliance/attestation/form.html"
 
-#: Every hop a register row (or its own ``__str__``) walks.
-_ROW_RELATIONS = ("policy", "user")
+#: Every hop a register row (or its own ``__str__``) walks. ``exempted_by`` is here and not only
+#: on the detail set because ``attestation/list.html`` names the person who excused an EXEMPTED
+#: row — one extra query per such row otherwise. Exemptions are rare, so this is a smaller cost
+#: than the same shape on the risk-signal and fraud registers; it is the same defect.
+_ROW_RELATIONS = ("policy", "user", "exempted_by")
 
-#: Every hop the detail page walks.
-_DETAIL_RELATIONS = _ROW_RELATIONS + ("exempted_by", "alert", "policy__applies_to", "policy__owner")
+#: Every hop the detail page walks, on top of the row set.
+_DETAIL_RELATIONS = _ROW_RELATIONS + ("alert", "policy__applies_to", "policy__owner")
 
 #: Longest exemption reason accepted from a POST. The column is 255 and ``mark_exempt`` slices to
 #: it; refusing a longer one here means the person is told their sentence was too long instead of
