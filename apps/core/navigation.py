@@ -1630,6 +1630,24 @@ LIVE_LINKS = {
         "Variance Analysis":                   "procurement:budget_variance",
         "Forecasting & Projection":            "procurement:costforecast_list",
     },
+    # 6.16 maps all five of its NavERP.md bullets and deliberately no more. "Scorecard
+    # Generation" points at the EVALUATION REGISTER rather than a generate page, because
+    # generating is a POST verb on one scorecard, not a page you can navigate to - the register
+    # is where you pick the period and press it. The three boards share one key: "Benchmarking &
+    # Trending" lands on the benchmark board, which carries the links across to the trend and
+    # perception-gap boards, so the sidebar names the bullet rather than listing three views of
+    # one idea.
+    "6.16": {
+        "KPI Definition & Setup":              "procurement:supplierkpi_list",
+        "Scorecard Generation":                "procurement:supplierevaluation_list",
+        "360-Degree Feedback Collection":      "procurement:supplierfeedback_list",
+        "Performance Improvement Plans (PIP)": "procurement:improvementplan_list",
+        "Benchmarking & Trending":             "procurement:supplier_benchmark_board",
+    },
+    # NO sidebar key for `SupplierKpiScore`, whose register is reached from the evaluation it
+    # belongs to (a score line is a child of a period document, the `SpendReportSnapshot` rule),
+    # nor for the trend and perception-gap boards, which are two more views of the benchmarking
+    # bullet above and are linked from the board that IS that bullet.
     "6.19": {
         "Central Document Repository":         "procurement:pdocument_list",
         "Version Control":                     "procurement:pdocrevision_list",
