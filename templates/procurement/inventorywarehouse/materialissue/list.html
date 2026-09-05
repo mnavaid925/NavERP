@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Material Issues{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — MaterialIssue register
+    (apps/procurement/views/InventoryWarehouseIntegration/MaterialIssues.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      stats{total, draft, submitted, posted, issues, returns},
+      locations, org_units, status_choices, movement_choices, purpose_choices.
+    The view's crud_list filter tuple is exactly (("status","status",False),
+    ("movement_type","movement_type",False), ("purpose","purpose",False),
+    ("location","location_id",True), ("org_unit","org_unit_id",True)) with search_fields over
+    number, reference, notes, the location code/name and the org unit name — so the filter bar
+    offers exactly q, status, movement type, purpose, location and cost centre. No <select>
+    here posts a param the view ignores, and no filter the view accepts is missing from the bar.
+
+    Row COUNTS and VALUES come from the view's annotations (annotated_line_count /
+    annotated_total_value), never from obj.total_value. That one is a @property — a data
+    descriptor — so an annotation of the same name would be silently ignored on read and every
+    row would quietly cost an extra aggregate. The names differ on purpose.
+
+    The two pk dropdowns compare with |stringformat:"d" (never |slugify); the three enum
+    dropdowns compare against status_choices / movement_choices / purpose_choices, which ARE
+    the model's CHOICES, so a badge and a filter option can never disagree.
+
+    Nullable-FK discipline (L10): org_unit is nullable on every row, so each read sits inside
+    an {% if %} branch. location is NOT nullable (PROTECT) and is read directly.
+
+    Only the document NUMBER reaches the delete confirm() string. The reference, the location
+    code and the notes are all user-authored, and the HTML attribute parser un-escapes an
+    escaped apostrophe back into the JS string literal before it is parsed — the number is
+    system-minted (MIS-#####) and cannot carry one.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Material Issues &amp; Returns</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <span>Material Issues</span>
+      </div>
+      <p class="text-muted">What actually left the shelf, who took it and what it was for — plus the mirror document for material that came back unused. Posting one mints a <span class="fw-600">draft</span> stock adjustment in SCM; stock changes when that adjustment is posted, not here.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:stockadjustment_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Stock adjustments</a>
+      <a href="{% url 'procurement:rtv_list' %}" class="btn btn-outline"><i data-lucide="truck"></i> Returns to vendor</a>
+      <a href="{% url 'procurement:materialissue_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New issue</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="package-minus"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Documents</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.submitted }}</div><div class="stat-label">Submitted</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.posted }}</div><div class="stat-label">Posted</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="arrow-up-from-line"></i></div><div class="stat-value">{{ stats.issues }}</div><div class="stat-label">Issues out</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="arrow-down-to-line"></i></div><div class="stat-value">{{ stats.returns }}</div><div class="stat-label">Returns to stock</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search material issues" class="form-input" placeholder="Search number, job reference, location or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="movement_type" aria-label="Direction" class="form-select">
+            <option value="">Issues and returns</option>
+            {% for value, label in movement_choices %}
+              <option value="{{ value }}" {% if request.GET.movement_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="purpose" aria-label="Purpose" class="form-select">
+            <option value="">All purposes</option>
+            {% for value, label in purpose_choices %}
+              <option value="{{ value }}" {% if request.GET.purpose == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk|stringformat:"d" }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }} · {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Cost centre" class="form-select">
+            <option value="">All cost centres</option>
+            {% for o in org_units %}
+              <option value="{{ o.pk|stringformat:"d" }}" {% if request.GET.org_unit == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:materialissue_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Date</th>
+            <th>Direction</th>
+            <th>Location</th>
+            <th>Purpose / for</th>
+            <th class="text-right">Lines</th>
+            <th class="text-right">Value</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:materialissue_detail' obj.pk %}">{{ obj.number }}</a>
+                {% if obj.reference %}<div class="text-muted">{{ obj.reference }}</div>{% endif %}
+              </td>
+              <td>{{ obj.issue_date|date:"M d, Y" }}</td>
+              <td><span class="badge {{ obj.movement_css }}">{{ obj.get_movement_type_display }}</span></td>
+              <td>
+                <a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+                <div class="text-muted">{{ obj.location.name }}</div>
+              </td>
+              <td>
+                {{ obj.get_purpose_display }}
+                {% if obj.org_unit %}<div class="text-muted">{{ obj.org_unit.name }}</div>{% else %}<div class="text-muted">no cost centre</div>{% endif %}
+              </td>
+              <td class="text-right">{{ obj.annotated_line_count }}</td>
+              <td class="text-right">{% if obj.annotated_total_value %}{{ obj.annotated_total_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:materialissue_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete are offered on drafts only — the views refuse both anyway
+                    (each re-checks can_edit and redirects with a message), so this is the
+                    honest affordance rather than the enforcement. A posted document is never
+                    deleted: it is corrected by a mirror return.
+                  {% endcomment %}
+                  {% if obj.can_edit %}
+                    <a href="{% url 'procurement:materialissue_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:materialissue_delete' obj.pk %}" onsubmit="return confirm('Delete material issue {{ obj.number }} and every line on it? Nothing outside this document is touched — no stock, no adjustment, no reservation.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="package-minus"></i>
+                <h3>No material issues found</h3>
+                <p>Nothing matches these filters. A material issue records the ordinary thing that happens to most stock — somebody takes it off the shelf and uses it — and the return document puts unused material back. Posting one mints a draft stock adjustment for SCM to post.</p>
+                <a href="{% url 'procurement:materialissue_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New issue</a>
+                <a href="{% url 'procurement:materialissue_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Three documents that are easy to confuse</h2><span class="text-muted">and cost real money when swapped</span></div>
+    <div class="card-body">
+      <p class="text-muted"><span class="fw-600">Issue</span> takes material out of a location for a cost centre, a job, maintenance or a sample. <span class="fw-600">Return to stock</span> — the same document with the direction flipped — puts unused material back on the same shelf.</p>
+      <p class="text-muted"><span class="fw-600">Return to vendor</span> is neither of those. It ships goods off site and expects a credit note, so it lives on its own document: <a href="{% url 'procurement:rtv_list' %}">6.12 Returns to Vendor</a>. Filing a supplier return here would leave stock on hand nobody can find; filing a shelf return there would chase a credit that was never owed.</p>
+      <p class="text-muted">Posting <em>never</em> moves stock by itself. It mints a draft <a href="{% url 'scm:stockadjustment_list' %}">stock adjustment</a>, signed for the direction of the document, and the ledger changes only when that adjustment is posted in SCM — one code path writes stock, and it lives in the app that owns it.</p>
+    </div>
+  </div>
+{% endblock %}
