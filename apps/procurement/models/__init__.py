@@ -107,6 +107,22 @@ from .BudgetCostManagement.BudgetMappings import (
 )
 from .BudgetCostManagement.CostForecasts import CostForecast, compute_forecast_amounts
 
+# 6.19 Document & Knowledge Management. ``normalize_tags`` and every ``*_CHOICES`` tuple stay
+# unhoisted (reachable as ``Model.FIELD_CHOICES``) per the 6.14/6.15 rule; the four reminder /
+# extraction callables ARE re-exported because the seeder, admin and a future management command
+# call them by name. ``extract_document_text`` in particular is the one entry point that knows the
+# lazy-pdfplumber fallback contract - a second copy would quietly disagree about what an
+# unreadable file means.
+from .DocumentKnowledgeManagement.Documents import (
+    ProcurementDocument,
+    expiring_documents,
+    run_document_reminders,
+    run_document_reminders_audited,
+)
+from .DocumentKnowledgeManagement.Revisions import ProcurementDocumentRevision, extract_document_text
+from .DocumentKnowledgeManagement.Policies import ProcurementPolicy
+from .DocumentKnowledgeManagement.KnowledgeResources import KnowledgeResource
+
 __all__ = [
     "EaucBid",
     "EaucInvite",
@@ -184,4 +200,12 @@ __all__ = [
     "requested_pr_lines",
     "CostForecast",
     "compute_forecast_amounts",
+    "ProcurementDocument",
+    "expiring_documents",
+    "run_document_reminders",
+    "run_document_reminders_audited",
+    "ProcurementDocumentRevision",
+    "extract_document_text",
+    "ProcurementPolicy",
+    "KnowledgeResource",
 ]
