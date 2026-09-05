@@ -149,27 +149,27 @@ sections beneath carry the evidence. Fix in ID order: C -> H -> I -> M. Mark eac
 
 ### MINOR
 
-- [ ] **M1** `supplierkpiscore_detail` double-fetches the joined row (2 of 9 queries). *(PB1, P10)*
-- [ ] **M2** normalise the confirm idiom to `onclick` in Entity 1's two KPI templates. *(PB2)*
-- [ ] **M3** `SupplierFeedback.__str__` renders literal `"None"` on an unsaved instance. *(PB3)*
-- [ ] **M4** five templates print the English word "None" where siblings use an em dash. *(S3)*
-- [ ] **M5** `breakdown['window']` renders as a **Python list literal** under a column headed *Value*.
+- [x] **M1** `supplierkpiscore_detail` double-fetches the joined row (2 of 9 queries). *(PB1, P10)*
+- [x] **M2** normalise the confirm idiom to `onclick` in Entity 1's two KPI templates. *(PB2)*
+- [x] **M3** `SupplierFeedback.__str__` renders literal `"None"` on an unsaved instance. *(PB3)*
+- [x] **M4** five templates print the English word "None" where siblings use an em dash. *(S3)*
+- [x] **M5** `breakdown['window']` renders as a **Python list literal** under a column headed *Value*.
   Join as `"2026-05-11 to 2026-08-09"` in the flattener. *(N2)*
-- [ ] **M6** the alert's `link_url` is hand-built rather than `reverse()`d. *(R6, X4)*
-- [ ] **M7** `row_cap` carries two different caps across boards/details (three instances). *(PB6, R9)*
-- [ ] **M8** `quadrant_choices` passed but never iterated; labels hard-coded twice. *(R10)*
-- [ ] **M9** `_supplier_parties` duplicated four times with **two different signatures**. *(X6)*
-- [ ] **M10** `_feedback_stats` omits `expired` while double-counting `requested`. *(X7)*
-- [ ] **M11** one of nine `write_audit_log` calls omits `tenant=` (harmless, inconsistent). *(X8)*
-- [ ] **M12** supplier linked to `core:party_detail` on two detail pages, plain text on two; empty-state
+- [x] **M6** the alert's `link_url` is hand-built rather than `reverse()`d. *(R6, X4)*
+- [x] **M7** `row_cap` carries two different caps across boards/details (three instances). *(PB6, R9)*
+- [x] **M8** `quadrant_choices` passed but never iterated; labels hard-coded twice. *(R10)*
+- [x] **M9** `_supplier_parties` duplicated four times with **two different signatures**. *(X6)*
+- [x] **M10** `_feedback_stats` omits `expired` while double-counting `requested`. *(X7)*
+- [x] **M11** one of nine `write_audit_log` calls omits `tenant=` (harmless, inconsistent). *(X8)*
+- [x] **M12** supplier linked to `core:party_detail` on two detail pages, plain text on two; empty-state
   heading wording drift. *(X9)*
-- [ ] **M13** breakdown key `rows` means the denominator for `otd` and the numerator for three others.
+- [x] **M13** breakdown key `rows` means the denominator for `otd` and the numerator for three others.
   *(N4)*
-- [ ] **M14** unbounded `closure_note` from POST -> `DataError` or silent truncation. Cap at 4000.
+- [x] **M14** unbounded `closure_note` from POST -> `DataError` or silent truncation. Cap at 4000.
   *(SEC5)*
-- [ ] **M15** generate's draft check reads a row fetched outside the transaction; use
+- [x] **M15** generate's draft check reads a row fetched outside the transaction; use
   `select_for_update()`. *(SEC6, R8-generate-only)*
-- [ ] **M16** `SupplierImprovementPlan` ordering index missing (low-volume table). *(P13)*
+- [x] **M16** `SupplierImprovementPlan` ordering index missing (low-volume table). *(P13)*
 - [ ] **M17** seeder step 5 does per-row `.save()` where `bulk_update` fits (5 rows). *(P14)*
 - [ ] **M18** `benchmark_rows` streams 2,402 risk rows to keep 302; fold into a `Subquery`. *(M1/P9)*
 - [ ] **M19** the `?source=` docstring still asserts the safety S1 disproved. Must change with I14.
