@@ -131,6 +131,20 @@ from .DocumentKnowledgeManagement.Revisions import ProcurementDocumentRevisionUp
 from .DocumentKnowledgeManagement.Policies import ProcurementPolicyForm
 from .DocumentKnowledgeManagement.KnowledgeResources import KnowledgeResourceForm
 
+# 6.16 Supplier Performance & Evaluation - from the entity MODULES, same reason as 6.13-6.15.
+# Four form classes over five view modules, and the two gaps are deliberate:
+#   * SupplierKpiScoreEditForm is EDIT-only. A score line is written by
+#     performance.generate_scorecard_lines; a hand-created one would be a measurement with no
+#     computation behind it. The edit path exists for source="manual" KPIs, where the figure is
+#     a human's by definition.
+#   * PerformanceBoards.py declares none - its three pages are GET-driven reports whose filter
+#     bar is sanitised against a whitelist in the view (the 6.14 SpendDashboards posture), so a
+#     junk parameter degrades to "filter ignored" rather than a page of red text.
+from .SupplierPerformanceEvaluation.SupplierKpis import SupplierKpiForm
+from .SupplierPerformanceEvaluation.ScorecardKpiScores import SupplierKpiScoreEditForm
+from .SupplierPerformanceEvaluation.SupplierFeedback import SupplierFeedbackForm
+from .SupplierPerformanceEvaluation.SupplierImprovementPlans import SupplierImprovementPlanForm
+
 __all__ = [
     "EaucBidForm",
     "EaucInviteForm",
@@ -215,4 +229,8 @@ __all__ = [
     "ProcurementDocumentRevisionUploadForm",
     "ProcurementPolicyForm",
     "KnowledgeResourceForm",
+    "SupplierKpiForm",
+    "SupplierKpiScoreEditForm",
+    "SupplierFeedbackForm",
+    "SupplierImprovementPlanForm",
 ]
