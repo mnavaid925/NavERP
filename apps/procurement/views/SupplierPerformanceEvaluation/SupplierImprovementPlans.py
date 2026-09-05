@@ -71,7 +71,15 @@ TEMPLATE_FORM = "procurement/performance/improvementplan/form.html"
 
 #: The FKs a plan row hops in a template or in ``__str__``. ONE tuple, so the register, the
 #: detail page and the verbs cannot drift into different N+1 profiles.
-_ROW_RELATIONS = ("supplier", "kpi", "owner", "scorecard", "escalated_suspension")
+#:
+#: ``scorecard__party`` is the CHAINED hop, and it was missing: ``improvementplan/detail.html``
+#: renders ``{{ obj.scorecard.party.name }}``, so a plan carrying a scorecard cost 10 queries
+#: against 9 for one without — the extra being a bare ``SELECT FROM core_party``. One query on a
+#: detail page, but this tuple is also what the paginated register joins on, so the day a list
+#: column prints the supplier off the scorecard it becomes 1+N for a 15-row page (L18). The
+#: sibling ``_SCORE_RELATIONS`` carries the chained hop for exactly this reason.
+_ROW_RELATIONS = ("supplier", "kpi", "owner", "scorecard", "scorecard__party",
+                  "escalated_suspension")
 
 #: Legal outcome values, keyed by the posted string — the close verb validates against this
 #: rather than trusting the request, because close does not go through a form at all.
