@@ -251,10 +251,23 @@ def supplierfeedback_edit(request, pk):
     that is what the three verbs are for. ``requested_by`` and ``requested_at`` are equally
     untouchable — a raise stamp that could be edited would stop being evidence of anything.
 
+    **OUTSTANDING requests only.** ``rating`` IS on the form, so an editable submitted response
+    let any member overwrite an answer somebody gave — bypassing the submit verb's own
+    validation and silently moving the survey aggregate and the perception-gap board. Not being
+    able to move the status was never the point: the payload is not the status.
+
     ``crud_edit`` hands ``success_url`` straight to ``redirect()`` with no arguments, so a route
     taking a pk must be an already-reversed PATH: passing the url NAME here would raise
     ``NoReverseMatch`` at save time, not at import time.
     """
+    obj = get_object_or_404(SupplierFeedback.objects.only("pk", "tenant_id", "status"),
+                            pk=pk, tenant=request.tenant)
+    if obj.status != _OPEN_STATUS:
+        messages.error(request, f"This response is {obj.get_status_display().lower()} and its "
+                                "answer is frozen — what a respondent said is evidence, and the "
+                                "survey aggregate is computed from it.")
+        return redirect("procurement:supplierfeedback_detail", pk=pk)
+
     return crud_edit(
         request, model=SupplierFeedback, pk=pk, form_class=SupplierFeedbackForm,
         template=TEMPLATE_FORM,
