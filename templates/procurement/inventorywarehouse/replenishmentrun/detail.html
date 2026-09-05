@@ -6,7 +6,7 @@
     (apps/procurement/views/InventoryWarehouseIntegration/Runs.py, rendered directly).
 
     Context contract, and NOTHING else exists here:
-      obj, lines, line_page_obj, decision_choices, vendors,
+      obj, lines, line_page_obj, decision_choices, vendors, vendors_capped, vendor_option_cap,
       totals{line_count, accepted, snoozed, dismissed, pending, accepted_value},
       can_generate, can_release, can_cancel, requisitions, truncated, sku_match_note.
 
@@ -23,6 +23,11 @@
     `decision_choices` rather than from a bound form per line: 25 bound forms would each
     evaluate the vendor queryset, which is 25 queries for one screen. The POST is still
     validated by ReplenishmentSuggestionDecisionForm — the view builds exactly one.
+
+    One query, but the MARKUP is still per row, so `vendors` is capped by the view
+    (_VENDOR_OPTION_CAP) and `vendors_capped` says when it bit. The vendors already on this
+    page's lines are kept whatever the cap does, so a row can never render a <select> that has
+    lost its own selection — do not "tidy" that by iterating an uncapped queryset here.
 
     Nullable-FK discipline (L10): location on the header, vendor, policy and requisition on
     every line are all nullable, so each read sits inside an {% if %} branch.
@@ -270,6 +275,9 @@
     <div class="card-body">
       <p class="text-muted"><span class="badge badge-green">Accepted</span> is included in the release and becomes a requisition line under the vendor shown on the row. <span class="badge badge-amber">Snoozed</span> needs a future date and says "not now, ask me again then". <span class="badge badge-slate">Dismissed</span> says "we looked and decided no" — which is exactly the answer nothing in the system could record before this run existed. <span class="badge badge-muted">Pending</span> means nobody has looked yet.</p>
       <p class="text-muted">The vendor on each line is a default taken from the replenishment policy, not a verdict. Change it here and the line moves into that vendor's requisition at release.</p>
+      {% if vendors_capped %}
+        <p class="form-help"><span class="badge badge-amber">Supplier list capped</span> This workspace has more supplier and vendor parties than the row dropdowns will carry, so each row offers the first {{ vendor_option_cap }} by name — plus whichever supplier is already on that line, which is never dropped. The list is repeated inside every row's form, so an uncapped register would add thousands of entries to this page. To point a line at a supplier outside the list, set it as the item's <a href="{% url 'procurement:replenishmentpolicy_list' %}">replenishment policy</a> preferred vendor and re-generate, or change the vendor on the requisition after release.</p>
+      {% endif %}
     </div>
   </div>
 
