@@ -388,6 +388,52 @@ from .BudgetCostManagement.CostForecasts import (
     costforecast_list,
 )
 
+# 6.19 Document & Knowledge Management - 32 views. Note pdocument_revision_upload: its ROUTE is
+# declared in the Documents url module (url modules own segments, and it sits under documents/),
+# but its VIEW lives in the Revisions module because the upload is what mints a revision. The
+# URLconf resolves views.<name> off this package, so the split is invisible to it - but a name
+# missing from the block below is an AttributeError at URLconf import, not a 404.
+from .DocumentKnowledgeManagement.Documents import (
+    pdocument_activate,
+    pdocument_archive,
+    pdocument_checkout,
+    pdocument_create,
+    pdocument_delete,
+    pdocument_detail,
+    pdocument_edit,
+    pdocument_list,
+    pdocument_reindex,
+    pdocument_release,
+    pdocument_run_reminders,
+    pdocument_supersede,
+)
+from .DocumentKnowledgeManagement.Revisions import (
+    pdocrevision_approve,
+    pdocrevision_delete,
+    pdocrevision_detail,
+    pdocrevision_list,
+    pdocument_revision_upload,
+)
+from .DocumentKnowledgeManagement.Policies import (
+    ppolicy_archive,
+    ppolicy_create,
+    ppolicy_delete,
+    ppolicy_detail,
+    ppolicy_edit,
+    ppolicy_list,
+    ppolicy_publish,
+)
+from .DocumentKnowledgeManagement.KnowledgeResources import (
+    knowledgeresource_archive,
+    knowledgeresource_create,
+    knowledgeresource_delete,
+    knowledgeresource_detail,
+    knowledgeresource_edit,
+    knowledgeresource_list,
+    knowledgeresource_publish,
+    knowledgeresource_use,
+)
+
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
     "eauc_publish", "eauc_cancel", "eauc_close",
@@ -561,4 +607,14 @@ __all__ = [
     "budget_availability", "commitment_register",
     "budget_variance", "budget_variance_export",
     "costforecast_list", "costforecast_detail", "costforecast_create", "costforecast_delete",
+    "pdocument_list", "pdocument_detail", "pdocument_create", "pdocument_edit",
+    "pdocument_delete", "pdocument_checkout", "pdocument_release", "pdocument_activate",
+    "pdocument_supersede", "pdocument_archive", "pdocument_reindex", "pdocument_run_reminders",
+    "pdocrevision_list", "pdocrevision_detail", "pdocument_revision_upload",
+    "pdocrevision_approve", "pdocrevision_delete",
+    "ppolicy_list", "ppolicy_detail", "ppolicy_create", "ppolicy_edit", "ppolicy_delete",
+    "ppolicy_publish", "ppolicy_archive",
+    "knowledgeresource_list", "knowledgeresource_detail", "knowledgeresource_create",
+    "knowledgeresource_edit", "knowledgeresource_delete", "knowledgeresource_publish",
+    "knowledgeresource_archive", "knowledgeresource_use",
 ]
