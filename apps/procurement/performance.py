@@ -34,7 +34,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, F, Min, Q, Sum
+from django.db.models import Count, DecimalField, F, Min, Q, Sum
 from django.utils import timezone
 
 # NOT-YET-WIRED entities of this SAME sub-module: import the entity MODULES directly, never
@@ -815,19 +815,46 @@ def meets_target(line):
     return line.measured_value >= line.target_at_time
 
 
+def _composite_from_sums(weighted_score, weight_total):
+    """:func:`_composite`'s arithmetic over two SQL ``SUM``s instead of over fetched rows.
+
+    Same inputs, same rounding, same ``None`` — the cohort's composites are aggregated in the
+    database because a 500-scorecard cohort times a large KPI catalogue is a lot of rows to
+    stream just to average them, but the division stays in Python so the result is Decimal-exact
+    and identical to what the trend board publishes for the same scorecard.
+    """
+    if not weight_total or weighted_score is None:
+        return None
+    return (Decimal(weighted_score) / Decimal(weight_total)).quantize(_STEP)
+
+
 def benchmark_rows(tenant, period_end, tier=None, category=None):
     """``(rows, cohort, truncated)`` — every supplier's composite for one period, ranked.
 
-    Three queries total: the scorecards (with their line count annotated), the supplier
-    profiles, and the risk assessments. Ranks and percentiles are one Python pass over the
-    already-fetched rows — a window function per row would be one query per supplier.
+    Three queries total: the scorecards (with their line count and composite aggregated), the
+    supplier profiles, and the risk assessments. Ranks and percentiles are one Python pass over
+    the already-fetched rows — a window function per row would be one query per supplier.
+
+    **The composite is the KPI lines' weighted mean, not ``overall_score``.** The two are
+    different numbers on purpose — ``overall_score`` is SCM's blend of the four dimension
+    columns, and only dimension-mapped KPIs reach it — so publishing one under the other's name
+    made this board and the trend board disagree about the same supplier in the same period, and
+    took rank, percentile and quadrant with it. ``overall`` rides the row beside it, exactly as
+    it does on a trend point.
     """
     from apps.scm.models import SupplierProfile, SupplierRiskAssessment, SupplierScorecard
 
+    scored = Q(procurement_kpi_scores__score__isnull=False)
     cards = list(SupplierScorecard.objects
                  .filter(tenant=tenant, period_end=period_end)
                  .select_related("party")
-                 .annotate(line_count=Count("procurement_kpi_scores"))
+                 .annotate(
+                     line_count=Count("procurement_kpi_scores"),
+                     scored_weight=Sum("procurement_kpi_scores__weight_applied", filter=scored),
+                     weighted_score=Sum(
+                         F("procurement_kpi_scores__score")
+                         * F("procurement_kpi_scores__weight_applied"),
+                         output_field=DecimalField(max_digits=20, decimal_places=4)))
                  .order_by("party__name", "-id")[:ROW_CAP + 1])
     truncated = len(cards) > ROW_CAP
     cards = cards[:ROW_CAP]
@@ -857,7 +884,7 @@ def benchmark_rows(tenant, period_end, tier=None, category=None):
             continue
         if category and card_category != category:
             continue
-        composite = card.overall_score
+        composite = _composite_from_sums(card.weighted_score, card.scored_weight)
         risk_index = risk.get(card.party_id)
         rows.append({
             "supplier_id": card.party_id,
@@ -868,6 +895,9 @@ def benchmark_rows(tenant, period_end, tier=None, category=None):
             "scorecard_id": card.pk,
             "scorecard_number": card.number,
             "composite": composite,
+            # SCM's own blend, carried beside the composite rather than instead of it — the same
+            # pair a trend point publishes, so a reader can see the two engines agree or not.
+            "overall": card.overall_score,
             "grade": card.grade,
             "rank": 0,
             "percentile": None,
