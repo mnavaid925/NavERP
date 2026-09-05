@@ -82,7 +82,7 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">What happens when you upload</h2><span class="text-muted">and what deliberately does not</span></div>
     <div class="card-body">
-      <p class="text-muted">The file is stored, checksummed and given the next revision number for this document. That number is allocated while the document row is locked, so two people uploading at the same moment get r{{ document.current_revision_no|add:1 }} and the one after it rather than both claiming the same version.</p>
+      <p class="text-muted">The file is stored, checksummed and given the next revision number for this document. That number is allocated while the document row is locked, so two people uploading at the same moment get the next number in the chain and the one after it rather than both claiming the same version. That number is one past the highest revision this document has, which is not necessarily one past the approved one — revisions waiting for approval have already taken theirs.</p>
       <p class="text-muted">The revision lands <strong>awaiting approval</strong>. Uploading never changes which version is current — a workspace administrator approves the new revision, and only then does the document's pointer move, its text become what search matches, and a draft document come into force. Approval only moves forward: a revision at or below the current number cannot be approved.</p>
       <p class="text-muted">The file is stored to be downloaded, never displayed inside a page. Text is read from it where there is text to read; when there is not, the revision says so on its own row instead of leaving an empty column that looks like a fault.</p>
     </div>
