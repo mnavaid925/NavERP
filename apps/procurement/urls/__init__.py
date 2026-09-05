@@ -57,6 +57,7 @@ from .ContractsManagement import urlpatterns as _cm_contractsmanagement
 from .PurchaseOrderManagement import urlpatterns as _pom_purchaseordermanagement
 from .SupplierPerformanceEvaluation import urlpatterns as _spe_supplierperformance
 from .InventoryWarehouseIntegration import urlpatterns as _iwi_inventorywarehouse
+from .RiskComplianceManagement import urlpatterns as _rcm_riskcompliance
 
 
 app_name = "procurement"
@@ -147,4 +148,17 @@ urlpatterns = [
                                 #      return-to-stock posting through a DRAFT
                                 #      scm.StockAdjustment, and three derived read-only pages
                                 #      (27 routes, 27 distinct names)
+    # 6.17 LAST, for the same belt-and-braces reason every sub-module since 6.13 has been
+    # appended last: all fourteen first segments it claims are new whole components —
+    # screenings/, screening-hits/, rescreening-due/, risk-signals/, risk-refresh-due/,
+    # fraud-alerts/, fraud-scan/, fraud-board/, policies/, policy-attestations/, my-policies/,
+    # policy-overdue/, audit-trail/, audit-seals/. Two near-misses that are NOT conflicts because
+    # Django matches whole path components and never string prefixes: 6.19's
+    # procurement-policies/ is a different component from policies/, and 6.12's receipt-audit/ is
+    # a different component from audit-trail/.
+    *_rcm_riskcompliance,       # 6.17 restricted-party screening + its hit resolution queue,
+                                #      supplier financial risk signals on their own inverted
+                                #      scales, the six-rule fraud detector with its scan and
+                                #      board, the policy sign-off ledger over 6.19's policy
+                                #      library, and the audit trail + its hash-chain seal
 ]
