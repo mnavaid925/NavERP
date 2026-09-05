@@ -21,18 +21,33 @@ invariant that actually holds, and the one worth stating.) Verify it with::
 
 which returns nothing.
 
-**Build order.** ``Policies``, ``Runs`` and ``MaterialIssues`` are concatenated so far.
-``StockPosition``, ``ReceiptBinMap`` and ``CountAccuracy`` are the same sub-module's remaining
-page modules and each appends its own line here as it lands, rather than this file
-importing a module that does not exist yet and taking the whole URLconf down with it.
+**Build order — COMPLETE.** All six modules are concatenated: the three entity modules
+(``Policies``, ``Runs``, ``MaterialIssues``) and the three derived read-only page modules
+(``StockPosition``, ``ReceiptBinMap``, ``CountAccuracy``). Each appended its own line here as it
+landed, rather than this file importing a module that did not exist yet and taking the whole
+URLconf down with it. **The sub-package now contributes exactly 27 patterns** — the count the
+contract's §3 table freezes, and the number ``apps/procurement/urls/__init__.py`` expects to gain
+when the Integrator includes this package. If that total moves, a route was added, dropped or
+renamed away from the frozen contract.
+
+The three derived pages carry ONE pattern each and no ``<int:pk>`` route at all: they own no model,
+so there is nothing to address by pk. They are declared last purely because they landed last —
+their first segments (``stock-position/``, ``receipt-bin-map/``, ``count-accuracy/``) are unique
+whole components, so position in this list cannot change which pattern wins.
 """
+from .CountAccuracy import urlpatterns as _iwi_countaccuracy
 from .MaterialIssues import urlpatterns as _iwi_materialissues
 from .Policies import urlpatterns as _iwi_policies
+from .ReceiptBinMap import urlpatterns as _iwi_receiptbinmap
 from .Runs import urlpatterns as _iwi_runs
+from .StockPosition import urlpatterns as _iwi_stockposition
 
 
 urlpatterns = [
-    *_iwi_policies,         # replenishment-policies/ CRUD
-    *_iwi_runs,             # replenishment-runs/ CRUD + generate/release/cancel + line decide
-    *_iwi_materialissues,   # material-issues/ CRUD + submit/post/cancel + line add/delete
-]
+    *_iwi_policies,         # replenishment-policies/ CRUD                            (5)
+    *_iwi_runs,             # replenishment-runs/ CRUD + generate/release/cancel + decide (9)
+    *_iwi_materialissues,   # material-issues/ CRUD + submit/post/cancel + line add/delete (10)
+    *_iwi_stockposition,    # stock-position/ — derived, read-only                    (1)
+    *_iwi_receiptbinmap,    # receipt-bin-map/ — derived, read-only                   (1)
+    *_iwi_countaccuracy,    # count-accuracy/ — derived, read-only                    (1)
+]                           #                                                    total 27
