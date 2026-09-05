@@ -77,6 +77,18 @@ DIMENSION_FIELDS = {
     "responsiveness": "responsiveness_score",
 }
 
+#: Every column :func:`generate_scorecard_lines` writes on a score line, in one place so the
+#: ``bulk_update`` field list and the values dict it is built from cannot drift apart. Note
+#: ``updated_at``: **``bulk_update`` does not fire ``auto_now``** — it compiles a ``CASE … WHEN``
+#: over the values already on the instances and never calls ``Field.pre_save`` — so the stamp is
+#: set by hand in the loop and listed here. (``bulk_create`` DOES call ``pre_save``, so a new
+#: line's ``created_at``/``updated_at`` still look after themselves.)
+_LINE_FIELDS = (
+    "measured_value", "score", "band", "weight_applied", "target_at_time", "direction_at_time",
+    "source_at_time", "unit_at_time", "kpi_name", "kpi_category", "breakdown",
+    "respondent_count", "computed_at", "computed_by", "updated_at",
+)
+
 ZERO = Decimal("0")
 _HUNDRED = Decimal("100")
 #: 2dp — the shape of ``SupplierKpiScore.score`` and of every percentage this module returns.
@@ -568,8 +580,11 @@ def generate_scorecard_lines(scorecard, user):
     print.
 
     **Safe to press twice.** ``SupplierKpiScore`` is unique on ``(tenant, scorecard, kpi)`` and
-    every line goes in through ``update_or_create``, so a second run refreshes the figures in
-    place instead of doubling them.
+    the run reuses the ``existing`` lines it already fetched, so a second press refreshes the
+    figures in place instead of doubling them.
+
+    **Two write round-trips, not four per line** — one ``bulk_update`` and one ``bulk_create``,
+    whatever the size of the KPI catalogue.
 
     **Refuses on anything but a draft**, writing nothing: a published or archived scorecard is a
     closed period, and silently rewriting one would change a number somebody has already acted
@@ -627,6 +642,11 @@ def generate_scorecard_lines(scorecard, user):
     now = timezone.now()
     written, skipped, crossings = 0, 0, []
     dimension_parts = defaultdict(list)
+    # TWO round-trips for the whole run instead of four PER LINE. ``update_or_create`` was
+    # costing a SAVEPOINT + SELECT + UPDATE + RELEASE each time round — 39 of the 54 queries a
+    # 9-KPI run made were write plumbing, and it grew at ~7 queries per extra KPI. ``existing``
+    # is already fetched above, so the loop knows which lines exist without asking again.
+    to_create, to_update = [], []
 
     for kpi in kpis:
         respondents = 0
@@ -649,31 +669,48 @@ def generate_scorecard_lines(scorecard, user):
         if measured is None:
             skipped += 1
 
-        line, _ = SupplierKpiScore.objects.update_or_create(
-            tenant=tenant, scorecard=scorecard, kpi=kpi,
-            defaults={
-                "measured_value": measured,
-                "score": score,
-                "band": band,
-                # Frozen-at-time columns — a later retune or rename must not rewrite history.
-                "weight_applied": kpi.weight,
-                "target_at_time": kpi.target_value,
-                "direction_at_time": kpi.direction,
-                "source_at_time": kpi.source,
-                "unit_at_time": kpi.unit,
-                "kpi_name": kpi.name,
-                "kpi_category": kpi.category,
-                "breakdown": breakdown,
-                "respondent_count": respondents,
-                "computed_at": now,
-                "computed_by": author,
-            })
+        values = {
+            "measured_value": measured,
+            "score": score,
+            "band": band,
+            # Frozen-at-time columns — a later retune or rename must not rewrite history.
+            "weight_applied": kpi.weight,
+            "target_at_time": kpi.target_value,
+            "direction_at_time": kpi.direction,
+            "source_at_time": kpi.source,
+            "unit_at_time": kpi.unit,
+            "kpi_name": kpi.name,
+            "kpi_category": kpi.category,
+            "breakdown": breakdown,
+            "respondent_count": respondents,
+            "computed_at": now,
+            "computed_by": author,
+            # Stamped by hand because bulk_update skips auto_now — see :data:`_LINE_FIELDS`.
+            "updated_at": now,
+        }
+
+        line = existing.get(kpi.pk)
+        if line is None:
+            line = SupplierKpiScore(tenant=tenant, scorecard=scorecard, kpi=kpi, **values)
+            to_create.append(line)
+        else:
+            for column, value in values.items():
+                setattr(line, column, value)
+            to_update.append(line)
         written += 1
 
         if kpi.maps_to_dimension and score is not None:
             dimension_parts[kpi.maps_to_dimension].append((score, kpi.weight))
         if band == "critical" and previous.get(kpi.pk) != "critical":
             crossings.append(line)
+
+    # One UPDATE and one INSERT for the whole run. ``unique_together`` still guards the second
+    # press: an existing line is UPDATED in place because it came out of ``existing``, so
+    # nothing here can double a scorecard.
+    if to_update:
+        SupplierKpiScore.objects.bulk_update(to_update, _LINE_FIELDS)
+    if to_create:
+        SupplierKpiScore.objects.bulk_create(to_create)
 
     # The four scm columns: a weighted mean by the frozen weight where several KPIs feed one
     # dimension. A dimension whose mapped KPIs all came back unscored is LEFT UNTOUCHED — never
@@ -697,9 +734,10 @@ def generate_scorecard_lines(scorecard, user):
     # Default save=True — overall_score and grade follow the four columns just written.
     scorecard.recompute_overall()
 
-    alerts = 0
-    for line in crossings:
-        ProcurementAlert.objects.create(
+    # One INSERT for every crossing rather than one per alert — same shape as the score lines
+    # above, and crossings are usually few but are not bounded.
+    new_alerts = [
+        ProcurementAlert(
             tenant=tenant, kind="task", severity="critical",
             title=f"{scorecard.party.name} — {line.kpi_name} is critical",
             message=(f"{line.kpi_name} came back at "
@@ -710,7 +748,11 @@ def generate_scorecard_lines(scorecard, user):
             # anything else, and an absolute URL here would make the alert card an open redirect.
             link_url=f"/procurement/supplier-evaluations/{scorecard.pk}/",
             created_by=author)
-        alerts += 1
+        for line in crossings
+    ]
+    if new_alerts:
+        ProcurementAlert.objects.bulk_create(new_alerts)
+    alerts = len(new_alerts)
 
     return {"refused": False, "refusal_reason": "", "written": written, "skipped": skipped,
             "dimensions": dimensions, "alerts": alerts}
