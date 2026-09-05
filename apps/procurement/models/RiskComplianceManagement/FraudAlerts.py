@@ -451,14 +451,25 @@ class FraudAlert(TenantNumbered):
         return f"{rule}:manual:{secrets.token_hex(8)}"
 
     def _key_attribute(self):
-        """Which attribute a pair alert matched on, taken off ``matched_on``'s first word.
+        """The attribute segment of a HAND-RAISED pair alert's dedupe key. Always ``manual``.
 
-        The scan always supplies its own key, so this only runs for a HAND-RAISED pair. Falling
-        back to ``manual`` keeps a hand-raised pair from silently colliding with the scan's row
-        for the same two parties on a different attribute.
+        The scan supplies its own key for every row it emits, so this runs only when somebody
+        raised a pair alert by hand — and it must not be able to produce the key a later scan
+        would compute.
+
+        It used to read the first word of ``matched_on``, which is a free-text field on the create
+        form. Typing ``tax_id ...`` there minted exactly ``vem:{low}:{high}:tax_id`` — the
+        detector's own key. ``_upsert`` refreshes a matched row and never re-opens a disposed one,
+        so a pre-emptive hand-raised row disposed ``unsubstantiated`` meant the real detection
+        could never afterwards surface as OPEN to anybody. Not a privilege escalation (an
+        administrator could dispose the genuine row too); the difference is that nobody would ever
+        see it raised.
+
+        A second hand-raised pair for the same two parties under the same rule now collides with
+        the first and gets ``clean()``'s friendly "that alert already exists" error, which is the
+        right answer: for one pair of parties under one rule, that IS the same accusation.
         """
-        head = (self.matched_on or "").split(" ", 1)[0].strip().lower()
-        return head if head in ("tax_id", "address", "contact", "name") else "manual"
+        return "manual"
 
     # -- validation -----------------------------------------------------------------------------
 
