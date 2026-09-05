@@ -51,14 +51,17 @@ TEMPLATE_LIST = "procurement/riskcompliance/fraudalert/list.html"
 TEMPLATE_DETAIL = "procurement/riskcompliance/fraudalert/detail.html"
 TEMPLATE_FORM = "procurement/riskcompliance/fraudalert/form.html"
 
-#: Every hop a register row (or its own ``__str__``) walks.
-_ROW_RELATIONS = ("vendor", "related_party", "assigned_to")
+#: Every hop a register row (or its own ``__str__``) walks. ``resolved_by`` is here and not only
+#: on the detail set because ``fraudalert/list.html`` names the person who closed every TERMINAL
+#: row — one extra query per such row otherwise, up to +15 on a settled register.
+_ROW_RELATIONS = ("vendor", "related_party", "assigned_to", "resolved_by")
 
-#: Every hop the detail page walks, chained ones included — ``approval__requisition`` is what the
-#: source list needs to name the requisition a signature belongs to without a second query.
+#: Every hop the detail page walks on top of the row set, chained ones included —
+#: ``approval__requisition`` is what the source list needs to name the requisition a signature
+#: belongs to without a second query.
 _DETAIL_RELATIONS = _ROW_RELATIONS + (
     "requisition", "purchase_order", "supplier_invoice", "approval", "approval__requisition",
-    "screening", "screening__party", "resolved_by", "suspension", "suspension__supplier")
+    "screening", "screening__party", "suspension", "suspension__supplier")
 
 
 # -- shared helpers ------------------------------------------------------------------------------
