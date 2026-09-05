@@ -38,7 +38,7 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'procurement:screening_detail' screening.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to screening</a>
-      {% if obj.is_open %}
+      {% if obj.is_open and not screening.is_terminal %}
         <a href="{% url 'procurement:screeninghit_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       {% endif %}
     </div>
@@ -133,7 +133,13 @@
     </div>
   {% endif %}
 
-  {% if obj.is_open %}
+  {% comment %}
+    Both destructive controls also require the PARENT screening to still be open. Once it is
+    cleared or blocked its hits are the evidence that decision was reasoned against, and
+    screeninghit_edit / screeninghit_delete refuse them — the page must not offer what the view
+    refuses.
+  {% endcomment %}
+  {% if obj.is_open and not screening.is_terminal %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
       <div class="card-body">
