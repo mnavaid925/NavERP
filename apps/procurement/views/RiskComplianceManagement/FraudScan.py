@@ -267,12 +267,16 @@ def _ageing(tenant, today):
         # An age of ``low`` days means document_date <= today - low; an age below ``high`` means
         # document_date > today - high. Computed as two date bounds so the whole thing is one
         # SQL aggregate rather than a Python walk over every open alert.
-        condition = Q(status__in=OPEN_STATUSES, document_date__lte=today - timedelta(days=low))
+        condition = Q(status__in=OPEN_STATUSES)
+        if low:
+            condition &= Q(document_date__lte=today - timedelta(days=low))
         if high is not None:
             condition &= Q(document_date__gt=today - timedelta(days=high))
         aggregates[key] = Count("id", filter=condition)
-    # The freshest bucket also has to catch anything dated today or (defensively) later, which
-    # ``document_date__lte=today`` already does — low is 0 for it.
+    # The freshest bucket carries NO upper date bound (``low`` is 0 for it), so it also catches an
+    # alert dated today or, defensively, later. A ``document_date__lte=today`` here would leave a
+    # future-dated open alert in no bucket at all, and the buckets would silently sum to less than
+    # ``stats.open`` — reachable, because FraudScanForm bounds ``end`` only relative to ``start``.
     counts = FraudAlert.objects.filter(tenant=tenant).aggregate(**aggregates)
     return [{"key": key, "label": label, "count": counts.get(key, 0), "css": css}
             for key, label, _low, _high, css in AGE_BUCKETS]
