@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Replenishment Run{% else %}New Replenishment Run{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — ReplenishmentRun create-or-edit. ONE template for
+    both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj).
+
+    The form carries exactly the five editable fields: location, run_date, trigger,
+    abc_class_filter, notes. Everything the run PRODUCES is excluded and none of it is
+    accepted from a POST — number is minted by TenantNumbered.save(), and status,
+    generated_by, generated_at and released_at are stamped by generate() / release() alone. A
+    proposal that could be typed in would not be a proposal.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and every
+    {% if %} branch falls through to field.help_text — the model's own help text is already
+    written and a silent blank would be worse than a duplicate. Each label is bound to its
+    widget with for="{{ field.id_for_label }}".
+
+    The ABC gotcha gets its own explainer card rather than a line of help text, because it is
+    the one thing on this form that is actively misleading if skimmed: two different models in
+    this system have an `abc_class`, they mean unrelated things, and this filter reads the
+    reorder rule's.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit run — {{ obj.number }}{% else %}New replenishment run{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <a href="{% url 'procurement:replenishmentrun_list' %}">Replenishment Runs</a><span class="sep">›</span>
+        <span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">This form only sets the <span class="fw-600">scope</span> of the run — where, when and which ABC class. Nothing is proposed until you press Generate on the run itself, and nothing is bought until accepted lines are released into draft requisitions.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Scope</h2><span class="text-muted">what this run will look at</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "location" %}
+                <div class="form-help">Leave blank to plan the whole network. A run scoped to ONE location is also the more accurate one: purchase-order and requisition lines carry no location, so a network run nets the same incoming quantity off every location that stocks the SKU and therefore proposes conservatively.</div>
+              {% elif field.name == "run_date" %}
+                <div class="form-help">The date this proposal is for. Each requisition's needed-by date is counted forward from it using that line's lead time, so a back-dated run produces back-dated due dates.</div>
+              {% elif field.name == "trigger" %}
+                <div class="form-help">“Manual” is somebody pressing Generate. “Scheduled” records that a timetable asked for this run — the column exists so a scheduled run is distinguishable from a hand-made one; releasing the money is a human action either way.</div>
+              {% elif field.name == "abc_class_filter" %}
+                <div class="form-help">Optional. Plan only one ABC class — useful when A-class items are reviewed weekly and C-class monthly. See the note below on which ABC class this is.</div>
+              {% elif field.name == "notes" %}
+                <div class="form-help">Optional. Worth writing when the run exists for a reason the scope does not explain — a seasonal build, a supplier outage, a one-off catch-up.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create run{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:replenishmentrun_detail' obj.pk %}{% else %}{% url 'procurement:replenishmentrun_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Which ABC class is this?</h2><span class="text-muted">two models, same three letters</span></div>
+    <div class="card-body">
+      <p class="text-muted">This filter reads the <span class="fw-600">reorder rule's</span> ABC class — the uppercase A/B/C revenue rank that SCM's demand planning assigns to an item at a location, where A is the small handful of items most of the money runs through.</p>
+      <p class="text-muted">It is <span class="fw-600">not</span> the location's ABC class, which is a lowercase a/b/c bin-velocity attribute describing how often a picker walks to that bin. The two are unrelated, and filtering by the wrong one would quietly plan the wrong items.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2><span class="text-muted">nothing, until you ask</span></div>
+    <div class="card-body">
+      <ol class="text-muted">
+        <li><span class="fw-600">Create</span> the run — this form. It starts as a draft with no lines.</li>
+        <li><span class="fw-600">Generate</span> on the run reads every active reorder rule in scope, nets off stock on hand, open purchase orders and open requisitions, and proposes what is still short. Press it as often as you like: each press replaces the previous lines rather than adding to them.</li>
+        <li><span class="fw-600">Decide</span> each line — accept, snooze with a date, or dismiss. The decision is kept, which is the whole reason this run exists as a record rather than a screen.</li>
+        <li><span class="fw-600">Release</span> turns the accepted lines into one draft requisition per vendor. Approval routing, the budget check and purchase-order conversion all still run afterwards.</li>
+      </ol>
+    </div>
+  </div>
+{% endblock %}
