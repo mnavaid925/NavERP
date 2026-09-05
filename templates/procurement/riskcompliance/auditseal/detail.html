@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — one audit seal
+    (apps/procurement/views/RiskComplianceManagement/AuditTrail.py :: auditseal_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, entries_covered, verification, is_admin.
+
+    TAMPER_NOTE and RETENTION_NOTE are read off the MODEL (obj.TAMPER_NOTE / obj.RETENTION_NOTE)
+    rather than being passed as context keys. They are class attributes for exactly this reason:
+    a page cannot render this record without the sentence that says what it does and does not
+    prove, no matter which view renders it.
+
+    ROW-DICT CONTRACTS (L41 §1) — each list carries these keys and no others:
+      verification    → check, state, state_css, state_label, detail
+      entries_covered → id, at, action, target, user, content_type, state, state_css, state_label
+
+    `entries_covered` rows are TWO shapes in one list and the template treats them as such: a
+    live entry has `at`, and a row for a SEALED ENTRY THAT IS NO LONGER THERE has at=None with
+    state="missing". That is the deletion made visible on the page rather than only in a count,
+    so every read of `at`, `user` and `content_type` sits inside an {% if %} branch.
+
+    Detail rows use <dl class="detail-grid"><div class="detail-item"><dt>/<dd> — .detail-label
+    and .detail-value DO NOT EXIST in theme.css (L40 §2). Badge classes come from the view
+    (row.state_css, check.state_css) and the model (obj.verify_css) and are used VERBATIM, never
+    re-derived in an {% if %} ladder, because theme.css ships only badge-green / badge-red /
+    badge-amber / badge-info / badge-muted / badge-slate and a semantic badge-success renders
+    completely unstyled while passing every test (L33).
+
+    NO EDIT AND NO DELETE, here or anywhere: a seal whose digest can be edited proves nothing,
+    and deleting one breaks the chain it exists to protect. The closing card says so where a
+    reviewer would look for the buttons. Verify is the only verb on the page, it is offered to
+    every reader rather than to administrators only, and there is no confirm() dialog on it —
+    it re-reads and re-hashes, it changes no record but this seal's own three check stamps.
+
+    Nullable-FK discipline (L10): prev_seal and sealed_by are both nullable, so each is read
+    inside an {% if %} branch before any default: filter argument. `note` and `target` are
+    user-authored and are never rendered with |safe.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:auditseal_list' %}">Audit seals</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">A SHA-256 digest over audit entries {{ obj.range_label }}, chained onto the seal before it. It proves this range is unchanged <em>since it was sealed</em> — nothing more, and the page below is explicit about the rest.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:audit_trail' %}" class="btn btn-outline"><i data-lucide="file-search"></i> Audit trail</a>
+      <a href="{% url 'procurement:auditseal_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to seals</a>
+      <form method="post" action="{% url 'procurement:auditseal_verify' obj.pk %}">
+        {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="shield-check"></i> Verify now</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Verification</h2>
+      <span class="badge {{ obj.verify_css }}">{{ obj.verify_label }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Check</th>
+            <th>State</th>
+            <th>What it establishes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for check in verification %}
+            <tr>
+              <td class="fw-600">{{ check.check }}</td>
+              <td><span class="badge {{ check.state_css }}">{{ check.state_label }}</span></td>
+              <td>{{ check.detail }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Everything above except the last full verification is checked live and cheaply — a row count, the fingerprints of the sample below, and the link to the previous seal. <strong>Press Verify now to re-hash every one of the {{ obj.row_count }} entries this seal covers.</strong> That is the only check that proves the digest, and if it fails it names the first entry that no longer matches.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this seal covers</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Entry range</dt><dd>{{ obj.range_label }}</dd></div>
+        <div class="detail-item"><dt>Entries sealed</dt><dd>{{ obj.row_count }}</dd></div>
+        <div class="detail-item"><dt>First entry</dt><dd>{{ obj.period_start|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Last entry</dt><dd>{{ obj.period_end|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Sealed</dt><dd>{{ obj.sealed_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Sealed by</dt><dd>{% if obj.sealed_by %}{{ obj.sealed_by.get_full_name|default:obj.sealed_by.username }}{% else %}<span class="text-muted">System</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Algorithm</dt><dd>{{ obj.algorithm }}</dd></div>
+        <div class="detail-item"><dt>Chains onto</dt><dd>{% if obj.prev_seal %}<a href="{% url 'procurement:auditseal_detail' obj.prev_seal.pk %}">{{ obj.prev_seal.number }}</a>{% else %}<span class="text-muted">Nothing — this is the first seal in the chain</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last checked</dt><dd>{% if obj.last_verified_at %}{{ obj.last_verified_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never re-hashed since it was sealed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Note</dt><dd>{% if obj.note %}{{ obj.note }}{% else %}<span class="text-muted">No note</span>{% endif %}</dd></div>
+      </dl>
+      <div style="margin-top:1rem;">
+        <div class="text-muted fw-600">Content digest</div>
+        <div style="word-break:break-all;">{{ obj.digest }}</div>
+      </div>
+      <div style="margin-top:.75rem;">
+        <div class="text-muted fw-600">Chain digest</div>
+        <div style="word-break:break-all;">{{ obj.chain_digest }}</div>
+        <p class="text-muted" style="margin-top:.25rem;">Computed as the previous seal's chain digest, then this seal's content digest, hashed together. Altering any entry in this range changes the content digest, which changes this value, which breaks every seal that chained onto it.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Entries in this range</h2>
+      <span class="text-muted">a sample of the {{ obj.row_count }} sealed entries, checked against their fingerprints</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Entry</th>
+            <th>When</th>
+            <th>Who</th>
+            <th>Action</th>
+            <th>Record</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in entries_covered %}
+            <tr>
+              <td class="fw-600">#{{ row.id }}</td>
+              <td>{% if row.at %}{{ row.at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.user %}{{ row.user }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.action %}{{ row.action }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.target %}{{ row.target }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if row.content_type %}<div class="text-muted">{{ row.content_type }}</div>{% endif %}
+              </td>
+              <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="alert-octagon"></i>
+                <h3>Every entry in this range is gone</h3>
+                <p>This seal covers {{ obj.row_count }} entries and none of them is still in the log. That is not an empty page — it is the seal doing its job: without it, their removal would have left no trace at all.</p>
+                <a href="{% url 'procurement:audit_trail' %}" class="btn btn-outline">Read the trail</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">A row marked <strong>Deleted</strong> is one the seal covers that is no longer in the log; <strong>Modified</strong> is one whose contents no longer match the fingerprint taken when the seal was made. Both are shown here rather than only counted, so the entry can be named rather than merely missed.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this proves, and what it does not</h2>
+      <span class="text-muted">tamper-evident, not tamper-proof</span>
+    </div>
+    <div class="card-body">
+      <p>{{ obj.TAMPER_NOTE }}</p>
+      <p class="text-muted">{{ obj.RETENTION_NOTE }}</p>
+      <p class="text-muted">This record has no Edit and no Delete button, and no view would accept one. A seal whose digest can be edited proves nothing, and deleting a seal breaks exactly the chain it exists to protect — it is the first move somebody covering their tracks would make. That is the one place this module departs from the application's CRUD rule, and it is a decision rather than an omission.</p>
+      {% if is_admin %}
+        <p class="text-muted">You can take a new seal from the <a href="{% url 'procurement:auditseal_list' %}">seal register</a> — it will cover everything written since {{ obj.number }}.</p>
+      {% else %}
+        <p class="text-muted">Taking a new seal is an administrator action. Verifying one is not: the button at the top of this page is available to you, and re-hashing the range is how you check this seal rather than taking somebody's word for the badge on it.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
