@@ -218,6 +218,14 @@
                 {% else %}
                   <form method="post" action="{% url 'procurement:replenishmentsuggestion_decide' obj.pk line.pk %}">
                     {% csrf_token %}
+                    {% comment %}
+                      Which page of the review board the buyer is on, carried through the POST so
+                      the redirect can put them back on it. Lines page at 25 and a run caps at
+                      500, so without this a buyer working page 8 is thrown to page 1 after EVERY
+                      save. The view re-parses it; it never trusts it as anything but a page
+                      number.
+                    {% endcomment %}
+                    {% if line_page_obj.number > 1 %}<input type="hidden" name="page" value="{{ line_page_obj.number }}">{% endif %}
                     <select name="decision" aria-label="Decision for {{ line.item.sku }}" class="form-select">
                       {% for value, label in decision_choices %}
                         <option value="{{ value }}" {% if line.decision == value %}selected{% endif %}>{{ label }}</option>
