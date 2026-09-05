@@ -59,7 +59,7 @@
               {% elif field.name == "tags" %}
                 <div class="form-help">Comma-separated keywords. They are lower-cased, de-duplicated and re-joined on save, so "HVAC, hvac , Warranty" is stored as "hvac, warranty".</div>
               {% elif field.name == "classification" %}
-                <div class="form-help">How sensitive the content is. This is a label people read, not an access rule — 6.19 does not enforce a permission matrix, and nothing here hides a document from a workspace member.</div>
+                <div class="form-help">How sensitive the content is, and who can see it. {{ classification_note }} Named readers, groups and inherited permissions are Module 13.7 — this is one rule, not a matrix.</div>
               {% elif field.name == "owner" %}
                 <div class="form-help">Who is answerable for keeping this current — renewing it before it expires and reviewing it when it comes due. Reminder alerts are raised into the shared inbox, not mailed.</div>
               {% elif field.name == "supplier_visible" %}
