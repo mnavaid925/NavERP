@@ -122,8 +122,9 @@ worth either renaming the key per board or documenting why trend's differs.
 | `admin.py` — four models registered | done (`07f0b03c`) |
 | `apps/core/navigation.py` — `LIVE_LINKS["6.16"]` | done (`d33ac440`) |
 | `urls/__init__.py` — appended last | done (`851c486c`) |
-| **`seed_procurement.py` — `_seed_supplier_performance`** | **NOT STARTED** |
-| `makemigrations` / `migrate` / seed / smoke | **NOT RUN** |
+| **`seed_procurement.py` — `_seed_supplier_performance`** | **NOT STARTED — the only code left** |
+| `makemigrations` + `migrate` | **DONE** — `0026` (`a0f4095d`), applied, single leaf, all four tables live |
+| seed / smoke / reviewers / fixer / tests / SKILL+README | **NOT RUN** |
 
 Verified by resolver walk (not grep — grep cannot see factory-generated names):
 **33 of 33 routes register, zero duplicate url names app-wide, procurement total 385.**
@@ -139,7 +140,26 @@ Verified by resolver walk (not grep — grep cannot see factory-generated names)
    theirs after. Idempotent (`.exists()` guard, `get_or_create`), reuse seeded `core.Party`
    suppliers, never `--flush`.
 
-### MIGRATION IS DELIBERATELY NOT GENERATED — do not just run it
+### MIGRATION: RESOLVED AND APPLIED — `0026` (`a0f4095d`)
+
+**Superseded the hold below.** The `ProcurementPolicy` ownership settled and was verified on disk:
+6.17's `PolicyAttestation.policy` FKs `"procurement.ProcurementPolicy"` by string at 6.19's table
+(`RiskComplianceManagement/Policies.py:265`), and exactly one `ProcurementPolicy` exists app-wide.
+6.19 consented to their models landing in a migration authored here. Generated, committed, applied:
+
+```
+procurement leaves: ['0026_procurementdocument_knowledgeresource_and_more']  count: 1  (linear)
+migrate -> OK ; check -> no issues
+procurement_supplierkpi / _supplierkpiscore / _supplierfeedback / _supplierimprovementplan : all live
+```
+
+`0026` carries **eight** tables — 6.16's four and 6.19's four — because `makemigrations` reads the app
+model registry and has no per-model or per-path flag. 6.17's and 6.18's are absent only because
+theirs were not re-exported at that moment. **The next generator takes `0027`.**
+
+The reasoning that led to holding is kept below because it is the reusable part.
+
+### Why generating was held until ownership settled
 
 `makemigrations procurement` **cannot be scoped to one session's models.** It reads the app model
 registry, and a `--dry-run` this session showed it would emit ONE migration containing 6.19's four
