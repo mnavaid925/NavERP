@@ -385,3 +385,98 @@ and `bulk_create` would break both.
 - **Zero DB work in any of the 26 templates** — no `.count`/`.all` on a related manager inside any
   `{% for %}`. All row-dicts precomputed in the views.
 - **All seven detail-page `select_related` sets are complete**; no chained-`__str__` misses.
+
+---
+
+## Pass 4 — frontend-reviewer
+
+**Counts checked** (so a short count reads as a broken glob, not a clean bill): 26/26 templates ·
+8 view modules cross-read · **17 live `confirm()` handlers** (32 raw hits − 15 in `{% comment %}`
+prose) · **101 `badge-*` tokens** (92 in markup, 9 in comment prose) — **0 non-existent in markup** ·
+59 distinct CSS classes, **0 missing from theme.css** · 44 `stat-icon` modifiers, all real ·
+56 distinct `{% url %}` names, all resolve · 29 filter selected-state comparisons, all correct ·
+22 `get_full_name|default:` uses, all nullable FKs guarded · **8/8 registers use
+`partials/pagination.html`** (no hand-rolled paginator) · `|safe` 0, `|slugify` 0, multi-line
+`{# #}` 0.
+
+**Critical: none.** No 500 risk, no comment leak, no unstyled badge, no missing context name, no
+`NoReverseMatch`, no unguarded pagination. On the two recurring classes specifically: every `{#`
+closes on its own line and all 26 files use `{% comment %}` for multi-line headers (L2 clean); the
+9 `badge-success`/`badge-warning` grep hits are **all prose inside `{% comment %}` blocks warning
+about the lesson** — zero reach live markup (L33 clean).
+
+### [ ] I10 — Important (latent, works today) — `{{ act.confirm }}` is HTML-escaped into a JS string literal
+`templates/procurement/riskcompliance/attestation/detail.html:123` and `:132`;
+`templates/procurement/riskcompliance/policy/detail.html:116`
+
+```django
+onsubmit="return confirm('{{ act.confirm }}');"
+```
+The three strings this resolves to (`Attestations.py:265`, `:281`, `Policies.py:382`) contain no
+apostrophe today, so the dialog fires — **not a live bug**. But the escaper is wrong for where the
+value lands: autoescape turns `'` into `&#39;`, the HTML parser decodes it back to a bare `'`
+*before* the JS engine sees it, the literal terminates, the handler throws, `onsubmit` returns
+`undefined`, and **the form submits with no confirmation at all**. The other 14 handlers are
+hand-audited literal copy whose apostrophes we control; these three take their copy from Python, one
+word away from silently disarming a sign / exempt / raise-roster dialog, with nothing failing.
+**Fix:** `{{ act.confirm|escapejs }}` in all three — `escapejs` emits `'`, which the HTML
+parser will not decode.
+
+**No stored-XSS vector:** the other 14 handlers interpolate only `number`, which is
+`CharField(editable=False)` with a `NUMBER_PREFIX` (`models/_base.py:64`) — system-assigned, cannot
+carry a quote. No user-typed field reaches any confirm string.
+
+### [ ] M19 — Minor — unreachable `{% empty %}` branch
+`risksignal/detail.html:254-261` — "No series yet" can never render: `series` filters on
+`party_id`/`provider`/`metric` equal to `obj`'s own, so it always contains `obj` itself
+(`RiskSignals.py:193` says so). Drop the block or reword the card.
+
+### [ ] M20 — Minor — always-true nested guard
+`screeninghit/detail.html:83` — `{% if allowed_dispositions %}` sits inside `{% if obj.is_open %}`
+(line 79) and the view sets `allowed_dispositions = _TERMINAL_DISPOSITION_CHOICES if obj.is_open
+else []`. With no `{% else %}`, a future change to that invariant renders the card with an empty
+body. Drop the inner `{% if %}` or give it an `{% else %}`.
+
+### [ ] M21 — Minor — per-row create button carries no row identity
+`rescreening_due.html:93`, `risk_refresh_due.html:121` — the `plus` icon in the Actions column links
+to bare `screening_create`/`risksignal_create`, identical on every row, while the `history` icon
+beside it correctly carries `?party={{ row.party.pk|stringformat:"d" }}`. In an Actions column a
+button reads as row-scoped. Either drop it (the page header already has the CTA) or add `?party=…`
+and seed `initial` from it in `_screening_form`/`_signal_form`.
+
+### [~] M22 — Minor — `<dt>`/`<dd>` outside a `<dl>` — APP-WIDE, do not fork
+7 places (`fraudalert/detail.html:163`, `risksignal/detail.html:106,123`,
+`screening/detail.html:62,80`, `screeninghit/detail.html:56,107`): a bare
+`<div class="detail-item">` wrapping `<dt>`/`<dd>` with no enclosing `<dl>`. **Renders correctly** —
+theme.css styles them via the descendant selectors `.detail-item dt`/`.detail-item dd`
+(`static/css/theme.css:356-357`) — it is only invalid HTML, and it appears 28 more times across 12
+templates outside this sub-module. Record, do not fix here (L18/L28).
+
+### Checked and cleared — do NOT "fix" these
+- `{% if r.amount is not None %}` / `{% if results is not None %}` / `{% if row.days_late is None %}`
+  — Django has no `None` literal, but `smartif`'s `TemplateLiteral.eval` resolves with
+  `ignore_failures=True`, so the operand becomes Python `None` and the comparison is **correct**.
+  Verified against `django/template/base.py`.
+- `screeninghit/list.html:146` delete **not** wrapped in `{% if is_admin %}` is correct *as built* —
+  `screeninghit_delete` is `@login_required` only. (Note: I1 changes that view; the template must be
+  updated in the same fix, which is why I1 already says so.)
+- `attestation/detail.html:50,75`, `attestation/list.html:127`, `policy/detail.html:161`,
+  `policy_overdue.html:111` use `obj.user.get_full_name|default:…` unguarded — **safe**:
+  `PolicyAttestation.user` is `CASCADE` with no `null=True`.
+- Filter controls use `aria-label` rather than a visible `<label for>` — a valid accessible name and
+  the app-wide `.filter-bar` pattern. Every `<label for>` inside a form template is correctly paired
+  to `{{ field.id_for_label }}`.
+- The 7 underscore filenames at the sub-module root are standalone board/report pages, allowed by
+  CLAUDE.md rule 6 — none is a banned `<entity>_<page>.html`.
+- The two deliberate exceptions (`auditseal/` no form/edit/delete; `policy/` no form) verified as
+  intended.
+
+### Structural point worth keeping
+The badge architecture is the *right* fix for L33, not merely a correct instance of it. Across 26
+templates there is exactly **one** `{% if %}` badge ladder (`audit_trail.html:209`), and it exists
+for a defensible reason — `AuditLog` belongs to `core` and 6.17 adds no column to it — with exact
+CHOICES values, a `badge-muted` `{% else %}`, and the label always from `get_action_display`. Every
+other badge reads a `*_css` value from a `_CSS` map in the model or view, and those maps emit only
+the six real classes (78 occurrences in Python, zero semantic names). **A future contributor cannot
+reintroduce `badge-success` by editing a template — there is no ladder to edit.** Same discipline on
+`state_css` in every row-dict contract.
