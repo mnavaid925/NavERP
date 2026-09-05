@@ -137,9 +137,10 @@
     Both destructive controls also require the PARENT screening to still be open. Once it is
     cleared or blocked its hits are the evidence that decision was reasoned against, and
     screeninghit_edit / screeninghit_delete refuse them — the page must not offer what the view
-    refuses.
+    refuses. Delete is additionally admin-only (@tenant_admin_required on screeninghit_delete):
+    deleting the last open hit is what unlocks Clear, so destroying a match is not analyst work.
   {% endcomment %}
-  {% if obj.is_open and not screening.is_terminal %}
+  {% if obj.is_open and not screening.is_terminal and is_admin %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
       <div class="card-body">
