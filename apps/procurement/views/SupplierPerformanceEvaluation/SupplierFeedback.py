@@ -179,9 +179,14 @@ def supplierfeedback_detail(request, pk):
     later — and because a template that reads ``can_submit`` next to a Submit button says what it
     means. They are the UX half of the rule: each verb re-checks the status itself, so a crafted
     POST against a submitted response is refused there too.
+
+    The status is read through a deliberately narrow ``.only()`` probe rather than by fetching
+    the whole row twice — ``crud_detail`` does its own tenant-scoped fetch with every rendered
+    FK joined, and duplicating that just to read one column would double the page's join cost.
     """
-    obj = get_object_or_404(_feedback_qs(request), pk=pk)
-    open_now = obj.status == _OPEN_STATUS
+    open_now = get_object_or_404(
+        SupplierFeedback.objects.only("pk", "tenant_id", "status"),
+        pk=pk, tenant=request.tenant).status == _OPEN_STATUS
     return crud_detail(
         request, model=SupplierFeedback, pk=pk, template=TEMPLATE_DETAIL,
         select_related=(*_ROW_RELATIONS, "requested_by"),
@@ -354,7 +359,7 @@ def supplierfeedback_expire(request, pk):
     write_audit_log(request.user, obj, "expire",
                     changes={"action": "expire", "status": obj.status}, tenant=request.tenant)
     messages.success(request, f"Response {obj.number} closed as expired.")
-    return redirect("procurement:supplierfeedback_list")
+    return redirect("procurement:supplierfeedback_detail", pk=pk)
 
 
 @login_required
