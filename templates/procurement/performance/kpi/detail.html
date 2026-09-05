@@ -4,10 +4,13 @@
   {% comment %}
     6.16 Supplier Performance & Evaluation — SupplierKpi detail
     (crud_detail, context contract: obj, score_rows, plans, feedback_rows, row_cap, truncated,
-    benchmark_note — and NOTHING else).
+    related_cap, related_truncated, benchmark_note — and NOTHING else).
 
-    The definition on the left, everything measured or opened UNDER it below. The three lists
-    are capped and tenant-scoped in the view; `truncated` is true when any of them was cut.
+    The definition on the left, everything measured or opened UNDER it below. All three lists
+    are capped and tenant-scoped in the view, but at TWO different caps: the measured history at
+    `row_cap` and the two related lists at `related_cap`. Hence two flags — `truncated` is the
+    measured history, `related_truncated` the other two. One key for two numbers is how this page
+    came to describe a 20-row list as "the most recent 50".
 
     Nullable-field discipline (L10): target_value, warning_threshold, critical_threshold,
     industry_benchmark_value and owner are all nullable, and every read of them sits inside an
@@ -116,7 +119,10 @@
       <p class="form-help">{{ benchmark_note }}</p>
       <p class="form-help">Re-tuning this definition does not rewrite history: every scorecard line freezes the weight, target, direction, source and unit that were in force when it was generated, so a retune changes the next period and leaves closed ones alone.</p>
       {% if truncated %}
-        <p class="form-help">Some of the lists below were cut — the most recent {{ row_cap }} measurements are shown, and only the most recent plans and responses. Open the registers for the full history.</p>
+        <p class="form-help">More than {{ row_cap }} measurements exist for this KPI &mdash; the most recent {{ row_cap }} are listed below. Open the score register and filter by this KPI for the full history.</p>
+      {% endif %}
+      {% if related_truncated %}
+        <p class="form-help">More than {{ related_cap }} rows cite this KPI across the plans and 360 tables &mdash; the most recent {{ related_cap }} of each are shown. Open those registers for the full set.</p>
       {% endif %}
     </div>
   </div>
@@ -179,7 +185,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Improvement plans citing this KPI</h2>
-      <span class="text-muted">most recent first</span>
+      <span class="text-muted">most recent first, at most {{ related_cap }} rows</span>
     </div>
     <div class="table-wrap">
       <table class="table">
@@ -236,7 +242,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">360 responses against this KPI</h2>
-      <span class="text-muted">most recent period first</span>
+      <span class="text-muted">most recent period first, at most {{ related_cap }} rows</span>
     </div>
     <div class="table-wrap">
       <table class="table">
