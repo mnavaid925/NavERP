@@ -4364,30 +4364,41 @@ class Command(BaseCommand):
             ]
 
             made = 0
-            for party, provider, metric, days_ago, value, source_ref, note, verdict in signal_rows:
-                observed_on = today - timedelta(days=days_ago)
-                signal = SupplierRiskSignal(
-                    tenant=tenant, party=party, provider=provider, metric=metric,
-                    observed_on=observed_on, value=value, source_ref=source_ref,
-                    # Never before the observation - clean() refuses that, and a refresh date is
-                    # a forward-looking commitment.
-                    next_refresh_on=observed_on + timedelta(days=180),
-                    captured_by=owner, notes=note)
-                # save() runs derive(), which stamps scale_min/scale_max/higher_is_better,
-                # risk_position, band, previous_value and trend. Not one of the seven is set here.
-                signal.save()
-                made += 1
-                if verdict is None:
-                    # Left at "new" on purpose: a register with nothing awaiting a human is not a
-                    # register anybody checks.
-                    continue
-                verb, verdict_note = verdict
-                if verb == "review":
-                    signal.mark_reviewed(owner, verdict_note)
-                elif verb == "action":
-                    signal.mark_actioned(owner, verdict_note)
-                elif verb == "dismiss":
-                    signal.dismiss(owner, verdict_note)
+            # Wrapped like every other block here. This one matters MORE than most, not less:
+            # derive() reads the PRECEDING row of the same (party, provider, metric) series to
+            # stamp previous_value and trend, so a half-written series is not merely partial -
+            # its later rows would be derived against a predecessor that is missing, and the
+            # existence check at the top of the block would then skip the repair on a re-run.
+            # Per-row .save() is correct and is NOT a bulk_create candidate: TenantNumbered.save()
+            # mints the number and derive() stamps seven columns from the preceding row, and
+            # bulk_create bypasses both.
+            with transaction.atomic():
+                for (party, provider, metric, days_ago, value, source_ref, note,
+                     verdict) in signal_rows:
+                    observed_on = today - timedelta(days=days_ago)
+                    signal = SupplierRiskSignal(
+                        tenant=tenant, party=party, provider=provider, metric=metric,
+                        observed_on=observed_on, value=value, source_ref=source_ref,
+                        # Never before the observation - clean() refuses that, and a refresh date
+                        # is a forward-looking commitment.
+                        next_refresh_on=observed_on + timedelta(days=180),
+                        captured_by=owner, notes=note)
+                    # save() runs derive(), which stamps scale_min/scale_max/higher_is_better,
+                    # risk_position, band, previous_value and trend. Not one of the seven is set
+                    # here.
+                    signal.save()
+                    made += 1
+                    if verdict is None:
+                        # Left at "new" on purpose: a register with nothing awaiting a human is
+                        # not a register anybody checks.
+                        continue
+                    verb, verdict_note = verdict
+                    if verb == "review":
+                        signal.mark_reviewed(owner, verdict_note)
+                    elif verb == "action":
+                        signal.mark_actioned(owner, verdict_note)
+                    elif verb == "dismiss":
+                        signal.dismiss(owner, verdict_note)
 
             # Read BACK off the database rather than off the objects above, so what is reported
             # is what was actually stored.
