@@ -1661,7 +1661,9 @@ LIVE_LINKS = {
     # Two boundaries worth stating, because both look like duplication and are not:
     #   * "Policy Management & Acknowledgment" points at 6.17's ACKNOWLEDGEMENT register, not at
     #     6.19's policy library. 6.19 owns `ProcurementPolicy` and its authoring; 6.17 owns the
-    #     sign-off ledger over it (contract §6a). The two pages link to each other.
+    #     sign-off ledger over it (contract §6a). 6.17 links TO `ppolicy_detail` (eight times);
+    #     the return link from 6.19's policy detail is 6.19's to add and is not built, so the
+    #     traversal is one-way today.
     #   * "Audit Trail & Logging" is deliberately the audit-trail REGISTER, not the seal list.
     #     The register is the page an auditor actually wants; the hash-chain seal is the evidence
     #     behind it and is reached from there. The page states plainly that the trail is
