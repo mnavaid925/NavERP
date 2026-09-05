@@ -13,8 +13,9 @@ is what makes the first-match-wins ordering above reviewable in one place. Every
 ``screening-hits/`` route lives in ``ScreeningHits.py``.
 
 **``screening_batch`` is deliberately NOT registered.** The plan marks it P2/cuttable, and it is
-the one route here that WRITES rows in bulk (one screening per un-screened supplier, capped at
-``BATCH_PARTY_LIMIT``). It is cut from this entity rather than shipped half-guarded; the
+the one route here that WRITES rows in bulk (one screening per un-screened supplier). It is cut
+from this entity rather than shipped half-guarded, and its ``BATCH_PARTY_LIMIT`` cap went with
+it rather than being left behind as a constant nothing reads; the
 re-screening board already surfaces exactly which suppliers it would have minted a screening for,
 so nothing is unreachable without it.
 
