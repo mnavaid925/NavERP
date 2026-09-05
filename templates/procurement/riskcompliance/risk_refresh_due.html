@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Risk Refresh Due{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the risk refresh board
+    (apps/procurement/views/RiskComplianceManagement/RiskSignals.py ::
+    risksignal_refresh_board). A standalone sub-module-root page, not an entity CRUD page, so it
+    lives at templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract, and NOTHING else exists here:
+      rows, stats{overdue, due_soon, stale}, today, is_admin.
+
+    Each row is a dict, NOT a model instance, and carries exactly:
+      row.party, row.signal (may be None — never monitored), row.provider_label,
+      row.metric_label, row.observed_on, row.due_on, row.days (days past due; negative means
+      still ahead; None when there is no due date), row.age_days (days since the observation),
+      row.state, row.state_label, row.state_css.
+    (`sort_on` is the view own ordering key and is deliberately not rendered.)
+
+    ON A "NEVER MONITORED" ROW `row.signal` IS None AND SO IS EVERY OTHER FIELD, so the whole row
+    body is guarded and renders an em-dash instead (L10). `row.state_css` is already a badge
+    class straight off the view, used verbatim — never re-derived in an {% if %} ladder here.
+
+    The Days column reads a different number per state on purpose: an overdue series is late by
+    row.days, a due-soon one is that many days ahead, and a STALE one has no meaningful due date
+    to be late for — what is true about it is its age, so it shows row.age_days.
+
+    There is NO stored "due" flag anywhere — the board is computed from the register on every
+    request (two queries: the supplier list, then every signal, ordered so the first row of each
+    series is its latest). Rows are built only for series needing attention, so this page has no
+    pagination by design: its length tracks the size of the problem, not the size of the vendor
+    master.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Risk Refresh Due</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Refresh due</span>
+      </div>
+      <p class="text-muted">Which supplier metrics are overdue a fresh reading, which are approaching one, which have gone stale, and which suppliers have never been monitored at all. Computed live from the register as at {{ today|date:"M d, Y" }} — there is no stored due flag to go stale.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:risksignal_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Risk signals</a>
+      <a href="{% url 'procurement:screening_rescreen_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Re-screening due</a>
+      <a href="{% url 'procurement:risksignal_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Capture observation</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Refresh overdue</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.due_soon }}</div><div class="stat-label">Due within 30 days</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="hourglass"></i></div><div class="stat-value">{{ stats.stale }}</div><div class="stat-label">Stale or never monitored</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Needs attention</h2>
+      <span class="text-muted">worst first — never monitored, then the longest neglected</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Latest observation</th>
+            <th>Provider &amp; metric</th>
+            <th>Observed</th>
+            <th>Refresh due</th>
+            <th class="text-right">Days</th>
+            <th>State</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:party_detail' row.party.pk %}">{{ row.party.name }}</a></td>
+              <td>
+                {% if row.signal %}
+                  <a href="{% url 'procurement:risksignal_detail' row.signal.pk %}">{{ row.signal.number }}</a>
+                  <div><span class="badge {{ row.signal.band_css }}">{{ row.signal.get_band_display }}</span></div>
+                {% else %}
+                  <span class="text-muted">Never monitored</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.signal %}
+                  {{ row.provider_label }}
+                  <div class="text-muted">{{ row.metric_label }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{% if row.signal %}{{ row.observed_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.due_on %}
+                  {{ row.due_on|date:"M d, Y" }}
+                {% elif row.signal %}
+                  <span class="text-muted">None promised</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                {% if row.state == "never" %}
+                  <span class="text-muted">—</span>
+                {% elif row.state == "overdue" %}
+                  <span class="text-danger">{{ row.days }} late</span>
+                {% elif row.state == "due_soon" %}
+                  <span class="text-warn">in {{ row.days|stringformat:"d"|cut:"-" }}</span>
+                {% else %}
+                  <span class="text-warn">{{ row.age_days }} old</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:risksignal_create' %}" class="btn-icon" title="Capture an observation" aria-label="Capture an observation"><i data-lucide="plus"></i></a>
+                  <a href="{% url 'procurement:risksignal_list' %}?party={{ row.party.pk|stringformat:"d" }}" class="btn-icon" title="Monitoring history" aria-label="Monitoring history"><i data-lucide="history"></i></a>
+                  {% if row.signal %}
+                    <a href="{% url 'procurement:risksignal_detail' row.signal.pk %}" class="btn-icon" title="View latest" aria-label="View latest"><i data-lucide="eye"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="calendar-check"></i>
+                <h3>Every monitored series is fresh</h3>
+                <p>No supplier metric is overdue a reading, approaching one, or old enough to have gone stale, and every supplier in this workspace has been monitored at least once. Nothing to do here today.</p>
+                <a href="{% url 'procurement:risksignal_list' %}" class="btn btn-outline">Go to the register</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How this board is worked out</h2><span class="text-muted">no stored flag, no background job</span></div>
+    <div class="card-body">
+      <p class="text-muted">Each supplier is tracked one series at a time — one provider, one metric — and only the latest reading in each series counts. A series whose refresh date has passed is <span class="badge badge-red">overdue</span>. One whose reading has aged past the staleness window is <span class="badge badge-amber">stale</span>, whatever its refresh date says, because an old number is an old number. One falling due inside the next thirty days is <span class="badge badge-amber">due soon</span>. Anything comfortably fresh is simply not listed.</p>
+      <p class="text-muted">A supplier with no observation at all is <span class="badge badge-red">never monitored</span> rather than overdue: nobody promised a refresh date for it, so it cannot be late for one. What is true is that there is no data, which is staleness taken to its limit — so it sorts to the top of the board regardless. A series against a party that has since lost its supplier role drops off this board entirely; the register still shows it, but nobody is being asked to refresh it.</p>
+      <p class="text-muted">Nothing on this page writes anything. It tells you which readings to refresh; capturing the observation is a deliberate act, on the register.</p>
+    </div>
+  </div>
+{% endblock %}
