@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Fraud Board{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the fraud board
+    (apps/procurement/views/RiskComplianceManagement/FraudScan.py :: fraud_board). A standalone
+    sub-module-root page, not an entity CRUD page, so it lives at
+    templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract, and NOTHING else exists here:
+      by_rule, by_severity, ageing, rule_labels, citation_invoice_url,
+      citation_maverick_url, stats{total, open, investigating, confirmed, high}, is_admin.
+
+    ROW-DICT CONTRACTS (L41 §1) — each list carries these keys and no others:
+      by_rule     → r.rule, r.label, r.open, r.total, r.high, r.amount (may be None), r.url
+      by_severity → s.severity, s.label, s.css, s.open, s.total, s.url
+      ageing      → a.key, a.label, a.count, a.css   — deliberately NO url
+
+    WHY THE AGEING BUCKETS ARE NOT LINKS. The register has no date-range filter, so a link here
+    would either carry a parameter nothing reads or land on a list that does not match the number
+    printed beside it. An honest count with no link beats a link to the wrong page — a board
+    whose numbers and pages disagree is a board people stop believing.
+
+    Likewise the open/high figures in the by-rule table are NOT links. The register's status
+    filter takes a single value, and "open" there means the `open` status rather than both live
+    statuses, so a link would land on a shorter list than the figure beside it. The linked number
+    is the TOTAL, which the ?rule= URL genuinely matches.
+
+    `r.amount` is NULL when no open alert under that rule carries one — the two pair rules never
+    do, because an overlap is not a transaction. It is gated on `is not None` so a genuine 0.00
+    would still render, and reads "not a transaction" rather than 0.00 when absent.
+
+    `rule_labels` is the RULE_CHOICES list of (value, label) pairs, used by the closing panel to
+    enumerate every rule the board covers, so the page names them even in a workspace where
+    nothing has ever fired.
+
+    Badge classes come from the view (a.css, s.css), used VERBATIM — never re-derived in an
+    {% if %} ladder here, because theme.css ships only badge-green / badge-red / badge-amber /
+    badge-info / badge-muted / badge-slate and a semantic badge-success renders unstyled (L33).
+
+    This page has no pagination by design: it is four aggregates, never a row per alert.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Fraud Board</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Fraud board</span>
+      </div>
+      <p class="text-muted">Where the open integrity work is: which rule raised it, how serious it was graded, and how long it has been sitting. Computed live from the register on every request, so there is no stored rollup to drift out of step with it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Fraud alerts</a>
+      <a href="{% url 'procurement:fraud_scan' %}" class="btn btn-outline"><i data-lucide="scan-search"></i> Run the rules</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="search"></i></div><div class="stat-value">{{ stats.investigating }}</div><div class="stat-label">Under investigation</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ stats.confirmed }}</div><div class="stat-label">Substantiated</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="flame"></i></div><div class="stat-value">{{ stats.high }}</div><div class="stat-label">High severity, still live</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="database"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Alerts on record</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By rule</h2>
+      <span class="text-muted">every rule, including the ones with nothing against them</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th class="text-right">Live</th>
+            <th class="text-right">High severity</th>
+            <th class="text-right">Value at stake</th>
+            <th class="text-right">All time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in by_rule %}
+            <tr>
+              <td class="fw-600">{{ r.label }}</td>
+              <td class="text-right">{% if r.open %}<span class="text-warn fw-600">{{ r.open }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+              <td class="text-right">{% if r.high %}<span class="text-danger fw-600">{{ r.high }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+              <td class="text-right">
+                {% comment %} NULL for the two pair rules — an overlap is not a transaction, and 0.00 would claim a measured zero. {% endcomment %}
+                {% if r.amount is not None %}{{ r.amount }}{% else %}<span class="text-muted">Not a transaction</span>{% endif %}
+              </td>
+              <td class="text-right"><a href="{{ r.url }}">{{ r.total }}</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Only the all-time figure is a link, and it opens the register narrowed to that rule. The live and high-severity counts cover both open and under-investigation alerts, which the register cannot filter to in one click — so they are printed rather than linked, because a link that lands on a different number than the one beside it is how a board stops being believed.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">By severity</h2><span class="text-muted">worst first</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Severity</th><th class="text-right">Live</th><th class="text-right">All time</th></tr></thead>
+        <tbody>
+          {% for s in by_severity %}
+            <tr>
+              <td><span class="badge {{ s.css }}">{{ s.label }}</span></td>
+              <td class="text-right">{% if s.open %}<span class="fw-600">{{ s.open }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+              <td class="text-right"><a href="{{ s.url }}">{{ s.total }}</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Severity starts as a default the rule stamped and stays editable, so these totals reflect what people decided as much as what the rules guessed. A rule that consistently over-calls its severity should be corrected on the rows rather than argued with here.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How long they have been sitting</h2><span class="text-muted">open alerts, aged from the date of the fact</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Age</th><th class="text-right">Open alerts</th></tr></thead>
+        <tbody>
+          {% for a in ageing %}
+            <tr>
+              <td><span class="badge {{ a.css }}">{{ a.label }}</span></td>
+              <td class="text-right">{% if a.count %}<span class="fw-600">{{ a.count }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Age is measured from the date of the FACT, never from when the scan happened — otherwise every bucket would reset each time somebody re-ran the rules, and a question nobody answered for six months would keep looking fresh. These counts are deliberately not links: the register has no date-range filter, and pointing at a page that shows a different number would be worse than printing an honest one.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board does not cover</h2><span class="text-muted">cited, never re-detected</span></div>
+    <div class="card-body">
+      <p class="text-muted">Two neighbouring questions look like this one and are answered elsewhere. This module does not re-detect either of them, because two modules disagreeing about the same fact is worse than one module answering it.</p>
+      <p>
+        <a href="{{ citation_invoice_url }}" class="fw-600"><i data-lucide="copy"></i> Duplicate invoices</a> —
+        the same invoice submitted twice. Detected on the invoice itself, where the amounts, dates and supplier reference actually live, and worked in the invoice module.
+      </p>
+      <p>
+        <a href="{{ citation_maverick_url }}" class="fw-600"><i data-lucide="trending-up"></i> Maverick spend</a> —
+        spend that went around the agreed process: no contract, no order, off catalogue, above the contracted price, or split below an approval threshold. That is a question about PROCESS. Everything on this board is a question about INTEGRITY, and a split purchase in particular is a control weakness rather than an accusation the evidence would support.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The six rules behind this board</h2><span class="text-muted">rules, not AI</span></div>
+    <div class="card-body">
+      <ul>
+        {% for value, label in rule_labels %}
+          <li><a href="{% url 'procurement:fraudalert_list' %}?rule={{ value }}">{{ label }}</a></li>
+        {% endfor %}
+      </ul>
+      <p class="text-muted">Every one is a deterministic comparison over records this workspace already holds — nothing learns, scores by model or predicts. The thresholds they use are printed in full on the <a href="{% url 'procurement:fraud_scan' %}">scan page</a>, along with the one rule that cannot be built here at all.</p>
+      <p class="text-muted">And none of them enforces anything. An alert is parked: it holds no purchase order, blocks no payment, refuses no award, and never edits, merges or deactivates a supplier record. The only place a vendor is actually blocked is the <a href="{% url 'procurement:vsu_list' %}">vendor suspension register</a>.</p>
+    </div>
+  </div>
+{% endblock %}
