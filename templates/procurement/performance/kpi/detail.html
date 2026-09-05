@@ -92,7 +92,7 @@
         <div class="detail-item"><dt>Critical threshold</dt>
           <dd>{% if obj.critical_threshold is not None %}{{ obj.critical_threshold|floatformat:"-4" }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Feeds scorecard dimension</dt>
-          <dd>{% if obj.maps_to_dimension %}{{ obj.get_maps_to_dimension_display }}{% else %}<span class="text-muted">None — measured but not rolled up</span>{% endif %}</dd></div>
+          <dd>{% if obj.maps_to_dimension %}{{ obj.get_maps_to_dimension_display }}{% else %}<span class="text-muted">Not mapped — measured but not rolled up</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Applies to</dt>
           <dd>{% if obj.applies_to == "tier" %}{{ obj.get_applies_to_tier_display }} suppliers only<div class="text-muted">matched against the supplier's SCM profile tier</div>{% else %}{{ obj.get_applies_to_display }}{% endif %}</dd></div>
         <div class="detail-item"><dt>Review frequency</dt>
