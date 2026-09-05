@@ -368,7 +368,11 @@ class FraudAlert(TenantNumbered):
                                 help_text="A default from the rule, re-gradable by a reviewer")
     #: The date of the FACT, never the detection date — a board that aged by detection date would
     #: reset every time somebody re-ran the scan.
-    document_date = models.DateField(db_index=True)
+    # No db_index= here: a standalone index on bare document_date can never lead, because every
+    # query on this table is tenant-scoped and prc_frd_tnt_docdate_idx below already covers
+    # (tenant, document_date). It is dead weight on the write path of the fastest-growing,
+    # append-only table in the sub-module - scan() bulk-upserts into it.
+    document_date = models.DateField()
     #: NULL is legal and meaningful: a conflict-of-interest overlap has no amount.
     amount = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     detail = models.TextField(blank=True, help_text="The evidence sentence the rule wrote")
@@ -414,6 +418,9 @@ class FraudAlert(TenantNumbered):
             models.Index(fields=["tenant", "document_date"], name="prc_frd_tnt_docdate_idx"),
             # Backs the supplier filter and the by-supplier view.
             models.Index(fields=["tenant", "vendor"], name="prc_frd_tnt_vendor_idx"),
+            # The register offers five filters; this is the fifth. Without it, narrowing the
+            # board to one investigator's queue is the only filter with no supporting index.
+            models.Index(fields=["tenant", "assigned_to"], name="prc_frd_tnt_assignee_idx"),
         ]
         verbose_name = "fraud alert"
 
