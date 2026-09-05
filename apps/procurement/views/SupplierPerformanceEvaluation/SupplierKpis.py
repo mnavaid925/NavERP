@@ -53,8 +53,9 @@ TEMPLATE_FORM = "procurement/performance/kpi/form.html"
 ACTIVE_CHOICES = (("True", "Active"), ("False", "Inactive"))
 
 #: Per-list cap on the two SECONDARY lists of the detail page (plans, feedback). The primary
-#: measured-history list uses ``performance.DETAIL_ROW_CAP``, which is also what the template
-#: prints as ``row_cap``.
+#: measured-history list uses ``performance.DETAIL_ROW_CAP``. The template prints them under
+#: SEPARATE keys — ``row_cap`` and ``related_cap`` — because one key for two different numbers
+#: is how the page came to describe a 20-row list as "the most recent 50".
 _RELATED_CAP = 20
 
 _ROW_RELATIONS = ("owner",)
@@ -157,9 +158,12 @@ def supplierkpi_detail(request, pk):
         .select_related("supplier", "respondent")
         .order_by("-period_end", "-id")[:_RELATED_CAP + 1])
 
-    truncated = (len(score_rows) > DETAIL_ROW_CAP
-                 or len(plans) > _RELATED_CAP
-                 or len(feedback_rows) > _RELATED_CAP)
+    # TWO flags and TWO caps, because there are two caps in play. One ``truncated`` next to one
+    # ``row_cap`` of 50 described three lists, two of which are actually cut at ``_RELATED_CAP``
+    # (20) — so the page could tell the reader "the most recent 50 are shown" about a list that
+    # stopped at 20. Same shape as ``supplierevaluation_detail``.
+    truncated = len(score_rows) > DETAIL_ROW_CAP
+    related_truncated = (len(plans) > _RELATED_CAP or len(feedback_rows) > _RELATED_CAP)
 
     return crud_detail(
         request, model=SupplierKpi, pk=pk, template=TEMPLATE_DETAIL,
@@ -170,6 +174,8 @@ def supplierkpi_detail(request, pk):
             "feedback_rows": feedback_rows[:_RELATED_CAP],
             "row_cap": DETAIL_ROW_CAP,
             "truncated": truncated,
+            "related_cap": _RELATED_CAP,
+            "related_truncated": related_truncated,
             "benchmark_note": BENCHMARK_NOTE,
         },
     )
