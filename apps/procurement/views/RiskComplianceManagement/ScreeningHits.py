@@ -190,7 +190,16 @@ def _hit_form(request, screening, instance=None):
             # The parent is stamped from the URL-resolved object, never from the payload.
             obj.screening = screening
             obj.save()
-            write_audit_log(request.user, obj, "update" if is_edit else "create", _changed(form))
+            # ``tenant=`` is passed EXPLICITLY on every audit write in this module. ScreeningHit
+            # is tenant-LESS by design, so write_audit_log's ``getattr(obj, "tenant", None)`` finds
+            # nothing and falls through to the USER's tenant. That happens to be right today
+            # (TenantMiddleware sets request.tenant = user.tenant), but an AuditLog row whose
+            # tenant is NULL falls outside every AuditSeal range in every workspace - seal_now
+            # selects filter(tenant=tenant, ...) - so its later modification would leave no
+            # evidence, which is the one property this sub-module exists to provide. The parent
+            # screening's tenant is the hit's tenant; say so rather than relying on a coincidence.
+            write_audit_log(request.user, obj, "update" if is_edit else "create", _changed(form),
+                            tenant=screening.tenant)
             # A new hit is born ``open``, so the parent's counters move on create as well as on
             # dispose. Display values only — the gate re-asks the database.
             screening.recount_hits()
@@ -279,7 +288,9 @@ def screeninghit_delete(request, pk):
     refusal = _refuse_if_parent_decided(request, screening, "deleted")
     if refusal is not None:
         return refusal
-    write_audit_log(request.user, obj, "delete")
+    # tenant= explicit: ScreeningHit has no tenant column, and an unattributed AuditLog row sits
+    # outside every seal range (see screeninghit_create).
+    write_audit_log(request.user, obj, "delete", tenant=screening.tenant)
     obj.delete()
     screening.recount_hits()
     messages.success(request, "Hit deleted.")
@@ -324,8 +335,11 @@ def screeninghit_dispose(request, pk):
             return redirect("procurement:screeninghit_detail", pk=pk)
         screening = obj.screening
 
+    # tenant= explicit: ScreeningHit has no tenant column, and an unattributed AuditLog row sits
+    # outside every seal range (see screeninghit_create).
     write_audit_log(request.user, obj, "update",
-                    {"action": "dispose", "disposition": disposition, "note": note[:200]})
+                    {"action": "dispose", "disposition": disposition, "note": note[:200]},
+                    tenant=screening.tenant)
     # Recounted after the commit, so the counters reflect state that actually landed.
     screening.recount_hits()
     messages.success(
