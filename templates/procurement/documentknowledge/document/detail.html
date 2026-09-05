@@ -124,10 +124,12 @@
     {% comment %}
       WARNING: an uploaded file is LINKED, never rendered inline. Embedding stored bytes in
       this page (an <iframe>, an <img>, an inline <svg>) is a stored-XSS surface — the browser
-      would execute whatever an uploader put in a file this workspace accepted. The link hands
-      the file to the browser instead. In deployment MEDIA_ROOT must sit outside any
-      executable path and the media response must carry Content-Disposition: attachment, so a
-      served .html or .svg downloads rather than runs on this origin.
+      would execute whatever an uploader put in a file this workspace accepted. The link goes to
+      procurement:pdocrevision_download, an authenticated tenant-scoped view that sends the
+      bytes with Content-Disposition: attachment and X-Content-Type-Options: nosniff — never to
+      file.url, which the web server would serve off MEDIA_ROOT with no login and no tenant
+      check. In deployment MEDIA_ROOT must additionally sit outside any web-served directory,
+      so the bytes cannot be reached around this view.
     {% endcomment %}
     <div class="table-wrap">
       <table class="table">
@@ -153,7 +155,7 @@
                 </div>
               </td>
               <td>
-                {% if r.file %}<a href="{{ r.file.url }}"><i data-lucide="download"></i> {{ r.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if r.file %}<a href="{% url 'procurement:pdocrevision_download' r.pk %}"><i data-lucide="download"></i> {{ r.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
                 <div class="text-muted">{{ r.file_size|filesizeformat }}{% if r.sha256 %} · checksum {{ r.sha256|slice:":16" }}…{% endif %}</div>
                 {% if r.extraction_note %}<div class="text-warn">{{ r.extraction_note }}</div>{% endif %}
               </td>
