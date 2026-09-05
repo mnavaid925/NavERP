@@ -1,8 +1,10 @@
 """Procurement 6.19 Document & Knowledge Management — ProcurementDocument URL patterns.
 
 One first segment, ``documents/``, collision-checked as a whole component against the
-concatenated inventory in ``apps/procurement/urls/__init__.py``; this app registers no greedy
-``<str:…>`` converter anywhere, so nothing can shadow it. (``templates/`` belongs to 6.2 and
+concatenated inventory in ``apps/procurement/urls/__init__.py``. No route in this app uses a
+converter in its FIRST path component — every first segment is a literal — so nothing can shadow
+it. (A ``<str:token>`` converter does exist, at 6.8's ``contract-sign/<str:token>/``, but it sits
+behind a literal first segment and shadows nothing outside it.) (``templates/`` belongs to 6.2 and
 ``contracts/`` to 6.8 — which is why the knowledge library is ``knowledge/`` and the policy
 library ``procurement-policies/``.)
 
