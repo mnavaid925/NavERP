@@ -107,9 +107,9 @@
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
         <a href="{% url 'procurement:count_accuracy' %}" class="btn btn-outline">Reset</a>
       </form>
-      <p class="text-muted" style="margin-top:.75rem;">Counts scheduled between <strong>{{ date_from|date:"d M Y" }}</strong> and <strong>{{ date_to|date:"d M Y" }}</strong>. Setting an explicit date pair overrides the named window. Cancelled counts are left out: a count that was called off measured nothing.</p>
+      <p class="text-muted" style="margin-top:.75rem;">Counts scheduled between <strong>{{ date_from|date:"d M Y" }}</strong> and <strong>{{ date_to|date:"d M Y" }}</strong>. Setting an explicit date pair overrides the named window. Cancelled counts are left out of <em>every accuracy figure</em> — a count that was called off measured nothing — but they are still part of the counts-in-window tally above, which is a tally of what was scheduled.</p>
       {% if truncated %}
-        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} rows qualify in one of the tables below — the worst {{ row_cap }} are shown, so the ranking is intact but the tables are not a complete inventory of the window.</p>
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} rows qualify in one of the tables below, and it has been cut to {{ row_cap }}. <strong>Worst items</strong> is cut worst-first by absolute variance, so its ranking survives the cut. <strong>Accuracy by location</strong> is cut by variance-line count and only then re-ranked by accuracy, and <strong>Counting schedule</strong> is cut by name — so on those two, a row that belongs at the top can fall outside the cut. Narrow by location for a complete picture.</p>
       {% endif %}
     </div>
   </div>
