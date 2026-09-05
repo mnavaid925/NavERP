@@ -91,6 +91,33 @@ before the consumer ships a table nobody reads).
      `procurement`.
   4. On a collision, whoever notices second drops theirs and regenerates against the new leaf.
      **Never `--merge`.**
+
+  **STATE AS OF THIS SESSION'S END (verified, not reported):** `0026_procurementdocument_
+  knowledgeresource_and_more` is on disk, committed and applied — one leaf, graph linear. It
+  carries eight tables (6.19's four + 6.16's four). **None of ours are in it**, because our five
+  are still unregistered. **The next generator takes `0027`.**
+
+  **THE REGISTRATION LEVER — this is the thing to get right at Integrate.** `makemigrations`
+  cannot be scoped to your own models: it reads the **app registry**, and whoever generates
+  captures every registered-but-unmigrated model in `procurement`, including ones they did not
+  write. A model enters the registry only when something imports it — and nothing imports ours,
+  because `apps/procurement/models/__init__.py` has no `InventoryWarehouseIntegration` re-export
+  block yet. Confirmed: `get_app_config("procurement").get_models()` does **not** contain any of
+  our five.
+
+  So the exposure window is **ours to schedule, not something that happens to us**:
+
+  > **Land the `models/__init__.py` re-export block and run `makemigrations procurement` back to
+  > back, in the same window.** Before the block lands we cannot be swept; after it lands we are
+  > exposed until someone generates.
+
+  Which means CLAUDE.md's build sequence was already right for a reason nobody had articulated: it
+  puts the `__init__.py` re-exports *inside* Integrate, immediately before `makemigrations`. That
+  is not just concurrency hygiene — it is migration-scope control.
+
+  Expect our `0027` to also capture 6.17's models if they are re-exported by then. That is fine
+  and not worth waiting on; **say so in the commit body** rather than letting the diff surprise
+  the next reader.
 - **Never `seed_procurement --flush`.** Plain idempotent `seed_procurement` only.
 - Shared files are **append-only via surgical `Edit`, never `Write`, never from a subagent**:
   the four `apps/procurement/{models,forms,views,urls}/__init__.py`, `apps/procurement/admin.py`,
