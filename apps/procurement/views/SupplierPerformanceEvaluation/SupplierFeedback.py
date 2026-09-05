@@ -261,7 +261,7 @@ def supplierfeedback_create(request):
                 "respondent_kind": obj.respondent_kind,
                 "kpi": obj.kpi.code if obj.kpi_id else "",
                 "status": obj.status,
-            })
+            }, tenant=request.tenant)
             messages.success(request, f"Feedback request {obj.number} raised.")
             return redirect("procurement:supplierfeedback_detail", pk=obj.pk)
     else:
