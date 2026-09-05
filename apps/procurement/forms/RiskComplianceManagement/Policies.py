@@ -122,6 +122,25 @@ class PolicyAttestationForm(TenantUniqueMixin, TenantModelForm):
             f"When the sign-off is due. Leave blank for no deadline; the roster raiser uses "
             f"{PolicyAttestation.DEFAULT_ATTESTATION_DUE_DAYS} days from the day it runs.")
 
+        if self.instance.pk:
+            # On an EXISTING row the deadline is the only amendable thing, which is what the edit
+            # view's docstring and the button's label ("Change the deadline") both say. Re-pointing
+            # `policy` or `user` would not be an amendment at all: it would move an obligation off
+            # one person and onto another, silently taking the first person off the overdue board
+            # - the withdrawal `policyattestation_delete` exists to restrict. `disabled` (rather
+            # than a hidden field or a template-side omission) is what makes that hold against a
+            # CRAFTED POST too: Django ignores the submitted value for a disabled field entirely
+            # and falls back to the instance's own.
+            for name in ("policy", "user"):
+                self.fields[name].disabled = True
+            self.fields["policy"].help_text = (
+                "Fixed once assigned - an obligation is against one policy. To put a different "
+                "policy to this person, withdraw this row and assign the other one.")
+            self.fields["user"].help_text = (
+                "Fixed once assigned - an obligation belongs to the person it names. To move it, "
+                "withdraw this row and assign the policy to the other person, so the record shows "
+                "both facts.")
+
     def clean_policy(self):
         """Refuse a policy that cannot carry a sign-off, whatever the POST said.
 
