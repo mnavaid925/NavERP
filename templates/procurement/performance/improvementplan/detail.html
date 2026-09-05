@@ -48,7 +48,14 @@
       <p class="text-muted">{{ obj.supplier.name }} · {{ obj.start_date|date:"M d, Y" }} &ndash; {{ obj.effective_close_date|date:"M d, Y" }} · {{ obj.get_severity_display|lower }} severity.</p>
     </div>
     <div class="page-actions">
-      <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        Open plans only, tested against the model's own OPEN_STATUSES so this cannot drift from
+        the gate improvementplan_edit enforces. A closed plan is signed and a cancelled one is
+        history.
+      {% endcomment %}
+      {% if obj.status in obj.OPEN_STATUSES %}
+        <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
       <a href="{% url 'procurement:improvementplan_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All plans</a>
     </div>
   </div>
@@ -236,13 +243,23 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
+      {% if obj.status in obj.OPEN_STATUSES %}
       <p class="text-muted">Editing corrects what was recorded &mdash; the finding, the actions, the dates, the owners, the evidence, and the extension when one is granted. It can never move the plan through its lifecycle or write an outcome: <span class="fw-600">status and outcome are not on the form</span>, and neither are the acknowledgement and verification stamps, which would stop being evidence of anything if they could be typed over.</p>
       <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit plan</a>
+      {% else %}
+      {% comment %}
+        Closed and cancelled plans are frozen — improvementplan_edit and improvementplan_delete
+        both refuse them now, so the page says why rather than letting two controls vanish.
+      {% endcomment %}
+      <p class="form-help"><i data-lucide="lock"></i> This plan is {{ obj.get_status_display|lower }}, so its record is frozen and can be neither edited nor deleted. A closed plan carries the outcome and the signature of whoever verified it, and it is the history an escalation stands on &mdash; a suspension raised &ldquo;after two failed plans&rdquo; means nothing once the plans are gone.</p>
+      {% endif %}
       <a href="{% url 'procurement:improvementplan_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to the register</a>
-      <p class="text-muted" style="margin-top:.75rem;">Deleting a <span class="fw-600">closed</span> plan removes the record that this supplier was ever put on one &mdash; exactly the history an escalation stands on, since a suspension raised &ldquo;after two failed plans&rdquo; means nothing once the plans are gone. Cancel an open plan instead. Deleting does <span class="fw-600">not</span> touch the suspension register: a vendor that is blocked stays blocked.</p>
+      {% if obj.status in obj.OPEN_STATUSES %}
+      <p class="text-muted" style="margin-top:.75rem;">Deleting is possible only while the plan is open, and <span class="fw-600">cancelling is almost always the better record</span> &mdash; it keeps the evidence that the plan was raised at all. Deleting does <span class="fw-600">not</span> touch the suspension register: a vendor that is blocked stays blocked.</p>
       <form method="post" action="{% url 'procurement:improvementplan_delete' obj.pk %}">
-        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete plan {{ obj.number }}? A closed plan is the record that this supplier was ever put on one — the history an escalation stands on. Cancel an open plan instead of deleting it. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete plan</button>
+        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete plan {{ obj.number }}? This removes the record that the supplier was ever put on a plan. Cancelling keeps that record and is usually what you want. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete plan</button>
       </form>
+      {% endif %}
     </div>
   </div>
 {% endblock %}
