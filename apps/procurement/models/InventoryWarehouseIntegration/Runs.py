@@ -317,13 +317,12 @@ class ReplenishmentRun(TenantNumbered):
 
         Returns the number of suggestion lines written.
         """
-        # views -> models is the usual direction; this one import goes the other way, at CALL
-        # time, and it is deliberate. _effective_numbers is the SINGLE written-down definition of
-        # the override-versus-fallback rule (policy.target_level else rule.reorder_point +
+        # The override-versus-fallback rule (policy.target_level else rule.reorder_point +
         # safety_stock; policy.lead_time_days_override tested `is not None` so a stored 0 is a real
-        # override). A second copy of that rule here would let the detail page and the run disagree
-        # about what a policy means, which is a far worse defect than an unusual import.
-        from apps.procurement.views.InventoryWarehouseIntegration.Policies import _effective_numbers
+        # override) is ReplenishmentPolicy.effective_numbers() — ONE written-down definition, on
+        # the model, read below through `shaping`. It used to live in the detail VIEW, which made
+        # this method import upward into apps.procurement.views at call time; every import in this
+        # sub-module now runs downward.
         from apps.inventory.models import InventoryReservation, StockStatus
         from apps.scm.models import ReorderRule, SalesOrderAllocation
 
@@ -409,7 +408,7 @@ class ReplenishmentRun(TenantNumbered):
                 if supply > reorder_point:
                     continue
 
-                effective = _effective_numbers(shaping, rule)
+                effective = shaping.effective_numbers(rule)
                 target = effective["target_level"]["value"]
                 if target is None:
                     continue  # nothing supplies an order-up-to level; proposing 0 would be noise
