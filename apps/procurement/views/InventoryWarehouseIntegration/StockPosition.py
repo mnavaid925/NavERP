@@ -278,6 +278,11 @@ def stock_position(request):
         # rather than 500 times inside the loop.
         requisition_url = reverse("scm:requisition_create")
 
+        # One unsaved instance carrying the model's own defaults, reused for every pair with no
+        # policy — the same sentinel ``generate()`` builds at ``Runs.py:387``. Sharing the sentinel
+        # is what stops "no policy" quietly meaning "different arithmetic" on the two pages.
+        unconfigured = ReplenishmentPolicy()
+
         # --- merge (pure Python; not one query lives inside this loop) --------------------------
         for combo in combos:
             key = (combo["item_id"], combo["location_id"])
@@ -291,17 +296,32 @@ def stock_position(request):
             ordered = on_order.get(sku, ZERO)
             requested = open_requisitions.get(sku, ZERO)
             reorder_point, avg_daily_demand = rules.get(key, (None, ZERO))
-            # The RUN's trigger, verbatim (Runs.py:403-409): on-hand plus everything inbound,
-            # against the point. A board that disagreed with the run it links to would be worse
-            # than one that is merely opinionated.
+
+            # THE RUN'S TRIGGER, including the two netting toggles the run applies
+            # (``Runs.py:400-401``): on-hand plus whatever the governing policy says counts as
+            # incoming, against the point. `shaping` is the real policy for this pair, or the
+            # model's defaults when the pair has none.
+            #
+            # Dropping the toggles here was not cosmetic. For a policy with
+            # ``include_on_order=False`` — point 100, on hand 50, on order 80 — the run computes a
+            # supply of 50 and proposes a line, while an ungated board computed 130 and showed the
+            # row healthy: the buyer sees nothing below point and then the run proposes out of
+            # nowhere. Both flags default True, so it only surfaces once somebody uses the field
+            # the form already exposes.
+            #
+            # The DISPLAYED on-order and open-requisition columns below stay UNGATED on purpose:
+            # they report what exists, which is true whether or not the run nets it off.
+            policy = policies.get(key)
+            shaping = policy or unconfigured
+            netted = ((ordered if shaping.include_on_order else ZERO)
+                      + (requested if shaping.include_open_requisitions else ZERO))
             below_point = (reorder_point is not None
-                           and (on_hand + ordered + requested) <= reorder_point)
+                           and (on_hand + netted) <= reorder_point)
 
             # The Expected block describes the OUTSTANDING quantity, so it is attached only when
             # there is one. A purchase order can sit in a receivable status long after every line
             # on it was received; naming it here would promise a delivery that already arrived.
             supply = inbound.get(sku) if ordered > ZERO else None
-            policy = policies.get(key)
             rows.append({
                 "item": item_map.get(combo["item_id"]),
                 "location": location_map.get(combo["location_id"]),
