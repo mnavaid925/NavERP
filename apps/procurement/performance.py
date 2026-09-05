@@ -35,6 +35,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, Min, Q, Sum
+from django.urls import reverse
 from django.utils import timezone
 
 # NOT-YET-WIRED entities of this SAME sub-module: import the entity MODULES directly, never
@@ -755,9 +756,13 @@ def generate_scorecard_lines(scorecard, user):
                      f"{line.measured_value if line.measured_value is not None else '—'} for "
                      f"the period ending {end}, crossing the critical line on scorecard "
                      f"{scorecard.number}."),
-            # An INTERNAL path with a single leading slash — ProcurementAlert.clean() rejects
-            # anything else, and an absolute URL here would make the alert card an open redirect.
-            link_url=f"/procurement/supplier-evaluations/{scorecard.pk}/",
+            # REVERSED, not hand-typed. A literal path here silently breaks every alert card
+            # the day the route is re-spelled, and it went out of its way to claim a defence
+            # that is not in force: ``ProcurementAlert.clean()`` does reject an external URL,
+            # but neither ``objects.create()`` nor ``bulk_create()`` calls ``full_clean()``, so
+            # nothing was validating it. ``reverse()`` settles both — the URLconf cannot produce
+            # anything but an internal path, so there is nothing left to validate.
+            link_url=reverse("procurement:supplierevaluation_detail", args=[scorecard.pk]),
             created_by=author)
         for line, kpi in crossings
     ]
