@@ -1630,6 +1630,17 @@ LIVE_LINKS = {
         "Variance Analysis":                   "procurement:budget_variance",
         "Forecasting & Projection":            "procurement:costforecast_list",
     },
+    "6.19": {
+        "Central Document Repository":         "procurement:pdocument_list",
+        "Version Control":                     "procurement:pdocrevision_list",
+        "Procurement Policy Library":          "procurement:ppolicy_list",
+        "Best Practices & Templates":          "procurement:knowledgeresource_list",
+        # The search bullet is not a page of its own - full-text search IS the register's filter
+        # card, which searches title, tags and the text extracted from each document's current
+        # approved revision. The fragment scrolls to it (`_safe_reverse` supports `url#frag`; the
+        # 6.13 `#discount` precedent), so the register's filter card carries `id="search"`.
+        "Full-Text Search & Indexing":         "procurement:pdocument_list#search",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
