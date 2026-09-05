@@ -92,16 +92,27 @@ before the consumer ships a table nobody reads).
   all five model names (`ReplenishmentPolicy`, `ReplenishmentRun`, `ReplenishmentSuggestion`,
   `MaterialIssue`, `MaterialIssueLine`), all six url segments, and the url names. **Re-run that
   check before adding any name this contract does not already list.**
-- **Fourth axis — duplicate url names ALREADY on disk**, whoever's they are. A contract grep sees
-  only what peers *intend*; this sees what is *there*:
-  ```bash
-  grep -rhoE "name=[\"'][a-z_0-9]+[\"']" apps/procurement/urls/ | tr -d "\"'" | sed 's/name=//' | sort | uniq -d
+- **Fourth axis — duplicate url names ALREADY REGISTERED**, whoever's they are. A contract grep
+  sees only what peers *intend*; disk sees only what is *written*; **only the resolver sees what
+  Django actually registers.** Walk it after `django.setup()`:
+  ```python
+  from django.urls import get_resolver
+  for ns, (prefix, sub) in sorted(get_resolver().namespace_dict.items()):
+      names = [n for n in sub.reverse_dict.keys() if isinstance(n, str)]
+      # collections.Counter(names) -> any count > 1 is a duplicate
   ```
-  Empty = clean. Verified clean at contract time (401 url names registered in `apps/procurement`;
-  `crm`/`accounting`/`hrm`/`scm`/`inventory` also clean — 2,792 across the repo). The quote-class
-  match is defensive only: **this repo is uniformly double-quoted, with zero single-quoted `name=`
-  anywhere**, so a single-quoted route would be the anomaly rather than business as usual.
-  **Re-run at Integrate.** A duplicate url
+  **A `grep` for `name="…"` is NOT sufficient and must not be the gate.** `apps/core/urls.py`
+  builds its routes with a `crud(slug, name)` factory whose names are **f-strings**
+  (`name=f"{name}_detail"`), so grep sees **4** names in that file where the resolver registers
+  **49** — 45 routes invisible. Grep also *over*-counts the other way: it reports url modules that
+  exist on disk but are not yet wired into `urls/__init__.py` (before Integrate, grep says 401 for
+  `procurement` while the resolver says 320, because this sub-module's 27 are not registered yet).
+  Grep is a fast pre-check; the resolver walk is the gate.
+  Verified clean at contract time: **4,854 namespaced routes across ten namespaces, zero
+  duplicates** (`accounting` 177 · `accounts` 20 · `core` 49 · `crm` 304 · `dashboard` 1 · `hrm`
+  932 · `inventory` 264 · `procurement` 320 · `scm` 657 · `tenants` 31; `admin` adds 2,099).
+  **Re-run at Integrate**, when this sub-module's 27 names become registered — that is the run
+  that actually matters. A duplicate url
   *name* is the quietest of all these failures: Django raises nothing, `reverse()` simply resolves
   to whichever pattern registered last, so buttons silently point into another sub-module's page —
   and a smoke test that only asserts status 200 will pass.
