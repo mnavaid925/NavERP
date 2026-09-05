@@ -2552,11 +2552,15 @@ class Command(BaseCommand):
         and ``generate_scorecard_lines`` refuses anything but a draft, writing nothing at all.
         Generating onto those published cards would leave every 6.16 board correct, empty and
         looking broken. So this block opens its own DRAFT scorecard per demo supplier for the review
-        period that closes the day BEFORE the published scm one does. A strictly earlier
-        ``period_end`` buys three things at once: it can never collide with SCM's card on a fresh
-        workspace, it gives the benchmark board a period whose cohort is exclusively ours, and it
-        gives the trend board two points to draw a line between. Ninety days wide, so the window
-        still overlaps the quotes, orders, invoices, disputes and blocks the derived resolvers read.
+        period that closes the day AFTER the published scm one does. A strictly LATER
+        ``period_end`` buys four things at once: it can never collide with SCM's card on a fresh
+        workspace, it gives the benchmark board a period whose cohort is exclusively ours, it gives
+        the trend board two points to draw a line between, and - the part a day EARLIER got wrong -
+        it is the newest period in the workspace, so ``period_choices(tenant)[0]``, which all three
+        boards default to, lands on a period this block actually generated onto. Ninety days wide,
+        so the window still overlaps the quotes, orders, invoices, disputes and blocks the derived
+        resolvers read, and reaches the goods receipt and the risk assessment that seed_scm stamps
+        on its own ``period_end``.
 
         **No metric invents a zero, and neither does this seeder.** The derived figures are whatever
         ``generate_scorecard_lines`` actually finds in that window; a KPI with no evidence comes back
@@ -2609,14 +2613,28 @@ class Command(BaseCommand):
                                           party.name))
         cohort = suppliers[:5]
 
-        # THE PERIOD - see the docstring. Anchored on the EARLIEST scm scorecard rather than on
-        # ``NOW`` (L16's usual rule) precisely because the collision it has to avoid is with that
-        # row, not with today: seed_scm dates its card ``today - 90 .. today``, so a NOW-derived
-        # window here would share its ``period_end`` on any fresh workspace. With no scm scorecard
-        # on file there is nothing to collide with and the window simply ends yesterday.
+        # THE PERIOD - see the docstring. Anchored on the LATEST scm scorecard rather than on
+        # ``NOW`` (L16's usual rule) precisely because what this window has to line up with is
+        # that row, not today: seed_scm dates its card ``today - 90 .. today`` and stamps its
+        # goods receipt and its supplier risk assessment on that same ``period_end``.
+        #
+        # ONE DAY AFTER it, never one day before. Ending the day BEFORE cost three things at
+        # once: ``period_choices(tenant)[0]`` - which all three boards default to - always
+        # resolved to SCM's period, so the default benchmark board ranked a cohort with no 6.16
+        # evidence behind it; the goods receipts, stamped on the run date, fell outside the
+        # window by exactly one day, leaving the flagship Delivery and Quality KPIs reading "No
+        # data" on every seeded scorecard; and the risk assessments fell outside it too, so the
+        # quadrant column never held a value. A strictly LATER ``period_end`` fixes all three
+        # and still cannot collide with SCM's own card, which is what the offset is for.
+        #
+        # The cards THIS BLOCK opens are excluded from the anchor. ``--flush`` deliberately
+        # leaves them alone (they are SCM's rows), so anchoring on them would walk the window a
+        # day further out on every re-seed instead of finding the same period again.
+        period_note = "Seeded 6.16 evaluation period."
         anchor = (SupplierScorecard.objects.filter(tenant=tenant)
-                  .order_by("period_end").values_list("period_end", flat=True).first())
-        period_end = (anchor or NOW.date()) - timedelta(days=1)
+                  .exclude(notes__startswith=period_note)
+                  .order_by("-period_end").values_list("period_end", flat=True).first())
+        period_end = (anchor + timedelta(days=1)) if anchor else NOW.date()
         period_start = period_end - timedelta(days=90)
 
         # ONE transaction for steps 1-6. The re-entry guard above is ``SupplierKpi.objects
@@ -2738,8 +2756,11 @@ class Command(BaseCommand):
                     tenant=tenant, party=party, period_start=period_start, period_end=period_end,
                     defaults={
                         "status": "draft",
-                        "notes": ("Seeded 6.16 evaluation period. Scored from the procurement KPI "
-                                  "library rather than from SCM's four-dimension signal engine."),
+                        # Starts with ``period_note``: the anchor query above excludes these rows
+                        # by that prefix, so a re-seed re-finds this period instead of stepping
+                        # one day past it every time.
+                        "notes": (f"{period_note} Scored from the procurement KPI library rather "
+                                  f"than from SCM's four-dimension signal engine."),
                     })
                 cards.append(card)
                 made_cards += int(was_created)
