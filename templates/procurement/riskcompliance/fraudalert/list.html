@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Fraud Alerts{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — FraudAlert register
+    (apps/procurement/views/RiskComplianceManagement/FraudAlerts.py :: fraudalert_list).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      rule_choices, status_choices, severity_choices, vendors, users,
+      stats{open, investigating, confirmed, high}, is_admin.
+
+    crud_list renders `object_list` — never `objects` (L7/L8: a mismatched name renders a
+    silently blank region and still returns 200).
+
+    stats.confirmed is the SUBSTANTIATED count. The status value stays "substantiated"; the card
+    is labelled Confirmed because that is the word people use for it, and renaming a model column
+    to match a caption would be churn.
+
+    The view filter tuple is exactly (("rule","rule",False), ("status","status",False),
+    ("severity","severity",False), ("vendor","vendor_id",True),
+    ("assigned_to","assigned_to_id",True)), so the bar offers exactly q, rule, status, severity,
+    vendor and assigned_to — no dead <select> posting a param the view ignores. The two FK
+    dropdowns compare with |stringformat:"d", never |slugify; the three enum dropdowns compare
+    against the raw choice value.
+
+    NULLABLE-FK DISCIPLINE (L10). vendor, related_party and assigned_to are ALL nullable here —
+    a hand-raised alert may point only at a requisition, and nobody has to be assigned. Every
+    read of them sits inside an {% if %} branch, because a `default:` filter argument on a None
+    FK raises VariableDoesNotExist and 500s.
+
+    `amount` is nullable and meaningfully so: an overlap between a supplier and an employee is
+    not a transaction. The column shows an em-dash rather than 0.00, which would claim a
+    measured zero.
+
+    Status and severity colours come from the model's own STATUS_CSS / SEVERITY_CSS through
+    obj.status_css and obj.severity_css — never from an {% if %} ladder here, because theme.css
+    ships only badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate and
+    a semantic badge-success renders unstyled (L33).
+
+    `detail` and `matched_on` are free text written by a rule or by a person. They render
+    AUTO-ESCAPED and never with |safe, and neither one ever reaches a confirm() string — only the
+    SYSTEM-ASSIGNED number does (L42). The copy avoids apostrophes entirely.
+
+    Edit and Delete disappear once the alert is disposed of, because both views refuse a terminal
+    row; Delete is additionally admin-gated, matching @tenant_admin_required.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Fraud Alerts</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Fraud alerts</span>
+      </div>
+      <p class="text-muted">Every integrity question a rule raised, and every one somebody raised by hand. These are deterministic rules over records this workspace already holds — nothing here learns, scores or predicts, and nothing here is proof. An alert is a question waiting for a person.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:fraud_board' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Board</a>
+      <a href="{% url 'procurement:fraud_scan' %}" class="btn btn-outline"><i data-lucide="scan-search"></i> Run the rules</a>
+      <a href="{% url 'procurement:fraudalert_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise by hand</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.open }}</div><div class="stat-label">Open</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="search"></i></div><div class="stat-value">{{ stats.investigating }}</div><div class="stat-label">Under investigation</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ stats.confirmed }}</div><div class="stat-label">Substantiated</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="flame"></i></div><div class="stat-value">{{ stats.high }}</div><div class="stat-label">High severity, still live</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search fraud alerts" class="form-input" placeholder="Search number, evidence, match or supplier…">
+        </div>
+        <div class="form-group">
+          <select name="rule" aria-label="Rule" class="form-select">
+            <option value="">All rules</option>
+            {% for value, label in rule_choices %}
+              <option value="{{ value }}" {% if request.GET.rule == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">Any severity</option>
+            {% for value, label in severity_choices %}
+              <option value="{{ value }}" {% if request.GET.severity == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="vendor" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk|stringformat:"d" }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="assigned_to" aria-label="Assigned to" class="form-select">
+            <option value="">Anyone</option>
+            {% for u in users %}
+              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.assigned_to == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Alert</th>
+            <th>Rule</th>
+            <th>Who it is about</th>
+            <th>Matched on</th>
+            <th>Fact dated</th>
+            <th class="text-right">Amount</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:fraudalert_detail' obj.pk %}">{{ obj.number }}</a>
+                {% if obj.assigned_to %}
+                  <div class="text-muted">{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username }}</div>
+                {% else %}
+                  <div class="text-muted">Unassigned</div>
+                {% endif %}
+              </td>
+              <td>
+                {{ obj.get_rule_display }}
+                {% if obj.detail %}<div class="text-muted">{{ obj.detail|truncatechars:90 }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.vendor %}
+                  <a href="{% url 'core:party_detail' obj.vendor.pk %}">{{ obj.vendor.name }}</a>
+                {% else %}
+                  <span class="text-muted">No supplier attached</span>
+                {% endif %}
+                {% comment %}
+                  The second party is an EMPLOYEE under the overlap rule and a SECOND SUPPLIER
+                  RECORD under the duplicate rule, so the caption changes with the rule rather
+                  than reading a meaningless "related party" on both.
+                {% endcomment %}
+                {% if obj.related_party %}
+                  <div class="text-muted">
+                    {% if obj.rule == "vendor_employee_match" %}with employee
+                    {% elif obj.rule == "duplicate_vendor" %}and
+                    {% else %}with{% endif %}
+                    <a href="{% url 'core:party_detail' obj.related_party.pk %}">{{ obj.related_party.name }}</a>
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.matched_on %}{{ obj.matched_on }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                {{ obj.document_date|date:"M d, Y" }}
+                {% if obj.is_open and obj.age_days %}<div class="text-muted">{{ obj.age_days }} days old</div>{% endif %}
+              </td>
+              <td class="text-right">
+                {% comment %} NULL is legal and meaningful — an overlap is not a transaction, and 0.00 would claim a measured zero. {% endcomment %}
+                {% if obj.amount is not None %}{{ obj.amount }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span></td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                {% if obj.resolved_by %}<div class="text-muted">{{ obj.resolved_by.get_full_name|default:obj.resolved_by.username }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:fraudalert_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete disappear once the alert is disposed of, because both views
+                    refuse a terminal row — a hidden button and a refused POST always agree.
+                    Delete is additionally admin-gated, matching @tenant_admin_required.
+                  {% endcomment %}
+                  {% if not obj.is_terminal %}
+                    <a href="{% url 'procurement:fraudalert_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                    {% if is_admin %}
+                      <form method="post" action="{% url 'procurement:fraudalert_delete' obj.pk %}" onsubmit="return confirm('Delete fraud alert {{ obj.number }}? The evidence and the reasoning go with it, and the next scan will raise it again if the underlying fact is still true.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="shield-alert"></i>
+                <h3>No fraud alerts found</h3>
+                <p>Nothing matches these filters. Alerts arrive one of two ways: a rule raised one over a window somebody scanned, or a person raised one by hand for something no rule can see.</p>
+                <a href="{% url 'procurement:fraud_scan' %}" class="btn btn-primary"><i data-lucide="scan-search"></i> Run the rules</a>
+                <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What an alert is, and what it is not</h2><span class="text-muted">rules, not accusations</span></div>
+    <div class="card-body">
+      <p class="text-muted">Each row records something a deterministic rule found true about records this workspace already holds: a supplier and an employee sharing a tax id, an address or a mailbox; a requisition signed off by the person who raised it; two supplier records that look like one company; an order dated after the invoice it authorises; spend committed against a supplier whose sanctions match nobody resolved; a brand-new supplier taking high-value spend at once.</p>
+      <p class="text-muted">Every one of those has an innocent explanation as well as a guilty one. A shared address can be a family business the company already knows about. A duplicate supplier record is usually a data-entry mistake. That is why an alert is <span class="fw-600">parked, never enforced</span>: raising one holds no purchase order, blocks no payment, refuses no award and never edits, merges or deactivates a supplier record. The only place a vendor is actually blocked is the <a href="{% url 'procurement:vsu_list' %}">vendor suspension register</a>, and that stays a separate, deliberate decision.</p>
+    </div>
+  </div>
+{% endblock %}
