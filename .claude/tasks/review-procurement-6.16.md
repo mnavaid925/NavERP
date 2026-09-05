@@ -603,4 +603,162 @@ the seven embedded tables.
 
 ---
 
-*(remaining reviewers append below: performance-reviewer → qa-smoke-tester → security-reviewer)*
+### 4/6 - `performance-reviewer` (measured against live seeded MySQL; scale tests in rolled-back transactions)
+
+**Headline: there is no N+1 anywhere in this sub-module.** All 15 pages measured **flat** across 6x
+cohort, 6x period, 9x score-line, 7x feedback, 16x plan and 4x KPI-catalogue growth. The real problems
+are missing indexes and unbounded row volume - a different, and in one case worse, failure mode.
+
+| Page | seeded | grown | delta |
+|---|---|---|---|
+| all five registers | 11-13 | 11-13 | **0** |
+| all five details | 9-11 | 9-11 | **0** |
+| benchmark board | 12 | 12 (also 12 at **302 suppliers**) | **0** |
+| trend board | 12 | 12 (2 -> 12 periods) | **0** |
+| perception gap | 11 | 11 (28 -> 208 rows) | **0** |
+
+Compute layer: `benchmark_rows()` **3 queries** at both 5 and 302 suppliers; `trend_series()` **2** at
+both 2 and 12 periods; `perception_gap_rows()` **1** at both 28 and 208 rows; the 14 resolvers **21
+queries total, 1-2 each, none looping**.
+
+#### P1 - CRITICAL - `SupplierKpiScore` has no index covering its `Meta.ordering`
+
+`ScorecardKpiScores.py:119-128` - `ordering = ["kpi_category", "kpi_name", "id"]`, but the three
+declared indexes are `(tenant, scorecard)`, `(tenant, band)`, `(tenant, kpi)`. Nothing covers the sort.
+
+**Measured at 60,041 score lines for one tenant** (200 scorecards x 300 KPIs, rolled back):
+
+```
+score register page 1   130 ms -> 1,484 ms   (11x)
+page 2000               1,571 ms
+?band=ok                1,291 ms
+query count             FLAT at 12          <- not an N+1, a missing index
+isolated ORDER BY ... LIMIT 15    277 ms  (0.5 ms when index-backed)
+EXPLAIN: type=ref rows=28697 Extra=Using where; Using filesort
+```
+
+**Fix:** `models.Index(fields=["tenant", "kpi_category", "kpi_name", "id"], name="prc_sks_tnt_cat_name_idx")`.
+
+**This is the app-wide pattern, not a fork:** 12 of the 72 procurement models index their register's
+default sort, and they are exactly the ledger-like ones - `SupplierInvoice (tenant, -invoice_date)`,
+`InvoiceMatchVariance (tenant, -detected_at)`, `PolicyAttestation`, `FraudAlert`, `MaverickSpendFinding`,
+`ComplianceScreening`, `MaterialIssue`, `CostForecast`, `ReplenishmentRun`. `SupplierKpiScore` is the
+fastest-growing table in 6.16 (suppliers x periods x catalogue size) and is the one left out.
+
+#### P2 - Important - `SupplierFeedback` has the same missing ordering index
+
+`SupplierFeedback.py:154-161` - `ordering = ["-period_end", "-id"]`, no covering index. **Measured at
+50,028 rows:** register 113 ms -> **822 ms**, perception-gap board 91 ms -> **384 ms**, counts flat.
+`EXPLAIN`: `Using where; Using filesort`. Fix: `Index(["tenant", "-period_end"])`; a second
+`(tenant, supplier, status, period_end)` would also cover `survey_aggregate()`,
+`perception_gap_rows()` and `_feedback_windows()`, which all filter that exact tuple.
+
+#### P3 - Important - **duplicate of S2**, with the app's own fix precedent located
+
+Same unordered-`annotate` pagination defect already filed as S2. Adds: `UnorderedObjectListWarning`
+fires on *every* request, and **the app already has the documented fix twice** -
+`OrderFulfillment/AdvancedShipmentNotice.py:57-62` and `EAuctionManagement/Auctions.py:54-56`, both with
+the reasoning spelled out. 6.16 forked from it. Also confirms the annotate's *cost* is fine (119 -> 152
+ms at 4,007 scorecards), so S2 is correctness-only. **Do not double-count; fix once.**
+
+#### P4 - Important - chained `scorecard__party` missing on two detail views (L18)
+
+`SupplierFeedback.py:65` and `SupplierImprovementPlans.py:71` stop their `_ROW_RELATIONS` at
+`scorecard`, but both detail templates hop `{{ obj.scorecard.party.name }}`. **Measured: 10 queries
+when the row has a scorecard vs 9 when it does not**, the extra being a bare `SELECT FROM core_party`.
+
+One query today - but the module's own `_SCORE_RELATIONS = ("kpi", "scorecard", "scorecard__party")`
+exists to prevent exactly this, and that tuple is reused by paginated registers, so the day a list
+template prints the supplier off the scorecard it becomes 1+N for a 15-row page.
+
+#### P5 - Important - `generate_scorecard_lines` writes row-by-row: 4 round-trips per line
+
+`performance.py:631-649`. **Measured: 54 queries at 9 KPIs -> 195 at 29 KPIs = 7.05 queries per extra
+KPI**, of which only 1-2 are the resolver. At 9 KPIs, **39 of the 54 queries are write plumbing** (10
+SAVEPOINT + 10 SELECT + 9 UPDATE + 10 RELEASE).
+
+The function already holds the answer: `:601-602` builds `existing = {row.kpi_id: row ...}` before the
+loop, so it knows which lines exist. Build objects in the loop, then one `bulk_update()` + one
+`bulk_create()` - **4N -> 2**. At 29 KPIs that is 195 -> ~85; in the seeder it removes ~150 of 675.
+*Caveat for the fixer:* `bulk_update` does not fire `auto_now`, so `updated_at` must be set explicitly
+and listed in `fields`. Same shape at `:680-692` where `ProcurementAlert.objects.create()` is called in
+a loop.
+
+#### P6 - Important - `_seed_supplier_performance` is not wrapped in `transaction.atomic()`
+
+`seed_procurement.py:2530`, guard at `:2569`. **Measured: 675 queries, 602 ms per tenant.** The
+re-entry guard is `if SupplierKpi.objects.filter(tenant=tenant).exists(): return` - so a crash after
+step 1 leaves the tenant holding KPIs and no scorecards, feedback or plans, and **that guard then
+preserves the broken state forever**. This is the exact failure `_seed_templates` documents and wraps
+against at `seed_procurement.py:408`. Fix: `with transaction.atomic():` around steps 1-6.
+
+#### P7 - Important - the scorecard `<select>` pickers are uncapped and pull whole rows
+
+`ScorecardKpiScores.py:333-335`, `SupplierFeedback.py:114-118`, plus both create/edit forms.
+**Measured with 2,007 scorecards:** score register 107 -> **349 ms**, HTML **425 KB -> 623 KB** (+197 KB
+of `<option>` in one `<select>`); feedback register the same. Counts flat - pure row volume.
+
+The module already has the convention everywhere else (`ROW_CAP=500`, `PERIOD_CAP=24`,
+`_CATEGORY_CAP=200`). Fix: slice `[:ROW_CAP]` and `.only("id","number","period_end","party__name")` -
+the dropdown prints four values and currently fetches all 18 scorecard columns plus the whole party row.
+
+#### P8 - Important - `supplierevaluation_detail` caps `lines` but not `plans` / `feedback_rows`
+
+`ScorecardKpiScores.py:236-241`. `lines` is correctly `[:ROW_CAP + 1]` with a `truncated` flag, and the
+sibling `supplierkpi_detail` caps all three of its lists. **Measured with 1,500 feedback rows and 500
+plans on one scorecard: 109 ms -> 924 ms, HTML 427 KB -> 2.28 MB**, counts flat. A supplier with a real
+360 programme reaches that without anything unusual happening.
+
+#### Minor - P9-P14
+
+- **P9** `benchmark_rows()` streams every risk assessment to keep one per party (reviewer 1's referral,
+  quantified): **2,402 rows pulled to keep 302** - an 8x over-fetch, one query, so memory not N+1. Fix
+  with a `Subquery(...values("risk_index")[:1])` annotation, which folds it into an existing query.
+- **P10 - PB1 quantified:** 2 of the 9 queries on `supplierkpiscore_detail` are the same row, fetched
+  once through `_score_qs` (3 joins) and again by `crud_detail` (4 joins). Both sibling detail views
+  already use the cheap-probe idiom; this one needs only `.only("pk","tenant_id","source_at_time","breakdown")`.
+- **P11 - PB5 quantified:** demonstrated with `ROW_CAP` monkeypatched to 10 - `?tier=strategic` returned
+  **1 row with `truncated=True` and `cohort.count=1`**. The damage is not query count: `cohort.average`,
+  `best`, `worst` and every rank/percentile are computed over the **post-cap survivors**, so a filtered
+  board reports statistics for a cohort that is not the cohort.
+- **P12** `.only("id","code","name")` on the two KPI pickers - they currently pull `description` and
+  `notes` (both `TextField`) for every `<option>`.
+- **P13** `SupplierImprovementPlan` ordering index missing (`EXPLAIN`: `type=ALL key=None ... filesort`),
+  but the table is low-volume by nature. `SupplierKpi` has the same gap on a 10-100-row catalogue -
+  deliberately not worth an index.
+- **P14** seeder step 5 does per-row `.save()` where `bulk_update` would be one call (5 rows today).
+
+#### M7 - cross-app NOTE, explicitly NOT a 6.16 fix
+
+`scm.SupplierScorecard` has no `(tenant, period_end)` index, and 6.16 is what turns `period_end` into a
+hot filter. Measured cost is currently small (1.9 ms). **Do not fork an index onto SCM's model from
+6.16** - this is a note for whoever owns SCM 4.x.
+
+#### Measured and found acceptable - coverage statement
+
+- **No N+1 anywhere**, across every growth axis tested.
+- `kpiscore/list.html` renders `{{ obj.scorecard.party.name }}` and `_SCORE_RELATIONS` **correctly chains
+  `scorecard__party`** - the highest-volume register does not fire per-row `Party` queries.
+- `SupplierKpiScore.__str__` reads the **frozen** `kpi_name`, never `self.kpi.name` - the L18 trap is
+  deliberately closed on the model that would suffer most.
+- **Every `stats` dict is ONE conditional `aggregate()`.** `_evaluation_stats` correctly carries
+  `distinct=True` on every count (dropping it on any one would silently report "number of score lines"),
+  and `_plan_stats` computes `overdue` through `Coalesce` in SQL so the stat card and the row badge
+  cannot disagree.
+- No `len(qs)` where `count()` belongs, no `if qs:` where `exists()` belongs. The `fetch cap+1 then
+  len()` idiom is correct - it answers "was it truncated?" from the same query.
+- All 17 templates grepped for `.all` / `.count` / `.exists` / `.first` inside `{% for %}` - **zero**
+  related-manager calls.
+- **`SupplierFeedback.score_value()` called twice (reviewer 1's referral) is NOT a performance finding** -
+  it is a pure dict lookup with no DB access. Leave it alone.
+
+#### Suggested query-count tests (hand to the test-writer)
+
+Seven `django_assert_max_num_queries` tests that lock in **flatness** rather than the fix - notably
+`test_616_feedback_detail_joins_the_scorecard_party` and `..._plan_detail_...` (a row *with* a scorecard
+must cost the same as one without; **fails until P4 is fixed**, which is the point) and
+`test_616_evaluation_register_queryset_is_ordered` (fails until S2/P3 is fixed).
+
+---
+
+*(remaining reviewers append below: qa-smoke-tester → security-reviewer)*
