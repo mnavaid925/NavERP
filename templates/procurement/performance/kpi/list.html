@@ -180,8 +180,8 @@
                     retiring it (Edit → uncheck Active) is the way to take a measured KPI out of
                     service without losing the history under it.
                   {% endcomment %}
-                  <form method="post" action="{% url 'procurement:supplierkpi_delete' obj.pk %}" onsubmit="return confirm('Delete KPI {{ obj.number }}? If anything has ever been measured under it the delete is refused — retire it instead by unticking Active. A KPI that was never measured is gone for good and cannot be recovered.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  <form method="post" action="{% url 'procurement:supplierkpi_delete' obj.pk %}">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete KPI {{ obj.number }}? If anything has ever been measured under it the delete is refused — retire it instead by unticking Active. A KPI that was never measured is gone for good and cannot be recovered.');"><i data-lucide="trash-2"></i></button>
                   </form>
                 </div>
               </td>
