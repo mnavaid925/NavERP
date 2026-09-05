@@ -34,60 +34,60 @@ column points back at the pass section holding the full scenario, reproduction a
 
 ## Critical
 
-| ID | was | Runtime | Issue |
-|---|---|---|---|
-| **C1** | S1 | ✅ anonymous `curl` | Every uploaded file readable with **no login, no session, no tenant**. No download view exists anywhere in the codebase; `file.url` is a raw static URL and `MEDIA_ROOT` has no tenant partitioning. `Content-Disposition: attachment` is documented in five places and **implemented in none**. *Clone family of 18 across 16 templates — fix 6.19's three links, and raise the app-wide sweep separately (L28).* |
-| **C2** | P1 | ✅ measured | Revision-register dropdown selects full `ProcurementDocument` rows, unbounded, including the 200 KB `extracted_text`, to render three fields. **59.02 MB and 4.872 s at 2,007 documents** vs a 0.189 s control. Fix measured 699× smaller. |
+| ID | was | Runtime | Issue | Status |
+|---|---|---|---|---|
+| **C1** | S1 | ✅ anonymous `curl` | Every uploaded file readable with **no login, no session, no tenant**. No download view exists anywhere in the codebase; `file.url` is a raw static URL and `MEDIA_ROOT` has no tenant partitioning. `Content-Disposition: attachment` is documented in five places and **implemented in none**. *Clone family of 18 across 16 templates — fix 6.19's three links, and raise the app-wide sweep separately (L28).* | [x] fixed — pdocrevision_download + the three links |
+| **C2** | P1 | ✅ measured | Revision-register dropdown selects full `ProcurementDocument` rows, unbounded, including the 200 KB `extracted_text`, to render three fields. **59.02 MB and 4.872 s at 2,007 documents** vs a 0.189 s control. Fix measured 699× smaller. | [x] fixed — .only() + [:200] on the document facet |
 
 ## Important
 
-| ID | was | Runtime | Issue |
-|---|---|---|---|
-| **I1** | Q1 | ✅ ×3 routes | Pointer can land on an **unapproved** revision → green **Current** badge beside **Not approved** on the same row, and delete then refuses it. `current_revision` resolves by number alone. **Fix `current_revision` to filter `is_approved=True`** as well as closing I2/I3. |
-| **I2** | E2 | ✅ 2 clicks | Revision `document` FK is admin-editable (`readonly_fields` omits it) → **deterministic** route into I1, no race. Extension: with the app-wide editable `tenant`, an acme revision + file + `approved_by` stamp was moved into globex. *(The `tenant` half is app-wide — 50 of 52 ModelAdmins; only the `document` half is 6.19's.)* |
-| **I3** | item 3 | ✅ | `pdocrevision_delete` guards an **unlocked** snapshot while approve uses `select_for_update` → destroys an approved revision and dangles the pointer, with a success message. *Consequence paragraph needs rewording — see pass 5.* |
-| **I4** | item 2 | ✅ | Re-index blind-overwrites the search copy after a slow read → **permanently** installs a superseded revision's text. Measured: search finds the doc by superseded words, misses current ones. |
-| **I5** | S2 | ✅ reachable | `classification` enforced **nowhere** — any member can search *inside*, enumerate via the facet, and read 4,000 chars of a `restricted` document. Either enforce it or stop the UI claiming "only a named few may read". |
-| **I6** | item 4 | ✅ | `pdocument_delete` ungated → a non-admin cascaded **2 of 2 approved revisions**, the exact rows `pdocrevision_delete` refuses to touch. |
-| **I7** | E1 | ✅ | `ppolicy_delete` ungated, and its Danger-zone text promises "Nothing cascades" — false the moment 6.17 integrates (their `PolicyAttestation` CASCADEs this table). Non-admin deleted a published policy. |
-| **I8** | S4 | — | Any member can **archive a published policy** that only an admin could publish, and only an admin can repair it. Same class: `pdocument_activate`/`_supersede`/`_archive`. |
-| **I9** | S3 | — | `pdfplumber` parses attacker-supplied PDFs in-process with **no page/time/memory bound**; amplified 200× by the re-index Run. "Never raises" ≠ bounded. |
-| **I10** | item 1 | ✅ HTTP 500 | `ProcurementPolicyAdmin.search_fields` names `"tags"`, which the model does not have → `FieldError` 500 on any admin search. `manage.py check` does not validate `search_fields`. |
-| **I11** | F1 | ✅ | "Release checkout" offered to every viewer; the view refuses non-holders. *On the same page "Upload revision" is correctly hidden — the page already knows how.* |
-| **I12** | P5 | — | Re-index: **401 queries and up to 200 synchronous `pdfplumber` parses in one POST** — 200–400 s, through both the gunicorn (30 s) and nginx (60 s) timeouts. **Compose with I4 and I9 in one edit.** |
-| **I13** | P4 | — | `run_document_reminders` costs 4–5 queries **per row** over a window with **no lower bound** → ~3,200 queries on a second press that writes nothing. Hoisting the dedupe drops it to **2**. |
-| **I14** | P2 | ✅ measured | All four registers haul `extracted_text` they never render (465.7 KB / 6057.2 KB / 94.2 KB / 186.7 KB per page); `knowledgeresource_list` reads **no** FK at all yet `select_related`s two. |
-| **I15** | P3 | ✅ 1.5 s | `?q=` sweeps the TextField **twice** per matching search (COUNT + page). Acceptable to ~1,000 docs/tenant; add the `len(q) >= 4` guard. *(A non-matching term runs it once — Paginator short-circuits.)* |
-| **I16** | P6 | ✅ EXPLAIN | `(tenant, review_on)` unindexed on two hot paths → `type=ALL, rows=2021, filesort`. **Argue it from the scan, not the policy twin — that argument did not survive EXPLAIN.** |
+| ID | was | Runtime | Issue | Status |
+|---|---|---|---|---|
+| **I1** | Q1 | ✅ ×3 routes | Pointer can land on an **unapproved** revision → green **Current** badge beside **Not approved** on the same row, and delete then refuses it. `current_revision` resolves by number alone. **Fix `current_revision` to filter `is_approved=True`** as well as closing I2/I3. | [x] fixed — current_revision filters is_approved=True |
+| **I2** | E2 | ✅ 2 clicks | Revision `document` FK is admin-editable (`readonly_fields` omits it) → **deterministic** route into I1, no race. Extension: with the app-wide editable `tenant`, an acme revision + file + `approved_by` stamp was moved into globex. *(The `tenant` half is app-wide — 50 of 52 ModelAdmins; only the `document` half is 6.19's.)* | [x] fixed — readonly_fields gains "document" |
+| **I3** | item 3 | ✅ | `pdocrevision_delete` guards an **unlocked** snapshot while approve uses `select_for_update` → destroys an approved revision and dangles the pointer, with a success message. *Consequence paragraph needs rewording — see pass 5.* | [x] fixed — both guards under select_for_update on the parent |
+| **I4** | item 2 | ✅ | Re-index blind-overwrites the search copy after a slow read → **permanently** installs a superseded revision's text. Measured: search finds the doc by superseded words, misses current ones. | [x] fixed — conditional .update() keyed on the pointer |
+| **I5** | S2 | ✅ reachable | `classification` enforced **nowhere** — any member can search *inside*, enumerate via the facet, and read 4,000 chars of a `restricted` document. Either enforce it or stop the UI claiming "only a named few may read". | [x] fixed — readable_document_q enforced on both entities |
+| **I6** | item 4 | ✅ | `pdocument_delete` ungated → a non-admin cascaded **2 of 2 approved revisions**, the exact rows `pdocrevision_delete` refuses to touch. | [x] fixed — @tenant_admin_required + no-approved-chain guard |
+| **I7** | E1 | ✅ | `ppolicy_delete` ungated, and its Danger-zone text promises "Nothing cascades" — false the moment 6.17 integrates (their `PolicyAttestation` CASCADEs this table). Non-admin deleted a published policy. | [x] fixed — @tenant_admin_required + attestation guard |
+| **I8** | S4 | — | Any member can **archive a published policy** that only an admin could publish, and only an admin can repair it. Same class: `pdocument_activate`/`_supersede`/`_archive`. | [x] fixed — archive/activate/supersede all admin-gated |
+| **I9** | S3 | — | `pdfplumber` parses attacker-supplied PDFs in-process with **no page/time/memory bound**; amplified 200× by the re-index Run. "Never raises" ≠ bounded. | [x] fixed — MAX_EXTRACT_PAGES + budget break + flush_cache |
+| **I10** | item 1 | ✅ HTTP 500 | `ProcurementPolicyAdmin.search_fields` names `"tags"`, which the model does not have → `FieldError` 500 on any admin search. `manage.py check` does not validate `search_fields`. | [x] fixed — search_fields drops the nonexistent tags |
+| **I11** | F1 | ✅ | "Release checkout" offered to every viewer; the view refuses non-holders. *On the same page "Upload revision" is correctly hidden — the page already knows how.* | [x] fixed — can_release computed and gated |
+| **I12** | P5 | — | Re-index: **401 queries and up to 200 synchronous `pdfplumber` parses in one POST** — 200–400 s, through both the gunicorn (30 s) and nginx (60 s) timeouts. **Compose with I4 and I9 in one edit.** | [x] fixed — batched pointers, cap 25, 20 s budget |
+| **I13** | P4 | — | `run_document_reminders` costs 4–5 queries **per row** over a window with **no lower bound** → ~3,200 queries on a second press that writes nothing. Hoisting the dedupe drops it to **2**. | [x] fixed — dedupe hoisted - 2nd press measured at 2 queries |
+| **I14** | P2 | ✅ measured | All four registers haul `extracted_text` they never render (465.7 KB / 6057.2 KB / 94.2 KB / 186.7 KB per page); `knowledgeresource_list` reads **no** FK at all yet `select_related`s two. | [x] fixed — defer(extracted_text) + dead joins dropped |
+| **I15** | P3 | ✅ 1.5 s | `?q=` sweeps the TextField **twice** per matching search (COUNT + page). Acceptable to ~1,000 docs/tenant; add the `len(q) >= 4` guard. *(A non-matching term runs it once — Paginator short-circuits.)* | [x] fixed — file text swept only from 4 characters |
+| **I16** | P6 | ✅ EXPLAIN | `(tenant, review_on)` unindexed on two hot paths → `type=ALL, rows=2021, filesort`. **Argue it from the scan, not the policy twin — that argument did not survive EXPLAIN.** | [x] fixed — (tenant, review_on) index - EXPLAIN now type=range |
 
 ## Minor
 
-| ID | was | Issue |
-|---|---|---|
-| M1 | item 6 ✅ | `policy/list.html:185` claims the register never shows two published versions — **2, then 3, rendered on that same page**. |
-| M2 | item 11 ✅ | Re-index makes no progress past 200 textless rows; contradicts "picks up where it left off". |
-| M3 | item 10 ✅ | "Check out" offered on an archived document; the view refuses it. |
-| M4 | F4 ✅ | Revision delete guard spelled three ways; two registers offer a trash icon the view rejects **in the I1 state**. |
-| M5 | item 5 | Untenanted self-FK traversal on policy detail (defense-in-depth; no write path found). |
-| M6 | item 7 | `revision/form.html:85` predicts the wrong next revision number. |
-| M7 | item 8 | `btn btn-outline danger` — inert modifier, renders unstyled (L33). |
-| M8 | item 9 | Bare `get_full_name` with no `\|default:` — **15 occurrences across 6 files**. |
-| M9 | F2 | `revision/detail.html:128` uses `table-actions` where its three siblings use `page-actions`. |
-| M10 | F3 | `<dt>`/`<dd>` outside any `<dl>` — 4 occurrences, 3 files (WCAG 1.3.1). |
-| M11 | F5 | Knowledge-resource tags render as unlabelled pills; the document page labels the same thing. |
-| M12 | E3 | `KnowledgeResource.is_review_due` docstring claims a stat tile that does not exist. |
-| M13 | E4 | One "needs reviewing" concept, three renderings (two labels, two colours, three levels of support). |
-| M14 | E5 | Three review-date fields, two spellings, neither matching the app's `next_review_date` precedent. |
-| M15 | E6 | `is_review_due` reached by two names — context key on two detail views, `obj.` on the other two. |
-| M16 | E7 | `KnowledgeResource.has_been_used` is dead code. |
-| M17 | E8 | Seeder comment cites a re-export rule the package `__init__` contradicts in plain words. |
-| M18 | E9 | `_holder_name` duplicated byte-identically across two view modules → `views/_helpers.py`. |
-| M19 | E11 | Unjustified function-local `import os`; every other local import here carries a reason. |
-| M20 | P7 | `prc_pdrev_tnt_doc_idx` fully redundant (leftmost prefix of the unique constraint + the FK index). |
-| M21 | P8 | `pdocument_detail` spends a 5th query re-fetching a row already in memory. |
-| M22 | P9 | Three uncapped reverse lists on `pdocument_detail`; the sibling bounds its fan-out at 10. |
-| M23 | P11 | Seeder audit loop re-queries the seven rows it just created. |
-| M24 | Q2 ✅ | `usage_count` at the `PositiveIntegerField` ceiling saturates silently; **500s under strict SQL mode**. |
+| ID | was | Issue | Status |
+|---|---|---|---|
+| M1 | item 6 ✅ | `policy/list.html:185` claims the register never shows two published versions — **2, then 3, rendered on that same page**. | [x] fixed — the claim narrowed on all three surfaces |
+| M2 | item 11 ✅ | Re-index makes no progress past 200 textless rows; contradicts "picks up where it left off". | [x] fixed — candidates exclude a noted current revision |
+| M3 | item 10 ✅ | "Check out" offered on an archived document; the view refuses it. | [x] fixed — Check out hidden on an archived document |
+| M4 | F4 ✅ | Revision delete guard spelled three ways; two registers offer a trash icon the view rejects **in the I1 state**. | [x] fixed — both registers test both delete conditions |
+| M5 | item 5 | Untenanted self-FK traversal on policy detail (defense-in-depth; no write path found). | [x] fixed — successor slice filtered on tenant_id |
+| M6 | item 7 | `revision/form.html:85` predicts the wrong next revision number. | [x] fixed — the predicted number dropped |
+| M7 | item 8 | `btn btn-outline danger` — inert modifier, renders unstyled (L33). | [x] fixed — btn btn-danger |
+| M8 | item 9 | Bare `get_full_name` with no `\|default:` — **15 occurrences across 6 files**. | [x] fixed — all 15 occurrences carry a \|default: fallback |
+| M9 | F2 | `revision/detail.html:128` uses `table-actions` where its three siblings use `page-actions`. | [x] fixed — page-actions |
+| M10 | F3 | `<dt>`/`<dd>` outside any `<dl>` — 4 occurrences, 3 files (WCAG 1.3.1). | [x] fixed — all 4 pairs inside their own <dl> |
+| M11 | F5 | Knowledge-resource tags render as unlabelled pills; the document page labels the same thing. | [x] fixed — tags carry a Tags label |
+| M12 | E3 | `KnowledgeResource.is_review_due` docstring claims a stat tile that does not exist. | [x] fixed — the invented stat tile removed from the docstring |
+| M13 | E4 | One "needs reviewing" concept, three renderings (two labels, two colours, three levels of support). | [x] fixed — one label ("Review due") and one colour (amber) |
+| M14 | E5 | Three review-date fields, two spellings, neither matching the app's `next_review_date` precedent. | [~] skipped — 6.17 now reads next_review_on (their policy detail template), so the rename would break a committed peer surface; a 3-model rename migration for a naming preference is not worth that in a shared checkout |
+| M15 | E6 | `is_review_due` reached by two names — context key on two detail views, `obj.` on the other two. | [x] fixed — the duplicate context key dropped on both detail views |
+| M16 | E7 | `KnowledgeResource.has_been_used` is dead code. | [x] fixed — has_been_used deleted |
+| M17 | E8 | Seeder comment cites a re-export rule the package `__init__` contradicts in plain words. | [x] fixed — the real reason (name collision) stated |
+| M18 | E9 | `_holder_name` duplicated byte-identically across two view modules → `views/_helpers.py`. | [x] fixed — holder_name lives in views/_helpers.py |
+| M19 | E11 | Unjustified function-local `import os`; every other local import here carries a reason. | [x] fixed — os imported at module level |
+| M20 | P7 | `prc_pdrev_tnt_doc_idx` fully redundant (leftmost prefix of the unique constraint + the FK index). | [x] fixed — prc_pdrev_tnt_doc_idx dropped |
+| M21 | P8 | `pdocument_detail` spends a 5th query re-fetching a row already in memory. | [x] fixed — resolved from the list already in memory |
+| M22 | P9 | Three uncapped reverse lists on `pdocument_detail`; the sibling bounds its fan-out at 10. | [x] fixed — capped at DETAIL_FAN_OUT_CAP = 50 |
+| M23 | P11 | Seeder audit loop re-queries the seven rows it just created. | [x] fixed — the seven rows already in hand |
+| M24 | Q2 ✅ | `usage_count` at the `PositiveIntegerField` ceiling saturates silently; **500s under strict SQL mode**. | [x] fixed — refused at the column ceiling |
 
 ## No action — recorded, deliberately not fixed
 
@@ -113,14 +113,14 @@ form exposes a view-owned/system field, no missing migration.
 
 ### Important
 
-**[ ] 1 — `admin.py:831` `ProcurementPolicyAdmin.search_fields` names a field that does not exist.**
+**[x] fixed 1 — `admin.py:831` `ProcurementPolicyAdmin.search_fields` names a field that does not exist.**
 `"tags"` was copied from `KnowledgeResourceAdmin:844`, where it does exist. Typing anything into
 the policy admin search box raises `FieldError: Cannot resolve keyword 'tags' into field`
 (reproduced against the real model). `manage.py check` does **not** validate `search_fields`, so
 the hooks let it through.
 *Fix:* `("number", "title", "summary", "body", "version_number")`.
 
-**[ ] 2 — `views/DocumentKnowledgeManagement/Documents.py:424-425` re-index can permanently install a SUPERSEDED revision text.**
+**[x] fixed 2 — `views/DocumentKnowledgeManagement/Documents.py:424-425` re-index can permanently install a SUPERSEDED revision text.**
 The Run blind-overwrites the parent search copy after a slow file read.
 *Scenario:* doc D has pointer=2, `extracted_text=""`. Admin A presses Re-index; the loop reads r2
 and spends seconds in `pdfplumber`. Admin B approves r3, so pointer=3 and r3 text is written. A
@@ -131,7 +131,7 @@ longer `""`.
 `pk`, `tenant`, `extracted_text=""` **and** `current_revision_no=document.current_revision_no`,
 then `.update(...)`, counting `indexed` only when it returns 1.
 
-**[ ] 3 — `views/DocumentKnowledgeManagement/Revisions.py:432-447` `pdocrevision_delete` guards an UNLOCKED snapshot.**
+**[x] fixed 3 — `views/DocumentKnowledgeManagement/Revisions.py:432-447` `pdocrevision_delete` guards an UNLOCKED snapshot.**
 Approve does the same work under `select_for_update()`; delete does not.
 *Scenario:* pointer=2, r3 pending. B POSTs delete on r3 (reads `is_approved=False`, pointer=2 —
 both guards pass); A concurrently approves r3, so pointer=3; B `revision.delete()` runs. The
@@ -143,7 +143,7 @@ document** until a second throwaway upload.
 `select_for_update()` on the parent document (scoped to `tenant`), and re-read
 `revision.is_approved` there, mirroring approve.
 
-**[ ] 4 — `views/DocumentKnowledgeManagement/Documents.py:229-230` `pdocument_delete` is ungated and cascades an approved chain.**
+**[x] fixed 4 — `views/DocumentKnowledgeManagement/Documents.py:229-230` `pdocument_delete` is ungated and cascades an approved chain.**
 Plain `crud_delete`, no admin gate, no status condition: any workspace member can POST
 `/procurement/documents/<pk>/delete/` on an `active` document and CASCADE away its entire approved
 revision chain — the exact records `pdocrevision_delete:432` refuses to remove ("approved history
@@ -157,7 +157,7 @@ template buttons in the same condition.
 
 ### Minor
 
-**[ ] 5 — `views/DocumentKnowledgeManagement/Policies.py:154,159` self-FK traversal with no tenant filter.**
+**[x] fixed 5 — `views/DocumentKnowledgeManagement/Policies.py:154,159` self-FK traversal with no tenant filter.**
 `obj.superseded_by.all()[:10]` and `obj.previous_version` — precisely the hazard the `# WARNING:`
 at `Policies.py:256-263` defends against 100 lines below in the same file. A foreign
 `previous_version_id` would print another workspace number/title/version/status and link to it.
@@ -166,7 +166,7 @@ Every write path traced (`TenantModelForm`, `_reject_foreign`, `ProcurementPolic
 defense-in-depth, not a demonstrated leak.
 *Fix:* `obj.superseded_by.filter(tenant_id=obj.tenant_id)[:SUPERSEDED_BY_CAP]`.
 
-**[ ] 6 — `templates/documentknowledge/policy/list.html:185` claims a guarantee the verb does not make.**
+**[x] fixed 6 — `templates/documentknowledge/policy/list.html:185` claims a guarantee the verb does not make.**
 It says the register never shows two published versions of the same rule, but
 `ppolicy_publish:265-273` only archives the predecessor reachable via `previous_version_id`.
 Publish v1.0, then create v2.0 leaving `previous_version` blank and publish it: both read
@@ -174,29 +174,29 @@ Publish v1.0, then create v2.0 leaving `previous_version` blank and publish it: 
 *Fix:* soften the claim here, at `policy/form.html:110` and in the `Policies.py:38-40` docstring —
 or have the verb warn when `(tenant, title)` already has a published row.
 
-**[ ] 7 — `templates/documentknowledge/revision/form.html:85` predicts the wrong revision number.**
+**[x] fixed 7 — `templates/documentknowledge/revision/form.html:85` predicts the wrong revision number.**
 It interpolates `document.current_revision_no|add:1`, but that is the *approved* pointer, while
 `next_revision_no()` returns `Max(revision_no)+1`. With r1 approved and r2/r3 pending the page
 promises r2; the upload mints r4.
 *Fix:* drop the interpolated number, say "the next number in the chain".
 
-**[ ] 8 — `templates/documentknowledge/revision/detail.html:137` inert theme modifier (L33).**
+**[x] fixed 8 — `templates/documentknowledge/revision/detail.html:137` inert theme modifier (L33).**
 `class="btn btn-outline danger"`; theme.css has `.btn-danger` and `.btn-icon.danger:hover` but no
 `.btn-outline.danger` and no bare `.danger`, so it renders completely unstyled. Every other 6.19
 danger button uses `btn btn-danger`.
 
-**[ ] 9 — `templates/documentknowledge/document/list.html:114` bare `get_full_name`, no username fallback.**
+**[x] fixed 9 — `templates/documentknowledge/document/list.html:114` bare `get_full_name`, no username fallback.**
 Renders an empty `<option>` for a user with blank first/last names (seeded users have names, so
 smoke would not catch it). House idiom is `|default:` — 84 uses vs 20 bare across
 `templates/procurement/`. **Clone family: 15 occurrences across 6 of the 12 new templates** —
 find them with `grep -rn "get_full_name }}" templates/procurement/documentknowledge/`.
 
-**[ ] 10 — `templates/documentknowledge/document/detail.html:247` offers a button the view refuses.**
+**[x] fixed 10 — `templates/documentknowledge/document/detail.html:247` offers a button the view refuses.**
 "Check out" shows whenever the document is not checked out, including `status == archived`, which
 `pdocument_checkout:263-266` refuses with `messages.error`.
 *Fix:* wrap in a status check, matching the view computed `can_upload`.
 
-**[ ] 11 — `views/DocumentKnowledgeManagement/Documents.py:405-408` re-index cannot make progress past 200 textless rows.**
+**[x] fixed 11 — `views/DocumentKnowledgeManagement/Documents.py:405-408` re-index cannot make progress past 200 textless rows.**
 Candidates are `extracted_text=""` ordered by id, capped at 200. A document whose current revision
 genuinely has no text layer can never be filled in, so it occupies a cap slot and costs a file read
 on *every* run, contradicting the docstring "picks up where it left off".
@@ -229,7 +229,7 @@ duplicates pass 1.
 
 ### Important
 
-**[ ] E1 — `ppolicy_delete` "Nothing cascades" becomes false the moment 6.17 lands, and the delete is ungated (L43, cross-session).**
+**[x] fixed E1 — `ppolicy_delete` "Nothing cascades" becomes false the moment 6.17 lands, and the delete is ungated (L43, cross-session).**
 Claimed at `views/…/Policies.py:185` (comment), `policy/detail.html:198` (to the user, in the
 Danger zone) and `policy/list.html:152`. But 6.17 declares
 `policy = models.ForeignKey("procurement.ProcurementPolicy", on_delete=models.CASCADE, related_name="attestations")`
@@ -245,7 +245,7 @@ claim is still true and this is a landmine, not a live bug.
 on `pdocument_delete` — `@tenant_admin_required` + refuse when `obj.attestations.exists()`.
 **Not a duplicate of item 4** (different route, different cascade); fix in the same pass.
 
-**[ ] E2 — "every column except `change_note` is `editable=False`" is false for `document`, and admin surfaces it.**
+**[x] fixed E2 — "every column except `change_note` is `editable=False`" is false for `document`, and admin surfaces it.**
 The revision-immutability invariant is asserted six times (`models/…/Revisions.py:18-20`,
 `views/…/Revisions.py:16-17`, `forms/…/Revisions.py:21-22`, `urls/…/Revisions.py:25-27`,
 `urls/…/__init__.py:24-26`, `revision/detail.html:23-24`). But `models/…/Revisions.py:78-79`
@@ -266,7 +266,7 @@ restatements.
 
 ### Minor
 
-**[ ] E3 — `KnowledgeResource.is_review_due` docstring claims a stat tile that does not exist.**
+**[x] fixed E3 — `KnowledgeResource.is_review_due` docstring claims a stat tile that does not exist.**
 `models/…/KnowledgeResources.py:255-261` says the register runs the same comparison in SQL "for its
 review stat tile, so the badge on a row and the count above it always agree".
 `knowledgeresource_list` aggregates `total/published/featured/used` only
@@ -274,7 +274,7 @@ review stat tile, so the badge on a row and the count above it always agree".
 `ProcurementPolicy.is_review_due` (`Policies.py:291-296`) **is** true, which is how the copy-paste
 happened. *Fix:* delete the sentence, or add the aggregate + facet.
 
-**[ ] E4 — one concept, three renderings, inside one sub-module.**
+**[x] fixed E4 — one concept, three renderings, inside one sub-module.**
 
 | surface | label | badge | facet | tile |
 |---|---|---|---|---|
@@ -286,7 +286,7 @@ The vocabularies disagree too: `EXPIRY_FILTER_CHOICES` says "Review due"
 (`models/…/Documents.py:94`), `REVIEW_CHOICES` says "Review overdue" (`views/…/Policies.py:68`).
 *Cost:* a user who learns "amber = review" on one register reads red on the next and assumes worse.
 
-**[ ] E5 — three review-date fields, two spellings, neither matching the app precedent.**
+**[~] skipped E5 — three review-date fields, two spellings, neither matching the app precedent.**
 `ProcurementDocument.review_on:178`, `KnowledgeResource.review_on:194`,
 `ProcurementPolicy.next_review_on:188`. The existing cross-app precedent is `next_review_date`
 (`scm/…/SupplierRiskAssessments.py:45`, `procurement/…/SupplierImprovementPlans.py:126`).
@@ -294,18 +294,18 @@ The vocabularies disagree too: `EXPIRY_FILTER_CHOICES` says "Review due"
 special-cases the third model. *Fix:* collapse to one spelling now — costs a migration plus
 `admin.py` and the policy templates; 6.17 does not reference it.
 
-**[ ] E6 — `is_review_due` reached by two names in one sub-module.**
+**[x] fixed E6 — `is_review_due` reached by two names in one sub-module.**
 `ppolicy_detail:163` and `knowledgeresource_detail:165` lift the model property into context;
 `pdocument_detail` does not, and `document/detail.html:63` reads `obj.is_review_due` — as do all
 four list templates. The context key is pure redundancy; the document detail shape is the better
 one. *Fix:* drop the key from both detail views, read `obj.is_review_due` everywhere, and amend the
 contract (pass 1 verified against it).
 
-**[ ] E7 — `KnowledgeResource.has_been_used` is dead.** `models/…/KnowledgeResources.py:263-266`.
+**[x] fixed E7 — `KnowledgeResource.has_been_used` is dead.** `models/…/KnowledgeResources.py:263-266`.
 No view, template, form, test or seeder references it; `knowledgeresource/detail.html:128` tests
 `{% if obj.usage_count %}` directly, which is what the property wraps.
 
-**[ ] E8 — the seeder justification comment contradicts the file it cites.**
+**[x] fixed E8 — the seeder justification comment contradicts the file it cites.**
 `seed_procurement.py:3025-3028` says `normalize_tags`/`next_revision_no`/`file_sha256`/
 `EXTRACT_MAX_CHARS` are not re-exported because of "the 6.14/6.15 rule that keeps the package
 `__init__` a model registry". But `models/__init__.py` re-exports 25+ non-model callables
@@ -315,7 +315,7 @@ facts are right; the stated rule is not, and `models/__init__.py:110-115` says t
 *Fix:* reword to the real reason (collision risk with `CatalogManagement` rival constants), which is
 given correctly elsewhere.
 
-**[ ] E9 — four intra-sub-module helper duplications, two with different names for identical bodies.**
+**[x] fixed E9 — four intra-sub-module helper duplications, two with different names for identical bodies.**
 `_holder_name` byte-identical in `views/…/Documents.py:245-247` and `views/…/Revisions.py:192-194`;
 `_owners(tenant)` (`views/…/Documents.py:118-125`) vs `_workspace_members(tenant)` (forms ×3);
 `_suppliers(tenant)` vs `_supplier_parties(tenant)`; `_need_tenant` in both view modules.
@@ -324,7 +324,7 @@ given correctly elsewhere.
 *Fix:* move `_holder_name` to `views/_helpers.py` (CLAUDE.md Backend rule 5 — used by two entities
 of one sub-module). Leave the rest; fixing them app-wide is a separate job.
 
-**[ ] E10 — `pdocument_*` vs `pdocrevision_*` spell "document" two ways.**
+**[~] no action E10 — `pdocument_*` vs `pdocrevision_*` spell "document" two ways.**
 On the wider question: the mixed abbreviation is **within house norms** —
 `supplierinvoice`/`budgetmapping` sit alongside `asn`/`rtv`/`eauc` app-wide, and the `p` prefixes
 have a real justification (`document_*`/`policy_*` are namespace-generic, and `policy_list` is in
@@ -334,7 +334,7 @@ inconsistency is narrower: `pdocument` keeps "document" whole while `pdocrevisio
 *Cost:* low, but url names are the one 6.19 surface other sub-modules hard-code. Cheap now (4 names,
 4 `path()` calls, ~20 `{% url %}` tags, one `__init__.py` block); permanent later.
 
-**[ ] E11 — unjustified function-local `import os`.** `views/…/Revisions.py:253`, inside the POST
+**[x] fixed E11 — unjustified function-local `import os`.** `views/…/Revisions.py:253`, inside the POST
 branch. Every other function-local import in 6.19 carries an explicit reason (the
 `CatalogManagement` constant collision, lazy `pdfplumber`, the not-yet-wired sub-package). `os` is
 stdlib with none of those, and `models/…/Revisions.py:39` imports it at module level.
@@ -400,7 +400,7 @@ sub-module's only inert modifier is the already-filed item 8.
 
 ### Important
 
-**[ ] F1 — `document/detail.html:242-245` offers "Release checkout" to every viewer; the view refuses most of them.**
+**[x] fixed F1 — `document/detail.html:242-245` offers "Release checkout" to every viewer; the view refuses most of them.**
 The guard is only `{% if obj.is_checked_out %}`, but `pdocument_release`
 (`views/…/Documents.py:288-296`) computes `forced = obj.checked_out_by_id != request.user.pk` and
 refuses with `messages.error` when `forced and not is_admin`.
@@ -415,13 +415,13 @@ key (holder-or-admin) and gate the form at line 243 on it.
 
 ### Minor
 
-**[ ] F2 — `revision/detail.html:128` uses `class="table-actions"` for its Actions row** (pass 2's
+**[x] fixed F2 — `revision/detail.html:128` uses `class="table-actions"` for its Actions row** (pass 2's
 lead, **confirmed**). `theme.css:305` is `justify-content:flex-end; gap:.25rem`; `.page-actions`
 (`theme.css:248`) is `gap:.5rem` with no justify. So the revision detail's Approve/Delete/Back
 buttons sit hard against the right edge with half the gap, while the same Actions card on the other
 three detail pages renders left-aligned and normally spaced. *Fix:* `class="page-actions"`.
 
-**[ ] F3 — `<dt>`/`<dd>` used outside any `<dl>` — 4 occurrences in 3 files.**
+**[x] fixed F3 — `<dt>`/`<dd>` used outside any `<dl>` — 4 occurrences in 3 files.**
 `document/detail.html:91,94` (the `<dl class="detail-grid">` opened at 68 closes at 88),
 `policy/detail.html:95` (closes at 92), `knowledgeresource/detail.html:94` (closes at 85). It looks
 right because `theme.css:356-357` scopes on `.detail-item dt`/`dd` rather than on the list, so
@@ -430,7 +430,7 @@ assistive tech gets a term/definition pair with no list to attach it to (WCAG 1.
 `<dt>` in the sub-module is correctly nested. *Fix:* wrap each stray block in its own
 `<dl class="detail-grid">`, or drop to a plain `detail-item` div.
 
-**[ ] F4 — the revision Delete guard is spelled three different ways across three surfaces.**
+**[x] fixed F4 — the revision Delete guard is spelled three different ways across three surfaces.**
 `pdocrevision_delete` (`views/…/Revisions.py:432-437`) checks **two** conditions — `is_approved`
 **and** `revision_no == document.current_revision_no` — and its docstring says both are deliberate
 so "a pointer left dangling by any future path must not become a route to deleting the row it
@@ -442,7 +442,7 @@ that state the two registers would offer a trash icon the view rejects.
 *Fix:* add `and not r.is_current` at both sites. `is_current` reads through `r.document`, which both
 views already `select_related`, so it costs no query.
 
-**[ ] F5 — `knowledgeresource/detail.html:87-91` renders tags as unlabelled pills** where
+**[x] fixed F5 — `knowledgeresource/detail.html:87-91` renders tags as unlabelled pills** where
 `document/detail.html:94` labels the same thing "Tags". A reader sees a row of grey pills with
 nothing saying what they are, sitting next to the `badge-muted` used for real statuses. *Fix:* give
 it the same labelled `detail-item` shell as the document page (folds into F3 if taken together).
@@ -499,7 +499,7 @@ extracted text per document, 200 KB quoted as worst case. **Verdict: one Critica
 
 ### Critical
 
-**[ ] P1 — `_documents()` builds the revision register's dropdown from FULL `ProcurementDocument` rows, unbounded, including the 200 KB `extracted_text` column.**
+**[x] fixed P1 — `_documents()` builds the revision register's dropdown from FULL `ProcurementDocument` rows, unbounded, including the 200 KB `extracted_text` column.**
 `views/…/Revisions.py:116-120` — `ProcurementDocument.objects.filter(tenant=tenant).order_by("number")`.
 `revision/list.html:76-78` renders exactly three values per option (`pk`, `number`, `title`); every
 other column comes down anyway, `extracted_text` and `description` included. It is **1 query** — not
@@ -522,7 +522,7 @@ the app carrying a machine-written 200 KB column, and it is the one fed to a dro
 
 ### Important
 
-**[ ] P2 — all four registers haul `extracted_text` they never render; three join `ProcurementDocument` for nothing.**
+**[x] fixed P2 — all four registers haul `extracted_text` they never render; three join `ProcurementDocument` for nothing.**
 
 | register | joins declared | joins the template uses | dead text per 15-row page (30 KB / 200 KB) |
 |---|---|---|---|
@@ -539,7 +539,7 @@ documents — the detail genuinely renders all five. House precedent:
 `apps/crm/views/DocumentContract/DocumentVersions.py:24` `.defer("body_snapshot")`, the direct
 analogue of `ProcurementDocumentRevision`.
 
-**[ ] P3 — `?q=` sweeps the 200 KB TextField with `icontains` TWICE per request, with no minimum-length guard.**
+**[x] fixed P3 — `?q=` sweeps the 200 KB TextField with `icontains` TWICE per request, with no minimum-length guard.**
 `views/…/Documents.py:147` puts `extracted_text` in `search_fields`; `crud.py:118` applies search
 before `paginate` (correct), but `Paginator` then issues `COUNT(*)` over the same filtered
 queryset, so the scan runs twice.
@@ -557,7 +557,7 @@ FULLTEXT (the SQLite ruling stands). *Fix:* include `extracted_text` in `search_
 exists as the one place to explain it. (Stat tiles aggregate over `base`, not the searched qs, so
 the LIKE runs twice, not three times.)
 
-**[ ] P4 — `run_document_reminders` issues 4-5 queries PER ROW over a scan set that only grows.**
+**[x] fixed P4 — `run_document_reminders` issues 4-5 queries PER ROW over a scan set that only grows.**
 Per in-window document: SAVEPOINT + `SELECT … FOR UPDATE` + `SELECT EXISTS` dedupe + (INSERT) +
 RELEASE.
 
@@ -580,7 +580,7 @@ on the window.
 *App-wide, do not fork 6.19 for it:* `ProcurementAlert` has no index reaching `link_url`; the same
 dedupe shape is in 6.3 `run_escalations` and 6.8 `run_renewal_alerts`.
 
-**[ ] P5 — re-index: 401 queries and up to 200 synchronous `pdfplumber` parses inside one POST.**
+**[x] fixed P5 — re-index: 401 queries and up to 200 synchronous `pdfplumber` parses inside one POST.**
 *(the item pass 1 routed here — investigated, filed with numbers)*
 1 candidates query + N `current_revision` property queries + up to N UPDATEs = **up to 401**.
 Wall clock is the real problem — `pdfplumber` is pure Python on pdfminer.six, ~0.1-0.3 s/page:
@@ -601,7 +601,7 @@ request: `REINDEX_ROW_CAP = 25` and/or a `time.monotonic()` budget with "X re-in
 The docstring already promises that behaviour; the code needs to keep it inside a timeout.
 **Compose this with item 2's conditional `.update()` fix — same edit.**
 
-**[ ] P6 — `review_on` is filtered on two hot paths and has no index, while its policy twin does.**
+**[x] fixed P6 — `review_on` is filtered on two hot paths and has no index, while its policy twin does.**
 `models/…/Documents.py:216-221` declares `(tenant,status)`, `(tenant,doc_type)`,
 `(tenant,expires_on)`, `(tenant,supplier)` — but not `(tenant, review_on)`, which is filtered by the
 `?expiry=review_due` facet **and** by the review branch of the reminder scan. `ProcurementPolicy`
@@ -611,30 +611,30 @@ indexes exactly this pattern at `Policies.py:253`, so the asymmetry is a tell, n
 
 ### Minor
 
-**[ ] P7 — `prc_pdrev_tnt_doc_idx` is fully redundant, on the fastest-growing table here.**
+**[x] fixed P7 — `prc_pdrev_tnt_doc_idx` is fully redundant, on the fastest-growing table here.**
 `Revisions.py:130` declares `(tenant, document)`; `:128`'s `unique_together
 ("tenant","document","revision_no")` already has that as its leftmost prefix, and `document` carries
 Django's automatic FK index. Three structures, one access path, maintained on every INSERT of an
 append-only table. `prc_pdrev_tnt_appr_idx` is a boolean at ~50% selectivity — MySQL will rarely
 choose it; keep only if `?approved=` is expected to be heavily used.
 
-**[ ] P8 — `pdocument_detail` spends a 5th query re-fetching a row it already holds.**
+**[x] fixed P8 — `pdocument_detail` spends a 5th query re-fetching a row it already holds.**
 `:183` materialises every revision; `:196` then calls `obj.current_revision`, which runs
 `self.revisions.filter(...).first()`. Replace with a `next(...)` over the list already in memory —
 5 queries → 4.
 
-**[ ] P9 — the three reverse lists on `pdocument_detail` are uncapped.** `:183-185` `list()`s
+**[x] fixed P9 — the three reverse lists on `pdocument_detail` are uncapped.** `:183-185` `list()`s
 `revisions`, `policies`, `knowledge_resources` with no slice, while the sibling detail bounds its
 fan-out with `SUPERSEDED_BY_CAP = 10`. A heavily-revised document is exactly the one people open.
 `[:50]` + a "showing the latest 50" note matches the house pattern.
 
-**[ ] P10 — pagination ordering is not index-supported — but this is the app-wide pattern, not a 6.19 fork.**
+**[~] no action P10 — pagination ordering is not index-supported — but this is the app-wide pattern, not a 6.19 fork.**
 None of the three `Meta.ordering` tuples has a matching `(tenant, <sort key>)` index, so every page
 is a filesort over the tenant's rows. App-wide only **25** of **894** tenant-prefixed index
 declarations carry `(tenant, created_at)`. 6.19 conforms. If anything is added, add it to the two
 tables that actually grow, as an app-wide pass.
 
-**[ ] P11 — the seeder's audit loop re-queries rows it is holding.** `seed_procurement.py:3319-3320`
+**[x] fixed P11 — the seeder's audit loop re-queries rows it is holding.** `seed_procurement.py:3319-3320`
 re-`list()`s the seven documents just created (and loads `description`/`extracted_text`). Cosmetic —
 it runs only inside the "no documents yet" branch.
 
@@ -761,7 +761,7 @@ index; argue it from the scan, not the twin.
 
 ### New findings
 
-**[ ] Q1 — Important — the item-3 / E2 end state is a pointer on an UNAPPROVED revision, not an unusable document.**
+**[x] fixed Q1 — Important — the item-3 / E2 end state is a pointer on an UNAPPROVED revision, not an unusable document.**
 `models/…/Documents.py:278` (`current_revision`) and `models/…/Revisions.py:144` (`is_current`)
 resolve the pointer **by number alone, with no `is_approved` predicate**. Once a dangling pointer is
 re-filled by the next upload's re-allocated number, every read surface treats an unapproved file as
@@ -781,7 +781,7 @@ Reproduced three ways (item 3's race, E2's admin reparent, and directly).
 `is_approved=True`** so no future path can paint "Current" on an unapproved row. Fold F4's
 `and not r.is_current` into the same pass — same state.
 
-**[ ] Q2 — Minor — `knowledgeresource_use` at the `usage_count` ceiling saturates silently here, 500s under strict SQL mode.**
+**[x] fixed Q2 — Minor — `knowledgeresource_use` at the `usage_count` ceiling saturates silently here, 500s under strict SQL mode.**
 `views/…/KnowledgeResources.py:294`. At `usage_count = 4294967295` this box returns 302, the counter
 stays put, and the banner reports the unchanged number as a fresh increment. The identical UPDATE
 under `sql_mode='STRICT_TRANS_TABLES'`:
@@ -789,7 +789,7 @@ under `sql_mode='STRICT_TRANS_TABLES'`:
 POST verb in a strict deployment. Unreachable in practice (4.29 billion clicks); filed for
 completeness and as the concrete example of Q3.
 
-**[ ] Q3 — Observation, not a 6.19 defect — this database runs without `STRICT_TRANS_TABLES`.**
+**[~] no action Q3 — Observation, not a 6.19 defect — this database runs without `STRICT_TRANS_TABLES`.**
 MariaDB 10.4.14, `sql_mode='NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION'`. Django's docs
 call non-strict MySQL/MariaDB a data-corruption risk: anything the form layer misses truncates or
 clamps silently instead of raising. 6.19's form layer caught everything thrown at it, so no 6.19 bug
@@ -833,7 +833,7 @@ storage sanitisation both do their jobs. **No traversal.**
 *(This pass numbered its findings C1-C5; renamed **S1-S5** here to avoid colliding with the
 consolidated severity IDs below.)*
 
-### [ ] S1 — CRITICAL — every uploaded document file is readable with no login, no session, no tenant
+### [x] fixed S1 — CRITICAL — every uploaded document file is readable with no login, no session, no tenant
 
 `models/…/Revisions.py:85-88` (the `FileField`), linked from `revision/detail.html:89`,
 `revision/list.html:123`, `document/detail.html:156`; served by `config/urls.py:23-24` and by Apache
@@ -883,7 +883,7 @@ it holds today (no `.html`/`.htm`/`.svg`/`.xhtml`/`.php`) — but it is doing th
 nosniff in dev, no disposition header, same-origin serving. Add one scriptable extension to that
 shared set at any future point and this is stored XSS on the app origin with no second control.
 
-### [ ] S2 — Important — `classification` is a decorative label; confidential/restricted file *contents* are searchable by every member
+### [x] fixed S2 — Important — `classification` is a decorative label; confidential/restricted file *contents* are searchable by every member
 
 `views/…/Documents.py:147` (`extracted_text` in `search_fields`), `:153` (the facet), `:83`, `:176`;
 `revision/detail.html:110`.
@@ -907,7 +907,7 @@ read-ACL is genuinely deferred to Module 13.7, then say so on the form help_text
 badge** — the current UI, with a tier literally named "for records only a named few may read",
 actively misleads the person choosing it.
 
-### [ ] S3 — Important — `pdfplumber` parses attacker-supplied files in-process with no page, time or memory bound
+### [x] fixed S3 — Important — `pdfplumber` parses attacker-supplied files in-process with no page, time or memory bound
 
 `models/…/Revisions.py:271-285`, driven from the upload (`views/…/Revisions.py:296`) and re-index
 (`views/…/Documents.py:420`). Any authenticated member (upload is `@login_required` only) can post a
@@ -924,7 +924,7 @@ planted bombs are one request. The plain-text branch **is** bounded correctly
 met, call `page.flush_cache()` per page, and move extraction off the request path (or wrap a hard
 wall-clock budget) before this accepts untrusted uploads. Compose with P5.
 
-### [ ] S4 — Important — any member can archive a published policy that only an admin could publish
+### [x] fixed S4 — Important — any member can archive a published policy that only an admin could publish
 
 `views/…/Policies.py:302-304` (`ppolicy_archive`: `@login_required` + `@require_POST` only) against
 `:204-207` (`ppolicy_publish`: `@tenant_admin_required`). A non-admin POSTs
@@ -941,7 +941,7 @@ position needs the same gate.
 member-reachable and all change the document-of-record's status (archiving additionally blocks
 checkout and new revisions). Worth a deliberate ruling rather than a default.
 
-### [ ] S5 — Minor — `supplier_visible` is inert today
+### [~] no action S5 — Minor — `supplier_visible` is inert today
 
 Asked directly, answered directly: **no code path acts on it.** Every hit is passive — model field,
 form checkbox, admin `list_filter`, seeder value, display badge, one docstring. No queryset filters
@@ -985,3 +985,86 @@ tamper-proofing. **Mass assignment:** both `Meta.fields` sets exclude every mach
 which are additionally `editable=False`. **Audit:** all eleven verbs call `write_audit_log`, with
 `sha256` truncated to 16 chars. **Secrets:** none in the sub-module; no generated value in a
 `messages.success` (L25).
+
+---
+
+# FIX LOG — code-fixer pass
+
+All 42 consolidated findings resolved: **41 fixed, 1 skipped**, no finding left open. One commit per file, explicit paths, nothing pushed. `manage.py check` clean and `makemigrations --check` "No changes detected" at the end; the 6.19 route sweep re-run green after every view or template change (content asserted, not just status).
+
+| ID | Status | What landed | Commit |
+|---|---|---|---|
+| C1 | [x] fixed | pdocrevision_download + the three links | security(procurement): serve 6.19 revision files through an authenticated tenant-scoped download view |
+| C2 | [x] fixed | .only() + [:200] on the document facet | security(procurement): serve 6.19 revision files through an authenticated tenant-scoped download view |
+| I1 | [x] fixed | current_revision filters is_approved=True | fix(procurement): make the 6.19 document pointer, reminder scan and re-index cap honest |
+| I2 | [x] fixed | readonly_fields gains "document" | fix(procurement): close the 6.19 admin revision reparent and the policy search 500 |
+| I3 | [x] fixed | both guards under select_for_update on the parent | fix(procurement): lock the revision delete guards and enforce classification on the chain |
+| I4 | [x] fixed | conditional .update() keyed on the pointer | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| I5 | [x] fixed | readable_document_q enforced on both entities | feat(procurement): add the 6.19 document read rule and the shared holder-name helper |
+| I6 | [x] fixed | @tenant_admin_required + no-approved-chain guard | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| I7 | [x] fixed | @tenant_admin_required + attestation guard | fix(procurement): gate policy delete and archive, and stop over-claiming what publish guarantees |
+| I8 | [x] fixed | archive/activate/supersede all admin-gated | fix(procurement): gate policy delete and archive, and stop over-claiming what publish guarantees |
+| I9 | [x] fixed | MAX_EXTRACT_PAGES + budget break + flush_cache | security(procurement): bound PDF text extraction and drop the redundant revision index |
+| I10 | [x] fixed | search_fields drops the nonexistent tags | fix(procurement): close the 6.19 admin revision reparent and the policy search 500 |
+| I11 | [x] fixed | can_release computed and gated | fix(procurement): align the document detail buttons with the verbs that answer them |
+| I12 | [x] fixed | batched pointers, cap 25, 20 s budget | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| I13 | [x] fixed | dedupe hoisted - 2nd press measured at 2 queries | fix(procurement): make the 6.19 document pointer, reminder scan and re-index cap honest |
+| I14 | [x] fixed | defer(extracted_text) + dead joins dropped | perf(procurement): drop the unread knowledge-library joins and refuse a saturated use counter |
+| I15 | [x] fixed | file text swept only from 4 characters | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| I16 | [x] fixed | (tenant, review_on) index - EXPLAIN now type=range | feat(procurement): migration 0029 - index (tenant, review_on), drop the redundant revision index |
+| M1 | [x] fixed | the claim narrowed on all three surfaces | fix(procurement): gate the policy delete icon and state what publish really guarantees |
+| M2 | [x] fixed | candidates exclude a noted current revision | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| M3 | [x] fixed | Check out hidden on an archived document | fix(procurement): align the document detail buttons with the verbs that answer them |
+| M4 | [x] fixed | both registers test both delete conditions | fix(procurement): mirror both revision delete conditions on the register |
+| M5 | [x] fixed | successor slice filtered on tenant_id | fix(procurement): gate policy delete and archive, and stop over-claiming what publish guarantees |
+| M6 | [x] fixed | the predicted number dropped | fix(procurement): stop predicting the wrong revision number on the upload page |
+| M7 | [x] fixed | btn btn-danger | fix(procurement): style the revision detail actions with classes theme.css actually ships |
+| M8 | [x] fixed | all 15 occurrences carry |default:username | fix(procurement): gate the register delete icon and state the search and read rules |
+| M9 | [x] fixed | page-actions | fix(procurement): style the revision detail actions with classes theme.css actually ships |
+| M10 | [x] fixed | all 4 pairs inside their own <dl> | fix(procurement): align the document detail buttons with the verbs that answer them |
+| M11 | [x] fixed | tags carry a Tags label | fix(procurement): label the knowledge-resource tags and read the review flag off the object |
+| M12 | [x] fixed | the invented stat tile removed from the docstring | refactor(procurement): correct the knowledge-resource review docstring and drop dead code |
+| M13 | [x] fixed | one label ("Review due") and one colour (amber) | style(procurement): one vocabulary for the review-date badge across the three registers |
+| M14 | [~] skipped | 6.17 now reads next_review_on (their policy detail template), so the rename would break a committed peer surface; a 3-model rename migration for a naming preference is not worth that in a shared checkout | - |
+| M15 | [x] fixed | the duplicate context key dropped on both detail views | fix(procurement): gate policy delete and archive, and stop over-claiming what publish guarantees |
+| M16 | [x] fixed | has_been_used deleted | refactor(procurement): correct the knowledge-resource review docstring and drop dead code |
+| M17 | [x] fixed | the real reason (name collision) stated | refactor(procurement): correct the 6.19 seeder import note and stop re-querying the rows it just created |
+| M18 | [x] fixed | holder_name lives in views/_helpers.py | feat(procurement): add the 6.19 document read rule and the shared holder-name helper |
+| M19 | [x] fixed | os imported at module level | security(procurement): serve 6.19 revision files through an authenticated tenant-scoped download view |
+| M20 | [x] fixed | prc_pdrev_tnt_doc_idx dropped | feat(procurement): migration 0029 - index (tenant, review_on), drop the redundant revision index |
+| M21 | [x] fixed | resolved from the list already in memory | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| M22 | [x] fixed | capped at DETAIL_FAN_OUT_CAP = 50 | fix(procurement): gate the 6.19 document verbs, enforce classification and bound the re-index |
+| M23 | [x] fixed | the seven rows already in hand | refactor(procurement): correct the 6.19 seeder import note and stop re-querying the rows it just created |
+| M24 | [x] fixed | refused at the column ceiling | perf(procurement): drop the unread knowledge-library joins and refuse a saturated use counter |
+
+## Verified by running it, not by reading it
+
+* **C1** — `GET /procurement/document-revisions/<pk>/download/` as `admin_acme` returns `200 Content-Disposition: attachment; filename="hvac-warranty-r1.txt"` with `X-Content-Type-Options: nosniff`; the same url for a globex revision 404s. No `file.url` remains anywhere in `templates/procurement/documentknowledge/`.
+* **I1** — un-approving the pointed-at revision makes `current_revision` return `None` instead of handing back an unapproved file (rolled back).
+* **I2** — the admin revision change form no longer renders a `document` input.
+* **I3** — a pending revision still deletes; an approved one is still refused with the same wording, now from inside the lock (rolled back, revision count identical).
+* **I4** — the conditional UPDATE writes **0 rows** when the pointer moved under it.
+* **I5** — as `ops_acme` (non-admin): PDOC-00007 (restricted) and PDOC-00002 (confidential) are absent from the register, absent from `?classification=restricted`, absent from `?q=<title word>`, absent from the revision register and its document facet, and both detail pages 404. `admin_acme` and the owner see everything as before.
+* **I6 / I8** — `ops_acme` now gets **403** on document delete / archive / activate / supersede / reindex and on policy delete / archive / publish; `admin_acme` gets 302.
+* **I7** — deleting PPOL-00002, which 6.17's seeder has already given **3** attestations, is refused with a message; an unsigned policy still deletes. This one was a landmine when the review was written and is live now.
+* **I9** — against a stubbed 100,000-page PDF: **200 pages parsed, 200 caches flushed**, 200,000 characters returned. Previously it would have parsed all 100,000 and built the whole string before truncating.
+* **I10** — `/admin/procurement/procurementpolicy/?q=abc` returns **200** (was 500).
+* **I13** — second press of Run reminders over an unchanged workspace: **2 queries**, zero writes (was ~14 for 3 in-window rows; ~3,200 at 800).
+* **I15** — `?q=a` no longer emits the `extracted_text LIKE`; `?q=warranty` still does.
+* **I16** — after migrating, `EXPLAIN` on the review facet reports `type=range, key=prc_pdoc_tnt_review_idx` (was `type=ALL, key=None`).
+* **M2** — a document whose current revision carries an `extraction_note` is no longer a re-index candidate; one whose text is readable is still swept and filled in.
+* **M23** — the seeder branch re-run against a cleared acme inside a rolled-back transaction: 7 documents + 6 revisions, state identical afterwards, orphaned media removed.
+
+## Notes — app-wide passes this sub-module should NOT fork on its own
+
+1. **C1's clone family is still open everywhere else.** `grep -rn "\.file\.url" templates/` still returns **15 occurrences across 13 files** outside 6.19 (procurement RFx responses, HRM onboarding, expense claims, investment proofs, travel bookings, inventory catalog). Each is a stored file served straight off `MEDIA_ROOT` with no login, no session and no tenant check. The `static()` media line in `config/urls.py` was deliberately **left in place** — those modules still depend on it — so the residual risk is unchanged for them: 6.19's bytes are now only reachable through the download view, but they are still *also* reachable by direct path until that line goes and `MEDIA_ROOT` moves outside the web root. Both are deployment/app-wide changes and were out of scope here. Recommended app-wide pass: lift `pdocrevision_download`'s shape into a shared authenticated file view, repoint all 15 links, then drop the `static()` line and relocate `MEDIA_ROOT` in one change.
+2. **`tenant` is editable on 50 of 52 procurement ModelAdmins** (E2's second leg). 6.19's half is fixed; the app-wide half still lets an admin move a row between workspaces. Worth one pass that adds `tenant` to `readonly_fields` on every registered tenant-scoped model.
+3. **P10 pagination ordering indexes** — confirmed app-wide (25 of 894), untouched by instruction.
+4. **The alert-raise skeleton is now duplicated three times** (6.3, 6.8, 6.19). 6.19's copy is now the cheapest of the three (one dedupe query rather than one per row); a fourth instance should lift the shared `raise_alerts_idempotent(...)` and back-port this shape.
+5. **`ProcurementAlert` has no index reaching `link_url`**, which the hoisted dedupe now reads once per Run instead of once per row — the cost moved but did not vanish. App-wide, with 6.3 and 6.8.
+
+## Found while fixing, not in the review
+
+* **The knowledge-resource register's `select_related` could not simply be emptied.** `_ROW_RELATIONS` was deleted rather than set to `()`, because `select_related()` with no arguments follows **every** FK — the "obvious" edit would have made P2 worse, not better.
+* **`_documents()` on the revision register was also a classification leak**, not only a payload one (C2/I5): the facet `<select>` listed every document number and title in the workspace, so it enumerated the confidential ones even though their rows never rendered. It is narrowed by the same read rule now.
+* **`ppolicy_delete`'s cascade is no longer hypothetical.** E1 recorded it as a landmine because `PolicyAttestation` was not yet migrated; it is now migrated, seeded and carrying 3 rows against PPOL-00002.
