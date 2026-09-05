@@ -56,6 +56,7 @@ from .VendorManagement import urlpatterns as _vm_vendormanagement
 from .ContractsManagement import urlpatterns as _cm_contractsmanagement
 from .PurchaseOrderManagement import urlpatterns as _pom_purchaseordermanagement
 from .SupplierPerformanceEvaluation import urlpatterns as _spe_supplierperformance
+from .InventoryWarehouseIntegration import urlpatterns as _iwi_inventorywarehouse
 
 
 app_name = "procurement"
@@ -132,4 +133,18 @@ urlpatterns = [
                                 #      scm.SupplierScorecard + the one-way generate door and its
                                 #      score lines, 360 feedback, improvement plans, and the
                                 #      three read-only boards (33 routes, 33 distinct names)
+    #
+    # 6.18 claims six literal first segments — replenishment-policies/, replenishment-runs/,
+    # material-issues/, stock-position/, receipt-bin-map/ and count-accuracy/ — every one a
+    # distinct whole component. receipt-bin-map/ is a NEIGHBOUR of the existing
+    # receipt-tolerances/, receipt-discrepancies/ and receipt-audit/, not a conflict: Django
+    # matches whole path components, never string prefixes. Inside the sub-package each entity
+    # module already orders its literal add/ ahead of <int:pk>/, and the two line routes stay
+    # nested under their parent document segment, so this must stay included as ONE unit.
+    *_iwi_inventorywarehouse,   # 6.18 replenishment policy overlay on scm.ReorderRule, the
+                                #      persisted replenishment run + its suggestion lines that
+                                #      release into scm.PurchaseRequisition, material issue /
+                                #      return-to-stock posting through a DRAFT
+                                #      scm.StockAdjustment, and three derived read-only pages
+                                #      (27 routes, 27 distinct names)
 ]
