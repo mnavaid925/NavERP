@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.kpi_name|default:"Score line" }} — Score Line{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — one measured line
+    (apps/procurement/views/SupplierPerformanceEvaluation/ScorecardKpiScores.py
+     :supplierkpiscore_detail — crud_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, breakdown_rows[{key, value}], can_edit.
+
+    NOTHING ON THIS PAGE IS RECOMPUTED. Every figure below is read straight off the row as the
+    generate run froze it — measured_value, score, band, weight_applied and the six *_at_time
+    columns. That is the whole point of the model: re-tune a KPI's weight or move its target next
+    quarter and this line still reads exactly as it read when the supplier was shown it. A page
+    that re-derived any of it would be quietly disagreeing with the scorecard it sits on.
+
+    breakdown_rows is the audit trail: the resolver's own working — numerator, denominator,
+    window, rows considered — flattened to sorted {key, value} pairs by the VIEW, with every
+    value str()-ified so a nested structure prints as text rather than as a dict repr. It is
+    rendered verbatim and never interpreted here.
+
+    can_edit is obj.source_at_time == "manual". It gates the Edit button only; the authorization
+    boundary is supplierkpiscore_edit itself, which refuses and redirects before any form work.
+    When it is false this page SAYS WHY rather than hiding the control silently.
+
+    Nullable-field discipline (L10): measured_value, score, target_at_time, contribution and
+    computed_by are all nullable, and every read of them sits inside an `is not None` (or, for
+    the FK, an `{% if %}`) branch — never truthiness, because 0 is a real measurement.
+
+    Badge classes are COLOUR-NAMED only (L33). The band takes its class from obj.band_css — the
+    committed BAND_CSS mapping on the model.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.kpi_name|default:obj.kpi.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierkpiscore_list' %}">Score lines</a><span class="sep">›</span>
+        <span>{{ obj.scorecard.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.scorecard.party.name }} · {{ obj.scorecard.period_start|date:"M d, Y" }} &ndash; {{ obj.scorecard.period_end|date:"M d, Y" }} · measured {{ obj.computed_at|date:"M d, Y H:i" }}.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}
+        <a href="{% url 'procurement:supplierkpiscore_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      <a href="{% url 'procurement:supplierevaluation_detail' obj.scorecard_id %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> The period</a>
+      <a href="{% url 'procurement:supplierkpiscore_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All score lines</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The measurement</h2>
+      <div>
+        <span class="badge {{ obj.band_css }}">{{ obj.get_band_display }}</span>
+        {% if obj.source_at_time == "derived" %}<span class="badge badge-info">Derived</span>
+        {% elif obj.source_at_time == "survey" %}<span class="badge badge-slate">360 survey</span>
+        {% elif obj.source_at_time == "manual" %}<span class="badge badge-muted">Manual</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Measured value</dt>
+          <dd>{% if obj.measured_value is not None %}<span class="fw-600">{{ obj.measured_value|floatformat:"-4" }}</span>{% if obj.unit_at_time %} <span class="text-muted">{{ obj.unit_at_time }}</span>{% endif %}{% else %}<span class="text-muted">No data in the period</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Score</dt>
+          <dd>{% if obj.score is not None %}<span class="fw-600">{{ obj.score|floatformat:2 }}</span> <span class="text-muted">/ 100</span>{% else %}<span class="text-muted">Not scored</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Band</dt>
+          <dd><span class="badge {{ obj.band_css }}">{{ obj.get_band_display }}</span>
+            <div class="text-muted">where the measured value fell against the thresholds that were in force at generation</div>
+          </dd></div>
+        <div class="detail-item"><dt>Weight applied</dt>
+          <dd>{{ obj.weight_applied }}
+            <div class="text-muted">frozen at generation &mdash; a later re-tune must not rewrite a closed period</div>
+          </dd></div>
+        <div class="detail-item"><dt>Contribution</dt>
+          <dd>{% if obj.contribution is not None %}{{ obj.contribution|floatformat:2 }}<div class="text-muted">score &times; weight applied &mdash; the numerator this line adds to the composite</div>{% else %}<span class="text-muted">None &mdash; an unscored line drops out of both sides of the composite rather than counting as zero</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Period</dt>
+          <dd><a href="{% url 'procurement:supplierevaluation_detail' obj.scorecard_id %}">{{ obj.scorecard.number }}</a>
+            <div class="text-muted">{{ obj.scorecard.party.name }} · {{ obj.scorecard.get_status_display|lower }}</div>
+          </dd></div>
+      </dl>
+      {% if obj.comment %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Comment</dt><dd>{{ obj.comment|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The definition, frozen at generation</h2>
+      <span class="text-muted">history, not input</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>KPI</dt>
+          <dd>{% if obj.kpi_id %}<a href="{% url 'procurement:supplierkpi_detail' obj.kpi_id %}">{{ obj.kpi.code }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+            <div class="text-muted">the live definition &mdash; it may have moved since</div>
+          </dd></div>
+        <div class="detail-item"><dt>Name at the time</dt>
+          <dd>{% if obj.kpi_name %}{{ obj.kpi_name }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Category at the time</dt>
+          <dd>{% if obj.kpi_category %}{{ obj.kpi_category|title }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Target at the time</dt>
+          <dd>{% if obj.target_at_time is not None %}{{ obj.target_at_time|floatformat:"-4" }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Direction at the time</dt>
+          <dd>
+            {% comment %}
+              direction_at_time / source_at_time / unit_at_time are plain editable=False
+              CharFields with NO choices, so there is no get_*_display for any of them. Each is
+              spelled out against the KPI's own CHOICES with a raw-value fallback.
+            {% endcomment %}
+            {% if obj.direction_at_time == "higher_is_better" %}Higher is better
+            {% elif obj.direction_at_time == "lower_is_better" %}Lower is better
+            {% elif obj.direction_at_time %}{{ obj.direction_at_time }}
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Unit at the time</dt>
+          <dd>{% if obj.unit_at_time %}{{ obj.unit_at_time }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Source at the time</dt>
+          <dd>
+            {% if obj.source_at_time == "derived" %}Derived from transactions<div class="text-muted">computed by a named resolver over the period window</div>
+            {% elif obj.source_at_time == "survey" %}360 survey<div class="text-muted">the importance-weighted mean of submitted responses against this KPI</div>
+            {% elif obj.source_at_time == "manual" %}Manual entry<div class="text-muted">typed by a person &mdash; the one case this line can be corrected by hand</div>
+            {% elif obj.source_at_time %}{{ obj.source_at_time }}
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Responses aggregated</dt>
+          <dd>{% if obj.respondent_count %}{{ obj.respondent_count }}{% else %}<span class="text-muted">None &mdash; not a survey measurement</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Computed at</dt>
+          <dd>{{ obj.computed_at|date:"M d, Y H:i" }}
+            <div class="text-muted">re-stamped by every generate run, so a stale figure never claims to be current</div>
+          </dd></div>
+        <div class="detail-item"><dt>Computed by</dt>
+          <dd>{% if obj.computed_by %}{{ obj.computed_by.get_full_name|default:obj.computed_by.email }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      <p class="form-help">Everything in this card was copied off the KPI when the line was generated and is never rewritten. Re-tune the definition and the next period picks the change up; this one keeps reading exactly as the supplier was shown it.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How the figure was arrived at</h2>
+      <span class="text-muted">the resolver's own working, printed verbatim</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Input</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in breakdown_rows %}
+            <tr>
+              <td class="fw-600">{{ row.key }}</td>
+              <td>{{ row.value }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2">
+              <div class="empty-state">
+                <i data-lucide="file-search"></i>
+                <h3>No working recorded</h3>
+                <p>This line was written without a breakdown &mdash; the resolver found nothing to count in the window, or the figure predates the breakdown being captured. The number above still stands on its own; there is simply no arithmetic stored behind it.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">This is the audit trail: the numerator, the denominator, the window and how many rows were considered, exactly as the resolver recorded them. It is what makes the score above arguable with evidence rather than on faith.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if can_edit %}
+        <p class="text-muted">This is a manual-entry line, so the figure and the comment can be corrected by hand. The correction is re-banded and re-scored through the KPI's own scoring method, so a typed number can never mean one thing here and another on a board.</p>
+        <a href="{% url 'procurement:supplierkpiscore_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit measurement</a>
+      {% else %}
+        {% comment %}
+          The control is not hidden silently — the page says why. can_edit is the UX half of the
+          rule; supplierkpiscore_edit refuses a non-manual line and redirects back here before
+          any form work, so a crafted POST against this pk never reaches the form either.
+        {% endcomment %}
+        <p class="form-help"><i data-lucide="lock"></i> This line cannot be edited by hand. Its figure was computed from evidence &mdash; a resolver over the transaction spine, or the submitted 360 responses &mdash; and typing over it would leave a number nobody stands behind, which the next generate run would overwrite anyway. Re-press Generate on the draft period to refresh it, or fix the KPI definition it was measured against.</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">Deleting a line does <span class="fw-600">not</span> re-blend the scorecard's four dimension columns: those were written by the generate run that produced this line, and silently re-deriving them from a hand-trimmed subset would move a published figure behind the operator's back. Re-press Generate on a draft period to rebuild them from what is actually there.</p>
+      <form method="post" action="{% url 'procurement:supplierkpiscore_delete' obj.pk %}">
+        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete this measured line from {{ obj.scorecard.number }}? The scorecard keeps the four dimension figures the generate run wrote — a delete does NOT re-blend them. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete line</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
