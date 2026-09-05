@@ -159,9 +159,6 @@ DEFAULT_MATCH_THRESHOLD = 85
 #: How long a clear screening stays good for before the supplier is due a re-screen.
 DEFAULT_RESCREEN_DAYS = 365
 
-#: Ceiling on one batch re-screen run, so a large workspace cannot mint an unbounded write.
-BATCH_PARTY_LIMIT = 500
-
 #: Rendered on the register and on every screening. Stated, never enforced by a job.
 RETENTION_NOTE = (
     f"Screening records - the lookup, its hits and every disposition - are retained for "
@@ -194,7 +191,6 @@ class ComplianceScreening(TenantNumbered):
     RETENTION_YEARS = RETENTION_YEARS
     DEFAULT_MATCH_THRESHOLD = DEFAULT_MATCH_THRESHOLD
     DEFAULT_RESCREEN_DAYS = DEFAULT_RESCREEN_DAYS
-    BATCH_PARTY_LIMIT = BATCH_PARTY_LIMIT
     RETENTION_NOTE = RETENTION_NOTE
 
     # PROTECT: deleting a party that carries screening history would erase the evidence that the
