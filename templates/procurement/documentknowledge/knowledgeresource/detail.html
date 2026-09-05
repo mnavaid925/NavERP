@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Knowledge Resource{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — KnowledgeResource detail
+    (apps/procurement/views/DocumentKnowledgeManagement/KnowledgeResources.py, hand-rolled
+    render).
+
+    Context contract, and NOTHING else exists here:
+      obj, library_note, document, is_review_due.
+
+    `document` is obj.document, already fetched by the view's select_related, named in context
+    so this page reads one name rather than hopping through the object for a nullable relation.
+    `is_review_due` is the model property lifted under the name the contract pins.
+
+    Nullable-FK discipline (L10): document, owner, created_by, review_on and last_used_at are all
+    nullable, so every read of them sits inside a conditional branch and renders an em dash or a
+    plain sentence otherwise.
+
+    WARNING: obj.summary and obj.body are user-authored prose rendered with |linebreaksbr and
+    NEVER with |safe (and never inside {% autoescape off %}). A playbook body is exactly the kind
+    of long free-text field somebody pastes markup into; turning autoescaping off for it would
+    make this page a stored-XSS sink for every reader in the workspace. |linebreaksbr escapes
+    first and only then converts newlines, which is the whole difference.
+
+    WARNING: the Use button POSTs to procurement:knowledgeresource_use, which redirects back
+    HERE. It deliberately does not redirect on to the linked file: a redirect target read out of
+    stored data is an open-redirect hop. The download below is an ordinary link the reader can
+    see before they click, which is the secure alternative and costs one click.
+
+    Publish and archive are NOT administrator-gated (unlike a policy's publish), so both buttons
+    are offered to any signed-in member of the workspace — putting a how-to on a shelf retires
+    nothing and states no binding rule.
+
+    Only the SYSTEM-ASSIGNED number reaches a confirm() handler.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:knowledgeresource_list' %}">Knowledge Library</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.title }} · {{ obj.get_resource_type_display }}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status != 'archived' %}
+        <form method="post" action="{% url 'procurement:knowledgeresource_use' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="hand-pointer"></i> Use this</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'procurement:knowledgeresource_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ obj.title }}</h2>
+      <span class="badge-group">
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        {% if obj.is_featured %}<span class="badge badge-info">Featured</span>{% endif %}
+        {% if is_review_due %}<span class="badge badge-amber">Review overdue</span>{% endif %}
+      </span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_resource_type_display }}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}</dd></div>
+        <div class="detail-item"><dt>Written for</dt>
+          {% comment %}
+            A reading hint, never an access control. Everybody in the workspace can open every
+            resource; per-audience visibility is 13.7's permission matrices, and the wording here
+            never implies a gate exists.
+          {% endcomment %}
+          <dd>{{ obj.get_audience_display }} <span class="text-muted">a reading hint — nothing is hidden from anyone in this workspace</span></dd></div>
+        <div class="detail-item"><dt>Owner</dt>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Next review</dt>
+          <dd>{% if obj.review_on %}{{ obj.review_on|date:"M d, Y" }}{% if is_review_due %} <span class="badge badge-amber">overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name }}</span>{% endif %}</dd></div>
+      </dl>
+
+      {% if obj.tag_list %}
+        <div class="badge-group" style="margin-top:.75rem;">
+          {% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}
+        </div>
+      {% endif %}
+
+      {% if obj.summary %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Summary</dt><dd>{{ obj.summary|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The guidance</h2><span class="text-muted">what to do, and why it is done that way</span></div>
+    <div class="card-body">
+      {% if obj.body %}
+        <p>{{ obj.body|linebreaksbr }}</p>
+      {% else %}
+        <p class="text-muted">No guidance has been written yet. Either write it here, or link the file below so the working copy lives in one place with its revision history.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The file</h2><span class="text-muted">the downloadable template or workbook, held in the repository</span></div>
+    <div class="card-body">
+      {% if document %}
+        <p><a href="{% url 'procurement:pdocument_detail' document.pk %}">{{ document.number }} · {{ document.title }}</a>
+          <span class="badge {{ document.status_css }}">{{ document.get_status_display }}</span></p>
+        <p class="text-muted">The file itself lives on that document, so it carries the revision chain, the approval step and the searchable text every other file in this sub-module gets. This resource holds no second copy of it — open the document to download the approved revision.</p>
+      {% else %}
+        <p class="text-muted">No file is linked. This resource is guidance text only. Linking a document keeps the working copy under revision control and makes its contents searchable, instead of leaving an unversioned copy somewhere else.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Usage</h2><span class="text-muted">a tally of the Use button, nothing more</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Times used</dt>
+          <dd>{% if obj.usage_count %}{{ obj.usage_count }}{% else %}<span class="text-muted">Not used yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last used</dt>
+          <dd>{% if obj.last_used_at %}{{ obj.last_used_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      {% comment %}
+        Said plainly on the page, because a number beside the word "used" invites being read as
+        proof. The count is incremented by the database itself (usage_count = usage_count + 1) so
+        two people pressing at once both count, but it still records only that the button was
+        pressed.
+      {% endcomment %}
+      <p class="text-muted">This count records presses of the Use button on this page. It does not know who pressed it, it is not proof that this template was used on any sourcing event, and nothing is approved or unlocked by it. Who did what is recorded in the audit trail; per-person usage records belong to Policy Management &amp; Acknowledgment (6.17) and Module 13, and none are kept here.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2><span class="text-muted">every one is recorded in the audit trail</span></div>
+    <div class="card-body">
+      <div class="page-actions">
+        {% if obj.status != 'archived' %}
+          <form method="post" action="{% url 'procurement:knowledgeresource_use' obj.pk %}">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="hand-pointer"></i> Use this</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status != 'published' %}
+          <form method="post" action="{% url 'procurement:knowledgeresource_publish' obj.pk %}" onsubmit="return confirm('Publish {{ obj.number }}? It appears in the library for the whole workspace. It is guidance to read — publishing changes no workflow and enforces nothing.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="send"></i> Publish</button>
+          </form>
+        {% endif %}
+
+        {% if obj.status != 'archived' %}
+          <form method="post" action="{% url 'procurement:knowledgeresource_archive' obj.pk %}" onsubmit="return confirm('Archive {{ obj.number }}? Nothing is deleted — it keeps its text and its usage count, and it can be published again.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+          </form>
+        {% endif %}
+
+        <a href="{% url 'procurement:knowledgeresource_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <a href="{% url 'procurement:knowledgeresource_list' %}" class="btn btn-outline">Back to library</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">{{ library_note }}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Deleting removes this resource row and the guidance written on it, along with its usage count. Nothing cascades: a linked document is untouched — the file stays in the repository with its revisions, its approval and its searchable text. If the guidance is merely out of date, archive it instead; an archived resource keeps everything and can be published again.</p>
+      <form method="post" action="{% url 'procurement:knowledgeresource_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any file it links to stays in the repository with its revisions; the guidance written around it is lost.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete resource</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
