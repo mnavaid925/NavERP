@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Score Lines{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — the score-line register
+    (apps/procurement/views/SupplierPerformanceEvaluation/ScorecardKpiScores.py
+     :supplierkpiscore_list).
+
+    Every measured line in the workspace, across every period. A line is written by
+    supplierevaluation_generate — never by hand — so THERE IS NO CREATE BUTTON HERE and no
+    supplierkpiscore_create route: a hand-created line would be a measurement with no
+    computation behind it. The header actions point at where lines actually come from.
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q, band_choices, source_choices, kpis, scorecards,
+      stats{total, ok, warning, critical, unknown}.
+
+    The view's crud_list filter tuple is exactly
+      (("band","band",False), ("source","source_at_time",False), ("kpi","kpi_id",True),
+       ("scorecard","scorecard_id",True))
+    with search_fields=("kpi_name","comment","scorecard__number","scorecard__party__name") — so
+    the filter bar offers exactly q, band, source, KPI and period. kpi and scorecard post pks and
+    compare with |stringformat:"d" (never |slugify); band compares against
+    SupplierKpiScore.BAND_CHOICES.
+
+    source_at_time is a plain CharField with NO choices, so crud_list's enum guard bails out and
+    the raw GET value reaches .filter(). That is safe — junk matches nothing — but it means the
+    dropdown below is the only thing keeping the offered values legal, which is why it is pinned
+    to SupplierKpi.SOURCE_CHOICES (context key source_choices) rather than invented here. For the
+    same reason the register has no get_source_at_time_display: the three values are spelled out
+    in an explicit chain with an else-fallback that prints the raw value.
+
+    Badge classes are COLOUR-NAMED only (L33). Bands take their class from obj.band_css — the
+    committed BAND_CSS mapping on the model — so a row can never disagree with the model about
+    what "critical" looks like.
+
+    Edit appears ONLY on a manual-entry line: a derived or survey line is recomputed by Generate
+    from evidence, and typing over it would leave a number nobody stands behind. The button is
+    the UX half of that rule; the VIEW is the authorization boundary. Delete is @require_POST, so
+    it can only be a form.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Score lines</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <span>Score lines</span>
+      </div>
+      <p class="text-muted">One row is one measured fact: this KPI, on this period, came back at this value, scored this, banded here. Lines are written when a period is generated &mdash; there is nothing to add by hand.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-primary"><i data-lucide="clipboard-list"></i> Evaluation periods</a>
+      <a href="{% url 'procurement:supplierkpi_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> KPI catalogue</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calculator"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Measured lines</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.ok }}</div><div class="stat-label">On target</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ stats.warning }}</div><div class="stat-label">Warning</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-circle"></i></div><div class="stat-value">{{ stats.critical }}</div><div class="stat-label">Critical</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="help-circle"></i></div><div class="stat-value">{{ stats.unknown }}</div><div class="stat-label">Not banded</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search score lines" class="form-input" placeholder="Search KPI name, comment, scorecard or supplier…">
+        </div>
+        <div class="form-group">
+          <select name="band" aria-label="Band" class="form-select">
+            <option value="">Any band</option>
+            {% for val, label in band_choices %}
+              <option value="{{ val }}" {% if request.GET.band == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source at generation" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kpi" aria-label="KPI" class="form-select">
+            <option value="">All KPIs</option>
+            {% for k in kpis %}
+              <option value="{{ k.pk|stringformat:"d" }}" {% if request.GET.kpi == k.pk|stringformat:"d" %}selected{% endif %}>{{ k.code }} · {{ k.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="scorecard" aria-label="Evaluation period" class="form-select">
+            <option value="">All periods</option>
+            {% for sc in scorecards %}
+              <option value="{{ sc.pk|stringformat:"d" }}" {% if request.GET.scorecard == sc.pk|stringformat:"d" %}selected{% endif %}>{{ sc.number }} · {{ sc.party.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:supplierkpiscore_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>KPI</th>
+            <th>Category</th>
+            <th>Period</th>
+            <th class="text-right">Measured</th>
+            <th class="text-right">Score</th>
+            <th>Band</th>
+            <th class="text-right">Weight</th>
+            <th>Source</th>
+            <th>Computed</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                {% comment %}
+                  kpi_name / kpi_category are the FROZEN copies taken at generation, printed here
+                  rather than obj.kpi.name so a KPI renamed since cannot re-label a closed
+                  period. The link still goes to the live definition.
+                {% endcomment %}
+                <a href="{% url 'procurement:supplierkpiscore_detail' obj.pk %}">{{ obj.kpi_name|default:obj.kpi.name }}</a>
+                <div class="text-muted">{{ obj.kpi.code }}</div>
+              </td>
+              <td>{% if obj.kpi_category %}{{ obj.kpi_category|title }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>
+                <a href="{% url 'procurement:supplierevaluation_detail' obj.scorecard_id %}">{{ obj.scorecard.number }}</a>
+                <div class="text-muted">{{ obj.scorecard.party.name }} · {{ obj.scorecard.period_end|date:"M d, Y" }}</div>
+              </td>
+              <td class="text-right">
+                {% if obj.measured_value is not None %}
+                  {{ obj.measured_value|floatformat:"-4" }}{% if obj.unit_at_time %} <span class="text-muted">{{ obj.unit_at_time }}</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">No data</span>
+                {% endif %}
+              </td>
+              <td class="text-right fw-600">{% if obj.score is not None %}{{ obj.score|floatformat:2 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td><span class="badge {{ obj.band_css }}">{{ obj.get_band_display }}</span></td>
+              <td class="text-right">{{ obj.weight_applied }}</td>
+              <td>
+                {% if obj.source_at_time == "derived" %}<span class="badge badge-info">Derived</span>
+                {% elif obj.source_at_time == "survey" %}<span class="badge badge-slate">360 survey</span>
+                {% elif obj.source_at_time == "manual" %}<span class="badge badge-muted">Manual</span>
+                {% elif obj.source_at_time %}<span class="text-muted">{{ obj.source_at_time }}</span>
+                {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              </td>
+              <td>{{ obj.computed_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierkpiscore_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if obj.source_at_time == "manual" %}
+                    <a href="{% url 'procurement:supplierkpiscore_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. Only the system-assigned
+                    scorecard number reaches the confirm() handler; kpi_name is user-authored and
+                    never does. Literal apostrophes inside that handler would need \' — there are
+                    none.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:supplierkpiscore_delete' obj.pk %}">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete" onclick="return confirm('Delete this measured line from {{ obj.scorecard.number }}? The scorecard keeps the four dimension figures the generate run wrote — a delete does NOT re-blend them. Re-press Generate on a draft period to rebuild them from what is actually left.');"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10">
+              <div class="empty-state">
+                <i data-lucide="calculator"></i>
+                <h3>No score lines</h3>
+                <p>Nothing has been generated yet, or the filters above exclude everything. Lines are written by generating an evaluation period &mdash; open one and press Generate, and every KPI that applies to that supplier gets a measured line with the arithmetic attached.</p>
+                <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-primary"><i data-lucide="clipboard-list"></i> Evaluation periods</a>
+                <a href="{% url 'procurement:supplierkpiscore_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
