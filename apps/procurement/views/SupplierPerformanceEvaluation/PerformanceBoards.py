@@ -82,7 +82,7 @@ QUADRANT_CHOICES = (
 #: Printed on the perception-gap board. ONE constant, so the page and its help text cannot
 #: describe the scale two different ways.
 GAP_NOTE = (
-    "Ratings are converted to a 0-100 scale (1 = 0 ... 5 = 100) and weighted by each "
+    "Ratings are converted to a 0-100 scale (1 = 0 … 5 = 100) and weighted by each "
     "respondent's importance. Only submitted responses count.")
 
 #: How many distinct ``SupplierProfile.category`` values the benchmark filter offers. Bounded
