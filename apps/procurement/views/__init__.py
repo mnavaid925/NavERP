@@ -500,6 +500,42 @@ from .InventoryWarehouseIntegration.StockPosition import stock_position
 from .InventoryWarehouseIntegration.ReceiptBinMap import receipt_bin_map
 from .InventoryWarehouseIntegration.CountAccuracy import count_accuracy
 
+# 6.17 Risk & Compliance Management — five NavERP.md bullets, five distinct destinations.
+# Screening (bullet 1), supplier financial risk (2), the audit trail + seal (3), fraud detection
+# (4) and the policy sign-off ledger (5). The policy pages are READ surfaces over 6.19's
+# ProcurementPolicy plus 6.17's own attestation ledger — no authoring verb is registered here
+# (contract §6a); policy_create/_edit/_delete/_publish/_archive are 6.19's ppolicy_* routes.
+from .RiskComplianceManagement.Screenings import (
+    screening_list, screening_create, screening_detail, screening_edit, screening_delete,
+    screening_clear, screening_escalate, screening_block, screening_rescreen_board,
+)
+# screeninghit_create lives HERE, not in Screenings, even though its ROUTE is a child of
+# screenings/<pk>/hits/add/ — the view belongs with the model it writes.
+from .RiskComplianceManagement.ScreeningHits import (
+    screeninghit_list, screeninghit_detail, screeninghit_create, screeninghit_edit,
+    screeninghit_delete, screeninghit_dispose,
+)
+from .RiskComplianceManagement.RiskSignals import (
+    risksignal_list, risksignal_create, risksignal_detail, risksignal_edit, risksignal_delete,
+    risksignal_review, risksignal_refresh_board,
+)
+from .RiskComplianceManagement.FraudAlerts import (
+    fraudalert_list, fraudalert_create, fraudalert_detail, fraudalert_edit, fraudalert_delete,
+    fraudalert_disposition,
+)
+from .RiskComplianceManagement.FraudScan import fraud_scan, fraud_board
+from .RiskComplianceManagement.Policies import (
+    policy_list, policy_detail, policy_mine, policy_overdue_board, policy_raise_attestations,
+)
+from .RiskComplianceManagement.Attestations import (
+    policyattestation_list, policyattestation_create, policyattestation_detail,
+    policyattestation_edit, policyattestation_delete, attestation_sign, attestation_exempt,
+)
+from .RiskComplianceManagement.AuditTrail import (
+    audit_trail, audit_trail_export, auditseal_list, auditseal_detail, auditseal_create,
+    auditseal_verify,
+)
+
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
     "eauc_publish", "eauc_cancel", "eauc_close",
@@ -706,4 +742,21 @@ __all__ = [
     "materialissue_delete", "materialissue_submit", "materialissue_post", "materialissue_cancel",
     "materialissueline_add", "materialissueline_delete",
     "stock_position", "receipt_bin_map", "count_accuracy",
+    # 6.17 Risk & Compliance Management
+    "screening_list", "screening_create", "screening_detail", "screening_edit",
+    "screening_delete", "screening_clear", "screening_escalate", "screening_block",
+    "screening_rescreen_board",
+    "screeninghit_list", "screeninghit_create", "screeninghit_detail", "screeninghit_edit",
+    "screeninghit_delete", "screeninghit_dispose",
+    "risksignal_list", "risksignal_create", "risksignal_detail", "risksignal_edit",
+    "risksignal_delete", "risksignal_review", "risksignal_refresh_board",
+    "fraudalert_list", "fraudalert_create", "fraudalert_detail", "fraudalert_edit",
+    "fraudalert_delete", "fraudalert_disposition", "fraud_scan", "fraud_board",
+    "policy_list", "policy_detail", "policy_mine", "policy_overdue_board",
+    "policy_raise_attestations",
+    "policyattestation_list", "policyattestation_create", "policyattestation_detail",
+    "policyattestation_edit", "policyattestation_delete", "attestation_sign",
+    "attestation_exempt",
+    "audit_trail", "audit_trail_export", "auditseal_list", "auditseal_detail",
+    "auditseal_create", "auditseal_verify",
 ]
