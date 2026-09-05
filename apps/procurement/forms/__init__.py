@@ -155,6 +155,25 @@ from .InventoryWarehouseIntegration.MaterialIssues import (
     MaterialIssueLineForm,
 )
 
+# 6.17 Risk & Compliance Management. The plain ``forms.Form`` classes here (FraudScanForm,
+# FraudDispositionForm, ScreeningHitDispositionForm) are decision inputs, not ModelForms: every
+# disposition, review and scan is a VERB with its own audit row, so the fields those verbs set
+# are deliberately absent from the ModelForms beside them (L20/L22 — a workflow-controlled
+# status, a derived score/band/trend and a system ``*_by``/``*_at`` stamp never appear on a form).
+from .RiskComplianceManagement.Screenings import (
+    ComplianceScreeningForm,
+    ScreeningHitForm,
+    ScreeningHitDispositionForm,
+)
+from .RiskComplianceManagement.RiskSignals import SupplierRiskSignalForm
+from .RiskComplianceManagement.FraudAlerts import (
+    FraudAlertForm,
+    FraudScanForm,
+    FraudDispositionForm,
+)
+from .RiskComplianceManagement.Policies import PolicyAttestationForm
+from .RiskComplianceManagement.AuditSeals import AuditSealForm
+
 __all__ = [
     "EaucBidForm",
     "EaucInviteForm",
@@ -249,4 +268,14 @@ __all__ = [
     "ReplenishmentSuggestionDecisionForm",
     "MaterialIssueForm",
     "MaterialIssueLineForm",
+    # 6.17 Risk & Compliance Management
+    "ComplianceScreeningForm",
+    "ScreeningHitForm",
+    "ScreeningHitDispositionForm",
+    "SupplierRiskSignalForm",
+    "FraudAlertForm",
+    "FraudScanForm",
+    "FraudDispositionForm",
+    "PolicyAttestationForm",
+    "AuditSealForm",
 ]
