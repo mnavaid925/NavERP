@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Procurement Policies{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — ProcurementPolicy register
+    (apps/procurement/views/DocumentKnowledgeManagement/Policies.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      policy_type_choices, status_choices, org_units, review_choices,
+      stats{total, published, draft, review_due},
+      advisory_note.
+
+    The view's crud_list filter tuple is exactly (("policy_type","policy_type",False),
+    ("status","status",False), ("org_unit","applies_to_id",True)); ?review= is pre-narrowed
+    in _policy_qs BEFORE pagination. The bar below offers exactly q, policy_type, status,
+    org_unit and review — one control per declared filter, so no dead <select> posts a param
+    the view ignores.
+    The org-unit dropdown posts a pk and compares with |stringformat:"d" (never |slugify);
+    the CHOICES dropdowns compare the raw string.
+
+    advisory_note is the ONE constant this page, the form and the detail page all print, so
+    the three surfaces cannot describe a threshold differently. Every threshold shown in the
+    Guideline column is documentation: nothing on this page, and nothing anywhere in 6.19,
+    reads those numbers to gate or route anything. Approval bands are 6.3's routing rules.
+
+    Badges are colour-named theme.css classes only (L33): status_css comes off the model, and
+    the review cell is red when the row is overdue, muted otherwise.
+
+    Only the SYSTEM-ASSIGNED number reaches a confirm() handler — obj.title, obj.summary and
+    obj.version_number are user-authored and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Procurement Policies</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <span>Policies</span>
+      </div>
+      <p class="text-muted">{{ advisory_note }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:ppolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scroll-text"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Policies</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.published }}</div><div class="stat-label">Published</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pencil-line"></i></div><div class="stat-value">{{ stats.draft }}</div><div class="stat-label">Draft</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ stats.review_due }}</div><div class="stat-label">Review overdue</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search policies" class="form-input" placeholder="Search number, title, summary or the policy text…">
+        </div>
+        <div class="form-group">
+          <select name="policy_type" aria-label="Policy type" class="form-select">
+            <option value="">All types</option>
+            {% for value, label in policy_type_choices %}
+              <option value="{{ value }}" {% if request.GET.policy_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Applies to" class="form-select">
+            <option value="">Every org unit</option>
+            {% for unit in org_units %}
+              <option value="{{ unit.pk|stringformat:"d" }}" {% if request.GET.org_unit == unit.pk|stringformat:"d" %}selected{% endif %}>{{ unit.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="review" aria-label="Review state" class="form-select">
+            <option value="">Any review state</option>
+            {% for value, label in review_choices %}
+              <option value="{{ value }}" {% if request.GET.review == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:ppolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Policy</th>
+            <th>Type</th>
+            <th>Applies to</th>
+            <th>Guideline</th>
+            <th>Status</th>
+            <th>Next review</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:ppolicy_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title }} <span class="badge badge-muted">v{{ obj.version_number }}</span></div>
+                {% if obj.requires_acknowledgment %}<div class="text-muted">Flagged for acknowledgment (6.17)</div>{% endif %}
+              </td>
+              <td>{{ obj.get_policy_type_display }}</td>
+              <td>{% if obj.applies_to %}{{ obj.applies_to.name }}{% else %}<span class="text-muted">Whole workspace</span>{% endif %}</td>
+              <td>
+                {% comment %}
+                  threshold_label is ONE renderer on the model, shared with the detail page, so
+                  the two surfaces cannot print the same advisory number differently. The word
+                  is "guideline" here and everywhere: this figure gates nothing.
+                {% endcomment %}
+                {% if obj.threshold_label %}
+                  <span class="text-muted">{{ obj.threshold_label }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                {% if obj.next_review_on %}
+                  {% if obj.is_review_due %}
+                    <span class="badge badge-red">Review overdue {{ obj.next_review_on|date:"M d, Y" }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ obj.next_review_on|date:"M d, Y" }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:ppolicy_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:ppolicy_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. The confirm is honest
+                    about what deletion does: nothing cascades — a later version that points at
+                    this one simply loses its back-pointer and stays in force.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:ppolicy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any later version that points back at it keeps its own text and stays in force, but the link to this one is lost.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="scroll-text"></i>
+                <h3>No policies found</h3>
+                <p>Nothing matches these filters. A policy is the written rule — the purchasing rule, the competitive-bidding guideline, the supplier code of conduct — kept with its version number, the version it replaces and the date it next needs reading. It states the rule; it does not enforce it.</p>
+                <a href="{% url 'procurement:ppolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+                <a href="{% url 'procurement:ppolicy_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this library does — and what it does not</h2><span class="text-muted">read this before quoting a number off a policy page</span></div>
+    <div class="card-body">
+      <p class="text-muted">{{ advisory_note }}</p>
+      <p class="text-muted">A guideline figure on a policy is the number the written rule quotes, so a buyer can read it next to the rule it belongs to. It is documentation. The approval bands that actually decide how many signatures a requisition needs are the routing rules in Approval Workflow Engine (6.3), which resolve department, commodity and amount to a required tier count and are enforced when an approval is recorded.</p>
+      <p class="text-muted">Publishing a version puts it in force and archives the version it replaces, so the register never shows two published versions of the same rule. Archiving takes a policy out of use without deleting anything — it keeps its text and its place in the version history.</p>
+      <p class="text-muted">Where a policy is flagged for acknowledgment, that is a marker for Policy Management &amp; Acknowledgment (6.17), which owns assignment and sign-off. Nothing here records who has read a policy.</p>
+    </div>
+  </div>
+{% endblock %}
