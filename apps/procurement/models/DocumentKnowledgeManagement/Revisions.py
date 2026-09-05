@@ -58,6 +58,14 @@ EXTRACT_MAX_CHARS = 200_000
 #: a format with no text layer to read.
 PLAIN_TEXT_EXTENSIONS = {".txt", ".csv"}
 
+#: How many PDF pages one extraction will parse. ``pdfplumber`` is pure Python on pdfminer.six at
+#: roughly 0.1-0.3 s and several MB per page, and it runs INSIDE the upload request on a file the
+#: uploader chose. A 20 MB PDF is inside ``MAX_UPLOAD_BYTES`` and can carry tens of thousands of
+#: pages or deeply nested streams, so "never raises" (the ``except`` below) is not the same as
+#: bounded: the worker has already spent the CPU and the memory by the time it returns. 500 pages
+#: is a specification; past that there is nothing left to learn about a document from its text.
+MAX_EXTRACT_PAGES = 500
+
 #: The four honest outcomes of a read attempt, kept as constants so the view, the templates and
 #: the tests all quote the same words and none of them can drift into over-claiming.
 NOTE_NO_EXTRACTOR = ("Text extraction is not installed on this server - this file is searchable "
@@ -127,7 +135,10 @@ class ProcurementDocumentRevision(TenantOwned):
         # rather than two rows both claiming to be r3.
         unique_together = ("tenant", "document", "revision_no")
         indexes = [
-            models.Index(fields=["tenant", "document"], name="prc_pdrev_tnt_doc_idx"),
+            # NOT (tenant, document): the unique_together above already carries that pair as its
+            # leftmost prefix, and ``document`` additionally has Django's automatic FK index. On
+            # the fastest-growing table in this sub-module that was a third structure maintained
+            # on every INSERT for an access path two others already served.
             models.Index(fields=["tenant", "is_approved"], name="prc_pdrev_tnt_appr_idx"),
         ]
         verbose_name = "Procurement Document Revision"
@@ -233,6 +244,11 @@ def extract_document_text(revision):
     come back empty with the honest note, and the document stays findable by its title,
     description and tags — which is exactly what the register tells people.
 
+    **Both branches are BOUNDED, not merely non-raising.** The plain-text branch reads a fixed
+    prefix; the PDF branch stops at ``MAX_EXTRACT_PAGES`` or as soon as ``EXTRACT_MAX_CHARS`` is
+    met, and frees each page's parse cache. That matters because this runs synchronously inside a
+    request, on a file somebody uploaded, and is driven 25 times over by the re-index Run.
+
     ``pdfplumber`` is imported lazily INSIDE the function so a server without it still runs every
     other page in this sub-module, and so nothing pays the import cost until somebody uploads a
     PDF.
@@ -275,12 +291,24 @@ def extract_document_text(revision):
             pdfplumber = None
         if pdfplumber is None:
             return "", NOTE_NO_EXTRACTOR
+        # Bounded three ways, because this parses an attacker-supplied file in-process: at most
+        # MAX_EXTRACT_PAGES pages, stopping as soon as the character budget is met, and flushing
+        # each page's parsed-object cache as we go. The join-then-truncate this replaces built
+        # the WHOLE text in memory before the cap applied and left every page object resident.
+        pieces, budget = [], 0
         try:
             with pdfplumber.open(path) as pdf:
-                text = "\n".join((page.extract_text() or "") for page in pdf.pages)
+                for index, page in enumerate(pdf.pages):
+                    if index >= MAX_EXTRACT_PAGES or budget >= EXTRACT_MAX_CHARS:
+                        break
+                    piece = page.extract_text() or ""
+                    pieces.append(piece)
+                    budget += len(piece) + 1
+                    page.flush_cache()
         except Exception:            # malformed / encrypted / truncated PDF — a note, not a 500
             return "", NOTE_BAD_FILE
-        if not (text or "").strip():
+        text = "\n".join(pieces)
+        if not text.strip():
             return "", NOTE_NO_TEXT_LAYER
         return text[:EXTRACT_MAX_CHARS], ""
 
