@@ -1648,6 +1648,24 @@ LIVE_LINKS = {
     # belongs to (a score line is a child of a period document, the `SpendReportSnapshot` rule),
     # nor for the trend and perception-gap boards, which are two more views of the benchmarking
     # bullet above and are linked from the board that IS that bullet.
+    # 6.18 is an INTEGRATION sub-module: it owns three tables and points the other two bullets at
+    # aggregates over rows `scm`/`inventory` own (L36). "Stock Level Visibility",
+    # "Warehouse Location Mapping" and "Cycle Count Integration" are DERIVED read-only pages with
+    # no model behind them — storing any of those figures would be a second source of truth for
+    # on-hand. Nothing here re-declares Item/Location/StockMove/LotSerial/ReorderRule, and
+    # "Goods Issue/Return to Stock" posts by minting a DRAFT `scm.StockAdjustment` rather than
+    # writing a StockMove, so stock still changes in exactly one place.
+    "6.18": {
+        "Stock Level Visibility":              "procurement:stock_position",
+        "Reorder Point Automation":            "procurement:replenishmentrun_list",
+        "Goods Issue/Return to Stock":         "procurement:materialissue_list",
+        "Warehouse Location Mapping":          "procurement:receipt_bin_map",
+        "Cycle Count Integration":             "procurement:count_accuracy",
+    },
+    # NO sidebar key for `ReplenishmentPolicy`: it is configuration behind an analysis page,
+    # reached from the run register (the `ReceiptTolerancePolicy` / `SpendClassificationRule` /
+    # `ReorderRule` precedent above). This dict maps NavERP.md feature bullets to pages, and the
+    # policy register is not a bullet — it is how the "Reorder Point Automation" bullet is tuned.
     "6.19": {
         "Central Document Repository":         "procurement:pdocument_list",
         "Version Control":                     "procurement:pdocrevision_list",
