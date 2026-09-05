@@ -330,6 +330,11 @@ class Command(BaseCommand):
             # It writes into no other module - no requisition is released and no material issue is
             # posted, so a re-seed never touches the scm stock ledger.
             self._seed_inventory_warehouse(tenant)
+            # 6.17 runs after EVERY block above, and the ordering is load-bearing twice over.
+            # Its fraud scan reads the invoices and orders those blocks created, and its audit
+            # seal hashes the core.AuditLog range that exists at the end of the run - a seal
+            # taken earlier would leave everything seeded afterwards outside the chain.
+            self._seed_risk_compliance(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -3847,3 +3852,613 @@ class Command(BaseCommand):
                 f"return), {made_lines} line(s) worth "
                 f"{issue.total_value + returned.total_value}. Neither is posted - no "
                 f"scm.StockAdjustment was minted and no scm.StockMove was written."))
+
+    # -- 6.17 Risk & Compliance Management -----------------------------------------------------
+
+    def _seed_risk_compliance(self, tenant):
+        """6.17 Risk & Compliance Management - the sanctions screening register, the supplier
+        financial-risk series, the fraud & integrity board, the policy sign-off ledger, and one
+        audit seal over the whole run.
+
+        REUSES what every block above created and invents no masters (L36): the screened and
+        monitored suppliers are existing ``core.Party`` rows carrying a supplier/vendor
+        ``PartyRole``, the blocked screening links an EXISTING 6.4 ``VendorSuspension`` (this
+        module never mints one - the register is the only place a vendor is actually blocked),
+        the fraud board points at real ``scm.PurchaseOrder`` / ``procurement.SupplierInvoice``
+        rows, and the attestation roster hangs off 6.19's PUBLISHED policy. A workspace with no
+        supplier party at all is skipped with a warning rather than crashed, exactly like the
+        6.19 block above.
+
+        **Nothing derived is ever typed.** ``risk_position``, ``band``, ``trend`` and
+        ``previous_value`` are stamped by ``SupplierRiskSignal.derive()`` inside ``save()``; the
+        two screening counters come from ``recount_hits()``; ``FraudAlert.dedupe_key`` comes from
+        ``build_dedupe_key()``; and every digest column on the seal is computed by
+        ``AuditSeal.seal_now()``. A seeder that wrote a band, a trend or a digest by hand would
+        prove only that a CharField stores a string.
+
+        **Workflow states move through the verbs.** ``clear()`` / ``escalate()`` / ``block()`` on
+        a screening, ``dispose()`` on a hit, ``mark_reviewed()`` / ``mark_actioned()`` /
+        ``dismiss()`` on a signal, ``investigate()`` / ``substantiate()`` / ``unsubstantiate()``
+        on an alert and ``acknowledge()`` on an attestation - so every ``*_by`` / ``*_at`` column
+        holds a real stamp and each verb's own guard is genuinely exercised. No status column is
+        assigned directly anywhere in this block.
+
+        **The risk series is written OLDEST FIRST on purpose.** ``derive()`` reads the preceding
+        observation through ``prior_observation()``, which filters ``observed_on__lte`` its own
+        row - so a series written newest-first would leave every row stamped ``new`` and the
+        trend column would be decorative. The FHR pair is written old, then new, which is what
+        makes ``trend`` derive as ``deteriorated`` against a real ``previous_value``.
+
+        **Both polarities are seeded deliberately.** An ``fhr`` (1-100, higher is HEALTHIER) and
+        a ``ser_rating`` (1-9, higher is RISKIER) sit side by side, because a register carrying
+        only one convention would look perfectly correct while ``METRIC_SCALES`` was inverted.
+        A high FHR must band SAFER and a high SER must band RISKIER; seeding one without the
+        other would hide exactly the bug this model exists to prevent.
+
+        Neither ``raise_deterioration_alert()`` nor ``raise_chase_alert()`` is called: both write
+        into 6.1's inbox, and their own docstrings say why a seeder must not - an inbox that
+        fills itself from a fixture is an inbox nobody reads.
+
+        Idempotent five times over, one existence guard per block, so a second run is a no-op and
+        a half-seeded workspace still fills in the block it is missing. The four auto-numbered
+        registers (``SCR-`` / ``SRS-`` / ``FRD-`` / ``ASL-``) are guarded by that existence check
+        rather than by a number lookup, because ``TenantNumbered`` mints the number inside
+        ``save()`` - there is no number to look up before the row exists.
+
+        Deep imports, function-local: ``raise_attestations`` and ``SPEND_PO_STATUSES`` are
+        deliberately NOT re-exported from ``apps.procurement.models`` (the 6.14/6.15 rule that
+        keeps the package ``__init__`` a model registry), and the scm class follows
+        ``_seed_contracts``' function-local precedent rather than widening this command's shared
+        import block - which three other sub-modules are appending to at the same time.
+        """
+        from apps.procurement.models import (
+            AuditSeal, ComplianceScreening, FraudAlert, PolicyAttestation, ScreeningHit,
+            SupplierRiskSignal)
+        from apps.procurement.models.RiskComplianceManagement.Policies import (
+            DEFAULT_ATTESTATION_DUE_DAYS, raise_attestations)
+        # ONE definition of what counts as committed spend, imported rather than copied - 6.14,
+        # 6.17's own scan and this seeder must never disagree about it.
+        from apps.procurement.models.SpendAnalyticsReporting.MaverickFindings import (
+            SPEND_PO_STATUSES)
+        from apps.scm.models import PurchaseOrder
+
+        # The EXACT narrowing every 6.17 form applies to its supplier <select>: a workspace files
+        # the same company under either role, and distinct() keeps a party holding both from
+        # arriving twice.
+        suppliers = list(Party.objects
+                         .filter(tenant=tenant, roles__role__in=("supplier", "vendor"))
+                         .distinct().order_by("name"))
+        if not suppliers:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no supplier parties (run seed_scm first) - skipping risk & "
+                f"compliance management."))
+            return
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        owner = members[0] if members else None
+        today = timezone.localdate()
+
+        def _supplier(index):
+            """Suppliers, wrapped - a thin workspace re-uses one rather than being skipped."""
+            return suppliers[index % len(suppliers)]
+
+        # The window the fraud scan covers. 366 days sits comfortably inside the model's own
+        # 400-day ceiling, and the end is EXCLUSIVE, so `today + 1` includes anything dated
+        # today. Resolved here because block 1 reads it too - the escalated screening has to be
+        # dated before an order that this window actually contains.
+        scan_start = today - timedelta(days=366)
+        scan_end = today + timedelta(days=1)
+
+        # -- 1. the screening register and its potential-match children ------------------------
+        if ComplianceScreening.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: compliance screenings already present, skipping.")
+        else:
+            # The escalated screening is deliberately placed on a supplier this workspace has
+            # ACTUALLY committed spend to, and dated BEFORE that order, so rule 5 of the fraud
+            # scan (new spend against an unresolved sanctions match) fires off real rows in block
+            # 3 rather than needing a hand-raised one. That rule is the cross-link which makes
+            # 6.17 one sub-module instead of five unrelated pages, and seeding it through the
+            # detector is the only way to prove it actually joins. A workspace with no committed
+            # order falls back to any supplier and simply does not produce that rule.
+            recent_order = (PurchaseOrder.objects
+                            .filter(tenant=tenant, status__in=SPEND_PO_STATUSES,
+                                    vendor__in=suppliers,
+                                    order_date__gte=scan_start, order_date__lt=scan_end)
+                            .select_related("vendor").order_by("-order_date", "-id").first())
+            if recent_order is not None:
+                escalated_party = recent_order.vendor
+                # Five days clear of the order, and never less than 45 days old, so the screening
+                # provably predates the spend it is about to be joined to.
+                escalated_days = max((today - recent_order.order_date).days + 5, 45)
+            else:
+                escalated_party, escalated_days = _supplier(2), 45
+
+            # The blocked screening goes on a supplier the 6.4 register ALREADY blocks, so its
+            # suspension link points at that supplier's own case rather than at somebody else's.
+            # Where no such case exists the screening is still blocked - it records the decision
+            # - it just carries no suspension, which is the honest shape.
+            blocked_suspension = (VendorSuspension.objects
+                                  .filter(tenant=tenant, supplier__in=suppliers)
+                                  .select_related("supplier").order_by("id").first())
+            blocked_party = (blocked_suspension.supplier if blocked_suspension is not None
+                             else _supplier(4))
+
+            cleared_party, adjudicated_party = _supplier(0), _supplier(1)
+            pending_party = _supplier(3)
+            rows = [
+                # (a) An OLD clear screening. clear() stamps next_rescreen_on 365 days after the
+                #     screening date, and 400 days back puts that date 35 days in the PAST - which
+                #     is what gives the re-screening board a row instead of an empty state. The
+                #     date is never written here; the verb derives it.
+                {"party": cleared_party, "list_source": "csl_consolidated",
+                 "checkpoint": "onboarding", "method": "manual_lookup", "result": "clear",
+                 "days_ago": 400, "threshold": 85,
+                 "rationale": ("Provider default. The consolidated search returned nothing at or "
+                               "above it, so there was no reason to move the bar."),
+                 "reference": "CSL-2025-114872",
+                 "notes": ("Onboarding screen, taken before the first order was raised against "
+                           "this supplier."),
+                 "hits": [],
+                 "verdict": ("clear", "No entry returned at or above the 85 threshold.")},
+                # (b) A screening that returned two entries and was cleared only AFTER both were
+                #     adjudicated - the case the two-column design exists for. The lookup said
+                #     "potential match"; a human said "cleared", and the reasoning for each entry
+                #     is on the hit rather than lost in a status change.
+                {"party": adjudicated_party, "list_source": "sam_exclusions",
+                 "checkpoint": "pre_award", "method": "file_upload", "result": "potential_match",
+                 "days_ago": 20, "threshold": 88,
+                 "rationale": ("Raised to 88 for this run: the trading name is a common word "
+                               "pair and 85 returned mostly noise."),
+                 "reference": "SAM-EX-2026-0418",
+                 "notes": ("Pre-award check on the exclusions extract. Both returned entries "
+                           "adjudicated before the award was signed."),
+                 "hits": [
+                     {"name": f"{adjudicated_party.name.upper()} LLC",
+                      "list": "sam_exclusions", "score": 91, "type": "name",
+                      "ref": "SAM-7741823", "program": "Federal debarment",
+                      "country": "United States",
+                      "remarks": ("Same trading name, different legal form and a US "
+                                  "registration."),
+                      "dispose": ("false_positive",
+                                  "Different entity. The listed party is a US limited liability "
+                                  "company; ours is registered elsewhere and the registration "
+                                  "numbers do not match.")},
+                     {"name": f"{adjudicated_party.name} (Holdings)",
+                      "list": "bis_entity", "score": 89, "type": "alias",
+                      "ref": "BIS-EL-2214", "program": "Entity List",
+                      "country": "United States",
+                      "remarks": "Parent group listed against a controlled-technology line.",
+                      "dispose": ("cleared_with_licence",
+                                  "Same group, listed for a controlled line we do not buy. "
+                                  "Cleared under export licence GB-2026-0091; the licence is on "
+                                  "file with the award pack.")},
+                 ],
+                 "verdict": ("clear",
+                             "Both returned entries adjudicated - one a different legal entity, "
+                             "one cleared under an export licence. Nothing outstanding.")},
+                # (c) The ESCALATED one, with two hits left OPEN. This is what proves the
+                #     disposition gate: clear() asks the database and would refuse this row while
+                #     either hit is undisposed. It is also the row rule 5 of the fraud scan joins
+                #     to the spend below it.
+                {"party": escalated_party, "list_source": "ofac_sdn", "checkpoint": "pre_po",
+                 "method": "manual_lookup", "result": "potential_match",
+                 "days_ago": escalated_days, "threshold": 85,
+                 "rationale": ("OFAC's own default. An SDN name match is a hard stop, so the bar "
+                               "stays where the provider sets it."),
+                 "reference": "OFAC-SDN-2026-3390",
+                 "notes": ("Run before a purchase order was raised. Referred to compliance - "
+                           "this screening records that, it holds nothing by itself."),
+                 "hits": [
+                     {"name": f"{escalated_party.name.upper()}",
+                      "list": "ofac_sdn", "score": 93, "type": "name",
+                      "ref": "OFAC-SDN-19822", "program": "SDN - non-proliferation",
+                      "country": "Undisclosed",
+                      "remarks": ("Name matches at 93. Address and registration still being "
+                                  "compared against the entry."),
+                      "dispose": None},
+                     {"name": f"{escalated_party.name} Trading",
+                      "list": "ofac_other", "score": 87, "type": "alias",
+                      "ref": "OFAC-SSI-4471", "program": "Sectoral sanctions (SSI)",
+                      "country": "Undisclosed",
+                      "remarks": "Reported alias of the entry above; not yet ruled in or out.",
+                      "dispose": None},
+                 ],
+                 "verdict": ("escalate",
+                             "Two entries at 93 and 87 against the SDN list, neither "
+                             "adjudicated. Referred to compliance before any order is raised.")},
+                # (d) A PENDING one, so the amber badge and the open-work queue are not empty.
+                #     No verb is called: this row is deliberately still awaiting a decision.
+                {"party": pending_party, "list_source": "eu_consolidated",
+                 "checkpoint": "periodic", "method": "manual_lookup", "result": "clear",
+                 "days_ago": 6, "threshold": 85,
+                 "rationale": "Provider default; nothing about this supplier argues for moving it.",
+                 "reference": "EU-CONS-2026-0771",
+                 "notes": ("Annual periodic re-screen. Clear on the day, waiting on a second "
+                           "pair of eyes before it is signed off."),
+                 "hits": [],
+                 "verdict": None},
+                # (e) A BLOCKED one, carrying the single confirmed match that caused it and
+                #     linked to the 6.4 case. block() stamps the suspension; it never creates one.
+                {"party": blocked_party, "list_source": "bis_dpl", "checkpoint": "pre_payment",
+                 "method": "manual_lookup", "result": "confirmed_match",
+                 "days_ago": 75, "threshold": 85,
+                 "rationale": "Provider default. A denied-persons entry is not a judgement call.",
+                 "reference": "BIS-DPL-2026-0088",
+                 "notes": ("Pre-payment check. The decision is recorded here; the block itself "
+                           "lives in the 6.4 suspension register."),
+                 "hits": [
+                     {"name": f"{blocked_party.name.upper()}",
+                      "list": "bis_dpl", "score": 97, "type": "name",
+                      "ref": "BIS-DPL-30214", "program": "Denied Persons List",
+                      "country": "Undisclosed",
+                      "remarks": "Name, address and registration number all line up.",
+                      "dispose": ("true_match",
+                                  "Confirmed against the denied-persons entry - name, address "
+                                  "and registration number all match. Payment stopped.")},
+                 ],
+                 "verdict": ("block",
+                             "Confirmed denied-party match. Payment stopped and the block "
+                             "recorded in the suspension register - this screening records the "
+                             "decision, it does not enforce it.")},
+            ]
+
+            made = made_hits = 0
+            with transaction.atomic():
+                for row in rows:
+                    screened_on = today - timedelta(days=row["days_ago"])
+                    screening = ComplianceScreening(
+                        tenant=tenant, party=row["party"], list_source=row["list_source"],
+                        checkpoint=row["checkpoint"], method=row["method"], result=row["result"],
+                        screened_on=screened_on,
+                        # A list cannot have been published after the search that used it -
+                        # clean() refuses the other way round, and a data date one day behind the
+                        # search is what a real extract looks like.
+                        list_as_of=screened_on - timedelta(days=1),
+                        reference=row["reference"], match_threshold=row["threshold"],
+                        threshold_rationale=row["rationale"], screened_by=owner,
+                        notes=row["notes"])
+                    screening.save()
+                    made += 1
+                    for hit_row in row["hits"]:
+                        hit = ScreeningHit.objects.create(
+                            screening=screening, matched_name=hit_row["name"],
+                            matched_list=hit_row["list"], match_score=hit_row["score"],
+                            match_type=hit_row["type"], entry_reference=hit_row["ref"],
+                            program=hit_row["program"], country=hit_row["country"],
+                            remarks=hit_row["remarks"])
+                        made_hits += 1
+                        if hit_row["dispose"] is not None:
+                            # Through the real verb: dispose() is what stamps disposed_by /
+                            # disposed_at and refuses an adjudication with no reasoning. Writing
+                            # the column directly would leave an anonymous, unexplained decision
+                            # - the exact finding a recordkeeping examination writes up.
+                            disposition, note = hit_row["dispose"]
+                            hit.dispose(owner, disposition, note)
+                    # What the hit views call after every create / dispose. The two counters are
+                    # DISPLAY values - clear() re-asks the database - so this is a badge refresh,
+                    # never a gate.
+                    screening.recount_hits()
+
+                    if row["verdict"] is None:
+                        continue
+                    verb, note = row["verdict"]
+                    if verb == "clear":
+                        screening.clear(owner, note)
+                    elif verb == "escalate":
+                        screening.escalate(owner, note)
+                    elif verb == "block":
+                        screening.block(owner, note, suspension=blocked_suspension)
+
+            rescreen_due = ComplianceScreening.objects.filter(
+                tenant=tenant, next_rescreen_on__lt=today).count()
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} compliance screening(s) + {made_hits} potential-match "
+                f"hit(s) - one cleared after adjudicating two entries, one escalated with two "
+                f"hits still open, one blocked against "
+                f"{blocked_suspension.number if blocked_suspension is not None else 'no 6.4 case'}"
+                f", one still pending, and {rescreen_due} past its re-screen date."))
+
+        # -- 2. the supplier financial-risk series ----------------------------------------------
+        if SupplierRiskSignal.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: supplier risk signals already present, skipping.")
+        else:
+            # ORDER IS LOAD-BEARING. Every row is written oldest-first, because derive() looks
+            # backwards for the preceding observation in the same (party, provider, metric)
+            # series - a newest-first pass would stamp every row "new". The two FHR rows are the
+            # series; everything after them is a first observation on its own metric.
+            #
+            # The two rows that matter most are the first and the third:
+            #   FHR 82 of 100 - higher is HEALTHIER -> risk position ~18 -> banded LOW,
+            #   SER  8 of   9 - higher is RISKIER   -> risk position ~88 -> banded CRITICAL.
+            # Neither number is typed here. Both come out of METRIC_SCALES inside save(), which
+            # is the whole point: if that table is ever inverted, these two rows say so loudly.
+            signal_rows = [
+                (_supplier(0), "rapidratings", "fhr", 150, Decimal("82.00"),
+                 "RR-FHR-2026-Q1-8841",
+                 ("First financial-health rating on file for this supplier. 82 of 100 sits "
+                  "comfortably above the 40 line RapidRatings treats as distress."),
+                 ("review", "Baseline noted. Nothing to do at 82 - re-read at the next refresh.")),
+                (_supplier(0), "rapidratings", "fhr", 15, Decimal("71.00"),
+                 "RR-FHR-2026-Q3-9120",
+                 ("Second observation in the same series. The raw number fell, and because "
+                  "higher is healthier on this scale that is a DETERIORATION - the trend column "
+                  "is derived from the risk position, not from the raw value."),
+                 None),
+                (_supplier(1), "dnb", "ser_rating", 25, Decimal("8.00"), "DNB-SER-2026-44107",
+                 ("Supplier Evaluation Risk of 8 on a 1-9 scale where 9 is the worst. The "
+                  "OPPOSITE convention to the FHR rows above, and past the buyer-imposed "
+                  "maximum of 5 - which colours a badge and blocks nothing."),
+                 ("action", "Dual-sourced the two parts this supplier is sole vendor on, and "
+                            "asked the category manager for a payment-terms review.")),
+                (_supplier(2), "dnb", "paydex", 40, Decimal("68.00"), "DNB-PAYDEX-2026-3388",
+                 ("PAYDEX of 68 - higher is prompter, so this is a middling payer rather than a "
+                  "slow one. Watch-band, no action."),
+                 ("dismiss", "Within the range we accept for this category. Nothing to action; "
+                             "the next observation is due at the scheduled refresh.")),
+                (_supplier(3), "internal", "dso_days", 8, Decimal("96.00"), "INT-DSO-2026-08",
+                 ("Days sales outstanding of 96, from our own ledger rather than a bureau. "
+                  "Higher is worse on this scale, so a big number bands high."),
+                 None),
+                (_supplier(4), "other", "other", 33, Decimal("3.50"), "INT-ASSESS-2026-11",
+                 ("An UNREGISTERED metric, on purpose. It has no scale in METRIC_SCALES, so it "
+                  "bands 'unrated' rather than defaulting to low - saying 'we do not know' is "
+                  "the honest answer, and a fabricated all-clear is not."),
+                 ("review", "Logged for completeness. No scale is registered for this number, "
+                            "so it is not comparable with anything else on the register.")),
+            ]
+
+            made = 0
+            for party, provider, metric, days_ago, value, source_ref, note, verdict in signal_rows:
+                observed_on = today - timedelta(days=days_ago)
+                signal = SupplierRiskSignal(
+                    tenant=tenant, party=party, provider=provider, metric=metric,
+                    observed_on=observed_on, value=value, source_ref=source_ref,
+                    # Never before the observation - clean() refuses that, and a refresh date is
+                    # a forward-looking commitment.
+                    next_refresh_on=observed_on + timedelta(days=180),
+                    captured_by=owner, notes=note)
+                # save() runs derive(), which stamps scale_min/scale_max/higher_is_better,
+                # risk_position, band, previous_value and trend. Not one of the seven is set here.
+                signal.save()
+                made += 1
+                if verdict is None:
+                    # Left at "new" on purpose: a register with nothing awaiting a human is not a
+                    # register anybody checks.
+                    continue
+                verb, verdict_note = verdict
+                if verb == "review":
+                    signal.mark_reviewed(owner, verdict_note)
+                elif verb == "action":
+                    signal.mark_actioned(owner, verdict_note)
+                elif verb == "dismiss":
+                    signal.dismiss(owner, verdict_note)
+
+            # Read BACK off the database rather than off the objects above, so what is reported
+            # is what was actually stored.
+            fhr_latest = (SupplierRiskSignal.objects
+                          .filter(tenant=tenant, metric="fhr").order_by("-observed_on").first())
+            ser = (SupplierRiskSignal.objects
+                   .filter(tenant=tenant, metric="ser_rating").order_by("-observed_on").first())
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} supplier risk signal(s). Inversion check - "
+                f"FHR {fhr_latest.value} -> risk {fhr_latest.risk_position}/100 "
+                f"({fhr_latest.band}, trend {fhr_latest.trend} from "
+                f"{fhr_latest.previous_value}); SER {ser.value} -> risk "
+                f"{ser.risk_position}/100 ({ser.band}). A high FHR must band safer than a high "
+                f"SER."))
+
+        # -- 3. the fraud & integrity board -----------------------------------------------------
+        if FraudAlert.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: fraud alerts already present, skipping.")
+        else:
+            # The REAL detection engine first, over the same window the scan page offers. Every
+            # row it writes is a genuine finding against this workspace's own invoices, orders
+            # and screenings - including rule 5, which joins the escalated screening block 1 just
+            # created to the spend committed against that supplier.
+            diagnostics = {}
+            counts = FraudAlert.scan(tenant, scan_start, scan_end, user=owner,
+                                     diagnostics=diagnostics)
+            detected = sum(counts.values())
+
+            # Then, and clearly labelled as such, the rules this demo data CANNOT produce. A
+            # workspace whose suppliers share no address with an employee and whose parties are
+            # all a year old will honestly never raise a conflict-of-interest or a rush alert -
+            # so a board seeded from the scan alone shows one rule and one severity. These rows
+            # are the shape a reviewer meets on the real board, hand-raised through the same
+            # model path the create form uses.
+            #
+            # EVERY candidate is existence-checked on its dedupe_key, and any whose key comes
+            # back non-deterministic (``:manual:`` - the random fallback build_dedupe_key() uses
+            # when a rule has no usable pointer) is DROPPED rather than written. That fallback
+            # key is what would make a re-run mint a fresh row every time, which is precisely the
+            # idempotency bug this check exists to prevent - so ``self_approval`` seeds only in a
+            # workspace that actually has a RequisitionApproval to point at, and silently does
+            # not elsewhere.
+            employee = (Party.objects.filter(tenant=tenant, employments__status="active")
+                        .distinct().order_by("name").first())
+            candidates = []
+            if employee is not None and employee.pk != _supplier(0).pk:
+                candidates.append({
+                    "rule": "vendor_employee_match", "vendor": _supplier(0),
+                    "related_party": employee, "severity": "high",
+                    "document_date": today - timedelta(days=60),
+                    # amount stays NULL: an overlap has no value, and writing 0.00 would put a
+                    # real zero into every by-value rollup and read as "worth nothing".
+                    "amount": None,
+                    "matched_on": "tax_id ****4821",
+                    "detail": (f"{_supplier(0).name} and {employee.name} carry the same tax "
+                               f"registration number. A supplier record sharing an identity "
+                               f"attribute with an employee is a conflict-of-interest question, "
+                               f"not yet a finding - somebody has to look at both records."),
+                })
+            if len(suppliers) >= 3:
+                candidates.append({
+                    "rule": "duplicate_vendor", "vendor": _supplier(1),
+                    "related_party": _supplier(2), "severity": "medium",
+                    "document_date": today - timedelta(days=90), "amount": None,
+                    "matched_on": "name near-duplicate on the suffix-stripped form",
+                    "detail": (f"{_supplier(1).name} and {_supplier(2).name} reduce to nearly "
+                               f"the same name once the legal-form suffix is stripped. Two "
+                               f"records for one company split its spend, hide it from every "
+                               f"threshold, and are how a shell supplier is parked in plain "
+                               f"sight."),
+                })
+            candidates.append({
+                "rule": "new_vendor_rush", "vendor": _supplier(3), "severity": "medium",
+                "document_date": today - timedelta(days=18), "amount": Decimal("42750.00"),
+                "matched_on": "vendor created 11 days before the spend",
+                "detail": (f"{_supplier(3).name} took 42,750.00 of spend inside the first "
+                           f"{FraudAlert.NEW_VENDOR_DAYS} days of the supplier record existing, "
+                           f"over the {FraudAlert.NEW_VENDOR_AMOUNT} threshold. New supplier, "
+                           f"immediate high value, no order history to compare it with."),
+            })
+
+            hand_raised = 0
+            with transaction.atomic():
+                for row in candidates:
+                    alert = FraudAlert(
+                        tenant=tenant, rule=row["rule"], severity=row["severity"],
+                        vendor=row.get("vendor"), related_party=row.get("related_party"),
+                        document_date=row["document_date"], amount=row["amount"],
+                        matched_on=row["matched_on"], detail=row["detail"])
+                    # Computed by the model, never typed - and read BEFORE the insert so the
+                    # existence check stands on the same string the unique constraint will.
+                    key = alert.build_dedupe_key()
+                    if ":manual:" in key:
+                        continue
+                    if FraudAlert.objects.filter(tenant=tenant, dedupe_key=key).exists():
+                        continue
+                    alert.save()
+                    hand_raised += 1
+
+            # Drive a few through the disposition verbs so every badge on the register exists and
+            # every resolved row carries a real resolved_by / resolved_at stamp. The guards keep
+            # at least one alert OPEN whatever this workspace turned up - a board with nothing
+            # left to answer teaches the wrong lesson about what it is for.
+            alerts = list(FraudAlert.objects.filter(tenant=tenant).order_by("id"))
+            total = len(alerts)
+            for index, alert in enumerate(alerts):
+                if index == 0 and total > 1:
+                    alert.investigate(owner)
+                    alert.substantiate(
+                        owner,
+                        "Reviewed against the source documents: the rule is right. Referred to "
+                        "the category manager, and the block - if there is to be one - belongs "
+                        "in the suspension register, not here.")
+                elif index == 1 and total > 2:
+                    alert.investigate(owner)
+                    alert.unsubstantiate(
+                        owner,
+                        "False positive. The two documents are a legitimate pair; the dates line "
+                        "up once the goods-receipt lag is taken into account.")
+                elif index == 2 and total > 3:
+                    alert.investigate(owner)
+
+            open_now = FraudAlert.objects.filter(
+                tenant=tenant, status__in=FraudAlert.OPEN_STATUSES).count()
+            fired = ", ".join(f"{rule}={count}" for rule, count in sorted(counts.items())
+                              if count) or "none"
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {detected} fraud alert(s) DETECTED by the real scan over "
+                f"{(scan_end - scan_start).days} days ({fired}) + {hand_raised} hand-raised for "
+                f"rules this workspace's data cannot produce; {open_now} of "
+                f"{FraudAlert.objects.filter(tenant=tenant).count()} still open."))
+
+        # -- 4. the policy sign-off ledger --------------------------------------------------------
+        if PolicyAttestation.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: policy attestations already present, skipping.")
+        else:
+            # 6.19 owns the policy library; 6.17 owns the acknowledgement ledger over it. Only a
+            # PUBLISHED policy that asks for acknowledgment has a roster worth collecting - which
+            # is the exact pair of conditions raise_attestations() itself refuses on.
+            policy = (ProcurementPolicy.objects
+                      .filter(tenant=tenant, status="published", requires_acknowledgment=True)
+                      .order_by("-published_at", "-id").first())
+            if policy is None or not members:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: no published policy requiring acknowledgment, or no "
+                    f"active users - skipping the attestation ledger."))
+            else:
+                # The REAL roster verb first, every time.
+                result = raise_attestations(policy, user=owner)
+                if result.refusal:
+                    # WHY THIS FALLBACK EXISTS, stated rather than hidden: resolve_audience()
+                    # walks accounts.User.party -> core.Employment.org_unit, and NO seeded login
+                    # user in this codebase carries a ``party`` at all - the employee parties are
+                    # HRM rows with no account attached. So an org-unit-scoped policy (which is
+                    # what 6.19 seeds) resolves to an audience of nobody. That is a gap in the
+                    # DEMO DATA, not a bug in the resolver, and this seeder must not paper over
+                    # it by minting Employment rows or writing User.party - both belong to other
+                    # modules' seeders. The refusal is reported, then the roster is raised
+                    # directly over the workspace's active members on the verb's OWN unique grain
+                    # (tenant, policy, user) with the same due window, so it stays idempotent.
+                    self.stdout.write(self.style.WARNING(
+                        f"  {tenant.name}: raise_attestations refused - {result.refusal} "
+                        f"Raising the roster directly over the {len(members)} active member(s) "
+                        f"instead; no seeded user carries a core.Party, so an org-unit-scoped "
+                        f"policy can resolve to nobody."))
+                    due_on = today + timedelta(days=DEFAULT_ATTESTATION_DUE_DAYS)
+                    with transaction.atomic():
+                        for person in members:
+                            PolicyAttestation.objects.get_or_create(
+                                tenant=tenant, policy=policy, user=person,
+                                # due_on ONLY in defaults, exactly as the verb does it: a repair
+                                # run must never move a deadline somebody is working to.
+                                defaults={"due_on": due_on})
+
+                # Stable order so a re-seed of a flushed workspace lands the same states on the
+                # same people.
+                roster = list(PolicyAttestation.objects
+                              .filter(tenant=tenant, policy=policy)
+                              .select_related("user").order_by("user__username", "id"))
+                acknowledged = overdue = 0
+                for index, row in enumerate(roster):
+                    if index == 0:
+                        # OVERDUE and still pending. due_on is a plain editable column, not a
+                        # derived one - is_overdue is computed from it against today, so moving
+                        # the date is the only honest way to put a row on the overdue board.
+                        # This is the tenant admin's own row, so "my policies" opens on something
+                        # actionable rather than on a page of history.
+                        row.due_on = today - timedelta(days=9)
+                        row.save(update_fields=["due_on", "updated_at"])
+                        overdue += 1
+                    elif index == 1:
+                        # Through the verb, and signed by its OWN OWNER - acknowledge() refuses
+                        # anybody else, administrators included, which is the single rule that
+                        # keeps this ledger worth having. It is also what stamps acknowledged_at.
+                        if row.acknowledge(row.user,
+                                           "Read in full. Understood that three written "
+                                           "quotations are expected above the guideline figure."):
+                            acknowledged += 1
+                self.stdout.write(self.style.SUCCESS(
+                    f"  {tenant.name}: {len(roster)} policy attestation(s) against "
+                    f"{policy.number} - {acknowledged} acknowledged, {overdue} overdue, "
+                    f"{len(roster) - acknowledged - overdue} pending and in date."))
+
+        # -- 5. one audit seal over the range this run produced -----------------------------------
+        if AuditSeal.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: audit seals already present, skipping.")
+        else:
+            # seal_now() reads the unsealed core.AuditLog range, hashes every row, chains the
+            # digest onto the previous seal and writes the whole thing itself. NOTHING here
+            # touches a digest column - a hand-written digest is not a seal, it is a string that
+            # looks like one, and it would verify against nothing.
+            #
+            # Guarded by the existence check rather than by seal_now()'s own empty-range refusal:
+            # this seeder writes audit entries as it runs, so a second seed WOULD find new rows
+            # and honestly mint a second seal. The guard is what makes the block a no-op instead.
+            seal, message = AuditSeal.seal_now(
+                tenant, owner,
+                note=("Baseline seal taken at the end of the procurement demo seed, covering "
+                      "every audit entry written up to that point."))
+            if seal is None:
+                self.stdout.write(self.style.WARNING(f"  {tenant.name}: {message}"))
+            else:
+                # Verified immediately through the model's own verifier, which re-reads the
+                # sealed range and re-hashes it. A seal nobody has ever verified is an assertion,
+                # not evidence - and this stamps last_verified_at / last_verify_ok honestly.
+                ok, detail = seal.verify()
+                writer = self.style.SUCCESS if ok else self.style.WARNING
+                self.stdout.write(writer(
+                    f"  {tenant.name}: {message} Chain {seal.chain_short}, verify "
+                    f"{'OK' if ok else 'FAILED'} - {detail}"))
