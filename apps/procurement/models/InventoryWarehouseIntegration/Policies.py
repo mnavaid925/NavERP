@@ -246,6 +246,64 @@ class ReplenishmentPolicy(TenantOwned):
 
         return qty.quantize(Decimal("0.0001")) if qty > ZERO else ZERO
 
+    # ------------------------------------------------------------------ planning figures
+    def effective_numbers(self, rule):
+        """The four planning figures a run would actually use, each labelled with its source.
+
+        The SINGLE place the override-versus-fallback rule is written down, and it matches this
+        model's own docstring exactly:
+
+        * ``reorder_point`` / ``safety_stock`` are the rule's, always — no column on this policy
+          holds either, and adding one would be the second reorder rule L36 forbids.
+        * ``target_level`` is the policy's when set, else ``reorder_point + safety_stock``.
+        * ``lead_time_days`` is the policy's override when set, else the rule's own lead time.
+
+        ``lead_time_days_override`` is tested with ``is not None`` rather than truthiness: a
+        genuine override of ``0`` (an item collected the same day) is falsy and would otherwise
+        silently fall back to the rule's figure.
+
+        Takes anything with the four ``ReorderRule`` columns, or ``None`` when this item has no
+        rule. Returns ``{name: {"value": ..., "source": ...}}``. ``value`` is ``None`` exactly when
+        nothing supplies the figure, and ``source`` then reads "not configured" — a blank cell with
+        no explanation is how a reader concludes the number is zero.
+
+        **It lives HERE, on the model, and not on the detail view that needed it first.** It takes
+        no request, touches no template and renders nothing: it is pure override-versus-fallback
+        arithmetic over this policy's own columns. Parked in the views layer it forced
+        ``ReplenishmentRun.generate()`` to import UPWARD into ``apps.procurement.views`` at call
+        time — the only model→views import in the repo — which dragged the whole views + forms +
+        ``apps.core.crud`` import graph in behind it and made the obvious tidy-up (promoting that
+        import to module scope) a circular import. The goal was always right: one written-down
+        definition so the detail page and the run cannot disagree about what a policy means. Only
+        the placement was upside down.
+        """
+        POLICY, RULE, NONE = "policy override", "reorder rule", "not configured"
+
+        def entry(value, source):
+            return {"value": value, "source": NONE if value is None else source}
+
+        reorder_point = rule.reorder_point if rule else None
+        safety_stock = rule.safety_stock if rule else None
+
+        if self.target_level is not None:
+            target = entry(self.target_level, POLICY)
+        elif reorder_point is not None:
+            target = entry((reorder_point or 0) + (safety_stock or 0), RULE)
+        else:
+            target = entry(None, NONE)
+
+        if self.lead_time_days_override is not None:
+            lead_time = entry(self.lead_time_days_override, POLICY)
+        else:
+            lead_time = entry(rule.lead_time_days if rule else None, RULE)
+
+        return {
+            "reorder_point": entry(reorder_point, RULE),
+            "safety_stock": entry(safety_stock, RULE),
+            "target_level": target,
+            "lead_time_days": lead_time,
+        }
+
     # ------------------------------------------------------------------ resolution
     @classmethod
     def resolve(cls, tenant, item, location=None):
