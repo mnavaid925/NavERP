@@ -136,7 +136,12 @@
           </dd></div>
         <div class="detail-item"><dt>Evidence</dt>
           <dd>
-            {% if obj.evidence %}<a href="{{ obj.evidence.url }}" target="_blank" rel="noopener noreferrer">Download the attached file</a>{% endif %}
+            {% comment %}
+              Routed through improvementplan_evidence, NOT obj.evidence.url: the raw MEDIA_URL
+              path is served by the web server with no session and no tenant check, so anybody
+              who guessed a filename under this month's folder could read the file.
+            {% endcomment %}
+            {% if obj.evidence %}<a href="{% url 'procurement:improvementplan_evidence' obj.pk %}">Download the attached file</a>{% endif %}
             {% if obj.evidence_url %}<div><a href="{{ obj.evidence_url }}" target="_blank" rel="noopener noreferrer">Evidence held elsewhere</a></div>{% endif %}
             {% if not obj.has_evidence %}<span class="text-muted">None attached</span>
               <div class="text-muted">a link to a QMS or a shared drive counts &mdash; proof does not have to be re-uploaded to be proof</div>{% endif %}
