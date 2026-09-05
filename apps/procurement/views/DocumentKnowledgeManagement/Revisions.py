@@ -166,10 +166,16 @@ def pdocrevision_list(request):
     each document and, across documents, most-recently-created first — the id tiebreak is doing
     that work.
     """
-    base = ProcurementDocumentRevision.objects.filter(tenant=request.tenant,
-                                                      document__tenant=request.tenant)
-    # ONE conditional aggregate, not three COUNTs. Computed over the whole workspace rather than
-    # the filtered page, so the tiles keep meaning something while a facet is applied.
+    # Same read rule as the rows (the sibling register narrows its own tile base for the same
+    # reason). Without this the tiles are a counting oracle: a member who may read nothing still
+    # saw "1 revision / 1 approved" over an empty table, which discloses that a confidential
+    # document exists and how far along its chain is. The prefix reaches the classification
+    # through the parent, exactly as _revision_qs does.
+    base = (ProcurementDocumentRevision.objects
+            .filter(tenant=request.tenant, document__tenant=request.tenant)
+            .filter(readable_document_q(request.user, "document__")))
+    # ONE conditional aggregate, not three COUNTs. Computed over the whole readable workspace
+    # rather than the filtered page, so the tiles keep meaning something while a facet is applied.
     stats = base.aggregate(
         total=Count("pk"),
         approved=Count("pk", filter=Q(is_approved=True)),
