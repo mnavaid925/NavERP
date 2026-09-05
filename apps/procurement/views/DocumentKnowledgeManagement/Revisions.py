@@ -30,8 +30,11 @@ Discipline a reviewer will otherwise go looking for:
   destination for both keeps the two honest.
 * **Every refusal is a message and a redirect**, never a 500 and never a silent no-op.
 """
+import os
+
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
+from django.http import FileResponse
 
 from apps.procurement.forms.DocumentKnowledgeManagement.Revisions import (
     ProcurementDocumentRevisionUploadForm)
@@ -60,6 +63,11 @@ REVISION_NOTE = (
     "A revision is immutable. Approving one makes it the document's current version; earlier "
     "approved revisions stay on the record as superseded. There is no edit."
 )
+
+#: How many documents the register's facet ``<select>`` offers. A dropdown is a navigation aid,
+#: not an export: past a couple of hundred options nobody scrolls it, and every extra option is
+#: a model instance built and an ``<option>`` rendered.
+DOCUMENT_FACET_CAP = 200
 
 #: The two values ``crud_list`` maps to booleans. Any other string is skipped by the filter
 #: rather than matched, so a hand-edited ``?approved=`` cannot empty the register (L11).
@@ -114,10 +122,20 @@ def _revision_qs(request):
 
 
 def _documents(tenant):
-    """The document facet's options, ordered by the number people actually cite."""
+    """The document facet's options — three columns, capped, ordered by the number people cite.
+
+    ``.only()`` here is load-bearing rather than a micro-optimisation. ``ProcurementDocument``
+    carries ``extracted_text``, a machine-written TextField that runs to 200,000 characters, and
+    the ``<select>`` renders exactly ``pk``, ``number`` and ``title`` — so a plain queryset hauls
+    the whole search corpus of the workspace into memory to draw a dropdown (measured: 59 MB and
+    4.9 s of a 4.9 s request at 2,007 documents, against 0.19 s for the register itself). Three
+    columns and a cap make it kilobytes.
+    """
     if tenant is None:
         return ProcurementDocument.objects.none()
-    return ProcurementDocument.objects.filter(tenant=tenant).order_by("number")
+    return (ProcurementDocument.objects.filter(tenant=tenant)
+            .only("pk", "number", "title")
+            .order_by("number")[:DOCUMENT_FACET_CAP])
 
 
 def _get_revision(request, pk):
@@ -181,6 +199,54 @@ def pdocrevision_detail(request, pk):
         "is_current": obj.is_current,
         "revision_note": REVISION_NOTE,
     })
+
+
+@login_required
+def pdocrevision_download(request, pk):
+    """Hand back this revision's stored bytes — authenticated, tenant-scoped, as an attachment.
+
+    WARNING, and the reason this view exists: ``file.url`` is a raw MEDIA_URL path served by the
+    web server, so linking it hands every stored document to anybody who can guess a filename —
+    no login, no session, no tenant. The bytes of a ``confidential`` or ``restricted`` record are
+    exactly what must not be readable that way. Every stored file linked in 6.19 links THIS route
+    instead, so the same double tenant scope and the same 404 that guard the page guard the file.
+
+    Two headers do the rest of the work:
+
+    * ``Content-Disposition: attachment`` — the file is handed to the browser to save, never
+      rendered on this origin. An uploaded ``.html`` or ``.svg`` served inline would be stored XSS
+      against every logged-in member of the workspace; the extension allow-list is then no longer
+      the only control standing between an upload and script execution.
+    * ``X-Content-Type-Options: nosniff`` — the browser must not second-guess the declared type.
+      ``SECURE_CONTENT_TYPE_NOSNIFF`` only applies outside DEBUG, so it is set here rather than
+      assumed.
+    """
+    revision = _get_revision(request, pk)
+    if not revision.file:
+        messages.error(request, f"r{revision.revision_no} of {revision.document.number} has no "
+                                f"stored file.")
+        return redirect("procurement:pdocrevision_detail", pk=revision.pk)
+
+    try:
+        handle = revision.file.open("rb")
+    except (OSError, ValueError):
+        # The row can outlive its bytes: a file removed from MEDIA_ROOT behind Django's back has
+        # to be a message on the page it was linked from, never a 500 on a download click.
+        messages.error(request, f"The stored file for r{revision.revision_no} could not be read "
+                                f"back from storage.")
+        return redirect("procurement:pdocrevision_detail", pk=revision.pk)
+
+    # The display name, with any CR/LF removed: it is attacker-supplied and it is about to be
+    # written into a response header. Django escapes quotes and backslashes itself and refuses a
+    # header carrying a newline outright (BadHeaderError) — stripping is what keeps that correct
+    # refusal from becoming a 500 on a download anybody can trigger.
+    filename = (revision.original_filename or os.path.basename(revision.file.name)
+                or f"r{revision.revision_no}")
+    filename = filename.replace("\r", " ").replace("\n", " ")
+
+    response = FileResponse(handle, as_attachment=True, filename=filename)
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 # ---------------------------------------------------------------------------------------------
@@ -250,8 +316,6 @@ def pdocument_revision_upload(request, pk):
             # never joined onto a filesystem path. Django's storage layer derives the real path
             # from the field's ``upload_to`` and sanitizes it; ``basename`` here strips any
             # directory component a client tried to smuggle in before it is ever shown.
-            import os
-
             digest = file_sha256(upload)
             original = os.path.basename(getattr(upload, "name", "") or "")[:255]
             size = getattr(upload, "size", 0) or 0
