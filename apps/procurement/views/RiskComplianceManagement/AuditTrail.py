@@ -647,7 +647,8 @@ def auditseal_verify(request, pk):
 
     seal = get_object_or_404(AuditSeal, pk=pk, tenant=request.tenant)
     was_ok = seal.last_verify_ok
-    ok, detail = seal.verify()
+    # Pass the actor so the stamp records WHO ran the check, not merely that one ran (M11).
+    ok, detail = seal.verify(user=request.user)
     if ok:
         messages.success(request, detail)
     else:
