@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Knowledge Resource{% else %}New Knowledge Resource{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — KnowledgeResource create-or-edit. ONE template for
+    both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj).
+
+    Context contract, and NOTHING else exists here: form, is_edit, (edit only) obj, library_note.
+    No page_title / submit_label / cancel_url — those belong to a hand-rolled create view, and
+    this one goes through the shared crud_* helpers (the budgetmapping_create precedent).
+
+    The form carries exactly: title, resource_type, category, audience, summary, body, tags,
+    is_featured, owner, document, review_on.
+
+    Deliberately ABSENT and worth knowing why, because a reader will look for them:
+      * status — verb-driven. Publish and archive are buttons on the detail page, each with its
+        own audit row. A status <select> here would skip both.
+      * usage_count / last_used_at — owned by the Use verb, which increments the counter in the
+        database itself so concurrent presses cannot lose a count. Typed here they would be a
+        claim about how often colleagues reached for something, entered by the person who wants
+        it to look popular, and a form save would overwrite exactly the increments that
+        protection exists for.
+      * a FILE field — the downloadable workbook or PDF is an ordinary document chosen through
+        `document`, so it goes through the repository's allow-list, size cap, checksum, text read
+        and approval step, and gains a revision chain. There is no second upload path that skips
+        those five.
+      * number and created_by — system-written.
+
+    library_note is the ONE constant this page, the register and the detail page all print, so
+    the person filling this form in is told what the library does before they wonder.
+
+    Field help is keyed off field.name so it stays correct if the form order changes, and each
+    label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New knowledge resource{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <a href="{% url 'procurement:knowledgeresource_list' %}">Knowledge Library</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">{{ library_note }}</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Resource</h2><span class="text-muted">the guidance, who it is for, and the file it points at</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "title" %}
+                <div class="form-help">What a colleague would search for — the job it helps with, not a filing code. "Negotiation playbook for annual IT renewals" beats "Doc 7".</div>
+              {% elif field.name == "resource_type" %}
+                <div class="form-help">What kind of thing this is: a template, a scorecard, a playbook, a checklist, a guide, a worked sample or training material. Drives the type facet on the register.</div>
+              {% elif field.name == "category" %}
+                <div class="form-help">What it is about — the spend area it belongs to. A fixed list, not a taxonomy: pick the closest match, and Other is honest when nothing fits.</div>
+              {% elif field.name == "audience" %}
+                <div class="form-help">Who it is written for. A reading hint on the register only — everybody in this workspace can open every resource, and choosing Legal hides nothing from anybody.</div>
+              {% elif field.name == "summary" %}
+                <div class="form-help">One or two sentences a colleague can act on without opening the full text. Searched alongside the title, the guidance and the tags.</div>
+              {% elif field.name == "body" %}
+                <div class="form-help">The guidance itself, for people to read. Searched in full. If the working copy is a workbook or a PDF, link that document below rather than pasting a second version of it here.</div>
+              {% elif field.name == "tags" %}
+                <div class="form-help">Comma-separated keywords. Lower-cased and de-duplicated when saved, and normalized exactly like a document's tags, so one word typed on a guide and on a document is one tag.</div>
+              {% elif field.name == "is_featured" %}
+                <div class="form-help">Puts this on the "Start here" shelf above the library, once it is published. It is a display choice — it does not approve the resource, does not make it mandatory and grants nobody anything.</div>
+              {% elif field.name == "owner" %}
+                <div class="form-help">Who is answerable for keeping this guidance current — rewriting it when it stops matching practice, and reading it again when the review date arrives.</div>
+              {% elif field.name == "document" %}
+                <div class="form-help">Optional. The downloadable template or workbook in the repository, so it inherits revision control, approval and text search instead of sitting somewhere as an unversioned copy.</div>
+              {% elif field.name == "review_on" %}
+                <div class="form-help">When somebody should read this again. Once the date arrives the resource is badged "Review overdue" on the register — guidance goes stale quietly, which is exactly why the date is worth setting.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create resource{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:knowledgeresource_detail' obj.pk %}{% else %}{% url 'procurement:knowledgeresource_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happens next</h2><span class="text-muted">draft, publish, feature</span></div>
+    <div class="card-body">
+      <p class="text-muted">{{ library_note }}</p>
+      <p class="text-muted">Saving creates the resource as a draft — yours to work on, not yet on the shelf. Publishing it from its own page puts it in the library for the whole workspace; any signed-in member can do that, because adding a how-to retires nothing and states no binding rule. Featured resources are shown first on the library page, and featuring one is a curator's display choice rather than an approval.</p>
+      <p class="text-muted">Archiving takes a resource out of circulation without deleting anything — it keeps its text, its tags and its usage count, and it can be published again later.</p>
+    </div>
+  </div>
+{% endblock %}
