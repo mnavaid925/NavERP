@@ -47,6 +47,7 @@ Discipline a reviewer will otherwise go looking for:
 from django.db.models import Count, Q
 from django.urls import reverse
 
+from apps.core.crud import as_db_int
 # NOT-YET-WIRED entity of this SAME sub-module: import the entity MODULES directly — see the
 # module docstring.
 from apps.procurement.forms.SupplierPerformanceEvaluation.SupplierFeedback import (
@@ -299,10 +300,17 @@ def supplierfeedback_submit(request, pk):
     rating = obj.rating
     posted = (request.POST.get("rating") or "").strip()
     if posted:
-        if not posted.isdecimal() or int(posted) not in _RATING_VALUES:
+        # ``as_db_int``, never a bare ``int()``: ``isdecimal()`` is True for 5,000 digits and
+        # ``int()`` then raises ``ValueError: Exceeds the limit (4300) for integer string
+        # conversion`` — an uncaught 500 any member with an open response's pk could fire at
+        # will. The helper length-checks BEFORE it parses, which is the same L11 guard
+        # ``crud_list`` applies to every GET filter; this verb takes its value from a POST body
+        # and goes through no form, so nothing else was applying it.
+        number = as_db_int(posted)
+        if number is None or number not in _RATING_VALUES:
             messages.error(request, "That is not one of the ratings on the 1-5 scale.")
             return redirect("procurement:supplierfeedback_detail", pk=pk)
-        rating = int(posted)
+        rating = number
     if rating is None:
         messages.error(request, "Pick a rating on the 1-5 scale before submitting this response "
                                 "— a submitted response with no rating measures nothing.")
