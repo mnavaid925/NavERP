@@ -20,7 +20,8 @@ Discipline a reviewer will otherwise go looking for:
   ``scm.SupplierRiskAssessment`` (SCM 4.2 owns the internal four-factor composite) and links to
   the 4.2 register. 6.17 never computes a rival headline (L29/L36/L37).
 * **Query shape.** The register select_relateds ``party`` — a row's own ``__str__`` walks it, so
-  without it a page of 15 rows is 16 queries. The detail page takes the ``SERIES_LIMIT`` window
+  without it a page of 15 rows is 16 queries — and ``reviewed_by``, which the list template names
+  on every reviewed row, for the same reason. The detail page takes the ``SERIES_LIMIT`` window
   and the latest assessment in one query each.
 """
 from datetime import timedelta
@@ -55,11 +56,14 @@ _REVIEW_ACTIONS = {
     "dismissed": ("dismiss", True),
 }
 
-#: Every hop a register row (or its own ``__str__``) walks.
-_ROW_RELATIONS = ("party",)
+#: Every hop a register row (or its own ``__str__``) walks. ``reviewed_by`` is here and not only
+#: on the detail set because ``risksignal/list.html`` names the reviewer on every reviewed row —
+#: without the join that is one extra query per such row, so a mature page costs ~7 queries when
+#: nothing has been reviewed and ~22 once everything has.
+_ROW_RELATIONS = ("party", "reviewed_by")
 
-#: Every hop the detail page walks.
-_DETAIL_RELATIONS = _ROW_RELATIONS + ("evidence", "captured_by", "reviewed_by", "alert")
+#: Every hop the detail page walks, on top of the row set.
+_DETAIL_RELATIONS = _ROW_RELATIONS + ("evidence", "captured_by", "alert")
 
 
 # -- shared helpers ------------------------------------------------------------------------------
