@@ -173,11 +173,18 @@ class FraudScanForm(forms.Form):
         cleaned = super().clean()
         start, end = cleaned.get("start"), cleaned.get("end")
 
-        # L35b — the prerequisite gets its OWN branch and returns. An elif chain whose bounds are
-        # all conditional falls through to "valid" when a bound is missing, which here would mean
-        # running an unbounded scan because one date failed to parse. The field-level required
-        # errors have already fired, so there is nothing more to say.
+        # L35b — the prerequisite gets its OWN REJECTION branch, not a silent fall-through. An
+        # elif chain whose bounds are all conditional reports "valid" when a bound is missing,
+        # which here would mean running an UNBOUNDED scan because one date failed to parse. Both
+        # fields are required=True, so field-level validation has normally already rejected it;
+        # the belt to that braces is the explicit error below, which guarantees this form can
+        # never come back valid without a usable window no matter how the fields are subclassed
+        # or overridden later.
         if not isinstance(start, date) or not isinstance(end, date):
+            if not self.errors:
+                self.add_error(None, ValidationError(
+                    "Enter both ends of the window. A scan with no bounds is not a narrower "
+                    "scan — it is every record in the workspace."))
             return cleaned
 
         if end <= start:
