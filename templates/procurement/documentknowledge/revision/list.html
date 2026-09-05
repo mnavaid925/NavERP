@@ -110,7 +110,7 @@
               <td class="fw-600">
                 <a href="{% url 'procurement:pdocrevision_detail' r.pk %}">r{{ r.revision_no }}</a>
                 <div>
-                  {% if r.is_current %}<span class="badge badge-green">Current</span>
+                  {% if r.is_current and r.is_approved %}<span class="badge badge-green">Current</span>
                   {% elif r.is_approved %}<span class="badge badge-amber">Superseded</span>
                   {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
                 </div>
@@ -127,12 +127,12 @@
               <td>{% if r.change_note %}{{ r.change_note }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>
                 {{ r.created_at|date:"M d, Y H:i" }}
-                {% if r.uploaded_by %}<div class="text-muted">{{ r.uploaded_by.get_full_name }}</div>{% endif %}
+                {% if r.uploaded_by %}<div class="text-muted">{{ r.uploaded_by.get_full_name|default:r.uploaded_by.username }}</div>{% endif %}
               </td>
               <td>
                 {% if r.is_approved %}
                   <span class="text-ok">Approved {{ r.approved_at|date:"M d, Y" }}</span>
-                  {% if r.approved_by %}<div class="text-muted">{{ r.approved_by.get_full_name }}</div>{% endif %}
+                  {% if r.approved_by %}<div class="text-muted">{{ r.approved_by.get_full_name|default:r.approved_by.username }}</div>{% endif %}
                 {% else %}
                   <span class="text-muted">Not approved</span>
                 {% endif %}
@@ -143,9 +143,11 @@
                   {% comment %}
                     Approve is tenant-admin gated in the view (PermissionDenied → 403), so the
                     button is hidden rather than offered and refused. Delete is refused on
-                    anything approved or current, so it is offered on neither. Both conditions
-                    are re-checked in the view — the page not offering an action is UX, not the
-                    control.
+                    anything approved or current, so BOTH conditions are tested here - the
+                    view checks is_approved AND that the document does not point at this
+                    revision, and a register that tested only the first would offer a trash icon
+                    the view rejects. Both are re-checked in the view; the page not offering an
+                    action is UX, not the control.
                   {% endcomment %}
                   {% if not r.is_approved %}
                     {% if request.user.is_superuser or request.user.is_tenant_admin %}
@@ -153,9 +155,11 @@
                         {% csrf_token %}<button class="btn-icon" type="submit" title="Approve" aria-label="Approve"><i data-lucide="check"></i></button>
                       </form>
                     {% endif %}
-                    <form method="post" action="{% url 'procurement:pdocrevision_delete' r.pk %}" onsubmit="return confirm('Delete r{{ r.revision_no }} of {{ r.document.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
-                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                    </form>
+                    {% if not r.is_current %}
+                      <form method="post" action="{% url 'procurement:pdocrevision_delete' r.pk %}" onsubmit="return confirm('Delete r{{ r.revision_no }} of {{ r.document.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
