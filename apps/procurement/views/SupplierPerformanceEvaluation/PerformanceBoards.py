@@ -80,6 +80,43 @@ QUADRANT_CHOICES = (
     ("underperforming", "Underperforming"),
 )
 
+#: The label, colour and one-line meaning of each segment, in ONE place. ``quadrant_choices`` was
+#: passed to the template and never iterated, while the four labels were hard-coded twice — once
+#: in the row badge chain and once in the legend — so a renamed segment had to be found in three
+#: files. The board now reads its badges and its legend from this tuple, and
+#: :func:`_with_quadrant` stamps the label and class onto each row.
+#:
+#: L33: theme.css ships COLOUR-NAMED badge classes only. Every ``css`` below names a colour.
+QUADRANT_SEGMENTS = (
+    {"value": "strategic", "label": "Strategic", "css": "badge-green",
+     "note": "scores 70+, low risk — keep and grow."},
+    {"value": "hidden", "label": "Hidden high performer", "css": "badge-info",
+     "note": "scores 70+, higher risk — performing well on borrowed time."},
+    {"value": "development", "label": "Development", "css": "badge-amber",
+     "note": "scores under 70, low risk — worth the coaching."},
+    {"value": "underperforming", "label": "Underperforming", "css": "badge-red",
+     "note": "scores under 70, higher risk — the improvement-plan conversation."},
+)
+
+#: Value -> segment, so a row lookup costs nothing.
+_QUADRANT_BY_VALUE = {segment["value"]: segment for segment in QUADRANT_SEGMENTS}
+
+
+def _with_quadrant(rows):
+    """Stamp ``quadrant_label`` and ``quadrant_css`` onto each benchmark row.
+
+    A pure in-memory pass over at most ``ROW_CAP`` dicts that are already built — no query, and
+    it keeps the template from carrying a four-branch chain that has to agree with a legend
+    twelve lines further down. An unplaced row (no composite or no risk assessment) gets no
+    segment and the template says so.
+    """
+    for row in rows:
+        segment = _QUADRANT_BY_VALUE.get(row.get("quadrant"))
+        row["quadrant_label"] = segment["label"] if segment else ""
+        row["quadrant_css"] = segment["css"] if segment else ""
+    return rows
+
+
 #: Printed on the perception-gap board. ONE constant, so the page and its help text cannot
 #: describe the scale two different ways.
 GAP_NOTE = (
@@ -234,6 +271,7 @@ def supplier_benchmark_board(request):
     if tenant is not None and selected_period is not None:
         rows, cohort, truncated = performance.benchmark_rows(
             tenant, selected_period, tier=tier or None, category=category or None)
+        _with_quadrant(rows)
 
     return render(request, TEMPLATE_BENCHMARK, {
         "rows": rows,
@@ -244,7 +282,10 @@ def supplier_benchmark_board(request):
         "category_choices": categories,
         "selected_tier": tier,
         "selected_category": category,
-        "quadrant_choices": QUADRANT_CHOICES,
+        # The segments the board actually renders - label, colour and meaning together, so the
+        # row badges and the legend below them cannot drift apart. QUADRANT_CHOICES stays as the
+        # plain (value, label) pairs for anything that wants a choices-shaped tuple.
+        "quadrant_choices": QUADRANT_SEGMENTS,
         "row_cap": performance.ROW_CAP,
         "truncated": truncated,
         "benchmark_note": performance.BENCHMARK_NOTE,
