@@ -55,6 +55,7 @@ from apps.procurement.forms.SupplierPerformanceEvaluation.SupplierFeedback impor
 from apps.procurement.models.SupplierPerformanceEvaluation.SupplierFeedback import (
     FUNCTION_CHOICES, RATING_CHOICES, RESPONDENT_KIND_CHOICES, STATUS_CHOICES, SupplierFeedback)
 from apps.procurement.models.SupplierPerformanceEvaluation.SupplierKpis import SupplierKpi
+from apps.procurement.performance import ROW_CAP
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 TEMPLATE_LIST = "procurement/performance/feedback/list.html"
@@ -114,16 +115,31 @@ def _supplier_parties(request):
 
 
 def _survey_kpis(request):
-    """Only SURVEY KPIs — the only kind a response can be attached to (the model refuses others)."""
+    """Only SURVEY KPIs — the only kind a response can be attached to (the model refuses others).
+
+    **Register picker only.** Capped at ``ROW_CAP`` and narrowed to the values the ``<option>``
+    prints, because it was pulling ``description`` and ``notes`` — both TextFields — for every
+    row of a dropdown that renders a code and a name. The form's own ``kpi`` queryset is
+    deliberately NOT built from this: a ``ModelChoiceField.queryset`` cannot be sliced (its
+    ``to_python()`` calls ``.get()`` on it, which is the ``_reject_foreign`` tenant boundary).
+    """
     return (SupplierKpi.objects.filter(tenant=request.tenant, source="survey")
-            .order_by("display_order", "code"))
+            .only("id", "code", "name", "display_order")
+            .order_by("display_order", "code")[:ROW_CAP])
 
 
 def _scorecards(request):
-    """The workspace's period documents, newest period first. Cross-app read, imported locally."""
+    """The workspace's period documents, newest period first. Cross-app read, imported locally.
+
+    **Register picker only**, capped and narrowed for the same reason as :func:`_survey_kpis`:
+    uncapped it streamed all 18 scorecard columns plus the whole party row per ``<option>``,
+    measured at +197 KB of markup in one ``<select>`` on the sibling register at 2,007 rows.
+    """
     from apps.scm.models import SupplierScorecard
     return (SupplierScorecard.objects.filter(tenant=request.tenant)
-            .select_related("party").order_by("-period_end", "-id"))
+            .select_related("party")
+            .only("id", "number", "period_end", "party__name")
+            .order_by("-period_end", "-id")[:ROW_CAP])
 
 
 def _feedback_stats(tenant):
