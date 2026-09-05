@@ -623,21 +623,30 @@ def auditseal_verify(request, pk):
     is the three stamps), and a tamper check that only an administrator can run is a check nobody
     runs. The result is a message naming the first offending entry when it fails.
 
-    **A FAILURE writes an audit entry; a pass does not.** A detected tamper is exactly the event
-    that must survive in the append-only trail, where the next seal will cover it. A pass is
-    already recorded in the seal's own stamps, and writing one row per button press would inflate
-    the very table being sealed.
+    **A NEWLY-DETECTED failure writes an audit entry; a pass, and a re-press on an
+    already-failing seal, do not.** A detected tamper is exactly the event that must survive in
+    the append-only trail, where the next seal will cover it — but only its DISCOVERY is news.
+    Writing a row per press would let somebody who tampered and was caught bury that first
+    ``verification_failed`` entry under thousands of identical ones, inside the very table being
+    sealed, and inflate every future seal's hashing cost while doing it. A pass is already
+    recorded in the seal's own stamps.
+
+    The transition is read from the stamp BEFORE re-verifying, so a seal that breaks, is
+    repaired, and breaks again is reported all three times.
     """
     guard = _need_tenant(request, "verify an audit seal")
     if guard is not None:
         return guard
 
     seal = get_object_or_404(AuditSeal, pk=pk, tenant=request.tenant)
+    was_ok = seal.last_verify_ok
     ok, detail = seal.verify()
     if ok:
         messages.success(request, detail)
     else:
         messages.error(request, detail)
-        write_audit_log(request.user, seal, "update",
-                        changes={"verification_failed": detail}, tenant=request.tenant)
+        if was_ok is not False:
+            # None (never verified) or True (was intact) — this press is the DISCOVERY.
+            write_audit_log(request.user, seal, "update",
+                            changes={"verification_failed": detail}, tenant=request.tenant)
     return redirect("procurement:auditseal_detail", pk=seal.pk)
