@@ -169,7 +169,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Recently proposed</h2>
-      <span class="text-muted">the last {{ recent_suggestions|length }} suggestion{{ recent_suggestions|length|pluralize }} this policy shaped</span>
+      <span class="text-muted">{% if recent_suggestions %}the last {{ recent_suggestions|length }} suggestion{{ recent_suggestions|length|pluralize }} this policy shaped{% else %}nothing shaped by this policy yet{% endif %}</span>
     </div>
     <div class="card-body">
       {% if recent_suggestions %}
