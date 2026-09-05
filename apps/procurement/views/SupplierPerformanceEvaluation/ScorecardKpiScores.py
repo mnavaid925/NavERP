@@ -448,8 +448,16 @@ def supplierkpiscore_detail(request, pk):
     ``breakdown`` is a JSONField the resolvers fill in; it is flattened to sorted ``{key, value}``
     pairs here so the template never has to render a raw dict — and every value is ``str()``-ified
     so a nested list prints as text rather than as a Django ``dict_items`` repr.
+
+    The pre-fetch is a CHEAP PROBE — ``.only(…)`` on the four columns it actually reads, with no
+    joins — because ``crud_detail`` fetches the row again a few lines later with the full
+    ``select_related``. Using ``_score_qs`` here paid for that three-table join TWICE (2 of the
+    page's 9 queries were the same row). Both sibling detail views already probe narrow for this
+    reason; this one had forked from them.
     """
-    obj = get_object_or_404(_score_qs(request), pk=pk)
+    obj = get_object_or_404(
+        SupplierKpiScore.objects.only("pk", "tenant_id", "source_at_time", "breakdown"),
+        pk=pk, tenant=request.tenant)
     breakdown = obj.breakdown if isinstance(obj.breakdown, dict) else {}
     return crud_detail(
         request, model=SupplierKpiScore, pk=pk, template=TEMPLATE_DETAIL,
