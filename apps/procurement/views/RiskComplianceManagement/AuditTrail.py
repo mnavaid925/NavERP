@@ -117,6 +117,15 @@ CHECK_STATE_CSS = {
     "note": "badge-slate",
 }
 
+#: The word on that badge. The raw state token is for branching, never for reading - "note" on a
+#: badge tells somebody nothing, and "Passes"/"Fails" is what they are actually looking for.
+CHECK_STATE_LABEL = {
+    "ok": "Passes",
+    "broken": "Fails",
+    "unknown": "Unknown",
+    "note": "Note",
+}
+
 #: Badge class per covered-entry state.
 ENTRY_STATE_CSS = {
     "intact": "badge-green",
@@ -475,10 +484,11 @@ def _verification_checks(seal, entries):
 
     ROW-DICT CONTRACT (L41 1) - every entry carries EXACTLY::
 
-        {"check":     str,   # the name of the check
-         "state":     str,   # "ok" | "broken" | "unknown" | "note"
-         "state_css": str,   # a real theme.css badge class (L33)
-         "detail":    str}   # one sentence saying what was and was not established
+        {"check":       str,   # the name of the check
+         "state":       str,   # "ok" | "broken" | "unknown" | "note" - for branching
+         "state_css":   str,   # a real theme.css badge class (L33)
+         "state_label": str,   # the word that goes ON the badge
+         "detail":      str}   # one sentence saying what was and was not established
     """
     live_count = AuditLog.objects.filter(
         tenant_id=seal.tenant_id,
@@ -529,7 +539,8 @@ def _verification_checks(seal, entries):
          "makes a change detectable, never impossible - the proof is re-running the verification, "
          "not the badge above it."),
     ]
-    return [{"check": name, "state": state, "state_css": CHECK_STATE_CSS[state], "detail": detail}
+    return [{"check": name, "state": state, "state_css": CHECK_STATE_CSS[state],
+             "state_label": CHECK_STATE_LABEL[state], "detail": detail}
             for name, state, detail in checks]
 
 
