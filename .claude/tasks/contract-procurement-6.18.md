@@ -125,7 +125,16 @@ before the consumer ships a table nobody reads).
   6.17's**), `apps/core/navigation.py` (**only** the `"6.18"` key), `README.md`.
 - `apps/procurement/tests/test_budgetcost_*.py` (4 untracked files) are another session's.
   Never `git add`, never edit.
-- **Commits carry NO `Co-Authored-By` trailer** (user preference, confirmed this session).
+- **Commit attribution: follow the CURRENT session instruction — do not read it off this line.**
+  An earlier version of this contract froze "no `Co-Authored-By` trailer" here as a settled fact.
+  That was a mistake in kind, not just in content: **a mutable user preference does not belong in
+  a frozen contract.** The preference was later reversed (`MEMORY.md` now says to match the
+  session's attribution instruction, and the repo's other three sessions use the trailer
+  throughout), so this line went stale and then actively misled an agent into omitting it —
+  a third different behaviour. 6.18's history is consequently mixed: roughly the first 37 commits
+  carry no trailer, most later ones do, and two Phase-6 commits do not. **Not worth rewriting
+  history over** with three sessions building on this branch. Freeze interfaces here; read
+  preferences from the session.
   One `git add` + one `git commit` per file, PowerShell-safe with `;`.
 - **Name checks must run against peers' frozen contracts, not just `apps/`.** In a shared tree,
   absence from disk is NOT absence from a peer's contract: 6.17 and 6.19 both grepped
