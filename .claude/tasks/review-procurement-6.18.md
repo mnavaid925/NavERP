@@ -576,60 +576,89 @@ All six passes complete. Deduped, sorted, IDs assigned. **Hand this section to `
 
 ## Critical — 3
 
-| ID | Source | File | Issue |
-|---|---|---|---|
-| **C1** | R1-C1 | `views/…/Runs.py:234` | `replenishmentrun_delete` has no status guard: a POST deletes a **released** run and CASCADE-destroys every suggestion, orphaning the requisitions it raised. Both templates claim the view refuses this. Mirror `materialissue_delete`. |
-| **C2** | R1-C2 | `views/…/CountAccuracy.py:180-182` | Half-filled date range → `ValueError: Cannot use None as a query value` → **500**. Reachable from the filter bar. |
-| **C3** | R3-C1 | `templates/…/count_accuracy.html:91,94` | Window dropdown **permanently inert** — the resolved dates are rendered back into the inputs, so the `both are None` guard never fires. **Fix with C2: the only escape from C3 is clearing a box, which is C2.** Also fix the two `aria-label`s (say "Counted", filter is `scheduled_date`). |
+| ID | Source | File | Issue | Status |
+|---|---|---|---|---|
+| **C1** | R1-C1 | `views/…/Runs.py:234` | `replenishmentrun_delete` has no status guard: a POST deletes a **released** run and CASCADE-destroys every suggestion, orphaning the requisitions it raised. Both templates claim the view refuses this. Mirror `materialissue_delete`. | **[x] fixed** — `fix(procurement): 6.18 C1 - guard replenishmentrun_delete on can_generate` |
+| **C2** | R1-C2 | `views/…/CountAccuracy.py:180-182` | Half-filled date range → `ValueError: Cannot use None as a query value` → **500**. Reachable from the filter bar. | **[x] fixed** — `fix(procurement): 6.18 C2 - resolve a half-filled count-accuracy window instead of 500ing` |
+| **C3** | R3-C1 | `templates/…/count_accuracy.html:91,94` | Window dropdown **permanently inert** — the resolved dates are rendered back into the inputs, so the `both are None` guard never fires. **Fix with C2: the only escape from C3 is clearing a box, which is C2.** Also fix the two `aria-label`s (say "Counted", filter is `scheduled_date`). | **[x] fixed** — `fix(procurement): 6.18 C3 - pre-fill the count-accuracy date boxes from raw GET, fix the aria-labels` |
 
 ## Important — 13
 
-| ID | Source | File | Issue |
+| ID | Source | File | Issue | Status |
+|---|---|---|---|---|
+| **I1** | S1 | `views/…/StockPosition.py:220-222` | `?item=0` / `?location=0` / `?vendor=0` silently empties the board. Siblings resolve the pk to an object first. | **[x] fixed** — `fix(procurement): 6.18 I1 - resolve the stock-position pk filters to real rows before filtering` |
+| **I2** | R2-I1 | `views/…/StockPosition.py:276-283` | Re-derives the run's trigger but **drops both policy toggles**, while the comment claims "verbatim". Board and run disagree once either flag is off. | **[x] fixed** — `fix(procurement): 6.18 I2 - apply the policy netting toggles to the board's below-point trigger` |
+| **I3** | R2-I2 | `models/…/Runs.py:326` | The **only model→views import in the repo**. Move `_effective_numbers` down as `ReplenishmentPolicy.effective_numbers()`. | **[x] fixed** — 3 commits: model method, then generate()'s upward import deleted, then the detail call site |
+| **I4** | R4-I1 | `views/…/Policies.py:255-273` | Policy CRUD is login-only; the config steers vendor/GL/budget/quantity onto requisitions the admin-gated Release raises. Its own docstring names a precedent that gates all three. | **[x] fixed** — `security(procurement): 6.18 I4+I5 …` + the two policy templates stop offering writes a member cannot perform |
+| **I5** | R4-I2 | `views/…/Policies.py:268-272` | Policy delete has no reference guard; `SET_NULL` erases the provenance of **released** suggestions, unaudited. | **[x] fixed** — same view commit; delete refused when any suggestion carries a requisition, steered to deactivation |
+| **I6** | R5-I1 | `models/…/Runs.py:364`, `views/…/StockPosition.py:232` | `SalesOrderAllocation` reached via 2-table join; its `(tenant, status)` index unreachable. Two sites (ours only). | **[x] fixed** — both 6.18 sites now `filter(tenant…)` directly (X3 left alone) |
+| **I7** | R5-I2 | `views/…/StockPosition.py:224-267,339` | `ROW_CAP` applied after building every row; `item_map` loads a `TextField` never rendered. | **[x] fixed** — `perf(procurement): 6.18 I7 - build the board's presentation keys only for the rows that survive ROW_CAP` |
+| **I8** | R5-I3 | `models/…/Runs.py:342-349` | Every active rule materialised **while holding the row lock** — the docstring names this scenario and the cap does not prevent it. `.only()` it. | **[x] fixed** — `perf(procurement): 6.18 I8+M13 - narrow generate()'s rules queryset to the nine columns it reads` |
+| **I9** | R3-I1 | `templates/…/replenishmentpolicy/detail.html:56` | Inactive-rule caveat is backwards — runs filter `is_active=True`, so those figures are what a run would **not** read. | **[x] fixed** — `docs(procurement): 6.18 I9 - the inactive-rule caveat said the opposite of what a run does` |
+| **I10** | R3-I2 | `views/…/MaterialIssues.py:164` | Shortfall flagged **per line** while `post()` sums **per item**; two lines of one item show no warning then Post refuses. Fix view-side so the copy stands. | **[x] fixed** — view aggregates demand per item as `post()` does; template explains it |
+| **I11** | R3-I3 | `templates/…/stock_position.html:197` | "can never disagree" — same drift as I2, from the template. | **[x] fixed** — `docs(procurement): 6.18 I11 - drop the 'can never disagree' guarantee the code does not make` |
+| **I12** | R3-I4 | `templates/…/replenishmentrun/detail.html:219` | Decide form posts no `page`; a buyer on page 8 is bounced to page 1 on **every** save. | **[x] fixed** — hidden `page` on every decide form + `_decide_redirect()` echoes it on all four exits |
+| **I13** | R1-I1 | `seed_procurement.py:290` | `--flush` misses all five 6.18 tables, so demo data can never be regenerated. This file has been patched for exactly this twice before. | **[x] fixed** — `fix(procurement): 6.18 I13 - flush the 6.18 rows so --flush can actually re-seed them` |
+
+## Minor — 16
+
+| ID | Source | Issue | Status |
 |---|---|---|---|
-| **I1** | S1 | `views/…/StockPosition.py:220-222` | `?item=0` / `?location=0` / `?vendor=0` silently empties the board. Siblings resolve the pk to an object first. |
-| **I2** | R2-I1 | `views/…/StockPosition.py:276-283` | Re-derives the run's trigger but **drops both policy toggles**, while the comment claims "verbatim". Board and run disagree once either flag is off. |
-| **I3** | R2-I2 | `models/…/Runs.py:326` | The **only model→views import in the repo**. Move `_effective_numbers` down as `ReplenishmentPolicy.effective_numbers()`. |
-| **I4** | R4-I1 | `views/…/Policies.py:255-273` | Policy CRUD is login-only; the config steers vendor/GL/budget/quantity onto requisitions the admin-gated Release raises. Its own docstring names a precedent that gates all three. |
-| **I5** | R4-I2 | `views/…/Policies.py:268-272` | Policy delete has no reference guard; `SET_NULL` erases the provenance of **released** suggestions, unaudited. |
-| **I6** | R5-I1 | `models/…/Runs.py:364`, `views/…/StockPosition.py:232` | `SalesOrderAllocation` reached via 2-table join; its `(tenant, status)` index unreachable. Two sites (ours only). |
-| **I7** | R5-I2 | `views/…/StockPosition.py:224-267,339` | `ROW_CAP` applied after building every row; `item_map` loads a `TextField` never rendered. |
-| **I8** | R5-I3 | `models/…/Runs.py:342-349` | Every active rule materialised **while holding the row lock** — the docstring names this scenario and the cap does not prevent it. `.only()` it. |
-| **I9** | R3-I1 | `templates/…/replenishmentpolicy/detail.html:56` | Inactive-rule caveat is backwards — runs filter `is_active=True`, so those figures are what a run would **not** read. |
-| **I10** | R3-I2 | `views/…/MaterialIssues.py:164` | Shortfall flagged **per line** while `post()` sums **per item**; two lines of one item show no warning then Post refuses. Fix view-side so the copy stands. |
-| **I11** | R3-I3 | `templates/…/stock_position.html:197` | "can never disagree" — same drift as I2, from the template. |
-| **I12** | R3-I4 | `templates/…/replenishmentrun/detail.html:219` | Decide form posts no `page`; a buyer on page 8 is bounced to page 1 on **every** save. |
-| **I13** | R1-I1 | `seed_procurement.py:290` | `--flush` misses all five 6.18 tables, so demo data can never be regenerated. This file has been patched for exactly this twice before. |
-
-## Minor — 12
-
-`M1` R1-M1 proposed-run scope edit leaves stale lines with no re-generate prompt ·
-`M2` R1-M2 `stock_position.html:111`/`:49` truncation copy inverted ·
-`M3` R1-M3 `CountAccuracy.py:317` program roll-up truncates without setting `truncated` ·
-`M4` R2-M1 board offers "Raise requisition" on transfer/manufacture rows the run refuses — **also
-fix contract § 5, which pins the key unconditionally** ·
-`M5` R3-M1 "ranking is intact" untrue of the location table ·
-`M6` R3-M2 "cancelled counts left out" unqualified but `tasks_total` counts them ·
-`M7` R3-M3 signed `value_impact()` vs unsigned `total_value` shown as contradictory figures ·
-`M8` R3-M4 "the last **0** suggestions" when empty ·
-`M9` R3-M5 `stock_position.html:175` icon-only control missing `aria-label` ·
-`M10` R3-M6 "one per vendor, all draft" is a state claim that goes stale ·
-`M11` R4-M1 `bulk_create` bypasses SCM's `unit_cost` `MaxValueValidator` ·
-`M12` R4-M2 admin-gated Post/Release buttons rendered for every member (guaranteed 403) ·
-`M13` R5-M1 two dead joins in `generate()`'s rules queryset ·
-`M14` R5-M2 location roll-up drags `scm_item` + two unrendered aggregates ·
-`M15` R5-M3 unbounded lot dropdown rebuilt every detail render ·
-`M16` R5-M4 vendor `<option>` list re-rendered inside all 25 row forms (~0.5 MB)
+| **M1** | R1-M1 | proposed-run scope edit leaves stale lines with no re-generate prompt | **[x] fixed** — `fix(procurement): 6.18 M1 - send a re-scoped PROPOSED run back to its detail page with a re-generate warning` |
+| **M2** | R1-M2 | `stock_position.html:111`/`:49` truncation copy inverted | **[x] fixed** — `docs(procurement): 6.18 M2+M9 - the truncation copy said the counters cover LESS than they do, and label the icon-only requisition button` |
+| **M3** | R1-M3 | `CountAccuracy.py:317` program roll-up truncates without setting `truncated` | **[x] fixed** — `perf(procurement): 6.18 M3+M14 - probe the programme roll-up for truncation and stop the location roll-up joining scm_item` |
+| **M4** | R2-M1 | board offers "Raise requisition" on transfer/manufacture rows the run refuses — **also fix contract § 5, which pins the key unconditionally** | **[x] fixed** — 3 commits: the view reads `shaping.raises_requisitions`, the template names the source method instead of an empty href, and contract § 5 now pins the key as conditional (+ `source_label`) |
+| **M5** | R3-M1 | "ranking is intact" untrue of the location table | **[x] fixed** — `docs(procurement): 6.18 M5+M6 - two window caveats that claimed more than the view does` |
+| **M6** | R3-M2 | "cancelled counts left out" unqualified but `tasks_total` counts them | **[x] fixed** — same commit; scoped to "left out of every accuracy figure, still in the counts-in-window tally" |
+| **M7** | R3-M3 | signed `value_impact()` vs unsigned `total_value` shown as contradictory figures | **[x] fixed** — `docs(procurement): 6.18 M7 - explain the signed adjustment value instead of leaving it contradicting the document value` |
+| **M8** | R3-M4 | "the last **0** suggestions" when empty | **[x] fixed** — `docs(procurement): 6.18 M8 - stop the Recently proposed card announcing 'the last 0 suggestions'` |
+| **M9** | R3-M5 | `stock_position.html:175` icon-only control missing `aria-label` | **[x] fixed** — same commit as M2; the label carries the row's SKU so 25 identical buttons are distinguishable |
+| **M10** | R3-M6 | "one per vendor, all draft" is a state claim that goes stale | **[x] fixed** — `docs(procurement): 6.18 M10 - 'all draft' is a state claim that goes stale; 'raised as drafts' stays true` |
+| **M11** | R4-M1 | `bulk_create` bypasses SCM's `unit_cost` `MaxValueValidator` | **[x] fixed** — `security(procurement): 6.18 M11 - clamp the minted adjustment cost at SCM's own unit_cost ceiling`; the ceiling is READ off SCM's field, not restated |
+| **M12** | R4-M2 | admin-gated Post/Release buttons rendered for every member (guaranteed 403) | **[x] fixed** — 2 commits (`can_post`, then `can_release`) + the contract; `_is_admin()` local copy per the app-wide idiom, decorator still the enforcement |
+| **M13** | R5-M1 | two dead joins in `generate()`'s rules queryset | **[x] fixed** — earlier in this run, folded into `perf(procurement): 6.18 I8+M13 - narrow generate()'s rules queryset to the nine columns it reads` |
+| **M14** | R5-M2 | location roll-up drags `scm_item` + two unrendered aggregates | **[x] fixed** — same commit as M3; `_LOCATION_ANNOTATIONS` is derived FROM `_ROLLUP_ANNOTATIONS` by key so the two cannot drift |
+| **M15** | R5-M3 | unbounded lot dropdown rebuilt every detail render | **[x] fixed** — `perf(procurement): 6.18 M15 - stop the lot dropdown offering lots no line could ever use, and stop it dragging scm_item`; narrowed to `item__is_active=True` (provably unselectable otherwise) + `.only()`, no capability lost |
+| **M16** | R5-M4 | vendor `<option>` list re-rendered inside all 25 row forms (~0.5 MB) | **[x] fixed** — 3 commits (view cap + template caveat + contract); capped at 200 by name **plus every vendor already on the page**, and it bounds only what is offered, never what may be submitted. See Notes — the ceiling is a judgement call worth revisiting. |
 
 ## OUT OF SCOPE — route, do not fix here — 3
 
-| ID | File | Owner |
-|---|---|---|
-| **X1** | `apps/scm/management/commands/seed_scm.py` (~469, ~545) | `PutawayTask.goods_receipt` NULL on 8/8 rows, so `receipt_bin_map`'s bins column is blank in every demo. **The 6.18 join is proven correct.** SCM's seeder. |
-| **X2** | `apps/procurement/views/BudgetCostManagement/BudgetMappings.py:85/91/98` | Same missing `@tenant_admin_required` as I4, on 6.15's config master. |
-| **X3** | `apps/inventory/views/InventoryTrackingControl/StockLevels.py:92` | Same index-bypassing join as I6. Module 5's file. |
+| ID | File | Owner | Status |
+|---|---|---|---|
+| **X1** | `apps/scm/management/commands/seed_scm.py` (~469, ~545) | `PutawayTask.goods_receipt` NULL on 8/8 rows, so `receipt_bin_map`'s bins column is blank in every demo. **The 6.18 join is proven correct.** SCM's seeder. | **[~] skipped — out of scope, routed** to whoever owns SCM seeding; file untouched |
+| **X2** | `apps/procurement/views/BudgetCostManagement/BudgetMappings.py:85/91/98` | Same missing `@tenant_admin_required` as I4, on 6.15's config master. | **[~] skipped — out of scope, routed** to 6.15; file untouched |
+| **X3** | `apps/inventory/views/InventoryTrackingControl/StockLevels.py:92` | Same index-bypassing join as I6. Module 5's file. | **[~] skipped — out of scope, routed** to Module 5; file untouched |
 
 **Rule for the fixer:** X1–X3 are other modules' or other sessions' files in a shared checkout.
 Mark each `[~] skipped — out of scope, routed` and do not touch them.
+
+---
+
+# NOTES FOR AN APP-WIDE PASS (raised by the fixer, not fixed here)
+
+1. **Unbounded FK dropdowns are the app-wide reference pattern, not a 6.18 defect (L18).** M15 and
+   M16 were fixed *in this sub-module* by narrowings that cost no capability (M15: lots of inactive
+   items can never validate against the `item` field's own active-only queryset) or that keep the
+   row's own selection (M16). But every form in this repo builds its FK choices as
+   `Model.objects.filter(tenant=…)` with no ceiling — `MaterialIssueLineForm.item` is *every* active
+   item, `gl_account` is *every* active account, and the same shape repeats across ~12 modules. The
+   structural fix is a searchable/typeahead widget, which is an app-wide decision and must not be
+   forked into one sub-module. **Recommend an app-wide pass.**
+2. **M16's cap of 200 is a judgement call.** A workspace with more than 200 supplier/vendor parties
+   cannot pick the 201st inline; the page says so and names two routes around it (the policy's
+   preferred vendor, or the requisition after release). The zero-loss fix — render the option list
+   once and clone it per row — needs JS/HTMX and a new endpoint, which is more than a Minor.
+   Fold this into the same app-wide typeahead pass.
+3. **`makemigrations --check` is NOT clean in this checkout, and it is not 6.18's.** It reports
+   `procurement/0030 … prc_sks_tnt_cat_name_idx on supplierkpiscore` — the index added by
+   `c468781e perf(procurement): C3 - index SupplierKpiScore on its Meta.ordering`, i.e. the **6.16**
+   session's fixer, whose model file is on this session's do-not-touch list. **No migration was
+   generated here.** The 6.16 session must claim `0030` (or the next free number).
+4. **One stray `AuditLog` row (id 6608) in the dev database.** Verifying M12 posted MIS-00002 as
+   `admin_acme` outside a transaction. The document, its `posted_at`/`issued_by` stamps and the
+   minted `ADJ-00004` (draft, no stock moves) were all restored/removed immediately, but the audit
+   log is append-only by design so the row was left in place. Demo data only; no schema or code
+   impact.
 
 ---
 
