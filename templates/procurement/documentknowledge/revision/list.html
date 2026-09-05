@@ -120,7 +120,7 @@
                 <div class="text-muted">{{ r.document.title }}</div>
               </td>
               <td>
-                {% if r.file %}<a href="{{ r.file.url }}"><i data-lucide="download"></i> {{ r.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if r.file %}<a href="{% url 'procurement:pdocrevision_download' r.pk %}"><i data-lucide="download"></i> {{ r.original_filename|default:"Download" }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
                 <div class="text-muted">{{ r.file_size|filesizeformat }}{% if r.sha256 %} · checksum {{ r.sha256|slice:":16" }}…{% endif %}</div>
                 {% if r.extraction_note %}<div class="text-warn">{{ r.extraction_note }}</div>{% endif %}
               </td>
