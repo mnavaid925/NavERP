@@ -80,6 +80,15 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Adjudicate</h2><span class="badge badge-red">Open</span></div>
       <div class="card-body">
+        {% comment %}
+          `allowed_dispositions` is _TERMINAL_DISPOSITION_CHOICES when obj.is_open and [] once
+          adjudicated, so inside this {% templatetag openblock %} if obj.is_open
+          {% templatetag closeblock %} it is always non-empty. It is still tested, because it is
+          the picker's OPTIONS and a card that offers a verb with nothing to choose is worse than
+          one that says why -- but the test now carries an {% templatetag openblock %} else
+          {% templatetag closeblock %}, so a future change to that invariant renders a sentence
+          instead of an empty card body.
+        {% endcomment %}
         {% if allowed_dispositions %}
           {% if is_admin %}
             <p class="text-muted">Does the geography line up? Is the identity actually the same entity, or a namesake? The answer, and the reasoning behind it, is the record — so the reasoning is required for every disposition, a false positive included.</p>
@@ -112,6 +121,8 @@
           {% else %}
             <p class="text-muted">This hit is still open. Adjudicating it is restricted to workspace administrators — ask one to record the disposition and the reasoning behind it.</p>
           {% endif %}
+        {% else %}
+          <p class="text-muted">This hit is still open, but no disposition is available to record against it right now.</p>
         {% endif %}
       </div>
     </div>
