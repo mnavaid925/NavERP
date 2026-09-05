@@ -6,7 +6,7 @@
     (apps/procurement/views/DocumentKnowledgeManagement/Policies.py, hand-rolled render).
 
     Context contract, and NOTHING else exists here:
-      obj, advisory_note, supersedes, superseded_by_rows, is_review_due.
+      obj, advisory_note, supersedes, superseded_by_rows.
 
     `supersedes` is obj.previous_version (ONE hop, already fetched by the view's
     select_related) and `superseded_by_rows` is a bounded reverse slice (ONE hop the other
@@ -63,7 +63,7 @@
       <span class="badge-group">
         <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
         <span class="badge badge-muted">v{{ obj.version_number }}</span>
-        {% if is_review_due %}<span class="badge badge-red">Review overdue</span>{% endif %}
+        {% if obj.is_review_due %}<span class="badge badge-amber">Review due</span>{% endif %}
         {% if obj.requires_acknowledgment %}<span class="badge badge-info">Acknowledgment flagged</span>{% endif %}
       </span>
     </div>
@@ -73,13 +73,13 @@
         <div class="detail-item"><dt>Applies to</dt>
           <dd>{% if obj.applies_to %}{{ obj.applies_to.name }} <span class="text-muted">({{ obj.applies_to.get_kind_display }})</span>{% else %}<span class="text-muted">The whole workspace</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Owner</dt>
-          <dd>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Effective from</dt>
           <dd>{% if obj.effective_from %}{{ obj.effective_from|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Published</dt>
           <dd>{% if obj.published_at %}{{ obj.published_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not published yet</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Next review</dt>
-          <dd>{% if obj.next_review_on %}{{ obj.next_review_on|date:"M d, Y" }}{% if is_review_due %} <span class="badge badge-red">overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <dd>{% if obj.next_review_on %}{{ obj.next_review_on|date:"M d, Y" }}{% if obj.is_review_due %} <span class="badge badge-amber">due</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Acknowledgment</dt>
           {% comment %}
             The flag and nothing more. 6.17 Policy Management & Acknowledgment owns assignment
@@ -88,11 +88,13 @@
           {% endcomment %}
           <dd>{% if obj.requires_acknowledgment %}<span class="badge badge-info">Flagged for sign-off</span> <span class="text-muted">collected by Policy Management &amp; Acknowledgment (6.17) when it ships — no sign-offs are recorded here</span>{% else %}<span class="text-muted">Not flagged</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Created</dt>
-          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name }}</span>{% endif %}</dd></div>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.created_by %} <span class="text-muted">by {{ obj.created_by.get_full_name|default:obj.created_by.username }}</span>{% endif %}</dd></div>
       </dl>
 
       {% if obj.summary %}
-        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Summary</dt><dd>{{ obj.summary|linebreaksbr }}</dd></div>
+        <dl class="detail-grid" style="margin-top:.75rem;">
+          <div class="detail-item"><dt class="text-muted">Summary</dt><dd>{{ obj.summary|linebreaksbr }}</dd></div>
+        </dl>
       {% endif %}
     </div>
   </div>
@@ -179,9 +181,13 @@
         {% endif %}
 
         {% if obj.status != 'archived' %}
-          <form method="post" action="{% url 'procurement:ppolicy_archive' obj.pk %}" onsubmit="return confirm('Archive {{ obj.number }}? Nothing is deleted — it keeps its text and its place in the version history.');">
-            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
-          </form>
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'procurement:ppolicy_archive' obj.pk %}" onsubmit="return confirm('Archive {{ obj.number }}? Nothing is deleted — it keeps its text and its place in the version history.');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+            </form>
+          {% else %}
+            <span class="text-muted">Only a workspace administrator can archive a policy.</span>
+          {% endif %}
         {% endif %}
 
         <a href="{% url 'procurement:ppolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
@@ -195,10 +201,14 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
     <div class="card-body">
-      <p class="text-muted">Deleting removes this policy row. Nothing cascades: a later version that points back at this one keeps its own text and stays in force, it simply loses the link, and a linked document is untouched — the file stays in the repository with its revisions. If the rule is merely out of use, archive it instead.</p>
-      <form method="post" action="{% url 'procurement:ppolicy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any later version that points back at it keeps its own text and stays in force, but the link to this one is lost.');">
-        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete policy</button>
-      </form>
+      <p class="text-muted">Deleting removes this policy row. A later version that points back at this one keeps its own text and stays in force, it simply loses the link, and a linked document is untouched — the file stays in the repository with its revisions. What DOES go with it is the acknowledgement record of this policy: every sign-off and every exemption recorded against it by Policy Management &amp; Acknowledgment (6.17) is deleted too, which is why deletion is refused while any exist. If the rule is merely out of use, archive it instead.</p>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'procurement:ppolicy_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any later version that points back at it keeps its own text and stays in force, but the link to this one is lost, and any acknowledgement records against it are deleted with it.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete policy</button>
+        </form>
+      {% else %}
+        <p class="text-muted">Only a workspace administrator can delete a policy.</p>
+      {% endif %}
     </div>
   </div>
 {% endblock %}
