@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Improvement Plan{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — one improvement plan (PIP)
+    (apps/procurement/views/SupplierPerformanceEvaluation/SupplierImprovementPlans.py
+     :improvementplan_detail — crud_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, outcome_choices, can_activate, can_monitor, can_acknowledge, can_close, can_cancel,
+      is_overdue.
+
+    The five can_* flags are passed SEPARATELY rather than as one "is open" flag because they
+    gate five verbs with three different rules: can_activate is draft-only, can_monitor is
+    active-only, can_acknowledge keys on a STAMP (acknowledged_at is None) rather than on a
+    status, can_close excludes draft — there is nothing to verify on a plan that never started —
+    and can_cancel covers all three open states. They are the UX half of the rule: every verb
+    re-checks its own gate, so a crafted POST against a closed plan is refused there too.
+
+    THE CLOSE FORM'S <select> IS DRIVEN BY outcome_choices, which is the model's own
+    OUTCOME_CHOICES. The view validates the posted value against exactly that list before writing
+    anything, so inventing an option here would be inventing one the verb then rejects.
+
+    Nullable-field discipline (L10): kpi, scorecard, owner, escalated_suspension,
+    extended_close_date, next_review_date, actual_close_date, acknowledged_at/_by,
+    verified_at/_by and every optional narrative field are nullable or blank, and every read of
+    them sits inside an explicit branch. "Due" is always obj.effective_close_date — the ONE place
+    a granted extension is honoured.
+
+    Badge classes are COLOUR-NAMED only (L33) and every one below comes from the model's own
+    committed mapping — obj.severity_css / obj.status_css / obj.outcome_css — so this page cannot
+    disagree with the register about what "critical" looks like.
+
+    Confirm dialogs sit on the BUTTON as onclick="return confirm(...)", matching the rest of
+    6.16. Only the system-assigned {{ obj.number }} reaches a handler; titles and supplier names
+    are user-authored and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.title }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:improvementplan_list' %}">Improvement plans</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.supplier.name }} · {{ obj.start_date|date:"M d, Y" }} &ndash; {{ obj.effective_close_date|date:"M d, Y" }} · {{ obj.get_severity_display|lower }} severity.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'procurement:improvementplan_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All plans</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The plan</h2>
+      <div>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+        {% if obj.outcome %}<span class="badge {{ obj.outcome_css }}">{{ obj.get_outcome_display }}</span>{% endif %}
+        {% if is_overdue %}<span class="badge badge-red">Past due</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd><a href="{% url 'core:party_detail' obj.supplier_id %}">{{ obj.supplier.name }}</a></dd></div>
+        <div class="detail-item"><dt>Triggering period</dt>
+          <dd>
+            {% if obj.scorecard %}<a href="{% url 'procurement:supplierevaluation_detail' obj.scorecard_id %}">{{ obj.scorecard.number }}</a>
+              <div class="text-muted">{{ obj.scorecard.party.name }} · the evidence this plan was opened off</div>
+            {% else %}<span class="text-muted">No triggering period</span>
+              <div class="text-muted">opened outside a scorecard cycle</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>KPI cited</dt>
+          <dd>
+            {% if obj.kpi %}<a href="{% url 'procurement:supplierkpi_detail' obj.kpi_id %}">{{ obj.kpi.code }}</a> {{ obj.kpi.name }}
+              <div class="text-muted">the one metric that drove this plan</div>
+            {% else %}<span class="text-muted">Not one KPI</span>
+              <div class="text-muted">a pattern rather than a single failing metric</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{{ obj.start_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Target close</dt>
+          <dd>{{ obj.target_close_date|date:"M d, Y" }}
+            <div class="text-muted">what was originally agreed</div>
+          </dd></div>
+        <div class="detail-item"><dt>Due</dt>
+          <dd>
+            <span class="fw-600">{{ obj.effective_close_date|date:"M d, Y" }}</span>
+            {% if is_overdue %} <span class="badge badge-red">Past due</span>{% endif %}
+            {% if obj.extended_close_date %}<div class="text-muted">extended &mdash; an extension must fall strictly after the original target, so it can never quietly re-write what was agreed</div>
+            {% else %}<div class="text-muted">no extension granted</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Next review</dt>
+          <dd>{% if obj.next_review_date %}{{ obj.next_review_date|date:"M d, Y" }}{% else %}<span class="text-muted">No check-in scheduled</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Actually closed</dt>
+          <dd>{% if obj.actual_close_date %}{{ obj.actual_close_date|date:"M d, Y" }}{% else %}<span class="text-muted">Still open</span>{% endif %}
+            <div class="text-muted">stamped by the close verb alone</div>
+          </dd></div>
+        <div class="detail-item"><dt>Our owner</dt>
+          <dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Their owner</dt>
+          <dd>
+            {% if obj.supplier_owner_name %}{{ obj.supplier_owner_name }}{% else %}<span class="text-muted">Not named</span>{% endif %}
+            {% if obj.supplier_owner_email %}<div class="text-muted">{{ obj.supplier_owner_email }}</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Acknowledged</dt>
+          <dd>
+            {% if obj.acknowledged_at %}{{ obj.acknowledged_at|date:"M d, Y H:i" }}
+              <div class="text-muted">{% if obj.acknowledged_by %}recorded by {{ obj.acknowledged_by.get_full_name|default:obj.acknowledged_by.email }}{% else %}recorded by a since-removed account{% endif %}</div>
+            {% else %}<span class="text-muted">Not yet acknowledged</span>
+              <div class="text-muted">the fact a disputed escalation turns on later</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Verified</dt>
+          <dd>
+            {% if obj.verified_at %}{{ obj.verified_at|date:"M d, Y H:i" }}
+              <div class="text-muted">{% if obj.verified_by %}signed off by {{ obj.verified_by.get_full_name|default:obj.verified_by.email }}{% else %}signed off by a since-removed account{% endif %}</div>
+            {% else %}<span class="text-muted">Not verified</span>
+              <div class="text-muted">stamped by the close verb, which is admin-only</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Escalated to</dt>
+          <dd>
+            {% comment %} 6.4's block register — the url name is `vsu_detail`, not the entity's full name. {% endcomment %}
+            {% if obj.escalated_suspension %}<a href="{% url 'procurement:vsu_detail' obj.escalated_suspension_id %}">{{ obj.escalated_suspension.number }}</a>
+              <div class="text-muted">{{ obj.escalated_suspension.get_status_display }} &mdash; the block lives in the suspension register, never here: a second blocking flag would disagree with it within a quarter</div>
+            {% else %}<span class="text-muted">Not escalated</span>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Evidence</dt>
+          <dd>
+            {% if obj.evidence %}<a href="{{ obj.evidence.url }}" target="_blank" rel="noopener noreferrer">Download the attached file</a>{% endif %}
+            {% if obj.evidence_url %}<div><a href="{{ obj.evidence_url }}" target="_blank" rel="noopener noreferrer">Evidence held elsewhere</a></div>{% endif %}
+            {% if not obj.has_evidence %}<span class="text-muted">None attached</span>
+              <div class="text-muted">a link to a QMS or a shared drive counts &mdash; proof does not have to be re-uploaded to be proof</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What was found, and what was agreed</h2>
+      <span class="text-muted">plan grain — the narrative, not a pretend action table</span>
+    </div>
+    <div class="card-body">
+      <div class="detail-item"><dt class="text-muted">Finding</dt><dd>{{ obj.finding|linebreaksbr }}</dd></div>
+      <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Root cause</dt>
+        <dd>{% if obj.root_cause %}{{ obj.root_cause|linebreaksbr }}{% else %}<span class="text-muted">Not recorded. A plan with no root cause is a plan that fixes a symptom.</span>{% endif %}</dd></div>
+      <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Corrective actions</dt>
+        <dd>{% if obj.corrective_actions %}{{ obj.corrective_actions|linebreaksbr }}{% else %}<span class="text-muted">Not recorded yet.</span>{% endif %}</dd></div>
+      <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Support we are providing</dt>
+        <dd>{% if obj.support_provided %}{{ obj.support_provided|linebreaksbr }}{% else %}<span class="text-muted">None recorded. A supplier told to improve with no help is being managed, not developed.</span>{% endif %}</dd></div>
+      <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Success criteria</dt>
+        <dd>{% if obj.success_criteria %}{{ obj.success_criteria|linebreaksbr }}{% else %}<span class="text-muted">Not recorded. Without a measurable definition of &ldquo;fixed&rdquo;, closing this plan is an opinion.</span>{% endif %}</dd></div>
+      {% if obj.closure_note %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Closure note</dt>
+          <dd>{{ obj.closure_note|linebreaksbr }}
+            <div class="text-muted">taken from the close form, next to the outcome it explains &mdash; it cannot be edited afterwards</div>
+          </dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Move this plan</h2>
+      <span class="text-muted">the five verbs — status and outcome are never typed</span>
+    </div>
+    <div class="card-body">
+      {% if can_activate or can_monitor or can_acknowledge or can_close or can_cancel %}
+        <p class="form-help">A plan runs <span class="fw-600">draft &rarr; active &rarr; monitoring &rarr; closed</span>, and can be <span class="fw-600">cancelled</span> from any of those three open states. <span class="fw-600">Acknowledge</span> moves no status at all &mdash; it records that the supplier was told, which is the fact a disputed escalation turns on later.</p>
+      {% else %}
+        {% comment %}
+          The controls are not hidden silently — the page says why. The can_* flags are the UX
+          half of the rule; each verb re-checks its own gate and refuses a crafted POST.
+        {% endcomment %}
+        <p class="form-help"><i data-lucide="lock"></i> This plan is {{ obj.get_status_display|lower }}, so it cannot be moved again. A closed plan carries a signed outcome and a cancelled one was withdrawn &mdash; a lifecycle that could be re-set would stop meaning anything. Correct what was recorded with Edit if it was filed wrong.</p>
+      {% endif %}
+
+      <div>
+        {% if can_activate %}
+          <form method="post" action="{% url 'procurement:improvementplan_activate' obj.pk %}" style="display:inline;">
+            {% csrf_token %}<button class="btn btn-primary" type="submit" onclick="return confirm('Put plan {{ obj.number }} into force? The clock starts running against its due date from now.');"><i data-lucide="play"></i> Activate</button>
+          </form>
+        {% endif %}
+        {% if can_monitor %}
+          <form method="post" action="{% url 'procurement:improvementplan_monitor' obj.pk %}" style="display:inline;">
+            {% csrf_token %}<button class="btn btn-primary" type="submit" onclick="return confirm('Move plan {{ obj.number }} into monitoring? The corrective work is done and the results are now being watched — this is deliberately not the same as closing it.');"><i data-lucide="eye"></i> Move to monitoring</button>
+          </form>
+        {% endif %}
+        {% if can_acknowledge %}
+          <form method="post" action="{% url 'procurement:improvementplan_acknowledge' obj.pk %}" style="display:inline;">
+            {% csrf_token %}<button class="btn btn-outline" type="submit" onclick="return confirm('Record that the supplier has received plan {{ obj.number }}? The first acknowledgement is the date that counts and is never re-stamped. The status is unchanged.');"><i data-lucide="mail-check"></i> Record acknowledgement</button>
+          </form>
+        {% endif %}
+        {% if can_cancel %}
+          <form method="post" action="{% url 'procurement:improvementplan_cancel' obj.pk %}" style="display:inline;">
+            {% csrf_token %}<button class="btn btn-outline" type="submit" onclick="return confirm('Cancel plan {{ obj.number }}? Cancelled means it stopped being the right thing to do — it is NOT the same as a failed closure, and a cancelled plan carries no outcome.');"><i data-lucide="circle-slash"></i> Cancel plan</button>
+          </form>
+        {% endif %}
+      </div>
+
+      {% if can_close %}
+        <form method="post" action="{% url 'procurement:improvementplan_close' obj.pk %}" style="margin-top:.75rem;">
+          {% csrf_token %}
+          <div class="form-group" style="max-width:360px;">
+            <label class="form-label" for="close-outcome">Outcome <span class="req">*</span></label>
+            <select name="outcome" id="close-outcome" class="form-select">
+              {% for val, label in outcome_choices %}
+                <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-help">How it ended. Required &mdash; a close with no outcome is refused, because a closed plan with nothing recorded is a plan nobody can learn from. <span class="fw-600">Escalated to suspension</span> is the one that pairs with a block: raise that in the suspension register and point this plan at it from Edit.</div>
+          </div>
+          <div class="form-group" style="max-width:640px;">
+            <label class="form-label" for="close-note">Closure note</label>
+            <textarea name="closure_note" id="close-note" class="form-textarea" rows="3" placeholder="What actually changed, measured against the success criteria…"></textarea>
+            <div class="form-help">Optional, and the sentence anyone reading this plan a year later will want. It is written once by this form and cannot be edited afterwards.</div>
+          </div>
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Close plan {{ obj.number }} with the outcome selected above? This signs the closure with your name, stamps the close date and stops the overdue clock. Only an admin can do it.');"><i data-lucide="circle-check"></i> Close plan</button>
+          <div class="form-help">Closing is admin-only: it writes the ending the supplier will be shown and signs it, which is a sign-off rather than an edit.</div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Editing corrects what was recorded &mdash; the finding, the actions, the dates, the owners, the evidence, and the extension when one is granted. It can never move the plan through its lifecycle or write an outcome: <span class="fw-600">status and outcome are not on the form</span>, and neither are the acknowledgement and verification stamps, which would stop being evidence of anything if they could be typed over.</p>
+      <a href="{% url 'procurement:improvementplan_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit plan</a>
+      <a href="{% url 'procurement:improvementplan_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Back to the register</a>
+      <p class="text-muted" style="margin-top:.75rem;">Deleting a <span class="fw-600">closed</span> plan removes the record that this supplier was ever put on one &mdash; exactly the history an escalation stands on, since a suspension raised &ldquo;after two failed plans&rdquo; means nothing once the plans are gone. Cancel an open plan instead. Deleting does <span class="fw-600">not</span> touch the suspension register: a vendor that is blocked stays blocked.</p>
+      <form method="post" action="{% url 'procurement:improvementplan_delete' obj.pk %}">
+        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete plan {{ obj.number }}? A closed plan is the record that this supplier was ever put on one — the history an escalation stands on. Cancel an open plan instead of deleting it. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete plan</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
