@@ -118,7 +118,13 @@
               <td><span class="badge {{ row.state_css }}">{{ row.state_label }}</span></td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'procurement:risksignal_create' %}" class="btn-icon" title="Capture an observation" aria-label="Capture an observation"><i data-lucide="plus"></i></a>
+                  {% comment %}
+                    Both icons carry the ROW's party, because in an Actions column a button reads
+                    as row-scoped. _signal_form seeds the form's `initial` from ?party= after
+                    checking it through as_db_int and against the form's own tenant-scoped party
+                    queryset, so a junk or foreign value simply seeds nothing.
+                  {% endcomment %}
+                  <a href="{% url 'procurement:risksignal_create' %}?party={{ row.party.pk|stringformat:"d" }}" class="btn-icon" title="Capture an observation for {{ row.party.name }}" aria-label="Capture an observation for {{ row.party.name }}"><i data-lucide="plus"></i></a>
                   <a href="{% url 'procurement:risksignal_list' %}?party={{ row.party.pk|stringformat:"d" }}" class="btn-icon" title="Monitoring history" aria-label="Monitoring history"><i data-lucide="history"></i></a>
                   {% if row.signal %}
                     <a href="{% url 'procurement:risksignal_detail' row.signal.pk %}" class="btn-icon" title="View latest" aria-label="View latest"><i data-lucide="eye"></i></a>
