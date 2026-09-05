@@ -130,6 +130,16 @@ _ROLLUP_ANNOTATIONS = {
         Value(ZERO), output_field=_VALUE_FIELD),
 }
 
+#: What the LOCATION roll-up actually renders: lines counted, lines with a variance, and the net
+#: quantity (the two sums, subtracted in Python). It is a strict subset of
+#: :data:`_ROLLUP_ANNOTATIONS`, taken FROM it rather than restated, so the two can never drift
+#: apart on how a variance line is counted. ``abs_sum`` and ``value_sum`` are left out because the
+#: location table prints neither — and ``value_sum`` multiplies by ``item__average_cost``, which
+#: drags a ``scm_item`` join onto a query grouped by LOCATION purely to compute a column nobody
+#: sees.
+_LOCATION_ANNOTATIONS = {name: _ROLLUP_ANNOTATIONS[name] for name in
+                         ("count_lines", "variance_lines", "counted_sum", "expected_sum")}
+
 
 def _accuracy_pct(count_lines, variance_lines):
     """Share of counted lines that agreed with the book, as a percentage.
@@ -300,7 +310,7 @@ def count_accuracy(request):
         # and the ranking is applied in Python over the capped batch.
         loc_batch = list(lines
                          .values(loc_id=F("cycle_count__location_id"))
-                         .annotate(**_ROLLUP_ANNOTATIONS)
+                         .annotate(**_LOCATION_ANNOTATIONS)
                          .filter(count_lines__gt=0)
                          .order_by("-variance_lines", "loc_id")[:ROW_CAP + 1])
         truncated = truncated or len(loc_batch) > ROW_CAP
@@ -328,7 +338,13 @@ def count_accuracy(request):
         if selected_location is not None:
             programs = programs.filter(Q(location_id=selected_location.pk)
                                        | Q(location__isnull=True))
-        for program in programs[:ROW_CAP]:
+        # The same [:ROW_CAP + 1] probe the two roll-ups above use: fetch one more than the cap,
+        # and if it comes back, SAY the table was cut. Slicing straight to ROW_CAP dropped
+        # programmes with nothing on the page admitting it — and unlike the item table this one is
+        # ordered by name, so the rows that fall off are arbitrary rather than the least important.
+        program_batch = list(programs[:ROW_CAP + 1])
+        truncated = truncated or len(program_batch) > ROW_CAP
+        for program in program_batch[:ROW_CAP]:
             program_rows.append({
                 "program": program,
                 "cadence_label": program.cadence_label,
