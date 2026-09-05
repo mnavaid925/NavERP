@@ -702,7 +702,8 @@ def generate_scorecard_lines(scorecard, user):
         if kpi.maps_to_dimension and score is not None:
             dimension_parts[kpi.maps_to_dimension].append((score, kpi.weight))
         if band == "critical" and previous.get(kpi.pk) != "critical":
-            crossings.append(line)
+            # The KPI travels with the line: the alert below is ASSIGNED to ``kpi.owner``.
+            crossings.append((line, kpi))
 
     # One UPDATE and one INSERT for the whole run. ``unique_together`` still guards the second
     # press: an existing line is UPDATED in place because it came out of ``existing``, so
@@ -736,9 +737,19 @@ def generate_scorecard_lines(scorecard, user):
 
     # One INSERT for every crossing rather than one per alert — same shape as the score lines
     # above, and crossings are usually few but are not bounded.
+    #
+    # ASSIGNED to the KPI's owner. ``kind="task"`` rows land in the 6.1 dashboard's personal
+    # queue, which is built as ``open_alerts.filter(assigned_to=me)`` — so a task raised with a
+    # null assignee reached nobody's widget at all, and every other producer in this app routes
+    # its alerts (``Escalations.py`` uses ``policy.escalate_to``; the seeder sets one too).
+    # ``SupplierKpi.owner`` is documented as "the person answerable for this number" and was
+    # read nowhere; a KPI crossing its critical line is precisely their number going wrong.
+    # A KPI with no owner still raises the alert unassigned — that is the team queue, and it is
+    # a better answer than not raising it.
     new_alerts = [
         ProcurementAlert(
             tenant=tenant, kind="task", severity="critical",
+            assigned_to=kpi.owner,
             title=f"{scorecard.party.name} — {line.kpi_name} is critical",
             message=(f"{line.kpi_name} came back at "
                      f"{line.measured_value if line.measured_value is not None else '—'} for "
@@ -748,7 +759,7 @@ def generate_scorecard_lines(scorecard, user):
             # anything else, and an absolute URL here would make the alert card an open redirect.
             link_url=f"/procurement/supplier-evaluations/{scorecard.pk}/",
             created_by=author)
-        for line in crossings
+        for line, kpi in crossings
     ]
     if new_alerts:
         ProcurementAlert.objects.bulk_create(new_alerts)
