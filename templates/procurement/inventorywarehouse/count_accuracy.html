@@ -87,11 +87,22 @@
             {% endfor %}
           </select>
         </div>
+        {% comment %}
+          Pre-filled from the RAW GET value, never from the resolved `date_from` / `date_to`.
+          Echoing the resolved dates made the window dropdown permanently inert: after the first
+          render both boxes were populated, every subsequent submit carried them, an explicit date
+          beats the window, and so picking "Last 12 months" changed the selected label and nothing
+          else. Empty boxes mean "no explicit date", which is exactly what the view needs to hear
+          for the window to apply. The window each box resolved to is printed in the prose below.
+          These inputs have no visible <label>, so the aria-label is the only name a screen reader
+          gets — and the filter is `scheduled_date`, i.e. when the count was SCHEDULED, not when it
+          was counted.
+        {% endcomment %}
         <div class="form-group">
-          <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" aria-label="Counted from" class="form-input">
+          <input type="date" name="date_from" value="{{ request.GET.date_from }}" aria-label="Scheduled from" class="form-input">
         </div>
         <div class="form-group">
-          <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" aria-label="Counted to" class="form-input">
+          <input type="date" name="date_to" value="{{ request.GET.date_to }}" aria-label="Scheduled to" class="form-input">
         </div>
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
         <a href="{% url 'procurement:count_accuracy' %}" class="btn btn-outline">Reset</a>
