@@ -106,6 +106,13 @@ from apps.procurement.models import (
     SupplierImprovementPlan,
     SupplierKpi,
     SupplierKpiScore,
+    # 6.18 Inventory & Warehouse Integration. ReplenishmentSuggestion is deliberately NOT
+    # imported: its rows are written by ``ReplenishmentRun.generate()``, never by this seeder,
+    # and the block counts them through the run's own ``lines`` related manager.
+    MaterialIssue,
+    MaterialIssueLine,
+    ReplenishmentPolicy,
+    ReplenishmentRun,
     generate_po_from_requisition,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -128,7 +135,8 @@ from apps.procurement.models import (
     VendorSuspension,
 )
 from apps.accounting.models import Budget, Currency, GLAccount, PaymentTerm, Project, TaxCode
-from apps.scm.models import Item, PurchaseRequisition, SupplierProfile, UOM
+from apps.scm.models import (
+    Item, Location, PurchaseRequisition, ReorderRule, SupplierProfile, UOM)
 
 User = get_user_model()
 
@@ -316,6 +324,12 @@ class Command(BaseCommand):
             # created - the supplier party, the contract, the purchase order and the sourcing
             # event. Run earlier it would file a repository of records that point at nothing.
             self._seed_document_knowledge(tenant)
+            # 6.18 runs LAST because its replenishment run is COMPUTED, not written: generate()
+            # reads this workspace's stock, its open purchase orders and its open requisitions at
+            # the moment it is called, so it has to see everything the blocks above have created.
+            # It writes into no other module - no requisition is released and no material issue is
+            # posted, so a re-seed never touches the scm stock ledger.
+            self._seed_inventory_warehouse(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -3549,3 +3563,287 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(
                 f"  {tenant.name}: {made} knowledge resources "
                 f"(2 featured on the shelf, 1 used 7 times, 1 draft overdue for review)."))
+
+    # -- 6.18 Inventory & Warehouse Integration ---------------------------------------------------
+
+    def _seed_inventory_warehouse(self, tenant):
+        """6.18 Inventory & Warehouse Integration - replenishment policies, one COMPUTED
+        replenishment run, and two material issue documents.
+
+        REUSES seed_scm's item master, locations and reorder rules and creates none of them
+        (L36): a policy is the procurement-side OVERLAY on ``scm.ReorderRule``, never a second
+        copy of one. A workspace that has not been through ``seed_scm`` has no item and no
+        location for a policy to point at, and is skipped with a warning.
+
+        **The run's lines are COMPUTED, never hand-written.** The run is created in draft and
+        then driven through the real ``ReplenishmentRun.generate()``, so every snapshot column -
+        on-hand, on-order, open requisitions, the reorder point, the rounded quantity - is
+        whatever that method actually saw in this workspace. Two consequences worth stating:
+
+        * A workspace with no active reorder rule, or one whose stock is comfortably above every
+          reorder point, legitimately proposes NOTHING. That is reported as a warning and the run
+          is left in ``draft``. An invented suggestion line would be a lie about this workspace's
+          stock position, and an empty register is worth more than a plausible one. (``generate()``
+          stamps ``proposed`` whatever it finds, so the zero case is walked back to ``draft``
+          afterwards; the audit entry it wrote stays, because the scan really did happen.)
+        * ``release()`` is NEVER called. It raises real ``scm.PurchaseRequisition`` rows, and a
+          seeder that commits money into another module's spine is one nobody can run twice.
+
+        **This block never calls ``MaterialIssue.post()``** - contract 6.18 section 6 rule 12.
+        Posting mints a ``scm.StockAdjustment``, which would couple a re-seed to SCM's state and
+        write into the stock ledger. The two documents are created as a DRAFT issue and a
+        SUBMITTED return - submitted through the real ``submit()`` verb, which is what refuses an
+        empty document and writes the audit entry a hand-set status column would skip. Posting is
+        exercised by the smoke script instead.
+
+        Idempotent three times over: the policies, the run and the issues each carry their own
+        per-tenant existence guard, so a second run is a no-op and a half-seeded workspace still
+        fills in the block it is missing. The two auto-numbered documents (``RPL-`` / ``MIS-``)
+        are guarded by that existence check rather than by a number lookup, because
+        ``TenantNumbered`` mints the number inside ``save()`` - there is no number to look up
+        before the row exists.
+        """
+        item_qs = Item.objects.filter(tenant=tenant).order_by("sku")
+        # WH-MAIN in the demo data. The fallback to any location keeps a workspace whose
+        # locations are all zones and bins working rather than skipped outright.
+        warehouse = (Location.objects.filter(tenant=tenant, is_active=True,
+                                             location_type="warehouse").order_by("code").first()
+                     or Location.objects.filter(tenant=tenant).order_by("code").first())
+        if not item_qs.exists() or warehouse is None:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no items or no locations (run seed_scm first) - skipping "
+                f"inventory & warehouse integration."))
+            return
+
+        members = list(User.objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        owner = members[0] if members else None
+        today = timezone.localdate()
+        zero = Decimal("0")
+
+        # Resolved ONCE for all three sub-blocks below: each is independently guarded, so a
+        # workspace that already has policies but no issues must still find these. Every one of
+        # them is optional - the SMOKETEST tenant has no org units and no GL accounts at all,
+        # and all three FKs are nullable precisely so that workspace still seeds.
+        department = (OrgUnit.objects.filter(tenant=tenant, parent__isnull=False)
+                      .order_by("id").first())
+        gl_account = (GLAccount.objects.filter(tenant=tenant, account_type="expense",
+                                               is_active=True).order_by("code").first())
+        # BOTH roles, exactly as ReplenishmentPolicy.clean() accepts both: it refuses a party
+        # holding neither, so a workspace with no supplier gets a blank preferred vendor rather
+        # than a policy pointed at whoever happened to be first.
+        vendor = (Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor"))
+                  .distinct().order_by("id").first())
+
+        # The (item, location) pairs a replenishment run actually plans for. Writing the policies
+        # over THESE is what makes the generated suggestions carry a real policy FK - and that
+        # policy's rounding - instead of falling through to generate()'s unconfigured default.
+        rules = list(ReorderRule.objects.filter(tenant=tenant, is_active=True)
+                     .select_related("item", "location").order_by("id"))
+        if rules:
+            # Put the shaping policy on a pair that is ACTUALLY SHORT, so its rounding is
+            # exercised by a real generated suggestion rather than merely configured on a row
+            # nothing ever reaches. On-hand alone is ``ReorderRule.is_below_point()``'s own
+            # definition and costs ONE grouped query - the same ``on_hand_map`` generate() uses
+            # for Q2. It is a PLACEMENT HEURISTIC, deliberately not a second copy of the run's
+            # trigger, which additionally nets off on-order and open requisition quantity: the
+            # run stays the only thing that decides what is really short.
+            on_hand = ReorderRule.on_hand_map(tenant, rules)
+            short_pks = {rule.pk for rule in rules
+                         if on_hand.get((rule.item_id, rule.location_id), zero)
+                         <= (rule.reorder_point or zero)}
+            # Stable sort on a boolean: short rules first, each group still in id order.
+            ranked = sorted(rules, key=lambda rule: rule.pk not in short_pks)
+            policy_item = ranked[0].item
+            policy_location = ranked[0].location or warehouse
+            spare_rule = ranked[1] if len(ranked) > 1 else None
+            second_item = spare_rule.item if spare_rule is not None else None
+            second_location = ((spare_rule.location or warehouse)
+                               if spare_rule is not None else None)
+        else:
+            spare = list(item_qs[:2])
+            policy_item, policy_location = spare[0], warehouse
+            second_item = spare[1] if len(spare) > 1 else None
+            second_location = warehouse if len(spare) > 1 else None
+
+        # -- 1. replenishment policies ---------------------------------------------------------
+        if ReplenishmentPolicy.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: replenishment policies already present, skipping.")
+        else:
+            if vendor is None:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: no party holds a supplier or vendor role - seeding the "
+                    f"policies with a blank preferred vendor."))
+            rows = [
+                # The LOCATED policy. Most specific, so it beats the catch-all below at this one
+                # location. It is also the row that shapes quantities - never fewer than 5,
+                # rounded UP to a multiple of 10, capped at 120 - so a generated suggestion shows
+                # a raw_suggested_qty and a different suggested_qty, which is the entire point of
+                # that column pair. target_level is left blank ON PURPOSE: this row demonstrates
+                # the FALLBACK to the reorder rule's point plus safety stock.
+                (policy_item, policy_location, {
+                    "source_method": "buy",
+                    "trigger_mode": "review",
+                    "preferred_vendor": vendor,
+                    "min_order_qty": Decimal("5.00"),
+                    "order_multiple": Decimal("10.00"),
+                    "max_order_qty": Decimal("120.00"),
+                    "include_on_order": True,
+                    "include_open_requisitions": True,
+                    "default_org_unit": department,
+                    "default_gl_account": gl_account,
+                    "notes": ("Location-specific policy: buy this item back up to the reorder "
+                              "rule's point plus safety stock, in cases of 10, never fewer than "
+                              "5 and never more than 120 on one line. The order-up-to level is "
+                              "deliberately blank so this row shows the fallback to the rule."),
+                }),
+                # The CATCH-ALL on the SAME item: a null location means anywhere the located row
+                # above does not cover. Two rows on one item is the specificity rule made visible
+                # - resolve() answers the located one at that location and this one everywhere
+                # else - and it is why clean() has to probe for a SECOND catch-all by hand, which
+                # SQL's distinct-NULLs unique constraint provably cannot catch.
+                (policy_item, None, {
+                    "source_method": "buy",
+                    "trigger_mode": "auto",
+                    "preferred_vendor": None,
+                    "target_level": Decimal("40.00"),
+                    "lead_time_days_override": 7,
+                    "include_on_order": True,
+                    "include_open_requisitions": True,
+                    "default_org_unit": department,
+                    "notes": ("Any-location catch-all. Carries both OVERRIDE columns - an "
+                              "order-up-to level of 40 and a 7-day lead time - so the detail "
+                              "page shows the two sources side by side: 'policy override' here "
+                              "against 'reorder rule' on the located row."),
+                }),
+            ]
+            if second_item is not None:
+                rows.append((second_item, second_location, {
+                    "source_method": "transfer",
+                    "trigger_mode": "review",
+                    "is_active": False,
+                    "notes": ("Kept INACTIVE so the register shows both states - resolve() skips "
+                              "a disabled row and falls through to whatever is next. Sourced by "
+                              "TRANSFER rather than by purchase as well: a run records and "
+                              "reports the shortfall but never raises a requisition for it, "
+                              "because moving stock between locations is SCM's transfer "
+                              "document, not a purchase."),
+                }))
+
+            made = 0
+            for item, location, defaults in rows:
+                # get_or_create on the model's own unique grain (tenant, item, location), so a
+                # re-run after a partial failure completes the set instead of duplicating it.
+                _obj, was_created = ReplenishmentPolicy.objects.get_or_create(
+                    tenant=tenant, item=item, location=location, defaults=defaults)
+                made += int(was_created)
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {made} replenishment policy(ies) - {policy_item.sku} at "
+                f"{policy_location.code} and an any-location catch-all behind it."))
+
+        # -- 2. one replenishment run, generated for real --------------------------------------
+        if ReplenishmentRun.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: replenishment runs already present, skipping.")
+        else:
+            run = ReplenishmentRun(
+                tenant=tenant,
+                # Whole network and every ABC class: a scoped run would quietly exclude rules,
+                # and a demo that proposes nothing because of its own filter teaches the wrong
+                # lesson about why it is empty.
+                location=None,
+                run_date=today,
+                trigger="manual",
+                abc_class_filter="",
+                notes=("Seeded demo run over the whole network. Its lines are whatever "
+                       "generate() computed against this workspace's own stock position - not a "
+                       "fixed list, and never hand-written."),
+            )
+            run.save()
+            if not rules:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: {run.number} left in draft - this workspace has no active "
+                    f"scm.ReorderRule, so a replenishment run has nothing to plan against (run "
+                    f"seed_scm first)."))
+            else:
+                written = run.generate(owner)
+                if written:
+                    self.stdout.write(self.style.SUCCESS(
+                        f"  {tenant.name}: {run.number} proposed {written} suggestion line(s) "
+                        f"computed from {len(rules)} active reorder rule(s)."))
+                else:
+                    # generate() stamps 'proposed' whatever it finds, so an empty scan would
+                    # leave a proposal that proposes nothing. Walk it back to draft: the register
+                    # then shows a run waiting to be generated, which is true. The audit entry
+                    # generate() wrote is left alone - the scan really did happen.
+                    run.status = "draft"
+                    run.generated_at = None
+                    run.generated_by = None
+                    run.save(update_fields=["status", "generated_at", "generated_by",
+                                            "updated_at"])
+                    self.stdout.write(self.style.WARNING(
+                        f"  {tenant.name}: {run.number} left in draft - all {len(rules)} active "
+                        f"reorder rule(s) sit above their reorder point once on-order and open "
+                        f"requisition quantity is netted in, so generate() proposed nothing. No "
+                        f"suggestion lines were invented to fill the page."))
+
+        # -- 3. two material issue documents - NEVER posted (contract 6.18 s6 rule 12) ----------
+        if MaterialIssue.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: material issues already present, skipping.")
+        else:
+            # Items that have actually moved, so the cost snapshot below is a real number. The
+            # fallback keeps a never-moved workspace seeding rather than skipping.
+            costed = list(item_qs.exclude(average_cost=zero)[:2]) or list(item_qs[:2])
+            drawn_item = costed[0]
+            also_drawn = costed[1] if len(costed) > 1 else None
+
+            issue = MaterialIssue(
+                tenant=tenant, location=warehouse, movement_type="issue",
+                purpose="maintenance", reference="JOB-0042",
+                issue_date=today - timedelta(days=3),
+                org_unit=department, gl_account=gl_account, requested_by=owner,
+                notes=("Seeded demo draft: material drawn from the main warehouse against "
+                       "maintenance job JOB-0042. Left in DRAFT - this seeder never posts, so "
+                       "no scm.StockAdjustment is minted and the stock ledger is untouched."))
+            issue.save()
+
+            returned = MaterialIssue(
+                tenant=tenant, location=warehouse, movement_type="return",
+                purpose="maintenance", reference="JOB-0042",
+                issue_date=today - timedelta(days=1),
+                org_unit=department, gl_account=gl_account, requested_by=owner,
+                notes=("Seeded demo return: what JOB-0042 did not consume, going back to the "
+                       "shelf it came off. Returning goods to a SUPPLIER is a different "
+                       "document - 6.12 Return to Vendor."))
+            returned.save()
+
+            issue_rows = [(drawn_item, Decimal("3.0000"), "Drawn for the scheduled service.")]
+            if also_drawn is not None:
+                issue_rows.append((also_drawn, Decimal("2.0000"),
+                                   "Consumable drawn with the above."))
+            return_rows = [(drawn_item, Decimal("1.0000"), "Unused - back on the shelf.")]
+
+            made_lines = 0
+            for document, line_rows in ((issue, issue_rows), (returned, return_rows)):
+                for item, quantity, note in line_rows:
+                    # One at a time, NOT bulk_create: MaterialIssueLine.save() is where the
+                    # Item.average_cost snapshot is stamped, and bulk_create bypasses save()
+                    # entirely - it would write a column of zeros and a zero-value document full
+                    # of real stock. The gl_account is left blank on the line because the header
+                    # already carries it: that field is a per-line OVERRIDE, and repeating the
+                    # header's account would be noise rather than an override.
+                    line = MaterialIssueLine(issue=document, item=item, quantity=quantity,
+                                             notes=note)
+                    # An item that has never moved has a zero moving average. Fall back to its
+                    # standard cost so the seeded document still has an honest value.
+                    if not (item.average_cost or zero):
+                        line.unit_cost = item.standard_cost or zero
+                    line.save()
+                    made_lines += 1
+
+            # Through the real verb rather than by writing the column: submit() is what refuses an
+            # empty document and writes the audit entry a hand-set status would skip.
+            returned.submit(owner)
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {issue.number} (draft issue) + {returned.number} (submitted "
+                f"return), {made_lines} line(s) worth "
+                f"{issue.total_value + returned.total_value}. Neither is posted - no "
+                f"scm.StockAdjustment was minted and no scm.StockMove was written."))
