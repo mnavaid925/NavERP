@@ -44,83 +44,108 @@ sections beneath carry the evidence. Fix in ID order: C -> H -> I -> M. Mark eac
 
 ### CRITICAL
 
-- [ ] **C1 - `?year=0` (and `>=10000`) is an uncaught 500.** `views/.../ScorecardKpiScores.py:153`.
+- [x] **C1 - `?year=0` (and `>=10000`) is an uncaught 500.** `views/.../ScorecardKpiScores.py:153`.
   `crud.py`'s zero-skip is gated on `_is_pk_lookup()`, false for `period_end__year`; `as_db_int`
   range-checks against `MAX_DB_INT`, not 1-9999. Reproduced. **`DEBUG` defaults to `True`
   (`settings.py:16`)**, so a deployment without a `.env` renders a full technical 500 from a typed URL.
   Clamp `year` to 1-9999 in the view; the general guard belongs in `apps/core/crud.py`. *(N1, SEC-confirmed)*
-- [ ] **C2 - Generate on an empty KPI library sets `manual_override` and destroys a derivable score.**
+  - **Status:** [x] fixed - 6ef3f76a `fix(procurement): C1 - clamp the 6.16 evaluation register year filter to 1-9999`. Re-verified this run: ?year=0 / =10000 / =99999 all 200, ?year=2025 still filters.
+- [x] **C2 - Generate on an empty KPI library sets `manual_override` and destroys a derivable score.**
   `performance.py:674`. A scorecard that would grade **A / 93.70** becomes permanently unscoreable by
   either engine, and the operator sees a **green success message**. Two reachable paths need no empty
   library: a supplier with no `scm.SupplierProfile` while KPIs are tier-scoped, and a library mid-retune.
   Guard on `if written:` or return the refusal shape when `kpis` is empty. *(R2, upgraded by reviewer 5)*
-- [ ] **C3 - `SupplierKpiScore` has no index covering its `Meta.ordering`.** `ScorecardKpiScores.py:119-128`.
+  - **Status:** [x] fixed - 8297484c `fix(procurement): C2 - generate refuses an empty run instead of setting manual_override`. Re-verified on BOTH reachable paths (every KPI deactivated; tier-scoped KPIs plus a supplier with no scm.SupplierProfile): refused, 0 lines written, manual_override stays False; the control run still writes 8.
+- [x] **C3 - `SupplierKpiScore` has no index covering its `Meta.ordering`.** `ScorecardKpiScores.py:119-128`.
   Measured: **130 ms -> 1,484 ms at 60,041 rows**, query count flat - a filesort over the tenant
   partition. Add `Index(["tenant","kpi_category","kpi_name","id"], name="prc_sks_tnt_cat_name_idx")`.
   **Needs a migration** - coordinate the number with the peer sessions. *(P1)*
-- [ ] **C4 - over-long `rating` POST is an uncaught 500.** `views/.../SupplierFeedback.py:302` -
+  - **Status:** [x] fixed - c468781e `perf(procurement): C3 - index SupplierKpiScore on its Meta.ordering`. MIGRATION STILL PENDING - see Notes.
+- [x] **C4 - over-long `rating` POST is an uncaught 500.** `views/.../SupplierFeedback.py:302` -
   `isdecimal()` passes on 5,000 digits, then `int()` raises. Reproduced. The only unguarded `int()` on
   request input in the repo. Use `as_db_int`. *(SEC1)*
+  - **Status:** [x] fixed - 931bf0d2 `security(procurement): C4 - guard the feedback rating POST with as_db_int`. Re-verified: a 5,000-digit rating returns 302 with 'That is not one of the ratings on the 1-5 scale.' and no mutation; rating=4 still submits.
 
 ### IMPORTANT
 
-- [ ] **I1 - the two boards publish DIFFERENT composites under the same key.** `performance.py:725` vs
+- [x] **I1 - the two boards publish DIFFERENT composites under the same key.** `performance.py:725` vs
   `:839`. **All five suppliers differ**; Bidder Two BV reads 34.62 (grade F) on one board and 69.87 on
   the other, and rank/percentile/quadrant all ride the wrong figure. *(R1)*
-- [ ] **I2 - add `_is_admin(request)` once and fold it into `can_generate` and `can_close`.** 6.16 has
+  - **Status:** [x] fixed - aac75bf1 `fix(procurement): I1 - rank the benchmark board on the KPI-line composite, not overall_score`. Option A of the two the finding offered (compute the cohort composite from its lines, aggregated in SQL via _composite_from_sums) rather than renaming the key: renaming would have left two different numbers shipping under two names, and the trend row already carried both. Re-verified: all five suppliers now agree across the boards - Bidder Two BV reads 69.87 on both, with SCM's 34.62 carried beside it as `overall`.
+- [x] **I2 - add `_is_admin(request)` once and fold it into `can_generate` and `can_close`.** 6.16 has
   no notion of admin anywhere; twelve sibling modules define this helper. Fixes R3+R4 at the root, and
   extend `refusal_reason` so the page still says *why*. *(X5, R3, R4, SEC7)*
-- [ ] **I3 - score lines are deletable off a PUBLISHED scorecard by any member** while writing them is
+  - **Status:** [x] fixed - 952cecaf + e54bcbfa + c3231816 + db83bd59. Re-verified against the real non-admin ops_acme: neither the Generate form nor the Close form renders, and the refusal names the ROLE ('...is a workspace-admin action - ask an admin of this workspace') rather than claiming the period is closed.
+- [x] **I3 - score lines are deletable off a PUBLISHED scorecard by any member** while writing them is
   admin-only and draft-only. Gate the delete on `scorecard.status == "draft"` and hide the bin icon.
   *(SEC2)*
-- [ ] **I4 - closed+signed plans and submitted responses stay editable/deletable by any member.**
+  - **Status:** [x] fixed - 80bcf6be + c21315ff + f132d7ce + 9119ad28. Re-verified: POSTing a delete for a score line on a published scorecard leaves the row in place and returns the reason; the register hides the bin icon for that line.
+- [x] **I4 - closed+signed plans and submitted responses stay editable/deletable by any member.**
   Gate `improvementplan_edit`/`_delete` on `OPEN_STATUSES` (already defined) and
   `supplierfeedback_edit` on `status == "requested"`, per `Milestones.py:102,139`. *(SEC3)*
-- [ ] **I5 - `evidence` served as a raw unauthenticated `MEDIA_URL` link.** Route through an
+  - **Status:** [x] fixed - bc2428d8 / d1a82552 / 96e1b05e / 24a19b45 / 7f840fc6 / 2f0dc37e (6 commits, previous run).
+- [x] **I5 - `evidence` served as a raw unauthenticated `MEDIA_URL` link.** Route through an
   authenticated view per `Revisions.py:226`. **Do NOT sweep the five sibling clones** - carry that up
   as an app-wide item. *(SEC4)*
-- [ ] **I6 - both `<select>`s submit their first option.** Feedback submit files **rating 1 "Poor"**;
+  - **Status:** [x] fixed - be6d00af / 77f8bfb1 / 7413bc2c / 023147b0 (4 commits, previous run).
+- [x] **I6 - both `<select>`s submit their first option.** Feedback submit files **rating 1 "Poor"**;
   plan close files **"Successful"** irreversibly, stamping `verified_by`. Add a neutral
   `<option value="" selected>` + `required` to each; both views already refuse blank. *(F1, F2)*
-- [ ] **I7 - benchmark cohort statistics are computed POST-cap.** Filter tier/category in the queryset
+  - **Status:** [x] fixed - 4bff3981 (rating select) + bf014074 (outcome select), previous run.
+- [x] **I7 - benchmark cohort statistics are computed POST-cap.** Filter tier/category in the queryset
   **before** the slice. Measured: a 13-supplier cohort averaging 55.14 (best 95.00) displayed as
   6 suppliers averaging 10.00 with a best of 10.00. *(PB5, P11)*
-- [ ] **I8 - `supplierevaluation_list` paginates an unordered queryset.** `annotate()`'s GROUP BY drops
+  - **Status:** [x] fixed - 7db61277 `fix(procurement): I7 - apply the benchmark tier/category filter before the row cap`.
+- [x] **I8 - `supplierevaluation_list` paginates an unordered queryset.** `annotate()`'s GROUP BY drops
   `Meta.ordering`; `UnorderedObjectListWarning` on every request. Append
   `.order_by("-period_end","-id")`. The app documents this fix twice already. *(S2, P3 - one fix)*
-- [ ] **I9 - `generate_scorecard_lines` writes row-by-row: 4 round-trips per line** (54 q at 9 KPIs ->
+  - **Status:** [x] fixed - 6af9687f `fix(procurement): I8 - order the evaluation register explicitly after the annotate`.
+- [x] **I9 - `generate_scorecard_lines` writes row-by-row: 4 round-trips per line** (54 q at 9 KPIs ->
   195 at 29; 39 of the first 54 are write plumbing). It already builds an `existing` dict before the
   loop - use `bulk_update` + `bulk_create`. **`bulk_update` does not fire `auto_now`**, so set
   `updated_at` explicitly. Same shape for the alert `create()` in a loop. *(P5)*
-- [ ] **I10 - the seeder is not atomic and its guard preserves a crash.** Wrap `_seed_supplier_performance`
+  - **Status:** [x] fixed - 0c5c404d `perf(procurement): I9 - bulk_update + bulk_create the generate run instead of 4 round-trips per line`. Measured 54 -> 21 queries on the first press and 20 on a re-press; line values byte-identical, pks stable across three presses, zero duplicate alerts. updated_at is stamped by hand and listed in the new _LINE_FIELDS because bulk_update does not fire auto_now.
+- [x] **I10 - the seeder is not atomic and its guard preserves a crash.** Wrap `_seed_supplier_performance`
   steps 1-6 in `transaction.atomic()`. *(P6)*
-- [ ] **I11 - `supplierevaluation_detail` caps `lines` but not `plans`/`feedback_rows`** - 109 ms ->
+  - **Status:** [x] fixed - 8b9a2f65 `fix(procurement): I10 - wrap the 6.16 seeder steps 1-6 in one transaction`. Exercised end to end against a rolled-back copy of acme; the summary line stays outside the atomic so it reports what actually committed.
+- [x] **I11 - `supplierevaluation_detail` caps `lines` but not `plans`/`feedback_rows`** - 109 ms ->
   924 ms, 427 KB -> 2.28 MB HTML. Cap both and OR into `truncated`. *(P8)*
-- [ ] **I12 - the seeder window sits one day before SCM's, with THREE symptoms:** the default board
+  - **Status:** [x] fixed - db68279c (view) + 16793a13 (template). Deviates from the finding on one point: the cut is published as a separate related_truncated / related_cap pair instead of being OR-ed into `truncated`, because the existing truncated message says the composite was computed over a cut list - which is false when only the plans table was cut. Two flags, two honest sentences.
+- [x] **I12 - the seeder window sits one day before SCM's, with THREE symptoms:** the default board
   lands on SCM's period showing a perfect cohort with **no 6.16 evidence**; both goods receipts fall
   outside the window so **16 of 30 derived lines are unmeasured** (Delivery and Quality read "No data"
   on every seeded scorecard); and both risk assessments fall outside it, so the quadrant column has
   **never held a value** on the correct period. Move the window to match SCM's. *(R7, N3)*
-- [ ] **I13 - seeder coverage gaps** (one edit, several holes): no `draft` or `cancelled` plan, all four
+  - **Status:** [x] fixed - 070182ef `fix(procurement): I12 - close the 6.16 seed window one day AFTER SCM's, not one day before`. All three symptoms measured fixed on a rolled-back re-seed: default board 2 rows with line_count 0 -> 5 rows with 9,8,8,8,8; unmeasured lines 16 -> 14 (On-time delivery and Defect rate each 5 -> 4); quadrants 0 of 5 placed -> 2 of 5. The anchor now also excludes the block's own cards, so a re-seed after --flush re-finds the period instead of walking a day further out each time. The second goods receipt stays outside the window because seed_inventory ran 14 days after seed_scm in this dev DB; on a workspace seeded in one pass both land on the run date.
+- [x] **I13 - seeder coverage gaps** (one edit, several holes): no `draft` or `cancelled` plan, all four
   always acknowledged, `evidence` FileField never populated, `applies_to_tier` only ever `strategic`,
   and the whole manual-score path hangs off **one** strategic profile with no warning if it becomes 0.
   *(X10 downgraded, X12, X13)*
-- [ ] **I14 - `?source=` and `?category=` pass unvalidated into a filter and silently empty the page.**
+  - **Status:** [x] fixed - ecf4e42c `fix(procurement): I13 - seed the plan states, the evidence upload and the manual-path warning`. 4 -> 8 plans; all five statuses and all four outcomes now have a row; 7 of 8 acknowledged so Activate and Acknowledge finally render; one plan carries a real evidence file (written behind was_created so a re-run leaves no storage-renamed duplicate); made_manual == 0 now prints a WARNING naming the KPI and the tier. acknowledged_by is now written only with acknowledged_at. One sub-item deliberately left - see Notes.
+- [x] **I14 - `?source=` and `?category=` pass unvalidated into a filter and silently empty the page.**
   Validate both in their views. *(S1, R5)*
-- [ ] **I15 - two `_ROW_RELATIONS` miss `scorecard__party`** while both detail templates hop it.
+  - **Status:** [x] fixed - 125c6d2d (?source= on the score register, which closes M19 with it) + f9e617bf (?category= on the benchmark board). Both junk values now fall back to the full list exactly as ?band= and ?tier= already did, and both real values still narrow (source: 15/10/1 rows; category: 5 -> 2, with tier 5 -> 1).
+- [x] **I15 - two `_ROW_RELATIONS` miss `scorecard__party`** while both detail templates hop it.
   Measured +1 query each; becomes 1+N the day a list template prints it. *(P4)*
-- [ ] **I16 - `manual_override` is invisible from the SCM side.** The scm scorecard page shows the
+  - **Status:** [x] fixed - f1e66f3b (360 responses) + e3ac0085 (improvement plans). Measured 10 -> 9 queries on each detail page, bare core_party selects 1 -> 0, and a row without a scorecard now costs the same as one with.
+- [~] **I16 - `manual_override` is invisible from the SCM side.** The scm scorecard page shows the
   effect and hides the cause. **Cross-app edit - confirm before touching `apps/scm`.** *(X2)*
-- [ ] **I17 - the critical-crossing alert is raised unassigned**, and the dashboard's personal queue
+  - **Status:** [~] skipped - cross-app edit on apps/scm, explicitly out of bounds for this session. The scm scorecard page does show manual_override and hide 'Recompute from signals' with no mention of 6.16, so the integration gap is real - but apps/scm and its templates belong to a live peer session and the ownership call is the user's. Carried up as a cross-app item.
+- [x] **I17 - the critical-crossing alert is raised unassigned**, and the dashboard's personal queue
   filters on `assigned_to` - so it reaches nobody. `SupplierKpi.owner` is the obvious assignee and is
   never read. *(X3)*
-- [ ] **I18 - a zero-response survey line contradicts itself** - branch on `source_at_time`, not on
+  - **Status:** [x] fixed - 5ebb6794 `fix(procurement): I17 - assign the critical-crossing alert to the KPI's owner`. Verified on a rolled-back generate run: both alerts come out assigned_to=admin_acme and land in that user's personal open-alert queue, where all four seeded ones previously reached nobody. A KPI with no owner still raises the alert unassigned - that is the team queue.
+- [x] **I18 - a zero-response survey line contradicts itself** - branch on `source_at_time`, not on
   `respondent_count`'s truthiness. *(F3)*
-- [ ] **I19 - no entity page links to any board**, though both boards accept `?supplier=`. *(X1)*
-- [ ] **I20 - `SupplierFeedback` missing ordering index** - 113 ms -> 822 ms at 50,028 rows. Same
+  - **Status:** [x] fixed - 25ee8f58 `fix(procurement): I18 - branch the responses row on the source, not on the count being truthy`. Verified on all four shapes; a zero-response survey line now reads '0 / asked, and nobody answered inside the period window' instead of contradicting the Source row six lines above.
+- [x] **I19 - no entity page links to any board**, though both boards accept `?supplier=`. *(X1)*
+  - **Status:** [x] fixed - 25d8e92b (evaluation detail: trend + benchmark + perception gap) / b10bcc2d (plan detail: supplier trend) / b32ab899 (360 register: perception gap) / 4290b4aa (KPI detail: trend pre-filtered to that KPI). Every href was fetched, not just rendered: all 200 and all land pre-filtered - naming the supplier or pre-selecting the KPI rather than showing the picker prompt.
+- [x] **I20 - `SupplierFeedback` missing ordering index** - 113 ms -> 822 ms at 50,028 rows. Same
   migration as C3. *(P2)*
-- [ ] **I21 - uncapped scorecard/KPI `<select>` pickers pulling whole rows** - +197 KB of `<option>` in
+  - **Status:** [x] fixed - 10fbffd4 `perf(procurement): I20 - index SupplierFeedback on its Meta.ordering`. MIGRATION NOT GENERATED - see Notes. The second index P2 suggested, (tenant, supplier, status, period_end), was deliberately not added: one covering index per table matches the twelve sibling ledger-like models, and a second write-cost index wants its own measurement.
+- [x] **I21 - uncapped scorecard/KPI `<select>` pickers pulling whole rows** - +197 KB of `<option>` in
   one select at 2,007 scorecards. Slice and `.only(...)`. *(P7, P12)*
+  - **Status:** [x] fixed - d0460b36 (score register) + 7ba2d199 (360 register). NOT applied to the create/edit forms P7 also named, and that is deliberate: slicing a ModelChoiceField.queryset breaks to_python()'s .get() ('Cannot filter a query once a slice has been taken'), and that .get() IS the _reject_foreign tenant boundary; .only() there would push label_from_instance's str(obj) into a deferred load per option. The form pickers want a limited widget, not this fix.
 
 ### MINOR
 
