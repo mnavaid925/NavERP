@@ -193,10 +193,18 @@
         {% endcomment %}
         <p class="form-help"><i data-lucide="lock"></i> This line cannot be edited by hand. Its figure was computed from evidence &mdash; a resolver over the transaction spine, or the submitted 360 responses &mdash; and typing over it would leave a number nobody stands behind, which the next generate run would overwrite anyway. Re-press Generate on the draft period to refresh it, or fix the KPI definition it was measured against.</p>
       {% endif %}
-      <p class="text-muted" style="margin-top:.75rem;">Deleting a line does <span class="fw-600">not</span> re-blend the scorecard's four dimension columns: those were written by the generate run that produced this line, and silently re-deriving them from a hand-trimmed subset would move a published figure behind the operator's back. Re-press Generate on a draft period to rebuild them from what is actually there.</p>
-      <form method="post" action="{% url 'procurement:supplierkpiscore_delete' obj.pk %}">
-        {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete this measured line from {{ obj.scorecard.number }}? The scorecard keeps the four dimension figures the generate run wrote — a delete does NOT re-blend them. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete line</button>
-      </form>
+      {% if obj.scorecard.status == "draft" %}
+        <p class="text-muted" style="margin-top:.75rem;">Deleting a line does <span class="fw-600">not</span> re-blend the scorecard's four dimension columns: those were written by the generate run that produced this line, and silently re-deriving them from a hand-trimmed subset would move a published figure behind the operator's back. Re-press Generate on a draft period to rebuild them from what is actually there.</p>
+        <form method="post" action="{% url 'procurement:supplierkpiscore_delete' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Delete this measured line from {{ obj.scorecard.number }}? The scorecard keeps the four dimension figures the generate run wrote — a delete does NOT re-blend them. This cannot be undone.');"><i data-lucide="trash-2"></i> Delete line</button>
+        </form>
+      {% else %}
+        {% comment %}
+          Draft periods only — the same rule supplierkpiscore_delete enforces. Said rather than
+          silently hidden, because a missing bin on a page that had one is a question.
+        {% endcomment %}
+        <p class="form-help" style="margin-top:.75rem;"><i data-lucide="lock"></i> {{ obj.scorecard.number }} is {{ obj.scorecard.get_status_display|lower }}, so this line cannot be deleted. It is the evidence behind a figure the supplier has already been shown &mdash; only a draft period's lines can be removed.</p>
+      {% endif %}
     </div>
   </div>
 {% endblock %}
