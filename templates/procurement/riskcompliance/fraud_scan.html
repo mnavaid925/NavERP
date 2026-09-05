@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Run the Fraud Rules{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the fraud rule runner
+    (apps/procurement/views/RiskComplianceManagement/FraudScan.py :: fraud_scan). A standalone
+    sub-module-root page, not an entity CRUD page, so it lives at
+    templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract, and NOTHING else exists here:
+      form, results, rule_labels, skipped_groups, capped, scan_limits,
+      not_buildable_note, is_admin.
+
+    `results` IS `{rule_value: newly_raised_count}` on POST and `None` on GET. The distinction is
+    load-bearing: "not run yet" and "ran and found nothing" are very different things to say on a
+    fraud page, and a truthiness test would collapse them.
+
+    `rule_labels` is the RULE_CHOICES list of (value, label) pairs — the same shape every
+    *_choices context var in this app carries. The template language cannot index a dict by a
+    loop variable, so the label for a result row is resolved by a nested lookup over
+    rule_labels. Six rules, so the inner loop is trivial, and it needs no custom filter.
+
+    ROW-DICT CONTRACTS (L41 §1) — these lists carry these keys and no others:
+      scan_limits    → lim.name, lim.value, lim.why
+      skipped_groups → grp.rule, grp.rule_label, grp.attribute, grp.size, grp.limit
+      capped         → cap.rule, cap.rule_label, cap.attribute, cap.emitted, cap.limit
+
+    BOTH DIAGNOSTIC LISTS ARE STATED, NEVER SWALLOWED. A scan that quietly skipped the group
+    containing the real overlap and reported "6 alerts raised" would be worse than no scan.
+
+    THE READ-ONLY HALF OF THIS PAGE IS VISIBLE TO EVERYBODY. Only the POST leg is admin-gated,
+    and the gate lives inside the view rather than on a decorator, precisely so the thresholds
+    and the not-buildable note below stay readable by anyone who wants to know what the rules
+    actually do. The run button is hidden for a non-admin, matching what the view would refuse.
+
+    `not_buildable_note` is model-authored prose. It renders auto-escaped, never with |safe.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Run the Fraud Rules</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Fraud scan</span>
+      </div>
+      <p class="text-muted">Six deterministic rules over records this workspace already holds. Nothing here learns, scores by model or predicts — every one of them is a comparison you could do by hand with enough time, which is exactly why the thresholds behind them are printed on this page instead of being folklore.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Fraud alerts</a>
+      <a href="{% url 'procurement:fraud_board' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Board</a>
+    </div>
+  </div>
+
+  {% if results is not None %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What this run raised</h2>
+        <span class="text-muted">newly raised only — a refreshed alert is not a new find</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rule</th><th class="text-right">Newly raised</th><th class="table-actions">Open</th></tr></thead>
+          <tbody>
+            {% for rule, count in results.items %}
+              <tr>
+                <td class="fw-600">
+                  {% comment %} Label resolved by nested lookup — the template language cannot index a dict by a loop variable, and six rules make the inner loop free. {% endcomment %}
+                  {% for value, label in rule_labels %}{% if value == rule %}{{ label }}{% endif %}{% endfor %}
+                </td>
+                <td class="text-right">
+                  {% if count %}<span class="fw-600 text-danger">{{ count }}</span>{% else %}<span class="text-muted">0</span>{% endif %}
+                </td>
+                <td><a href="{% url 'procurement:fraudalert_list' %}?rule={{ rule }}" class="btn-icon" title="Open the register for this rule" aria-label="Open the register for this rule"><i data-lucide="external-link"></i></a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3">
+                <div class="empty-state">
+                  <i data-lucide="shield-check"></i>
+                  <h3>No rules ran</h3>
+                  <p>Nothing was selected, or the window was refused. Adjust it below and run again.</p>
+                </div>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">These are alerts that did not exist before this run. An alert the rules had already raised for the same fact was refreshed in place — its amount, evidence sentence and dates were brought up to date — and it is deliberately not counted here, because reporting it again would mean the same finding was announced twice. An alert somebody has already closed keeps its decision: a re-scan never re-opens settled work.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if skipped_groups %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Groups this run skipped</h2><span class="badge badge-amber">Not scanned</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rule</th><th>Attribute</th><th class="text-right">Records sharing it</th><th class="text-right">Limit</th></tr></thead>
+          <tbody>
+            {% for grp in skipped_groups %}
+              <tr>
+                <td class="fw-600">{{ grp.rule_label }}</td>
+                <td>{{ grp.attribute }}</td>
+                <td class="text-right"><span class="text-warn">{{ grp.size }}</span></td>
+                <td class="text-right">{{ grp.limit }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Too many records shared one value for the pairing to be meaningful. Two hundred suppliers registered at one serviced-office address is a data-quality problem, and pairing them would produce nineteen thousand alerts that bury the one real overlap. Those groups were left alone and are listed here so you know they were, rather than being counted as clean. Cleaning the shared value up is what makes them scannable.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if capped %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Rules that hit their ceiling</h2><span class="badge badge-amber">Partial</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rule</th><th>Attribute</th><th class="text-right">Pairs emitted</th><th class="text-right">Ceiling</th></tr></thead>
+          <tbody>
+            {% for cap in capped %}
+              <tr>
+                <td class="fw-600">{{ cap.rule_label }}</td>
+                <td>{{ cap.attribute }}</td>
+                <td class="text-right">{{ cap.emitted }}</td>
+                <td class="text-right">{{ cap.limit }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-warn">This run was INCOMPLETE for the rules listed above. It stopped at the ceiling, so there are matches it did not emit. Narrow the window, work through what is already in the register, and run it again.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The window</h2>
+      <span class="text-muted">the end date is exclusive</span>
+    </div>
+    <div class="card-body">
+      {% if is_admin %}
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="scan-search"></i> Run the rules</button>
+            <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline">Go to the register</a>
+          </div>
+        </form>
+      {% else %}
+        <p class="text-muted">Running the rules is restricted to workspace administrators, because a run writes alerts about named people into the register. Everything else on this page — what each rule looks for, the thresholds it uses, and the one rule that is not implemented — is here for everybody to read.</p>
+        <a href="{% url 'procurement:fraudalert_list' %}" class="btn btn-outline">Go to the register</a>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">A run writes fraud alerts and nothing else. It holds no purchase order, blocks no payment, refuses no award, raises no vendor block and never edits, merges or deactivates a supplier record. Park, do not block: the rules produce questions, and people answer them.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What each rule looks for</h2><span class="text-muted">deterministic comparisons, stated in full</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Vendor and employee share an identity attribute</dt>
+          <dd>A supplier and an employee with the same tax id, the same address, or the same phone number or mailbox. Flags the overlap and names both sides; a family business the company knows about looks identical from the data.</dd></div>
+        <div class="detail-item"><dt>Requisition approved by its own requester</dt>
+          <dd>The approver on a signature is the same user who raised the requisition. The one rule here with no judgement in it at all — either the two ids match or they do not.</dd></div>
+        <div class="detail-item"><dt>Duplicate / shell supplier record</dt>
+          <dd>Two supplier records sharing a normalised name, a tax id or an address. FLAGGED ONLY — nothing merges, deactivates or edits either record.</dd></div>
+        <div class="detail-item"><dt>Purchase order raised after the invoice it authorises</dt>
+          <dd>An order dated later than the invoice it is supposed to cover, past the grace period. Different from an invoice with no order at all, which belongs to <a href="{% url 'procurement:maverick_dashboard' %}">spend analytics</a>.</dd></div>
+        <div class="detail-item"><dt>New spend against an unresolved screening match</dt>
+          <dd>An order committed to a supplier whose sanctions screening, dated on or before that order, still carries a match nobody adjudicated. A hit found afterwards does not count: that would be hindsight.</dd></div>
+        <div class="detail-item"><dt>New supplier with immediate high-value spend</dt>
+          <dd>A supplier invoiced past the threshold inside its first thirty days. One alert per supplier, pointing at the largest single invoice in the run.</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The thresholds</h2><span class="text-muted">read-only — visible, not folkloric</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Setting</th><th>Value</th><th>What it buys</th></tr></thead>
+        <tbody>
+          {% for lim in scan_limits %}
+            <tr>
+              <td class="fw-600">{{ lim.name }}</td>
+              <td>{{ lim.value }}</td>
+              <td class="text-muted">{{ lim.why }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">These are read-only on purpose. An editable rule table with no scan wired to it would be worse than none: it would look like a control and change nothing. They are printed here because a number that decides whether somebody gets asked a hard question should be visible to the person being asked.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">One rule is not implemented</h2><span class="badge badge-muted">Not buildable here</span></div>
+    <div class="card-body">
+      <p>{{ not_buildable_note }}</p>
+      <p class="text-muted">It is written here rather than left out, because a fraud page that silently drops a rule reads as a page that ran it and found nothing — which is the one thing a fraud page must never say by accident.</p>
+    </div>
+  </div>
+{% endblock %}
