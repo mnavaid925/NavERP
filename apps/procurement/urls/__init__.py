@@ -4,7 +4,8 @@ Each entity module exposes its own ``urlpatterns``; this __init__ sets
 ``app_name = "procurement"`` once and concatenates them.
 
 Django is first-match-wins: within each module the literal routes (`add/`, `export/`) precede the
-``<int:pk>/`` ones, and every first segment (``, `alerts/`, `quick-requisition/`, `activity/`,
+``<int:pk>/`` ones, and every first segment (`""` — the root, i.e. the module landing
+page `procurement:dashboard` — then `alerts/`, `quick-requisition/`, `activity/`,
 `reports/`, `widgets/`, `requisitions/`, `templates/`, `amendments/`, `approvals/`, `escalations/`,
 `rfx/`, `events/`, `bids/`, `awards/`, `analytics/`, `portal-access/`, `suspensions/`,
 `submissions/`, `vendor-portal/`, `auctions/`, `clauses/`, `contracts/`, `contract-sign/`,
@@ -84,8 +85,8 @@ urlpatterns = [
     # 6.13 LAST, so it cannot shadow an earlier module: every first segment here is new
     # (``supplier-invoices/``, ``capture/``, ``invoice-vouchers/``, ``supplier-invoice-lines/``,
     # ``payment-schedule/``, ``match-variances/``, ``match-board/``, ``invoice-disputes/``) and
-    # this app registers no greedy ``<str:…>`` converter, so appended-last is belt-and-braces
-    # against a future module claiming one of them.
+    # no route in this app uses a converter in its FIRST path component, so appended-last is
+    # belt-and-braces against a future module claiming one of them.
     *_ivm_supplierinvoices,     # 6.13 invoice register + capture, duplicates, match/approval verbs
     *_ivm_supplierinvoicelines,  # 6.13 invoice line register + the payment schedule board
     *_ivm_matchvariances,       # 6.13 match exceptions + the three-way match board
