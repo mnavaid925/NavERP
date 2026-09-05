@@ -128,8 +128,20 @@
             {% elif obj.source_at_time %}{{ obj.source_at_time }}
             {% else %}<span class="text-muted">&mdash;</span>{% endif %}
           </dd></div>
+        {% comment %}
+          Branch on the SOURCE, never on respondent_count's truthiness. respondent_count is a
+          PositiveIntegerField(default=0), and generate writes a line for every applicable KPI —
+          so a survey KPI nobody answered inside the window gets a real line with
+          source_at_time="survey", measured_value=None and respondent_count=0. A truthiness test
+          sent that line down the "not a survey measurement" branch, so the card read
+          "Source at the time: 360 survey" six rows above and "Responses aggregated: not a
+          survey measurement" here — two rows of one card contradicting each other, with the
+          honest fact (asked, nobody answered) lost between them.
+        {% endcomment %}
         <div class="detail-item"><dt>Responses aggregated</dt>
-          <dd>{% if obj.respondent_count %}{{ obj.respondent_count }}{% else %}<span class="text-muted">None &mdash; not a survey measurement</span>{% endif %}</dd></div>
+          <dd>{% if obj.source_at_time == "survey" %}{{ obj.respondent_count }}
+            {% if not obj.respondent_count %}<div class="text-muted">asked, and nobody answered inside the period window</div>{% endif %}
+            {% else %}<span class="text-muted">&mdash; not a survey measurement</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Computed at</dt>
           <dd>{{ obj.computed_at|date:"M d, Y H:i" }}
             <div class="text-muted">re-stamped by every generate run, so a stale figure never claims to be current</div>
