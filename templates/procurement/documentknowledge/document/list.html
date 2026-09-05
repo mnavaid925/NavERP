@@ -111,7 +111,7 @@
           <select name="owner" aria-label="Owner" class="form-select">
             <option value="">All owners</option>
             {% for u in owners %}
-              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name }}</option>
+              <option value="{{ u.pk|stringformat:"d" }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
             {% endfor %}
           </select>
         </div>
@@ -157,7 +157,7 @@
               <td>{{ obj.get_doc_type_display }}</td>
               <td><span class="badge {{ obj.classification_css }}">{{ obj.get_classification_display }}</span></td>
               <td>{% if obj.supplier %}{{ obj.supplier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-              <td>{% if obj.owner %}{{ obj.owner.get_full_name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
               <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
               <td>
                 {% if obj.expires_on %}
@@ -180,13 +180,19 @@
                   <a href="{% url 'procurement:pdocument_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'procurement:pdocument_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
-                    Delete is @require_POST, so it can only be a form. The confirm is honest
-                    about what deletion does and does not do: the row and its revision rows go,
-                    the stored files under MEDIA_ROOT stay (see the WARNING in the view).
+                    Delete is @require_POST, so it can only be a form. It is also tenant-admin
+                    gated in the view and refuses any document the revision pointer has moved
+                    on, so it is offered on neither - a document with approved history is
+                    archived, not deleted. Both conditions are re-checked in the view; the page
+                    not offering the button is UX, not the control. The confirm is honest about
+                    what deletion does and does not do: the row and its revision rows go, the
+                    stored files under MEDIA_ROOT stay (see the WARNING in the view).
                   {% endcomment %}
-                  <form method="post" action="{% url 'procurement:pdocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }} and every revision record it holds? The stored files are not reclaimed from disk here.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if not obj.current_revision_no %}{% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'procurement:pdocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }} and every revision record it holds? The stored files are not reclaimed from disk here.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}{% endif %}
                 </div>
               </td>
             </tr>
@@ -212,7 +218,8 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">How search and expiry work here</h2><span class="text-muted">what the register can and cannot find</span></div>
     <div class="card-body">
-      <p class="text-muted">Searching sweeps the number, title, description, tags and the text read from the document's currently approved file. Text is read from PDFs that carry a text layer and from plain-text uploads; a scanned image has no text to read, so such a document is findable by what people typed about it rather than by what is inside it. Re-index re-reads files for documents whose stored text is empty.</p>
+      <p class="text-muted">Searching sweeps the number, title, description and tags, and — once the term is four characters or longer — the text read from the document's currently approved file. Text is read from PDFs that carry a text layer and from plain-text uploads; a scanned image has no text to read, so such a document is findable by what people typed about it rather than by what is inside it. Re-index re-reads files for documents whose stored text is empty.</p>
+      <p class="text-muted">{{ classification_note }}</p>
       <p class="text-muted">Expiring soon means the expiry date falls inside the next 30 days; Expired means it has passed; Review due means the review date has arrived. Past retention is a flag for a human to act on — nothing on this page deletes anything on a schedule, and deleting a document never reclaims its stored files from disk.</p>
     </div>
   </div>
