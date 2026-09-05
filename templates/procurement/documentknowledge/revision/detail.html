@@ -57,7 +57,7 @@
     <div class="card-header">
       <h2 class="card-title">{{ document.title }}</h2>
       <span class="badge-group">
-        {% if is_current %}<span class="badge badge-green">Current</span>
+        {% if is_current and obj.is_approved %}<span class="badge badge-green">Current</span>
         {% elif obj.is_approved %}<span class="badge badge-amber">Superseded</span>
         {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
         <span class="badge {{ document.status_css }}">{{ document.get_status_display }}</span>
@@ -72,9 +72,9 @@
         <div class="detail-item"><dt>Document currently on</dt>
           <dd>{% if document.current_revision_no %}r{{ document.current_revision_no }}{% else %}<span class="text-muted">No approved revision yet</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Uploaded</dt>
-          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.uploaded_by %} <span class="text-muted">by {{ obj.uploaded_by.get_full_name }}</span>{% endif %}</dd></div>
+          <dd>{{ obj.created_at|date:"M d, Y H:i" }}{% if obj.uploaded_by %} <span class="text-muted">by {{ obj.uploaded_by.get_full_name|default:obj.uploaded_by.username }}</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Approval</dt>
-          <dd>{% if obj.is_approved %}<span class="text-ok">Approved {{ obj.approved_at|date:"M d, Y H:i" }}</span>{% if obj.approved_by %} <span class="text-muted">by {{ obj.approved_by.get_full_name }}</span>{% endif %}{% else %}<span class="text-muted">Awaiting approval</span>{% endif %}</dd></div>
+          <dd>{% if obj.is_approved %}<span class="text-ok">Approved {{ obj.approved_at|date:"M d, Y H:i" }}</span>{% if obj.approved_by %} <span class="text-muted">by {{ obj.approved_by.get_full_name|default:obj.approved_by.username }}</span>{% endif %}{% else %}<span class="text-muted">Awaiting approval</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Change note</dt>
           <dd>{% if obj.change_note %}{{ obj.change_note }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
       </dl>
@@ -125,7 +125,7 @@
         offered on neither. Every one of these conditions is re-checked in the view — a page
         that does not offer an action is UX, not the control.
       {% endcomment %}
-      <div class="table-actions">
+      <div class="page-actions">
         {% if not obj.is_approved %}
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'procurement:pdocrevision_approve' obj.pk %}" onsubmit="return confirm('Approve r{{ obj.revision_no }} of {{ document.number }}? It becomes the current version and its text becomes what search matches.');">
@@ -134,7 +134,7 @@
           {% endif %}
           {% if not is_current %}
             <form method="post" action="{% url 'procurement:pdocrevision_delete' obj.pk %}" onsubmit="return confirm('Delete r{{ obj.revision_no }} of {{ document.number }}? The record is removed; the stored file is not reclaimed from disk here.');">
-              {% csrf_token %}<button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+              {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
             </form>
           {% endif %}
         {% endif %}
