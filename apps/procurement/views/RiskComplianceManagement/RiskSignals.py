@@ -29,7 +29,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.db.models import Count, Q
 
-from apps.core.crud import _changed
+from apps.core.crud import _changed, as_db_int
 from apps.core.models import Party
 from apps.procurement.forms.RiskComplianceManagement.RiskSignals import SupplierRiskSignalForm
 # NOT-YET-WIRED entity of this SAME sub-module: import the entity MODULE directly, never
@@ -219,6 +219,24 @@ def risksignal_detail(request, pk):
 
 # -- capture / amend -------------------------------------------------------------------------------
 
+def _initial_party(request, form_class):
+    """``{"party": pk}`` when a valid ``?party=`` names a party this form may actually offer.
+
+    Lets a board's per-row "add" button carry its row's identity instead of linking to a bare
+    create page identical on every row. Deliberately strict (L11): the value arrives from a URL,
+    so it goes through ``as_db_int`` — which refuses ``abc``, a superscript digit and an
+    over-range 20-digit value — and is then checked against the FORM's own party queryset, which
+    is already tenant-scoped and role-narrowed. Anything else seeds nothing and the form renders
+    exactly as it does without the parameter; a junk value never 500s and never pre-selects
+    somebody else's workspace.
+    """
+    pk = as_db_int(request.GET.get("party"))
+    if pk is None:
+        return None
+    queryset = form_class(tenant=request.tenant).fields["party"].queryset
+    return {"party": pk} if queryset.filter(pk=pk).exists() else None
+
+
 def _signal_form(request, instance=None):
     """Capture or amend one observation.
 
@@ -256,7 +274,11 @@ def _signal_form(request, instance=None):
                     f"{obj.get_metric_display()}. Alert raised in the Task & Alert Center.")
             return redirect("procurement:risksignal_detail", pk=obj.pk)
     else:
-        form = SupplierRiskSignalForm(instance=instance, tenant=request.tenant)
+        # `initial` only on the CREATE path: on an edit the instance already carries its party,
+        # and a URL parameter must never be able to re-point an existing record.
+        form = SupplierRiskSignalForm(
+            instance=instance, tenant=request.tenant,
+            initial=None if is_edit else _initial_party(request, SupplierRiskSignalForm))
 
     ctx = {"form": form, "is_edit": is_edit}
     if is_edit:
