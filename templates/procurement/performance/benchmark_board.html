@@ -23,7 +23,8 @@
       periods (list of date), selected_period (date or None),
       cohort{count, scored, average, best, worst},
       tier_choices, category_choices (list of str), selected_tier, selected_category,
-      quadrant_choices, row_cap, truncated, benchmark_note.
+      quadrant_choices (the four segments as {value, label, css, note} - the row badges AND
+      the legend both read it, so they cannot drift), row_cap, truncated, benchmark_note.
 
     The period select posts YYYY-MM-DD and compares date to date; tier compares against
     SupplierKpi.TIER_CHOICES values; category is free text from scm.SupplierProfile.category.
@@ -167,10 +168,13 @@
               <td class="text-right">{% if row.percentile is None %}<span class="text-muted">&mdash;</span>{% else %}{{ row.percentile|floatformat:1 }}%{% endif %}</td>
               <td class="text-right">{% if row.risk_index is None %}<span class="text-muted">&mdash;</span>{% else %}{{ row.risk_index|floatformat:2 }}{% endif %}</td>
               <td>
-                {% if row.quadrant == 'strategic' %}<span class="badge badge-green">Strategic</span>
-                {% elif row.quadrant == 'hidden' %}<span class="badge badge-info">Hidden high performer</span>
-                {% elif row.quadrant == 'development' %}<span class="badge badge-amber">Development</span>
-                {% elif row.quadrant == 'underperforming' %}<span class="badge badge-red">Underperforming</span>
+                {% comment %}
+                  Label AND colour come from the view's QUADRANT_SEGMENTS via quadrant_label /
+                  quadrant_css, so this cell and the Segments legend below cannot disagree about
+                  what a segment is called or what colour it is. The four-branch chain that used
+                  to sit here was the second of two hard-coded copies.
+                {% endcomment %}
+                {% if row.quadrant_label %}<span class="badge {{ row.quadrant_css }}">{{ row.quadrant_label }}</span>
                 {% else %}<span class="badge badge-slate" title="Needs both a composite score and a risk assessment">Unplaced</span>{% endif %}
               </td>
               <td class="text-right">{{ row.line_count }}</td>
@@ -200,10 +204,9 @@
         Two axes, both already on the row: the composite score above, and the risk index from the supplier's most recent risk assessment dated on or before this period end (a 1-5 mean, where <strong>lower is safer</strong>). A supplier scoring 70 or better sits in the top half of performance; a risk index of 2.5 or less sits in the safer half. A supplier missing either axis is left <strong>Unplaced</strong> rather than being guessed into a corner.
       </p>
       <p style="margin-top:.5rem;">
-        <span class="badge badge-green">Strategic</span> <span class="text-muted">scores 70+, low risk &mdash; keep and grow.</span><br>
-        <span class="badge badge-info">Hidden high performer</span> <span class="text-muted">scores 70+, higher risk &mdash; performing well on borrowed time.</span><br>
-        <span class="badge badge-amber">Development</span> <span class="text-muted">scores under 70, low risk &mdash; worth the coaching.</span><br>
-        <span class="badge badge-red">Underperforming</span> <span class="text-muted">scores under 70, higher risk &mdash; the improvement-plan conversation.</span>
+        {% for segment in quadrant_choices %}
+          <span class="badge {{ segment.css }}">{{ segment.label }}</span> <span class="text-muted">{{ segment.note }}</span>{% if not forloop.last %}<br>{% endif %}
+        {% endfor %}
       </p>
       <p class="form-help" style="margin-top:.75rem;">
         Rank and percentile are computed across the suppliers shown above and nobody else: the percentile is the share of the scored cohort a supplier is at or above. Change the tier or category filter and both change, because the cohort changed. Suppliers with no scored line are listed last and are given no rank at all &mdash; an absence of evidence is not a score of zero.
