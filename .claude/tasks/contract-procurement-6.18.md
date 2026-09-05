@@ -71,9 +71,26 @@ before the consumer ships a table nobody reads).
 
 ## 0. Concurrency gates — four sessions are live on `apps/procurement`
 
-- **Migration slot is `0028_*`.** Do **NOT** run `makemigrations procurement` until
-  `apps/procurement/migrations/0027_*.py` exists on disk. Queue: `0026`=6.16, `0027`=6.17,
-  `0028`=**us**, `0029`=6.19. Disk leaf at contract-freeze time: `0025`.
+- **Migration protocol — the reserved-number queue is WITHDRAWN. Take the next free number when
+  ready; do not wait for anyone.** The original scheme (0026=6.16, 0027=6.17, 0028=us, 0029=6.19)
+  was wrong on the mechanics and actively harmful: the `NNNN_` filename prefix carries **no
+  ordering semantics**. Ordering lives in the explicit `dependencies` edge, which `makemigrations`
+  writes against whatever the leaf is *at the instant it runs* — verified: `0025`'s dependencies
+  include `('procurement', '0024_budgetmapping_costforecast')`, and the graph has exactly **one**
+  procurement leaf. Two sessions generating at different times therefore always produce a linear
+  chain regardless of who reserved which number; only *simultaneous* generation splits the graph.
+  The queue did not prevent that — it made it likelier, by releasing every waiting session at once
+  the moment a number landed (a thundering herd on precisely the operation that must not be
+  concurrent) — while charging real build time for a weaker guarantee than simply announcing.
+  Replacement:
+  1. Numbers by **arrival**, not by sub-module.
+  2. **Announce immediately before running `makemigrations`**; do not generate while someone else
+     is announcing.
+  3. Verify **one** leaf afterwards:
+     `MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes()` filtered to
+     `procurement`.
+  4. On a collision, whoever notices second drops theirs and regenerates against the new leaf.
+     **Never `--merge`.**
 - **Never `seed_procurement --flush`.** Plain idempotent `seed_procurement` only.
 - Shared files are **append-only via surgical `Edit`, never `Write`, never from a subagent**:
   the four `apps/procurement/{models,forms,views,urls}/__init__.py`, `apps/procurement/admin.py`,
