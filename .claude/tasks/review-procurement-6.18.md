@@ -200,6 +200,114 @@ tenant-less child models reach it through `run__tenant` / `issue__tenant`; every
 `tenant`, `number`, `status` and every `editable=False` stamp; `@require_POST` +
 `@tenant_admin_required` sit on `release` and `post` as contracted.
 
+### Pass 2 — `explorer` (spine integrity + structural fit)
+
+Scope counts re-verified 4/4/7/7/12. Three new findings, all structural. **Both Importants
+independently reproduced by the main session.**
+
+#### R2-I1 — `stock_position` re-derives the run's trigger, drops both policy toggles, and its own comment claims otherwise
+
+**File:** `apps/procurement/views/InventoryWarehouseIntegration/StockPosition.py:276-283`
+
+```python
+ordered   = on_order.get(sku, ZERO)                 # ungated
+requested = open_requisitions.get(sku, ZERO)        # ungated
+# "The RUN's trigger, verbatim (Runs.py:403-409)"  <- the comment
+below_point = reorder_point is not None and (on_hand + ordered + requested) <= reorder_point
+```
+
+versus the actual trigger at `models/…/Runs.py:400-401`:
+
+```python
+ordered   = on_order.get(sku, ZERO) if shaping.include_on_order else ZERO
+requested = open_requisitions.get(sku, ZERO) if shaping.include_open_requisitions else ZERO
+```
+
+**Confirmed by the main session** — both lines read side by side; the toggles are absent and the
+comment asserts they are not.
+
+**Consequence.** For a policy with `include_on_order=False` (point 100, on-hand 50, on-order 80):
+the run computes supply 50 and proposes a line; the board computes 130 and shows the row healthy.
+The buyer sees nothing below point, then the run proposes lines from nowhere — precisely the
+two-definitions failure the page's own docstring says it exists to prevent. `stats.below_point`
+and both the `below_point` and `no_cover` tabs undercount with it.
+
+**Why it is invisible today:** both flags default `True` and the seeder sets them `True`, so it
+surfaces only once someone uses the field the form already exposes
+(`forms/…/Policies.py:59`) and the detail template already documents
+(`replenishmentpolicy/detail.html:140-144`).
+
+**Fix.** `policies.get(key)` is already resolved seven lines below at `:289` — move it above the
+calculation, use the `_UNCONFIGURED = ReplenishmentPolicy()` sentinel `Runs.py:387` already
+defines, and gate a separate trigger pair. Leave the **displayed** `on_order` /
+`open_requisition_qty` columns ungated: those report what exists, not what is netted off.
+
+#### R2-I2 — a pure domain rule lives in the views layer and the model imports upward to reach it
+
+**File:** `apps/procurement/models/InventoryWarehouseIntegration/Runs.py:326`
+
+```python
+from apps.procurement.views.InventoryWarehouseIntegration.Policies import _effective_numbers
+```
+
+**Confirmed by the main session:** `grep -rn "from apps\.[a-z]*\.views" apps/*/models/` returns
+**exactly one hit, repo-wide — this one.**
+
+`_effective_numbers(policy, rule)` (`views/…/Policies.py:112-156`) takes no request, touches no
+template and renders nothing. It is pure override-vs-fallback arithmetic whose first parameter is
+the policy — a `ReplenishmentPolicy` method in disguise, parked in the presentation layer because
+the detail page happened to need it first. The *goal* (one written-down definition so the detail
+page and the run cannot disagree) is right; the placement inverts the layering to achieve it.
+
+**Consequences.** `generate()` transitively drags the views + forms + `apps.core.crud` import graph
+in at call time; promoting that import to module scope — the obvious future tidy-up, since it is
+the only deferred import in `generate()` not justified by app-registry ordering — would create a
+circular import. Breaks CLAUDE.md Backend Package Structure rule 5.
+
+**Fix (one move, no behaviour change).** Move it to `models/…/Policies.py` as
+`ReplenishmentPolicy.effective_numbers(self, rule)`; `views/…/Policies.py:247` becomes
+`obj.effective_numbers(rule)`; delete the upward import. Every import in the sub-module is then
+downward.
+
+**Same root, other direction (noted, not a separate finding):** `StockPosition.py:63-65` imports
+private `_on_order_map` / `_open_requisition_map` / `_pair_map` from a *models* module — the only
+cross-layer private import in the app. Directionally fine and better than a third copy, but with
+R2-I2 it shows 6.18 never settled on a home for its shared pure functions.
+
+#### R2-M1 — the board offers "Raise requisition" on rows the run refuses to buy
+
+`StockPosition.py:310` sets `raise_requisition_url` unconditionally, and `below_point` ignores
+`source_method` entirely. `Runs.py:392-393` skips any policy whose `source_method` is not in
+`REQUISITIONABLE_SOURCE_METHODS` — a discipline `models/…/Policies.py:63-68` explicitly tells
+callers to read rather than hard-code. A `transfer`- or `manufacture`-sourced item therefore
+renders as below point with a Buy button, inviting exactly the purchase the model prevents.
+
+**Note: this is contract drift as much as code drift** — § 5 pins `raise_requisition_url` with no
+condition. Fix the contract line too, or the next builder reintroduces it.
+
+#### Verified clean by this pass — stated explicitly
+
+1. **Spine reuse (L36) — clean.** Zero redeclarations of `Item`/`Location`/`StockMove`/`LotSerial`/
+   `ReorderRule`/`PutawayTask`/`CycleCountTask`/`GoodsReceiptNote`/`PurchaseRequisition`/
+   `StockAdjustment`; no Bin/Zone model. All 26 FKs target the spine **by string**. A grep for any
+   `StockMove` write across the whole of `apps/procurement` returns **nothing** — contract § 6 rule
+   1 holds app-wide, not merely in 6.18.
+2. **Derived-vs-stored — clean, and the distinction is drawn correctly.** No stored aggregate
+   columns in `0027`. The 11 snapshot columns are a legitimate point-in-time record (the
+   `CycleCountTaskLine.expected_quantity` precedent), never a second source of truth — every live
+   figure is re-read from `StockMove`.
+3. **Availability formula genuinely reused verbatim** — character-identical at
+   `StockPosition.py:274`, `Runs.py:434` and `inventory/…/StockLevels.py:124`. 6.18 mirrors
+   `_on_order_map` locally rather than making a third copy, per contract § 6 rule 4.
+4. **Package layout — clean.** 5 models / 5 forms / 27 views all re-exported (verified
+   programmatically, zero missing); 27 patterns, six unique literal first segments; every import
+   absolute.
+5. **Structural fit — it belongs.** Template tree matches the four peers exactly;
+   `TenantUniqueMixin` first in MRO on the three header forms and correctly absent from the two
+   child forms whose models carry no `tenant` column; colour-named badges only.
+
+---
+
 **Called out as done well:** `MaterialIssue.post()` implements all four properties of the
 `CountProgram.generate_tasks()` precedent rather than merely citing it — `select_for_update` on the
 header, the `adjustment_id` reuse branch that closes the double-mint window the status gate cannot,
