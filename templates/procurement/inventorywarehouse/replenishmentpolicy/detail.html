@@ -60,7 +60,7 @@
         <p class="text-muted">Read against reorder rule
           {% if rule_url %}<a href="{{ rule_url }}">{{ rule.item.sku }} @ {{ rule.location.code }}</a>{% else %}{{ rule.item.sku }} @ {{ rule.location.code }}{% endif %}
           <span class="badge {% if rule.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if rule.is_active %}Rule active{% else %}Rule inactive{% endif %}</span>
-          {% if not rule.is_active %}<br>An inactive rule still holds these numbers, but SCM will not alert on it — the figures below are what a run would read, not a promise that anything will trigger.{% endif %}
+          {% if not rule.is_active %}<br>The rule is <strong>inactive</strong>, and a replenishment run only reads active rules — so a run will not plan this item at all, and the figures below are what it <em>would</em> use if the rule were switched back on. SCM will not alert on it either. Reactivate the reorder rule to make any of this take effect.{% endif %}
         </p>
       {% else %}
         <p class="text-muted">
