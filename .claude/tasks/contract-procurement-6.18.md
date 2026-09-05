@@ -479,10 +479,23 @@ filters: `("status","status",False)`, `("trigger","trigger",False)`,
 
 base `obj` **+** `lines` (paginated 25 via `paginate`,
 `select_related("item","item__uom","location","vendor","policy","requisition")`),
-`line_page_obj`, `decision_choices`, `vendors`, `totals` (`line_count`, `accepted`, `snoozed`,
-`dismissed`, `pending`, `accepted_value`), `can_generate`, `can_release`, `can_cancel`,
-`requisitions` (distinct released PRs, urls reversed **in Python**), `truncated`,
-`sku_match_note`.
+`line_page_obj`, `decision_choices`, `vendors`, `vendors_capped`, `vendor_option_cap`, `totals`
+(`line_count`, `accepted`, `snoozed`, `dismissed`, `pending`, `accepted_value`), `can_generate`,
+`can_release`, `can_cancel`, `requisitions` (distinct released PRs, urls reversed **in Python**),
+`truncated`, `sku_match_note`.
+
+`vendors` is **capped** at `_VENDOR_OPTION_CAP` (200) by name, plus every vendor already on the
+lines of the page being rendered (review 6.18 M16): the list is repeated inside all 25 row forms,
+so an uncapped register is 25 × N `<option>` elements for one page, and a row whose vendor sorted
+past the cap would otherwise render a `<select>` with nothing selected and be silently unassigned
+by the next Save. `vendors_capped` drives the caveat on the page. It bounds only what is
+**offered** — `ReplenishmentSuggestionDecisionForm.vendor.queryset` stays the full register, so
+the cap can never turn a legitimate POST into a validation error.
+
+`can_release` is `obj.can_release` **and** `_is_admin(request)` (review 6.18 M12) — the verb is
+`@tenant_admin_required`, so the flag carries the same term and the page stops offering a button
+that is guaranteed a 403. Same for `can_post` on `materialissue_detail`. The decorator remains the
+enforcement.
 
 ### `replenishmentrun_generate` / `_release` / `_cancel`
 
