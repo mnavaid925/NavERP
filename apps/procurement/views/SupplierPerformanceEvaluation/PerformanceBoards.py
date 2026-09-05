@@ -34,9 +34,10 @@ suppliers, periods or KPIs on the page:
   cohort in one ``party_id__in``, the risk assessments for the whole cohort in one more). The
   ranking and the percentiles are ONE Python pass over rows already in memory. Twenty suppliers
   and two hundred cost the same five queries.
-* ``supplier_trend_board`` — the two pickers, the two selection lookups, and ``trend_series()``'s
-  two (the scorecards, then every line across all of them in one ``scorecard_id__in``). Never one
-  query per period.
+* ``supplier_trend_board`` — the two pickers, the supplier lookup and ``trend_series()``'s two
+  (the scorecards, then every line across all of them in one ``scorecard_id__in``); a sixth only
+  when ``?kpi=`` is set and the KPI has to be resolved. Never one query per period: three periods
+  and ten cost the same.
 * ``supplier_perception_gap`` — the supplier picker, the selection lookup, the window picker, and
   ``perception_gap_rows()``'s single pass over the window's submitted responses, bucketed in
   Python by KPI and side. One grouped read, not two loops.
@@ -239,8 +240,9 @@ def supplier_benchmark_board(request):
 def supplier_trend_board(request):
     """One supplier across every period on record — the composite, and each KPI underneath it.
 
-    Six queries regardless of how many periods the supplier has: ``trend_series()`` reads the
-    scorecards once and every line across all of them once, never one query per period.
+    Five queries (six with ``?kpi=``) regardless of how many periods the supplier has:
+    ``trend_series()`` reads the scorecards once and every line across all of them once, never
+    one query per period. Measured flat from three periods to ten.
     """
     tenant = request.tenant
     suppliers = _supplier_parties(tenant)
