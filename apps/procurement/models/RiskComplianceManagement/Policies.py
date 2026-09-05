@@ -309,7 +309,10 @@ class PolicyAttestation(TenantOwned):
         # raiser idempotent — get_or_create stands on it, not on a pre-check.
         unique_together = (("tenant", "policy", "user"),)
         indexes = [
-            models.Index(fields=["tenant", "policy"], name="prc_patt_tnt_policy_idx"),
+            # No (tenant, policy) index: it would be a strict PREFIX of the unique_together
+            # above, which MySQL already backs with a unique index on
+            # (tenant_id, policy_id, user_id) - and a prefix of an existing index is served by
+            # that index. A second copy is write cost for no read.
             models.Index(fields=["tenant", "user", "status"], name="prc_patt_user_status_idx"),
             # Backs both the overdue board and the "my policies" page: status + due date is the
             # question both of them ask.
