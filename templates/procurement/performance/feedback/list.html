@@ -10,7 +10,7 @@
       object_list, page_obj, q,
       status_choices, kind_choices, function_choices, rating_choices,
       suppliers, kpis, scorecards,
-      stats{total, requested, submitted, declined, overdue}.
+      stats{total, requested, submitted, declined, expired, overdue}.
 
     The view's crud_list filter tuple is exactly
       (("supplier","supplier_id",True), ("status","status",False), ("kind","respondent_kind",False),
@@ -66,7 +66,14 @@
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ stats.requested }}</div><div class="stat-label">Awaiting an answer</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="circle-check"></i></div><div class="stat-value">{{ stats.submitted }}</div><div class="stat-label">Submitted</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="circle-slash"></i></div><div class="stat-value">{{ stats.declined }}</div><div class="stat-label">Declined</div></div>
-    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Past due</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="hourglass"></i></div><div class="stat-value">{{ stats.expired }}</div><div class="stat-label">Expired</div></div>
+    {% comment %}
+      The four cards above are the four STATUS_CHOICES and add up to "Responses on file".
+      "Past due" is not a fifth status - it is the subset of "Awaiting an answer" whose due
+      date has passed - so its label says so rather than letting the cards look like they
+      should sum to the total.
+    {% endcomment %}
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.overdue }}</div><div class="stat-label">Past due (of those awaiting)</div></div>
   </div>
 
   <div class="card">
