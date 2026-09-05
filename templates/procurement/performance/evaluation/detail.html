@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Evaluation Period{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — the period document
+    (apps/procurement/views/SupplierPerformanceEvaluation/ScorecardKpiScores.py
+     :supplierevaluation_detail — a hand-rolled render(), not crud_detail, because obj is the
+     CROSS-APP scm.SupplierScorecard).
+
+    Context contract, and NOTHING else exists here:
+      obj, lines, composite{weighted_total, weight_total, scored_lines, total_lines,
+      unscored_lines, overall, grade}, dimension_map{<dim>: {label, score, kpi_count, kpi_names,
+      weight_total}}, can_generate, refusal_reason, plans, feedback_rows, band_choices,
+      handover_note, row_cap, truncated.
+
+    THE ONE-WAY DOOR. Generating writes obj.delivery_score / quality_score / price_score /
+    responsiveness_score from the KPI lines and sets obj.manual_override, after which
+    scm.SupplierScorecard.recompute_from_signals() returns immediately on this row and SCM's
+    signal engine never touches it again. That fact is stated THREE times on this page by
+    design — as a standing warning above the button, inside the button's confirm() handler, and
+    again as a past-tense note once manual_override is already set — because it cannot be undone
+    from anywhere in this module.
+
+    can_generate is false on a published or archived scorecard (a closed period is closed) and
+    for a tenant-less user. When it is false the button is REPLACED by refusal_reason: a
+    greyed-out control that will not say why is worse than no control at all.
+
+    Two numbers, computed differently on purpose (see composite below): the 6.16 composite is the
+    weighted mean of every SCORED line; obj.overall_score is SCM's blend of the four dimension
+    columns. Showing both side by side is how an operator sees that generate did what it said.
+
+    Nullable-field discipline (L10): overall_score, grade, every dimension score, measured_value
+    and score are all nullable, and every read of them sits inside an `is not None` branch —
+    never truthiness, because 0 is a real score.
+
+    Badge classes are COLOUR-NAMED only (L33). Every score LINE takes its class from
+    line.band_css — the committed BAND_CSS mapping on the model — so a row can never disagree
+    with the model about what "critical" looks like. The band legend below is the one place a
+    literal chain appears: band_choices is a list of (value, label) 2-tuples with no css hook to
+    read, and the four branches there mirror BAND_CSS exactly.
+
+    HAND-OFF TO ENTITIES 3 & 4: `plans` and `feedback_rows` are rendered WITHOUT links, because
+    supplierfeedback_detail / improvementplan_detail do not exist until those entities land. When
+    they do, wrap each table's number cell in a {% url 'procurement:improvementplan_detail' p.pk %}
+    / {% url 'procurement:supplierfeedback_detail' f.pk %} anchor and add the matching eye action
+    to an Actions column. Emitting either route now would be a NoReverseMatch 500 on every render
+    of this page, empty tables included — a url tag in an {% empty %} branch fires precisely when
+    there is nothing to link to.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.party.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:supplierevaluation_list' %}">Evaluation periods</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.period_start|date:"M d, Y" }} &ndash; {{ obj.period_end|date:"M d, Y" }} · {{ obj.get_status_display|lower }} · {{ composite.total_lines }} KPI line{{ composite.total_lines|pluralize }} measured.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:scorecard_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open in SCM</a>
+      <a href="{% url 'procurement:supplierevaluation_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All periods</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Generate KPI lines</h2>
+      <div>
+        {% if obj.manual_override %}
+          <span class="badge badge-info">Owned by Procurement</span>
+        {% else %}
+          <span class="badge badge-slate">Owned by SCM signals</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        Warning FIRST, control second. handover_note is performance.HANDOVER_NOTE — the same
+        sentence the model docstring, the generate view docstring and the register carry, so the
+        four surfaces cannot describe the one-way door differently.
+      {% endcomment %}
+      <p class="form-help"><i data-lucide="alert-triangle"></i> {{ handover_note }}</p>
+      {% if obj.manual_override %}
+        <p class="form-help">This has already happened: <span class="fw-600">manual_override is set on this scorecard</span>, so SCM's signal engine already skips it and Procurement 6.16 owns the four dimension columns. Re-generating refreshes the figures from the current KPI definitions and the current transaction history; it does not hand anything back.</p>
+      {% endif %}
+
+      {% if can_generate %}
+        <p class="text-muted">Every active KPI that applies to this supplier is resolved over the period window, scored through its own definition and written as a line below. Pressing this twice is safe &mdash; each line is updated in place rather than doubled &mdash; and a KPI with no data in the window is skipped rather than scored zero.</p>
+        <form method="post" action="{% url 'procurement:supplierevaluation_generate' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Generate KPI lines onto {{ obj.number }}? This writes the four scorecard dimension columns — delivery, quality, price and responsiveness — from the KPI lines and takes this scorecard over from SCM\'s signal engine permanently: manual_override is set, recompute_from_signals() will skip it from then on, and this cannot be undone from here.');"><i data-lucide="calculator"></i> Generate KPI lines</button>
+        </form>
+      {% else %}
+        {% comment %}
+          refusal_reason is the view's own sentence, printed rather than swallowed. It is ""
+          only when can_generate is true, so this branch always has something to say.
+        {% endcomment %}
+        <p class="form-help"><i data-lucide="lock"></i> {{ refusal_reason }}</p>
+        <p class="text-muted">Nothing on this page can be recomputed while the period is closed. The lines below read exactly as they read when they were generated &mdash; that is what makes a published scorecard something a supplier can be held to.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Period document</h2>
+      <div>
+        {% if obj.status == "draft" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "published" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "archived" %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Scorecard</dt><dd class="fw-600">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.party.name }}</dd></div>
+        <div class="detail-item"><dt>Period start</dt><dd>{{ obj.period_start|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Period end</dt><dd>{{ obj.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+        <div class="detail-item"><dt>Overall score (SCM)</dt>
+          <dd>{% if composite.overall is not None %}<span class="fw-600">{{ composite.overall|floatformat:2 }}</span>{% else %}<span class="text-muted">Not scored</span>{% endif %}
+            <div class="text-muted">SCM's weighted blend of the four dimension columns</div>
+          </dd></div>
+        <div class="detail-item"><dt>Grade</dt>
+          <dd>{% if composite.grade %}<span class="badge badge-info">{{ composite.grade }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Written by</dt>
+          <dd>{% if obj.manual_override %}Procurement 6.16<div class="text-muted">manual_override is set &mdash; SCM's signal engine skips this scorecard</div>{% else %}SCM signal engine<div class="text-muted">recompute_from_signals() still owns the four dimension columns</div>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+      {% if truncated %}
+        <p class="form-help">This scorecard carries more than {{ row_cap }} KPI lines; only the first {{ row_cap }} are listed below, and the composite is computed over those. Open the score register and filter by this period for the full set.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Composite</h2>
+      <span class="text-muted">the weighted mean of every scored line on this page</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>6.16 composite</dt>
+          <dd>{% if composite.weighted_total is not None %}<span class="fw-600">{{ composite.weighted_total|floatformat:2 }}</span>{% else %}<span class="text-muted">Not computable</span>{% endif %}
+            <div class="text-muted">&sum;(score &times; weight applied) &divide; &sum;(weight applied), over scored lines only</div>
+          </dd></div>
+        <div class="detail-item"><dt>Overall score (SCM)</dt>
+          <dd>{% if composite.overall is not None %}<span class="fw-600">{{ composite.overall|floatformat:2 }}</span>{% else %}<span class="text-muted">Not scored</span>{% endif %}
+            <div class="text-muted">the scorecard's own stored figure</div>
+          </dd></div>
+        <div class="detail-item"><dt>Weight in play</dt><dd>{{ composite.weight_total }}</dd></div>
+        <div class="detail-item"><dt>Lines scored</dt><dd>{{ composite.scored_lines }} of {{ composite.total_lines }}</dd></div>
+        <div class="detail-item"><dt>Lines with no figure</dt>
+          <dd>{% if composite.unscored_lines %}<span class="fw-600">{{ composite.unscored_lines }}</span><div class="text-muted">no data in the window &mdash; dropped from BOTH sides of the division, never scored zero</div>{% else %}None{% endif %}</dd></div>
+      </dl>
+      <p class="form-help">The two figures above are computed differently and are meant to be read together, not reconciled. The composite is the weighted mean of every KPI actually scored this period; the overall is SCM's blend of the four dimension columns. They agree when every KPI maps to a dimension and every dimension has data &mdash; and when they disagree, the dimension map below says exactly where the difference went.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Dimension map</h2>
+      <span class="text-muted">which KPIs feed each of the four scorecard columns</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th class="text-right">Score on the scorecard</th>
+            <th class="text-right">KPIs feeding it</th>
+            <th class="text-right">Weight</th>
+            <th>Which KPIs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key, dim in dimension_map.items %}
+            <tr>
+              <td class="fw-600">{{ dim.label }}</td>
+              <td class="text-right">{% if dim.score is not None %}<span class="fw-600">{{ dim.score|floatformat:2 }}</span>{% else %}<span class="text-muted">Not scored</span>{% endif %}</td>
+              <td class="text-right">{{ dim.kpi_count }}</td>
+              <td class="text-right">{{ dim.weight_total }}</td>
+              <td>
+                {% if dim.kpi_names %}
+                  {{ dim.kpi_names|join:", " }}
+                {% else %}
+                  <span class="text-muted">Nothing on this scorecard feeds this column</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="form-help">A dimension with a score but no KPIs behind it was written by SCM's signal engine before this scorecard was generated onto. A dimension with KPIs but no score has lines that never produced a figure. Both are worth a look before the period is published.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">KPI lines</h2>
+      <span class="text-muted">frozen as generated &mdash; at most {{ row_cap }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>KPI</th>
+            <th>Category</th>
+            <th class="text-right">Measured</th>
+            <th class="text-right">Target then</th>
+            <th class="text-right">Score</th>
+            <th>Band</th>
+            <th class="text-right">Weight</th>
+            <th class="text-right">Contribution</th>
+            <th>Source</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600">
+                {% comment %}
+                  kpi_name / kpi_category are the FROZEN copies taken at generation. They are
+                  printed here rather than line.kpi.name so a KPI renamed or re-categorised since
+                  cannot re-label a closed period. The link still goes to the live definition.
+                {% endcomment %}
+                {% if line.kpi_id %}
+                  <a href="{% url 'procurement:supplierkpi_detail' line.kpi_id %}">{{ line.kpi_name|default:line.kpi.name }}</a>
+                  <div class="text-muted">{{ line.kpi.code }}</div>
+                {% else %}
+                  {{ line.kpi_name|default:"KPI" }}
+                {% endif %}
+              </td>
+              <td>{% if line.kpi_category %}{{ line.kpi_category|title }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td class="text-right">
+                {% if line.measured_value is not None %}
+                  {{ line.measured_value|floatformat:"-4" }}{% if line.unit_at_time %} <span class="text-muted">{{ line.unit_at_time }}</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">No data</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{% if line.target_at_time is not None %}{{ line.target_at_time|floatformat:"-4" }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td class="text-right fw-600">{% if line.score is not None %}{{ line.score|floatformat:2 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td><span class="badge {{ line.band_css }}">{{ line.get_band_display }}</span></td>
+              <td class="text-right">{{ line.weight_applied }}</td>
+              <td class="text-right">{% if line.contribution is not None %}{{ line.contribution|floatformat:2 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>
+                {% comment %}
+                  source_at_time is a plain CharField with no choices — there is no
+                  get_source_at_time_display, so the three values are spelled out here against
+                  SupplierKpi.SOURCE_CHOICES with an else-fallback that prints the raw value.
+                {% endcomment %}
+                {% if line.source_at_time == "derived" %}<span class="badge badge-info">Derived</span>
+                {% elif line.source_at_time == "survey" %}<span class="badge badge-slate">360 survey</span>
+                {% elif line.source_at_time == "manual" %}<span class="badge badge-muted">Manual</span>
+                {% elif line.source_at_time %}<span class="text-muted">{{ line.source_at_time }}</span>
+                {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:supplierkpiscore_detail' line.pk %}" class="btn-icon" title="View measurement" aria-label="View measurement"><i data-lucide="eye"></i></a>
+                  {% if line.source_at_time == "manual" %}
+                    <a href="{% url 'procurement:supplierkpiscore_edit' line.pk %}" class="btn-icon" title="Edit measurement" aria-label="Edit measurement"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  <form method="post" action="{% url 'procurement:supplierkpiscore_delete' line.pk %}">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete line" aria-label="Delete line" onclick="return confirm('Delete this measured line from {{ obj.number }}? The four dimension columns are NOT re-blended by a delete — they keep the figures the generate run wrote. Re-press Generate on a draft to rebuild them from what is actually left.');"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10">
+              <div class="empty-state">
+                <i data-lucide="calculator"></i>
+                <h3>Nothing measured on this period yet</h3>
+                <p>Press <span class="fw-600">Generate KPI lines</span> above and every active KPI that applies to this supplier is resolved over the window, scored through its own definition and written here with the arithmetic attached. Read the hand-over warning first &mdash; generating is not reversible from this module.</p>
+                <a href="{% url 'procurement:supplierkpi_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> The KPI catalogue</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        The band legend. band_choices is a list of (value, label) 2-tuples with NO css hook, so
+        this is the one place a literal colour chain appears — and it mirrors the model's
+        BAND_CSS exactly (ok -> badge-green, warning -> badge-amber, critical -> badge-red,
+        unknown -> badge-muted). Every ROW above takes its class from line.band_css instead.
+      {% endcomment %}
+      <p class="text-muted">
+        Bands:
+        {% for val, label in band_choices %}
+          {% if val == "ok" %}<span class="badge badge-green">{{ label }}</span>
+          {% elif val == "warning" %}<span class="badge badge-amber">{{ label }}</span>
+          {% elif val == "critical" %}<span class="badge badge-red">{{ label }}</span>
+          {% elif val == "unknown" %}<span class="badge badge-muted">{{ label }}</span>
+          {% else %}<span class="badge badge-slate">{{ label }}</span>{% endif %}
+        {% endfor %}
+      </p>
+      <p class="form-help">Every column on a line is frozen at generation &mdash; the weight, the target, the direction, the source and the unit are the ones that were in force when the figure was taken. Re-tune a KPI next quarter and this period still reads exactly as the supplier was shown it.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Improvement plans opened off this period</h2>
+      <span class="text-muted">the work that followed the numbers</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>KPI cited</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Target close</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in plans %}
+            <tr>
+              <td class="fw-600">{{ p.title }}<div class="text-muted">{{ p.number }}</div></td>
+              <td>{% if p.kpi %}{{ p.kpi.name }}{% else %}<span class="text-muted">General</span>{% endif %}</td>
+              <td>
+                {% if p.severity == "critical" %}<span class="badge badge-red">{{ p.get_severity_display }}</span>
+                {% elif p.severity == "major" %}<span class="badge badge-amber">{{ p.get_severity_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ p.get_severity_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if p.status == "closed" %}<span class="badge badge-green">{{ p.get_status_display }}</span>
+                {% elif p.status == "monitoring" %}<span class="badge badge-info">{{ p.get_status_display }}</span>
+                {% elif p.status == "active" %}<span class="badge badge-amber">{{ p.get_status_display }}</span>
+                {% elif p.status == "cancelled" %}<span class="badge badge-muted">{{ p.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ p.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ p.start_date|date:"M d, Y" }}</td>
+              <td>{{ p.target_close_date|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="clipboard-check"></i>
+                <h3>No improvement plans cite this period</h3>
+                <p>A period that produced a critical band and no plan is the gap worth closing: the number is evidence, and the plan is what somebody agreed to do about it.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">360 responses for this period</h2>
+      <span class="text-muted">what the survey KPIs above were averaged from</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Response</th>
+            <th>Respondent</th>
+            <th>KPI</th>
+            <th>Rating</th>
+            <th class="text-right">Importance</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in feedback_rows %}
+            <tr>
+              <td class="fw-600">{{ f.number }}</td>
+              <td>
+                {% if f.respondent %}{{ f.respondent.get_full_name|default:f.respondent.email }}
+                {% elif f.respondent_name %}{{ f.respondent_name }}
+                {% else %}<span class="text-muted">Anonymous</span>{% endif %}
+                <div class="text-muted">{{ f.get_respondent_kind_display }} · {{ f.get_respondent_function_display }}</div>
+              </td>
+              <td>{% if f.kpi %}{{ f.kpi.name }}{% else %}<span class="text-muted">General commentary</span>{% endif %}</td>
+              <td>
+                {% if f.rating is not None %}
+                  {% if f.rating >= 4 %}<span class="badge badge-green">{{ f.get_rating_display }}</span>
+                  {% elif f.rating == 3 %}<span class="badge badge-amber">{{ f.get_rating_display }}</span>
+                  {% else %}<span class="badge badge-red">{{ f.get_rating_display }}</span>{% endif %}
+                {% else %}<span class="text-muted">Not rated</span>{% endif %}
+              </td>
+              <td class="text-right">{{ f.importance }}</td>
+              <td>
+                {% if f.status == "submitted" %}<span class="badge badge-green">{{ f.get_status_display }}</span>
+                {% elif f.status == "requested" %}<span class="badge badge-amber">{{ f.get_status_display }}</span>
+                {% elif f.status == "declined" %}<span class="badge badge-muted">{{ f.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ f.get_status_display }}</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="message-square"></i>
+                <h3>No 360 responses against this period</h3>
+                <p>Survey KPIs on this scorecard have nothing to average until responses are requested and submitted for this window &mdash; they are skipped by Generate rather than scored zero.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
