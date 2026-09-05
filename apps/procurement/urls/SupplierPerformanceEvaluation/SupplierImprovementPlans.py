@@ -38,6 +38,10 @@ urlpatterns = [
          name="improvementplan_detail"),
     path("improvement-plans/<int:pk>/edit/", views.improvementplan_edit,
          name="improvementplan_edit"),
+    # The uploaded evidence, served BY DJANGO rather than linked at MEDIA_URL: the raw path
+    # carries no session and no tenant check, and the file is an NCR pack or an audit report.
+    path("improvement-plans/<int:pk>/evidence/", views.improvementplan_evidence,
+         name="improvementplan_evidence"),
     path("improvement-plans/<int:pk>/activate/", views.improvementplan_activate,
          name="improvementplan_activate"),
     path("improvement-plans/<int:pk>/monitor/", views.improvementplan_monitor,
