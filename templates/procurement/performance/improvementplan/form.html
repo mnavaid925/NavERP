@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Improvement Plan{% else %}Open an Improvement Plan{% endif %}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.16 Supplier Performance & Evaluation — improvement-plan create-or-edit. ONE template for
+    both, driven by `is_edit` (crud_create passes is_edit=False and NO obj; crud_edit passes
+    is_edit=True and obj). EVERY obj.* read below is inside an is_edit branch — on create there
+    is no obj and an unguarded read is a silently blank region (L8).
+
+    Context contract:
+      form, is_edit, and on EDIT ONLY obj.
+
+    THE FORM CARRIES enctype="multipart/form-data" — the `evidence` FileField needs it, and
+    without it the browser posts only the filename, so the upload silently never arrives. The
+    form's clean_evidence applies the extension allowlist and the 20 MB cap; both are printed
+    next to the field so the refusal is not the first time anyone hears about them.
+
+    The form carries twenty fields: title, supplier, scorecard, kpi, severity, finding,
+    root_cause, corrective_actions, support_provided, success_criteria, start_date,
+    target_close_date, next_review_date, extended_close_date, owner, supplier_owner_name,
+    supplier_owner_email, escalated_suspension, evidence, evidence_url.
+
+    `status` and `outcome` are NOT among them: the lifecycle belongs to the five verbs on the
+    detail page, and an outcome typed here would be a result nobody signed off. `number` (auto
+    SIP-#####), `tenant`, `actual_close_date`, the acknowledgement stamps and the verification
+    stamps plus `closure_note` are all system-set and have no input either — a stamp that could
+    be typed over would stop being evidence of anything.
+
+    Four rules are enforced by the MODEL, not by anything here, and are raised together so this
+    page shows every problem at once: the plan must not close before it starts; an extension must
+    fall STRICTLY AFTER the original target; an outcome belongs only to a closed plan (which is
+    why there is no outcome field here at all); and an escalation must point at a suspension in
+    this workspace AND against this same supplier. The help text below explains each of them
+    where the field renders.
+
+    Field help is keyed off field.name so it stays correct if the form order changes.
+    Each label is bound to its widget with for="{{ field.id_for_label }}".
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit plan — {{ obj.number }}{% else %}Open an improvement plan{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Supplier Performance &amp; Evaluation</span><span class="sep">›</span>
+        <a href="{% url 'procurement:improvementplan_list' %}">Improvement plans</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">A scorecard says what happened. This says what was agreed about it, by when, and who owns it on both sides &mdash; so that closing it later is a finding, not an opinion.</p>
+      {% if is_edit %}
+        <p class="text-muted">Editing corrects what was recorded, including granting an extension. It cannot move the plan through its lifecycle or write an outcome: <span class="fw-600">status and outcome are not on this form</span>. Use Activate, Monitoring, Acknowledge, Close or Cancel on the plan page for that.</p>
+      {% else %}
+        <p class="text-muted">A new plan starts as a <span class="fw-600">Draft</span> &mdash; agreed with nobody yet. Activate it from the plan page once it has been put to the supplier, and record their acknowledgement when it comes back.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The plan</h2><span class="text-muted">what went wrong, what was agreed, and by when</span></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.name == "title" %}
+                <div class="form-help">One line somebody scanning the register will recognise &mdash; the problem, not the ceremony. &ldquo;Late deliveries on the Kanto line&rdquo; beats &ldquo;Q3 PIP&rdquo;.</div>
+              {% elif field.name == "supplier" %}
+                <div class="form-help">Who the plan is with. The list is this workspace&rsquo;s supplier and vendor parties.</div>
+              {% elif field.name == "scorecard" %}
+                <div class="form-help">The period whose performance opened this plan &mdash; the evidence behind it. Optional, but a plan tied to a period shows up on that period&rsquo;s page, where the number and the work to fix it stay attached to each other.</div>
+              {% elif field.name == "kpi" %}
+                <div class="form-help">The failing KPI, when one metric drove this. Leave blank when the problem is a pattern rather than a single number &mdash; a plan citing a KPI appears on that KPI&rsquo;s definition page.</div>
+              {% elif field.name == "severity" %}
+                <div class="form-help">How bad it is. Severity drives triage and nothing automatic: a critical plan is not a different workflow, it is the same workflow somebody reads first.</div>
+              {% elif field.name == "finding" %}
+                <div class="form-help">What was actually observed, in the supplier&rsquo;s language as much as ours. This is the paragraph that gets quoted back if the plan is ever disputed.</div>
+              {% elif field.name == "root_cause" %}
+                <div class="form-help">Why it happened. Optional &mdash; and a plan with no root cause is a plan that fixes a symptom, so it is worth coming back to fill in once the supplier has investigated.</div>
+              {% elif field.name == "corrective_actions" %}
+                <div class="form-help">What was agreed would be done about it. Narrative on purpose: a plan is one row here, and a real action list belongs in its own register rather than crammed into a text box that nothing can count.</div>
+              {% elif field.name == "support_provided" %}
+                <div class="form-help">What we are doing to help &mdash; forecast visibility, a joint audit, revised drawings. A supplier told to improve with no help is being managed, not developed.</div>
+              {% elif field.name == "success_criteria" %}
+                <div class="form-help">What &ldquo;fixed&rdquo; looks like, in numbers: <span class="fw-600">on-time delivery above 95% for two consecutive months</span>, not <span class="fw-600">better delivery</span>. Without this, closing the plan is an opinion.</div>
+              {% elif field.name == "start_date" %}
+                <div class="form-help">When the plan period begins.</div>
+              {% elif field.name == "target_close_date" %}
+                <div class="form-help">The date agreed at the outset. It must not fall before the start date, and it stays as the record of what was originally agreed even if an extension is granted later.</div>
+              {% elif field.name == "next_review_date" %}
+                <div class="form-help">When the next check-in falls due. Optional &mdash; but a plan nobody reviews between opening and closing is one nobody works.</div>
+              {% elif field.name == "extended_close_date" %}
+                <div class="form-help">A granted extension. It must fall <span class="fw-600">strictly after</span> the target close date &mdash; an &ldquo;extension&rdquo; on or before the agreed date would be a way to quietly re-write what was agreed. Once set, every &ldquo;past due&rdquo; reading is measured against this instead.</div>
+              {% elif field.name == "owner" %}
+                <div class="form-help">Who owns this on our side. Optional, and a plan with no owner is a plan with nobody chasing it.</div>
+              {% elif field.name == "supplier_owner_name" %}
+                <div class="form-help">Who owns it on theirs. Their name here is what makes the acknowledgement mean something later.</div>
+              {% elif field.name == "supplier_owner_email" %}
+                <div class="form-help">Where the plan and its reviews get sent.</div>
+              {% elif field.name == "escalated_suspension" %}
+                <div class="form-help">The block-register entry this plan escalated to. Blocking a vendor happens in the <span class="fw-600">suspension register</span> with its own request &rarr; decide &rarr; lift lifecycle &mdash; this field only points at it, because a second blocking flag would disagree with the real one within a quarter. It must be a suspension against <span class="fw-600">this same supplier</span>.</div>
+              {% elif field.name == "evidence" %}
+                <div class="form-help">Supporting proof &mdash; the audit report, the failure photographs, the signed plan. Allowed: pdf, doc, docx, xls, xlsx, csv, txt, png, jpg, jpeg, gif, webp, zip. Maximum 20 MB.</div>
+              {% elif field.name == "evidence_url" %}
+                <div class="form-help">A link to evidence held elsewhere &mdash; a QMS record, a shared drive. Just as good as an upload: proof does not have to be copied here to be proof.</div>
+              {% elif field.help_text %}
+                <div class="form-help">{{ field.help_text }}</div>
+              {% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="form-help">The lifecycle is not on this form. A plan runs <span class="fw-600">draft &rarr; active &rarr; monitoring &rarr; closed</span> through the verbs on its own page, and can be <span class="fw-600">cancelled</span> from any open state. Only the close verb writes an outcome, and only an admin can press it &mdash; closing signs the ending the supplier will be shown.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Open plan{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'procurement:improvementplan_detail' obj.pk %}{% else %}{% url 'procurement:improvementplan_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
