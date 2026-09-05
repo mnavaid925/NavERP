@@ -136,7 +136,13 @@
     <div class="card-body">
       <dl class="detail-grid">
         <div class="detail-item"><dt>Scorecard</dt><dd class="fw-600">{{ obj.number }}</dd></div>
-        <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.party.name }}</dd></div>
+        {% comment %}
+          Linked, like the Supplier row on the plan and 360 detail pages. Two of the four
+          6.16 detail pages linked the supplier to its party record and two printed it as
+          text, so the same field was a dead end on half of them.
+        {% endcomment %}
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd><a href="{% url 'core:party_detail' obj.party_id %}">{{ obj.party.name }}</a></dd></div>
         <div class="detail-item"><dt>Period start</dt><dd>{{ obj.period_start|date:"M d, Y" }}</dd></div>
         <div class="detail-item"><dt>Period end</dt><dd>{{ obj.period_end|date:"M d, Y" }}</dd></div>
         <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
