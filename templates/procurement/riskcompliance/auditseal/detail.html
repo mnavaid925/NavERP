@@ -102,7 +102,7 @@
         <div class="detail-item"><dt>Sealed by</dt><dd>{% if obj.sealed_by %}{{ obj.sealed_by.get_full_name|default:obj.sealed_by.username }}{% else %}<span class="text-muted">System</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Algorithm</dt><dd>{{ obj.algorithm }}</dd></div>
         <div class="detail-item"><dt>Chains onto</dt><dd>{% if obj.prev_seal %}<a href="{% url 'procurement:auditseal_detail' obj.prev_seal.pk %}">{{ obj.prev_seal.number }}</a>{% else %}<span class="text-muted">Nothing — this is the first seal in the chain</span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Last checked</dt><dd>{% if obj.last_verified_at %}{{ obj.last_verified_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never re-hashed since it was sealed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last checked</dt><dd>{% if obj.last_verified_at %}{{ obj.last_verified_at|date:"M d, Y H:i" }}{% if obj.last_verified_by %} by {{ obj.last_verified_by.get_full_name|default:obj.last_verified_by.username }}{% else %} <span class="text-muted">(actor not recorded)</span>{% endif %}{% else %}<span class="text-muted">Never re-hashed since it was sealed</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Note</dt><dd>{% if obj.note %}{{ obj.note }}{% else %}<span class="text-muted">No note</span>{% endif %}</dd></div>
       </dl>
       <div style="margin-top:1rem;">
