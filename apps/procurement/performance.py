@@ -616,6 +616,25 @@ def generate_scorecard_lines(scorecard, user):
     """
     from apps.procurement.models.DashboardPortal.ProcurementAlerts import ProcurementAlert
 
+    # RE-READ THE STATUS UNDER A ROW LOCK before trusting it. The caller fetched this instance
+    # outside any transaction, so its ``status`` is a snapshot: a scorecard published between
+    # that fetch and this call would still pass a check made against the stale in-memory value,
+    # and generate would write the four dimension columns and ``manual_override`` onto a CLOSED
+    # period — the exact invariant this guard exists to protect. We are already inside
+    # ``@transaction.atomic``, so the lock is held until the whole run commits. Same shape as
+    # ``vsu_approve`` in ``VendorManagement/VendorSuspensions.py``.
+    #
+    # ``select_for_update()`` is a real lock on MySQL and a silent no-op on SQLite (the backend
+    # reports ``has_select_for_update = False``, so the clause is simply not emitted), which is
+    # what the test suite runs on — the re-read still happens there, only unlocked.
+    locked = (type(scorecard).objects.select_for_update()
+              .filter(pk=scorecard.pk).only("pk", "status").first())
+    if locked is None:
+        return {"refused": True,
+                "refusal_reason": "That scorecard no longer exists.",
+                "written": 0, "skipped": 0, "dimensions": {}, "alerts": 0}
+    scorecard.status = locked.status
+
     if scorecard.status != "draft":
         return {"refused": True,
                 "refusal_reason": (f"A {scorecard.get_status_display().lower()} scorecard is "
