@@ -45,6 +45,11 @@ TEMPLATE_FORM = "procurement/riskcompliance/screeninghit/form.html"
 _TERMINAL_DISPOSITION_CHOICES = [(value, label) for value, label in DISPOSITION_CHOICES
                                  if value in TERMINAL_DISPOSITIONS]
 
+#: How many parent screenings the queue's filter ``<select>`` offers, newest first. The app-wide
+#: cap for a ledger-backed dropdown (``GoodsReceiptInspection/ReceiptBoards.py:163`` and
+#: ``ReturnsToVendor.py:77`` use the same number).
+FILTER_OPTION_CAP = 200
+
 #: Every hop a queue row (or its parent's ``__str__``) walks.
 _ROW_RELATIONS = ("screening", "screening__party")
 
@@ -93,15 +98,22 @@ def _stats(tenant):
 
 
 def _screening_options(tenant):
-    """The parent-screening filter dropdown.
+    """The parent-screening filter dropdown, capped at the most recent ``FILTER_OPTION_CAP``.
 
     ``select_related("party")`` because ``ComplianceScreening.__str__`` walks the party — without
     it every option in the list costs its own query.
+
+    The cap is the app-wide rule for a **transactional/ledger** dropdown (``ReceiptBoards`` and
+    ``ReturnsToVendor`` both use the same 200), not for a master one: a *party* dropdown is left
+    uncapped app-wide because the vendor master is bounded, but screenings are append-only and
+    grow forever. Newest first, so the cap drops the screenings least likely to be filtered for.
+    Narrowing by an off-list screening still works — the ``?screening=`` filter is applied to the
+    QUERYSET, not to this list.
     """
     if tenant is None:
         return ComplianceScreening.objects.none()
     return (ComplianceScreening.objects.filter(tenant=tenant).select_related("party")
-            .order_by("-screened_on", "-id"))
+            .order_by("-screened_on", "-id")[:FILTER_OPTION_CAP])
 
 
 # -- the work queue --------------------------------------------------------------------------------
