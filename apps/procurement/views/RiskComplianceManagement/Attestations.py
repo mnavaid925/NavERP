@@ -309,11 +309,21 @@ def policyattestation_create(request):
 
 
 @login_required
+@tenant_admin_required
 def policyattestation_edit(request, pk):
     """Amend an assignment — refused once it has been signed or exempted.
 
     Changing who owes a signature that has already been given would rewrite the evidence. The only
-    thing worth amending on a live row is the deadline, and that is what the form offers.
+    thing worth amending on a live row is the deadline, and that is what the form offers on an
+    existing row: ``PolicyAttestationForm`` marks ``policy`` and ``user`` ``disabled`` once
+    ``instance.pk`` is set, so Django ignores whatever the POST said about them.
+
+    **Admin-gated**, matching ``policyattestation_delete`` and ``attestation_exempt``. Amending is
+    not a lesser verb here: pushing ``due_on`` out takes a row off the overdue board, and moving
+    ``user`` transfers the obligation to somebody else — either one is the withdrawal that delete
+    exists to restrict to administrators, reached through a different route. The Administration
+    card on the detail page has always hidden this button behind ``is_admin``; without the
+    decorator that was cosmetic, because the route itself had no gate.
     """
     obj = get_object_or_404(PolicyAttestation.objects.select_related("policy"), pk=pk,
                             tenant=request.tenant)
