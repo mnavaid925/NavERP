@@ -392,8 +392,12 @@ def auditseal_list(request):
         broken=Count("id", filter=Q(last_verify_ok=False)),
     )
     # .defer() keeps the per-entry locator list - which can hold 50,000 pairs - out of a page of
-    # 15 rows that never renders it.
-    qs = base.defer("row_fingerprints").select_related("prev_seal", "sealed_by")
+    # 15 rows that never renders it. NOTE .defer() scopes to the ROOT model only, so a
+    # select_related("prev_seal") here would drag the PREVIOUS seal's row_fingerprints back in
+    # through the join, undoing the defer 15 times over (~1.4 MB per seal at the cap). The page
+    # never renders prev_seal, so the join is simply dropped - chain_status below is what shows
+    # the chain, and it does its own query.
+    qs = base.defer("row_fingerprints").select_related("sealed_by")
     return crud_list(
         request, qs, TEMPLATE_SEAL_LIST,
         search_fields=["number", "note"],
