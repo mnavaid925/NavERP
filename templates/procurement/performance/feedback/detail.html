@@ -146,8 +146,17 @@
         <form method="post" action="{% url 'procurement:supplierfeedback_submit' obj.pk %}">
           {% csrf_token %}
           <div class="form-group" style="max-width:320px;">
-            <label class="form-label" for="submit-rating">Rating</label>
-            <select name="rating" id="submit-rating" class="form-select">
+            <label class="form-label" for="submit-rating">Rating <span class="req">*</span></label>
+            {% comment %}
+              The neutral first option is load-bearing. With none, no {% if %} fires on the
+              ordinary flow (status requested, rating still None) and the BROWSER selects the
+              first option — so pressing Submit without touching the select filed the supplier
+              at rating 1, "Poor", and the view accepted it as a deliberate choice. An empty
+              value is refused by supplierfeedback_submit with a message, which is what the help
+              text below already promises.
+            {% endcomment %}
+            <select name="rating" id="submit-rating" class="form-select" required>
+              <option value="" {% if obj.rating is None %}selected{% endif %}>Choose a rating…</option>
               <option value="1" {% if obj.rating == 1 %}selected{% endif %}>1 — Poor</option>
               <option value="2" {% if obj.rating == 2 %}selected{% endif %}>2 — Below expectations</option>
               <option value="3" {% if obj.rating == 3 %}selected{% endif %}>3 — Meets expectations</option>
