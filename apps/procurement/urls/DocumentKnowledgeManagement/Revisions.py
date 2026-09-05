@@ -29,6 +29,10 @@ the next upload, never amended in place, so the stored file always means what it
 was approved. An edit route would be a way to make an approved version say something it did not
 say at approval time.
 
+``<int:pk>/download/`` is a GET: it is a read, and it is the ONLY way 6.19 hands out stored
+bytes. Linking ``file.url`` instead would serve the file straight off MEDIA_ROOT with no login,
+no session and no tenant check — which is why no template in this sub-module does.
+
 Both verbs are POST-only through their views' ``@require_POST``; ``approve/`` is additionally
 ``@tenant_admin_required`` (``PermissionDenied`` → 403). ``delete/`` has no confirm template —
 the register and both detail pages carry a ``{% csrf_token %}`` form with an ``onsubmit``
@@ -43,6 +47,11 @@ urlpatterns = [
     path("document-revisions/", views.pdocrevision_list, name="pdocrevision_list"),
 
     path("document-revisions/<int:pk>/", views.pdocrevision_detail, name="pdocrevision_detail"),
+    # The stored bytes, handed back by an authenticated, tenant-scoped view with
+    # Content-Disposition: attachment — never by linking MEDIA_URL. GET, because a download is a
+    # read; the tenant scope and the 404 are the whole control.
+    path("document-revisions/<int:pk>/download/", views.pdocrevision_download,
+         name="pdocrevision_download"),
 
     # Verbs. No edit route by design — see the module docstring.
     path("document-revisions/<int:pk>/approve/", views.pdocrevision_approve,
