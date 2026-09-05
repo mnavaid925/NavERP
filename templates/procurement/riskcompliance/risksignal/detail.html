@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% block title %}Risk Signal {{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — SupplierRiskSignal detail
+    (apps/procurement/views/RiskComplianceManagement/RiskSignals.py :: risksignal_detail).
+
+    Context contract, and NOTHING else exists here:
+      obj, series, scale{registered, min, max, higher_is_better, direction, safest, riskiest},
+      breaches_minimum, minimum_acceptable, assessment, alert, is_admin.
+
+    THIS PAGE EXISTS BECAUSE A RAW NUMBER IS MEANINGLESS WITHOUT ITS SCALE. An FHR of 100 is
+    excellent; a D&B SER of 9 is dangerous. So the value is never shown alone: it is shown
+    against `scale`, and the direction is stated in this metric own words via scale.direction,
+    scale.safest and scale.riskiest — never as a generic "higher is better". When
+    scale.registered is False (metric = "other") the page says plainly that no scale is
+    registered and that the band is therefore Not banded, and draws NO meter: a bar with no
+    meaning behind it is worse than no bar.
+
+    `breaches_minimum` is ADVISORY and the page says so in those words. It colours a badge
+    against `minimum_acceptable` and stops nothing — no PO hold, no payment block, no award
+    refusal. The only place a vendor is actually blocked is the 6.4 suspension register.
+
+    `assessment` is the party latest scm.SupplierRiskAssessment, CITED and never recomputed —
+    SCM 4.2 owns the internal four-factor composite and 6.17 ships no rival headline. Its level
+    renders in a NEUTRAL badge-slate chip on purpose: this page reports 4.2 verdict, it does not
+    re-grade it.
+
+    Nullable-FK discipline (L10): evidence, captured_by, reviewed_by and alert are all nullable,
+    so every read of them sits inside an {% if %} branch — a `default:` filter argument on a
+    None FK raises VariableDoesNotExist and 500s. `party` is PROTECT and never null.
+
+    The meter is gated on obj.is_banded, never on obj.risk_position: the template language has no
+    None literal, so `{% if obj.risk_position %}` would also hide a position of 0.00 — the safest
+    possible reading, rendered blank.
+
+    No |safe anywhere: notes, review_note and source_ref are staff-authored text. `source_ref`
+    renders as TEXT and never inside an href. Only the SYSTEM-ASSIGNED number reaches a
+    confirm() string (L42); the copy avoids apostrophes entirely.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <a href="{% url 'procurement:risksignal_list' %}">Risk signals</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        <span class="fw-600">{{ obj.party.name }}</span> — {{ obj.get_metric_display }}, observed {{ obj.observed_on|date:"M d, Y" }} by {{ obj.get_provider_display }}.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:risksignal_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      <a href="{% url 'procurement:risksignal_list' %}?party={{ obj.party.pk|stringformat:"d" }}" class="btn btn-outline"><i data-lucide="history"></i> Supplier history</a>
+      {% if not obj.is_terminal %}
+        <a href="{% url 'procurement:risksignal_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this number means</h2>
+      <span>
+        <span class="badge {{ obj.band_css }}">{{ obj.get_band_display }}</span>
+        <span class="badge {{ obj.trend_css }}">{{ obj.get_trend_display }}</span>
+      </span>
+    </div>
+    <div class="card-body">
+      {% if scale.registered %}
+        <p>
+          <span class="fw-600">{{ obj.value }}</span> on {{ obj.get_metric_display }}.
+          That metric runs from {{ scale.min }} to {{ scale.max }}, and on it <span class="fw-600">{{ scale.direction }}</span> —
+          {{ scale.safest }} is the safest reading and {{ scale.riskiest }} the riskiest.
+        </p>
+
+        {% if obj.is_banded %}
+          {% comment %}
+            The meter shows the RISK POSITION, not the raw value: 0 is always the safest end of
+            whichever scale this metric uses, so a full bar always means danger whether the
+            provider counts up or down. Gated on is_banded so a legitimate 0.00 still renders.
+          {% endcomment %}
+          <div class="progress" style="margin:.75rem 0 .35rem;">
+            <div class="progress-bar" style="width: {{ obj.risk_position|stringformat:"s" }}%;"></div>
+          </div>
+          <p class="text-muted">
+            Risk position <span class="fw-600">{{ obj.risk_position }}/100</span> — 0 is the safest end of this metric own scale and 100 the riskiest, whichever way the provider counts. That single normalised number is what makes this reading comparable with an observation from any other bureau, and it is what the band is read off: under 25 Low, under 50 Watch, under 75 Elevated, 75 and over Critical.
+          </p>
+        {% endif %}
+      {% else %}
+        <p>
+          <span class="fw-600">{{ obj.value }}</span> on {{ obj.get_metric_display }}.
+          <span class="badge badge-muted">Not banded</span>
+        </p>
+        <p class="text-muted">No scale is registered for this metric, so there is nothing to measure the number against: the system does not know whether {{ obj.value }} is high or low here, or even which direction counts as bad. That is why the band is Not banded rather than Low, why no meter is drawn, and why the trend on an unscaled metric always reads as stable. Recording that nothing is known is the honest answer; assuming a clean band would be a fabricated all-clear. To have this reading banded and trended, capture it under a metric whose scale is registered.</p>
+      {% endif %}
+
+      {% if breaches_minimum %}
+        <p class="text-danger" style="margin-top:.75rem;">
+          <i data-lucide="alert-triangle"></i>
+          This reading sits on the wrong side of the accepted floor of {{ minimum_acceptable }} for {{ obj.get_metric_display }}.
+        </p>
+        <p class="text-muted">That floor is <span class="fw-600">advisory only</span>. It colours this badge and nothing else — it holds no purchase order, blocks no payment and refuses no award. If this supplier should actually be stopped from trading, that decision belongs in the vendor suspension register, which is the only place a block is put into force.</p>
+      {% elif minimum_acceptable %}
+        <p class="text-ok" style="margin-top:.75rem;">Inside the accepted floor of {{ minimum_acceptable }} for this metric. That floor is advisory: it colours a badge and blocks nothing either way.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The observation</h2>
+      <span class="badge {{ obj.review_css }}">{{ obj.get_review_status_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier</dt>
+          <dd class="fw-600"><a href="{% url 'core:party_detail' obj.party.pk %}">{{ obj.party.name }}</a></dd></div>
+        <div class="detail-item"><dt>Provider</dt><dd>{{ obj.get_provider_display }}</dd></div>
+        <div class="detail-item"><dt>Metric</dt><dd>{{ obj.get_metric_display }}</dd></div>
+        <div class="detail-item"><dt>Observed on</dt>
+          <dd>{{ obj.observed_on|date:"M d, Y" }}
+            {% if obj.is_stale %}<div class="text-warn">Older than the staleness window — worth refreshing before it is relied on</div>{% endif %}
+          </dd></div>
+        <div class="detail-item"><dt>Value</dt><dd class="fw-600">{{ obj.value }}</dd></div>
+        <div class="detail-item"><dt>Previous reading</dt>
+          <dd>{% if obj.trend != "new" %}{{ obj.previous_value }}{% else %}<span class="text-muted">First observation in this series</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Risk position</dt>
+          <dd>{% if obj.is_banded %}{{ obj.risk_position }}/100{% else %}<span class="text-muted">Not derived — this metric has no registered scale</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Next refresh</dt>
+          <dd>{% if obj.next_refresh_on %}{{ obj.next_refresh_on|date:"M d, Y" }}{% else %}<span class="text-muted">Not scheduled — this series will show as stale rather than overdue</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Source reference</dt>
+          {% comment %} TEXT, never an href — a staff-typed report reference is not a URL. {% endcomment %}
+          <dd>{% if obj.source_ref %}{{ obj.source_ref }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Evidence</dt>
+          <dd>{% if obj.evidence %}{{ obj.evidence.name }}{% else %}<span class="text-muted">None attached</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Captured by</dt>
+          <dd>{% if obj.captured_by %}{{ obj.captured_by.get_full_name|default:obj.captured_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Captured at</dt>
+          <dd>{% if obj.created_at %}{{ obj.created_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">There is no live bureau connection here. Every observation is entered by a person or loaded from an extract, which is why it states who captured it, the date the provider measured it, and the reference it can be traced back to. The date on the report is the one that matters — not the day it was typed in.</p>
+    </div>
+  </div>
+
+  {% if obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The decision</h2><span class="badge {{ obj.review_css }}">{{ obj.get_review_status_display }}</span></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Reviewed by</dt>
+            <dd>{% if obj.reviewed_by %}{{ obj.reviewed_by.get_full_name|default:obj.reviewed_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Reviewed at</dt>
+            <dd>{% if obj.reviewed_at %}{{ obj.reviewed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+        {% if obj.review_note %}
+          <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Reasoning</dt><dd>{{ obj.review_note|linebreaksbr }}</dd></div>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">A closed-out signal is the record a decision rests on: it cannot be edited, deleted or re-opened. If the number has moved, capture the new observation — that is what leaves an honest series behind.</p>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Review</h2><span class="text-muted">a signal nobody looked at is the finding an audit writes up</span></div>
+      <div class="card-body">
+        {% comment %}
+          Deliberately NOT admin-gated — reviewing observations is the daily work of a
+          procurement analyst, and a queue only an admin can clear is a queue nobody clears.
+          Each form posts one `action` to risksignal_review, which re-checks the guard on the
+          model, so a direct POST is exactly as safe as a click.
+
+          Acknowledge is offered from "new" only, matching mark_reviewed. Action and Dismiss are
+          offered for any non-terminal row and both REQUIRE a note, matching the model verbs and
+          the view own check — hidden buttons and refused POSTs always agree.
+        {% endcomment %}
+        {% if obj.review_status == "new" %}
+          <form method="post" action="{% url 'procurement:risksignal_review' obj.pk %}" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reviewed">
+            <div class="form-group">
+              <label class="form-label" for="reviewed-note">Note <span class="text-muted">(optional)</span></label>
+              <textarea class="form-textarea" rows="2" id="reviewed-note" name="review_note" placeholder="Anything worth recording about having looked at this…"></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="eye"></i> Acknowledge — seen, still watching</button>
+          </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'procurement:risksignal_review' obj.pk %}" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="actioned">
+          <div class="form-group">
+            <label class="form-label" for="actioned-note">What was done about it? <span class="req">*</span></label>
+            <textarea class="form-textarea" rows="2" id="actioned-note" name="review_note" required placeholder="Dual-sourced the part, shortened the payment terms, escalated to the category manager…"></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Action — something was done</button>
+        </form>
+
+        <form method="post" action="{% url 'procurement:risksignal_review' obj.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="dismissed">
+          <div class="form-group">
+            <label class="form-label" for="dismissed-note">Why is no action needed? <span class="req">*</span></label>
+            <textarea class="form-textarea" rows="2" id="dismissed-note" name="review_note" required placeholder="A dismissal with no stated reasoning is indistinguishable from a signal nobody looked at."></textarea>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Dismiss — no action needed</button>
+        </form>
+
+        <p class="text-muted" style="margin-top:.75rem;">Actioning or dismissing closes this observation for good. Neither one stops anything by itself: a review records what a human decided about a number, and nothing here holds a purchase order or blocks a payment.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The series</h2>
+      <span class="text-muted">same supplier, same provider, same metric — newest first</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Signal</th>
+            <th>Observed</th>
+            <th class="text-right">Value</th>
+            <th class="text-right">Risk position</th>
+            <th>Band</th>
+            <th>Trend</th>
+            <th>Captured by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in series %}
+            <tr>
+              <td class="fw-600">
+                {% if s.pk == obj.pk %}
+                  {{ s.number }} <span class="badge badge-info">This reading</span>
+                {% else %}
+                  <a href="{% url 'procurement:risksignal_detail' s.pk %}">{{ s.number }}</a>
+                {% endif %}
+              </td>
+              <td>{{ s.observed_on|date:"M d, Y" }}</td>
+              <td class="text-right">{{ s.value }}</td>
+              <td class="text-right">{% if s.is_banded %}{{ s.risk_position }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {{ s.band_css }}">{{ s.get_band_display }}</span></td>
+              <td><span class="badge {{ s.trend_css }}">{{ s.get_trend_display }}</span></td>
+              <td>{% if s.captured_by %}{{ s.captured_by.get_full_name|default:s.captured_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="line-chart"></i>
+                <h3>No series yet</h3>
+                <p>This is the only observation of this metric for this supplier from this provider. A second one gives the trend something to compare against.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Trend is judged on the risk position, never on the raw number. A Supplier Evaluation Risk falling from 7 to 4 is an improvement and an FHR falling from 70 to 40 is a deterioration — both numbers went down, and comparing the raw values would call one of them backwards whichever convention you picked.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Alongside this reading</h2><span class="text-muted">cited, never recomputed</span></div>
+    <div class="card-body">
+      {% if assessment %}
+        <p>
+          The most recent internal risk assessment for this supplier is
+          <a href="{% url 'scm:riskassessment_detail' assessment.pk %}" class="fw-600">{{ assessment.number }}</a>,
+          dated {{ assessment.assessment_date|date:"M d, Y" }} —
+          <span class="badge badge-slate">{{ assessment.get_risk_level_display }}</span>
+          on a four-factor composite of {{ assessment.risk_index }}.
+        </p>
+        <p class="text-muted">That composite belongs to supplier risk assessment in SCM and is shown here only so the two views of the same supplier sit together: a bureau number about its finances, and the internal judgement about the whole relationship. This module never computes a second headline score, because two rival scores for one supplier is one score too many.</p>
+      {% else %}
+        <p class="text-muted">No internal risk assessment has been recorded for this supplier yet. This page shows a bureau observation about its finances; the internal four-factor judgement about the whole relationship lives in <a href="{% url 'scm:riskassessment_list' %}">supplier risk assessments</a>, and the two are meant to be read together.</p>
+      {% endif %}
+
+      {% if alert %}
+        <p style="margin-top:.75rem;">
+          <span class="badge {{ alert.severity_css }}">{{ alert.get_severity_display }}</span>
+          <span class="badge {{ alert.status_css }}">{{ alert.get_status_display }}</span>
+          <a href="{% url 'procurement:alert_detail' alert.pk %}" class="fw-600">{{ alert.title }}</a>
+        </p>
+        <p class="text-muted">This deterioration raised one item in the Task &amp; Alert Center. One — not one a month: a supplier whose metric keeps sliding gets a single open item per metric until somebody closes it, because an inbox that refills itself is an inbox nobody reads.</p>
+      {% elif obj.alerts_on_deterioration %}
+        <p class="text-muted" style="margin-top:.75rem;">This reading meets the bar for an alert, but none is stamped against it — either an open alert already covers this supplier and metric, or the observation was loaded without going through the capture form. Nothing is wrong with the reading itself.</p>
+      {% else %}
+        <p class="text-muted" style="margin-top:.75rem;">No alert was raised. An alert needs both a deterioration and a landing in the elevated or critical band — a wobble inside the safer bands is a data point, not an inbox item.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if is_admin and not obj.is_terminal %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Delete</h2><span class="text-muted">admin only</span></div>
+      <div class="card-body">
+        <p class="text-muted">Deleting an observation erases part of the evidence that this supplier financial health was ever watched, and leaves a gap in the series that later readings are trended against. Correcting a number is what Edit is for; a reading that has moved is a new observation.</p>
+        <form method="post" action="{% url 'procurement:risksignal_delete' obj.pk %}" onsubmit="return confirm('Delete risk signal {{ obj.number }}? The observation goes with it, and this supplier monitoring history loses a data point.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete risk signal</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
