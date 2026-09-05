@@ -171,7 +171,12 @@ class SupplierFeedback(TenantNumbered):
         verbose_name_plural = "Supplier Feedback"
 
     def __str__(self):
-        return f"{self.number or 'SFB'} · {self.supplier_id and self.supplier.name}"
+        # ``self.supplier_id and self.supplier.name`` evaluates to None when supplier_id is
+        # unset, and an f-string renders that as the literal word "None" — so an unsaved
+        # instance (the admin add form, a repr() in a traceback) read "SFB · None". The
+        # conditional expression gives the em dash the sibling models already use for an absent
+        # value, and still costs no query when supplier_id is set to nothing.
+        return f"{self.number or 'SFB'} · {self.supplier.name if self.supplier_id else '—'}"
 
     def clean(self):
         """Five rules, collected so a form shows every problem at once rather than the first.
