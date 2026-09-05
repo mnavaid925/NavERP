@@ -51,6 +51,7 @@ from django.db.models import Count, Q
 from django.db.models.functions import ExtractYear
 from django.urls import reverse
 
+from apps.core.crud import as_db_int
 # NOT-YET-WIRED entity of this SAME sub-module: import the entity MODULES directly — see the
 # module docstring.
 from apps.procurement.forms.SupplierPerformanceEvaluation.ScorecardKpiScores import (
@@ -78,6 +79,15 @@ _SCORE_RELATIONS = ("kpi", "scorecard", "scorecard__party")
 #: no control at all.
 _REFUSAL_NO_TENANT = ("Select a tenant workspace before generating — a scorecard belongs to one "
                       "workspace and the superuser has none.")
+
+#: The range ``datetime.date`` can hold. ``period_end__year`` is the app's ONLY ``__year`` int
+#: filter, and it is NOT a pk lookup — so ``crud_list``'s zero-skip (scoped to pk lookups on
+#: purpose, because ``?year=0`` reads like a legitimate value) does not catch it, and
+#: ``as_db_int`` range-checks against the COLUMN width rather than the calendar. Django then hands
+#: the value to ``datetime.date(value, 1, 1)`` inside the backend, which raises
+#: ``ValueError: year 0 is out of range`` — an uncaught 500 from a URL anybody can type. L11 says
+#: a hand-edited query string skips the filter; it never raises.
+_MIN_YEAR, _MAX_YEAR = 1, 9999
 
 
 def _scorecard_model():
@@ -117,6 +127,20 @@ def _evaluation_years(tenant):
                 .values_list("year", flat=True).distinct().order_by("-year"))
 
 
+def _evaluation_filters(request):
+    """The register's ``crud_list`` filter tuples, with ``year`` dropped when it is not a year.
+
+    A year outside 1-9999 cannot be compared against a date column at all — see
+    :data:`_MIN_YEAR`. Dropping the tuple is the same answer ``crud_list`` gives every other
+    unusable filter value: the register renders unfiltered instead of raising.
+    """
+    year = as_db_int(request.GET.get("year"))
+    if year is None or not _MIN_YEAR <= year <= _MAX_YEAR:
+        return (("supplier", "party_id", True), ("status", "status", False))
+    return (("supplier", "party_id", True), ("status", "status", False),
+            ("year", "period_end__year", True))
+
+
 def _evaluation_stats(tenant):
     """``{total, draft, published, archived, generated}`` in ONE query.
 
@@ -142,15 +166,14 @@ def supplierevaluation_list(request):
     "New period" links out to ``scm:scorecard_create`` (L36). ``line_count`` says at a glance
     which periods have actually been generated onto.
 
-    ``supplier`` and ``year`` ride the ``is_int=True`` path so a hand-edited query string cannot
-    500 the page (L11); ``status`` is validated against the model's own CHOICES by ``crud_list``.
+    ``supplier`` rides the ``is_int=True`` path so a hand-edited query string cannot 500 the page
+    (L11); ``status`` is validated against the model's own CHOICES by ``crud_list``. ``year``
+    needs one guard more than ``is_int`` gives it — see :func:`_evaluation_filters`.
     """
     return crud_list(
         request, _evaluation_qs(request), TEMPLATE_EVALUATION_LIST,
         search_fields=("number", "party__name"),
-        filters=(("supplier", "party_id", True),
-                 ("status", "status", False),
-                 ("year", "period_end__year", True)),
+        filters=_evaluation_filters(request),
         extra_context={
             "status_choices": _scorecard_model().STATUS_CHOICES,
             "suppliers": _supplier_parties(request),
