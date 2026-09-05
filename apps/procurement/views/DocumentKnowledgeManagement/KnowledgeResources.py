@@ -64,11 +64,19 @@ TEMPLATE_LIST = "procurement/documentknowledge/knowledgeresource/list.html"
 TEMPLATE_DETAIL = "procurement/documentknowledge/knowledgeresource/detail.html"
 TEMPLATE_FORM = "procurement/documentknowledge/knowledgeresource/form.html"
 
-#: What one register ROW renders. Pinned once so the list's select_related, the shelf's and the
-#: detail's cannot drift apart.
-_ROW_RELATIONS = ("owner", "document")
-#: The detail page additionally names the author.
-_DETAIL_RELATIONS = _ROW_RELATIONS + ("created_by",)
+#: The DETAIL page's joins. There is deliberately no ``_ROW_RELATIONS`` twin: a register row -
+#: and a featured-shelf card - renders the title, the summary, the badges and the counts, and not
+#: one attribute of the owner or of the linked document. Joining them was two LEFT JOINs per page
+#: for nothing, and the document join dragged its 200,000-character ``extracted_text`` along with
+#: it (measured 186.7 KB per page once three resources linked a text-bearing document). A future
+#: row template that DOES read an FK must add the join back with its own name.
+_DETAIL_RELATIONS = ("owner", "document", "created_by")
+
+#: The ceiling of a ``PositiveIntegerField`` as Django documents it. At that value the atomic
+#: increment below has nowhere to go: this database clamps it silently, and the same UPDATE under
+#: sql_mode=STRICT_TRANS_TABLES raises DataError - a 500 on a POST verb. Unreachable in practice
+#: (4.29 billion presses), refused honestly rather than left to the database to decide.
+USAGE_COUNT_CEILING = 2_147_483_647
 
 #: The featured facet. EXACTLY the strings ``crud_list`` maps to booleans ("True"/"False") — any
 #: other value raises inside ``.filter()`` and is skipped, which is the behaviour that keeps a
@@ -85,8 +93,7 @@ def _resource_qs(request):
     definition of the shelf order means the register, the shelf and every page of the paginator
     agree.
     """
-    return (KnowledgeResource.objects.filter(tenant=request.tenant)
-            .select_related(*_ROW_RELATIONS))
+    return KnowledgeResource.objects.filter(tenant=request.tenant)
 
 
 def _featured_shelf(tenant):
@@ -99,8 +106,7 @@ def _featured_shelf(tenant):
     if tenant is None:
         return []
     return list(KnowledgeResource.objects
-                .filter(tenant=tenant, status="published", is_featured=True)
-                .select_related(*_ROW_RELATIONS)[:FEATURED_CAP])
+                .filter(tenant=tenant, status="published", is_featured=True)[:FEATURED_CAP])
 
 
 @login_required
@@ -153,6 +159,9 @@ def knowledgeresource_detail(request, pk):
     """
     obj = get_object_or_404(
         KnowledgeResource.objects.filter(tenant=request.tenant)
+        # The linked document's search copy is never rendered here - the page shows its number,
+        # title and status - so the join stays and its TextField does not come with it.
+        .defer("document__extracted_text")
         .select_related(*_DETAIL_RELATIONS), pk=pk)
 
     return render(request, TEMPLATE_DETAIL, {
@@ -161,8 +170,9 @@ def knowledgeresource_detail(request, pk):
         # Came down with the select_related above, so naming it costs nothing and the template
         # reads one name instead of hopping through the object for a nullable relation.
         "document": obj.document,
-        # The model property lifted into context under the name the contract pins.
-        "is_review_due": obj.is_review_due,
+        # ``is_review_due`` is deliberately NOT lifted into context. It is a property of ``obj``,
+        # both register templates already read it as ``obj.is_review_due``, and a context key of
+        # the same name meant one fact reachable by two names inside one sub-module.
     })
 
 
@@ -289,6 +299,20 @@ def knowledgeresource_use(request, pk):
     if obj.status == "archived":
         messages.error(request, f"{obj.number} is archived, so it is not counted as in use. "
                                 f"Publish it again if this guidance is back in circulation.")
+        return redirect("procurement:knowledgeresource_detail", pk=obj.pk)
+
+    if obj.usage_count >= USAGE_COUNT_CEILING:
+        # The counter is parked at the column's ceiling. Incrementing anyway would clamp here and
+        # raise DataError on a strict deployment, and either way the success message would report
+        # an unchanged number as a fresh increment. ``last_used_at`` still moves, because the
+        # resource WAS used - it is the tally that has run out of room, not the fact.
+        obj.last_used_at = timezone.now()
+        obj.save(update_fields=["last_used_at", "updated_at"])
+        write_audit_log(request.user, obj, "knowledge_resource_used",
+                        {"usage_count": obj.usage_count, "at_ceiling": True})
+        messages.info(request, f"{obj.number} opened. Its use counter has reached the maximum "
+                               f"this column can hold ({USAGE_COUNT_CEILING:,}) and stays there; "
+                               f"the audit trail still records every use.")
         return redirect("procurement:knowledgeresource_detail", pk=obj.pk)
 
     obj.usage_count = F("usage_count") + 1
