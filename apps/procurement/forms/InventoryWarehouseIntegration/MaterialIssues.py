@@ -155,12 +155,25 @@ class MaterialIssueLineForm(TenantModelForm):
             self.fields["item"].queryset = (
                 Item.objects.filter(tenant=tenant, is_active=True)
                 .select_related("uom").order_by("sku"))
-            # Only lots that still exist as usable stock. The lot↔item consistency rule is the
-            # model's (``MaterialIssueLine.clean()``): a dropdown cannot express "belongs to
-            # whichever item you picked in the field above" without a round trip.
+            # Only lots that still exist as usable stock, and only of items this form could
+            # actually put on a line. The lot↔item consistency rule itself is the model's
+            # (``MaterialIssueLine.clean()``): a dropdown cannot express "belongs to whichever item
+            # you picked in the field above" without a round trip. What it CAN do is stop offering
+            # lots that could never validate — the ``item`` field above offers ACTIVE items only,
+            # so every lot of a retired item was being fetched and rendered as an ``<option>``
+            # nobody could legally choose. This list is unbounded and grows with every goods
+            # receipt, and it is rebuilt on every ``materialissue_detail`` render of a draft.
+            #
+            # ``.only()`` for the same reason ``generate()`` uses it: ``LotSerial.__str__`` reads
+            # ``item.sku`` and ``number``, ``_reject_foreign`` reads ``tenant_id`` and
+            # ``MaterialIssueLine.clean()`` reads ``item_id`` — nothing reads the rest, and a bare
+            # ``select_related("item")`` dragged a full ``scm_item`` row, ``description``
+            # TextField and all, per lot. Measured: loading the list and touching all four on
+            # every row costs exactly ONE query.
             self.fields["lot_serial"].queryset = (
-                LotSerial.objects.filter(tenant=tenant, status="available")
-                .select_related("item").order_by("item__sku", "number"))
+                LotSerial.objects.filter(tenant=tenant, status="available", item__is_active=True)
+                .select_related("item").only("number", "tenant", "item__sku")
+                .order_by("item__sku", "number"))
             self.fields["gl_account"].queryset = (
                 GLAccount.objects.filter(tenant=tenant, is_active=True).order_by("code"))
 
