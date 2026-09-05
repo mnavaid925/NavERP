@@ -75,6 +75,23 @@ _ROW_RELATIONS = ("supplier", "kpi", "owner", "scorecard", "escalated_suspension
 _OUTCOME_VALUES = dict(OUTCOME_CHOICES)
 
 
+def _is_admin(request):
+    """Mirrors ``@tenant_admin_required`` exactly, so a hidden button and a refused POST agree.
+
+    The local-copy convention twelve sibling view modules follow (6.3, 6.12 and 6.13 each carry
+    the same three lines). Without it ``can_close`` offered the close form to every member —
+    while the page's own help text said closing was admin-only — and the POST then 403'd.
+    """
+    return bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+
+
+#: Printed where the close form would have been, so a non-admin reads why rather than finding a
+#: control missing. The verb's own copy says closing is admin-only; this is the same sentence
+#: reaching the person it applies to.
+_CLOSE_NOT_ADMIN = ("Closing signs the ending the supplier will be shown, so it is a "
+                    "workspace-admin action — ask an admin of this workspace to close it.")
+
+
 def _plan_qs(request):
     """The register's base queryset — tenant-scoped, with every rendered FK joined."""
     return (SupplierImprovementPlan.objects.filter(tenant=request.tenant)
@@ -171,7 +188,8 @@ def improvementplan_detail(request, pk):
     The five ``can_*`` flags are passed SEPARATELY rather than as one "is open" flag, because
     they gate five different verbs with three different rules — ``can_activate`` is draft-only,
     ``can_monitor`` is active-only, ``can_acknowledge`` keys on a STAMP rather than a status, and
-    ``can_close`` excludes draft (there is nothing to verify on a plan that never started). They
+    ``can_close`` excludes draft (there is nothing to verify on a plan that never started) AND
+    tests ``_is_admin``, because closing is the one ``@tenant_admin_required`` verb here. They
     are the UX half of the rule: every verb re-checks its own gate, so a crafted POST against a
     closed plan is refused there too.
 
@@ -189,7 +207,16 @@ def improvementplan_detail(request, pk):
             "can_activate": obj.status == "draft",
             "can_monitor": obj.status == "active",
             "can_acknowledge": obj.status in OPEN_STATUSES and obj.acknowledged_at is None,
-            "can_close": obj.status in ("active", "monitoring"),
+            # ``improvementplan_close`` is @tenant_admin_required, so the admin test belongs on
+            # the flag as well: a form that renders for everybody and then 403s is worse than no
+            # form. ``close_refusal`` is what the page prints in its place.
+            "can_close": obj.status in ("active", "monitoring") and _is_admin(request),
+            # Non-empty ONLY when the admin rule is what hid the form. A draft, cancelled or
+            # already-closed plan has no close form for anybody, and printing "ask an admin"
+            # there would offer a route that does not exist.
+            "close_refusal": ("" if _is_admin(request)
+                              or obj.status not in ("active", "monitoring")
+                              else _CLOSE_NOT_ADMIN),
             "can_cancel": obj.status in OPEN_STATUSES,
             "is_overdue": obj.is_overdue,
         },
