@@ -79,7 +79,7 @@
               {% elif field.name == "document" %}
                 <div class="form-help">Optional. The downloadable template or workbook in the repository, so it inherits revision control, approval and text search instead of sitting somewhere as an unversioned copy.</div>
               {% elif field.name == "review_on" %}
-                <div class="form-help">When somebody should read this again. Once the date arrives the resource is badged "Review overdue" on the register — guidance goes stale quietly, which is exactly why the date is worth setting.</div>
+                <div class="form-help">When somebody should read this again. Once the date arrives the resource is badged "Review due" on the register — guidance goes stale quietly, which is exactly why the date is worth setting.</div>
               {% elif field.help_text %}
                 <div class="form-help">{{ field.help_text }}</div>
               {% endif %}
