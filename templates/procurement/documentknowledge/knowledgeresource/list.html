@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Library{% endblock %}
+{% block content %}
+  {% comment %}
+    6.19 Document & Knowledge Management — KnowledgeResource register
+    (apps/procurement/views/DocumentKnowledgeManagement/KnowledgeResources.py).
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      resource_type_choices, category_choices, audience_choices, status_choices,
+      featured_choices, featured,
+      stats{total, published, featured, used},
+      library_note.
+
+    The view's crud_list filter tuple is exactly (("resource_type","resource_type",False),
+    ("category","category",False), ("audience","audience",False), ("status","status",False),
+    ("featured","is_featured",False)). The bar below offers exactly q plus those five — one
+    control per declared filter, so no dead <select> posts a param the view ignores.
+    Every one of the five compares the raw string; the featured facet's options are literally
+    "True" / "False", which are the exact strings crud_list maps to booleans. Anything else
+    skips the filter rather than emptying the register (L11).
+
+    `featured` is the shelf, computed separately from the paginated register and capped at
+    FEATURED_CAP, so page 3 shows the same "start here" row as page 1. It is a DISPLAY order and
+    not an approval: a starred resource carries exactly the authority of an unstarred one.
+
+    library_note is the ONE constant this page, the form and the detail page all print, so the
+    three surfaces cannot describe the library differently — nothing stored here executes.
+
+    Badges are colour-named theme.css classes only (L33): status_css comes off the model, and
+    the featured marker is badge-info.
+
+    Only the SYSTEM-ASSIGNED number reaches a confirm() handler — obj.title, obj.summary and
+    obj.tags are user-authored and never do.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Knowledge Library</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Document &amp; Knowledge Management</span><span class="sep">›</span>
+        <span>Knowledge Library</span>
+      </div>
+      <p class="text-muted">{{ library_note }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:knowledgeresource_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New resource</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="library"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Resources</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.published }}</div><div class="stat-label">Published</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="star"></i></div><div class="stat-value">{{ stats.featured }}</div><div class="stat-label">Featured</div></div>
+    {% comment %}
+      `used` counts ROWS that have been opened at least once, not total presses — "12 of 40
+      guides have been reached for" is a fact about the shelf, where a total would mostly
+      describe one popular playbook.
+    {% endcomment %}
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="hand-pointer"></i></div><div class="stat-value">{{ stats.used }}</div><div class="stat-label">Ever used</div></div>
+  </div>
+
+  {% if featured %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Start here</h2><span class="text-muted">featured, published resources — the same shelf on every page of the register below</span></div>
+      <div class="card-body">
+        <ul>
+          {% for row in featured %}
+            <li>
+              <a href="{% url 'procurement:knowledgeresource_detail' row.pk %}">{{ row.number }} · {{ row.title }}</a>
+              <span class="badge badge-info">Featured</span>
+              <span class="badge badge-muted">{{ row.get_resource_type_display }}</span>
+              {% if row.summary %}<div class="text-muted">{{ row.summary }}</div>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="text-muted">Featured is a display choice made by whoever curates this library. It puts a resource first; it does not approve it, mandate it or grant anything.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search the library" class="form-input" placeholder="Search number, title, summary, guidance text or tags…">
+        </div>
+        <div class="form-group">
+          <select name="resource_type" aria-label="Resource type" class="form-select">
+            <option value="">All types</option>
+            {% for value, label in resource_type_choices %}
+              <option value="{{ value }}" {% if request.GET.resource_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">All categories</option>
+            {% for value, label in category_choices %}
+              <option value="{{ value }}" {% if request.GET.category == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="audience" aria-label="Audience" class="form-select">
+            <option value="">Any audience</option>
+            {% for value, label in audience_choices %}
+              <option value="{{ value }}" {% if request.GET.audience == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %} The option values are literally "True" / "False" — the two strings crud_list maps onto a BooleanField. {% endcomment %}
+          <select name="featured" aria-label="Featured" class="form-select">
+            <option value="">Featured or not</option>
+            {% for value, label in featured_choices %}
+              <option value="{{ value }}" {% if request.GET.featured == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:knowledgeresource_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Resource</th>
+            <th>Type</th>
+            <th>Category</th>
+            <th>Audience</th>
+            <th>Status</th>
+            <th>Used</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'procurement:knowledgeresource_detail' obj.pk %}">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title }}</div>
+                {% if obj.tag_list %}
+                  <div class="badge-group">
+                    {% for tag in obj.tag_list %}<span class="badge badge-muted">{{ tag }}</span>{% endfor %}
+                  </div>
+                {% endif %}
+                {% if obj.is_review_due %}<div><span class="badge badge-amber">Review overdue</span></div>{% endif %}
+              </td>
+              <td>{{ obj.get_resource_type_display }}</td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>{{ obj.get_audience_display }}</td>
+              <td>
+                <span class="badge-group">
+                  <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                  {% if obj.is_featured %}<span class="badge badge-info">Featured</span>{% endif %}
+                </span>
+              </td>
+              <td>
+                {% if obj.usage_count %}
+                  {{ obj.usage_count }}
+                  {% if obj.last_used_at %}<div class="text-muted">last {{ obj.last_used_at|date:"M d, Y" }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:knowledgeresource_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:knowledgeresource_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST, so it can only be a form. The confirm is honest about
+                    what deletion does: the linked document is untouched — the file stays in the
+                    repository with its revisions — what is lost is the guidance written around it.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'procurement:knowledgeresource_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Any file it links to stays in the repository with its revisions; the guidance written around it is lost.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="library"></i>
+                <h3>No resources found</h3>
+                <p>Nothing matches these filters. This library holds the reusable guidance a buyer reaches for — the RFP and RFQ templates, the bid-evaluation scorecard, the negotiation playbook, the sourcing checklists and how-to guides — each one written for an audience and tagged so it can be found again.</p>
+                <a href="{% url 'procurement:knowledgeresource_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New resource</a>
+                <a href="{% url 'procurement:knowledgeresource_list' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging. Paging is stable because the model's ordering ends in the unique id — featured first, then newest, then id. {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this library is — and what it is not</h2><span class="text-muted">read this before treating a stored template as something that runs</span></div>
+    <div class="card-body">
+      <p class="text-muted">{{ library_note }}</p>
+      <p class="text-muted">Everything here is content people read. Opening a scorecard tells you how bids are meant to be compared; it does not score anything. Opening an RFP template shows you the wording that works; the event suppliers actually answer is built in Sourcing &amp; Tendering (6.5) and its questionnaire in 6.6, and the requisition blueprints that genuinely raise a purchase live in Requisition Management (6.2).</p>
+      <p class="text-muted">The downloadable file behind a resource is an ordinary document in the repository, so it carries a revision chain, an approval step and searchable text instead of sitting somewhere as an unversioned copy.</p>
+      <p class="text-muted">The "Used" column counts presses of the Use button on a resource page and nothing else. It does not know who pressed it and it is not evidence that a template was used on any event — the audit trail is what records who did what.</p>
+    </div>
+  </div>
+{% endblock %}
