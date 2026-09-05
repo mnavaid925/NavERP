@@ -11,7 +11,11 @@
       obj, lines, composite{weighted_total, weight_total, scored_lines, total_lines,
       unscored_lines, overall, grade}, dimension_map{<dim>: {label, score, kpi_count, kpi_names,
       weight_total}}, can_generate, refusal_reason, plans, feedback_rows, band_choices,
-      handover_note, row_cap, truncated.
+      handover_note, row_cap, truncated, related_cap, related_truncated.
+
+    Two truncation flags, on purpose: `truncated` is the KPI lines (row_cap) and its warning
+    says the composite was computed over a cut list; `related_truncated` is the plans and 360
+    tables (related_cap), which do not feed the composite at all.
 
     THE ONE-WAY DOOR. Generating writes obj.delivery_score / quality_score / price_score /
     responsiveness_score from the KPI lines and sets obj.manual_override, after which
@@ -327,8 +331,11 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Improvement plans opened off this period</h2>
-      <span class="text-muted">the work that followed the numbers</span>
+      <span class="text-muted">newest first, at most {{ related_cap }} rows</span>
     </div>
+    {% if related_truncated %}
+      <p class="form-help">More than {{ related_cap }} rows cite this period across the two tables below &mdash; the most recent {{ related_cap }} of each are shown. Open the improvement-plan and 360 registers and filter by this period for the full set.</p>
+    {% endif %}
     <div class="table-wrap">
       <table class="table">
         <thead>
@@ -384,7 +391,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">360 responses for this period</h2>
-      <span class="text-muted">what the survey KPIs above were averaged from</span>
+      <span class="text-muted">what the survey KPIs above were averaged from &mdash; at most {{ related_cap }} rows</span>
     </div>
     <div class="table-wrap">
       <table class="table">
