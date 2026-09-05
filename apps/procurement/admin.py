@@ -54,6 +54,10 @@ from .models import (
     SpendReportSnapshot,
     BudgetMapping,
     CostForecast,
+    SupplierFeedback,
+    SupplierImprovementPlan,
+    SupplierKpi,
+    SupplierKpiScore,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -843,3 +847,67 @@ class KnowledgeResourceAdmin(admin.ModelAdmin):
     # so concurrent presses both count). Typing a number here would invent usage that never
     # happened — and the counter is already documented as a click count, not an audit trail.
     readonly_fields = ("number", "usage_count", "last_used_at", "created_at", "updated_at")
+
+
+# ---------------------------------------------------------------------------
+# 6.16 Supplier Performance & Evaluation
+# ---------------------------------------------------------------------------
+
+
+@admin.register(SupplierKpi)
+class SupplierKpiAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "category", "source", "direction", "weight",
+                    "scoring_method", "maps_to_dimension", "applies_to", "is_active")
+    list_filter = ("tenant", "category", "source", "direction", "scoring_method",
+                   "maps_to_dimension", "applies_to", "is_active")
+    search_fields = ("code", "name", "number", "description", "notes")
+    raw_id_fields = ("owner",)
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(SupplierKpiScore)
+class SupplierKpiScoreAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "scorecard", "kpi", "measured_value", "score", "band",
+                    "weight_applied", "computed_at")
+    list_filter = ("tenant", "band", "kpi_category", "source_at_time")
+    search_fields = ("kpi_name", "kpi__code", "kpi__name", "scorecard__number",
+                     "scorecard__party__name", "comment")
+    raw_id_fields = ("scorecard", "kpi", "computed_by")
+    # Everything but measured_value / score / band / weight / comment is FROZEN at generation —
+    # the model already declares those columns editable=False so they never reach a form here.
+    # Listing the derivation columns explicitly keeps the reason visible where the form is
+    # built: a line's history is what makes a closed period readable later, and hand-editing
+    # target_at_time or breakdown would rewrite the evidence behind a figure somebody acted on.
+    readonly_fields = ("target_at_time", "direction_at_time", "source_at_time", "unit_at_time",
+                       "kpi_name", "kpi_category", "breakdown", "respondent_count",
+                       "computed_at", "computed_by", "created_at", "updated_at")
+
+
+@admin.register(SupplierFeedback)
+class SupplierFeedbackAdmin(admin.ModelAdmin):
+    list_display = ("number", "supplier", "respondent_kind", "respondent_function", "rating",
+                    "importance", "status", "period_end", "due_date")
+    list_filter = ("tenant", "status", "respondent_kind", "respondent_function", "rating")
+    search_fields = ("number", "supplier__name", "respondent_name", "comment")
+    raw_id_fields = ("supplier", "scorecard", "kpi", "respondent", "requested_by")
+    # requested_at / submitted_at are stamped by the create path and the submit verb; both are
+    # editable=False on the model. Setting submitted_at by hand would date a response that was
+    # never given, and the survey aggregate reads these rows as evidence.
+    readonly_fields = ("number", "requested_at", "submitted_at", "created_at", "updated_at")
+
+
+@admin.register(SupplierImprovementPlan)
+class SupplierImprovementPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "supplier", "severity", "status", "outcome",
+                    "start_date", "target_close_date", "next_review_date", "owner")
+    list_filter = ("tenant", "status", "severity", "outcome")
+    search_fields = ("number", "title", "supplier__name", "finding", "root_cause",
+                     "corrective_actions", "supplier_owner_name")
+    raw_id_fields = ("supplier", "scorecard", "kpi", "owner", "escalated_suspension",
+                     "acknowledged_by", "verified_by")
+    # The close/acknowledge verbs own these: actual_close_date, the two acknowledgement stamps,
+    # the two verification stamps and closure_note are all editable=False on the model. Typing
+    # a closure by hand would sign off a plan nobody actually verified — and `outcome` stays
+    # writable here only because it is a plain choice column the close verb sets from its POST.
+    readonly_fields = ("number", "actual_close_date", "acknowledged_by", "acknowledged_at",
+                       "verified_by", "verified_at", "closure_note", "created_at", "updated_at")
