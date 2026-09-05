@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Material Issue {{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    6.18 Inventory & Warehouse Integration — MaterialIssue detail / line editor
+    (apps/procurement/views/InventoryWarehouseIntegration/MaterialIssues.py, rendered directly).
+
+    Context contract, and NOTHING else exists here:
+      obj, lines, line_form, total_value, adjustment, adjustment_url, availability,
+      can_submit, can_post, can_cancel, can_edit, boundary_note, ledger_note.
+
+    `lines` is a LIST (not a queryset) already joined on item, uom, lot_serial and gl_account,
+    so nothing in the loop below reaches through an unjoined FK. The view also attaches
+    `on_hand` and `is_short` to each line: `availability` is a dict keyed by item_id and a
+    Django template cannot index a dict by a variable key, so the dict stays in the context as
+    the contract's key while the per-line attributes are what the table actually renders. Both
+    come from ONE grouped query for the whole document.
+
+    `is_short` is only ever True on an ISSUE — a return adds stock, so it has no shortfall.
+
+    `adjustment_url` is reversed IN PYTHON and is None until the document is posted; a {% url %}
+    tag on a null pk is a NoReverseMatch 500 rather than a blank cell. Same for the two notes'
+    links, which is why boundary_note and ledger_note are {text, url, link_label} dicts.
+
+    Nullable-FK discipline (L10): org_unit, gl_account, requested_by, issued_by, adjustment and
+    reservation are all nullable on the header, and lot_serial / gl_account on every line — so
+    each read sits inside an {% if %} branch. location is PROTECTed and non-null.
+
+    Only the document number and primary keys reach a confirm() string. Notes, the reference and
+    every SKU are user-authored, and the HTML attribute parser un-escapes an escaped apostrophe
+    back into the JS string literal before it is parsed.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {{ obj.movement_css }}">{{ obj.get_movement_type_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Inventory &amp; Warehouse Integration</span><span class="sep">›</span>
+        <a href="{% url 'procurement:materialissue_list' %}">Material Issues</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        {% if obj.is_issue %}Material issued from{% else %}Material returned to{% endif %}
+        <span class="fw-600">{{ obj.location.code }}</span> on {{ obj.issue_date|date:"M d, Y" }} for {{ obj.get_purpose_display|lower }}{% if obj.reference %}, against {{ obj.reference }}{% endif %}. Each line is valued at the item's moving-average cost at the moment it was added, so this document still explains its own value after the average has rolled on.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}
+        <a href="{% url 'procurement:materialissue_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit header</a>
+      {% endif %}
+      {% if can_submit %}
+        <form method="post" action="{% url 'procurement:materialissue_submit' obj.pk %}" onsubmit="return confirm('Submit {{ obj.number }}? Its lines can no longer be changed after this. Nothing moves yet — submitting only marks the document as finished.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="send"></i> Submit</button>
+        </form>
+      {% endif %}
+      {% if can_post %}
+        <form method="post" action="{% url 'procurement:materialissue_post' obj.pk %}" onsubmit="return confirm('Post {{ obj.number }}? This mints a DRAFT stock adjustment in SCM. Stock does not change until that adjustment is posted there — and this document can never be cancelled afterwards, only corrected by a mirror return.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Post</button>
+        </form>
+      {% endif %}
+      {% if can_cancel %}
+        <form method="post" action="{% url 'procurement:materialissue_cancel' obj.pk %}" onsubmit="return confirm('Cancel {{ obj.number }}? The lines are kept as the record of what was going to move.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x-circle"></i> Cancel</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list"></i></div><div class="stat-value">{{ lines|length }}</div><div class="stat-label">Lines</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="banknote"></i></div><div class="stat-value">{{ total_value|floatformat:2 }}</div><div class="stat-label">Document value</div></div>
+    <div class="stat-card">
+      <div class="stat-icon {% if obj.is_issue %}orange{% else %}green{% endif %}"><i data-lucide="{% if obj.is_issue %}arrow-up-from-line{% else %}arrow-down-to-line{% endif %}"></i></div>
+      <div class="stat-value">{{ obj.get_movement_type_display }}</div><div class="stat-label">Direction</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon {% if adjustment %}green{% else %}slate{% endif %}"><i data-lucide="scale"></i></div>
+      <div class="stat-value">{% if adjustment %}{{ adjustment.get_status_display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if adjustment %}Adjustment {{ adjustment.number }}{% else %}Not posted{% endif %}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ledger_note — the thing people assume wrongly about this page: that Post moves stock. It
+    does not. Rendered before the lines because it changes how the whole page reads.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What posting actually does</h2>
+      <span class="text-muted">it mints a draft, it does not move stock</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ ledger_note.text }}</p>
+      {% if adjustment %}
+        <p>
+          <span class="badge {% if adjustment.status == 'posted' %}badge-green{% elif adjustment.status == 'cancelled' %}badge-slate{% else %}badge-amber{% endif %}">{{ adjustment.get_status_display }}</span>
+          This document minted <a href="{{ adjustment_url }}" class="fw-600">{{ adjustment.number }}</a>
+          on {{ adjustment.adjustment_date|date:"M d, Y" }}, valued at {{ adjustment.value_impact|floatformat:2 }}.
+          {% if adjustment.status == 'draft' %}
+            It is still a <span class="fw-600">draft</span> — the stock ledger has not changed yet.
+          {% elif adjustment.status == 'posted' %}
+            It has been posted, so the stock movements exist now.
+          {% else %}
+            It was cancelled in SCM, so no stock moved.
+          {% endif %}
+        </p>
+      {% else %}
+        <p class="text-muted">Nothing has been minted yet — this document has not been posted. <a href="{{ ledger_note.url }}">{{ ledger_note.link_label }}</a></p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Document</h2><span class="text-muted">{{ obj.get_purpose_display|lower }}</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Date</dt><dd>{{ obj.issue_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>{% if obj.is_issue %}Issued from{% else %}Returned to{% endif %}</dt>
+          <dd><a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+            <div class="text-muted">{{ obj.location.name }}</div></dd></div>
+        <div class="detail-item"><dt>Purpose</dt>
+          <dd>{{ obj.get_purpose_display }}
+            {% if obj.reference %}<div class="text-muted">{{ obj.reference }}</div>
+            {% else %}<div class="text-muted">no job / project reference</div>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Cost centre</dt>
+          <dd>{% if obj.org_unit %}{{ obj.org_unit.name }}
+            <div class="text-muted">{{ obj.org_unit.get_kind_display }}</div>
+            {% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Expense account</dt>
+          <dd>{% if obj.gl_account %}{{ obj.gl_account.code }} · {{ obj.gl_account.name }}
+            {% else %}<span class="text-muted">Set per line</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requested by</dt>
+          <dd>{% if obj.requested_by %}{{ obj.requested_by.username }}{% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Posted</dt>
+          <dd>{% if obj.posted_at %}{{ obj.posted_at|date:"M d, Y H:i" }}
+              <div class="text-muted">{% if obj.issued_by %}by {{ obj.issued_by.username }}{% else %}by a user since removed{% endif %}</div>
+            {% elif obj.cancelled_at %}<span class="text-muted">Cancelled {{ obj.cancelled_at|date:"M d, Y H:i" }}</span>
+            {% else %}<span class="text-muted">Not posted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Against reservation</dt>
+          <dd>{% if obj.reservation %}<a href="{% url 'inventory:reservation_detail' obj.reservation.pk %}">{{ obj.reservation.number }}</a>
+              <div class="text-muted">{{ obj.reservation.item.sku }} × {{ obj.reservation.quantity|floatformat:2 }}</div>
+            {% else %}<span class="text-muted">None</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <div class="detail-item" style="margin-top:.75rem;"><dt class="text-muted">Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Lines</h2>
+      <span class="text-muted">{{ lines|length }} line{{ lines|length|pluralize }} · {{ total_value|floatformat:2 }} total</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">
+        {% if obj.is_issue %}
+          <span class="fw-600">On hand</span> is what {{ obj.location.code }} holds right now, from the live stock ledger — shown here so a shortfall is visible <em>before</em> anybody presses Post rather than only as a refusal afterwards. Posting is refused outright if any item is short.
+        {% else %}
+          This is a <span class="fw-600">return</span>: it adds stock back to {{ obj.location.code }}, so there is nothing to be short of and no availability check applies.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Lot / serial</th>
+            <th class="text-right">Quantity</th>
+            <th class="text-right">On hand</th>
+            <th class="text-right">Unit cost</th>
+            <th class="text-right">Value</th>
+            <th>Account</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'scm:item_detail' line.item.pk %}">{{ line.item.sku }}</a>
+                <div class="text-muted">{{ line.item.name }}{% if line.item.uom %} · {{ line.item.uom.code }}{% endif %}</div>
+                {% if line.notes %}<div class="text-muted">{{ line.notes }}</div>{% endif %}
+              </td>
+              <td>{% if line.lot_serial %}{{ line.lot_serial.number }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right fw-600">{{ line.quantity|floatformat:4 }}</td>
+              <td class="text-right">
+                {{ line.on_hand|floatformat:2 }}
+                {% if line.is_short %}
+                  <div><span class="badge badge-red">Short</span></div>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ line.unit_cost|floatformat:4 }}</td>
+              <td class="text-right">{{ line.line_value|floatformat:2 }}</td>
+              <td>{% if line.gl_account %}{{ line.gl_account.code }}{% elif obj.gl_account %}<span class="text-muted">{{ obj.gl_account.code }} (document)</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  {% if can_edit %}
+                    <form method="post" action="{% url 'procurement:materialissueline_delete' obj.pk line.pk %}" onsubmit="return confirm('Remove this line from {{ obj.number }}?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove line" aria-label="Remove line"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">Locked</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="package"></i>
+                <h3>No lines yet</h3>
+                {% if can_edit %}
+                  <p>Add what is actually {% if obj.is_issue %}being taken off the shelf{% else %}coming back{% endif %}. Each line is valued automatically at the item's moving-average cost — nobody types a price.</p>
+                {% else %}
+                  <p>This document has no lines and can no longer be changed.</p>
+                {% endif %}
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if can_edit %}
+      {% comment %}
+        The add-a-line row. `line_form` is ONE unbound, tenant-narrowed MaterialIssueLineForm
+        built by the view — unit_cost is not on it at all, because it is a snapshot stamped in
+        MaterialIssueLine.save() from the item's moving-average cost. `issue` is not on it
+        either: the view sets it from the URL, which is what stops a line being filed onto
+        somebody else's document.
+      {% endcomment %}
+      <div class="card-body">
+        <h3 class="card-title">Add a line</h3>
+        <form method="post" action="{% url 'procurement:materialissueline_add' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in line_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.name == "quantity" %}
+                  <div class="form-help">Always positive — the direction comes from the document, not the line.</div>
+                {% elif field.name == "lot_serial" %}
+                  <div class="form-help">Optional, and it must belong to the item chosen above.</div>
+                {% elif field.help_text %}
+                  <div class="form-help">{{ field.help_text }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-outline" type="submit"><i data-lucide="plus"></i> Add line</button>
+          </div>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %}
+    boundary_note — the most expensive mistake available on this page, so it gets its own card
+    with the link the view reversed rather than a sentence buried in help text.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Return to stock is not return to vendor</h2>
+      <span class="text-muted">two documents, two very different outcomes</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ boundary_note.text }}</p>
+      <a href="{{ boundary_note.url }}" class="btn btn-outline"><i data-lucide="truck"></i> {{ boundary_note.link_label }}</a>
+    </div>
+  </div>
+
+  {% if can_edit %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Danger zone</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Deleting removes this document and every line on it. Nothing outside it is touched — no stock, no adjustment, no reservation. Delete is offered on drafts only: once a document has been posted it has minted a stock adjustment, and the only correction is a mirror {% if obj.is_issue %}return{% else %}issue{% endif %} against the same location. That is the compensating-move law the whole stock ledger runs on.</p>
+        <form method="post" action="{% url 'procurement:materialissue_delete' obj.pk %}" onsubmit="return confirm('Delete material issue {{ obj.number }} and every line on it? Nothing outside this document is touched.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete document</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
