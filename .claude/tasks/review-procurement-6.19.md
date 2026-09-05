@@ -413,3 +413,189 @@ three places a user could learn what a threshold does, or what search can and ca
 PDF, are structurally incapable of disagreeing. `upload_note` is the standout: `revision/form.html:63`
 prints a limit built in the view from `ALLOWED_DOC_EXTENSIONS` and `MAX_UPLOAD_BYTES`, so the page
 physically cannot promise a size the form will then reject.
+
+---
+
+## Pass 4 — `performance-reviewer` (ORM / query efficiency)
+
+20 Python + 12 templates + the seeder block + the 6.19 index ops in `0026_*.py:291-350`. Counts
+derived statically. Sizing assumes `EXTRACT_MAX_CHARS = 200_000` with a realistic **30 KB average**
+extracted text per document, 200 KB quoted as worst case. **Verdict: one Critical, five Important.**
+
+### Critical
+
+**[ ] P1 — `_documents()` builds the revision register's dropdown from FULL `ProcurementDocument` rows, unbounded, including the 200 KB `extracted_text` column.**
+`views/…/Revisions.py:116-120` — `ProcurementDocument.objects.filter(tenant=tenant).order_by("number")`.
+`revision/list.html:76-78` renders exactly three values per option (`pk`, `number`, `title`); every
+other column comes down anyway, `extracted_text` and `description` included. It is **1 query** — not
+an N+1, an unbounded payload that grows with the table:
+
+| documents in workspace | bytes per load of the revision register | `<option>` elements |
+|---|---|---|
+| 200 | ≈ 6 MB | 200 |
+| 2,000 | ≈ 60 MB | 2,000 (~120 KB of HTML) |
+| 2,000 at the 200 KB ceiling | ≈ **400 MB** | 2,000 |
+
+At 2,000 documents this is a multi-second request that can OOM a worker under concurrency, on a
+primary navigation page. The sibling dropdowns (`_suppliers`/`_owners`, `_org_units`) are unbounded
+too, but a `Party` or `User` row is a few hundred bytes. `ProcurementDocument` is the one model in
+the app carrying a machine-written 200 KB column, and it is the one fed to a dropdown raw.
+*Fix* — the app's own idiom (114 uses elsewhere, 8 in `apps/procurement`):
+`.only("pk", "number", "title").order_by("number")[:200]`. Exact precedent
+`apps/crm/views/DocumentContract/Contracts.py:27`. Payload 60 MB → ~12 KB, query count unchanged.
+`.only()` alone is the mandatory half if the cap is unacceptable UX.
+
+### Important
+
+**[ ] P2 — all four registers haul `extracted_text` they never render; three join `ProcurementDocument` for nothing.**
+
+| register | joins declared | joins the template uses | dead text per 15-row page (30 KB / 200 KB) |
+|---|---|---|---|
+| `pdocument_list` | supplier, owner, contract, purchase_order, sourcing_event | supplier, owner | own text **450 KB / 3 MB** + 3 unused LEFT JOINs |
+| `pdocrevision_list` | document, uploaded_by, approved_by | all three | own + parent text **900 KB / 6 MB** |
+| `ppolicy_list` | applies_to, owner, document, threshold_currency | applies_to, threshold_currency | parent doc text via an unread join **450 KB / 3 MB** |
+| `knowledgeresource_list` | owner, document | **neither** | (15 + 6 shelf) × doc text **630 KB / 4.2 MB** |
+
+`knowledgeresource/list.html` reads **no** FK at all (verified line by line), so its `select_related`
+is pure cost. `pdocument_detail:183` has the same shape — 12 revisions = 360 KB / 2.4 MB discarded.
+*Fix:* `.defer("extracted_text", …)` on each (keeps the join so a later template edit cannot
+reintroduce an N+1, drops only the payload), and split `_ROW_RELATIONS` from `_DETAIL_RELATIONS` on
+documents — the detail genuinely renders all five. House precedent:
+`apps/crm/views/DocumentContract/DocumentVersions.py:24` `.defer("body_snapshot")`, the direct
+analogue of `ProcurementDocumentRevision`.
+
+**[ ] P3 — `?q=` sweeps the 200 KB TextField with `icontains` TWICE per request, with no minimum-length guard.**
+`views/…/Documents.py:147` puts `extracted_text` in `search_fields`; `crud.py:118` applies search
+before `paginate` (correct), but `Paginator` then issues `COUNT(*)` over the same filtered
+queryset, so the scan runs twice.
+
+| documents / tenant | text scanned per search (COUNT + page) |
+|---|---|
+| 500 × 30 KB | ≈ 30 MB |
+| 2,000 × 30 KB | ≈ **120 MB** |
+| 2,000 at ceiling | ≈ 800 MB |
+
+`?q=a` matches nearly every row, so both halves do maximum work for a useless result set.
+**Plainly: acceptable to roughly 1,000 documents/tenant, needs bounding beyond.** Does **not** need
+FULLTEXT (the SQLite ruling stands). *Fix:* include `extracted_text` in `search_fields` only when
+`len(q) >= 4`; optionally make the file-text sweep opt-in via `?in_files=1`. `SEARCH_NOTE` already
+exists as the one place to explain it. (Stat tiles aggregate over `base`, not the searched qs, so
+the LIKE runs twice, not three times.)
+
+**[ ] P4 — `run_document_reminders` issues 4-5 queries PER ROW over a scan set that only grows.**
+Per in-window document: SAVEPOINT + `SELECT … FOR UPDATE` + `SELECT EXISTS` dedupe + (INSERT) +
+RELEASE.
+
+| in-window documents | first press | second press (raises nothing) |
+|---|---|---|
+| 50 | ~252 queries | ~202 queries, **zero writes** |
+| 200 | ~1,002 | ~802, zero writes |
+| 800 | ~4,002 | **~3,202, zero writes** |
+
+The scan at `:355` has **no lower bound**, so every document whose expiry or review date has ever
+passed stays in the window permanently — a 3-year-old workspace with 2,000 documents and 40%
+past-dated hits it. The button's confirm advertises that it is safe to press twice, so the
+all-skipped path is the *common* one. Also: `expiring_documents` materialises full instances
+(800 × 30 KB ≈ **24 MB resident**) and joins `supplier`/`owner`, which neither the engine nor the
+view reads.
+*Fix:* hoist the dedupe out of the loop into one `values_list("link_url")` set; keep the per-row
+`select_for_update` only where a write will happen. Second press drops ~3,200 → **2** queries with
+the concurrency guarantee unchanged. Drop the two dead joins, add `.only(...)`, and consider a floor
+on the window.
+*App-wide, do not fork 6.19 for it:* `ProcurementAlert` has no index reaching `link_url`; the same
+dedupe shape is in 6.3 `run_escalations` and 6.8 `run_renewal_alerts`.
+
+**[ ] P5 — re-index: 401 queries and up to 200 synchronous `pdfplumber` parses inside one POST.**
+*(the item pass 1 routed here — investigated, filed with numbers)*
+1 candidates query + N `current_revision` property queries + up to N UPDATEs = **up to 401**.
+Wall clock is the real problem — `pdfplumber` is pure Python on pdfminer.six, ~0.1-0.3 s/page:
+
+| per-document parse | 200-row Run |
+|---|---|
+| 0.15 s | 30 s |
+| 1 s | **200 s** |
+| 2 s | **400 s** |
+
+gunicorn defaults to a 30 s worker timeout, nginx `proxy_read_timeout` to 60 s. **Every one of those
+blows through both.** The cap is sized to "a lot of documents", not to a request budget. Saved from
+Critical only because `ATOMIC_REQUESTS` is unset, so each save autocommits and a killed request
+keeps finished work.
+*Fix:* (a) batch the pointer resolution into one `document_id__in` query keyed
+`(document_id, revision_no)`, and `bulk_update(batch_size=50)` — 401 → ~5; (b) size the cap to a
+request: `REINDEX_ROW_CAP = 25` and/or a `time.monotonic()` budget with "X re-indexed, more remain".
+The docstring already promises that behaviour; the code needs to keep it inside a timeout.
+**Compose this with item 2's conditional `.update()` fix — same edit.**
+
+**[ ] P6 — `review_on` is filtered on two hot paths and has no index, while its policy twin does.**
+`models/…/Documents.py:216-221` declares `(tenant,status)`, `(tenant,doc_type)`,
+`(tenant,expires_on)`, `(tenant,supplier)` — but not `(tenant, review_on)`, which is filtered by the
+`?expiry=review_due` facet **and** by the review branch of the reminder scan. `ProcurementPolicy`
+indexes exactly this pattern at `Policies.py:253`, so the asymmetry is a tell, not a choice. At
+2,000 documents/tenant the facet is a full tenant scan on every hit.
+*Fix:* add `models.Index(fields=["tenant","review_on"], name="prc_pdoc_tnt_review_idx")`.
+
+### Minor
+
+**[ ] P7 — `prc_pdrev_tnt_doc_idx` is fully redundant, on the fastest-growing table here.**
+`Revisions.py:130` declares `(tenant, document)`; `:128`'s `unique_together
+("tenant","document","revision_no")` already has that as its leftmost prefix, and `document` carries
+Django's automatic FK index. Three structures, one access path, maintained on every INSERT of an
+append-only table. `prc_pdrev_tnt_appr_idx` is a boolean at ~50% selectivity — MySQL will rarely
+choose it; keep only if `?approved=` is expected to be heavily used.
+
+**[ ] P8 — `pdocument_detail` spends a 5th query re-fetching a row it already holds.**
+`:183` materialises every revision; `:196` then calls `obj.current_revision`, which runs
+`self.revisions.filter(...).first()`. Replace with a `next(...)` over the list already in memory —
+5 queries → 4.
+
+**[ ] P9 — the three reverse lists on `pdocument_detail` are uncapped.** `:183-185` `list()`s
+`revisions`, `policies`, `knowledge_resources` with no slice, while the sibling detail bounds its
+fan-out with `SUPERSEDED_BY_CAP = 10`. A heavily-revised document is exactly the one people open.
+`[:50]` + a "showing the latest 50" note matches the house pattern.
+
+**[ ] P10 — pagination ordering is not index-supported — but this is the app-wide pattern, not a 6.19 fork.**
+None of the three `Meta.ordering` tuples has a matching `(tenant, <sort key>)` index, so every page
+is a filesort over the tenant's rows. App-wide only **25** of **894** tenant-prefixed index
+declarations carry `(tenant, created_at)`. 6.19 conforms. If anything is added, add it to the two
+tables that actually grow, as an app-wide pass.
+
+**[ ] P11 — the seeder's audit loop re-queries rows it is holding.** `seed_procurement.py:3319-3320`
+re-`list()`s the seven documents just created (and loads `description`/`extracted_text`). Cosmetic —
+it runs only inside the "no documents yet" branch.
+
+### Verified clean — with the numbers
+
+**No N+1 in any register.** Every FK a row template touches is in that register's `select_related`.
+Constant counts for a 15-row page, independent of row count: `pdocument_list` **5**,
+`pdocrevision_list` **4**, `ppolicy_list` **4**, `knowledgeresource_list` **4**. Detail pages
+bounded: `pdocument_detail` 5 (4 after P8), `ppolicy_detail` **2**, `knowledgeresource_detail` **1**,
+`pdocrevision_detail` **1**.
+**No chained `__str__` hop anywhere (L18)** — grep for a bare `{{ obj.<fk> }}` across all 12
+templates returns nothing; all 39 FK reads are attribute hops. `document/detail.html:109`
+deliberately prints `{{ obj.purchase_order.number }}`, never the object, so
+`scm.PurchaseOrder.__str__`'s `self.vendor` hop is never triggered.
+**`is_current` costs 0 queries in both places it renders** — on the register `document` is
+`select_related`; on the detail Django's reverse manager populates `_known_related_objects`.
+**Stat tiles are one aggregate each**, computed on the unfiltered `base`, which also keeps the
+expensive LIKE out of the stats query. **Paginator's COUNT does not duplicate the `select_related`
+joins** (Django strips them). No `len(qs)` anywhere; no DB work in any template loop;
+`knowledgeresource_use` is a single `F()` UPDATE. **The seeder has no performance defect** —
+`bulk_create` is explicitly the wrong call because `TenantNumbered.save()` allocates the numbers.
+
+### For the test-writer — `django_assert_max_num_queries`
+
+```
+pdocument_list (30 docs)                       <= 5    # + assert page 2
+pdocrevision_list (30 revs / 5 docs)           <= 4
+ppolicy_list (30) / knowledgeresource_list (30, 8 featured)   <= 4
+pdocument_detail (6 revs, 2 policies, 2 KRs)   <= 5    # <= 4 once P8 lands
+ppolicy_detail (12 successors)                 <= 2    # assert only 10 render
+knowledgeresource_detail / pdocrevision_detail <= 1
+run_document_reminders (10 in-window, 1st)     <= 12   # after P4; ~52 today
+run_document_reminders (2nd press, no raises)  <= 4    # after P4; ~42 today
+pdocument_reindex (10 textless candidates)     <= 15   # after P5; ~21 today
+```
+
+Two payload tests a query-count assertion will **not** catch: capture each register's SQL with
+`CaptureQueriesContext` and assert `"extracted_text" not in sql`; assert the revision register's
+document-dropdown query carries a `LIMIT`.
