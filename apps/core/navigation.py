@@ -1655,6 +1655,25 @@ LIVE_LINKS = {
     # on-hand. Nothing here re-declares Item/Location/StockMove/LotSerial/ReorderRule, and
     # "Goods Issue/Return to Stock" posts by minting a DRAFT `scm.StockAdjustment` rather than
     # writing a StockMove, so stock still changes in exactly one place.
+    # 6.17 Risk & Compliance Management — five bullets, five DISTINCT destinations (L30: sibling
+    # bullets sharing one URL is the defect a route-reverses check cannot see).
+    #
+    # Two boundaries worth stating, because both look like duplication and are not:
+    #   * "Policy Management & Acknowledgment" points at 6.17's ACKNOWLEDGEMENT register, not at
+    #     6.19's policy library. 6.19 owns `ProcurementPolicy` and its authoring; 6.17 owns the
+    #     sign-off ledger over it (contract §6a). The two pages link to each other.
+    #   * "Audit Trail & Logging" is deliberately the audit-trail REGISTER, not the seal list.
+    #     The register is the page an auditor actually wants; the hash-chain seal is the evidence
+    #     behind it and is reached from there. The page states plainly that the trail is
+    #     tamper-EVIDENT, not tamper-proof — `core.AuditLog` has no immutability guarantee, and a
+    #     control people wrongly believe in is worse than none.
+    "6.17": {
+        "Regulatory Compliance Checks":        "procurement:screening_list",
+        "Supplier Financial Risk Monitoring":  "procurement:risksignal_list",
+        "Audit Trail & Logging":               "procurement:audit_trail",
+        "Fraud Detection Rules":               "procurement:fraudalert_list",
+        "Policy Management & Acknowledgment":  "procurement:policy_list",
+    },
     "6.18": {
         "Stock Level Visibility":              "procurement:stock_position",
         "Reorder Point Automation":            "procurement:replenishmentrun_list",
