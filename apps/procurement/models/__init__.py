@@ -149,6 +149,23 @@ from .InventoryWarehouseIntegration.Policies import ReplenishmentPolicy
 from .InventoryWarehouseIntegration.Runs import ReplenishmentRun, ReplenishmentSuggestion
 from .InventoryWarehouseIntegration.MaterialIssues import MaterialIssue, MaterialIssueLine
 
+# 6.17 Risk & Compliance Management — screening, supplier financial risk, fraud detection, the
+# policy sign-off ledger and the audit-trail seal.
+#
+# OWNERSHIP (contract §6a, agreed with the 6.19 session): 6.19 owns ``ProcurementPolicy`` itself
+# — the library, its supersession chain and its authoring verbs. 6.17 owns only the
+# ACKNOWLEDGEMENT half, ``PolicyAttestation``, which FKs that table by string. There is deliberately
+# no second policy model here; two models of one name in an app_label raise
+# ``RuntimeError: Conflicting 'procurementpolicy' models`` and break ``check`` for the whole repo.
+#
+# ``ScreeningHit`` is tenant-LESS on purpose (the ``scm.ComplianceCheck`` precedent): its parent FK
+# IS its tenant scope, so every view resolves it as ``screening__tenant=request.tenant``.
+from .RiskComplianceManagement.Screenings import ComplianceScreening, ScreeningHit
+from .RiskComplianceManagement.RiskSignals import SupplierRiskSignal
+from .RiskComplianceManagement.FraudAlerts import FraudAlert
+from .RiskComplianceManagement.Policies import PolicyAttestation
+from .RiskComplianceManagement.AuditSeals import AuditSeal
+
 __all__ = [
     "EaucBid",
     "EaucInvite",
@@ -244,4 +261,11 @@ __all__ = [
     "ReplenishmentSuggestion",
     "MaterialIssue",
     "MaterialIssueLine",
+    # 6.17 Risk & Compliance Management
+    "ComplianceScreening",
+    "ScreeningHit",
+    "SupplierRiskSignal",
+    "FraudAlert",
+    "PolicyAttestation",
+    "AuditSeal",
 ]
