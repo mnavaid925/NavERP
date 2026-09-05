@@ -433,6 +433,53 @@ from .DocumentKnowledgeManagement.KnowledgeResources import (
     knowledgeresource_publish,
     knowledgeresource_use,
 )
+# 6.16 Supplier Performance & Evaluation — 33 public views over five modules. The URLconf
+# resolves ``views.<name>`` off THIS package, so a name missing from the block below is an
+# AttributeError at URLconf import time, not a 404. Everything ``_``-prefixed in those modules
+# is private helper surface and stays out.
+from .SupplierPerformanceEvaluation.SupplierKpis import (
+    supplierkpi_create,
+    supplierkpi_delete,
+    supplierkpi_detail,
+    supplierkpi_edit,
+    supplierkpi_list,
+)
+from .SupplierPerformanceEvaluation.ScorecardKpiScores import (
+    supplierevaluation_detail,
+    supplierevaluation_generate,
+    supplierevaluation_list,
+    supplierkpiscore_delete,
+    supplierkpiscore_detail,
+    supplierkpiscore_edit,
+    supplierkpiscore_list,
+)
+from .SupplierPerformanceEvaluation.SupplierFeedback import (
+    supplierfeedback_create,
+    supplierfeedback_decline,
+    supplierfeedback_delete,
+    supplierfeedback_detail,
+    supplierfeedback_edit,
+    supplierfeedback_expire,
+    supplierfeedback_list,
+    supplierfeedback_submit,
+)
+from .SupplierPerformanceEvaluation.SupplierImprovementPlans import (
+    improvementplan_acknowledge,
+    improvementplan_activate,
+    improvementplan_cancel,
+    improvementplan_close,
+    improvementplan_create,
+    improvementplan_delete,
+    improvementplan_detail,
+    improvementplan_edit,
+    improvementplan_list,
+    improvementplan_monitor,
+)
+from .SupplierPerformanceEvaluation.PerformanceBoards import (
+    supplier_benchmark_board,
+    supplier_perception_gap,
+    supplier_trend_board,
+)
 
 __all__ = [
     "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
@@ -617,4 +664,17 @@ __all__ = [
     "knowledgeresource_list", "knowledgeresource_detail", "knowledgeresource_create",
     "knowledgeresource_edit", "knowledgeresource_delete", "knowledgeresource_publish",
     "knowledgeresource_archive", "knowledgeresource_use",
+    "supplierkpi_list", "supplierkpi_detail", "supplierkpi_create", "supplierkpi_edit",
+    "supplierkpi_delete",
+    "supplierevaluation_list", "supplierevaluation_detail", "supplierevaluation_generate",
+    "supplierkpiscore_list", "supplierkpiscore_detail", "supplierkpiscore_edit",
+    "supplierkpiscore_delete",
+    "supplierfeedback_list", "supplierfeedback_detail", "supplierfeedback_create",
+    "supplierfeedback_edit", "supplierfeedback_submit", "supplierfeedback_decline",
+    "supplierfeedback_expire", "supplierfeedback_delete",
+    "improvementplan_list", "improvementplan_detail", "improvementplan_create",
+    "improvementplan_edit", "improvementplan_activate", "improvementplan_monitor",
+    "improvementplan_acknowledge", "improvementplan_close", "improvementplan_cancel",
+    "improvementplan_delete",
+    "supplier_benchmark_board", "supplier_trend_board", "supplier_perception_gap",
 ]
