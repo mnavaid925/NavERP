@@ -19,7 +19,9 @@ page `procurement:dashboard` — then `alerts/`, `quick-requisition/`, `activity
 `spend-report-snapshots/`, `budget-mappings/`, `budget-availability/`, `commitments/`,
 `budget-variance/`, `cost-forecasts/`, `delegations/`, `eauc/`, `po-changes/`,
 `po-generation/`, `po-tracking/`, `documents/`, `document-revisions/`,
-`procurement-policies/`, `knowledge/`) is a distinct whole component.
+`procurement-policies/`, `knowledge/`, `supplier-kpis/`, `supplier-evaluations/`,
+`supplier-feedback/`, `improvement-plans/`, `supplier-benchmarking/`) is a distinct whole
+component.
 
 No route in this app uses a converter in its FIRST path component — every first segment is a
 literal — so no module can shadow another's namespace. (A ``<str:token>`` converter DOES exist,
@@ -53,6 +55,7 @@ from .SourcingTendering import urlpatterns as _st_sourcingtendering
 from .VendorManagement import urlpatterns as _vm_vendormanagement
 from .ContractsManagement import urlpatterns as _cm_contractsmanagement
 from .PurchaseOrderManagement import urlpatterns as _pom_purchaseordermanagement
+from .SupplierPerformanceEvaluation import urlpatterns as _spe_supplierperformance
 
 
 app_name = "procurement"
@@ -113,4 +116,20 @@ urlpatterns = [
     # which is why the policy library is ``procurement-policies/`` and not ``policies/``.
     *_dkm_documentknowledge,    # 6.19 document register + revision chain, policy library,
                                 #      knowledge resources (32 routes, 32 distinct names)
+    # 6.16 LAST for the same reason 6.13-6.15 and 6.19 were: all five first segments it claims
+    # are new (``supplier-kpis/``, ``supplier-evaluations/``, ``supplier-feedback/``,
+    # ``improvement-plans/``, ``supplier-benchmarking/``), and appended-last is belt-and-braces
+    # against a future module claiming one of them. The names dodge segments already taken —
+    # ``suspensions/`` and ``submissions/`` are 6.4's, and the whole supplier-facing family is
+    # prefixed rather than bare for exactly that reason.
+    #
+    # The sub-package is included as ONE unit and must stay that way: inside it the four literal
+    # ``supplier-evaluations/scores/`` routes are already declared ahead of
+    # ``supplier-evaluations/<int:pk>/``, and flattening the modules separately here (or letting
+    # a later sub-module re-open that segment) would put the converter route in front of the
+    # literals and hide the whole score register behind a scorecard-detail 404.
+    *_spe_supplierperformance,  # 6.16 KPI definition master, the evaluation register over
+                                #      scm.SupplierScorecard + the one-way generate door and its
+                                #      score lines, 360 feedback, improvement plans, and the
+                                #      three read-only boards (33 routes, 33 distinct names)
 ]
