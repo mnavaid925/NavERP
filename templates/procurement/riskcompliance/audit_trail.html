@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Audit Trail{% endblock %}
+{% block content %}
+  {% comment %}
+    6.17 Risk & Compliance Management — the audit trail register
+    (apps/procurement/views/RiskComplianceManagement/AuditTrail.py :: audit_trail). A standalone
+    sub-module-root page, not an entity CRUD page, so it lives at
+    templates/procurement/riskcompliance/ rather than under an entity folder.
+
+    Context contract (crud_list + extra_context), and NOTHING else exists here:
+      object_list, page_obj, q,
+      action_choices, content_types, users, retention_note, chain_status, tamper_note,
+      export_query.
+
+    crud_list renders `object_list` — never `objects` (L7/L8: a mismatched name renders a
+    silently blank region and still returns 200).
+
+    ROW-DICT CONTRACT (L41 §1) — every entry of `chain_status` carries these keys and no others:
+      pk, number, row_count, range, sealed_at, linked, link_detail, verified, verified_at,
+      verify_detail, state, state_css, state_label, digest_short.
+    `verified` is THREE-valued (True / False / None) and so is never rendered directly — a None
+    printed through a default: filter would read as "no". The page branches on `verify_detail`
+    (empty until somebody has verified) and prints `state_label`, both of which are always
+    strings, rather than relying on the template engine's handling of a None literal.
+
+    THE HONESTY CARD IS THE FIRST THING ON THE PAGE, AND THAT IS THE DESIGN. core.AuditLog has
+    no hash column, no sequence number and nothing preventing an UPDATE or a DELETE, so this
+    page must never say "tamper-proof". `tamper_note` is the model's own TAMPER_NOTE constant,
+    rendered verbatim, in the position somebody actually reads. A security control people
+    wrongly believe in is worse than no control at all.
+
+    The filter bar offers exactly what the view reads — q, action, content_type, user,
+    object_id, date_from, date_to — so no <select> posts a parameter nothing acts on. Both FK
+    dropdowns compare with |stringformat:"d", never |slugify. The int boxes and the date boxes
+    echo what was typed: the view IGNORES a value it cannot use (?object_id=abc, ?date=lastweek)
+    rather than 500ing, and the note under the bar says so, because a box that silently does
+    nothing is worse than one that explains itself (L11/L44).
+
+    NOTHING HERE IS RENDERED WITH |safe. `target` and `changes` are user-authored and some of it
+    is attacker-influenced — it is the record of what somebody typed into the system.
+
+    The action badge is a ladder rather than a model property because AuditLog belongs to core
+    and this sub-module adds no column to it (zero core migrations). Every branch names a REAL
+    theme.css class — badge-green / badge-info / badge-red / badge-muted — and the label always
+    comes from get_action_display, so an unrecognised action degrades to a grey badge with the
+    right word on it instead of an unstyled semantic class (L33).
+
+    Rows link to 6.1's activity_detail rather than to a second detail page of our own: that view
+    is scoped to the SAME procurement audit queryset, so every row here is reachable there and a
+    row from another module 404s exactly as it should.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Audit Trail</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span>
+        <span>Risk &amp; Compliance</span><span class="sep">›</span>
+        <span>Audit trail</span>
+      </div>
+      <p class="text-muted">Every create, update and delete recorded against this workspace's procurement records — who did it, to which record, and when. The register is read-only: corrections appear as new entries, never as edits to old ones.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:auditseal_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Audit seals</a>
+      <a href="{% url 'procurement:audit_trail_export' %}{% if export_query %}?{{ export_query }}{% endif %}" class="btn btn-primary"><i data-lucide="download"></i> Export these rows</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What a seal proves, and what it does not</h2>
+      <span class="text-muted">read this before relying on the word "audit"</span>
+    </div>
+    <div class="card-body">
+      <p>{{ tamper_note }}</p>
+      <p class="text-muted">In practice: seal regularly, and verify a seal when you need to rely on the range it covers. A seal taken today can prove nothing about a row that was quietly changed last week.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Seal chain</h2>
+      <span class="text-muted">most recent seals, newest first</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Seal</th>
+            <th>Covers</th>
+            <th>Sealed</th>
+            <th>Link</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for link in chain_status %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:auditseal_detail' link.pk %}">{{ link.number }}</a></td>
+              <td>
+                {{ link.range }}
+                <div class="text-muted">{{ link.row_count }} entries</div>
+              </td>
+              <td>{{ link.sealed_at|date:"M d, Y H:i" }}</td>
+              <td>
+                {% if link.linked %}
+                  <span class="text-muted">{{ link.link_detail }}</span>
+                {% else %}
+                  <span class="text-danger">{{ link.link_detail }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ link.state_css }}">{{ link.state_label }}</span>
+                {% if link.verify_detail %}
+                  <div class="text-muted">{{ link.verify_detail }}</div>
+                {% else %}
+                  <div class="text-muted">Not re-hashed since it was sealed.</div>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <i data-lucide="shield-off"></i>
+                <h3>Nothing here is sealed yet</h3>
+                <p>Without a seal, a change to this trail would leave no evidence at all. Sealing takes a SHA-256 digest over the entries written so far, so a later modification, deletion or insertion becomes detectable — and the verifier names the entry it happened to.</p>
+                <a href="{% url 'procurement:auditseal_list' %}" class="btn btn-primary"><i data-lucide="shield-check"></i> Go to audit seals</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search the trail" class="form-input" placeholder="Search the record this entry was about…">
+        </div>
+        <div class="form-group">
+          <select name="action" aria-label="Action" class="form-select">
+            <option value="">Any action</option>
+            {% for value, label in action_choices %}
+              <option value="{{ value }}" {% if request.GET.action == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="content_type" aria-label="Record type" class="form-select">
+            <option value="">All record types</option>
+            {% for ct in content_types %}
+              <option value="{{ ct.pk|stringformat:"d" }}" {% if request.GET.content_type == ct.pk|stringformat:"d" %}selected{% endif %}>{{ ct.app_label }}.{{ ct.model }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="user" aria-label="Person" class="form-select">
+            <option value="">Everybody</option>
+            {% for person in users %}
+              <option value="{{ person.pk|stringformat:"d" }}" {% if request.GET.user == person.pk|stringformat:"d" %}selected{% endif %}>{{ person.get_full_name|default:person.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="text" name="object_id" value="{{ request.GET.object_id|default:'' }}" aria-label="Record id" class="form-input" placeholder="Record id" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ request.GET.date_from|default:'' }}" aria-label="From date" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ request.GET.date_to|default:'' }}" aria-label="To date" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:audit_trail' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="text-muted" style="margin-top:.5rem;">Dates are ISO (YYYY-MM-DD) and the record id is a whole number. A value that is neither is ignored rather than treated as a filter, so the rows below always match the boxes that could be read.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Entry</th>
+            <th>When</th>
+            <th>Who</th>
+            <th>Action</th>
+            <th>Record type</th>
+            <th>Record</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'procurement:activity_detail' obj.pk %}">#{{ obj.pk }}</a></td>
+              <td>
+                {{ obj.at|date:"M d, Y" }}
+                <div class="text-muted">{{ obj.at|date:"H:i" }}</div>
+              </td>
+              <td>
+                {% if obj.user %}
+                  {{ obj.user.get_full_name|default:obj.user.username }}
+                {% else %}
+                  <span class="text-muted">System</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {% if obj.action == 'create' %}badge-green{% elif obj.action == 'update' %}badge-info{% elif obj.action == 'delete' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_action_display }}</span>
+              </td>
+              <td>
+                {% if obj.content_type %}
+                  {{ obj.content_type.app_label }}.{{ obj.content_type.model }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.target %}{{ obj.target }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if obj.object_id %}<div class="text-muted">id {{ obj.object_id }}</div>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="file-search"></i>
+                <h3>No audit entries found</h3>
+                <p>Nothing matches these filters. The trail records changes to procurement records — requisitions, orders, receipts, and this module's own rows — so an empty result usually means the filters are narrower than the activity, not that nothing happened.</p>
+                <a href="{% url 'procurement:audit_trail' %}" class="btn btn-outline">Clear filters</a>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% comment %} The partial guards has_previous / has_next and replays every GET param except `page`, so the filters survive paging (L9). {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Retention</h2><span class="text-muted">and why nothing here has a delete button</span></div>
+    <div class="card-body">
+      <p class="text-muted">{{ retention_note }}</p>
+    </div>
+  </div>
+{% endblock %}
