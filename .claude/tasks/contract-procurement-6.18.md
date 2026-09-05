@@ -26,8 +26,22 @@ would miss every `<entity>/<page>.html` file, i.e. all nine CRUD templates. This
 
 The shared files touched at Integrate (`apps/core/navigation.py`, `admin.py`,
 `seed_procurement.py`, the four app-level `__init__.py`, `README.md`) are **not** reviewable by
-glob — a glob pulls in three peers' hunks too. Point reviewers at the **`6.18` / `InventoryWarehouse`
-blocks within those files only**, by name.
+glob — a glob pulls in three peers' hunks too, and a commit range pulls in their commits. Isolate
+our own hunks mechanically instead, since every session tags its sub-module in the commit subject:
+
+```bash
+git log --format=%H --grep='6\.18' -- apps/core/navigation.py \
+  | xargs -I{} git show {} -- apps/core/navigation.py
+```
+
+Hand the reviewer **that output**, not the file. Same shape for `admin.py`,
+`seed_procurement.py`, the four app-level `__init__.py` and `README.md`.
+
+**Caveat — this is better than eyeballing, not airtight.** `git add <file>` stages the whole
+file, so if one of our commits swept in a peer's in-flight hunk, that hunk appears inside *our*
+commit and this query hands it to the reviewer as ours. Mitigations: commit shared files in the
+same breath as the edit (narrow window), and sanity-check the output for blocks that aren't ours
+before handing it over.
 
 Scope is **3 entities / 5 model classes + 3 derived no-model pages**. `CountVarianceReview`
 [CVR-] is **dropped** this pass (its only consumer is 6.16's scorecard; building a producer
@@ -58,6 +72,16 @@ before the consumer ships a table nobody reads).
   all five model names (`ReplenishmentPolicy`, `ReplenishmentRun`, `ReplenishmentSuggestion`,
   `MaterialIssue`, `MaterialIssueLine`), all six url segments, and the url names. **Re-run that
   check before adding any name this contract does not already list.**
+- **Fourth axis — duplicate url names ALREADY on disk**, whoever's they are. A contract grep sees
+  only what peers *intend*; this sees what is *there*:
+  ```bash
+  grep -rhoE "name=[\"'][a-z_0-9]+[\"']" apps/procurement/urls/ | tr -d "\"'" | sed 's/name=//' | sort | uniq -d
+  ```
+  Empty = clean. Verified clean at contract time (401 url names registered in `apps/procurement`;
+  `crm`/`accounting`/`hrm`/`scm`/`inventory` also clean). **Re-run at Integrate.** A duplicate url
+  *name* is the quietest of all these failures: Django raises nothing, `reverse()` simply resolves
+  to whichever pattern registered last, so buttons silently point into another sub-module's page —
+  and a smoke test that only asserts status 200 will pass.
 - If `manage.py check` starts failing with a conflicting-model error touching policies, it is the
   6.17/6.19 collision above — **not ours**. Do not debug it as ours.
 
