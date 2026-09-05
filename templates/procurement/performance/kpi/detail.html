@@ -36,6 +36,12 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'procurement:supplierkpi_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        The trend board plots this KPI through time once a supplier is picked, and it accepts
+        ?kpi= as well as ?supplier= — so the link carries the KPI and lets the board's own
+        picker supply the supplier. Without it no entity page reached any board.
+      {% endcomment %}
+      <a href="{% url 'procurement:supplier_trend_board' %}?kpi={{ obj.pk }}" class="btn btn-outline"><i data-lucide="trending-up"></i> Trend for this KPI</a>
       <a href="{% url 'procurement:supplierkpi_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All KPIs</a>
     </div>
   </div>
