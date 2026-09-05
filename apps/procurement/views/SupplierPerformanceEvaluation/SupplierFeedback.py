@@ -143,18 +143,28 @@ def _scorecards(request):
 
 
 def _feedback_stats(tenant):
-    """``{total, requested, submitted, declined, overdue}`` in ONE query.
+    """``{total, requested, submitted, declined, expired, overdue}`` in ONE query.
 
-    ``overdue`` is a still-``requested`` response whose due date has passed — the same rule
-    ``SupplierFeedback.is_overdue`` states per row, expressed once here as a filtered ``Count``
-    so the stat costs nothing extra. Counted over the whole workspace on purpose: a stat card
-    answers "where do we stand?", which must not change because somebody typed a search.
+    **Exhaustive over the four statuses.** ``expired`` was missing, so the status counts did not
+    add up to ``total`` and a reader had no way to see where the difference went — the sibling
+    ``_score_stats`` and ``_evaluation_stats`` cover every value of their enum and this one now
+    does too.
+
+    ``overdue`` is deliberately NOT a fifth status: it is a still-``requested`` response whose
+    due date has passed, i.e. a strict SUBSET of ``requested``, expressed once here as a filtered
+    ``Count`` so the stat costs nothing extra and cannot disagree with the per-row
+    ``SupplierFeedback.is_overdue``. The template labels it as a subset rather than letting it
+    read as a sixth bucket.
+
+    Counted over the whole workspace on purpose: a stat card answers "where do we stand?", which
+    must not change because somebody typed a search.
     """
     return SupplierFeedback.objects.filter(tenant=tenant).aggregate(
         total=Count("pk"),
         requested=Count("pk", filter=Q(status="requested")),
         submitted=Count("pk", filter=Q(status="submitted")),
         declined=Count("pk", filter=Q(status="declined")),
+        expired=Count("pk", filter=Q(status="expired")),
         overdue=Count("pk", filter=Q(status="requested",
                                      due_date__lt=timezone.localdate())),
     )
