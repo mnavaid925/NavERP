@@ -1,8 +1,10 @@
 """Procurement 6.19 Document & Knowledge Management — ProcurementDocumentRevision URL patterns.
 
 One first segment, ``document-revisions/``, collision-checked as a whole component against the
-concatenated inventory in ``apps/procurement/urls/__init__.py``; this app registers no greedy
-``<str:…>`` converter anywhere, so nothing can shadow it and it shadows nothing. It is a
+concatenated inventory in ``apps/procurement/urls/__init__.py``. No route in this app uses a
+converter in its FIRST path component — every first segment is a literal — so nothing can shadow
+it and it shadows nothing. (6.8's ``contract-sign/<str:token>/`` converter sits behind a literal
+first segment.) It is a
 distinct component from ``documents/`` — Django matches path components, not string prefixes —
 so the two registers cannot collide.
 
