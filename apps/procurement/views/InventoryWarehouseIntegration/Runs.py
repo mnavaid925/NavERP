@@ -94,6 +94,15 @@ def _run_qs(request):
             .order_by("-run_date", "-id"))
 
 
+def _is_admin(request):
+    """Mirrors @tenant_admin_required exactly, so a hidden button and a refused POST agree.
+
+    The local-copy convention: every peer sub-module in this app carries its own one-line copy
+    rather than importing another entity module's private name.
+    """
+    return bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False))
+
+
 def _vendor_options(request):
     """Parties this workspace can actually buy from — empty for a tenant-less user.
 
@@ -212,7 +221,11 @@ def replenishmentrun_detail(request, pk):
         "totals": totals,
         # Read from the model so the button and the verb can never disagree about what is allowed.
         "can_generate": obj.can_generate,
-        "can_release": obj.can_release,
+        # Release is the one verb here that is @tenant_admin_required — it raises requisitions, and
+        # a requisition is the start of spending money. On the status flag alone a plain member saw
+        # the button, confirmed the dialog and got a PermissionDenied. The decorator stays the
+        # enforcement; the flag stops OFFERING an action that is guaranteed to be refused.
+        "can_release": obj.can_release and _is_admin(request),
         "can_cancel": obj.can_cancel,
         "requisitions": _released_requisitions(obj),
         "truncated": obj.is_truncated,
