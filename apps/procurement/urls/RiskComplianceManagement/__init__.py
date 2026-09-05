@@ -34,12 +34,26 @@ Neither is a prefix of any existing segment. ``risk-signals/<int:pk>/`` addition
 in step with ``RiskSignals.alert_link``, which builds the ``ProcurementAlert.link_url`` that a
 raised deterioration points at.
 
-Later entities of this sub-module append their own modules here (``FraudAlerts``, ``FraudScan``,
-``Policies``, ``Attestations``, ``AuditTrail``) with their own segments; the splat list below
-grows, it is never rewritten.
+**Entity 3 (FraudAlert) claims three more**, checked the same way and against Entity 1's and
+Entity 2's five:
+
+* ``fraud-alerts/`` — the fraud register, its CRUD and the one disposition verb that carries all
+  four transitions in its POST body
+* ``fraud-scan/`` — the rule runner: GET is the window form plus the read-only thresholds, POST
+  is the admin-only scan
+* ``fraud-board/`` — open alerts by rule, severity and age
+
+None is a prefix of any existing segment. ``fraud-scan/`` is deliberately not ``@require_POST``:
+its GET leg writes nothing and renders the thresholds and the not-buildable-rule note that
+everybody should be able to read, so only the POST leg is admin-gated, inside the view.
+
+Later entities of this sub-module append their own modules here (``Policies``, ``Attestations``,
+``AuditTrail``) with their own segments; the splat list below grows, it is never rewritten.
 
 ``screening_batch`` is deliberately unregistered — see the note in ``Screenings.py``.
 """
+from .FraudAlerts import urlpatterns as _rcm_fraud_alerts
+from .FraudScan import urlpatterns as _rcm_fraud_scan
 from .RiskSignals import urlpatterns as _rcm_risk_signals
 from .Screenings import urlpatterns as _rcm_screenings
 from .ScreeningHits import urlpatterns as _rcm_screening_hits
@@ -49,4 +63,6 @@ urlpatterns = [
     *_rcm_screenings,      # screenings/ CRUD + clear/escalate/block + rescreening-due/
     *_rcm_screening_hits,  # screening-hits/ queue + dispose/
     *_rcm_risk_signals,    # risk-signals/ CRUD + review/ + risk-refresh-due/
+    *_rcm_fraud_alerts,    # fraud-alerts/ CRUD + disposition/
+    *_rcm_fraud_scan,      # fraud-scan/ runner + fraud-board/
 ]
