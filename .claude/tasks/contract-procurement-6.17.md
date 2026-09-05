@@ -17,6 +17,7 @@ This file exists for one reason: **a name left unpinned is a silently blank regi
 | — | `crud_detail`/`crud_edit` render **`obj`**; `crud_create`/`crud_edit` render **`form` + `is_edit`** | Pinned below; do not rename. |
 | `log_action` (Phase-1 brief) | `apps.core.utils.write_audit_log(user, obj, action, changes=None, tenant=None)` — 987 call sites; **`log_action` does not exist** | Use `write_audit_log`. |
 | sub-package unnamed | siblings are PascalCase NavERP titles | **`RiskComplianceManagement/`** in all four layers; templates `templates/procurement/riskcompliance/`; test subslug **`riskcompliance`**. |
+| Entity 4 declares `ProcurementPolicy` | **`procurement.ProcurementPolicy` ALREADY EXISTS** — 6.19 shipped it (commit `dfa7cc99`) at `models/DocumentKnowledgeManagement/Policies.py:152`, prefix `[PPOL-]`, already re-exported. A second one raises `RuntimeError: Conflicting 'procurementpolicy' models in application 'procurement'` | **Entity 4 builds the LEDGER ONLY** — see §6a. |
 
 **Import rule for a not-yet-wired entity** (house pattern, copied from
 `views/BudgetCostManagement/BudgetMappings.py:30`): inside this sub-package import the entity
@@ -118,8 +119,10 @@ apps/procurement/{models,forms,views,urls}/RiskComplianceManagement/
 `fraudalert_list` `fraudalert_create` `fraudalert_detail` `fraudalert_edit` `fraudalert_delete`
 `fraudalert_disposition` `fraud_scan` `fraud_board`
 
-`policy_list` `policy_create` `policy_detail` `policy_edit` `policy_delete` `policy_publish`
-`policy_archive` `policy_new_version` `policy_mine` `policy_overdue_board`
+`policy_list` `policy_detail` `policy_mine` `policy_overdue_board` `policy_raise_attestations`
+— **amended, see §6a.** `policy_create` `policy_edit` `policy_delete` `policy_publish`
+`policy_archive` `policy_new_version` are **NOT built by 6.17**: 6.19 already owns the authoring
+surface for this table (`ppolicy_create/_edit/_delete/_publish/_archive`).
 
 `policyattestation_list` `policyattestation_create` `policyattestation_detail`
 `policyattestation_edit` `policyattestation_delete` `attestation_sign` `attestation_exempt`
@@ -136,7 +139,8 @@ seal. Documented deviation from the CRUD-completeness rule; the reason is stated
 
 `screening/{list,detail,form}.html` · `screeninghit/{list,detail,form}.html` ·
 `risksignal/{list,detail,form}.html` · `fraudalert/{list,detail,form}.html` ·
-`policy/{list,detail,form}.html` · `attestation/{list,detail,form}.html` ·
+`policy/{list,detail}.html` (**no `form.html`** — 6.19 owns authoring, §6a) ·
+`attestation/{list,detail,form}.html` ·
 `auditseal/{list,detail}.html` (no form — creation is a POST button)
 
 Sub-module-root standalone pages: `rescreening_due.html` `risk_refresh_due.html` `fraud_scan.html`
@@ -177,6 +181,40 @@ block flag) · `procurement.RequisitionApproval` (6.3) · `procurement.Procureme
 Cited, never duplicated: `scm.SupplierRiskAssessment` (4.2 composite score),
 `scm.ComplianceRequirement`/`ComplianceCheck` (4.12), `procurement.MaverickSpendFinding` (6.14 —
 copy the `scan()`/`dedupe_key` SHAPE, none of its eight reasons), 6.13 duplicate-invoice detection.
+
+### 6a. Ownership call — 6.19 owns `ProcurementPolicy`; 6.17 owns the attestation ledger
+
+**Decided 2026-09-05, mid-build, by the ships-first rule (L36/L29/L37).** 6.19 Document &
+Knowledge Management shipped `procurement.ProcurementPolicy` [PPOL-] before 6.17 reached Entity 4.
+Django permits one model of a name per app, so the plan's second `ProcurementPolicy` is not merely
+duplicative — it **cannot load**:
+
+```
+RuntimeError: Conflicting 'procurementpolicy' models in application 'procurement'
+```
+
+This is not a naming accident. 6.19's own model docstring reserves this work for 6.17 in as many
+words: *"Policy Management & Acknowledgment is 6.17's sub-module, and it owns the acknowledgement
+ledger"*, and its `requires_acknowledgment` field is documented as *"a bare hook … 6.17 should
+collect acknowledgements for this one when it ships"*. So the two modules already agree; only the
+6.17 plan — written before 6.19 landed — was out of date.
+
+**The split, now fixed:**
+
+| | owns |
+|---|---|
+| **6.19** | the policy table itself: authoring, versioning (`previous_version`), publish/archive verbs, the `ppolicy_*` register |
+| **6.17** | the **acknowledgement ledger**: `PolicyAttestation`, who was assigned, who signed, when, who is overdue, and the exemption path |
+
+**Consequences, all reflected above:** 6.17 declares **`PolicyAttestation` only**, FK'ing
+`"procurement.ProcurementPolicy"` **by string** — it never re-declares the policy. The authoring
+verbs are dropped. Because 6.17 must not edit 6.19's files, "publish raises the roster" is
+inverted into a 6.17-owned idempotent admin verb, **`policy_raise_attestations`**, which raises the
+roster for an already-published policy — **zero edits to 6.19's code**. 6.19's model has no
+`attestation_due_days`, so `due_on` derives from a 6.17-owned `DEFAULT_ATTESTATION_DUE_DAYS = 14`.
+
+Bullet 5 is still fully served, and by a better division than the plan had: one policy library, one
+sign-off ledger, no second register competing for the same concept.
 
 **Not buildable, and the page says so:** the vendor bank-detail-change fraud rule —
 `accounting.VendorProfile` has no bank fields and `accounting.BankAccount` is the tenant's own
