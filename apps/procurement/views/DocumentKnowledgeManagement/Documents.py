@@ -281,6 +281,22 @@ def pdocument_create(request):
 
 @login_required
 def pdocument_edit(request, pk):
+    """Edit a document the member is allowed to READ — the read rule gates the write path too.
+
+    ``crud_edit`` fetches by model and can only tenant-scope, so the classification gate has to
+    run first, here. Without it the edit form is a hole straight through the I5 read rule: a
+    member 404'd on the detail page, absent from their register and unable to find the row by
+    searching its text could still open ``documents/<pk>/edit/``, read the whole record off the
+    prefilled form, and rewrite it — including downgrading ``classification`` to ``public`` and
+    making the document permanently visible to the workspace.
+
+    Deliberately a second fetch rather than a change to ``apps/core/crud.py``: that helper is
+    shared by every module in the app and a new queryset parameter is single-writer work. The
+    extra query costs one primary-key lookup on a page that is already several.
+    """
+    get_object_or_404(
+        ProcurementDocument.objects.filter(tenant=request.tenant)
+        .filter(readable_document_q(request.user)).only("pk"), pk=pk)
     return crud_edit(request, model=ProcurementDocument, pk=pk,
                      form_class=ProcurementDocumentForm, template=TEMPLATE_FORM,
                      success_url="procurement:pdocument_list",
