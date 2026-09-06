@@ -268,10 +268,26 @@ class Command(BaseCommand):
             # NOTE: the DRAFT ``scm.SupplierScorecard`` rows this block opens are SCM's, not ours,
             # and are deliberately left alone - a procurement flush has no business deleting a
             # peer app's period documents. A re-seed finds them again by their period.
+            #
+            # M20: the flag and the four dimension columns 6.16 WROTE onto those SCM cards are ours,
+            # even though the rows are not. Left as-is, a flush strands them: the justifying score
+            # lines are gone, ``recompute_from_signals()`` still returns immediately on
+            # ``manual_override``, and the published figures stand on nothing. So capture exactly
+            # the cards that carried our lines - BEFORE deleting the lines that identify them - and
+            # hand those, and only those, back to SCM. A card a human ticked ``manual_override`` on
+            # never had 6.16 lines, so it is not in this set and is not touched.
+            from apps.scm.models import SupplierScorecard
+            _generated_card_ids = list(
+                SupplierKpiScore.objects.values_list("scorecard_id", flat=True).distinct())
             SupplierKpiScore.objects.all().delete()
             SupplierImprovementPlan.objects.all().delete()
             SupplierFeedback.objects.all().delete()
             SupplierKpi.objects.all().delete()
+            if _generated_card_ids:
+                SupplierScorecard.objects.filter(id__in=_generated_card_ids).update(
+                    manual_override=False, delivery_score=None, quality_score=None,
+                    price_score=None, responsiveness_score=None, overall_score=None, grade="",
+                    signal_summary="")
             # 6.19 document & knowledge rows: children first. A revision CASCADEs from its
             # document, but deleting it explicitly clears the register in one pass and — more to
             # the point — a document's current_revision_no pointer must never outlive the
@@ -2910,9 +2926,12 @@ class Command(BaseCommand):
             manual_kpi = kpis["INV-01"]
             manual_value = Decimal("78.0000")
             manual_score, manual_band = manual_kpi.score_and_band(manual_value)
-            made_manual = 0
-            for line in SupplierKpiScore.objects.filter(
-                    tenant=tenant, kpi=manual_kpi, scorecard__in=cards, measured_value__isnull=True):
+            # ONE round trip, not one per row (M17). ``bulk_update`` does NOT fire ``auto_now``,
+            # so ``updated_at`` is stamped explicitly here and named in the field list - otherwise
+            # these rows would silently keep whatever ``updated_at`` the generate run left.
+            manual_lines = list(SupplierKpiScore.objects.filter(
+                tenant=tenant, kpi=manual_kpi, scorecard__in=cards, measured_value__isnull=True))
+            for line in manual_lines:
                 line.measured_value = manual_value
                 line.score = manual_score
                 line.band = manual_band
@@ -2924,9 +2943,12 @@ class Command(BaseCommand):
                     "entered_at": NOW.isoformat(),
                 }
                 line.comment = "Scored at the annual review; two accepted improvement proposals."
-                line.save(update_fields=["measured_value", "score", "band", "breakdown", "comment",
-                                         "updated_at"])
-                made_manual += 1
+                line.updated_at = NOW
+            if manual_lines:
+                SupplierKpiScore.objects.bulk_update(
+                    manual_lines,
+                    ["measured_value", "score", "band", "breakdown", "comment", "updated_at"])
+            made_manual = len(manual_lines)
             if not made_manual:
                 # The WHOLE manual-score path hangs off this one line landing. INV-01 is
                 # tier-scoped, so if seed_scm's tiering ever stops producing a cohort supplier on
