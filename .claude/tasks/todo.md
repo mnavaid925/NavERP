@@ -5144,3 +5144,62 @@ One module per views module; `app_name` is set once in `apps/procurement/urls/__
 
 ### 6.18-M Review notes
 (filled in at the end of the pass)
+
+---
+
+## Review — 6.19 Document & Knowledge Management (closed 2026-09-06)
+
+Built across two sessions with three peer sessions (6.16/6.17/6.18) live in the same checkout.
+All seven phases complete.
+
+**Shipped:** 4 models (`ProcurementDocument` [PDOC-], `ProcurementDocumentRevision`,
+`ProcurementPolicy` [PPOL-], `KnowledgeResource` [PKR-]), 33 routes over 4 first segments, 12
+templates, migration `0026` (+ index changes in `0029`), seeder block, `LIVE_LINKS["6.19"]`.
+**1,003 tests** across four lanes (models 247, forms 173, views 334, security 249).
+
+### What the review phase actually bought
+
+Six reviewers ran one after another and produced **2 Critical, 16 Important, 24 Minor**. The
+`code-fixer` closed 41 of 42; the one skip (renaming `next_review_on`) was correct, because 6.17 had
+already committed a template reading it.
+
+The two Critical findings were both invisible to everything that came before them:
+
+* **C1** — every uploaded file was readable with **no login, no session, no tenant**, confirmed by
+  an anonymous `curl`. The smoke sweep's 37 route probes and its cross-tenant IDOR checks all
+  passed, because they tested the HTML pages — which were correctly tenant-scoped — and never the
+  object those pages linked to. Fixed with an authenticated, tenant-scoped `pdocrevision_download`.
+* **C2** — the revision register hauled **59 MB in 4.87 s** at 2,000 documents against a 0.189 s
+  control, because an unbounded dropdown selected full rows including the 200 KB `extracted_text`
+  to render three fields.
+
+**`classification` was enforced nowhere** (I5) — not one queryset, decorator or conditional read it,
+while the UI described a tier as "for records only a named few may read". Fixing it took **three
+passes**, and the second and third holes were found by later agents rather than by the reviewers:
+the revision register's stat tiles were a counting oracle, and the edit form was a read of every
+field it prefills.
+
+### What worked, and is worth repeating
+
+* **Runtime verification beat static reasoning.** Pass 5 reproduced every theorised finding and
+  **refuted one**: item 3's predicted consequence (a wedged document) was wrong, and the real end
+  state was worse — an *unapproved* file becoming the document of record, with a green "Current"
+  badge beside "Not approved" on the same row.
+* **A reviewer that rejects leads is doing its job.** Pass 3 knocked down two of pass 2's three
+  handovers with evidence.
+* **Strict xfail for an open finding.** The security lane encoded the `pdocument_edit` hole as a
+  `strict=True` xfail rather than softening the assertion, so the defect lived in the suite instead
+  of only in a report — and the marker forced its own deletion when the view was fixed.
+* **Pinning a test contract before writing tests.** It caught 27 places the frozen build contract
+  had gone stale, and its author found the counting oracle while measuring what to assert.
+
+### Deliberately not done
+
+App-wide clone families were recorded, not forked into this sub-module: **15 remaining `.file.url`
+links across 13 templates** (C1's family), the tenant-editable admin on 50 of 52 ModelAdmins,
+pagination-ordering indexes, and the thrice-duplicated alert-raise skeleton.
+
+**One upstream bug found here, not fixed here:** `core.AuditLog.action` is `varchar(10)` while 6.19
+writes `"document_reminders_run"` (22 chars). SQLite ignores VARCHAR length so the suite is green;
+**MariaDB in strict mode would 500 the Run-reminders POST.** The fix is a `core` migration —
+single-writer work, and this dev DB is not in strict mode, which is why it has stayed invisible.
