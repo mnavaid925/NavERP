@@ -1640,3 +1640,157 @@ no-op, destroying a derivable score while reporting success in a green message.
 * **Add a board column** → it comes off the frozen line, not off a live join. If the figure is not
   frozen, ask whether it belongs on the line instead.
 * **Change a band colour** → edit the model's `*_CSS` map. Do not add a colour chain to a template.
+
+## 6.17 Risk & Compliance Management (built 2026-09-05, reviewed + fixed 2026-09-05, tested 2026-09-06)
+
+Package folder `RiskComplianceManagement/` across all four layers; templates
+`templates/procurement/riskcompliance/`; test subslug **`riskcompliance`**. Six models, 54 url
+names, 26 templates, migrations `0028` (tables) and `0030` (review fixes).
+
+**Read this first: 6.17 does NOT own the policy library.** `procurement.ProcurementPolicy` `[PPOL-]`
+belongs to **6.19** (`models/DocumentKnowledgeManagement/Policies.py:152`) — it shipped first and it
+owns the document, the `previous_version` supersession chain and every authoring verb
+(`ppolicy_create/_edit/_delete/_publish/_archive`). 6.17 owns **only the acknowledgement ledger**,
+`PolicyAttestation`, which FKs that table **by string**. This was settled with the 6.19 session by
+message and is recorded in contract §6a; 6.19's own model docstring had already reserved the ledger
+for 6.17. **Declaring a second `ProcurementPolicy` raises `RuntimeError: Conflicting
+'procurementpolicy' models in application 'procurement'` and breaks `manage.py check` for the whole
+repo** — a build agent hit exactly that and stopped rather than working around it. There is no
+`policy/form.html` and no policy authoring route here; 6.17's policy pages link out to `ppolicy_*`.
+
+**The honesty constraint that shapes the whole sub-module.** `core.AuditLog` has no hash, no
+sequence and nothing preventing `UPDATE`/`DELETE`. So the trail is **tamper-EVIDENT, not
+tamper-proof**, and every page says so. Claiming otherwise would be a security defect, not a wording
+nit — a control people wrongly believe in is worse than none.
+
+### Models (`models/RiskComplianceManagement/`)
+
+**`ComplianceScreening`** (`Screenings.py`) `[SCR-]` — one restricted-party screening run:
+`party` × `list_source` × `checkpoint`. 13 list sources (CSL and SAM.gov are **separate** values —
+the CSL consolidates 11 lists and deliberately excludes SAM). `result` is what the LOOKUP returned;
+`status` is what a HUMAN decided — two different questions, two columns. `method` carries `api_feed`
+in the vocabulary but **not** in `SELECTABLE_METHODS`, so a future connector writes the same rows
+with no migration. `RETENTION_YEARS = 10` (OFAC 31 CFR 501.601).
+**The gate:** `clear()` refuses while any hit is undisposed and asks the **database**, not the
+cached `open_hit_count` — a test forces both counters to 0 by raw `UPDATE` and proves it still
+refuses. `block()` stamps an existing `procurement.VendorSuspension` (6.4) and **creates none** —
+6.17 invented no second block flag and the model has zero BooleanFields.
+
+**`ScreeningHit`** (same file) — **tenant-LESS by design** (the `scm.ComplianceCheck` precedent):
+its parent FK IS its scope, so every view resolves it
+`get_object_or_404(ScreeningHit, pk=pk, screening__tenant=request.tenant)`. **This is the one model
+where resolving by pk alone leaks across workspaces**; the security lane asserts 404 on all four of
+its routes. `disposition` has a real third outcome, `cleared_with_licence` — an Entity List match is
+a licence application, not a hard stop. A disposition note is **mandatory even on a false positive**
+(31 CFR 501.601).
+
+**`SupplierRiskSignal`** (`RiskSignals.py`) `[SRS-]` — a dated `(provider, metric, value)`
+observation. **`METRIC_SCALES` is the single most important constant in the sub-module**: a bare
+"risk score" column without provider+metric is a lie, because RapidRatings FHR 100 is *healthy*
+while D&B SER 9 is *dangerous*. `risk_position` (0–100, 0 = safest), `band`, `previous_value` and
+`trend` are ALL derived in `save()` and `editable=False`. **`trend` compares risk position, not raw
+value** — otherwise a falling SER reads as deterioration when it is an improvement.
+`metric="other"` has no registered scale and bands `unrated` rather than guessing.
+`MINIMUM_ACCEPTABLE` is **advisory only** — it colours a badge, it never blocks.
+
+**`FraudAlert`** (`FraudAlerts.py`) `[FRD-]` — six rules, none of them 6.14's:
+`vendor_employee_match` (over `Party.tax_id` / `Address` / `ContactMethod`), `self_approval`
+(`RequisitionApproval.approver` vs `PurchaseRequisition.requester`), `duplicate_vendor`,
+`backdated_po`, `screening_unresolved`, `new_vendor_rush`. `scan()` copies
+`MaverickSpendFinding`'s shape (`_scan_context` bulk prefetch, chunked dedupe lookup,
+`SCAN_ROW_LIMIT` slices that compile to SQL `LIMIT`) but **none of its eight reasons** —
+`split_purchase` stays 6.14's. `scan()` is idempotent via `dedupe_key`, writes **only** `FraudAlert`
+rows, and the window cap is **O(1)**: `MAX_SCAN_WINDOW_DAYS` is checked arithmetically before any
+query, proven with `django_assert_num_queries(0)`. `duplicate_vendor` **flags, never merges**.
+**Not buildable and the page says so:** a vendor bank-detail-change rule — `accounting.VendorProfile`
+has no bank fields and `accounting.BankAccount` is the tenant's own account.
+
+**`PolicyAttestation`** (`Policies.py`) — the sign-off ledger over 6.19's policy. Targets
+`AUTH_USER_MODEL` (bullet 5 says "user sign-offs"), unlike `hrm.PolicyAcknowledgment` which targets
+an employee. Audience resolves `User.party → Employment.org_unit`. **Signing is OWNER-ONLY at both
+the view and the model** — a tenant admin, a workspace superuser and the tenant-less superuser are
+all refused, because a signature somebody else could stamp is not evidence. 6.19's
+`requires_acknowledgment` flag genuinely governs the ledger: False raises **no** rows.
+
+**`AuditSeal`** (`AuditSeals.py`) `[ASL-]` — a SHA-256 hash chain over `core.AuditLog`, with
+**zero `core` migrations**. Ranges are **id-keyed, never time-keyed** — a time window has a
+late-arrival hole, and a test proves a row written later but backdated 30 days lands in the *next*
+seal. `verify()` **names the first offending log id**; "broken" without a location is not
+actionable. Modify, delete and insert are each detected and each name the id. **No
+`auditseal_edit`, no `auditseal_delete`, and the admin refuses add and delete** — a seal that can be
+edited is not a seal; that is a deliberate, documented deviation from the CRUD-completeness rule.
+`last_verified_by` records WHO ran a check, stamping NULL rather than a placeholder for an
+unauthenticated caller.
+
+### Views / URLs
+
+14 first path segments, all new whole components: `screenings/` `screening-hits/`
+`rescreening-due/` `risk-signals/` `risk-refresh-due/` `fraud-alerts/` `fraud-scan/` `fraud-board/`
+`policies/` `policy-attestations/` `my-policies/` `policy-overdue/` `audit-trail/` `audit-seals/`.
+Two near-misses that are **not** conflicts because Django matches whole path components: 6.19's
+`procurement-policies/` vs `policies/`, and 6.12's `receipt-audit/` vs `audit-trail/`.
+
+Admin-gated verbs: `screening_clear/_escalate/_block`, `screeninghit_dispose`, `screeninghit_delete`,
+every `*_delete`, `fraudalert_disposition`, `policyattestation_edit`, `attestation_exempt`,
+`policy_raise_attestations`, `auditseal_create`, and the POST legs of `fraud_scan` and
+`policy_overdue_board`. `attestation_sign` and `risksignal_review` are `@login_required` —
+**`attestation_sign` is gated by ownership, not by role**.
+`auditseal_verify` is deliberately **un-gated**: `verify()` recomputes from live data, so the stamps
+cannot be flipped to a false value, and a tamper check only an administrator can run is a check
+nobody runs.
+
+`policy_raise_attestations` is 6.17-owned and idempotent — it exists so "publish raises the roster"
+needs **zero edits to 6.19's publish verb**. `screening_batch` was deliberately cut.
+
+### Templates
+`screening/` `screeninghit/` `risksignal/` `fraudalert/` `policy/` `attestation/` `auditseal/`
+entity folders, plus seven sub-module-root boards: `rescreening_due` `risk_refresh_due` `fraud_scan`
+`fraud_board` `policy_overdue` `my_policies` `audit_trail`.
+**`policy/` has no `form.html`** (6.19 owns authoring) and **`auditseal/` has no `form.html`**
+(creation is a POST button).
+
+**Badges read a `*_CSS` map from the model, never a template `{% if %}` ladder** — there is exactly
+one ladder in 26 templates (`audit_trail.html`, because `AuditLog` is `core`'s and 6.17 adds no
+column). That is *why* this sub-module came back clean on L33: there is no ladder for a future
+contributor to reintroduce `badge-success` into.
+
+### Seeder
+`_seed_risk_compliance(tenant)` runs **last** in `seed_procurement` — the seal must cover everything
+written before it. Per tenant: 5 screenings, 5 hits, 6 risk signals (including an FHR/SER pair of
+opposite polarity and a two-observation series so `trend` derives), 12 fraud alerts, 3 attestations,
+1 seal. Idempotent; a second run adds zero rows.
+**Known demo-fidelity gap:** three seeded fraud alerts are hand-raised and are *not* reproducible by
+the rules whose labels they carry (the supporting data does not exist — acme has zero
+`RequisitionApproval` rows), so pressing **Run scan** over their window reports "raised nothing new".
+Stated in the seeder at ~line 4419.
+
+### Sidebar wiring
+`LIVE_LINKS["6.17"]` — five bullets, five **distinct** staff pages, all `@login_required` only so an
+ordinary member reaches every one (L32, proven at runtime with a non-admin client):
+`Regulatory Compliance Checks` → `screening_list` · `Supplier Financial Risk Monitoring` →
+`risksignal_list` · `Audit Trail & Logging` → `audit_trail` (the register, not the seal list) ·
+`Fraud Detection Rules` → `fraudalert_list` · `Policy Management & Acknowledgment` → `policy_list`
+(6.17's acknowledgement register, **not** 6.19's library).
+
+### Tests — 470, all green
+`test_riskcompliance_models.py` (102) · `_forms.py` (113 functions / 188 cases) · `_views.py` (117) ·
+`_security.py` (63). Every function `test_riskcompliance_*`, every module-level helper
+`_riskcompliance_*`; 22 `riskcompliance_*` fixtures in the shared `conftest.py`.
+Note the query-budget tests assert **equality between 3 rows and 15 rows**, not a fixed ceiling:
+`apps/core/middleware.py:50` stamps `_last_activity` on every authenticated request, which forces a
+session write worth three queries. The N+1 property is what matters and it is immune to that
+overhead.
+
+### Gotchas
+1. **Never declare a second `ProcurementPolicy`** — see the top of this section.
+2. **`ScreeningHit` has no tenant column.** Resolve it through `screening__tenant`, always.
+3. **Derived columns are never set by hand** — `risk_position`/`band`/`trend`/`previous_value`,
+   `hit_count`/`open_hit_count`, `dedupe_key`, every digest. Build inputs; let `save()` /
+   `recount_hits()` / the verbs derive.
+4. **`defer()` scopes to the root model only.** `select_related("prev_seal")` re-pulls the previous
+   seal's 50k-pair `row_fingerprints` JSON blob past a root-level `defer` — up to ~21 MB per page,
+   invisible to any query-count test. The seal register does not join `prev_seal` at all.
+5. **`annotate()` drops `Meta.ordering`** on an aggregate query, so `_policy_qs` carries an explicit
+   `order_by("-created_at", "-id")`. Removing it as "redundant" reintroduces rows repeating or
+   vanishing across page boundaries.
+6. **Never say "tamper-proof."**
