@@ -1780,3 +1780,296 @@ def test_riskcompliance_policy_overdue_board_post_with_nobody_late_raises_nothin
     assert resp.status_code == 302
     assert riskcompliance_attestation_pending.alert_id is None
     assert any("nobody to chase" in message for message in _riskcompliance_messages(resp))
+
+
+# ================================================================== the attestation ledger
+
+def test_riskcompliance_policyattestation_list_renders_rows_and_its_context(
+        client_a, riskcompliance_attestation_pending, riskcompliance_attestation_signed,
+        riskcompliance_attestation_overdue, riskcompliance_policy_published,
+        riskcompliance_member_a):
+    resp = client_a.get(reverse("procurement:policyattestation_list"))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/attestation/list.html" in _riskcompliance_templates(resp)
+    assert set(_riskcompliance_pks(resp)) == {riskcompliance_attestation_pending.pk,
+                                              riskcompliance_attestation_signed.pk,
+                                              riskcompliance_attestation_overdue.pk}
+    assert riskcompliance_policy_published.number in html
+    assert riskcompliance_member_a.username in html
+    assert len(resp.context["status_choices"]) == 3
+    # Filter options are the rows that actually appear in the ledger - never a dead option.
+    assert [policy.pk for policy in resp.context["policies"]] == [
+        riskcompliance_policy_published.pk]
+    assert len(resp.context["users"]) == 3
+    assert resp.context["stats"] == {"pending": 2, "overdue": 1, "acknowledged": 1}
+    assert resp.context["is_admin"] is True
+
+
+def test_riskcompliance_policyattestation_list_each_valid_filter_value_returns_its_rows(
+        client_a, admin_user, riskcompliance_member_a, riskcompliance_policy_published,
+        riskcompliance_policy_draft, riskcompliance_attestation_pending,
+        riskcompliance_attestation_signed):
+    exempted = _riskcompliance_new_attestation(riskcompliance_policy_draft,
+                                               riskcompliance_member_a)
+    exempted.mark_exempt(admin_user, "Not in the buying chain.")
+    url = reverse("procurement:policyattestation_list")
+
+    assert _riskcompliance_pks(client_a.get(url, {"status": "pending"})) == [
+        riskcompliance_attestation_pending.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"status": "acknowledged"})) == [
+        riskcompliance_attestation_signed.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"status": "exempt"})) == [exempted.pk]
+    assert set(_riskcompliance_pks(
+        client_a.get(url, {"policy": str(riskcompliance_policy_published.pk)}))) == {
+            riskcompliance_attestation_pending.pk, riskcompliance_attestation_signed.pk}
+    assert set(_riskcompliance_pks(
+        client_a.get(url, {"user": str(riskcompliance_member_a.pk)}))) == {
+            riskcompliance_attestation_pending.pk, exempted.pk}
+    assert _riskcompliance_pks(client_a.get(url, {"user": str(admin_user.pk)})) == [
+        riskcompliance_attestation_signed.pk]
+
+
+def test_riskcompliance_policyattestation_list_search_matches_the_policy_and_the_person(
+        client_a, admin_user, riskcompliance_member_a, riskcompliance_policy_published,
+        riskcompliance_policy_draft, riskcompliance_attestation_pending,
+        riskcompliance_attestation_signed):
+    other = _riskcompliance_new_attestation(riskcompliance_policy_draft, admin_user)
+    url = reverse("procurement:policyattestation_list")
+
+    assert set(_riskcompliance_pks(client_a.get(url, {"q": "Code of Conduct"}))) == {
+        riskcompliance_attestation_pending.pk, riskcompliance_attestation_signed.pk}
+    assert _riskcompliance_pks(
+        client_a.get(url, {"q": riskcompliance_policy_draft.number})) == [other.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"q": "clerk_acme"})) == [
+        riskcompliance_attestation_pending.pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"q": "admin@acme.com"}))) == {
+        riskcompliance_attestation_signed.pk, other.pk}
+
+
+def test_riskcompliance_policyattestation_list_query_budget_with_every_row_exempt(
+        client_a, tenant_a, admin_user, django_assert_max_num_queries):
+    """15 rows ALL exempt - ``exempted_by`` is non-null on every one, which is the FK hop."""
+    policy = _riskcompliance_new_policy(tenant_a, "Ledger Budget Policy", admin_user)
+    url = reverse("procurement:policyattestation_list")
+
+    def build(count, offset=0):
+        for index in range(offset, offset + count):
+            person = _riskcompliance_person(tenant_a, f"budget{index:02d}@acme.com",
+                                            f"budget{index:02d}_acme")
+            row = _riskcompliance_new_attestation(policy, person)
+            row.mark_exempt(admin_user, "Outside the buying chain.")
+
+    build(3)
+    three_rows = _riskcompliance_count_queries(client_a, url)
+    build(12, offset=3)
+
+    # 12 = 9 page/auth reads (this ledger offers TWO dropdowns, policies and users) + the
+    # 3-query session write every authenticated request makes.
+    with django_assert_max_num_queries(12):
+        resp = client_a.get(url)
+
+    assert resp.status_code == 200
+    assert len(_riskcompliance_pks(resp)) == 15
+    assert {row.exempted_by_id for row in resp.context["object_list"]} == {admin_user.pk}
+    assert _riskcompliance_count_queries(client_a, url) == three_rows
+
+
+def test_riskcompliance_policyattestation_list_paginates_with_a_tie_on_the_deadline(
+        client_a, tenant_a, admin_user):
+    policy = _riskcompliance_new_policy(tenant_a, "Paging Policy", admin_user)
+    made = []
+    for index in range(18):
+        person = _riskcompliance_person(tenant_a, f"pager{index:02d}@acme.com",
+                                        f"pager{index:02d}_acme")
+        made.append(_riskcompliance_new_attestation(policy, person, due_in_days=10))
+    url = reverse("procurement:policyattestation_list")
+
+    page_one = client_a.get(url)
+    page_two = client_a.get(url, {"page": "2"})
+
+    assert len(_riskcompliance_pks(page_one)) == 15
+    assert len(_riskcompliance_pks(page_two)) == 3
+    seen = _riskcompliance_pks(page_one) + _riskcompliance_pks(page_two)
+    assert len(set(seen)) == 18
+    assert set(seen) == {row.pk for row in made}
+
+
+def test_riskcompliance_policyattestation_detail_offers_sign_to_its_owner_only(
+        riskcompliance_member_a, riskcompliance_attestation_pending,
+        riskcompliance_policy_published):
+    from django.test import Client
+
+    owner = Client()
+    owner.force_login(riskcompliance_member_a)
+
+    resp = owner.get(reverse("procurement:policyattestation_detail",
+                             args=[riskcompliance_attestation_pending.pk]))
+    actions = resp.context["allowed_actions"]
+
+    assert resp.status_code == 200
+    assert resp.context["policy"].pk == riskcompliance_policy_published.pk
+    assert resp.context["can_sign"] is True
+    assert resp.context["is_admin"] is False
+    assert [action["key"] for action in actions] == ["sign"]
+    assert _riskcompliance_key_sets(actions) == {frozenset(
+        {"key", "label", "icon", "css", "help", "note_name", "note_label", "note_placeholder",
+         "note_required", "confirm"})}
+    assert actions[0]["note_required"] is False
+    assert riskcompliance_policy_published.number in _riskcompliance_html(resp)
+
+
+def test_riskcompliance_policyattestation_detail_offers_exempt_to_an_admin_who_is_not_the_owner(
+        client_a, riskcompliance_attestation_pending):
+    resp = client_a.get(reverse("procurement:policyattestation_detail",
+                                args=[riskcompliance_attestation_pending.pk]))
+    actions = resp.context["allowed_actions"]
+
+    assert resp.status_code == 200
+    assert resp.context["can_sign"] is False
+    assert [action["key"] for action in actions] == ["exempt"]
+    assert actions[0]["note_required"] is True
+    assert actions[0]["note_name"] == "reason"
+
+
+def test_riskcompliance_policyattestation_detail_offers_nothing_once_settled(
+        client_a, riskcompliance_attestation_signed):
+    resp = client_a.get(reverse("procurement:policyattestation_detail",
+                                args=[riskcompliance_attestation_signed.pk]))
+
+    assert resp.status_code == 200
+    assert resp.context["can_sign"] is False
+    assert resp.context["allowed_actions"] == []
+
+
+def test_riskcompliance_attestation_sign_by_the_owner_stamps_acknowledged_at(
+        riskcompliance_member_a, riskcompliance_attestation_pending):
+    from django.test import Client
+
+    owner = Client()
+    owner.force_login(riskcompliance_member_a)
+
+    resp = owner.post(reverse("procurement:attestation_sign",
+                              args=[riskcompliance_attestation_pending.pk]),
+                      {"note": "Read in full."})
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:policyattestation_detail",
+                                       args=[riskcompliance_attestation_pending.pk])
+    assert riskcompliance_attestation_pending.status == "acknowledged"
+    assert riskcompliance_attestation_pending.acknowledged_at is not None
+    assert riskcompliance_attestation_pending.acknowledgement_note == "Read in full."
+
+
+def test_riskcompliance_attestation_sign_refuses_a_second_signature(
+        riskcompliance_member_a, riskcompliance_attestation_pending):
+    from django.test import Client
+
+    owner = Client()
+    owner.force_login(riskcompliance_member_a)
+    url = reverse("procurement:attestation_sign",
+                  args=[riskcompliance_attestation_pending.pk])
+    owner.post(url, {"note": "Read in full."})
+    riskcompliance_attestation_pending.refresh_from_db()
+    first_stamp = riskcompliance_attestation_pending.acknowledged_at
+
+    again = owner.post(url, {"note": "Read it twice."})
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert again.status_code == 302
+    assert riskcompliance_attestation_pending.acknowledged_at == first_stamp
+    assert any("cannot be signed again" in message
+               for message in _riskcompliance_messages(again))
+
+
+def test_riskcompliance_attestation_exempt_by_an_admin_stamps_the_grantor(
+        client_a, admin_user, riskcompliance_attestation_pending):
+    resp = client_a.post(reverse("procurement:attestation_exempt",
+                                 args=[riskcompliance_attestation_pending.pk]),
+                         {"reason": "Not in the buying chain."})
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_attestation_pending.status == "exempt"
+    assert riskcompliance_attestation_pending.exempted_by_id == admin_user.pk
+    assert riskcompliance_attestation_pending.exempted_at is not None
+    assert riskcompliance_attestation_pending.exempt_reason == "Not in the buying chain."
+
+
+def test_riskcompliance_attestation_exempt_refuses_a_blank_reason(
+        client_a, riskcompliance_attestation_pending):
+    resp = client_a.post(reverse("procurement:attestation_exempt",
+                                 args=[riskcompliance_attestation_pending.pk]),
+                         {"reason": "   "})
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_attestation_pending.status == "pending"
+    assert riskcompliance_attestation_pending.exempted_by_id is None
+    assert any("Say why this person is being excused." in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_policyattestation_create_post_assigns_one_person(
+        client_a, tenant_a, riskcompliance_member_a, riskcompliance_policy_published):
+    due = _riskcompliance_today() + _riskcompliance_days(20)
+
+    resp = client_a.post(reverse("procurement:policyattestation_create"), {
+        "policy": str(riskcompliance_policy_published.pk),
+        "user": str(riskcompliance_member_a.pk),
+        "due_on": due.isoformat(),
+    })
+    saved = PolicyAttestation.objects.get(policy=riskcompliance_policy_published,
+                                          user=riskcompliance_member_a)
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:policyattestation_list")
+    assert saved.tenant_id == tenant_a.pk
+    assert saved.status == "pending"
+    assert saved.due_on == due
+
+
+def test_riskcompliance_policyattestation_edit_moves_the_deadline_only(
+        client_a, riskcompliance_attestation_pending, riskcompliance_policy_published,
+        riskcompliance_member_a):
+    new_due = _riskcompliance_today() + _riskcompliance_days(40)
+
+    resp = client_a.post(
+        reverse("procurement:policyattestation_edit",
+                args=[riskcompliance_attestation_pending.pk]),
+        {"policy": str(riskcompliance_policy_published.pk),
+         "user": str(riskcompliance_member_a.pk),
+         "due_on": new_due.isoformat()})
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_attestation_pending.due_on == new_due
+    assert riskcompliance_attestation_pending.user_id == riskcompliance_member_a.pk
+
+
+def test_riskcompliance_policyattestation_delete_withdraws_pending_and_refuses_settled(
+        client_a, riskcompliance_attestation_pending, riskcompliance_attestation_signed):
+    settled_url = reverse("procurement:policyattestation_delete",
+                          args=[riskcompliance_attestation_signed.pk])
+
+    refused = client_a.post(settled_url)
+    assert refused.status_code == 302
+    assert PolicyAttestation.objects.filter(
+        pk=riskcompliance_attestation_signed.pk).count() == 1
+    assert any("cannot be withdrawn" in message
+               for message in _riskcompliance_messages(refused))
+
+    live_url = reverse("procurement:policyattestation_delete",
+                       args=[riskcompliance_attestation_pending.pk])
+    got = client_a.get(live_url)
+    assert got.status_code == 405
+    assert PolicyAttestation.objects.filter(
+        pk=riskcompliance_attestation_pending.pk).count() == 1
+
+    posted = client_a.post(live_url)
+    assert posted.status_code == 302
+    assert posted["Location"] == reverse("procurement:policyattestation_list")
+    assert PolicyAttestation.objects.filter(
+        pk=riskcompliance_attestation_pending.pk).count() == 0
