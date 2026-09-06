@@ -2083,3 +2083,633 @@ def test_supplierperf_fixture_suppliers_carry_the_role_every_dropdown_filters_on
     for party in (supplierperf_supplier_a, supplierperf_supplier2_a, supplierperf_supplier_b):
         assert Party.objects.filter(pk=party.pk,
                                     roles__role__in=("supplier", "vendor")).exists()
+
+
+# =================================================================================================
+# performance.DERIVED_RESOLVERS - the fourteen
+#
+# Uniform signature ``(tenant, party, start, end) -> (Decimal | None, dict)``. The rule every one
+# of them keeps is the one generate depends on: an EMPTY denominator answers ``None``, never 0.
+# A phantom zero is a claim about the supplier where the truth is a gap in OUR data, and it would
+# tank a composite that nothing measured.
+#
+# The spine each resolver reads is minted here rather than in the shared conftest - these rows
+# exist to pin one ratio each, and a fixture shared with three other lanes would drift the moment
+# one of them needed a different denominator.
+# =================================================================================================
+
+def _supplierperf_window():
+    """The window every resolver test measures over - the same 90 days a scorecard covers."""
+    end = _supplierperf_today()
+    return end - datetime.timedelta(days=89), end
+
+
+def _supplierperf_po(tenant, vendor, **overrides):
+    from apps.scm.models import PurchaseOrder
+    end = _supplierperf_today()
+    fields = dict(tenant=tenant, vendor=vendor, status="approved",
+                  order_date=end - datetime.timedelta(days=30),
+                  expected_date=end - datetime.timedelta(days=10))
+    fields.update(overrides)
+    return PurchaseOrder.objects.create(**fields)
+
+
+def _supplierperf_po_line(po, quantity=Decimal("10"), unit_price=Decimal("25.00")):
+    from apps.scm.models import PurchaseOrderLine
+    return PurchaseOrderLine.objects.create(
+        purchase_order=po, item_description="Bearing housing 40mm", quantity=quantity,
+        unit_price=unit_price, sku_hint="BRG-40", uom_hint="EA")
+
+
+def _supplierperf_grn(tenant, po, days_ago=10, **overrides):
+    """A BOOKED receipt - ``_received_notes`` counts ``status="received"`` and nothing else."""
+    from apps.scm.models import GoodsReceiptNote
+    fields = dict(tenant=tenant, purchase_order=po, status="received",
+                  receipt_date=_supplierperf_today() - datetime.timedelta(days=days_ago))
+    fields.update(overrides)
+    return GoodsReceiptNote.objects.create(**fields)
+
+
+def _supplierperf_grn_line(grn, po_line, received="10", rejected="0"):
+    from apps.scm.models import GoodsReceiptLine
+    return GoodsReceiptLine.objects.create(
+        goods_receipt=grn, po_line=po_line, quantity_received=Decimal(received),
+        quantity_rejected=Decimal(rejected))
+
+
+def _supplierperf_invoice(tenant, vendor, number, **overrides):
+    from apps.procurement.models import SupplierInvoice
+    fields = dict(tenant=tenant, vendor=vendor, invoice_number=number,
+                  invoice_date=_supplierperf_today() - datetime.timedelta(days=20),
+                  match_status="not_run")
+    fields.update(overrides)
+    return SupplierInvoice.objects.create(**fields)
+
+
+def _supplierperf_dispute(tenant, invoice, supplier, raised_at=None, resolved_at=None,
+                          **overrides):
+    """One invoice dispute, optionally BACK-DATED.
+
+    ``InvoiceDispute.raised_at`` is ``auto_now_add`` (``InvoiceDisputes.py:158``), so passing it
+    to ``create()`` is silently ignored - the column is stamped at INSERT. Back-dating therefore
+    goes through a queryset ``.update()``, which does not run ``pre_save`` and is the only way to
+    place a dispute anywhere but "now". Left alone, ``raised_at`` is today, which is inside every
+    window these tests measure over.
+    """
+    from apps.procurement.models import InvoiceDispute
+    fields = dict(tenant=tenant, invoice=invoice, supplier=supplier, reason_code="price",
+                  description="Unit price above the agreed schedule.")
+    fields.update(overrides)
+    dispute = InvoiceDispute.objects.create(**fields)
+    stamps = {}
+    if raised_at is not None:
+        stamps["raised_at"] = raised_at
+    if resolved_at is not None:
+        stamps["resolved_at"] = resolved_at
+    if stamps:
+        InvoiceDispute.objects.filter(pk=dispute.pk).update(**stamps)
+        dispute.refresh_from_db()
+    return dispute
+
+
+def _supplierperf_rfq(tenant, issued_days_ago=20, **overrides):
+    from apps.scm.models import RFQ
+    fields = dict(tenant=tenant, title="Bearings restock",
+                  issue_date=_supplierperf_today()
+                  - datetime.timedelta(days=issued_days_ago))
+    fields.update(overrides)
+    return RFQ.objects.create(**fields)
+
+
+def _supplierperf_quote(tenant, rfq, party, total, received_days_ago=17):
+    from apps.scm.models import RFQQuote
+    return RFQQuote.objects.create(
+        tenant=tenant, rfq=rfq, party=party, total=Decimal(total),
+        received_date=_supplierperf_today() - datetime.timedelta(days=received_days_ago))
+
+
+@pytest.mark.parametrize("metric", sorted(performance.DERIVED_RESOLVERS))
+def test_supplierperf_every_derived_resolver_answers_none_without_data(
+        metric, tenant_a, supplierperf_supplier_a):
+    """No data is NOT a zero. Every one of the fourteen has to say so."""
+    start, end = _supplierperf_window()
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, metric,
+                                                   start, end)
+    assert value is None, metric
+    assert breakdown["metric"] == metric
+    assert breakdown["window"] == [str(start), str(end)]
+    assert breakdown["rows"] == 0
+
+
+def test_supplierperf_resolve_derived_survives_an_unknown_metric_key(
+        tenant_a, supplierperf_supplier_a):
+    """A definition problem must not take a whole generate run down with it."""
+    start, end = _supplierperf_window()
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "not_a_metric", start, end)
+    assert value is None
+    assert breakdown["error"] == "no resolver"
+
+
+def test_supplierperf_resolver_otd_counts_only_datable_receipts(
+        tenant_a, supplierperf_supplier_a):
+    """One on time, one late, and one whose PO carries no expected date (excluded both sides)."""
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    _supplierperf_grn(tenant_a, po, days_ago=12)                      # on time
+    _supplierperf_grn(tenant_a, po, days_ago=4)                       # late
+    undated = _supplierperf_po(tenant_a, supplierperf_supplier_a, expected_date=None)
+    _supplierperf_grn(tenant_a, undated, days_ago=3)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "otd",
+                                                   start, end)
+    assert value == Decimal("50.00")
+    assert breakdown["datable_receipts"] == 2
+    assert breakdown["on_time"] == 1
+
+
+def test_supplierperf_resolver_otd_ignores_an_unbooked_receipt(
+        tenant_a, supplierperf_supplier_a):
+    """A draft receipt has not been booked - it says nothing about the supplier yet."""
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    _supplierperf_grn(tenant_a, po, days_ago=12, status="draft")
+    value, _ = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "otd", start, end)
+    assert value is None
+
+
+def test_supplierperf_resolver_otif_needs_the_lines_to_add_up(
+        tenant_a, supplierperf_supplier_a):
+    """On time AND in full - an on-time receipt that arrived short is not OTIF."""
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    line = _supplierperf_po_line(po, quantity=Decimal("10"))
+    full = _supplierperf_grn(tenant_a, po, days_ago=12)
+    _supplierperf_grn_line(full, line, received="10")
+    short = _supplierperf_grn(tenant_a, po, days_ago=11)
+    _supplierperf_grn_line(short, line, received="4")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "otif",
+                                                   start, end)
+    assert value == Decimal("50.00")
+    assert breakdown["in_full"] == 1
+    assert breakdown["short_receipts"] == 1
+
+
+def test_supplierperf_resolver_otif_refuses_to_call_a_lineless_receipt_full(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    _supplierperf_po_line(po)
+    _supplierperf_grn(tenant_a, po, days_ago=12)                      # on time, NO lines
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "otif",
+                                                   start, end)
+    assert value == Decimal("0.00")
+    assert breakdown["on_time"] == 1 and breakdown["in_full"] == 0
+
+
+def test_supplierperf_resolver_defect_rate_is_rejected_over_inspected(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    line = _supplierperf_po_line(po)
+    grn = _supplierperf_grn(tenant_a, po)
+    _supplierperf_grn_line(grn, line, received="90", rejected="10")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "defect_rate", start, end)
+    assert value == Decimal("10.00")
+    assert Decimal(breakdown["inspected"]) == Decimal("100")
+    assert Decimal(breakdown["rejected"]) == Decimal("10")
+
+
+def test_supplierperf_resolver_defect_rate_is_none_when_nothing_was_inspected(
+        tenant_a, supplierperf_supplier_a):
+    """A receipt line of zero is not a clean one - there was nothing to reject."""
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    line = _supplierperf_po_line(po)
+    grn = _supplierperf_grn(tenant_a, po)
+    _supplierperf_grn_line(grn, line, received="0", rejected="0")
+    value, _ = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "defect_rate",
+                                           start, end)
+    assert value is None
+
+
+def test_supplierperf_resolver_ncr_rate_is_discrepancies_over_receipts(
+        tenant_a, supplierperf_supplier_a):
+    from apps.procurement.models import ReceiptDiscrepancy
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    flagged = _supplierperf_grn(tenant_a, po, days_ago=12)
+    _supplierperf_grn(tenant_a, po, days_ago=11)
+    ReceiptDiscrepancy.objects.create(
+        tenant=tenant_a, goods_receipt=flagged, kind="short_shipment",
+        description="Three cartons short on the pallet.")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "ncr_rate",
+                                                   start, end)
+    assert value == Decimal("50.00")
+    assert (breakdown["discrepancies"], breakdown["receipts"]) == (1, 2)
+
+
+def test_supplierperf_resolver_rtv_rate_is_returns_over_receipts(
+        tenant_a, supplierperf_supplier_a):
+    from apps.procurement.models import ReturnToVendor
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    _supplierperf_grn(tenant_a, po, days_ago=12)
+    _supplierperf_grn(tenant_a, po, days_ago=11)
+    ReturnToVendor.objects.create(tenant=tenant_a, vendor=supplierperf_supplier_a,
+                                  reason="damaged", remedy="credit")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "rtv_rate",
+                                                   start, end)
+    assert value == Decimal("50.00")
+    assert (breakdown["returns"], breakdown["receipts"]) == (1, 2)
+
+
+def test_supplierperf_resolver_invoice_accuracy_excludes_an_unmatched_invoice(
+        tenant_a, supplierperf_supplier_a):
+    """An invoice whose match never ran says nothing about the supplier's paperwork."""
+    start, end = _supplierperf_window()
+    _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-1", match_status="matched")
+    _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-2",
+                          match_status="price_variance")
+    _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-3", match_status="not_run")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "invoice_accuracy", start, end)
+    assert value == Decimal("50.00")
+    assert breakdown["matched_invoices"] == 2
+
+
+def test_supplierperf_resolver_invoice_accuracy_counts_within_tolerance_as_clean(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-1",
+                          match_status="within_tolerance")
+    value, _ = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                           "invoice_accuracy", start, end)
+    assert value == Decimal("100.00")
+
+
+def test_supplierperf_resolver_dispute_rate_is_disputes_over_invoices(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    first = _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-1")
+    _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-2")
+    _supplierperf_dispute(tenant_a, first, supplierperf_supplier_a)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "dispute_rate", start, end)
+    assert value == Decimal("50.00")
+    assert (breakdown["disputes"], breakdown["invoices"]) == (1, 2)
+
+
+def test_supplierperf_resolver_dispute_days_averages_only_the_closed_ones(
+        tenant_a, supplierperf_supplier_a):
+    """An unresolved dispute has no resolution time yet - averaging it in would invent one."""
+    start, end = _supplierperf_window()
+    invoice = _supplierperf_invoice(tenant_a, supplierperf_supplier_a, "SUP-1")
+    raised = timezone.now() - datetime.timedelta(days=20)
+    _supplierperf_dispute(tenant_a, invoice, supplierperf_supplier_a, raised_at=raised,
+                          resolved_at=raised + datetime.timedelta(days=2))
+    _supplierperf_dispute(tenant_a, invoice, supplierperf_supplier_a, raised_at=raised,
+                          resolved_at=raised + datetime.timedelta(days=4),
+                          reason_code="quantity")
+    _supplierperf_dispute(tenant_a, invoice, supplierperf_supplier_a, raised_at=raised,
+                          reason_code="tax")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "dispute_days", start, end)
+    assert value == Decimal("3.00")
+    assert breakdown["resolved_disputes"] == 2
+
+
+def test_supplierperf_resolver_promise_adherence_ignores_an_unpromised_instalment(
+        tenant_a, supplierperf_supplier_a):
+    from apps.procurement.models import DeliverySchedule
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    line = _supplierperf_po_line(po)
+    need_by = _supplierperf_today() - datetime.timedelta(days=15)
+    DeliverySchedule.objects.create(                       # promised early - kept
+        tenant=tenant_a, po_line=line, sequence=1, scheduled_quantity=Decimal("4"),
+        need_by_date=need_by, promised_date=need_by - datetime.timedelta(days=2))
+    DeliverySchedule.objects.create(                       # promised late - not kept
+        tenant=tenant_a, po_line=line, sequence=2, scheduled_quantity=Decimal("3"),
+        need_by_date=need_by, promised_date=need_by + datetime.timedelta(days=5))
+    DeliverySchedule.objects.create(                       # never promised - excluded
+        tenant=tenant_a, po_line=line, sequence=3, scheduled_quantity=Decimal("3"),
+        need_by_date=need_by)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "promise_adherence", start, end)
+    assert value == Decimal("50.00")
+    assert (breakdown["kept"], breakdown["promised"]) == (1, 2)
+
+
+def test_supplierperf_resolver_backorder_rate_is_backorders_over_po_lines(
+        tenant_a, supplierperf_supplier_a):
+    from apps.procurement.models import Backorder
+    start, end = _supplierperf_window()
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    first = _supplierperf_po_line(po)
+    _supplierperf_po_line(po, quantity=Decimal("4"), unit_price=Decimal("60.00"))
+    Backorder.objects.create(
+        tenant=tenant_a, po_line=first, quantity_backordered=Decimal("3"),
+        reason="out_of_stock",
+        original_promise_date=_supplierperf_today() - datetime.timedelta(days=15))
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "backorder_rate", start, end)
+    assert value == Decimal("50.00")
+    assert (breakdown["backorders"], breakdown["po_lines"]) == (1, 2)
+
+
+def test_supplierperf_resolver_po_change_rate_rides_the_order_date_on_both_sides(
+        tenant_a, supplierperf_supplier_a):
+    from apps.procurement.models import PurchaseOrderChange
+    start, end = _supplierperf_window()
+    amended = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    PurchaseOrderChange.objects.create(tenant=tenant_a, purchase_order=amended,
+                                       reason="The vendor moved the dispatch date.")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "po_change_rate", start, end)
+    assert value == Decimal("50.00")
+    assert (breakdown["changes"], breakdown["purchase_orders"]) == (1, 2)
+
+
+def test_supplierperf_resolver_price_competitiveness_compares_against_the_best_quote(
+        tenant_a, supplierperf_supplier_a, supplierperf_supplier2_a):
+    """100% would mean this supplier WAS the cheapest; 80/100 quoted is 80%."""
+    start, end = _supplierperf_window()
+    rfq = _supplierperf_rfq(tenant_a)
+    _supplierperf_quote(tenant_a, rfq, supplierperf_supplier_a, "100.00")
+    _supplierperf_quote(tenant_a, rfq, supplierperf_supplier2_a, "80.00")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "price_competitiveness", start, end)
+    assert value == Decimal("80.00")
+    assert breakdown["compared"] == 1
+
+
+def test_supplierperf_resolver_price_competitiveness_caps_the_cheapest_at_a_hundred(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    rfq = _supplierperf_rfq(tenant_a)
+    _supplierperf_quote(tenant_a, rfq, supplierperf_supplier_a, "80.00")
+    value, _ = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                           "price_competitiveness", start, end)
+    assert value == Decimal("100.00")
+
+
+def test_supplierperf_resolver_price_competitiveness_is_none_with_nothing_to_compare(
+        tenant_a, supplierperf_supplier_a):
+    """A zero-total quote is not a free one - there is no ratio to take."""
+    start, end = _supplierperf_window()
+    rfq = _supplierperf_rfq(tenant_a)
+    _supplierperf_quote(tenant_a, rfq, supplierperf_supplier_a, "0.00")
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "price_competitiveness", start, end)
+    assert value is None
+    assert breakdown["compared"] == 0
+
+
+def test_supplierperf_resolver_quote_turnaround_measures_from_the_rfq_issue_date(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    rfq = _supplierperf_rfq(tenant_a, issued_days_ago=20)
+    _supplierperf_quote(tenant_a, rfq, supplierperf_supplier_a, "100.00",
+                        received_days_ago=17)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "quote_turnaround", start, end)
+    assert value == Decimal("3.00")
+    assert breakdown["quotes"] == 1
+
+
+def test_supplierperf_resolver_quote_turnaround_excludes_an_unissued_rfq(
+        tenant_a, supplierperf_supplier_a):
+    """There is nothing to measure the turnaround FROM."""
+    start, end = _supplierperf_window()
+    rfq = _supplierperf_rfq(tenant_a, issue_date=None)
+    _supplierperf_quote(tenant_a, rfq, supplierperf_supplier_a, "100.00")
+    value, _ = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                           "quote_turnaround", start, end)
+    assert value is None
+
+
+def test_supplierperf_resolver_suspension_incidents_is_none_without_any_trade(
+        tenant_a, supplierperf_supplier_a):
+    """A supplier we never bought from has no incident RATE - only a supplier we did can
+    honestly score a real zero."""
+    start, end = _supplierperf_window()
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "suspension_incidents", start, end)
+    assert value is None
+    assert breakdown["had_activity"] is False
+
+
+def test_supplierperf_resolver_suspension_incidents_scores_a_real_zero_after_trade(
+        tenant_a, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "suspension_incidents", start, end)
+    assert value == Decimal("0.00")
+    assert breakdown["had_activity"] is True
+
+
+def test_supplierperf_resolver_suspension_incidents_counts_blocks_in_force(
+        tenant_a, admin_user, supplierperf_supplier_a):
+    start, end = _supplierperf_window()
+    VendorSuspension.objects.create(
+        tenant=tenant_a, supplier=supplierperf_supplier_a, reason="Four late shipments.",
+        status="active", starts_on=_supplierperf_today() - datetime.timedelta(days=30),
+        requested_by=admin_user)
+    VendorSuspension.objects.create(                       # requested, never came into force
+        tenant=tenant_a, supplier=supplierperf_supplier_a, reason="Under review.",
+        status="requested", starts_on=_supplierperf_today() - datetime.timedelta(days=20),
+        requested_by=admin_user)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a,
+                                                   "suspension_incidents", start, end)
+    assert value == Decimal("1.00")
+    assert breakdown["incidents"] == 1
+
+
+def test_supplierperf_resolvers_never_read_another_workspaces_spine(
+        tenant_a, tenant_b, supplierperf_supplier_a, supplierperf_supplier_b):
+    """Tenant B's receipts must not show up in tenant A's on-time delivery figure."""
+    start, end = _supplierperf_window()
+    theirs = _supplierperf_po(tenant_b, supplierperf_supplier_b)
+    _supplierperf_grn(tenant_b, theirs, days_ago=12)
+    value, breakdown = performance.resolve_derived(tenant_a, supplierperf_supplier_a, "otd",
+                                                   start, end)
+    assert value is None
+    assert breakdown["datable_receipts"] == 0
+
+
+def test_supplierperf_generate_writes_a_derived_figure_onto_the_line(
+        tenant_a, admin_user, supplierperf_supplier_a, supplierperf_scorecard_draft_a):
+    """End to end: a resolver's number reaches the score line, banded by the one scale."""
+    po = _supplierperf_po(tenant_a, supplierperf_supplier_a)
+    _supplierperf_grn(tenant_a, po, days_ago=12)
+    kpi = _supplierperf_make_kpi(tenant_a, source="derived", derived_metric="otd",
+                                 scoring_method="linear", target_value=Decimal("95"),
+                                 warning_threshold=Decimal("90"),
+                                 critical_threshold=Decimal("85"))
+    performance.generate_scorecard_lines(supplierperf_scorecard_draft_a, admin_user)
+    line = SupplierKpiScore.objects.get(kpi=kpi)
+    assert line.measured_value == Decimal("100.0000")
+    assert line.band == "ok"
+    assert line.score == Decimal("100.00")
+    assert line.breakdown["metric"] == "otd"
+    assert line.source_at_time == "derived"
+
+
+# =================================================================================================
+# performance - the composite arithmetic the boards publish
+#
+# These are pure (or near-pure) helpers, so they are pinned HERE rather than through a page: the
+# views lane asserts that a board renders them; this lane asserts they are RIGHT. The rule they
+# share with SupplierScorecard.recompute_overall() is the one that matters - weights re-weight
+# over the lines that actually scored, so a KPI with no data in the period never quietly drags a
+# supplier down.
+# =================================================================================================
+
+def test_supplierperf_composite_reweights_over_the_lines_that_scored(
+        tenant_a, supplierperf_scorecard_draft_a):
+    """(100 x 30 + 40 x 10) / 40 = 85.00 - the unscored line drops out of BOTH sides."""
+    high = _supplierperf_make_kpi(tenant_a, weight=30, display_order=10)
+    low = _supplierperf_make_kpi(tenant_a, weight=10, display_order=20)
+    dark = _supplierperf_make_kpi(tenant_a, weight=60, display_order=30)
+    lines = [
+        _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, high,
+                           score=Decimal("100.00"), weight_applied=30),
+        _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, low,
+                           score=Decimal("40.00"), weight_applied=10),
+        _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, dark,
+                           score=None, weight_applied=60),
+    ]
+    assert performance._composite(lines) == Decimal("85.00")
+
+
+def test_supplierperf_composite_is_none_when_nothing_scored(
+        tenant_a, supplierperf_scorecard_draft_a):
+    kpi = _supplierperf_make_kpi(tenant_a)
+    line = _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, kpi, score=None)
+    assert performance._composite([line]) is None
+    assert performance._composite([]) is None
+
+
+def test_supplierperf_composite_from_sums_matches_the_row_wise_arithmetic(
+        tenant_a, supplierperf_scorecard_draft_a):
+    """The cohort board sums in SQL; the trend board averages fetched rows. Same answer."""
+    high = _supplierperf_make_kpi(tenant_a, weight=30, display_order=10)
+    low = _supplierperf_make_kpi(tenant_a, weight=10, display_order=20)
+    lines = [
+        _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, high,
+                           score=Decimal("100.00"), weight_applied=30),
+        _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, low,
+                           score=Decimal("40.00"), weight_applied=10),
+    ]
+    weighted = sum(line.score * line.weight_applied for line in lines)
+    assert (performance._composite_from_sums(weighted, 40)
+            == performance._composite(lines) == Decimal("85.00"))
+
+
+def test_supplierperf_composite_from_sums_is_none_on_an_empty_cohort():
+    assert performance._composite_from_sums(None, 0) is None
+    assert performance._composite_from_sums(Decimal("100"), 0) is None
+    assert performance._composite_from_sums(None, 40) is None
+
+
+def test_supplierperf_meets_target_reads_the_frozen_direction(
+        tenant_a, supplierperf_scorecard_draft_a):
+    """Flipping a KPI's direction later must not re-judge a period already closed."""
+    kpi = _supplierperf_make_kpi(tenant_a)
+    higher = _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, kpi,
+                                measured_value=Decimal("96"), target_at_time=Decimal("95"),
+                                direction_at_time="higher_is_better")
+    assert performance.meets_target(higher) is True
+    higher.measured_value = Decimal("94")
+    assert performance.meets_target(higher) is False
+    higher.direction_at_time = "lower_is_better"
+    assert performance.meets_target(higher) is True
+
+
+def test_supplierperf_meets_target_is_true_exactly_on_the_target(
+        tenant_a, supplierperf_scorecard_draft_a):
+    kpi = _supplierperf_make_kpi(tenant_a)
+    line = _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, kpi,
+                              measured_value=Decimal("95"), target_at_time=Decimal("95"),
+                              direction_at_time="higher_is_better")
+    assert performance.meets_target(line) is True
+    line.direction_at_time = "lower_is_better"
+    assert performance.meets_target(line) is True
+
+
+def test_supplierperf_meets_target_is_none_when_either_side_is_missing(
+        tenant_a, supplierperf_scorecard_draft_a):
+    """A KPI with no target has nothing to meet - "False" would read as a failure nobody asked
+    for."""
+    kpi = _supplierperf_make_kpi(tenant_a)
+    no_target = _supplierperf_line(tenant_a, supplierperf_scorecard_draft_a, kpi,
+                                   measured_value=Decimal("96"), target_at_time=None)
+    assert performance.meets_target(no_target) is None
+    no_target.target_at_time = Decimal("95")
+    no_target.measured_value = None
+    assert performance.meets_target(no_target) is None
+
+
+def test_supplierperf_quadrant_for_splits_on_performance_and_risk():
+    """70 composite and a 2.5 risk index are the two axes; both boundaries are inclusive."""
+    assert performance.quadrant_for(Decimal("80"), Decimal("1.0")) == "strategic"
+    assert performance.quadrant_for(Decimal("80"), Decimal("4.0")) == "hidden"
+    assert performance.quadrant_for(Decimal("40"), Decimal("1.0")) == "development"
+    assert performance.quadrant_for(Decimal("40"), Decimal("4.0")) == "underperforming"
+    assert performance.quadrant_for(Decimal("70"), Decimal("2.5")) == "strategic"
+
+
+def test_supplierperf_quadrant_for_is_blank_without_both_axes():
+    assert performance.quadrant_for(None, Decimal("1.0")) == ""
+    assert performance.quadrant_for(Decimal("80"), None) == ""
+    assert performance.quadrant_for(None, None) == ""
+
+
+def test_supplierperf_weighted_mean_counts_a_zero_weight_voice():
+    """Same contract as survey_aggregate: importance WEIGHTS, it does not gate the count."""
+    assert performance._weighted([]) == (None, 0)
+    assert performance._weighted([(Decimal("75"), 8), (Decimal("25"), 2)]) == (Decimal("65.00"), 2)
+    assert performance._weighted([(Decimal("75"), 0), (Decimal("25"), 0)]) == (None, 2)
+
+
+def test_supplierperf_delta_css_is_colour_named_only():
+    for delta in (None, Decimal("40"), Decimal("20"), Decimal("15"), Decimal("10"),
+                  Decimal("0"), Decimal("-10"), Decimal("-40")):
+        assert performance._delta_css(delta) in _SUPPLIERPERF_THEME_BADGES, delta
+    assert performance._delta_css(None) == "badge-slate"
+    assert performance._delta_css(Decimal("20")) == "badge-red"
+    assert performance._delta_css(Decimal("10")) == "badge-amber"
+    assert performance._delta_css(Decimal("-10")) == "badge-info"
+    assert performance._delta_css(Decimal("0")) == "badge-green"
+
+
+def test_supplierperf_period_choices_are_distinct_and_newest_first(
+        tenant_a, tenant_b, supplierperf_supplier_a, supplierperf_supplier_b):
+    end = _supplierperf_today()
+    older = end - datetime.timedelta(days=90)
+    _supplierperf_card(tenant_a, supplierperf_supplier_a, period_end=end)
+    _supplierperf_card(tenant_a, supplierperf_supplier_a, period_end=end)   # same period twice
+    _supplierperf_card(tenant_a, supplierperf_supplier_a, period_end=older,
+                       period_start=older - datetime.timedelta(days=89))
+    _supplierperf_card(tenant_b, supplierperf_supplier_b)
+    assert performance.period_choices(tenant_a) == [end, older]
+
+
+def test_supplierperf_period_choices_are_empty_without_a_scorecard(tenant_a):
+    assert performance.period_choices(tenant_a) == []
+
+
+def test_supplierperf_handover_note_names_the_one_way_door():
+    """ONE constant - the register, the detail page and the confirm dialog all print it."""
+    note = performance.HANDOVER_NOTE
+    assert "manual_override" in note
+    assert "recompute_from_signals" in note
+    assert "cannot be undone" in note
+
+
+def test_supplierperf_benchmark_note_refuses_to_imply_an_external_feed():
+    """There is no industry benchmark feed anywhere in this system and no page may imply one."""
+    assert "no external industry feed" in performance.BENCHMARK_NOTE
