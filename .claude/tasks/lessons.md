@@ -1345,3 +1345,65 @@ external standard.** It needs no judgement, and the fix is already written.
 Related: L47 (never `-k` the final run), L49 (`--reuse-db` is inert — a flag that cannot act is
 worse than none, because it answers the question you would otherwise ask), L51 (the index collides
 in a shared checkout).
+
+---
+
+## L53 — In a shared checkout, `makemigrations` and `grep` both lie about scope
+
+**Context (2026-09-05/06, procurement 6.19 with three peer sessions live on `apps/procurement`).**
+Four Claude sessions built 6.16, 6.17, 6.18 and 6.19 into one working tree. Three separate
+scope assumptions failed, all the same shape: **a check that answers a narrower question than the
+one being asked.**
+
+**1. `makemigrations` scopes to the app model REGISTRY, not to your files.**
+We had agreed an elaborate migration queue (`0026`=6.16, `0027`=6.17, `0028`=6.18, `0029`=6.19) to
+avoid two sessions minting the same number. It solved the wrong problem twice over:
+
+* The **number is a filename prefix with no ordering semantics** — Django orders by the explicit
+  `dependencies` edge. Sequential generation at different times yields a linear chain no matter who
+  intended which number, because each run reads the leaf off disk at that moment. The reservation
+  bought nothing and blocked a finished session behind three still building.
+* Worse, reservation **concentrates** the hazard it was meant to prevent: everyone waits on the same
+  disk event, so when a number lands every waiting session is released at once — a thundering herd
+  on exactly the operation that must not be concurrent.
+* And it does not scope anything anyway. `makemigrations procurement --dry-run` produced **eight**
+  `Create model` lines — four of ours and four of a peer's — because the command reads the app
+  registry. There is no per-model or per-path flag. Whoever generates first captures every
+  registered, unmigrated model in the app.
+
+**The protocol that actually works: numbers by arrival, announce immediately before you generate,
+never generate while someone is announcing.** And say in the commit body whose models you swept in.
+
+**2. Absence from disk is not absence from a peer's frozen contract.**
+`grep -rn "^class ProcurementPolicy" apps/` returned nothing, so 6.19 declared the model. 6.17's
+contract had frozen the same class name hours earlier, unwritten. Two models with one name under one
+`app_label` is `RuntimeError: Conflicting models` at startup — for **all four** sessions, not just
+the two. Grep sees what is written; with concurrent sessions holding frozen-but-unwritten contracts,
+that is a real blind spot. **Check a new class name against peers' `.claude/tasks/contract-*.md`,
+not only against `apps/`.**
+
+*(What settled it is worth more than the collision: not migration order, not arrival order — both
+contingent on a protocol the group revised twice that day — but the fact that 6.19's own model
+docstring already described the split. Prefer the argument resting on something written in the code
+over one resting on a convention the group can revise.)*
+
+**3. A review glob needs `**`, and a commit needs a pathspec.**
+`templates/x/y/*` matches only the directories — a reviewer handed that reads nothing and reports
+**clean**, which is indistinguishable from success. Expand the glob and count against a pinned
+expected number *before* handing it to an agent; a short count then reads as "glob wrong" rather
+than "no findings". Likewise `git add 'f'; git commit -m '…'` sweeps whatever else is staged:
+`git add 'f'; git commit -m '…' -- 'f'` makes the file list a property of the command. (Options go
+**before** `--`; everything after it is a pathspec.)
+
+**Rules:**
+1. Never reserve migration numbers. Announce, then generate, then say what you swept in.
+2. Before declaring a new model/class name in a shared tree, grep the peers' contract files too.
+3. Never let a reviewer or fixer scope be a bare `*` glob or a commit range — a range in a shared
+   tree returns every session's work. Expand, count, then hand it over.
+4. `git commit -m '…' -- 'path'` for every commit while peers are live.
+5. When a check comes back clean, ask what question it actually answered. The six-pass review and a
+   37-route IDOR sweep all came back clean on pages that were correctly tenant-scoped — and none of
+   them tested the **file those pages linked to**, which was readable with no login at all.
+
+Related: L43 (migrations are where concurrent work collides), L45 (a dirty tree is not yours),
+L47 (never `-k` the final run), and the memory note *"a verified answer to the wrong question"*.
