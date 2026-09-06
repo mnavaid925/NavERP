@@ -1257,3 +1257,91 @@ wait on one disk event releases them all simultaneously onto the operation that 
 Related: [[concurrent-sessions-same-tree]], L43 (concurrent writes to a shared *file* — this is the same tree,
 different resource), L45 (a dirty tree is not yours), L41 §3 (a subagent's report of its own cleanup is not
 evidence), L36 (ships-first ownership), L12 (wire up last).
+
+---
+
+## L52 — Silence reads as success, and confident prose is worse than none
+
+**Context (2026-09-05/06, procurement 6.18).** Six review passes produced 32 findings. Two
+patterns account for most of them, and neither is about the code being wrong in a way anyone would
+notice.
+
+### Part 1 — the defect that shipped six times: prose asserting what the code does not do
+
+Six of the 32 findings were a comment, docstring or template caveat stating the opposite of the
+behaviour beside it:
+
+* Two templates promised *"if the run has already been released, delete is not offered at all"* and
+  *"the view refuses both anyway."* The view had no status guard; a POST deleted a released run and
+  CASCADE-took every suggestion with it.
+* A view comment read *"the RUN's trigger, verbatim (Runs.py:403-409)"* — and dropped the two
+  policy toggles the run gates on.
+* A detail page described an inactive rule's figures as *"what a run would read"*; `generate()`
+  filters `is_active=True`, so a run reads none of them.
+* A page promised a shortfall is visible *"before anybody presses Post"* while flagging per line,
+  when `post()` sums per item — two lines of one item showed no warning and were then refused.
+* A truncation note said the counters *"cover those rather than the whole workspace"*; the view
+  computed stats before the cap, so they covered more.
+* ~50 urls modules carried *"this app registers no greedy `<str:…>` converter anywhere"*, false
+  since 6.8 shipped `contract-sign/<str:token>/`.
+
+**Nothing type-checks prose.** It is written once against the code as it was, copied forward, and
+then silently outlives the behaviour. And confident prose is *worse than none*, because it stops
+the next reader from checking — every one of the above would have been caught in minutes by
+someone who did not already have a sentence telling them the answer.
+
+**Rules:**
+1. **When you fix a behaviour, grep for sentences that describe it.** The defect and the sentence
+   drift apart at the moment of the fix, not later.
+2. **Prefer an invariant a grep can confirm to an absence someone must maintain.** *"No route uses
+   a converter in its first path component"* is checkable in one command and cannot rot unnoticed;
+   *"this app has no converters"* expired the moment somebody added one.
+3. **A fix that makes false prose merely vague is not a fix.** Vague-but-true is the tempting
+   option and it destroys the sentence's only value.
+
+### Part 2 — every instrument that failed, failed by returning nothing
+
+* A review glob one level too shallow (`templates/<app>/<sub>/*`) matches **zero** entity
+  templates. The reviewer reads nothing and reports **clean** — which is the answer you were
+  hoping for, so you believe it.
+* `grep 'name="…"'` saw 4 route names in `apps/core/urls.py` where Django registers **49**, because
+  a `crud()` factory builds them as f-strings. Empty result, read as no duplicates.
+* A `--grep`-based commit query returned nothing on a file with no commits yet — indistinguishable
+  from the query being broken, which it also was.
+* `pytest.skip()` in the sharpest security test (a real tenant-B child id smuggled under a
+  tenant-A parent) rendered as a pass. The fixture simply had no line to steal.
+* A `?item=0` regression comparing an empty board to an empty board passes while proving nothing.
+* Three attempts to capture a pytest count were swallowed by my own pipe; `exit 0` proves the
+  assertion, it is not the measurement.
+
+**The asymmetry is the whole point: an over-matching scope produces findings you can discard; an
+under-matching one produces silence you will believe.** Only one of those two errors is
+self-correcting.
+
+**Rules:**
+1. **Expand every glob and count it against a pinned expectation before trusting a pass.** The
+   `find` proves nothing — the *expected number* does all the work. A check with no expected
+   number cannot distinguish "wrong scope" from "no work".
+2. **Never `pytest.skip()` a test that is the only one covering an invariant.** Build the fixture
+   the test needs. A skip is a pass you did not earn.
+3. **After a suite goes green first try, prove it is not vacuous** — assert the fixtures actually
+   contain the rows the assertions range over.
+4. **Prefer the framework to disk, and disk to intent.** Contracts see what peers intend, grep sees
+   what is written, only the resolver/registry/migration graph sees what is *real*. Each is blind
+   to something the next can see, and every blindness presents as a clean result.
+
+### Part 3 — inconsistency inside one sub-module is the strongest defect signal there is
+
+Six findings were *one page of three*, or *one verb of two*, differing from its own siblings: one
+derived page filtering pk=0 unguarded while the other two resolved the id first; one delete verb
+without the status guard its sibling had; one register annotating without the `order_by` its
+sibling carried. If all three had done the same thing I would have been arguing house style. One
+differing is not a trade-off — it is drift, and the correct implementation is already in the file
+next door.
+
+**Rule: when reviewing, diff a thing against its own siblings before diffing it against any
+external standard.** It needs no judgement, and the fix is already written.
+
+Related: L47 (never `-k` the final run), L49 (`--reuse-db` is inert — a flag that cannot act is
+worse than none, because it answers the question you would otherwise ask), L51 (the index collides
+in a shared checkout).
