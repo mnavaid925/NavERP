@@ -21,6 +21,55 @@ reads nothing and reports clean, which is the answer you were hoping for. And no
 
 ---
 
+## CLOSE-OUT — 6.16 is complete (2026-09-07)
+
+**48 of 49 findings fixed. 1 deliberately deferred. 0 open.**
+
+| Phase | Result |
+|---|---|
+| Build | 4 models, `performance.py`, 34 routes, 17 templates |
+| Integrate + migration | indexes landed in `0030`; `makemigrations --check` clean |
+| Seeder | idempotent; 9 KPIs / ~41 lines / 28 feedback / 4 plans per tenant |
+| Smoke gate | 123 assertions |
+| Six reviewers | 49 findings — 4 Critical, 1 High, 21 Important, 22 Minor, 2 contract |
+| Fixer | 48 fixed |
+| **Tests** | **631 — models 244, forms 156, views 181, security 50** |
+| Full suite | **5,492 passed, 1 pre-existing skip, 0 failed** |
+| Docs | SKILL.md section + README paragraph |
+
+### The one deferred item
+
+**M18** — `benchmark_rows()` streams every risk assessment in the cohort to keep one per party
+(2,402 rows to keep 302, an 8x over-fetch). Deferred, not forgotten: it is **one query**, the board
+measured **flat at 12 queries from 5 to 302 suppliers**, so this is memory pressure on a path with no
+N+1. The fix is a `Subquery(...values("risk_index")[:1])` annotation that folds it into the existing
+cohort query. Worth doing when someone next touches that function; not worth a change on its own.
+
+### Recorded but NOT fixed — surfaced by the test lanes, filed for a future pass
+
+- **T1 — tied composites get distinct ranks.** `performance.py:1011-1018` assigns rank and percentile
+  by list index after a `(composite, supplier_name)` sort, so three suppliers all at 70.00 read
+  100.00 / 66.67 / 33.33. Deterministic, but three identical suppliers should not read as different.
+- **T2 — a breakdown value is stringified before quantization.**
+  `forms/.../ScorecardKpiScores.py:82` writes `str(obj.measured_value)` from the *cleaned* Decimal, so
+  the detail page can print `97` beside a column reading `97.0000`. Cosmetic.
+
+### What the review process itself got wrong — worth carrying forward
+
+- **Two findings were REFUTED by a later reviewer** (X10, X11). A fixer working an un-deduped list
+  would have "fixed" eight working resolvers and added status gates that buy nothing. The REFUTED
+  section exists because of this.
+- **Two were CONTRACT defects, not code defects** (CD1, CD2) — the spec was wrong and the shipped
+  code right. A build agent flagged one rather than silently following the contract; that was correct.
+- **One finding was double-filed** (S2 = P3) and one was **understated** (R2, raised to Critical only
+  after a later pass built the state to test it).
+- **Three route-count claims were stale** — the urls docstring, the SKILL.md section and the review
+  scope all said 33 when the I5 fix had made it 34. The security lane caught it by counting the live
+  URLconf instead of trusting the number, and now asserts `len(declared) == 34` so the next added
+  route fails a test rather than shipping unswept.
+
+---
+
 ## THE FIX LIST - deduped, sorted, IDs assigned (all six reviewers in)
 
 **This is what the `code-fixer` works from.** Every item below is a distinct defect; the per-reviewer
@@ -170,21 +219,21 @@ sections beneath carry the evidence. Fix in ID order: C -> H -> I -> M. Mark eac
 - [x] **M15** generate's draft check reads a row fetched outside the transaction; use
   `select_for_update()`. *(SEC6, R8-generate-only)*
 - [x] **M16** `SupplierImprovementPlan` ordering index missing (low-volume table). *(P13)*
-- [ ] **M17** seeder step 5 does per-row `.save()` where `bulk_update` fits (5 rows). *(P14)*
-- [ ] **M18** `benchmark_rows` streams 2,402 risk rows to keep 302; fold into a `Subquery`. *(M1/P9)*
-- [ ] **M19** the `?source=` docstring still asserts the safety S1 disproved. Must change with I14.
+- [x] **M17** seeder step 5 does per-row `.save()` where `bulk_update` fits (5 rows). *(P14)*
+- [~] **M18** `benchmark_rows` streams 2,402 risk rows to keep 302; fold into a `Subquery`. *(M1/P9)*
+- [x] **M19** the `?source=` docstring still asserts the safety S1 disproved. Must change with I14.
   *(X15)*
-- [ ] **M20** `--flush` leaves scm scorecards flagged `manual_override` with their justifying lines
+- [x] **M20** `--flush` leaves scm scorecards flagged `manual_override` with their justifying lines
   gone. *(X14)*
-- [ ] **M21** one `.stat-grid` nested in a `.card` needing an inline padding override. *(F5)*
-- [ ] **M22** seven badge chains hand-rolled where the model already exposes `*_css` (all agree today).
+- [x] **M21** one `.stat-grid` nested in a `.card` needing an inline padding override. *(F5)*
+- [x] **M22** seven badge chains hand-rolled where the model already exposes `*_css` (all agree today).
   *(F4)*
 
 ### CONTRACT DEFECTS - amend `.claude/tasks/contract-procurement-6.16.md`, not the code
 
-- [ ] **CD1** §3.1 specifies `supplierkpi_delete` with no `ProtectedError` guard, which would 500 on any
+- [x] **CD1** §3.1 specifies `supplierkpi_delete` with no `ProtectedError` guard, which would 500 on any
   KPI with measured history. The code's guard is correct; **the contract is wrong.** *(PB4)*
-- [ ] **CD2** §6 describes `skipped` as "applicable KPIs that produced no line", but every applicable
+- [x] **CD2** §6 describes `skipped` as "applicable KPIs that produced no line", but every applicable
   KPI gets a line. Code and message agree; the contract does not. *(R11)*
 
 ### NOTES - out of scope for this fixer
