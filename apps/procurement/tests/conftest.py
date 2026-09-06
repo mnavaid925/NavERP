@@ -3459,3 +3459,1018 @@ def invwarehouse_count_program_a(db, tenant_a, invwarehouse_location_a):
         tenant=tenant_a, name="Aisle A weekly sweep", location=invwarehouse_location_a,
         abc_class="a", frequency="weekly", weekday=0, count_method="zone", is_active=True,
         last_run_date=timezone.localdate() - datetime.timedelta(days=7))
+
+
+# =================================================================================================
+# 6.16 Supplier Performance & Evaluation
+# =================================================================================================
+#
+# Every fixture and helper below is prefixed ``supplierperf_`` / ``_supplierperf_`` so the four
+# 6.16 test lanes (test_supplierperf_models / _forms / _views / _security) never collide with the
+# 6.1 - 6.18 records above, or with whatever a later sub-module appends next (L47). Dates derive
+# from ``timezone.localdate()`` / ``timezone.now()`` - never ``datetime.date.today()`` - so
+# exact-date assertions stay stable in the hours after local midnight (L16).
+#
+# Reused rather than re-minted: ``tenant_a`` / ``tenant_b`` / ``admin_user`` / ``member_user`` /
+# ``admin_b`` from the ROOT conftest. 6.16 declares no vendor, no scorecard and no suspension of
+# its own (L36) - it FKs ``core.Party``, ``scm.SupplierScorecard`` and 6.4's
+# ``procurement.VendorSuspension``, so the fixtures below mint those spine rows and hang the four
+# 6.16 tables off them.
+#
+# SIX THINGS TO KNOW BEFORE USING THESE:
+#
+# 1. ``Model.objects.create()`` does NOT call ``clean()``. Every 6.16 invariant that matters -
+#    band ordering, the derived/tier conjunctions, the one-response-per-(supplier, scorecard, kpi,
+#    respondent) rule, the outcome/closed pairing and every cross-tenant guard - is ``clean()``
+#    behaviour. Assert them through ``full_clean()`` or through a FORM, never by reading a fixture.
+# 2. ``SupplierKpiScore``'s seven frozen columns (``weight_applied``, ``target_at_time``,
+#    ``direction_at_time``, ``source_at_time``, ``unit_at_time``, ``kpi_name``, ``kpi_category``)
+#    are ``editable=False`` and are written ONLY by ``performance.generate_scorecard_lines``.
+#    ``_supplierperf_score`` sets every one of them explicitly - a fixture that leaves them at
+#    their defaults seeds a line whose "frozen history" assertions pass vacuously.
+# 3. ``source_at_time`` is the EDIT GATE. Only a line whose ``source_at_time == "manual"`` may be
+#    edited (the view refuses the rest), so ``supplierperf_score_manual_a`` is the editable row
+#    and ``supplierperf_score_derived_a`` is the one every refusal test drives.
+# 4. ``performance.applicable_kpis`` sweeps up EVERY active KPI in the tenant. A test that pins an
+#    exact line count must mint its own catalogue rather than requesting several ``*_kpi_*``
+#    fixtures - each one it requests is another line generate will write.
+# 5. ``supplierperf_supplier_a`` has a STRATEGIC ``scm.SupplierProfile``;
+#    ``supplierperf_supplier2_a`` deliberately has NONE, so it is the "unprofiled supplier gets
+#    only the applies_to=all KPIs" case. Requesting ``supplierperf_profile_a`` is what gives the
+#    first one its tier - the party fixture alone does not.
+# 6. Generating is a ONE-WAY DOOR: it sets ``scm.SupplierScorecard.manual_override``. Fixtures
+#    here never call it - a lane that wants a generated card calls ``generate_scorecard_lines``
+#    itself, so the hand-over is visible in the test that relies on it.
+#
+# The shape the four lanes can rely on:
+#
+#   spine
+#     supplierperf_supplier_a      core.Party + supplier PartyRole ("Northwind Precision Castings")
+#     supplierperf_profile_a       scm.SupplierProfile for it, tier "strategic"
+#     supplierperf_supplier2_a     core.Party + vendor PartyRole ("Southgate Fasteners") - NO profile
+#     supplierperf_supplier_b      tenant B party + role - the crafted-FK / IDOR target
+#     supplierperf_scorecard_draft_a      SCR- draft, period [today-89, today]
+#     supplierperf_scorecard_published_a  SCR- published  -> generate must REFUSE
+#     supplierperf_scorecard_archived_a   SCR- archived   -> generate must REFUSE
+#     supplierperf_scorecard_b            tenant B draft  - the crafted-FK / IDOR target
+#     supplierperf_suspension_a    VSU- in force against supplier_a - the PIP escalation target
+#   KPI library (tenant A unless noted)
+#     supplierperf_kpi_manual_a    MAN-01 manual  / band   / higher / 95-90-85 / -> delivery
+#     supplierperf_kpi_derived_a   OTD-01 derived / linear / higher / 95-90-85 / -> delivery / otd
+#     supplierperf_kpi_survey_a    SRV-01 survey  / direct / higher / 80-65-50 / -> responsiveness
+#     supplierperf_kpi_tier_a      TIR-01 manual, applies_to "tier" = strategic
+#     supplierperf_kpi_inactive_a  OLD-01 is_active False -> generate must never pick it up
+#     supplierperf_kpi_b           tenant B, same MAN-01 code (two workspaces may both own it)
+#   score lines (on supplierperf_scorecard_draft_a)
+#     supplierperf_score_manual_a  92.0000 -> 70.00 "warning", source_at_time "manual" (EDITABLE)
+#     supplierperf_score_derived_a 88.0000 -> 60.00 "warning", source_at_time "derived" (frozen)
+#     supplierperf_score_b         tenant B line
+#   360 responses
+#     supplierperf_feedback_requested_a  requested, no rating, due in 7 days, respondent member_user
+#     supplierperf_feedback_submitted_a  submitted, rating 4, importance 8, respondent admin_user
+#     supplierperf_feedback_self_a       supplier_self, rating 5, respondent_name, no respondent
+#     supplierperf_feedback_overdue_a    requested, due 3 days AGO, ad-hoc (no scorecard, no kpi)
+#     supplierperf_feedback_b            tenant B response
+#   improvement plans
+#     supplierperf_plan_draft_a    draft, closes in 30 days
+#     supplierperf_plan_overdue_a  active, target 10 days AGO -> is_overdue True
+#     supplierperf_plan_closed_a   closed + outcome "successful" + actual_close_date
+#     supplierperf_plan_b          tenant B plan
+
+def _supplierperf_party(tenant, name, role="supplier"):
+    """A counterparty WITH its PartyRole - every 6.16 supplier dropdown narrows on
+    ``roles__role__in=("supplier", "vendor")``, so a Party with no role is invisible to the forms
+    and to every ``?supplier=`` filter widget."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant, name=name, kind="organization")
+    PartyRole.objects.create(tenant=tenant, party=party, role=role, status="active")
+    return party
+
+
+def _supplierperf_period():
+    """``(start, end)`` - a 90-day window ending TODAY, on the models' own date basis (L16)."""
+    end = timezone.localdate()
+    return end - datetime.timedelta(days=89), end
+
+
+def _supplierperf_scorecard(tenant, party, **overrides):
+    from apps.scm.models import SupplierScorecard
+    start, end = _supplierperf_period()
+    fields = dict(tenant=tenant, party=party, period_start=start, period_end=end,
+                  status="draft")
+    fields.update(overrides)
+    return SupplierScorecard.objects.create(**fields)
+
+
+def _supplierperf_kpi(tenant, **overrides):
+    """A VALID KPI definition - the band triple is already ordered for ``higher_is_better``.
+
+    Flip ``direction`` and you MUST flip the triple too, or ``clean()`` refuses the row (which
+    ``objects.create()`` will not tell you about - see note 1 above)."""
+    from apps.procurement.models import SupplierKpi
+    fields = dict(
+        tenant=tenant, code="MAN-01", name="Innovation and continuous improvement",
+        category="delivery", unit="pct", direction="higher_is_better", source="manual",
+        derived_metric="", weight=20,
+        target_value=Decimal("95"), warning_threshold=Decimal("90"),
+        critical_threshold=Decimal("85"), scoring_method="band",
+        maps_to_dimension="delivery", applies_to="all", applies_to_tier="",
+        review_frequency="quarterly", display_order=10, is_active=True)
+    fields.update(overrides)
+    return SupplierKpi.objects.create(**fields)
+
+
+def _supplierperf_score(tenant, scorecard, kpi, **overrides):
+    """A score line with EVERY frozen column filled from the KPI - see note 2 above."""
+    from apps.procurement.models import SupplierKpiScore
+    fields = dict(
+        tenant=tenant, scorecard=scorecard, kpi=kpi,
+        measured_value=Decimal("92.0000"), score=Decimal("70.00"), band="warning",
+        weight_applied=kpi.weight, target_at_time=kpi.target_value,
+        direction_at_time=kpi.direction, source_at_time=kpi.source, unit_at_time=kpi.unit,
+        kpi_name=kpi.name, kpi_category=kpi.category,
+        breakdown={"source": "fixture", "note": "seeded score line"},
+        respondent_count=0, comment="")
+    fields.update(overrides)
+    return SupplierKpiScore.objects.create(**fields)
+
+
+def _supplierperf_feedback(tenant, supplier, **overrides):
+    from apps.procurement.models import SupplierFeedback
+    start, end = _supplierperf_period()
+    fields = dict(tenant=tenant, supplier=supplier, period_start=start, period_end=end,
+                  respondent_kind="internal", respondent_function="procurement",
+                  importance=5, status="requested")
+    fields.update(overrides)
+    return SupplierFeedback.objects.create(**fields)
+
+
+def _supplierperf_plan(tenant, supplier, **overrides):
+    from apps.procurement.models import SupplierImprovementPlan
+    today = timezone.localdate()
+    fields = dict(
+        tenant=tenant, supplier=supplier, title="Late deliveries on the casting line",
+        severity="major", finding="Four of six shipments arrived after the promised date.",
+        root_cause="Single-source furnace capacity.", start_date=today,
+        target_close_date=today + datetime.timedelta(days=30), status="draft")
+    fields.update(overrides)
+    return SupplierImprovementPlan.objects.create(**fields)
+
+
+# -- spine: suppliers, profiles, scorecards, the escalation target ------------------------------
+
+@pytest.fixture
+def supplierperf_supplier_a(db, tenant_a):
+    """Tenant A supplier, WITH the ``supplier`` PartyRole every 6.16 dropdown filters on."""
+    return _supplierperf_party(tenant_a, "Northwind Precision Castings")
+
+
+@pytest.fixture
+def supplierperf_profile_a(db, tenant_a, supplierperf_supplier_a):
+    """The STRATEGIC ``scm.SupplierProfile`` - what makes an ``applies_to="tier"`` KPI apply.
+
+    Requested separately on purpose: without it ``applicable_kpis`` sees no tier and returns only
+    the ``all`` KPIs, which is a case worth being able to build."""
+    from apps.scm.models import SupplierProfile
+    return SupplierProfile.objects.create(
+        tenant=tenant_a, party=supplierperf_supplier_a, onboarding_status="approved",
+        tier="strategic", category="Precision castings")
+
+
+@pytest.fixture
+def supplierperf_supplier2_a(db, tenant_a):
+    """A SECOND tenant-A supplier with NO ``scm.SupplierProfile`` - the unprofiled cohort case,
+    and the 'that suspension is against a different supplier' target."""
+    return _supplierperf_party(tenant_a, "Southgate Fasteners", role="vendor")
+
+
+@pytest.fixture
+def supplierperf_supplier_b(db, tenant_b):
+    """Tenant B's supplier - the crafted-FK / IDOR target."""
+    return _supplierperf_party(tenant_b, "Globex Alloys")
+
+
+@pytest.fixture
+def supplierperf_scorecard_draft_a(db, tenant_a, supplierperf_supplier_a):
+    """DRAFT ``scm.SupplierScorecard`` over [today-89, today] - the only status generate accepts."""
+    return _supplierperf_scorecard(tenant_a, supplierperf_supplier_a)
+
+
+@pytest.fixture
+def supplierperf_scorecard_published_a(db, tenant_a, supplierperf_supplier_a):
+    """PUBLISHED - a closed period. Generate must refuse it and write NOTHING."""
+    return _supplierperf_scorecard(tenant_a, supplierperf_supplier_a, status="published")
+
+
+@pytest.fixture
+def supplierperf_scorecard_archived_a(db, tenant_a, supplierperf_supplier_a):
+    """ARCHIVED - also closed. Generate must refuse it and write NOTHING."""
+    return _supplierperf_scorecard(tenant_a, supplierperf_supplier_a, status="archived")
+
+
+@pytest.fixture
+def supplierperf_scorecard_b(db, tenant_b, supplierperf_supplier_b):
+    """Tenant B's scorecard - the crafted-FK / IDOR target."""
+    return _supplierperf_scorecard(tenant_b, supplierperf_supplier_b)
+
+
+@pytest.fixture
+def supplierperf_suspension_a(db, tenant_a, admin_user, supplierperf_supplier_a):
+    """A 6.4 ``VendorSuspension`` IN FORCE against supplier A - what a failed PIP escalates TO.
+
+    6.16 never declares a second blocking mechanism;
+    ``SupplierImprovementPlan.escalated_suspension`` is a pointer at THIS register, and
+    ``clean()`` insists it is same-tenant AND same-supplier."""
+    from apps.procurement.models import VendorSuspension
+    return VendorSuspension.objects.create(
+        tenant=tenant_a, supplier=supplierperf_supplier_a, kind="suspension",
+        reason_category="delivery", reason="Four late shipments in one quarter.",
+        status="active", requested_by=admin_user)
+
+
+# -- the KPI library ---------------------------------------------------------------------------
+
+@pytest.fixture
+def supplierperf_kpi_manual_a(db, tenant_a, admin_user):
+    """MAN-01 - hand-entered, band-scored, higher-is-better, feeds ``delivery``.
+
+    The only source whose score line is EDITABLE (``source_at_time == "manual"``), and the one
+    generate never overwrites: the figure is a human's."""
+    return _supplierperf_kpi(tenant_a, owner=admin_user)
+
+
+@pytest.fixture
+def supplierperf_kpi_derived_a(db, tenant_a, admin_user):
+    """OTD-01 - derived from ``performance.DERIVED_RESOLVERS["otd"]``, linear-scored.
+
+    With no goods receipts in the window the resolver returns ``None``, NEVER 0 - a phantom zero
+    would tank a supplier for a gap in OUR data."""
+    return _supplierperf_kpi(
+        tenant_a, code="OTD-01", name="On-time delivery", source="derived",
+        derived_metric="otd", scoring_method="linear", weight=30, display_order=20,
+        owner=admin_user)
+
+
+@pytest.fixture
+def supplierperf_kpi_survey_a(db, tenant_a):
+    """SRV-01 - the 360 survey KPI. ``SupplierFeedback.kpi`` may point ONLY at a survey KPI."""
+    return _supplierperf_kpi(
+        tenant_a, code="SRV-01", name="360: communication and responsiveness",
+        category="service", unit="score", source="survey", scoring_method="direct",
+        maps_to_dimension="responsiveness", weight=10,
+        target_value=Decimal("80"), warning_threshold=Decimal("65"),
+        critical_threshold=Decimal("50"), display_order=30)
+
+
+@pytest.fixture
+def supplierperf_kpi_tier_a(db, tenant_a):
+    """TIR-01 - ``applies_to="tier"``, strategic only. Applies to ``supplierperf_supplier_a``
+    ONLY once ``supplierperf_profile_a`` exists; never to the unprofiled second supplier."""
+    return _supplierperf_kpi(
+        tenant_a, code="TIR-01", name="Strategic partnership review", category="innovation",
+        unit="score", applies_to="tier", applies_to_tier="strategic", weight=5,
+        maps_to_dimension="", display_order=40)
+
+
+@pytest.fixture
+def supplierperf_kpi_inactive_a(db, tenant_a):
+    """OLD-01 - RETIRED. Retirement is ``is_active=False``, never a delete (the score FK is
+    PROTECT), and generate must never pick it up again."""
+    return _supplierperf_kpi(
+        tenant_a, code="OLD-01", name="Retired packaging compliance check",
+        category="compliance", is_active=False, maps_to_dimension="", display_order=90)
+
+
+@pytest.fixture
+def supplierperf_kpi_b(db, tenant_b):
+    """Tenant B's KPI - the crafted-FK / IDOR target. Same ``code`` as tenant A's on purpose:
+    ``unique_together ("tenant", "code")`` must let both workspaces own "MAN-01"."""
+    return _supplierperf_kpi(tenant_b, name="Globex innovation review")
+
+
+# -- score lines ---------------------------------------------------------------------------------
+
+@pytest.fixture
+def supplierperf_score_manual_a(db, tenant_a, supplierperf_scorecard_draft_a,
+                                supplierperf_kpi_manual_a):
+    """The EDITABLE line - ``source_at_time == "manual"``, so the edit view lets it through."""
+    return _supplierperf_score(tenant_a, supplierperf_scorecard_draft_a,
+                               supplierperf_kpi_manual_a)
+
+
+@pytest.fixture
+def supplierperf_score_derived_a(db, tenant_a, supplierperf_scorecard_draft_a,
+                                 supplierperf_kpi_derived_a):
+    """The FROZEN line - ``source_at_time == "derived"``, so the edit view must refuse it."""
+    return _supplierperf_score(
+        tenant_a, supplierperf_scorecard_draft_a, supplierperf_kpi_derived_a,
+        measured_value=Decimal("88.0000"), score=Decimal("60.00"), band="warning",
+        breakdown={"metric": "otd", "rows": 12, "on_time": 9})
+
+
+@pytest.fixture
+def supplierperf_score_b(db, tenant_b, supplierperf_scorecard_b, supplierperf_kpi_b):
+    """Tenant B's line - the IDOR target for detail / edit / delete."""
+    return _supplierperf_score(tenant_b, supplierperf_scorecard_b, supplierperf_kpi_b)
+
+
+# -- 360 responses -------------------------------------------------------------------------------
+
+@pytest.fixture
+def supplierperf_feedback_requested_a(db, tenant_a, member_user, supplierperf_supplier_a,
+                                      supplierperf_scorecard_draft_a, supplierperf_kpi_survey_a):
+    """REQUESTED and not yet due - the row the submit / decline / expire verbs act on."""
+    return _supplierperf_feedback(
+        tenant_a, supplierperf_supplier_a, scorecard=supplierperf_scorecard_draft_a,
+        kpi=supplierperf_kpi_survey_a, respondent=member_user, respondent_function="quality",
+        due_date=timezone.localdate() + datetime.timedelta(days=7))
+
+
+@pytest.fixture
+def supplierperf_feedback_submitted_a(db, tenant_a, admin_user, supplierperf_supplier_a,
+                                      supplierperf_scorecard_draft_a, supplierperf_kpi_survey_a):
+    """SUBMITTED, rating 4 at importance 8 - the only shape ``survey_aggregate`` counts
+    (submitted AND internal AND ``period_end`` inside the window)."""
+    return _supplierperf_feedback(
+        tenant_a, supplierperf_supplier_a, scorecard=supplierperf_scorecard_draft_a,
+        kpi=supplierperf_kpi_survey_a, respondent=admin_user, rating=4, importance=8,
+        status="submitted", submitted_at=timezone.now(),
+        comment="Answers within the day, escalates before we have to ask.")
+
+
+@pytest.fixture
+def supplierperf_feedback_self_a(db, tenant_a, supplierperf_supplier_a,
+                                 supplierperf_scorecard_draft_a, supplierperf_kpi_survey_a):
+    """The supplier's OWN assessment - ``respondent_kind="supplier_self"``, filed under a NAME
+    with no internal user. ``survey_aggregate`` deliberately excludes it; the perception-gap
+    board is the only place it is read."""
+    return _supplierperf_feedback(
+        tenant_a, supplierperf_supplier_a, scorecard=supplierperf_scorecard_draft_a,
+        kpi=supplierperf_kpi_survey_a, respondent_kind="supplier_self",
+        respondent_name="D. Whitlock (Northwind)", rating=5, importance=5,
+        status="submitted", submitted_at=timezone.now())
+
+
+@pytest.fixture
+def supplierperf_feedback_overdue_a(db, tenant_a, supplierperf_supplier_a):
+    """AD-HOC (no scorecard, no KPI, no respondent) and PAST its due date -> ``is_overdue``.
+
+    Its natural key is (supplier, NULL, NULL, NULL): the exact tuple a ``unique_together`` would
+    have let duplicate, which is why the rule lives in ``clean()``."""
+    return _supplierperf_feedback(
+        tenant_a, supplierperf_supplier_a, respondent_name="Site walk-round",
+        due_date=timezone.localdate() - datetime.timedelta(days=3))
+
+
+@pytest.fixture
+def supplierperf_feedback_b(db, tenant_b, admin_b, supplierperf_supplier_b):
+    """Tenant B's response - the IDOR target."""
+    return _supplierperf_feedback(
+        tenant_b, supplierperf_supplier_b, respondent=admin_b, rating=2, status="submitted",
+        submitted_at=timezone.now())
+
+
+# -- improvement plans ---------------------------------------------------------------------------
+
+@pytest.fixture
+def supplierperf_plan_draft_a(db, tenant_a, admin_user, supplierperf_supplier_a,
+                              supplierperf_scorecard_draft_a):
+    """DRAFT - editable, deletable, activatable, cancellable. Closes in 30 days."""
+    return _supplierperf_plan(
+        tenant_a, supplierperf_supplier_a, scorecard=supplierperf_scorecard_draft_a,
+        owner=admin_user, supplier_owner_name="D. Whitlock",
+        supplier_owner_email="dw@northwind.example",
+        success_criteria="Three consecutive months at or above 95% on-time.")
+
+
+@pytest.fixture
+def supplierperf_plan_overdue_a(db, tenant_a, admin_user, supplierperf_supplier_a):
+    """ACTIVE with a target date TEN DAYS AGO and no extension -> ``is_overdue`` True."""
+    today = timezone.localdate()
+    return _supplierperf_plan(
+        tenant_a, supplierperf_supplier_a, title="Reject rate above the agreed ceiling",
+        severity="critical", status="active", owner=admin_user,
+        start_date=today - datetime.timedelta(days=40),
+        target_close_date=today - datetime.timedelta(days=10),
+        next_review_date=today + datetime.timedelta(days=3))
+
+
+@pytest.fixture
+def supplierperf_plan_closed_a(db, tenant_a, admin_user, supplierperf_supplier_a):
+    """CLOSED with its outcome recorded - ``outcome`` and ``closed`` live and die together."""
+    today = timezone.localdate()
+    return _supplierperf_plan(
+        tenant_a, supplierperf_supplier_a, title="Packaging damage on inbound pallets",
+        severity="minor", status="closed", outcome="successful", owner=admin_user,
+        start_date=today - datetime.timedelta(days=90),
+        target_close_date=today - datetime.timedelta(days=30),
+        actual_close_date=today - datetime.timedelta(days=32),
+        evidence_url="https://qms.example/capa/4471")
+
+
+@pytest.fixture
+def supplierperf_plan_b(db, tenant_b, admin_b, supplierperf_supplier_b):
+    """Tenant B's plan - the IDOR target for detail / edit / delete / every verb."""
+    return _supplierperf_plan(tenant_b, supplierperf_supplier_b,
+                              title="Globex-only improvement plan", owner=admin_b)
+
+
+# =================================================================================================
+# 6.17 Risk & Compliance Management
+# =================================================================================================
+#
+# Every fixture below is prefixed ``riskcompliance_`` / ``_riskcompliance_`` so the four 6.17 test
+# lanes (test_riskcompliance_models / _forms / _views / _security) can never rebind a fixture an
+# earlier sub-module defined, and a later sub-module appending underneath cannot rebind these
+# (L41 2 / L47 - Python binds the LAST module-level definition, silently). Dates derive from
+# ``timezone.localdate()`` / ``timezone.now()``, never ``datetime.date.today()`` (L16).
+#
+# Reused rather than re-minted: ``tenant_a`` / ``tenant_b`` / ``admin_user`` / ``admin_b`` /
+# ``member_user`` from the ROOT conftest and ``org_unit_a`` / ``org_unit_b`` from the top of this
+# file. 6.17 adds only its own five entities plus the ``core.Party`` rows they screen and the
+# ``core.AuditLog`` rows the seal covers.
+#
+# SIX THINGS TO KNOW BEFORE USING THESE:
+#
+# 1. NOTHING DERIVED IS TYPED HERE. ``risk_position``, ``band``, ``trend``, ``previous_value``,
+#    ``scale_min`` / ``scale_max`` / ``higher_is_better``, ``hit_count``, ``open_hit_count``,
+#    ``dedupe_key`` and every ``digest`` column are ``editable=False`` and are stamped by
+#    ``save()`` / ``recount_hits()`` / ``seal_now()``. The fixtures build the INPUTS and let the
+#    model derive. A fixture that wrote a band by hand would make every band assertion vacuous.
+# 2. EVERY WORKFLOW STATE MOVES THROUGH ITS VERB - ``clear()``, ``block()``, ``dispose()``,
+#    ``acknowledge()``, ``substantiate()``. ``status`` is ``editable=False`` on four of the five
+#    models, so a fixture that assigned it would be testing a shape the product cannot produce.
+#    The one exception is 6.19's ``ProcurementPolicy``, which has NO model-level publish verb -
+#    the publish action lives in 6.19's VIEW
+#    (apps/procurement/views/DocumentKnowledgeManagement/Policies.py:289) and stamps exactly two
+#    columns. ``_riskcompliance_publish`` reproduces that same two-column stamp and nothing else.
+# 3. ``ScreeningHit`` IS TENANT-LESS. It carries no ``tenant`` FK at all; its only scope is
+#    ``screening__tenant``. An isolation test must assert through the parent, and a view that
+#    filters ``ScreeningHit.objects.filter(pk=...)`` without the parent join is the bug.
+# 4. ``objects.create()`` DOES NOT CALL ``clean()``. The cross-tenant FK guards, the
+#    ``list_as_of > screened_on`` rule, the NaN/Infinity value guards and the fraud dedupe
+#    pre-check are all ``clean()`` behaviour - assert them through the MODEL or the FORM, never by
+#    reading a fixture back.
+# 5. THE TWO RISK SIGNALS HAVE OPPOSITE POLARITY AND THAT IS THE POINT. ``_signal_fhr`` is
+#    higher-is-BETTER (FHR 1-100) and ``_signal_ser`` is higher-is-WORSE (D&B SER 1-9). Both
+#    collapse to the same 0-100 ``risk_position`` where 0 is always safest, so the FHR row
+#    (82.00 -> 18.18, "low") MUST band safer than the SER row (7.00 -> 75.00, "critical") even
+#    though 82 is the larger raw number. If that ever inverts, ``METRIC_SCALES`` or
+#    ``_derive_risk_position`` is broken - it is not a fixture problem.
+# 6. ``riskcompliance_signal_ser`` DEPENDS ON ``riskcompliance_signal_series``, so requesting the
+#    SER row always brings its predecessor and its ``trend`` is always ``"deteriorated"``, never
+#    ``"new"``. Requesting ``_signal_series`` alone gives the one-row, ``trend="new"`` case. A
+#    count assertion over ser_rating rows therefore sees TWO.
+#
+# The shape the four lanes can rely on:
+#
+#   parties / people
+#     riskcompliance_party_a      core.Party "Northwind Components Ltd" (organization) - tenant A
+#     riskcompliance_party_b      core.Party "Globex Offshore Trading"  - tenant B, IDOR target
+#     riskcompliance_member_a     non-admin tenant-A user (is_tenant_admin=False, status active)
+#
+#   screenings (SCR-)
+#     riskcompliance_screening_open      pending_review, result potential_match, 2 OPEN hits ->
+#                                        hit_count 2 / open_hit_count 2. clear() must REFUSE.
+#     riskcompliance_screening_disposed  pending_review, 2 hits BOTH disposed via dispose() ->
+#                                        hit_count 2 / open_hit_count 0. clear() must now succeed.
+#     riskcompliance_screening_cleared   cleared via clear(): decided_* stamped and
+#                                        next_rescreen_on auto-set to screened_on + 365
+#     riskcompliance_screening_blocked   blocked via block() after its one hit was disposed
+#                                        true_match. No suspension is minted - 6.17 never does.
+#     riskcompliance_screening_b         tenant B, pending_review - the IDOR / crafted-FK target
+#     riskcompliance_hit_open            the top-scoring OPEN hit of _screening_open (score 96)
+#     riskcompliance_hit_disposed        the top-scoring hit of _screening_disposed, false_positive
+#
+#   risk signals (SRS-)
+#     riskcompliance_signal_fhr     rapidratings / fhr / 82.00 -> position 18.18, band "low",
+#                                   trend "new", breaches_minimum False (floor 40, higher better)
+#     riskcompliance_signal_series  dnb / ser_rating / 4.00 observed 30 days ago -> position
+#                                   37.50, band "watch", trend "new". The predecessor row.
+#     riskcompliance_signal_ser     dnb / ser_rating / 7.00 observed today, SAME party+provider+
+#                                   metric -> position 75.00, band "critical", previous_value
+#                                   4.00, trend "deteriorated", breaches_minimum True (floor 5,
+#                                   higher WORSE), alerts_on_deterioration True
+#
+#   fraud alerts (FRD-)
+#     riskcompliance_fraud_open      new_vendor_rush on party_a, 48,000.00, status "open",
+#                                    severity "medium", dedupe_key "nvrush:<party_a.pk>"
+#     riskcompliance_fraud_resolved  vendor_employee_match pair (party_a + an inline tenant-A
+#                                    person), substantiated via substantiate() -> resolution_note
+#                                    / resolved_by / resolved_at stamped, dedupe_key
+#                                    "vem:<low>:<high>:manual". is_pair_rule True.
+#
+#   policies (6.19 PPOL-) + attestations
+#     riskcompliance_policy_published  published + requires_acknowledgment=True -> the ONE shape
+#                                      raise_attestations() accepts
+#     riskcompliance_policy_draft      draft, requires_acknowledgment=True -> refused (not the
+#                                      published status)
+#     riskcompliance_policy_no_ack     published but requires_acknowledgment=False -> refused
+#     riskcompliance_attestation_pending  member_a, due in 10 days, status "pending"
+#     riskcompliance_attestation_signed   admin_user, acknowledged BY ITS OWN OWNER via
+#                                         acknowledge() - the only way a signature is real
+#     riskcompliance_attestation_overdue  an inline third tenant-A user, due 21 days ago ->
+#                                         is_overdue True, days_late 21
+#
+#   audit seal (ASL-)
+#     riskcompliance_seal   3 core.AuditLog rows in tenant A, sealed by the real seal_now().
+#                           Genesis link (prev_seal None, prev_digest the GENESIS constant),
+#                           row_count 3, verify() -> (True, ...). The log rows are reachable as
+#                           AuditLog.objects.filter(id__gte=seal.from_log_id,
+#                           id__lte=seal.to_log_id).
+
+
+# -- helpers --------------------------------------------------------------------------------------
+
+def _riskcompliance_party(tenant, name, kind="organization", tax_id=""):
+    """One ``core.Party``.
+
+    ``Party`` has no ``is_active`` and no role of its own - a ``core.PartyRole`` is what makes it a
+    supplier, and 6.17 deliberately does not require one: a screening is run against whoever was
+    checked, including a prospect that never became a vendor.
+    """
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant, name=name, kind=kind, tax_id=tax_id)
+
+
+def _riskcompliance_user(tenant, email, username, is_admin=False):
+    """A tenant user. ``email`` is the REQUIRED first argument - the manager is email-primary.
+
+    ``status`` is left at its ``"active"`` default ON PURPOSE: ``resolve_audience()`` filters on
+    ``is_active=True`` AND ``status="active"`` (two different facts in this codebase), so a user
+    seeded with any other status silently drops out of every attestation roster.
+    """
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email=email, username=username, password="TestPass123!",
+        tenant=tenant, is_tenant_admin=is_admin)
+
+
+def _riskcompliance_screening(tenant, party, user=None, **overrides):
+    """One ``ComplianceScreening``, always ``pending_review`` on return.
+
+    ``status`` is ``editable=False`` and is never passed here: the three decision verbs
+    (``clear`` / ``escalate`` / ``block``) are its only writers, and a fixture that assigned it
+    would build a row the product cannot produce. ``screened_on`` uses ``timezone.localdate()``,
+    the field's own default basis, never ``date.today()`` (L16).
+    """
+    from apps.procurement.models import ComplianceScreening
+    fields = dict(
+        tenant=tenant, party=party,
+        list_source="csl_consolidated", checkpoint="onboarding", method="manual_lookup",
+        screened_on=timezone.localdate(),
+        list_as_of=timezone.localdate() - datetime.timedelta(days=1),
+        reference="CSL-2026-0917", result="clear",
+        match_threshold=85,
+        threshold_rationale="ITA CSL default fuzzy threshold; at or above it is adjudicated.",
+        screened_by=user,
+        notes="")
+    fields.update(overrides)
+    return ComplianceScreening.objects.create(**fields)
+
+
+def _riskcompliance_hit(screening, matched_name, score, **overrides):
+    """One ``ScreeningHit``.
+
+    **No tenant column exists on this model** - the parent screening IS the scope. ``disposition``
+    is left at ``"open"``; ``dispose()`` is the only mover.
+    """
+    from apps.procurement.models import ScreeningHit
+    fields = dict(
+        screening=screening, matched_name=matched_name, matched_list="ofac_sdn",
+        match_score=score, match_type="name",
+        entry_reference="SDN-19472", program="UKRAINE-EO13662", country="Cyprus",
+        remarks="Returned by the consolidated search on the supplier's registered name.")
+    fields.update(overrides)
+    return ScreeningHit.objects.create(**fields)
+
+
+def _riskcompliance_signal(tenant, party, metric, value, days_ago=0, provider="dnb", user=None,
+                           **overrides):
+    """One ``SupplierRiskSignal``. Only the INPUTS are set.
+
+    ``scale_min`` / ``scale_max`` / ``higher_is_better`` / ``risk_position`` / ``band`` /
+    ``previous_value`` / ``trend`` are all ``editable=False`` and are stamped by ``derive()``
+    inside ``save()`` from ``METRIC_SCALES`` and the preceding observation. Handing any of them in
+    would both fail to stick and hide the one behaviour this entity exists for.
+    """
+    from apps.procurement.models import SupplierRiskSignal
+    observed = timezone.localdate() - datetime.timedelta(days=days_ago)
+    fields = dict(
+        tenant=tenant, party=party, provider=provider, metric=metric, value=Decimal(value),
+        observed_on=observed,
+        next_refresh_on=observed + datetime.timedelta(days=90),
+        source_ref="Provider report page 2 - typed by hand; no live bureau call exists here.",
+        captured_by=user, notes="")
+    fields.update(overrides)
+    return SupplierRiskSignal.objects.create(**fields)
+
+
+def _riskcompliance_policy(tenant, title, user=None, published=False, requires_ack=True,
+                           **overrides):
+    """One 6.19 ``ProcurementPolicy``.
+
+    ``unique_together`` includes ``("tenant", "title", "version_number")``, so every fixture below
+    uses a distinct title. Publication goes through ``_riskcompliance_publish`` rather than a
+    ``status`` kwarg, so ``published_at`` is stamped the way the real action stamps it.
+    """
+    from apps.procurement.models import ProcurementPolicy
+    fields = dict(
+        tenant=tenant, title=title, policy_type="supplier_code_of_conduct",
+        summary="What buyers and suppliers are held to.",
+        body="Read it, then acknowledge it.",
+        version_number="1.0", status="draft",
+        effective_from=timezone.localdate() - datetime.timedelta(days=7),
+        requires_acknowledgment=requires_ack, owner=user, created_by=user)
+    fields.update(overrides)
+    policy = ProcurementPolicy.objects.create(**fields)
+    if published:
+        _riskcompliance_publish(policy)
+    return policy
+
+
+def _riskcompliance_publish(policy):
+    """Publish a 6.19 policy the way 6.19's own view publishes one.
+
+    ``ProcurementPolicy`` has NO model-level publish verb: 6.19 owns the action and it lives in
+    ``apps/procurement/views/DocumentKnowledgeManagement/Policies.py`` (~line 289), which stamps
+    exactly ``status`` and ``published_at`` under a row lock. This reproduces that two-column
+    stamp and nothing else, so a fixture-published policy is identical to a clicked one.
+    """
+    policy.status = "published"
+    policy.published_at = timezone.now()
+    policy.save(update_fields=["status", "published_at", "updated_at"])
+    return policy
+
+
+def _riskcompliance_attestation(policy, user, due_in_days=10):
+    """One ``PolicyAttestation``, always ``pending`` on return.
+
+    ``status`` is ``editable=False``; ``acknowledge()`` and ``mark_exempt()`` are its only movers,
+    and ``acknowledge()`` refuses anybody but ``self.user`` - including a tenant admin, including
+    a superuser. ``due_on`` derives from ``timezone.localdate()`` so an ``is_overdue`` /
+    ``days_late`` assertion cannot flake in the hours after local midnight (L16).
+    """
+    from apps.procurement.models import PolicyAttestation
+    return PolicyAttestation.objects.create(
+        tenant=policy.tenant, policy=policy, user=user,
+        due_on=timezone.localdate() + datetime.timedelta(days=due_in_days))
+
+
+def _riskcompliance_audit_rows(tenant, user, count=3):
+    """``count`` ``core.AuditLog`` rows in one workspace - what a seal actually seals.
+
+    ``at`` is ``auto_now_add`` and ids are monotonic, so these land as a contiguous id range that
+    ``seal_now()`` picks up whole. Nothing in the 6.17 MODELS writes audit rows (the views do), so
+    a seal fixture that wants a known range has to write the range itself.
+    """
+    from apps.core.models import AuditLog
+    actions = ("create", "update", "delete")
+    return [AuditLog.objects.create(
+        tenant=tenant, user=user, action=actions[i % len(actions)],
+        target=f"Supplier record #{i + 1}",
+        changes={"name": ["Northwind", f"Northwind Components {i + 1}"]})
+        for i in range(count)]
+
+
+# -- parties / people ------------------------------------------------------------------------------
+
+@pytest.fixture
+def riskcompliance_party_a(db, tenant_a):
+    """The tenant-A supplier every 6.17 entity points at."""
+    return _riskcompliance_party(tenant_a, "Northwind Components Ltd", tax_id="GB-4471902")
+
+
+@pytest.fixture
+def riskcompliance_party_b(db, tenant_b):
+    """The tenant-B supplier.
+
+    The crafted-FK target: a POST from tenant A naming this pk in ``party`` must be REJECTED, not
+    saved into A's workspace.
+    """
+    return _riskcompliance_party(tenant_b, "Globex Offshore Trading", tax_id="CY-88120")
+
+
+@pytest.fixture
+def riskcompliance_member_a(db, tenant_a):
+    """A non-admin tenant-A user (``is_tenant_admin=False``).
+
+    Distinct from the root conftest's ``member_user`` so a permission test can hold BOTH a
+    non-admin who owns an attestation and one who does not. Every ``@tenant_admin_required``
+    action in 6.17 - exempting a sign-off, sealing the trail, running the fraud scan - must be
+    blocked for this user while the read pages stay reachable.
+    """
+    return _riskcompliance_user(tenant_a, "compliance.clerk@acme.com", "clerk_acme")
+
+
+# -- screenings ------------------------------------------------------------------------------------
+
+@pytest.fixture
+def riskcompliance_screening_open(db, tenant_a, riskcompliance_party_a, admin_user):
+    """``pending_review`` with TWO OPEN hits - the disposition gate's negative case.
+
+    ``clear()`` must REFUSE this row, and it must refuse by asking the database
+    (``hits.filter(disposition="open").exists()``) rather than by reading ``open_hit_count``: the
+    counter renders a badge, and a stale badge must never unlock the gate. ``recount_hits()`` is
+    called so badge and truth agree here -> ``hit_count`` 2, ``open_hit_count`` 2.
+    """
+    screening = _riskcompliance_screening(
+        tenant_a, riskcompliance_party_a, admin_user,
+        result="potential_match", checkpoint="pre_award", reference="CSL-2026-0918")
+    _riskcompliance_hit(screening, "NORTHWIND COMPONENTS LLC", 96)
+    _riskcompliance_hit(screening, "Northwind Komponenty OOO", 88,
+                        matched_list="eu_consolidated", match_type="alias")
+    screening.recount_hits()
+    return screening
+
+
+@pytest.fixture
+def riskcompliance_screening_disposed(db, tenant_a, riskcompliance_party_a, admin_user):
+    """Every hit adjudicated, status STILL ``pending_review`` - the gate's positive case.
+
+    Both hits go through the real ``dispose()``, which requires a note for EVERY disposition
+    (``false_positive`` included) and stamps ``disposed_by`` / ``disposed_at``. The screening is
+    deliberately left undecided so a test can call ``clear()`` on it and watch it succeed:
+    ``hit_count`` 2, ``open_hit_count`` 0.
+    """
+    screening = _riskcompliance_screening(
+        tenant_a, riskcompliance_party_a, admin_user,
+        result="potential_match", checkpoint="pre_po", reference="CSL-2026-0919")
+    first = _riskcompliance_hit(screening, "NORTHWIND CHEMICALS PLC", 91)
+    second = _riskcompliance_hit(screening, "N. Windt Components", 86, match_type="alias")
+    first.dispose(admin_user, "false_positive",
+                  "Different registered address and tax id; chemicals, not fasteners.")
+    second.dispose(admin_user, "false_positive",
+                   "Name similarity only - no shared officer, address or identifier.")
+    screening.recount_hits()
+    return screening
+
+
+@pytest.fixture
+def riskcompliance_screening_cleared(db, tenant_a, riskcompliance_party_a, admin_user):
+    """Decided CLEAR through the real ``clear()`` verb - terminal, so no edit and no delete.
+
+    Carries no hits, so the gate lets it through. ``clear()`` also back-fills ``next_rescreen_on``
+    to ``screened_on + 365`` because it was blank, which is what puts the supplier on the
+    re-screening board instead of quietly out of scope.
+    """
+    screening = _riskcompliance_screening(
+        tenant_a, riskcompliance_party_a, admin_user,
+        result="clear", checkpoint="onboarding", reference="CSL-2026-0920")
+    screening.clear(admin_user, "No entries returned at or above the 85 threshold.")
+    screening.refresh_from_db()
+    return screening
+
+
+@pytest.fixture
+def riskcompliance_screening_blocked(db, tenant_a, riskcompliance_party_a, admin_user):
+    """Decided BLOCKED through the real ``block()`` verb after a ``true_match`` disposition.
+
+    ``suspension`` is left NULL on purpose: 6.17 stamps an EXISTING 6.4 ``VendorSuspension`` when
+    an operator picked one and never mints one itself. The ABSENCE of a suspension here is an
+    assertion - blocking a screening must not create a second block flag anywhere.
+    """
+    screening = _riskcompliance_screening(
+        tenant_a, riskcompliance_party_a, admin_user,
+        result="confirmed_match", checkpoint="pre_payment", reference="CSL-2026-0921")
+    hit = _riskcompliance_hit(screening, "NORTHWIND COMPONENTS LTD", 99)
+    hit.dispose(admin_user, "true_match",
+                "Exact name, registration number and address match the SDN entry.")
+    screening.recount_hits()
+    screening.block(admin_user, "Confirmed SDN match - no further spend pending legal review.")
+    screening.refresh_from_db()
+    return screening
+
+
+@pytest.fixture
+def riskcompliance_screening_b(db, tenant_b, riskcompliance_party_b, admin_b):
+    """Tenant B's screening.
+
+    Requesting its pk as tenant A on detail / edit / delete / any hit action must 404, and it must
+    never appear in tenant A's register.
+    """
+    return _riskcompliance_screening(
+        tenant_b, riskcompliance_party_b, admin_b,
+        result="potential_match", reference="CSL-GBX-0004")
+
+
+@pytest.fixture
+def riskcompliance_hit_open(db, riskcompliance_screening_open):
+    """The top-scoring OPEN hit (96) of ``_screening_open``.
+
+    **Tenant-less by design** - ``ScreeningHit`` has no tenant column, so its only scope is
+    ``screening__tenant``. A view that resolves a hit without joining the parent is the isolation
+    bug this fixture exists to catch.
+    """
+    return riskcompliance_screening_open.hits.order_by("-match_score", "id").first()
+
+
+@pytest.fixture
+def riskcompliance_hit_disposed(db, riskcompliance_screening_disposed):
+    """The top-scoring hit (91) of ``_screening_disposed``, already ``false_positive``.
+
+    ``dispose()`` must refuse it a second time - there is no re-open, and a hit that could be
+    re-adjudicated is not evidence.
+    """
+    return riskcompliance_screening_disposed.hits.order_by("-match_score", "id").first()
+
+
+# -- risk signals ----------------------------------------------------------------------------------
+
+@pytest.fixture
+def riskcompliance_signal_fhr(db, tenant_a, riskcompliance_party_a, admin_user):
+    """RapidRatings FHR 82.00 - HIGHER IS BETTER.
+
+    Derived, not typed: scale ``(1, 100, higher_is_better=True)`` -> raw position 81.82 -> FLIPPED
+    to ``risk_position`` 18.18 -> band ``"low"``, ``trend`` ``"new"`` (first in its series).
+    ``breaches_minimum`` is False: the FHR floor is 40 and 82 is comfortably above it.
+
+    Pair this with ``riskcompliance_signal_ser`` (raw 7.00 -> position 75.00 -> ``"critical"``):
+    the SMALLER raw number bands SAFER, which is the whole reason ``METRIC_SCALES`` exists.
+    """
+    return _riskcompliance_signal(tenant_a, riskcompliance_party_a, "fhr", "82.00",
+                                  days_ago=5, provider="rapidratings", user=admin_user)
+
+
+@pytest.fixture
+def riskcompliance_signal_series(db, tenant_a, riskcompliance_party_a, admin_user):
+    """The PREDECESSOR observation: D&B SER 4.00, 30 days ago -> position 37.50, band ``"watch"``.
+
+    On its own this is the one-row case: ``trend`` ``"new"``, ``previous_value`` None. It exists so
+    ``riskcompliance_signal_ser`` (same tenant + party + provider + metric, observed today) has a
+    prior to compare against and derives a real trend instead of ``"new"``.
+    """
+    return _riskcompliance_signal(tenant_a, riskcompliance_party_a, "ser_rating", "4.00",
+                                  days_ago=30, provider="dnb", user=admin_user)
+
+
+@pytest.fixture
+def riskcompliance_signal_ser(db, tenant_a, riskcompliance_party_a, admin_user,
+                              riskcompliance_signal_series):
+    """D&B Supplier Evaluation Risk 7.00 - HIGHER IS WORSE. The opposite polarity to ``_signal_fhr``.
+
+    Derived: scale ``(1, 9, higher_is_better=False)`` -> ``risk_position`` 75.00, NOT flipped ->
+    band ``"critical"``. Against its 30-day-old predecessor (4.00 -> 37.50) the RISK POSITION rose
+    37.50 points, so ``previous_value`` is 4.00 and ``trend`` is ``"deteriorated"`` - note the raw
+    value ROSE and that is the bad direction here, the exact case a raw-value comparison gets
+    backwards. ``breaches_minimum`` is True (SER floor 5, higher is worse) and
+    ``alerts_on_deterioration`` is True (critical + deteriorated).
+
+    Depends on ``_signal_series``, so requesting this fixture always puts TWO ser_rating rows in
+    the workspace.
+    """
+    return _riskcompliance_signal(tenant_a, riskcompliance_party_a, "ser_rating", "7.00",
+                                  days_ago=0, provider="dnb", user=admin_user)
+
+
+# -- fraud alerts ----------------------------------------------------------------------------------
+
+@pytest.fixture
+def riskcompliance_fraud_open(db, tenant_a, riskcompliance_party_a, admin_user):
+    """An OPEN ``new_vendor_rush`` alert on party A - 48,000.00, three days ago.
+
+    ``dedupe_key`` is DERIVED in ``save()`` as ``nvrush:<party_a.pk>``; nothing here types it.
+    ``severity`` is the ``SEVERITY_BY_RULE`` default for this rule (``"medium"``) and stays on the
+    form on purpose so a reviewer can re-grade a row the engine over-called.
+    """
+    from apps.procurement.models import FraudAlert
+    return FraudAlert.objects.create(
+        tenant=tenant_a, vendor=riskcompliance_party_a, rule="new_vendor_rush",
+        severity="medium",
+        document_date=timezone.localdate() - datetime.timedelta(days=3),
+        amount=Decimal("48000.00"),
+        detail="Supplier approved 6 days ago; first order is 48,000.00 against a 25,000.00 bar.",
+        matched_on="", assigned_to=admin_user)
+
+
+@pytest.fixture
+def riskcompliance_fraud_resolved(db, tenant_a, riskcompliance_party_a, admin_user):
+    """A SUBSTANTIATED ``vendor_employee_match`` pair alert - terminal, so no edit and no delete.
+
+    The second side of the pair is an inline tenant-A person (reachable as
+    ``alert.related_party``); a pair rule needs two DIFFERENT parties in the SAME workspace, which
+    is why tenant B's party cannot stand in. ``dedupe_key`` derives as
+    ``vem:<low_pk>:<high_pk>:manual`` - sorted, so the same overlap is one row whichever side the
+    detector walked first, and ``manual`` so a hand-raised row can never pre-empt the key a later
+    scan computes.
+
+    The disposition goes through the real ``substantiate()``, which REQUIRES a note (all three
+    terminal verbs do, ``unsubstantiate`` included) and stamps ``resolved_by`` / ``resolved_at``.
+    """
+    from apps.procurement.models import FraudAlert
+    insider = _riskcompliance_party(tenant_a, "R. Okonkwo", kind="person", tax_id="GB-4471902")
+    alert = FraudAlert.objects.create(
+        tenant=tenant_a, vendor=riskcompliance_party_a, related_party=insider,
+        rule="vendor_employee_match", severity="high",
+        document_date=timezone.localdate() - datetime.timedelta(days=10),
+        amount=Decimal("12500.00"),
+        detail="Supplier and an active employee share a tax id.",
+        matched_on="tax id ending 1902", assigned_to=admin_user)
+    alert.substantiate(admin_user,
+                       "Confirmed with HR: the same person owns the supplier. Referred to legal.")
+    alert.refresh_from_db()
+    return alert
+
+
+# -- policies + attestations -----------------------------------------------------------------------
+
+@pytest.fixture
+def riskcompliance_policy_published(db, tenant_a, admin_user):
+    """The ONE policy shape ``raise_attestations()`` accepts: PUBLISHED and
+    ``requires_acknowledgment=True``.
+
+    ``applies_to`` is left blank, so its audience is the whole workspace - 6.19's own help text on
+    that column says "Blank = the whole workspace".
+    """
+    return _riskcompliance_policy(tenant_a, "Supplier Code of Conduct", admin_user,
+                                  published=True, requires_ack=True)
+
+
+@pytest.fixture
+def riskcompliance_policy_draft(db, tenant_a, admin_user):
+    """DRAFT, and requires acknowledgment.
+
+    ``raise_attestations()`` must refuse it with the "publish it first" sentence: a draft is not
+    yet the rule, so collecting sign-offs for it would record agreement to something nobody is
+    being asked to follow.
+    """
+    return _riskcompliance_policy(tenant_a, "Sole Source Justification Standard", admin_user,
+                                  published=False, requires_ack=True,
+                                  policy_type="sole_source")
+
+
+@pytest.fixture
+def riskcompliance_policy_no_ack(db, tenant_a, admin_user):
+    """PUBLISHED but ``requires_acknowledgment=False``.
+
+    The second refusal path: 6.19's flag is the workspace's statement of intent for this policy,
+    and a flag the attestation ledger ignored would be decorative. The refusal must be a SENTENCE,
+    not a silent zero.
+    """
+    return _riskcompliance_policy(tenant_a, "Purchase Card Handling Note", admin_user,
+                                  published=True, requires_ack=False,
+                                  policy_type="purchasing_rule")
+
+
+@pytest.fixture
+def riskcompliance_attestation_pending(db, riskcompliance_policy_published,
+                                       riskcompliance_member_a):
+    """A live sign-off owed by the NON-ADMIN user, due in 10 days -> ``is_overdue`` False,
+    ``days_late`` -10.
+
+    The owner-only guard's positive case: ``member_a`` may sign this and nobody else may,
+    ``admin_user`` included.
+    """
+    return _riskcompliance_attestation(riskcompliance_policy_published, riskcompliance_member_a,
+                                       due_in_days=10)
+
+
+@pytest.fixture
+def riskcompliance_attestation_signed(db, riskcompliance_policy_published, admin_user):
+    """SIGNED, by its own owner, through the real ``acknowledge()`` verb.
+
+    ``acknowledge()`` refuses any actor that is not ``self.user`` - a tenant admin cannot sign on
+    somebody's behalf, and that refusal is the entire evidentiary value of the row. Terminal: no
+    edit, no delete, no un-sign.
+    """
+    row = _riskcompliance_attestation(riskcompliance_policy_published, admin_user, due_in_days=10)
+    row.acknowledge(admin_user, "Read in full and accepted.")
+    row.refresh_from_db()
+    return row
+
+
+@pytest.fixture
+def riskcompliance_attestation_overdue(db, tenant_a, riskcompliance_policy_published):
+    """PENDING and 21 days past its deadline -> ``is_overdue`` True, ``days_late`` 21.
+
+    Its owner is a third inline tenant-A user (reachable as ``attestation.user``) because
+    ``unique_together`` is ``("tenant", "policy", "user")`` - one person owes one policy once.
+    ``due_on`` derives from ``timezone.localdate()``, so ``days_late`` is exactly 21 at any hour of
+    the day (L16). 21 is under ``SERIOUSLY_LATE_DAYS`` (30), which keeps the "seriously late"
+    branch something a test opts into rather than something this fixture silently pre-triggers.
+    """
+    latecomer = _riskcompliance_user(tenant_a, "buyer.late@acme.com", "buyer_late_acme")
+    return _riskcompliance_attestation(riskcompliance_policy_published, latecomer,
+                                       due_in_days=-21)
+
+
+# -- audit seal ------------------------------------------------------------------------------------
+
+@pytest.fixture
+def riskcompliance_seal(db, tenant_a, admin_user):
+    """A genesis ``AuditSeal`` over a known 3-row ``core.AuditLog`` range in tenant A.
+
+    Built by the REAL ``seal_now()``, so every hash column is computed rather than fabricated:
+    ``prev_seal`` None, ``prev_digest`` == ``GENESIS_DIGEST``, ``row_count`` 3, one
+    ``row_fingerprints`` entry per row, and ``verify()`` returns ``(True, ...)`` until something
+    edits or deletes a row inside ``[from_log_id, to_log_id]``.
+
+    ``seal_now()`` REFUSES an empty range, so the log rows must exist first - and a second call
+    with nothing new returns ``(None, "No new audit rows since ASL-...")`` rather than minting
+    chain spam. That refusal is a behaviour to assert, not an obstacle.
+    """
+    from apps.procurement.models import AuditSeal
+    _riskcompliance_audit_rows(tenant_a, admin_user, count=3)
+    seal, _message = AuditSeal.seal_now(tenant_a, admin_user, note="Month-end seal.")
+    assert seal is not None, "seal_now() refused a non-empty range - fixture precondition broken"
+    return seal
