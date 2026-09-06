@@ -44,6 +44,7 @@ from django.utils import timezone
 
 from apps.core.models import AuditLog, Party, PartyRole
 from apps.procurement.models import (
+    AuditSeal,
     ComplianceScreening,
     FraudAlert,
     PolicyAttestation,
@@ -2073,3 +2074,317 @@ def test_riskcompliance_policyattestation_delete_withdraws_pending_and_refuses_s
     assert posted["Location"] == reverse("procurement:policyattestation_list")
     assert PolicyAttestation.objects.filter(
         pk=riskcompliance_attestation_pending.pk).count() == 0
+
+
+# ================================================================== the audit trail
+
+def test_riskcompliance_audit_trail_renders_the_rows_and_its_context(
+        client_a, tenant_a, admin_user):
+    created = _riskcompliance_new_audit_row(tenant_a, admin_user, action="create",
+                                            target="Screening SCR-00001")
+    updated = _riskcompliance_new_audit_row(tenant_a, admin_user, action="update",
+                                            target="Fraud alert FRD-00004")
+
+    resp = client_a.get(reverse("procurement:audit_trail"))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/audit_trail.html" in _riskcompliance_templates(resp)
+    assert set(_riskcompliance_pks(resp)) == {created.pk, updated.pk}
+    # The target text REACHED the page (L8).
+    assert "Screening SCR-00001" in html
+    assert "Fraud alert FRD-00004" in html
+    assert resp.context["action_choices"] == AuditLog.ACTION_CHOICES
+    assert [ct.model for ct in resp.context["content_types"]] == ["compliancescreening"]
+    assert [user.pk for user in resp.context["users"]] == [admin_user.pk]
+    assert resp.context["chain_status"] == []
+    assert resp.context["export_query"] == ""
+    assert resp.context["retention_note"]
+    assert resp.context["tamper_note"]
+
+
+def test_riskcompliance_audit_trail_each_valid_filter_value_returns_its_rows(
+        client_a, tenant_a, admin_user, riskcompliance_member_a):
+    created = _riskcompliance_new_audit_row(tenant_a, admin_user, action="create",
+                                            target="Screening SCR-00001")
+    updated = _riskcompliance_new_audit_row(tenant_a, riskcompliance_member_a, action="update",
+                                            target="Fraud alert FRD-00004")
+    deleted = _riskcompliance_new_audit_row(tenant_a, admin_user, action="delete",
+                                            target="Hit on SCR-00001")
+    url = reverse("procurement:audit_trail")
+
+    assert _riskcompliance_pks(client_a.get(url, {"action": "create"})) == [created.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"action": "update"})) == [updated.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"action": "delete"})) == [deleted.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"user": str(riskcompliance_member_a.pk)})) == [
+        updated.pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"user": str(admin_user.pk)}))) == {
+        created.pk, deleted.pk}
+    content_type = ContentType.objects.get_for_model(ComplianceScreening)
+    assert len(_riskcompliance_pks(
+        client_a.get(url, {"content_type": str(content_type.pk)}))) == 3
+    assert _riskcompliance_pks(client_a.get(url, {"q": "Fraud alert"})) == [updated.pk]
+    # The date bounds are inclusive and derive from localdate, never date.today() (L16).
+    today = _riskcompliance_today()
+    assert len(_riskcompliance_pks(
+        client_a.get(url, {"date_from": today.isoformat(),
+                           "date_to": today.isoformat()}))) == 3
+    assert _riskcompliance_pks(
+        client_a.get(url, {"date_to": (today - _riskcompliance_days(1)).isoformat()})) == []
+
+
+def test_riskcompliance_audit_trail_paginates_at_thirty_rows_a_page(
+        client_a, tenant_a, admin_user):
+    made = [_riskcompliance_new_audit_row(tenant_a, admin_user, target=f"Record {index:03d}")
+            for index in range(35)]
+    url = reverse("procurement:audit_trail")
+
+    page_one = client_a.get(url)
+    page_two = client_a.get(url, {"page": "2"})
+    past_end = client_a.get(url, {"page": "999"})
+
+    assert len(_riskcompliance_pks(page_one)) == 30
+    assert len(_riskcompliance_pks(page_two)) == 5
+    seen = _riskcompliance_pks(page_one) + _riskcompliance_pks(page_two)
+    assert len(set(seen)) == 35
+    assert set(seen) == {row.pk for row in made}
+    assert past_end.status_code == 200
+    assert len(_riskcompliance_pks(past_end)) == 5
+
+
+def test_riskcompliance_audit_trail_export_query_carries_the_filters_without_the_page(
+        client_a, tenant_a, admin_user):
+    _riskcompliance_new_audit_row(tenant_a, admin_user, action="create")
+
+    resp = client_a.get(reverse("procurement:audit_trail"),
+                        {"action": "create", "page": "1"})
+
+    assert resp.status_code == 200
+    assert resp.context["export_query"] == "action=create"
+
+
+def test_riskcompliance_audit_trail_export_is_a_well_formed_csv_attachment(
+        client_a, tenant_a, admin_user, riskcompliance_seal):
+    _riskcompliance_new_audit_row(tenant_a, admin_user, action="create",
+                                  target="Screening SCR-00001")
+
+    resp = client_a.get(reverse("procurement:audit_trail_export"))
+
+    assert resp.status_code == 200
+    assert resp["Content-Type"] == "text/csv"
+    assert resp["Content-Disposition"].startswith("attachment; filename=\"audit-trail-")
+    assert resp["Content-Disposition"].endswith('.csv"')
+    assert f"audit-trail-{_riskcompliance_today():%Y%m%d}.csv" in resp["Content-Disposition"]
+
+    rows = list(csv.reader(io.StringIO(resp.content.decode())))
+    assert rows[0] == ["Entry", "When", "User", "Action", "Record type", "Object id", "Target",
+                       "Changes", "Sealed by"]
+    body = [row for row in rows[1:] if row and row[0].isdigit()]
+    assert len(body) == 1
+    assert body[0][3] == "Create"
+    assert body[0][4] == "procurement.compliancescreening"
+    assert body[0][6] == "Screening SCR-00001"
+    assert body[0][2] == admin_user.username
+    # The entry postdates the seal's range, so no seal covers it yet and the page says so.
+    assert body[0][8] == ""
+    assert any(cell and "seal" in cell.lower() for row in rows[1:] for cell in row)
+
+
+def test_riskcompliance_audit_trail_export_labels_a_sealed_entry_with_its_seal(
+        client_a, tenant_a, admin_user, riskcompliance_seal):
+    resp = client_a.get(reverse("procurement:audit_trail_export"),
+                        {"content_type": ""})
+    rows = list(csv.reader(io.StringIO(resp.content.decode())))
+    body = [row for row in rows[1:] if row and row[0].isdigit()]
+
+    # The conftest seal covers three CONTENT-TYPE-LESS rows, which the procurement trail does
+    # not show - so the export is empty and the seal column has nothing to label.
+    assert resp.status_code == 200
+    assert body == []
+    assert riskcompliance_seal.row_count == 3
+
+
+def test_riskcompliance_audit_trail_export_honours_the_page_filters(
+        client_a, tenant_a, admin_user):
+    _riskcompliance_new_audit_row(tenant_a, admin_user, action="create", target="Kept row")
+    _riskcompliance_new_audit_row(tenant_a, admin_user, action="delete", target="Dropped row")
+
+    resp = client_a.get(reverse("procurement:audit_trail_export"), {"action": "create"})
+    rows = list(csv.reader(io.StringIO(resp.content.decode())))
+    targets = [row[6] for row in rows[1:] if row and row[0].isdigit()]
+
+    assert resp.status_code == 200
+    assert targets == ["Kept row"]
+
+
+# ================================================================== the audit seals
+
+def test_riskcompliance_auditseal_list_renders_the_seal_and_the_chain(
+        client_a, riskcompliance_seal):
+    resp = client_a.get(reverse("procurement:auditseal_list"))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/auditseal/list.html" in _riskcompliance_templates(resp)
+    assert _riskcompliance_pks(resp) == [riskcompliance_seal.pk]
+    assert riskcompliance_seal.number in html
+    assert riskcompliance_seal.range_label in html
+    assert "3 entries" in html
+    # The note is searchable but is deliberately NOT a column - the register's columns are the
+    # digest, the range, the period, who sealed it and its verification state.
+    assert _riskcompliance_pks(
+        client_a.get(reverse("procurement:auditseal_list"), {"q": "Month-end"})) == [
+            riskcompliance_seal.pk]
+    assert _riskcompliance_pks(
+        client_a.get(reverse("procurement:auditseal_list"), {"q": "nothing matches"})) == []
+    # Never verified yet: neither verified nor broken, and the page labels the difference.
+    assert resp.context["stats"] == {"seals": 1, "verified": 0, "broken": 0}
+    assert resp.context["is_admin"] is True
+
+    chain = resp.context["chain_status"]
+    assert _riskcompliance_key_sets(chain) == {frozenset(
+        {"pk", "number", "row_count", "range", "sealed_at", "linked", "link_detail", "verified",
+         "verified_at", "verify_detail", "state", "state_css", "state_label", "digest_short"})}
+    assert len(chain) == 1
+    assert chain[0]["pk"] == riskcompliance_seal.pk
+    assert chain[0]["row_count"] == 3
+    assert chain[0]["linked"] is True
+    assert chain[0]["verified"] is None
+    assert chain[0]["state"] == "unverified"
+    assert len(chain[0]["digest_short"]) == 12
+
+
+def test_riskcompliance_auditseal_detail_rows_carry_the_pinned_keys(
+        client_a, riskcompliance_seal):
+    resp = client_a.get(reverse("procurement:auditseal_detail",
+                                args=[riskcompliance_seal.pk]))
+    html = _riskcompliance_html(resp)
+    entries = resp.context["entries_covered"]
+    verification = resp.context["verification"]
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/auditseal/detail.html" in _riskcompliance_templates(resp)
+    assert _riskcompliance_key_sets(entries) == {frozenset(
+        {"id", "at", "action", "target", "user", "content_type", "state", "state_css",
+         "state_label"})}
+    assert len(entries) == 3
+    assert {entry["state"] for entry in entries} == {"intact"}
+    assert [entry["target"] for entry in entries] == [
+        "Supplier record #1", "Supplier record #2", "Supplier record #3"]
+
+    assert _riskcompliance_key_sets(verification) == {frozenset(
+        {"check", "state", "state_css", "state_label", "detail"})}
+    assert [row["check"] for row in verification] == [
+        "Coverage", "Sample of covered entries", "Chain link", "Last full verification",
+        "Storage"]
+    assert [row["state"] for row in verification] == ["ok", "ok", "ok", "unknown", "note"]
+    assert resp.context["is_admin"] is True
+    # A real entry target and the seal number reach the markup (L8).
+    assert "Supplier record #2" in html
+    assert riskcompliance_seal.number in html
+
+
+def test_riskcompliance_auditseal_detail_reports_a_deleted_entry_as_broken(
+        client_a, riskcompliance_seal):
+    covered = list(AuditLog.objects.filter(id__gte=riskcompliance_seal.from_log_id,
+                                           id__lte=riskcompliance_seal.to_log_id)
+                   .order_by("id"))
+    AuditLog.objects.filter(pk=covered[1].pk).delete()
+
+    resp = client_a.get(reverse("procurement:auditseal_detail",
+                                args=[riskcompliance_seal.pk]))
+    states = {row["check"]: row["state"] for row in resp.context["verification"]}
+    entry_states = {entry["id"]: entry["state"] for entry in resp.context["entries_covered"]}
+
+    assert resp.status_code == 200
+    assert states["Coverage"] == "broken"
+    assert states["Sample of covered entries"] == "broken"
+    assert entry_states[covered[1].pk] == "missing"
+    assert entry_states[covered[0].pk] == "intact"
+
+
+def test_riskcompliance_auditseal_create_then_verify_stamps_the_verifier(
+        client_a, tenant_a, admin_user):
+    _riskcompliance_new_audit_row(tenant_a, admin_user, target="Sealed row one")
+    _riskcompliance_new_audit_row(tenant_a, admin_user, target="Sealed row two")
+
+    created = client_a.post(reverse("procurement:auditseal_create"),
+                            {"note": "Before the audit visit."})
+    seal = AuditSeal.objects.get(tenant=tenant_a)
+
+    assert created.status_code == 302
+    assert created["Location"] == reverse("procurement:auditseal_detail", args=[seal.pk])
+    assert seal.note == "Before the audit visit."
+    assert seal.sealed_by_id == admin_user.pk
+    assert seal.prev_seal_id is None
+    assert seal.last_verify_ok is None
+    assert seal.number.startswith("ASL-")
+    # The success path writes an audit entry recording the digest, so the NEXT seal covers it.
+    assert seal.row_count >= 2
+
+    verified = client_a.post(reverse("procurement:auditseal_verify", args=[seal.pk]))
+    seal.refresh_from_db()
+
+    assert verified.status_code == 302
+    assert verified["Location"] == reverse("procurement:auditseal_detail", args=[seal.pk])
+    assert seal.last_verify_ok is True
+    assert seal.last_verified_by_id == admin_user.pk
+    assert seal.last_verified_at is not None
+    assert seal.last_verify_detail != ""
+
+
+def test_riskcompliance_auditseal_create_with_nothing_new_mints_no_second_seal(
+        client_a, tenant_a, admin_user, riskcompliance_seal):
+    resp = client_a.post(reverse("procurement:auditseal_create"), {"note": ""})
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:auditseal_list")
+    assert AuditSeal.objects.filter(tenant=tenant_a).count() == 1
+    assert any("No new audit rows since" in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_auditseal_create_is_post_only(client_a, tenant_a, admin_user):
+    _riskcompliance_new_audit_row(tenant_a, admin_user, target="Not sealed by a GET")
+
+    resp = client_a.get(reverse("procurement:auditseal_create"))
+
+    assert resp.status_code == 405
+    assert AuditSeal.objects.filter(tenant=tenant_a).count() == 0
+
+
+def test_riskcompliance_auditseal_verify_reports_a_tampered_range(
+        client_a, riskcompliance_seal):
+    covered = list(AuditLog.objects.filter(id__gte=riskcompliance_seal.from_log_id,
+                                           id__lte=riskcompliance_seal.to_log_id)
+                   .order_by("id"))
+    AuditLog.objects.filter(pk=covered[0].pk).update(target="Rewritten after the fact")
+
+    resp = client_a.post(reverse("procurement:auditseal_verify",
+                                 args=[riskcompliance_seal.pk]))
+    riskcompliance_seal.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_seal.last_verify_ok is False
+    assert str(covered[0].pk) in riskcompliance_seal.last_verify_detail
+    # A newly DETECTED failure is itself written into the append-only trail.
+    assert AuditLog.objects.filter(
+        tenant=riskcompliance_seal.tenant,
+        changes__has_key="verification_failed").count() == 1
+
+    again = client_a.post(reverse("procurement:auditseal_verify",
+                                  args=[riskcompliance_seal.pk]))
+    assert again.status_code == 302
+    # Only the DISCOVERY is news - a re-press on an already-failing seal writes nothing.
+    assert AuditLog.objects.filter(
+        tenant=riskcompliance_seal.tenant,
+        changes__has_key="verification_failed").count() == 1
+
+
+def test_riskcompliance_auditseal_verify_is_post_only(client_a, riskcompliance_seal):
+    resp = client_a.get(reverse("procurement:auditseal_verify",
+                                args=[riskcompliance_seal.pk]))
+    riskcompliance_seal.refresh_from_db()
+
+    assert resp.status_code == 405
+    assert riskcompliance_seal.last_verify_ok is None
