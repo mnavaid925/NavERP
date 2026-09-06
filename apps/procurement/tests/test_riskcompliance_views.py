@@ -1441,3 +1441,342 @@ def test_riskcompliance_fraud_board_rows_carry_the_pinned_keys(
     assert resp.context["citation_maverick_url"] == reverse("procurement:maverick_dashboard")
     # A real label from a row-dict reaches the markup (L8).
     assert "New supplier with immediate high-value spend" in html
+
+
+# ================================================================== the policy register
+
+def test_riskcompliance_policy_list_renders_rows_with_their_roster_annotations(
+        client_a, tenant_a, admin_user, riskcompliance_member_a,
+        riskcompliance_policy_published, riskcompliance_policy_draft):
+    _riskcompliance_new_attestation(riskcompliance_policy_published, riskcompliance_member_a)
+    signed = _riskcompliance_new_attestation(riskcompliance_policy_published, admin_user)
+    signed.acknowledge(admin_user, "Read.")
+
+    resp = client_a.get(reverse("procurement:policy_list"))
+    html = _riskcompliance_html(resp)
+    rows = {row.pk: row for row in resp.context["object_list"]}
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/policy/list.html" in _riskcompliance_templates(resp)
+    assert riskcompliance_policy_published.number in html
+    assert "Supplier Code of Conduct" in html
+    assert set(rows) == {riskcompliance_policy_published.pk, riskcompliance_policy_draft.pk}
+    # The four annotations _policy_qs documents - they exist only on a queryset built there.
+    published_row = rows[riskcompliance_policy_published.pk]
+    assert published_row.roster_size == 2
+    assert published_row.signed_count == 1
+    assert published_row.exempt_count == 0
+    assert published_row.pending_count == 1
+    assert rows[riskcompliance_policy_draft.pk].roster_size == 0
+
+    assert len(resp.context["status_choices"]) == 3
+    assert len(resp.context["category_choices"]) >= 3
+    assert resp.context["stats"] == {"published": 1, "draft": 1, "attestation_due": 1}
+    assert resp.context["is_admin"] is True
+
+
+def test_riskcompliance_policy_list_each_valid_filter_value_returns_its_rows(
+        client_a, tenant_a, admin_user, riskcompliance_policy_published,
+        riskcompliance_policy_draft, riskcompliance_policy_no_ack):
+    url = reverse("procurement:policy_list")
+
+    assert set(_riskcompliance_pks(client_a.get(url, {"status": "published"}))) == {
+        riskcompliance_policy_published.pk, riskcompliance_policy_no_ack.pk}
+    assert _riskcompliance_pks(client_a.get(url, {"status": "draft"})) == [
+        riskcompliance_policy_draft.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"status": "archived"})) == []
+    assert _riskcompliance_pks(
+        client_a.get(url, {"category": "supplier_code_of_conduct"})) == [
+            riskcompliance_policy_published.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"category": "sole_source"})) == [
+        riskcompliance_policy_draft.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"category": "purchasing_rule"})) == [
+        riskcompliance_policy_no_ack.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"q": "Sole Source"})) == [
+        riskcompliance_policy_draft.pk]
+    assert _riskcompliance_pks(
+        client_a.get(url, {"q": riskcompliance_policy_no_ack.number})) == [
+            riskcompliance_policy_no_ack.pk]
+    assert len(_riskcompliance_pks(client_a.get(url, {"q": "held to"}))) == 3
+
+
+def test_riskcompliance_policy_list_paginates_with_a_tie_on_created_at(
+        client_a, tenant_a, admin_user):
+    """The exact ``_policy_qs`` defect shape: an aggregate query DROPS Meta.ordering, and 18
+    rows sharing one ``created_at`` then repeat or vanish across the page boundary unless the
+    order is made TOTAL by ``-id``."""
+    made = [_riskcompliance_new_policy(tenant_a, f"Tie Policy {index:02d}", admin_user)
+            for index in range(18)]
+    frozen = timezone.now()
+    ProcurementPolicy.objects.filter(pk__in=[policy.pk for policy in made]).update(
+        created_at=frozen)
+    url = reverse("procurement:policy_list")
+
+    page_one = client_a.get(url)
+    page_two = client_a.get(url, {"page": "2"})
+    past_end = client_a.get(url, {"page": "999"})
+
+    assert len(_riskcompliance_pks(page_one)) == 15
+    assert len(_riskcompliance_pks(page_two)) == 3
+    seen = _riskcompliance_pks(page_one) + _riskcompliance_pks(page_two)
+    assert len(set(seen)) == 18
+    assert set(seen) == {policy.pk for policy in made}
+    assert past_end.status_code == 200
+    assert len(_riskcompliance_pks(past_end)) == 3
+
+
+def test_riskcompliance_policy_detail_renders_the_roster_and_the_coverage_rate(
+        client_a, admin_user, riskcompliance_member_a, riskcompliance_policy_published):
+    pending = _riskcompliance_new_attestation(riskcompliance_policy_published,
+                                              riskcompliance_member_a)
+    signed = _riskcompliance_new_attestation(riskcompliance_policy_published, admin_user)
+    signed.acknowledge(admin_user, "Read.")
+
+    resp = client_a.get(reverse("procurement:policy_detail",
+                                args=[riskcompliance_policy_published.pk]))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/policy/detail.html" in _riskcompliance_templates(resp)
+    # Outstanding first - "pending" sorts LAST alphabetically, so a raw-column order buries it.
+    assert [row.pk for row in resp.context["attestations"]] == [pending.pk, signed.pk]
+    assert resp.context["attestation_stats"] == {"target": 2, "attested": 1, "outstanding": 1,
+                                                 "rate": 50}
+    assert resp.context["supersedes"] is None
+    assert resp.context["superseded_by"] == []
+    assert [action["key"] for action in resp.context["allowed_actions"]] == [
+        "raise_attestations"]
+    assert _riskcompliance_key_sets(resp.context["allowed_actions"]) == {frozenset(
+        {"key", "label", "icon", "css", "help", "confirm"})}
+    assert riskcompliance_policy_published.number in html
+    assert riskcompliance_member_a.username in html
+
+
+def test_riskcompliance_policy_detail_offers_no_raise_button_on_a_draft(
+        client_a, riskcompliance_policy_draft):
+    resp = client_a.get(reverse("procurement:policy_detail",
+                                args=[riskcompliance_policy_draft.pk]))
+
+    assert resp.status_code == 200
+    assert resp.context["allowed_actions"] == []
+    assert resp.context["attestation_stats"] == {"target": 0, "attested": 0, "outstanding": 0,
+                                                 "rate": 0}
+
+
+# ================================================================== raise attestations
+
+def test_riskcompliance_policy_raise_attestations_is_idempotent(
+        client_a, tenant_a, admin_user, riskcompliance_member_a,
+        riskcompliance_policy_published):
+    url = reverse("procurement:policy_raise_attestations",
+                  args=[riskcompliance_policy_published.pk])
+    audience = 2  # admin_user + riskcompliance_member_a, both active in tenant A
+
+    first = client_a.post(url)
+    assert first.status_code == 302
+    assert first["Location"] == reverse("procurement:policy_detail",
+                                        args=[riskcompliance_policy_published.pk])
+    raised = PolicyAttestation.objects.filter(policy=riskcompliance_policy_published)
+    assert raised.count() == audience
+    assert set(raised.values_list("user_id", flat=True)) == {admin_user.pk,
+                                                             riskcompliance_member_a.pk}
+    assert set(raised.values_list("status", flat=True)) == {"pending"}
+    assert set(raised.values_list("due_on", flat=True)) == {
+        _riskcompliance_today() + _riskcompliance_days(
+            PolicyAttestation.DEFAULT_ATTESTATION_DUE_DAYS)}
+    assert any(f"Raised {audience} attestation(s)" in message
+               for message in _riskcompliance_messages(first))
+
+    second = client_a.post(url)
+    assert second.status_code == 302
+    assert PolicyAttestation.objects.filter(
+        policy=riskcompliance_policy_published).count() == audience
+    assert any("nothing created, no deadline moved" in message
+               for message in _riskcompliance_messages(second))
+
+
+def test_riskcompliance_policy_raise_attestations_refuses_a_draft(
+        client_a, riskcompliance_policy_draft):
+    resp = client_a.post(reverse("procurement:policy_raise_attestations",
+                                 args=[riskcompliance_policy_draft.pk]))
+
+    assert resp.status_code == 302
+    assert PolicyAttestation.objects.filter(policy=riskcompliance_policy_draft).count() == 0
+    assert any("publish it first" in message for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_policy_raise_attestations_refuses_an_archived_policy(
+        client_a, tenant_a, admin_user):
+    archived = _riskcompliance_new_policy(tenant_a, "Retired Standard", admin_user,
+                                          published=False)
+    archived.status = "archived"
+    archived.save(update_fields=["status", "updated_at"])
+
+    resp = client_a.post(reverse("procurement:policy_raise_attestations", args=[archived.pk]))
+
+    assert resp.status_code == 302
+    assert PolicyAttestation.objects.filter(policy=archived).count() == 0
+    assert any("publish it first" in message for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_policy_raise_attestations_refuses_a_policy_that_needs_no_signoff(
+        client_a, riskcompliance_policy_no_ack):
+    resp = client_a.post(reverse("procurement:policy_raise_attestations",
+                                 args=[riskcompliance_policy_no_ack.pk]))
+
+    assert resp.status_code == 302
+    assert PolicyAttestation.objects.filter(policy=riskcompliance_policy_no_ack).count() == 0
+    assert any("not marked as requiring acknowledgment" in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_policy_raise_attestations_ignores_a_junk_due_days(
+        client_a, admin_user, riskcompliance_member_a, riskcompliance_policy_published):
+    """A number hand-parsed out of a POST body: junk is reported and ignored, never a 500 (L11)."""
+    resp = client_a.post(
+        reverse("procurement:policy_raise_attestations",
+                args=[riskcompliance_policy_published.pk]),
+        {"due_days": "NaN"})
+
+    assert resp.status_code == 302
+    default_due = _riskcompliance_today() + _riskcompliance_days(
+        PolicyAttestation.DEFAULT_ATTESTATION_DUE_DAYS)
+    assert set(PolicyAttestation.objects
+               .filter(policy=riskcompliance_policy_published)
+               .values_list("due_on", flat=True)) == {default_due}
+    assert any("was not a whole number of days" in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_policy_raise_attestations_honours_a_valid_due_days(
+        client_a, admin_user, riskcompliance_member_a, riskcompliance_policy_published):
+    resp = client_a.post(
+        reverse("procurement:policy_raise_attestations",
+                args=[riskcompliance_policy_published.pk]),
+        {"due_days": "45"})
+
+    assert resp.status_code == 302
+    assert set(PolicyAttestation.objects
+               .filter(policy=riskcompliance_policy_published)
+               .values_list("due_on", flat=True)) == {
+                   _riskcompliance_today() + _riskcompliance_days(45)}
+
+
+# ================================================================== my policies
+
+def test_riskcompliance_policy_mine_rows_carry_the_pinned_keys(
+        riskcompliance_member_a, riskcompliance_attestation_pending,
+        riskcompliance_policy_published):
+    from django.test import Client
+
+    owner = Client()
+    owner.force_login(riskcompliance_member_a)
+
+    resp = owner.get(reverse("procurement:policy_mine"))
+    html = _riskcompliance_html(resp)
+    rows = resp.context["rows"]
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/my_policies.html" in _riskcompliance_templates(resp)
+    assert _riskcompliance_key_sets(rows) == {frozenset(
+        {"attestation", "policy", "due_on", "days_late", "state", "state_label", "state_css",
+         "can_sign", "sort_on"})}
+    assert len(rows) == 1
+    assert rows[0]["attestation"].pk == riskcompliance_attestation_pending.pk
+    assert rows[0]["policy"].pk == riskcompliance_policy_published.pk
+    assert rows[0]["days_late"] == -10
+    assert rows[0]["state"] == "open"
+    assert rows[0]["can_sign"] is True
+    assert resp.context["stats"] == {"pending": 1, "overdue": 0, "signed": 0}
+    assert resp.context["today"] == _riskcompliance_today()
+    assert "Supplier Code of Conduct" in html
+    assert riskcompliance_policy_published.number in html
+
+
+def test_riskcompliance_policy_mine_separates_overdue_from_signed(
+        client_a, admin_user, riskcompliance_policy_published, riskcompliance_policy_draft):
+    signed = _riskcompliance_new_attestation(riskcompliance_policy_published, admin_user)
+    signed.acknowledge(admin_user, "Read.")
+    late = _riskcompliance_new_attestation(riskcompliance_policy_draft, admin_user,
+                                           due_in_days=-21)
+
+    resp = client_a.get(reverse("procurement:policy_mine"))
+    rows = resp.context["rows"]
+
+    assert resp.status_code == 200
+    # Outstanding first, and the overdue row is the outstanding one.
+    assert [row["state"] for row in rows] == ["overdue", "signed"]
+    assert rows[0]["attestation"].pk == late.pk
+    assert rows[0]["days_late"] == 21
+    assert rows[0]["state_css"] == "badge-red"
+    assert rows[1]["can_sign"] is False
+    assert resp.context["stats"] == {"pending": 1, "overdue": 1, "signed": 1}
+
+
+# ================================================================== the chase board
+
+def test_riskcompliance_policy_overdue_board_rows_carry_the_pinned_keys(
+        client_a, riskcompliance_attestation_overdue, riskcompliance_attestation_pending,
+        riskcompliance_policy_published):
+    due_soon = _riskcompliance_new_attestation(
+        riskcompliance_policy_published,
+        _riskcompliance_person(riskcompliance_policy_published.tenant,
+                               "soon@acme.com", "soon_acme"),
+        due_in_days=3)
+
+    resp = client_a.get(reverse("procurement:policy_overdue_board"))
+    html = _riskcompliance_html(resp)
+    rows = resp.context["rows"]
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/policy_overdue.html" in _riskcompliance_templates(resp)
+    assert _riskcompliance_key_sets(rows) == {frozenset(
+        {"attestation", "policy", "user", "due_on", "days_late", "state", "state_label",
+         "state_css", "chased", "sort_on"})}
+    # The pending row is 10 days out, past the 7-day due-soon window, so it is not on the board.
+    assert [row["attestation"].pk for row in rows] == [
+        riskcompliance_attestation_overdue.pk, due_soon.pk]
+    assert [row["state"] for row in rows] == ["overdue", "due_soon"]
+    assert rows[0]["days_late"] == 21
+    assert rows[0]["chased"] is False
+    assert rows[0]["user"].pk == riskcompliance_attestation_overdue.user_id
+    assert rows[1]["days_late"] == -3
+    assert resp.context["stats"] == {"overdue": 1, "due_soon": 1}
+    assert resp.context["today"] == _riskcompliance_today()
+    assert resp.context["is_admin"] is True
+    assert riskcompliance_policy_published.number in html
+    assert riskcompliance_attestation_overdue.user.username in html
+
+
+def test_riskcompliance_policy_overdue_board_post_chases_once_and_only_once(
+        client_a, riskcompliance_attestation_overdue):
+    url = reverse("procurement:policy_overdue_board")
+
+    first = client_a.post(url)
+    riskcompliance_attestation_overdue.refresh_from_db()
+    assert first.status_code == 302
+    assert first["Location"] == url
+    assert riskcompliance_attestation_overdue.alert_id is not None
+    assert any("Raised 1 chase alert(s)" in message
+               for message in _riskcompliance_messages(first))
+
+    already = riskcompliance_attestation_overdue.alert_id
+    second = client_a.post(url)
+    riskcompliance_attestation_overdue.refresh_from_db()
+    assert second.status_code == 302
+    assert riskcompliance_attestation_overdue.alert_id == already
+    assert any("already being chased" in message
+               for message in _riskcompliance_messages(second))
+
+    board = client_a.get(url)
+    assert [row["chased"] for row in board.context["rows"]] == [True]
+
+
+def test_riskcompliance_policy_overdue_board_post_with_nobody_late_raises_nothing(
+        client_a, riskcompliance_attestation_pending):
+    resp = client_a.post(reverse("procurement:policy_overdue_board"))
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_attestation_pending.alert_id is None
+    assert any("nobody to chase" in message for message in _riskcompliance_messages(resp))
