@@ -52,6 +52,29 @@
     </div>
   </div>
 
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="users"></i></div>
+      <div class="stat-value">{{ cohort.count }}</div>
+      <div class="stat-label">Suppliers in cohort ({{ cohort.scored }} scored)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="sigma"></i></div>
+      <div class="stat-value">{% if cohort.average is None %}&mdash;{% else %}{{ cohort.average|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">Cohort average</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="arrow-up-right"></i></div>
+      <div class="stat-value">{% if cohort.best is None %}&mdash;{% else %}{{ cohort.best|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">Best in cohort</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="arrow-down-right"></i></div>
+      <div class="stat-value">{% if cohort.worst is None %}&mdash;{% else %}{{ cohort.worst|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">Worst in cohort</div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-body">
       <form method="get" class="filter-bar">
@@ -103,29 +126,6 @@
       {% if truncated %}
         <p class="text-muted" style="margin-top:.5rem;"><span class="badge badge-amber">Truncated</span> More than {{ row_cap }} scorecards exist for this period — the first {{ row_cap }} are ranked and the cohort figures below cover only those.</p>
       {% endif %}
-    </div>
-
-    <div class="stat-grid" style="padding:0 1rem;">
-      <div class="stat-card">
-        <div class="stat-icon blue"><i data-lucide="users"></i></div>
-        <div class="stat-value">{{ cohort.count }}</div>
-        <div class="stat-label">Suppliers in cohort ({{ cohort.scored }} scored)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon purple"><i data-lucide="sigma"></i></div>
-        <div class="stat-value">{% if cohort.average is None %}&mdash;{% else %}{{ cohort.average|floatformat:2 }}{% endif %}</div>
-        <div class="stat-label">Cohort average</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon green"><i data-lucide="arrow-up-right"></i></div>
-        <div class="stat-value">{% if cohort.best is None %}&mdash;{% else %}{{ cohort.best|floatformat:2 }}{% endif %}</div>
-        <div class="stat-label">Best in cohort</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon red"><i data-lucide="arrow-down-right"></i></div>
-        <div class="stat-value">{% if cohort.worst is None %}&mdash;{% else %}{{ cohort.worst|floatformat:2 }}{% endif %}</div>
-        <div class="stat-label">Worst in cohort</div>
-      </div>
     </div>
 
     <div class="table-wrap">
