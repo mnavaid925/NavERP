@@ -88,6 +88,26 @@ def _riskcompliance_key_sets(rows):
     return {frozenset(row) for row in rows}
 
 
+def _riskcompliance_count_queries(client, url, params=None):
+    """Queries for ONE GET of ``url``, the whole request/response cycle included.
+
+    Used alongside ``django_assert_max_num_queries`` rather than instead of it. The ceiling says
+    "this page is cheap"; comparing two counts taken at DIFFERENT ROW COUNTS says "and its cost
+    does not grow with the table", which is the actual N+1 property and is immune to every fixed
+    overhead in the stack - including the three-query session write
+    (``SAVEPOINT`` / ``UPDATE django_session`` / ``RELEASE``) that
+    ``apps.core.middleware`` performs on every authenticated request when it stamps
+    ``_last_activity``.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    with CaptureQueriesContext(connection) as captured:
+        response = client.get(url, params or {})
+    assert response.status_code == 200
+    return len(captured)
+
+
 # -- master data ---------------------------------------------------------------------------------
 
 def _riskcompliance_supplier(party, role="supplier"):
@@ -393,3 +413,705 @@ def test_riskcompliance_screening_delete_is_post_only_and_get_deletes_nothing(
     assert posted.status_code == 302
     assert posted["Location"] == reverse("procurement:screening_list")
     assert ComplianceScreening.objects.filter(pk=screening.pk).count() == 0
+
+
+# ================================================================== the three decision verbs
+
+def test_riskcompliance_screening_clear_is_refused_while_a_hit_is_open(
+        client_a, riskcompliance_screening_open):
+    resp = client_a.post(reverse("procurement:screening_clear",
+                                 args=[riskcompliance_screening_open.pk]),
+                         {"note": "Looks fine to me."})
+    riskcompliance_screening_open.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_screening_open.status == "pending_review"
+    assert riskcompliance_screening_open.decided_by_id is None
+    assert riskcompliance_screening_open.decided_at is None
+    messages = _riskcompliance_messages(resp)
+    assert any("2 unadjudicated hit(s)" in message for message in messages)
+
+
+def test_riskcompliance_screening_clear_succeeds_once_every_hit_is_disposed(
+        client_a, admin_user, riskcompliance_screening_disposed):
+    resp = client_a.post(reverse("procurement:screening_clear",
+                                 args=[riskcompliance_screening_disposed.pk]),
+                         {"note": "Both hits are false positives."})
+    riskcompliance_screening_disposed.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_screening_disposed.status == "cleared"
+    assert riskcompliance_screening_disposed.decided_by_id == admin_user.pk
+    assert riskcompliance_screening_disposed.decided_at is not None
+    # clear() back-fills the re-screen date so the supplier lands on the board rather than
+    # quietly falling out of scope.
+    assert riskcompliance_screening_disposed.next_rescreen_on == (
+        riskcompliance_screening_disposed.screened_on
+        + _riskcompliance_days(ComplianceScreening.DEFAULT_RESCREEN_DAYS))
+
+
+def test_riskcompliance_screening_escalate_moves_the_row_and_requires_a_note(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    screening = _riskcompliance_new_screening(tenant_a, riskcompliance_party_a, admin_user,
+                                              reference="CSL-ESC-0001")
+    url = reverse("procurement:screening_escalate", args=[screening.pk])
+
+    blank = client_a.post(url, {"note": "   "})
+    screening.refresh_from_db()
+    assert blank.status_code == 302
+    assert screening.status == "pending_review"
+    assert any("Say why this screening is being escalated." in message
+               for message in _riskcompliance_messages(blank))
+
+    ok = client_a.post(url, {"note": "Legal wants to look at the Cyprus address."})
+    screening.refresh_from_db()
+    assert ok.status_code == 302
+    assert screening.status == "escalated"
+    assert screening.decided_by_id == admin_user.pk
+
+
+def test_riskcompliance_screening_block_stamps_the_suspension_link(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    from apps.procurement.models import VendorSuspension
+
+    screening = _riskcompliance_new_screening(tenant_a, riskcompliance_party_a, admin_user,
+                                              reference="CSL-BLK-0001",
+                                              result="confirmed_match")
+    suspension = VendorSuspension.objects.create(
+        tenant=tenant_a, supplier=riskcompliance_party_a, kind="suspension",
+        reason_category="other", reason="Confirmed SDN match.",
+        starts_on=_riskcompliance_today())
+
+    resp = client_a.post(reverse("procurement:screening_block", args=[screening.pk]), {
+        "note": "Confirmed SDN match - no further spend.",
+        "suspension": str(suspension.pk),
+    })
+    screening.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert screening.status == "blocked"
+    assert screening.suspension_id == suspension.pk
+    assert any(f"Linked to suspension {suspension.number}." in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_screening_block_refuses_a_suspension_for_another_supplier(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    """An absent prerequisite is REJECTED, never dropped so the block lands unexplained (L35)."""
+    from apps.procurement.models import VendorSuspension
+
+    other = _riskcompliance_party_named(tenant_a, "Contoso Fasteners")
+    screening = _riskcompliance_new_screening(tenant_a, riskcompliance_party_a, admin_user,
+                                              reference="CSL-BLK-0002")
+    foreign = VendorSuspension.objects.create(
+        tenant=tenant_a, supplier=other, kind="suspension", reason_category="other",
+        reason="Nothing to do with the screened party.", starts_on=_riskcompliance_today())
+
+    resp = client_a.post(reverse("procurement:screening_block", args=[screening.pk]), {
+        "note": "Block it.",
+        "suspension": str(foreign.pk),
+    })
+    screening.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert screening.status == "pending_review"
+    assert screening.suspension_id is None
+    assert any("not on file for this supplier" in message
+               for message in _riskcompliance_messages(resp))
+
+
+# ================================================================== the re-screening board
+
+def test_riskcompliance_screening_rescreen_board_rows_carry_the_pinned_keys(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    """Three suppliers, three states: never screened, overdue, and comfortably in date."""
+    _riskcompliance_supplier(riskcompliance_party_a)
+    overdue_party = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Contoso Fasteners"))
+    fresh_party = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Fabrikam Bearings"))
+
+    overdue = _riskcompliance_new_screening(
+        tenant_a, overdue_party, admin_user, reference="CSL-BRD-0001",
+        next_rescreen_on=_riskcompliance_today() - _riskcompliance_days(5))
+    overdue.clear(admin_user, "Nothing returned.")
+    fresh = _riskcompliance_new_screening(
+        tenant_a, fresh_party, admin_user, reference="CSL-BRD-0002",
+        next_rescreen_on=_riskcompliance_today() + _riskcompliance_days(200))
+    fresh.clear(admin_user, "Nothing returned.")
+
+    resp = client_a.get(reverse("procurement:screening_rescreen_board"))
+    html = _riskcompliance_html(resp)
+    rows = resp.context["rows"]
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/rescreening_due.html" in _riskcompliance_templates(resp)
+    assert _riskcompliance_key_sets(rows) == {frozenset(
+        {"party", "screening", "due_on", "days", "state", "state_label", "state_css",
+         "sort_on"})}
+    assert [row["state"] for row in rows] == ["never", "overdue"]
+    assert rows[0]["party"].pk == riskcompliance_party_a.pk
+    assert rows[1]["party"].pk == overdue_party.pk
+    assert rows[1]["screening"].pk == overdue.pk
+    assert rows[1]["days"] == 5
+    assert resp.context["stats"] == {"overdue": 2, "due_soon": 0, "total": 3}
+    assert resp.context["today"] == _riskcompliance_today()
+    assert resp.context["is_admin"] is True
+    # A real value from a row reaches the markup - not a grid of em-dashes (L8).
+    assert "Contoso Fasteners" in html
+    assert "Northwind Components Ltd" in html
+    assert "Fabrikam Bearings" not in html
+
+
+def test_riskcompliance_screening_rescreen_board_counts_a_due_soon_supplier(
+        client_a, admin_user, tenant_a):
+    soon_party = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Tailspin Alloys"))
+    soon = _riskcompliance_new_screening(
+        tenant_a, soon_party, admin_user, reference="CSL-BRD-0003",
+        next_rescreen_on=_riskcompliance_today() + _riskcompliance_days(10))
+    soon.clear(admin_user, "Nothing returned.")
+
+    resp = client_a.get(reverse("procurement:screening_rescreen_board"))
+
+    assert resp.status_code == 200
+    assert [row["state"] for row in resp.context["rows"]] == ["due_soon"]
+    assert resp.context["rows"][0]["days"] == -10
+    assert resp.context["stats"] == {"overdue": 0, "due_soon": 1, "total": 1}
+    assert soon.number in _riskcompliance_html(resp)
+
+
+# ================================================================== screening hits
+
+def test_riskcompliance_screeninghit_list_renders_rows_and_its_context(
+        client_a, riskcompliance_screening_open, riskcompliance_screening_disposed):
+    resp = client_a.get(reverse("procurement:screeninghit_list"))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/screeninghit/list.html" in _riskcompliance_templates(resp)
+    assert len(_riskcompliance_pks(resp)) == 4
+    assert "NORTHWIND COMPONENTS LLC" in html
+    assert "NORTHWIND CHEMICALS PLC" in html
+    assert len(resp.context["disposition_choices"]) == 4
+    assert len(resp.context["match_type_choices"]) == 5
+    assert len(resp.context["list_source_choices"]) == 13
+    assert [screening.pk for screening in resp.context["screenings"]] == sorted(
+        [riskcompliance_screening_open.pk, riskcompliance_screening_disposed.pk], reverse=True)
+    assert resp.context["stats"] == {"open": 2, "true_match": 0, "false_positive": 2}
+    assert resp.context["is_admin"] is True
+
+
+def test_riskcompliance_screeninghit_list_each_valid_filter_value_returns_its_rows(
+        client_a, riskcompliance_screening_open, riskcompliance_screening_disposed,
+        riskcompliance_hit_open):
+    url = reverse("procurement:screeninghit_list")
+    open_pks = set(riskcompliance_screening_open.hits.values_list("pk", flat=True))
+    disposed_pks = set(riskcompliance_screening_disposed.hits.values_list("pk", flat=True))
+
+    assert set(_riskcompliance_pks(client_a.get(url, {"disposition": "open"}))) == open_pks
+    assert set(_riskcompliance_pks(
+        client_a.get(url, {"disposition": "false_positive"}))) == disposed_pks
+    assert _riskcompliance_pks(client_a.get(url, {"disposition": "true_match"})) == []
+    # Two of the four hits are alias matches, one per screening.
+    assert len(_riskcompliance_pks(client_a.get(url, {"match_type": "alias"}))) == 2
+    assert len(_riskcompliance_pks(client_a.get(url, {"match_type": "name"}))) == 2
+    assert set(_riskcompliance_pks(
+        client_a.get(url, {"screening": str(riskcompliance_screening_open.pk)}))) == open_pks
+    assert _riskcompliance_pks(
+        client_a.get(url, {"matched_list": "eu_consolidated"})) == [
+            riskcompliance_screening_open.hits.get(matched_list="eu_consolidated").pk]
+    assert _riskcompliance_pks(
+        client_a.get(url, {"q": "Komponenty"})) == [
+            riskcompliance_screening_open.hits.get(match_type="alias").pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"min_score": "91"}))) == {
+        riskcompliance_hit_open.pk,
+        riskcompliance_screening_disposed.hits.get(match_score=91).pk}
+
+
+def test_riskcompliance_screeninghit_detail_renders_the_parent_and_the_picker(
+        client_a, riskcompliance_hit_open, riskcompliance_screening_open):
+    resp = client_a.get(reverse("procurement:screeninghit_detail",
+                                args=[riskcompliance_hit_open.pk]))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert resp.context["screening"].pk == riskcompliance_screening_open.pk
+    assert [value for value, _label in resp.context["allowed_dispositions"]] == [
+        "false_positive", "true_match", "cleared_with_licence"]
+    assert riskcompliance_hit_open.matched_name in html
+    assert riskcompliance_screening_open.number in html
+
+
+def test_riskcompliance_screeninghit_detail_offers_no_verb_once_adjudicated(
+        client_a, riskcompliance_hit_disposed):
+    resp = client_a.get(reverse("procurement:screeninghit_detail",
+                                args=[riskcompliance_hit_disposed.pk]))
+
+    assert resp.status_code == 200
+    assert resp.context["allowed_dispositions"] == []
+
+
+def test_riskcompliance_screeninghit_create_files_the_hit_and_recounts_the_parent(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    screening = _riskcompliance_new_screening(tenant_a, riskcompliance_party_a, admin_user,
+                                              reference="CSL-HIT-0001")
+
+    resp = client_a.post(reverse("procurement:screeninghit_create", args=[screening.pk]), {
+        "matched_name": "NORTHWIND HOLDINGS SA",
+        "matched_list": "eu_consolidated",
+        "match_score": "93",
+        "match_type": "alias",
+        "entry_reference": "EU-4471",
+        "program": "SYRIA",
+        "country": "Malta",
+        "remarks": "Returned on the alias search.",
+    })
+    screening.refresh_from_db()
+    hit = ScreeningHit.objects.get(matched_name="NORTHWIND HOLDINGS SA")
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:screeninghit_detail", args=[hit.pk])
+    # The parent comes from the URL-resolved object, never from the payload.
+    assert hit.screening_id == screening.pk
+    assert hit.disposition == "open"
+    assert screening.hit_count == 1
+    assert screening.open_hit_count == 1
+
+
+def test_riskcompliance_screeninghit_cannot_be_added_to_a_decided_screening(
+        client_a, riskcompliance_screening_cleared):
+    """A review fix, locked in: an open hit under a decided screening invalidates the decision."""
+    url = reverse("procurement:screeninghit_create",
+                  args=[riskcompliance_screening_cleared.pk])
+
+    got = client_a.get(url)
+    assert got.status_code == 302
+    assert got["Location"] == reverse("procurement:screening_detail",
+                                      args=[riskcompliance_screening_cleared.pk])
+    assert any("cannot be added to a decided screening" in message
+               for message in _riskcompliance_messages(got))
+
+    posted = client_a.post(url, {
+        "matched_name": "SHOULD NEVER LAND", "matched_list": "ofac_sdn", "match_score": "99",
+        "match_type": "name", "entry_reference": "", "program": "", "country": "",
+        "remarks": ""})
+    assert posted.status_code == 302
+    assert ScreeningHit.objects.filter(matched_name="SHOULD NEVER LAND").count() == 0
+
+
+def test_riskcompliance_screeninghit_cannot_be_deleted_from_a_decided_screening(
+        client_a, riskcompliance_screening_blocked):
+    """The other half of the same review fix - the evidence a block was reasoned against."""
+    hit = riskcompliance_screening_blocked.hits.get()
+
+    resp = client_a.post(reverse("procurement:screeninghit_delete", args=[hit.pk]))
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:screening_detail",
+                                       args=[riskcompliance_screening_blocked.pk])
+    assert ScreeningHit.objects.filter(pk=hit.pk).count() == 1
+    assert any("cannot be deleted" in message for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_screeninghit_delete_removes_a_live_hit_and_recounts(
+        client_a, riskcompliance_screening_open, riskcompliance_hit_open):
+    url = reverse("procurement:screeninghit_delete", args=[riskcompliance_hit_open.pk])
+
+    got = client_a.get(url)
+    assert got.status_code == 405
+    assert ScreeningHit.objects.filter(pk=riskcompliance_hit_open.pk).count() == 1
+
+    posted = client_a.post(url)
+    riskcompliance_screening_open.refresh_from_db()
+    assert posted.status_code == 302
+    assert ScreeningHit.objects.filter(pk=riskcompliance_hit_open.pk).count() == 0
+    assert riskcompliance_screening_open.hit_count == 1
+    assert riskcompliance_screening_open.open_hit_count == 1
+
+
+def test_riskcompliance_screeninghit_dispose_stamps_the_row_and_unlocks_clear(
+        client_a, admin_user, riskcompliance_screening_open):
+    hits = list(riskcompliance_screening_open.hits.order_by("-match_score", "id"))
+
+    first = client_a.post(reverse("procurement:screeninghit_dispose", args=[hits[0].pk]), {
+        "disposition": "false_positive",
+        "disposition_note": "Different address and tax id.",
+    })
+    hits[0].refresh_from_db()
+    assert first.status_code == 302
+    assert hits[0].disposition == "false_positive"
+    assert hits[0].disposed_by_id == admin_user.pk
+    assert hits[0].disposed_at is not None
+    assert not any("can be cleared" in message for message in _riskcompliance_messages(first))
+
+    second = client_a.post(reverse("procurement:screeninghit_dispose", args=[hits[1].pk]), {
+        "disposition": "cleared_with_licence",
+        "disposition_note": "Covered by the general licence.",
+    })
+    riskcompliance_screening_open.refresh_from_db()
+    assert second.status_code == 302
+    assert riskcompliance_screening_open.open_hit_count == 0
+    assert any("it can be cleared" in message for message in _riskcompliance_messages(second))
+
+
+def test_riskcompliance_screeninghit_dispose_refuses_a_second_adjudication(
+        client_a, riskcompliance_hit_disposed):
+    resp = client_a.post(reverse("procurement:screeninghit_dispose",
+                                 args=[riskcompliance_hit_disposed.pk]), {
+        "disposition": "true_match",
+        "disposition_note": "Changed my mind.",
+    })
+    riskcompliance_hit_disposed.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_hit_disposed.disposition == "false_positive"
+    assert any("cannot be re-opened" in message for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_screeninghit_dispose_refuses_a_blank_note(
+        client_a, riskcompliance_hit_open):
+    resp = client_a.post(reverse("procurement:screeninghit_dispose",
+                                 args=[riskcompliance_hit_open.pk]),
+                         {"disposition": "false_positive", "disposition_note": ""})
+    riskcompliance_hit_open.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_hit_open.disposition == "open"
+    assert len(_riskcompliance_messages(resp)) == 1
+
+
+# ================================================================== risk-signal register
+
+def test_riskcompliance_risksignal_list_renders_the_seeded_rows_and_its_context(
+        client_a, riskcompliance_signal_fhr, riskcompliance_signal_ser):
+    resp = client_a.get(reverse("procurement:risksignal_list"))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/risksignal/list.html" in _riskcompliance_templates(resp)
+    assert riskcompliance_signal_fhr.number in html
+    assert riskcompliance_signal_ser.number in html
+    assert "Northwind Components Ltd" in html
+    # fhr + the SER pair (the ser fixture brings its own predecessor).
+    assert len(_riskcompliance_pks(resp)) == 3
+    assert len(resp.context["provider_choices"]) == 9
+    assert len(resp.context["metric_choices"]) == 13
+    assert len(resp.context["band_choices"]) == 5
+    assert len(resp.context["trend_choices"]) == 4
+    assert len(resp.context["review_status_choices"]) == 4
+    assert resp.context["stats"] == {"critical": 1, "deteriorating": 1, "unreviewed": 3,
+                                     "refresh_due": 0}
+    assert resp.context["is_admin"] is True
+
+
+def test_riskcompliance_risksignal_list_each_valid_filter_value_returns_its_rows(
+        client_a, riskcompliance_signal_fhr, riskcompliance_signal_ser,
+        riskcompliance_signal_series):
+    url = reverse("procurement:risksignal_list")
+    ser_pks = {riskcompliance_signal_ser.pk, riskcompliance_signal_series.pk}
+
+    assert _riskcompliance_pks(
+        client_a.get(url, {"provider": "rapidratings"})) == [riskcompliance_signal_fhr.pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"provider": "dnb"}))) == ser_pks
+    assert _riskcompliance_pks(client_a.get(url, {"metric": "fhr"})) == [
+        riskcompliance_signal_fhr.pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"metric": "ser_rating"}))) == ser_pks
+    assert _riskcompliance_pks(client_a.get(url, {"band": "low"})) == [
+        riskcompliance_signal_fhr.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"band": "critical"})) == [
+        riskcompliance_signal_ser.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"band": "watch"})) == [
+        riskcompliance_signal_series.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"trend": "deteriorated"})) == [
+        riskcompliance_signal_ser.pk]
+    assert len(_riskcompliance_pks(client_a.get(url, {"trend": "new"}))) == 2
+    assert len(_riskcompliance_pks(client_a.get(url, {"review_status": "new"}))) == 3
+    assert _riskcompliance_pks(client_a.get(url, {"review_status": "actioned"})) == []
+    assert len(_riskcompliance_pks(client_a.get(
+        url, {"party": str(riskcompliance_signal_fhr.party_id)}))) == 3
+
+
+def test_riskcompliance_risksignal_list_search_matches_each_declared_field(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    by_source = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, user=admin_user,
+                                           source_ref="Creditsafe bulletin 4471")
+    by_note = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="paydex",
+                                         value="60.00", provider="dnb",
+                                         notes="Watched by the treasury desk")
+    url = reverse("procurement:risksignal_list")
+
+    assert _riskcompliance_pks(client_a.get(url, {"q": "bulletin 4471"})) == [by_source.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"q": "treasury desk"})) == [by_note.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"q": by_note.number})) == [by_note.pk]
+    assert len(_riskcompliance_pks(client_a.get(url, {"q": "Northwind"}))) == 2
+
+
+def test_riskcompliance_risksignal_list_query_budget_with_every_row_reviewed(
+        client_a, tenant_a, riskcompliance_party_a, admin_user,
+        django_assert_max_num_queries):
+    """15 signals ALL with ``reviewed_by`` set - an unreviewed row hides the N+1 entirely.
+
+    The list template names the reviewer on every reviewed row, so a missing
+    ``select_related("reviewed_by")`` costs one query PER ROW - and only on rows that HAVE a
+    reviewer, which is why every row here has one.
+    """
+    url = reverse("procurement:risksignal_list")
+
+    def build(count, offset=0):
+        for index in range(offset, offset + count):
+            signal = _riskcompliance_new_signal(
+                tenant_a, riskcompliance_party_a, metric="paydex", value=f"{50 + index}.00",
+                provider="dnb", days_ago=index, user=admin_user)
+            signal.mark_reviewed(admin_user, "Read.")
+
+    build(3)
+    three_rows = _riskcompliance_count_queries(client_a, url)
+    build(12, offset=3)
+
+    # 11 = 8 page/auth reads + the 3-query session write every authenticated request makes.
+    with django_assert_max_num_queries(11):
+        resp = client_a.get(url)
+
+    assert resp.status_code == 200
+    assert len(_riskcompliance_pks(resp)) == 15
+    assert {signal.reviewed_by_id for signal in resp.context["object_list"]} == {admin_user.pk}
+    # Five times the rows, the SAME number of queries - the N+1 property itself.
+    assert _riskcompliance_count_queries(client_a, url) == three_rows
+
+
+def test_riskcompliance_risksignal_list_paginates_with_a_tie_on_the_sort_column(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    same_day = _riskcompliance_today()
+    made = [_riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="paydex",
+                                       value=f"{40 + index}.00", provider="dnb",
+                                       user=admin_user, observed_on=same_day,
+                                       source_ref=f"TIE-{index:03d}")
+            for index in range(18)]
+    url = reverse("procurement:risksignal_list")
+
+    page_one = client_a.get(url)
+    page_two = client_a.get(url, {"page": "2"})
+    past_end = client_a.get(url, {"page": "999"})
+
+    assert len(_riskcompliance_pks(page_one)) == 15
+    assert len(_riskcompliance_pks(page_two)) == 3
+    seen = _riskcompliance_pks(page_one) + _riskcompliance_pks(page_two)
+    assert len(set(seen)) == 18
+    assert set(seen) == {signal.pk for signal in made}
+    # Page past the end is guarded, never a 500 (L9).
+    assert past_end.status_code == 200
+    assert len(_riskcompliance_pks(past_end)) == 3
+
+
+def test_riskcompliance_risksignal_detail_renders_the_series_and_the_scale(
+        client_a, riskcompliance_signal_ser, riskcompliance_signal_series):
+    resp = client_a.get(reverse("procurement:risksignal_detail",
+                                args=[riskcompliance_signal_ser.pk]))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert [row.pk for row in resp.context["series"]] == [riskcompliance_signal_ser.pk,
+                                                          riskcompliance_signal_series.pk]
+    assert resp.context["scale"]["higher_is_better"] is False
+    assert resp.context["breaches_minimum"] is True
+    assert resp.context["minimum_acceptable"] == Decimal("5")
+    assert resp.context["assessment"] is None
+    assert resp.context["alert"] is None
+    assert riskcompliance_signal_ser.number in html
+    assert riskcompliance_signal_series.number in html
+
+
+def test_riskcompliance_risksignal_create_post_saves_and_derives_the_band(
+        client_a, tenant_a, riskcompliance_party_a):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    today = _riskcompliance_today()
+
+    resp = client_a.post(reverse("procurement:risksignal_create"), {
+        "party": str(riskcompliance_party_a.pk),
+        "provider": "dnb",
+        "metric": "ser_rating",
+        "observed_on": today.isoformat(),
+        "value": "8.00",
+        "next_refresh_on": (today + _riskcompliance_days(90)).isoformat(),
+        "source_ref": "D&B report, page 1.",
+        "notes": "",
+    })
+    saved = SupplierRiskSignal.objects.get(source_ref="D&B report, page 1.")
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:risksignal_detail", args=[saved.pk])
+    assert saved.tenant_id == tenant_a.pk
+    # Derived by save(), never posted: SER 8 on a 1-9 higher-is-worse scale.
+    assert saved.risk_position == Decimal("87.50")
+    assert saved.band == "critical"
+    assert saved.trend == "new"
+    assert saved.review_status == "new"
+    assert saved.number.startswith("SRS-")
+
+
+def test_riskcompliance_risksignal_edit_post_updates_and_redecides_the_band(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    signal = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="fhr",
+                                        value="82.00", provider="rapidratings", user=admin_user)
+    today = _riskcompliance_today()
+
+    resp = client_a.post(reverse("procurement:risksignal_edit", args=[signal.pk]), {
+        "party": str(riskcompliance_party_a.pk),
+        "provider": "rapidratings",
+        "metric": "fhr",
+        "observed_on": today.isoformat(),
+        "value": "12.00",
+        "next_refresh_on": (today + _riskcompliance_days(30)).isoformat(),
+        "source_ref": "Amended after a re-read.",
+        "notes": "",
+    })
+    signal.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert signal.value == Decimal("12.00")
+    # 12 on a 1-100 higher-is-BETTER scale flips to a risk position of 88.89.
+    assert signal.band == "critical"
+
+
+def test_riskcompliance_risksignal_review_moves_the_row_for_each_action(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    signal = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="paydex",
+                                        value="55.00", provider="dnb", user=admin_user)
+    url = reverse("procurement:risksignal_review", args=[signal.pk])
+
+    junk = client_a.post(url, {"action": "obliterate", "review_note": "x"})
+    signal.refresh_from_db()
+    assert junk.status_code == 302
+    assert signal.review_status == "new"
+    assert any("Choose whether to mark this signal" in message
+               for message in _riskcompliance_messages(junk))
+
+    reviewed = client_a.post(url, {"action": "reviewed", "review_note": ""})
+    signal.refresh_from_db()
+    assert reviewed.status_code == 302
+    assert signal.review_status == "reviewed"
+    assert signal.reviewed_by_id == admin_user.pk
+    assert signal.reviewed_at is not None
+
+    no_note = client_a.post(url, {"action": "actioned", "review_note": "  "})
+    signal.refresh_from_db()
+    assert no_note.status_code == 302
+    assert signal.review_status == "reviewed"
+    assert any("Record what was done about this signal." in message
+               for message in _riskcompliance_messages(no_note))
+
+    actioned = client_a.post(url, {"action": "actioned",
+                                   "review_note": "Escalated to the category manager."})
+    signal.refresh_from_db()
+    assert actioned.status_code == 302
+    assert signal.review_status == "actioned"
+    assert signal.review_note == "Escalated to the category manager."
+
+
+def test_riskcompliance_risksignal_review_refuses_a_terminal_row(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    signal = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="paydex",
+                                        value="55.00", provider="dnb", user=admin_user)
+    signal.dismiss(admin_user, "Not material.")
+
+    resp = client_a.post(reverse("procurement:risksignal_review", args=[signal.pk]),
+                         {"action": "reviewed", "review_note": ""})
+    signal.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert signal.review_status == "dismissed"
+    assert any("cannot be marked reviewed from dismissed" in message
+               for message in _riskcompliance_messages(resp))
+
+
+# ================================================================== the refresh board
+
+def test_riskcompliance_risksignal_refresh_board_rows_carry_the_pinned_keys(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    never_party = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Contoso Fasteners"))
+    fresh_party = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Fabrikam Bearings"))
+
+    overdue = _riskcompliance_new_signal(
+        tenant_a, riskcompliance_party_a, metric="fhr", value="70.00",
+        provider="rapidratings", days_ago=100, user=admin_user,
+        next_refresh_on=_riskcompliance_today() - _riskcompliance_days(4))
+    _riskcompliance_new_signal(
+        tenant_a, fresh_party, metric="fhr", value="90.00", provider="rapidratings",
+        days_ago=1, user=admin_user,
+        next_refresh_on=_riskcompliance_today() + _riskcompliance_days(200))
+
+    resp = client_a.get(reverse("procurement:risksignal_refresh_board"))
+    html = _riskcompliance_html(resp)
+    rows = resp.context["rows"]
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/risk_refresh_due.html" in _riskcompliance_templates(resp)
+    assert _riskcompliance_key_sets(rows) == {frozenset(
+        {"party", "signal", "provider_label", "metric_label", "observed_on", "due_on", "days",
+         "age_days", "state", "state_label", "state_css", "sort_on"})}
+    assert [row["state"] for row in rows] == ["never", "overdue"]
+    assert rows[0]["party"].pk == never_party.pk
+    assert rows[0]["signal"] is None
+    assert rows[1]["signal"].pk == overdue.pk
+    assert rows[1]["days"] == 4
+    assert rows[1]["age_days"] == 100
+    assert rows[1]["provider_label"] == "RapidRatings"
+    assert resp.context["stats"] == {"overdue": 1, "due_soon": 0, "stale": 1}
+    assert resp.context["today"] == _riskcompliance_today()
+    assert resp.context["is_admin"] is True
+    assert "Contoso Fasteners" in html
+    assert overdue.number in html
+    assert "Fabrikam Bearings" not in html
+
+
+def test_riskcompliance_risksignal_refresh_board_query_budget(
+        client_a, admin_user, tenant_a, django_assert_max_num_queries):
+    """Guards the ``parties_by_id`` rewrite: no per-row Party lookup may come back."""
+    url = reverse("procurement:risksignal_refresh_board")
+
+    def build(count, offset=0):
+        for index in range(offset, offset + count):
+            party = _riskcompliance_supplier(
+                _riskcompliance_party_named(tenant_a, f"Board Supplier {index:02d}"))
+            _riskcompliance_new_signal(
+                tenant_a, party, metric="fhr", value="70.00", provider="rapidratings",
+                days_ago=10, user=admin_user,
+                next_refresh_on=_riskcompliance_today() - _riskcompliance_days(index + 1))
+
+    build(3)
+    three_rows = _riskcompliance_count_queries(client_a, url)
+    build(9, offset=3)
+
+    # 9 = 6 page/auth reads + the 3-query session write every authenticated request makes.
+    with django_assert_max_num_queries(9):
+        resp = client_a.get(url)
+
+    assert resp.status_code == 200
+    assert len(resp.context["rows"]) == 12
+    assert {row["state"] for row in resp.context["rows"]} == {"overdue"}
+    # Four times the rows, the SAME number of queries: the board reads its Party objects out of
+    # ``parties_by_id`` and never off the ``.only()``-narrowed signal.
+    assert _riskcompliance_count_queries(client_a, url) == three_rows
+
+
+def test_riskcompliance_risksignal_refresh_board_marks_a_stale_observation(
+        client_a, admin_user, tenant_a):
+    party = _riskcompliance_supplier(_riskcompliance_party_named(tenant_a, "Tailspin Alloys"))
+    stale_days = SupplierRiskSignal.STALE_AFTER_DAYS + 10
+    stale = _riskcompliance_new_signal(
+        tenant_a, party, metric="fhr", value="70.00", provider="rapidratings",
+        days_ago=stale_days, user=admin_user,
+        next_refresh_on=_riskcompliance_today() + _riskcompliance_days(120))
+
+    resp = client_a.get(reverse("procurement:risksignal_refresh_board"))
+
+    assert resp.status_code == 200
+    assert [row["state"] for row in resp.context["rows"]] == ["stale"]
+    assert resp.context["rows"][0]["age_days"] == stale_days
+    assert resp.context["stats"] == {"overdue": 0, "due_soon": 0, "stale": 1}
+    assert stale.number in _riskcompliance_html(resp)
