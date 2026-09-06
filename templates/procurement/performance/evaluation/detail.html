@@ -370,16 +370,10 @@
               <td class="fw-600">{{ p.title }}<div class="text-muted"><a href="{% url 'procurement:improvementplan_detail' p.pk %}">{{ p.number }}</a></div></td>
               <td>{% if p.kpi %}{{ p.kpi.name }}{% else %}<span class="text-muted">General</span>{% endif %}</td>
               <td>
-                {% if p.severity == "critical" %}<span class="badge badge-red">{{ p.get_severity_display }}</span>
-                {% elif p.severity == "major" %}<span class="badge badge-amber">{{ p.get_severity_display }}</span>
-                {% else %}<span class="badge badge-slate">{{ p.get_severity_display }}</span>{% endif %}
+                <span class="badge {{ p.severity_css }}">{{ p.get_severity_display }}</span>
               </td>
               <td>
-                {% if p.status == "closed" %}<span class="badge badge-green">{{ p.get_status_display }}</span>
-                {% elif p.status == "monitoring" %}<span class="badge badge-info">{{ p.get_status_display }}</span>
-                {% elif p.status == "active" %}<span class="badge badge-amber">{{ p.get_status_display }}</span>
-                {% elif p.status == "cancelled" %}<span class="badge badge-muted">{{ p.get_status_display }}</span>
-                {% else %}<span class="badge badge-slate">{{ p.get_status_display }}</span>{% endif %}
+                <span class="badge {{ p.status_css }}">{{ p.get_status_display }}</span>
               </td>
               <td>{{ p.start_date|date:"M d, Y" }}</td>
               <td>{{ p.target_close_date|date:"M d, Y" }}</td>
@@ -441,10 +435,7 @@
               </td>
               <td class="text-right">{{ f.importance }}</td>
               <td>
-                {% if f.status == "submitted" %}<span class="badge badge-green">{{ f.get_status_display }}</span>
-                {% elif f.status == "requested" %}<span class="badge badge-amber">{{ f.get_status_display }}</span>
-                {% elif f.status == "declined" %}<span class="badge badge-muted">{{ f.get_status_display }}</span>
-                {% else %}<span class="badge badge-slate">{{ f.get_status_display }}</span>{% endif %}
+                <span class="badge {{ f.status_css }}">{{ f.get_status_display }}</span>
               </td>
               <td>
                 <div class="table-actions">
