@@ -1,7 +1,9 @@
 """6.16 Supplier Performance & Evaluation URL patterns — one module per entity/page group.
 
 ``app_name`` is set once in ``apps/procurement/urls/__init__.py``; this package only concatenates
-its five modules' ``urlpatterns`` — 33 routes under 33 distinct names.
+its five modules' ``urlpatterns`` — 34 routes under 34 distinct names (the 34th is
+``improvementplan_evidence``, added by the review fix that moved plan evidence off a raw
+unauthenticated MEDIA_URL link onto an authenticated view).
 
 Five first segments are claimed by this sub-module, every one of them a new whole component
 checked against the inventory in ``apps/procurement/urls/__init__.py``: ``supplier-kpis/``,
