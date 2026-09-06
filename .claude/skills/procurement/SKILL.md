@@ -1350,3 +1350,151 @@ than implying a capability the page lacks.
 **Known upstream gap (not 6.18's to fix):** `PutawayTask.goods_receipt` is NULL on every seeded row,
 so `receipt_bin_map`'s bins column is blank in demo data. The join is proven correct — linking tasks
 in a rolled-back transaction renders a real bin. The fix belongs in `apps/scm`'s seeder.
+
+---
+
+## 6.19 Document & Knowledge Management (built 2026-09-05, reviewed + fixed 2026-09-05, tested 2026-09-06)
+
+Package folder `DocumentKnowledgeManagement/` across all four layers; templates under
+`templates/procurement/documentknowledge/`. Migration `0026` (all four tables; it also carries
+6.16's four models — `makemigrations` sweeps the app registry, not a file list). Index changes
+landed in `0029`.
+
+**Read this first: 6.19 owns the procurement document REPOSITORY, not a general DMS.** Module 13
+is the future full DMS; `core.Document` (the generic GFK attachment) is deliberately **untouched** —
+no import, no FK, no reference anywhere in the 20 files. It was rejected because its `version` is a
+flat CharField with no revision chain and its GenericForeignKey cannot be `.filter(tenant=…)`d,
+joined or faceted on a list page. 6.19 declares four real link FKs instead.
+
+**Ownership settled with 6.17 (2026-09-05).** 6.19 declares `ProcurementPolicy`; 6.17 declares
+`PolicyAttestation` and FKs it by string with `related_name="attestations"`. 6.17 never re-declares
+the table and never edits anything under `DocumentKnowledgeManagement/`. `requires_acknowledgment`
+is a bare boolean hook on this side — **6.19 ships no sign-off ledger, no assignment, no
+"who has acknowledged" surface**; that is 6.17's half. Do not add one here.
+
+### Models (`models/DocumentKnowledgeManagement/`)
+
+| Model | Base / number | File | Notes |
+|---|---|---|---|
+| `ProcurementDocument` | `TenantNumbered` `PDOC-#####` | `Documents.py` | The register. 4 nullable link FKs, not a GFK |
+| `ProcurementDocumentRevision` | `TenantOwned`, child `revision_no` | `Revisions.py` | Immutable; `unique_together (tenant, document, revision_no)` |
+| `ProcurementPolicy` | `TenantNumbered` `PPOL-#####` | `Policies.py` | Library + supersession chain |
+| `KnowledgeResource` | `TenantNumbered` `PKR-#####` | `KnowledgeResources.py` | RFP templates, scorecards, playbooks |
+
+Spine FKs, all by string: `core.Party` (as `supplier`, narrowed
+`roles__role__in=("supplier","vendor")`), `core.OrgUnit`, `scm.SupplierContract`,
+`scm.PurchaseOrder` (**not** the legacy `crm.PurchaseOrder`), `procurement.SourcingEvent`,
+`accounting.Currency` (global — deliberately exempt from the tenant re-check).
+
+### THE REVISION CHAIN — the invariant everything else defends
+
+1. `revision_no` is allocated inside `transaction.atomic()` behind `select_for_update()` on the
+   **parent document**, with the unique constraint as backstop and one `IntegrityError` retry.
+2. **Upload never moves the pointer.** A new revision lands `is_approved=False`.
+3. **Approve refuses `revision_no <= current_revision_no`** — that single rule keeps the chain
+   linear — and the check is repeated *inside* the lock against a TOCTOU race. On success it stamps
+   the revision, moves the pointer, copies `extracted_text` up to the parent and lifts the parent
+   `draft -> active` on first approval.
+4. `current_revision_no` is an **integer pointer**, never a circular FK.
+5. **`current_revision` filters `is_approved=True`.** Without this a re-allocated number can put an
+   unapproved file on the record — the register renders a green *Current* badge beside *Not
+   approved* on the same row. This was reproduced three ways and is the reason the filter exists.
+6. `revision.is_current` is **number-equality only**, deliberately; templates guard the green badge
+   with `is_current AND is_approved`. Do not "unify" the two — both halves are asserted.
+7. Immutability is **structural**: no edit url, no edit view, no edit template; the editable set is
+   exactly the create-path columns. `document` is **not** `editable=False` (the FileField must stay
+   editable for the upload form) — it is held down by `admin.py`'s `readonly_fields`.
+8. Delete is permitted only for an **unapproved, non-current** revision, and both guards run under
+   the parent row lock.
+
+### Full-text search — what it is and what it is not
+
+`extracted_text` is a denormalised copy of the current approved revision's text, populated by a
+**lazy `pdfplumber` import with a graceful fallback that never raises** (the
+`SupplierInvoices._pdf_text` posture). Search is `icontains` over title + tags + that column,
+**joined only from 4 characters** — a 1-3 character `?q=` skips the TextField sweep, because the
+scan runs twice per matching search (Paginator's COUNT, then the page) and costs ~1.5 s at 2,000
+documents. MySQL FULLTEXT is ruled out because tests run on SQLite. **The word "OCR" must not
+appear on any 6.19 surface** — there is no OCR and claiming it would be a lie.
+
+### Views / URLs — 33 routes, 4 first segments
+
+`documents/` - `document-revisions/` - `procurement-policies/` - `knowledge/`
+(`policies/` is 6.17's and `templates/` is 6.2's — hence the longer names.)
+
+```
+pdocument_list _create _detail _edit _delete _checkout _release _activate _supersede _archive
+               _reindex _run_reminders _revision_upload
+pdocrevision_list _detail _download _approve _delete
+ppolicy_list _create _detail _edit _delete _publish _archive
+knowledgeresource_list _create _detail _edit _delete _publish _archive _use
+```
+
+`pdocument_revision_upload`'s **route** lives in the Documents url module (url modules own
+segments, and it sits under `documents/`) while its **view** lives in the Revisions module.
+
+**Admin-gated (`@tenant_admin_required`), 9 of 33:** `pdocument_delete _activate _supersede
+_archive _reindex`, `pdocrevision_approve`, `ppolicy_delete _publish _archive`. The forward and
+inverse verbs are gated symmetrically — un-making a workspace's stated position needs the same
+authority as making it.
+
+### Two rules that are easy to reintroduce
+
+**Files are served through `pdocrevision_download`, never `file.url`.** The route is
+`@login_required`, tenant-scoped, and sets `Content-Disposition: attachment` +
+`X-Content-Type-Options: nosniff`. `MEDIA_ROOT` sits under the XAMPP docroot with no tenant
+partitioning, so a raw `file.url` link is an **unauthenticated read of every workspace's files** —
+this was confirmed with an anonymous `curl`. *(15 `.file.url` links across 13 other templates are
+still unfixed app-wide; that sweep is not 6.19's.)*
+
+**`classification` is enforced, not decorative.** `readable_document_q(user, prefix="")` in
+`views/_helpers.py` is the single definition: confidential/restricted rows are visible to their
+owner and to tenant admins only. It must be applied to **every** surface — register rows, **stat
+tiles**, facets, `?q=`, detail, **edit** (`crud_edit` only tenant-scopes, so the gate runs before
+the delegation), the revision register **and its stats**, the download, and all verbs. Two holes
+were found after the first fix — the revision stats (a counting oracle) and the edit form (a read
+of every field it prefills) — so when adding a document surface, apply the rule and assert it.
+
+### Templates (`templates/procurement/documentknowledge/`)
+
+`document/` `revision/` `policy/` `knowledgeresource/`, each `list/detail/form.html`
+(`revision/form.html` is the create-only upload page — `is_edit` is unconditionally `False`).
+The document register's filter card carries **`id="search"`**; the sidebar's *Full-Text Search &
+Indexing* bullet deep-links `procurement:pdocument_list#search`.
+
+### Seeder
+
+`_seed_document_knowledge(tenant)`, called last in `handle()`. Per tenant: **7 documents** across
+7 types and all 4 statuses (including one expiring in 21 days, one expired, one confidential, one
+restricted, one draft with no revision), **6 revisions** exercising all three badges
+(Current / Superseded / Pending), **3 policies** (v2.0 published having archived v1.0, plus a
+draft), **4 knowledge resources** (2 featured, 1 with `usage_count=7`). Payloads are `.txt` via
+`ContentFile` so extraction is genuinely demonstrable without a binary fixture. Idempotent; the
+`--flush` branch deletes children-first.
+
+### Sidebar wiring
+
+`LIVE_LINKS["6.19"]` — five bullets, four to registers plus
+`"Full-Text Search & Indexing": "procurement:pdocument_list#search"` (`_safe_reverse` passes the
+fragment through; the 6.13 `#discount` precedent).
+
+### Tests — `apps/procurement/tests/test_dk_*.py`
+
+`models` 247 - `forms` 173 - `views` 334 - `security` 249. Fixtures are the `dk_*` set in the
+shared `conftest.py`; every function is `test_dk_*` and every helper `_dk_*` (L47). The security
+lane shipped its one open finding as a **strict xfail** rather than softening the assertion — the
+marker forced its own deletion when the view was fixed. Copy that habit.
+
+### Known gaps (deliberate, not omissions)
+
+`supplier_visible` is **inert** — no code path reads it. When 6.4 ships a vendor portal it must
+filter `supplier_visible=True` **and** join through to an `is_approved=True` current revision
+**and** serve bytes through `pdocrevision_download`, or it will publish an unapproved internal file
+to a counterparty. Policy acknowledgement -> 6.17. OCR, semantic search, folder trees, redlines and
+retention destruction -> Module 13.
+
+**Upstream bug found here, not fixed here:** `core.AuditLog.action` is `varchar(10)` while 6.19
+writes `"document_reminders_run"` (22 chars). SQLite ignores VARCHAR length so the suite is green;
+**MariaDB in strict mode would 500 the Run-reminders POST.** The fix is a `core` migration widening
+the column — single-writer work, and this dev DB is not in strict mode, which is why it has stayed
+invisible.
