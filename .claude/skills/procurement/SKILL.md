@@ -1498,3 +1498,145 @@ writes `"document_reminders_run"` (22 chars). SQLite ignores VARCHAR length so t
 **MariaDB in strict mode would 500 the Run-reminders POST.** The fix is a `core` migration widening
 the column — single-writer work, and this dev DB is not in strict mode, which is why it has stayed
 invisible.
+
+## 6.16 Supplier Performance & Evaluation (built 2026-09-05, reviewed + fixed 2026-09-06, tested 2026-09-06)
+
+Package folder `SupplierPerformanceEvaluation/` across all four layers, plus one flat compute module
+`apps/procurement/performance.py` (the `analytics.py` precedent — no sub-package glob reaches it, so
+remember it separately when scoping a reviewer or a grep).
+
+**Read this first: 6.16 does NOT own a scorecard.** `scm.SupplierScorecard` already existed with four
+**hard-coded** dimensions (`delivery`/`quality`/`price`/`responsiveness`) and a class-level
+`WEIGHTS` dict. 6.16 is the layer that makes those definable: a tenant KPI library, frozen per-period
+measurements hanging off SCM's scorecard by string FK, 360 feedback feeding survey-sourced KPIs, and
+PIPs. **L36 — never re-declare the scorecard.** The "New period" button links out to
+`scm:scorecard_create`; there is no procurement scorecard create route.
+
+**The one-way door.** `supplierevaluation_generate` writes the four SCM dimension columns for KPIs
+declaring a `maps_to_dimension`, sets `manual_override = True`, then calls the scorecard's own
+`recompute_overall()`. Setting that flag **permanently hands the scorecard to 6.16**:
+`scm`'s `recompute_from_signals()` returns immediately on any row carrying it
+(`SupplierScorecards.py:107`), so the two engines can never fight over one row. This is documented
+behaviour, stated in the model docstring, the view docstring, the confirm dialog and on the page —
+and generate **refuses** on a `published` or `archived` scorecard, because a closed period is closed.
+
+### Models (`models/SupplierPerformanceEvaluation/`)
+
+**`SupplierKpi`** (`SupplierKpis.py`) `[SKP-]` — the tenant-definable KPI library, and the single
+change that unlocks everything else. `weight` is the field that replaces SCM's hard-coded `WEIGHTS`.
+`source` ∈ `derived`/`survey`/`manual`. **`derived_metric` is a CLOSED 14-key registry** matching
+`performance.DERIVED_RESOLVERS` exactly, both ways — a key with no resolver is a KPI you can define,
+select, and never get a number from. `direction` + `target_value`/`warning_threshold`/
+`critical_threshold` are validated in `clean()` **against the direction**, so the bands cannot be
+ordered backwards. `maps_to_dimension` is the bridge to SCM's four columns. `applies_to`/
+`applies_to_tier` scope a KPI to one `scm.SupplierProfile.tier`.
+
+**`SupplierKpiScore`** (`ScorecardKpiScores.py`) — the frozen per-period line. `TenantOwned`, not
+`TenantNumbered`: a per-tenant `SKS-00001` is a number nobody would quote. FKs
+`"scm.SupplierScorecard"` **by string** (CASCADE, `related_name="procurement_kpi_scores"`) and
+`SupplierKpi` **PROTECT** — deleting a KPI must never silently take measured history with it;
+retirement is `is_active=False`, and the delete view carries a `ProtectedError` guard.
+`unique_together (tenant, scorecard, kpi)` is what makes generate idempotent. **Seven columns are
+frozen at write time** — `weight_applied`, `target_at_time`, `direction_at_time`, `source_at_time`,
+`unit_at_time`, `kpi_name`, `kpi_category` — so a later retune or rename cannot rewrite history.
+`__str__` reads the frozen `kpi_name`, never `self.kpi.name` (closes the L18 trap on the
+highest-volume table).
+
+**`SupplierFeedback`** (`SupplierFeedback.py`) `[SFB-]` — 360 responses. `respondent_kind`
+`internal`/`supplier_self` is **one CharField that buys the whole perception-gap board**. `rating`
+1–5 with `score_value()` → 0/25/50/75/100, weighted by `importance` 0–10. The
+one-response-per-`(supplier, scorecard, kpi, respondent)` rule lives in **`clean()`, not
+`unique_together`** — `scorecard` and `kpi` are nullable and SQL NULLs compare distinct, so a DB
+constraint would not actually prevent duplicates.
+
+**`SupplierImprovementPlan`** (`SupplierImprovementPlans.py`) `[SIP-]` — PIP/CAPA at plan grain.
+`escalated_suspension` FKs the **existing** `procurement.VendorSuspension` rather than inventing a
+second blocking mechanism. `OPEN_STATUSES` gates edit and delete, so a closed+signed plan is history.
+
+### `apps/procurement/performance.py` — the compute module
+
+`generate_scorecard_lines(scorecard, user)` is the heart. `@transaction.atomic`, `update_or_create`
+against the unique key so a second press refreshes rather than duplicates, and it **snapshots the
+pre-run bands into `previous` BEFORE writing anything** so "a NEW critical crossing" survives repeated
+presses and raises zero duplicate alerts. Alerts reuse `procurement.ProcurementAlert` (`kind="task"`)
+— no new alert table.
+
+**The 14 resolvers each own one counter-intuitive join** and they were all corrected during the
+contract phase — verify against the source before changing one: `ReceiptDiscrepancy` has **no vendor
+FK and no business date** (hop `goods_receipt__purchase_order__vendor` /
+`goods_receipt__receipt_date`); `SupplierInvoice`'s party FK is **`vendor`** while its sibling
+`InvoiceDispute`'s is **`supplier`**; `Backorder`/`DeliverySchedule` reach the supplier only via
+`po_line__purchase_order__vendor`; `PurchaseOrderChange` has no business date so **both sides** of
+the ratio window on the PO's `order_date`. **A resolver with no data returns `None`, never `0`** — a
+phantom zero would silently tank a supplier's score.
+
+### The three computed boards (bullet 5 — no model)
+
+Every figure is already frozen on the score lines, so a snapshot table would duplicate them.
+`benchmark_rows()` (3 queries at 5 suppliers **and at 302**), `trend_series()` (2 queries at 2 periods
+and at 12), `perception_gap_rows()` (1 query at 28 rows and at 208). **The honesty rule is
+load-bearing:** `BENCHMARK_NOTE` prints unconditionally — *"Benchmarks here are your own supply base
+only. There is no external industry feed in this system."* Nothing on these pages may say "industry
+benchmark", "predictive", "AI" or "machine-learned"; `SupplierKpi.industry_benchmark_value` is
+hand-entered and is labelled as such.
+
+### URLs / routes (`app_name = "procurement"`)
+
+Five first segments, all literals: `supplier-kpis/`, `supplier-evaluations/` (with `scores/`
+declared **before** `<int:pk>/`), `supplier-feedback/`, `improvement-plans/`,
+`supplier-benchmarking/` (+ `/trend/`, `/perception-gap/`). **33 routes, 33 distinct names.**
+`supplierevaluation_generate` and `improvementplan_close` are `@tenant_admin_required`; all 13 verbs
+are `@require_POST`.
+
+### Templates (`templates/procurement/performance/`)
+
+`kpi/`, `evaluation/`, `kpiscore/`, `feedback/`, `improvementplan/` × `{list,detail,form}.html`, plus
+`benchmark_board.html`, `trend_board.html`, `perception_gap.html` at the sub-module root — **17 files.**
+Badges render from **model-owned `*_css` maps** (`BAND_CSS`, `SEVERITY_CSS`, `STATUS_CSS`,
+`RATING_CSS`, `OUTCOME_CSS`) rather than template colour chains, which makes L33 structurally unable
+to recur on those rows: the template never names a colour.
+
+### Seeder (`_seed_supplier_performance`, dispatched after `_seed_budget_cost`)
+
+**The trap:** `seed_scm` creates its scorecards `draft`, recomputes, then **flips them to
+`published`** — and generate refuses anything but a draft. So this block **opens its own draft
+scorecard per supplier**, anchored on the *earliest existing SCM card's* `period_end` minus a day
+(not on `NOW`, which would collide on a fresh workspace). Per tenant: 9 KPIs, ~41 score lines, 28
+feedback, 4 plans. `--flush` deletes children-first (`SupplierKpiScore` before `SupplierKpi`, because
+of the PROTECT) and **resets `manual_override` and the four dimension columns on exactly the cards
+6.16 generated onto** — captured before the lines that identify them are deleted, so a card a human
+flagged is never touched.
+
+### Sidebar wiring
+
+`LIVE_LINKS["6.16"]` maps the five NavERP.md bullets character-exactly → `supplierkpi_list`,
+`supplierevaluation_list`, `supplierfeedback_list`, `improvementplan_list`,
+`supplier_benchmark_board`.
+
+### Tests
+
+`tests/test_supplierperf_{models,forms,views,security}.py`, fixtures `supplierperf_*` in the shared
+`conftest.py`. Model lane: **244 tests green**. The regression worth knowing about: **generating with
+zero applicable KPIs must leave `manual_override` False** — it used to fire the one-way door on a
+no-op, destroying a derivable score while reporting success in a green message.
+
+### Conventions & gotchas
+
+* **Never re-declare the scorecard** (L36). FK `"scm.SupplierScorecard"` by string.
+* **`makemigrations` sweeps the whole app registry** — it has no per-model flag, so it captures every
+  registered unmigrated model in `procurement`, including peers'. `--dry-run` first, announce, and
+  add the `models/__init__.py` re-export and generate in the same window.
+* **The demo period is not "today"** — seeded windows end `2026-08-09` (Acme/Globex). A board driven
+  at the default period lands on SCM's card, which carries zero 6.16 lines. That is correct, not drift.
+* `crud_list`'s L11 enum guard **disables itself for a field with no `choices`** — `source_at_time` is
+  a bare `CharField`, so its filter needs an explicit guard in the view. Same for any `__year` lookup:
+  `as_db_int` range-checks against `MAX_DB_INT`, not the date range 1–9999.
+
+### Common tasks
+
+* **Add a KPI metric** → add the key to `DERIVED_METRIC_CHOICES` **and** a resolver to
+  `DERIVED_RESOLVERS`. The registry is closed and asserted both ways; a key without a resolver is a
+  dead KPI.
+* **Add a board column** → it comes off the frozen line, not off a live join. If the figure is not
+  frozen, ask whether it belongs on the line instead.
+* **Change a band colour** → edit the model's `*_CSS` map. Do not add a colour chain to a template.
