@@ -1208,3 +1208,145 @@ URLs, CSRF on both write verbs, cross-tenant IDOR to 404, and that a forged POST
 `tenant`/`number`/the three amounts/`created_by` on a forecast create. Date bases use
 `timezone.localdate()` throughout, never `datetime.date.today()`, or the window-boundary assertions
 flake after local midnight (L16).
+
+---
+
+## 6.18 Inventory & Warehouse Integration (built 2026-09-05, reviewed + fixed 2026-09-05, tested 2026-09-06)
+
+**As-built now: 6.1–6.19.** Package folder `InventoryWarehouseIntegration/` across all four layers;
+templates under `templates/procurement/inventorywarehouse/`. Migration `0027` (all five tables).
+
+**Read this first: 6.18 is an INTEGRATION sub-module, and what it does NOT own is the design.**
+It ships three tables and *three pages with no table behind them at all*, and every quantity it
+shows is an aggregate over rows another module owns.
+
+* **`apps/procurement` writes ZERO `scm.StockMove` rows.** Grep it: `StockMove(` appears nowhere in
+  the app. `MaterialIssue.post()` mints a **draft `scm.StockAdjustment`** and SCM's own post action
+  writes the movement. This is the `CountProgram.generate_tasks()` bridge pattern
+  (`apps/inventory/models/StocktakingCycleCounting/CountPrograms.py:85-125`), and it is what keeps
+  "one way for stock to change" true across the whole codebase.
+* **There is no Bin or Zone model, and 6.18 must never add one.** A bin **is**
+  `scm.Location(location_type="bin")` (`apps/scm/models/InventoryManagement/Locations.py:17-23`).
+* **The receipt→bin trail is GRN → `PutawayTask.goods_receipt` → `to_location`.** It is *not*
+  `StockMove.reference == grn.number` — that matches only the receipt into **staging** and can
+  never name a bin. (The frozen contract asserted the wrong join for three phases; built as
+  written, the page would have rendered 200 with a silently blank bins column.)
+* **Nothing re-declares `Item`/`Location`/`StockMove`/`LotSerial`/`ReorderRule`** (L36). All 26 FKs
+  target the spine by string.
+
+### Models (`models/InventoryWarehouseIntegration/`)
+
+| Model | Base / number | File | Notes |
+|---|---|---|---|
+| `ReplenishmentPolicy` | `TenantOwned` — **no number** | `Policies.py` | Config, not a document |
+| `ReplenishmentRun` | `TenantNumbered` `RPL-#####` | `Runs.py` | The persisted proposal |
+| `ReplenishmentSuggestion` | plain, **no tenant column** | `Runs.py` | Child; tenancy via `run__tenant` |
+| `MaterialIssue` | `TenantNumbered` `MIS-#####` | `MaterialIssues.py` | Issue **and** return-to-stock |
+| `MaterialIssueLine` | plain, **no tenant column** | `MaterialIssues.py` | Child; tenancy via `issue__tenant` |
+
+**`ReplenishmentPolicy` is the procurement-side overlay on `scm.ReorderRule`** — it answers the
+three questions the rule does not: *who* to buy from (`preferred_vendor`, since `scm.Item` has no
+vendor FK), *how much* to round to, and *what defaults* the generated requisition inherits
+(`default_org_unit` / `default_budget` / `default_gl_account`, so 6.15's budget check and 6.3's
+approval routing both still run on it).
+
+* `round_quantity(raw)` is the **single** rounding implementation. Order is the contract: never
+  negative → floor at `min_order_qty` → round **up** to `order_multiple` → **cap last**. The cap
+  beats the multiple (multiple 30, cap 100, raw 95 → **100**, not 120) because a ceiling a caller
+  can exceed is not a ceiling.
+* `resolve()` / `resolve_map()` are **specificity-first**: an exact `(item, location)` row wins
+  over the `(item, NULL)` catch-all. **Use `resolve_map` in loops** — `resolve()` per row is the
+  N+1 this module exists to avoid.
+* `include_on_order` defaults **True** and closes a real behavioural gap rather than adding a
+  preference: `ReorderRule.is_below_point()` tests on-hand **only**, so an item already covered by
+  an open PO re-triggers on every run.
+* **`location` is nullable, so `unique_together` cannot catch a duplicate catch-all** — NULLs
+  compare distinct in SQL. `clean()` probes for it explicitly. Do not delete that probe.
+
+**`MaterialIssue` carries issue and return in ONE document** discriminated by `movement_type`.
+`StockAdjustment.reason` is `"other"` for **both** directions — `write_off` would assert the stock
+was destroyed and `found` that it appeared from nowhere — and direction rides the **sign** of
+`quantity_delta`. The provenance marker doubles as the note `StockAdjustment.clean()` demands for
+`reason="other"`.
+
+`post()` has four properties that must survive any edit: `select_for_update()` on the header; an
+`adjustment_id` **reuse branch** that closes the double-mint window the status gate cannot; the
+availability guard running *before* anything is minted, so a refused post leaves no orphan draft;
+and **per-item demand aggregation** — two lines of the same item are summed before comparing to
+on-hand, or a document passes line-by-line and still overdraws.
+
+### Routes (six literal first segments, 27 names)
+
+```
+stock-position/           stock_position                    (derived, no model)
+replenishment-policies/   replenishmentpolicy_{list,create,detail,edit,delete}
+replenishment-runs/       replenishmentrun_{list,create,detail,edit,delete,generate,release,cancel}
+                          replenishmentsuggestion_decide     (…/lines/<line_id>/decide/)
+material-issues/          materialissue_{list,create,detail,edit,delete,submit,post,cancel}
+                          materialissueline_{add,delete}
+receipt-bin-map/          receipt_bin_map                   (derived, no model)
+count-accuracy/           count_accuracy                    (derived, no model)
+```
+
+`replenishmentrun_release` and `materialissue_post` are `@tenant_admin_required` **and**
+`@require_POST` — one commits money, the other changes stock. So are the three
+`replenishmentpolicy_*` write verbs: the policy is configuration, but `release()` stamps it
+verbatim onto a requisition the admin then raises **in their own name**.
+
+### Templates (`templates/procurement/inventorywarehouse/`)
+
+Nine entity CRUD pages under `replenishmentpolicy/`, `replenishmentrun/`, `materialissue/`, plus
+the three derived pages as **bare files at the sub-module root** (they are standalone, not a CRUD
+triple). A two-level glob written for the entity folders alone silently misses all three.
+
+### Seeder (`_seed_inventory_warehouse`, dispatched last)
+
+3 policies / 1 run / 2 material issues per tenant. The run is **generated, not fabricated** — in a
+well-stocked workspace `generate()` correctly proposes nothing and the run is walked back to
+`draft` with a warning rather than having lines invented for it.
+
+**The seeder never calls `post()`.** Posting mints a `scm.StockAdjustment`, so a seeder that posted
+would write into the stock ledger on every re-seed — making seeding non-idempotent in a *different
+app's* tables, where the drift would surface in SCM with nothing in SCM's code to explain it.
+
+Lines are written through `save()`, never `bulk_create` — `save()` is where the
+`Item.average_cost` snapshot is stamped, and `bulk_create` would seed every line at zero value.
+
+### Gotchas that have already bitten
+
+* **Django drops `Meta.ordering` on a GROUP BY query.** `annotate()` over a multi-valued relation
+  makes one, so both registers carry an explicit `.order_by()` repeating `Meta.ordering`. Without
+  it `qs.ordered` is False, no `ORDER BY` reaches the SQL, and paginated rows repeat across pages
+  while others never show — no error, no production warning. **Do not delete those as duplication.**
+* **`ReorderRule.abc_class` is UPPERCASE `A/B/C`; `Location.abc_class` is lowercase `a/b/c`.**
+  `abc_class_filter` targets the former. Getting it backwards matches nothing rather than erroring.
+* **`as_db_int()` passes `0` through** — it is decimal and in range — but an `AutoField` starts at
+  1, so `filter(item_id=0)` silently empties a register. Resolve a pk to an object first.
+* **Two templates avoid 1+N only by their exact phrasing.** `{{ line.policy.pk }}` and
+  `{{ line.lot_serial.number }}` — printing the *object* instead resolves `__str__` through
+  unjoined relations at 1+2N and 1+N. The query-ceiling tests exist to catch that edit.
+* `CycleCountTaskLine.variance` is a Python **property** and cannot be aggregated — roll up as
+  `Sum(counted) − Sum(expected)`.
+
+### Sidebar (`LIVE_LINKS["6.18"]`)
+
+Five entries, one per NavERP.md bullet — three of them pointing at pages with **no model behind
+them**. `ReplenishmentPolicy` gets **no** key: it is configuration behind an analysis page, reached
+from the run register (the `ReceiptTolerancePolicy` / `SpendClassificationRule` precedent).
+
+### Tests (`test_invwarehouse_*.py`, subslug `invwarehouse`)
+
+143 tests: 37 models / 29 forms / 47 views / 30 security. Named regressions carry their finding id.
+The two sharpest security tests smuggle a **real** tenant-B child id under a tenant-A parent id —
+the only assertion that distinguishes "resolves through the parent" from "filters by tenant".
+
+### Deferred
+
+`CountVarianceReview` [CVR-] — root-cause attribution for count variance. Dropped deliberately: its
+only consumer is 6.16's supplier scorecard, so building the producer first ships a table nobody
+reads. `count_accuracy`'s `attribution_note` says plainly that attribution is not recorded rather
+than implying a capability the page lacks.
+
+**Known upstream gap (not 6.18's to fix):** `PutawayTask.goods_receipt` is NULL on every seeded row,
+so `receipt_bin_map`'s bins column is blank in demo data. The join is proven correct — linking tasks
+in a rolled-back transaction renders a real bin. The fix belongs in `apps/scm`'s seeder.
