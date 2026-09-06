@@ -2388,3 +2388,340 @@ def test_riskcompliance_auditseal_verify_is_post_only(client_a, riskcompliance_s
 
     assert resp.status_code == 405
     assert riskcompliance_seal.last_verify_ok is None
+
+
+# ================================================================== remaining CRUD legs
+
+def test_riskcompliance_screening_create_get_seeds_the_party_from_the_query_string(
+        client_a, tenant_a, riskcompliance_party_a):
+    """The board's per-row "screen this supplier" button carries its row's identity."""
+    _riskcompliance_supplier(riskcompliance_party_a)
+    url = reverse("procurement:screening_create")
+
+    seeded = client_a.get(url, {"party": str(riskcompliance_party_a.pk)})
+    assert seeded.status_code == 200
+    assert seeded.context["is_edit"] is False
+    assert seeded.context["form"].initial["party"] == riskcompliance_party_a.pk
+
+    # A value that is not a pk at all seeds nothing and never 500s (L11).
+    junk = client_a.get(url, {"party": "abc"})
+    assert junk.status_code == 200
+    assert junk.context["form"].initial.get("party") is None
+
+
+def test_riskcompliance_risksignal_create_get_seeds_the_party_from_the_query_string(
+        client_a, tenant_a, riskcompliance_party_a):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    url = reverse("procurement:risksignal_create")
+
+    seeded = client_a.get(url, {"party": str(riskcompliance_party_a.pk)})
+    assert seeded.status_code == 200
+    assert seeded.context["form"].initial["party"] == riskcompliance_party_a.pk
+
+    over_range = client_a.get(url, {"party": "999999999999999999999"})
+    assert over_range.status_code == 200
+    assert over_range.context["form"].initial.get("party") is None
+
+
+def test_riskcompliance_screeninghit_edit_amends_a_live_hit_and_refuses_an_adjudicated_one(
+        client_a, riskcompliance_hit_open, riskcompliance_hit_disposed,
+        riskcompliance_screening_open):
+    resp = client_a.post(
+        reverse("procurement:screeninghit_edit", args=[riskcompliance_hit_open.pk]), {
+            "matched_name": "NORTHWIND COMPONENTS LLC (AMENDED)",
+            "matched_list": "ofac_sdn",
+            "match_score": "97",
+            "match_type": "name",
+            "entry_reference": "SDN-19472",
+            "program": "UKRAINE-EO13662",
+            "country": "Cyprus",
+            "remarks": "Re-read the entry.",
+        })
+    riskcompliance_hit_open.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_hit_open.matched_name == "NORTHWIND COMPONENTS LLC (AMENDED)"
+    assert riskcompliance_hit_open.match_score == 97
+    assert riskcompliance_hit_open.screening_id == riskcompliance_screening_open.pk
+
+    refused = client_a.get(
+        reverse("procurement:screeninghit_edit", args=[riskcompliance_hit_disposed.pk]))
+    assert refused.status_code == 302
+    assert refused["Location"] == reverse("procurement:screeninghit_detail",
+                                          args=[riskcompliance_hit_disposed.pk])
+    assert any("can no longer be edited" in message
+               for message in _riskcompliance_messages(refused))
+
+
+def test_riskcompliance_risksignal_delete_is_post_only_and_refuses_a_terminal_row(
+        client_a, admin_user, tenant_a, riskcompliance_party_a):
+    live = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="paydex",
+                                      value="55.00", provider="dnb", user=admin_user)
+    closed = _riskcompliance_new_signal(tenant_a, riskcompliance_party_a, metric="fhr",
+                                        value="60.00", provider="rapidratings",
+                                        user=admin_user)
+    closed.dismiss(admin_user, "Not material.")
+    live_url = reverse("procurement:risksignal_delete", args=[live.pk])
+
+    got = client_a.get(live_url)
+    assert got.status_code == 405
+    assert SupplierRiskSignal.objects.filter(pk=live.pk).count() == 1
+
+    posted = client_a.post(live_url)
+    assert posted.status_code == 302
+    assert posted["Location"] == reverse("procurement:risksignal_list")
+    assert SupplierRiskSignal.objects.filter(pk=live.pk).count() == 0
+
+    refused = client_a.post(reverse("procurement:risksignal_delete", args=[closed.pk]))
+    assert refused.status_code == 302
+    assert SupplierRiskSignal.objects.filter(pk=closed.pk).count() == 1
+    assert any("cannot be deleted" in message for message in _riskcompliance_messages(refused))
+
+
+def test_riskcompliance_fraudalert_edit_amends_an_open_alert_and_refuses_a_disposed_one(
+        client_a, tenant_a, riskcompliance_party_a, admin_user,
+        riskcompliance_fraud_open, riskcompliance_fraud_resolved):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    today = _riskcompliance_today()
+
+    resp = client_a.post(
+        reverse("procurement:fraudalert_edit", args=[riskcompliance_fraud_open.pk]), {
+            "rule": "new_vendor_rush",
+            "severity": "high",
+            "document_date": today.isoformat(),
+            "amount": "52000.00",
+            "detail": "Re-graded after the category manager looked at it.",
+            "matched_on": "",
+            "assigned_to": str(admin_user.pk),
+            "vendor": str(riskcompliance_party_a.pk),
+        })
+    riskcompliance_fraud_open.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_fraud_open.severity == "high"
+    assert riskcompliance_fraud_open.amount == Decimal("52000.00")
+    assert riskcompliance_fraud_open.status == "open"
+
+    refused = client_a.get(
+        reverse("procurement:fraudalert_edit", args=[riskcompliance_fraud_resolved.pk]))
+    assert refused.status_code == 302
+    assert refused["Location"] == reverse("procurement:fraudalert_detail",
+                                          args=[riskcompliance_fraud_resolved.pk])
+    assert any("cannot be edited" in message for message in _riskcompliance_messages(refused))
+
+
+def test_riskcompliance_fraudalert_list_paginates_with_a_tie_on_the_document_date(
+        client_a, tenant_a, riskcompliance_party_a):
+    same_day = _riskcompliance_today() - _riskcompliance_days(2)
+    made = [_riskcompliance_new_alert(tenant_a, riskcompliance_party_a, rule="backdated_po",
+                                      amount=f"{100 + index}.00", document_date=same_day,
+                                      matched_on=f"TIE-{index:03d}")
+            for index in range(17)]
+    url = reverse("procurement:fraudalert_list")
+
+    page_one = client_a.get(url)
+    page_two = client_a.get(url, {"page": "2"})
+
+    assert len(_riskcompliance_pks(page_one)) == 15
+    assert len(_riskcompliance_pks(page_two)) == 2
+    seen = _riskcompliance_pks(page_one) + _riskcompliance_pks(page_two)
+    assert len(set(seen)) == 17
+    assert set(seen) == {alert.pk for alert in made}
+
+
+def test_riskcompliance_screeninghit_list_paginates_with_a_tie_on_the_match_score(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    screening = _riskcompliance_new_screening(tenant_a, riskcompliance_party_a, admin_user,
+                                              reference="CSL-PAGE-0001")
+    made = [_riskcompliance_new_hit(screening, f"MATCH {index:03d}", score=88)
+            for index in range(17)]
+    url = reverse("procurement:screeninghit_list")
+
+    page_one = client_a.get(url)
+    page_two = client_a.get(url, {"page": "2"})
+
+    assert len(_riskcompliance_pks(page_one)) == 15
+    assert len(_riskcompliance_pks(page_two)) == 2
+    seen = _riskcompliance_pks(page_one) + _riskcompliance_pks(page_two)
+    assert len(set(seen)) == 17
+    assert set(seen) == {hit.pk for hit in made}
+
+
+def test_riskcompliance_audit_trail_object_id_filter_returns_its_rows(
+        client_a, tenant_a, admin_user):
+    first = _riskcompliance_new_audit_row(tenant_a, admin_user, target="Screening one")
+    second = _riskcompliance_new_audit_row(tenant_a, admin_user, target="Screening two")
+    AuditLog.objects.filter(pk=second.pk).update(object_id=77)
+    url = reverse("procurement:audit_trail")
+
+    assert _riskcompliance_pks(client_a.get(url, {"object_id": "77"})) == [second.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"object_id": "1"})) == [first.pk]
+
+
+# ================================================================== invalid POSTs redisplay
+
+def test_riskcompliance_screening_create_invalid_post_redisplays_the_form(
+        client_a, tenant_a, riskcompliance_party_a):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    today = _riskcompliance_today()
+
+    resp = client_a.post(reverse("procurement:screening_create"), {
+        "party": str(riskcompliance_party_a.pk),
+        "list_source": "ofac_sdn",
+        "checkpoint": "pre_po",
+        "method": "manual_lookup",
+        "screened_on": today.isoformat(),
+        # The list snapshot postdates the lookup - the model's own rule.
+        "list_as_of": (today + _riskcompliance_days(3)).isoformat(),
+        "reference": "CSL-BAD-0001",
+        "result": "clear",
+        "match_threshold": "90",
+        "threshold_rationale": "House threshold.",
+        "notes": "",
+    })
+
+    assert resp.status_code == 200
+    assert resp.context["is_edit"] is False
+    assert len(resp.context["form"].errors) >= 1
+    assert ComplianceScreening.objects.filter(reference="CSL-BAD-0001").count() == 0
+
+
+def test_riskcompliance_screeninghit_create_invalid_post_redisplays_the_form(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    screening = _riskcompliance_new_screening(tenant_a, riskcompliance_party_a, admin_user,
+                                              reference="CSL-BADHIT-0001")
+
+    resp = client_a.post(reverse("procurement:screeninghit_create", args=[screening.pk]), {
+        "matched_name": "   ",
+        "matched_list": "ofac_sdn",
+        "match_score": "93",
+        "match_type": "name",
+        "entry_reference": "",
+        "program": "",
+        "country": "",
+        "remarks": "",
+    })
+    screening.refresh_from_db()
+
+    assert resp.status_code == 200
+    assert resp.context["screening"].pk == screening.pk
+    assert resp.context["is_edit"] is False
+    assert "matched_name" in resp.context["form"].errors
+    assert screening.hits.count() == 0
+    assert screening.hit_count == 0
+
+
+def test_riskcompliance_risksignal_create_invalid_post_redisplays_the_form(
+        client_a, tenant_a, riskcompliance_party_a):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    today = _riskcompliance_today()
+
+    resp = client_a.post(reverse("procurement:risksignal_create"), {
+        "party": str(riskcompliance_party_a.pk),
+        "provider": "dnb",
+        "metric": "ser_rating",
+        # The observation is dated in the future - nobody observed tomorrow's number.
+        "observed_on": (today + _riskcompliance_days(5)).isoformat(),
+        "value": "8.00",
+        "next_refresh_on": (today + _riskcompliance_days(90)).isoformat(),
+        "source_ref": "Bad row.",
+        "notes": "",
+    })
+
+    assert resp.status_code == 200
+    assert resp.context["is_edit"] is False
+    assert len(resp.context["form"].errors) >= 1
+    assert SupplierRiskSignal.objects.filter(source_ref="Bad row.").count() == 0
+
+
+def test_riskcompliance_fraudalert_create_invalid_post_redisplays_the_form(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    _riskcompliance_supplier(riskcompliance_party_a)
+
+    resp = client_a.post(reverse("procurement:fraudalert_create"), {
+        "rule": "vendor_employee_match",
+        "severity": "high",
+        "document_date": _riskcompliance_today().isoformat(),
+        "amount": "100.00",
+        "detail": "Both sides of the overlap are the same party.",
+        "matched_on": "",
+        "assigned_to": str(admin_user.pk),
+        "vendor": str(riskcompliance_party_a.pk),
+        # The two sides of an overlap have to be two DIFFERENT parties.
+        "related_party": str(riskcompliance_party_a.pk),
+    })
+
+    assert resp.status_code == 200
+    assert resp.context["is_edit"] is False
+    assert len(resp.context["form"].errors) >= 1
+    assert FraudAlert.objects.filter(tenant=tenant_a).count() == 0
+
+
+# ================================================================== exemption guard rails
+
+def test_riskcompliance_attestation_exempt_refuses_an_over_long_reason(
+        client_a, riskcompliance_attestation_pending):
+    from apps.procurement.views.RiskComplianceManagement.Attestations import MAX_REASON_LENGTH
+
+    resp = client_a.post(reverse("procurement:attestation_exempt",
+                                 args=[riskcompliance_attestation_pending.pk]),
+                         {"reason": "x" * (MAX_REASON_LENGTH + 1)})
+    riskcompliance_attestation_pending.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_attestation_pending.status == "pending"
+    assert riskcompliance_attestation_pending.exempt_reason == ""
+    assert any(f"longer than {MAX_REASON_LENGTH} characters" in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_attestation_exempt_refuses_a_settled_row(
+        client_a, admin_user, riskcompliance_attestation_signed):
+    resp = client_a.post(reverse("procurement:attestation_exempt",
+                                 args=[riskcompliance_attestation_signed.pk]),
+                         {"reason": "Too late to excuse them."})
+    riskcompliance_attestation_signed.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_attestation_signed.status == "acknowledged"
+    assert riskcompliance_attestation_signed.exempted_by_id is None
+    assert any("cannot be exempted" in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_auditseal_create_refuses_an_over_long_note(
+        client_a, tenant_a, admin_user):
+    _riskcompliance_new_audit_row(tenant_a, admin_user, target="Waiting to be sealed")
+
+    resp = client_a.post(reverse("procurement:auditseal_create"), {"note": "x" * 300})
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:auditseal_list")
+    assert AuditSeal.objects.filter(tenant=tenant_a).count() == 0
+    assert len(_riskcompliance_messages(resp)) == 1
+
+
+def test_riskcompliance_screening_rescreen_board_falls_back_to_the_default_window(
+        client_a, admin_user, tenant_a):
+    """A cleared screening with no ``next_rescreen_on`` is due ``screened_on + 365``, not
+    quietly out of scope."""
+    party = _riskcompliance_supplier(_riskcompliance_party_named(tenant_a, "Tailspin Alloys"))
+    screened_on = _riskcompliance_today() - _riskcompliance_days(
+        ComplianceScreening.DEFAULT_RESCREEN_DAYS + 6)
+    screening = _riskcompliance_new_screening(tenant_a, party, admin_user,
+                                              reference="CSL-FALLBACK-0001",
+                                              screened_on=screened_on,
+                                              list_as_of=screened_on)
+    screening.clear(admin_user, "Nothing returned.")
+    # Blank the back-filled date the way a row cleared before that back-fill existed would look.
+    ComplianceScreening.objects.filter(pk=screening.pk).update(next_rescreen_on=None)
+
+    resp = client_a.get(reverse("procurement:screening_rescreen_board"))
+    rows = resp.context["rows"]
+
+    assert resp.status_code == 200
+    assert [row["state"] for row in rows] == ["overdue"]
+    assert rows[0]["due_on"] == screened_on + _riskcompliance_days(
+        ComplianceScreening.DEFAULT_RESCREEN_DAYS)
+    assert rows[0]["days"] == 6
+    assert resp.context["stats"] == {"overdue": 1, "due_soon": 0, "total": 1}
