@@ -1584,7 +1584,7 @@ hand-entered and is labelled as such.
 
 Five first segments, all literals: `supplier-kpis/`, `supplier-evaluations/` (with `scores/`
 declared **before** `<int:pk>/`), `supplier-feedback/`, `improvement-plans/`,
-`supplier-benchmarking/` (+ `/trend/`, `/perception-gap/`). **33 routes, 33 distinct names.**
+`supplier-benchmarking/` (+ `/trend/`, `/perception-gap/`). **34 routes, 34 distinct names** (the 34th is `improvementplan_evidence`, added by the I5 security fix — the urls package docstring still says 33).
 `supplierevaluation_generate` and `improvementplan_close` are `@tenant_admin_required`; all 13 verbs
 are `@require_POST`.
 
