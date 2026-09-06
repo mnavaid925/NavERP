@@ -3471,6 +3471,81 @@ If a glob returns fewer than the "now" column, the glob is wrong — not the wor
 `git add 'path'; git commit --only 'path' -m 'msg'` — one file per commit. Plain `git add` + `git commit` sweeps
 peers' staged files into your commit (it already happened once, `8262b645`). Never `git add -A`/`.`. Never push.
 
+
+---
+
+# 6.17 CLOSE-OUT REVIEW (2026-09-06) — supersedes the HANDOFF block above
+
+**Delivered.** Module 6 is now **19 of 19 sub-modules** — the Procurement Management System is complete.
+
+## What shipped
+
+| | |
+|---|---|
+| Models | 6 — `ComplianceScreening` + `ScreeningHit`, `SupplierRiskSignal`, `FraudAlert`, `PolicyAttestation`, `AuditSeal` |
+| Backend | 30 `.py` across `models/forms/views/urls` `RiskComplianceManagement/` |
+| Templates | 26 under `templates/procurement/riskcompliance/` |
+| Routes | 54 url names, 14 first path segments |
+| Migrations | `0028` (tables), `0030` (review fixes + `last_verified_by`) |
+| Tests | **470** — models 102, forms 113 fns/188 cases, views 117, security 63 |
+| Review | 6 passes, **39 findings**: 37 fixed, 2 skipped app-wide, 1 refuted |
+
+## The five NavERP.md bullets, and how each is actually served
+1. **Regulatory Compliance Checks** → `ComplianceScreening` + `ScreeningHit`. 13 list sources (CSL and
+   SAM.gov separate — the CSL excludes SAM), 4 OFAC checkpoints, dispositions mandatory even on a false
+   positive (31 CFR 501.601), a true match escalating into the **existing** 6.4 `VendorSuspension`.
+2. **Supplier Financial Risk Monitoring** → `SupplierRiskSignal` with `METRIC_SCALES`, the constant that
+   lets FHR 100 (healthy) and SER 9 (dangerous) render honestly on one page.
+3. **Audit Trail & Logging** → the `audit_trail` register plus `AuditSeal`'s SHA-256 chain.
+4. **Fraud Detection Rules** → `FraudAlert.scan()`, six rules, none of them 6.14's.
+5. **Policy Management & Acknowledgment** → `PolicyAttestation` over 6.19's policy library.
+
+## Decisions worth carrying forward
+- **6.19 owns `ProcurementPolicy`; 6.17 owns the ledger.** Ships-first (L36), settled by cross-session
+  message, recorded in contract §6a, 6.19's docstring and the module skill. A second declaration raises
+  `RuntimeError` and breaks `check` repo-wide.
+- **Tamper-EVIDENT, never tamper-proof.** `core.AuditLog` has no immutability guarantee. Every surface
+  says so. Over-claiming would be a security defect, not a wording nit.
+- **`screening_batch` cut**, and the vendor bank-detail fraud rule declared **not buildable** on the page
+  (`accounting.VendorProfile` has no bank fields) rather than faked.
+- **`auditseal_verify` left un-gated deliberately** — `verify()` recomputes from live data so the stamps
+  cannot be flipped to a false value, and a tamper check only an admin can run is a check nobody runs.
+
+## What the six review passes actually caught (the case for running all six)
+Each pass found something the others could not:
+- **code-reviewer** — C1: a hit deletable out of a *decided* screening, erasing the match the decision
+  rested on.
+- **security-reviewer** — I3: `policyattestation_edit` ungated while its sibling delete was admin-only, so
+  the template's `is_admin` gate was cosmetic and any member could reassign an obligation.
+- **performance-reviewer** — C2: `defer()` scopes to the root model, so a `select_related("prev_seal")`
+  re-pulled a 50k-pair JSON blob (~21 MB/page) **past** the defer. Invisible to any query-count test.
+- **frontend-reviewer** — I10: three `confirm()` handlers HTML-escaping a Python-authored string; correct
+  today, one apostrophe away from silently disarming a dialog.
+- **explorer** — I11: the `kind="risk"` hand-off to 6.1 was never completed, so 6.17's alerts were
+  unfilterable *and* uneditable in that inbox.
+- **qa-smoke-tester** — proved by execution what the others could only reason about: the disposition gate
+  survives its cached counters being zeroed by raw `UPDATE`, and the seal detects modify/delete/insert while
+  naming the offending log id.
+
+## Known gaps, stated rather than hidden
+- **Three seeded fraud alerts are hand-raised** and not reproducible by the rules whose labels they carry
+  (acme has no `RequisitionApproval` rows). Pressing *Run scan* over their window reports "raised nothing
+  new". Recorded at `seed_procurement.py:~4419` and as finding M26.
+- **`self_approval` has no seeded runtime coverage** — the model lane builds its own fixture data for it and
+  for three other rules, so all six are tested; only two are exercised by the demo workspace.
+- **M3 and M22 skipped as app-wide** (`PROCUREMENT_CONTENT_MODELS` entries that are inert on the
+  procurement branch; `<dt>`/`<dd>` outside a `<dl>`, which renders correctly via descendant selectors and
+  appears 28 more times outside this sub-module). Forking 6.17 out of step with twelve other modules would
+  be worse than the defect (L18/L28).
+- **I13 routed to 6.19, not fixed here** — four of their surfaces still say the ledger does not exist, one
+  user-visible. Their files; message sent.
+
+## Cross-session notes
+Built alongside live 6.16, 6.18 and 6.19 sessions in one checkout. Two of their files ended up inside 6.17
+commits (`8262b645`, `00b28c0e`) — nothing lost, both flagged by message, neither rebased. The migration
+queue was replaced mid-build by arrival-order-plus-announce, and `0030` deliberately carried three of 6.16's
+indexes because `makemigrations` reads the app registry, not a file list. See **L51** and its correction.
+
 # Sub-module 6.19 - Document & Knowledge Management (Module 6: Procurement Management System, `procurement`) - plan from research-procurement-6.19.md  (2026-09-05)
 
 > Built AHEAD of 6.16/6.17/6.18 (no `LIVE_LINKS` key exists for any of them). Scope is the research's
