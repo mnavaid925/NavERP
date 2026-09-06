@@ -1191,7 +1191,29 @@ of **the index at that instant** rather than of the command. Committing "quickly
 
 **Rule:** `git add 'path'; git commit --only 'path' -m 'msg'`. `--only` commits exactly that pathspec whatever
 else is staged. The `git add` is still needed for an untracked file (pathspec matching cannot see it otherwise),
-but the sweep becomes impossible rather than unlikely. 6.16 tested the matrix: `git commit -- path -m msg` fails
+but the sweep becomes impossible rather than unlikely.
+
+**CORRECTION (2026-09-06, same session, procurement 6.17) — `--only` fixes ONE of the two races, and I
+generalised from a test that only covered that one.** There are two:
+
+* **The INDEX race** — a peer's `git add` of a *different* file lands between my `add` and my `commit`.
+  `--only` closes this completely. Verified with a peer file concurrently staged.
+* **The FILE race** — two sessions hold uncommitted changes *inside the same file*. `git add <file>` and
+  `git commit --only <file>` **both take the whole working-tree copy of that path**; neither can take half a
+  file. So whoever commits first necessarily carries the other's in-flight work, and **no pathspec discipline
+  avoids it.** This is how commit `00b28c0e` ("6.17 shared fixtures") came to contain ~414 lines of 6.16's
+  `supplierperf_` conftest block.
+
+`git add -p` is the only thing that could split a file and it is interactive, so it is unavailable to an agent.
+The real mitigations are: **commit a shared file promptly** after appending to it so the window is small; **say
+so** when it happens; and — the only step that actually *proves* nothing was clobbered rather than assuming the
+merge was clean — **run an AST duplicate-definition check over the whole file afterwards** (`ast.parse` + count
+module-level defs; `apps/procurement/tests/test_suite_hygiene.py` is the committed version of this).
+
+The meta-lesson is the one worth keeping: **I tested `--only` against the index race, it passed, and I
+recommended it to three other sessions as the fix for "the sweep".** The test was correct and was aimed at half
+the problem. A verified answer to the wrong question still reads as green — see [[verified-answer-wrong-question]],
+and L44's whole family. 6.16 tested the matrix: `git commit -- path -m msg` fails
 (`-m` parses as a pathspec) and `git commit -m msg -- path` works but is order-sensitive — **`--only` is the only
 form with no argument-order trap.**
 
