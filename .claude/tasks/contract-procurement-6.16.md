@@ -822,7 +822,19 @@ must not break it. All five segments are new whole components — checked agains
 | 2 | `supplier-kpis/add/` | `views.supplierkpi_create` | `supplierkpi_create` | `@login_required` |
 | 3 | `supplier-kpis/<int:pk>/` | `views.supplierkpi_detail` | `supplierkpi_detail` | `@login_required` |
 | 4 | `supplier-kpis/<int:pk>/edit/` | `views.supplierkpi_edit` | `supplierkpi_edit` | `@login_required` |
-| 5 | `supplier-kpis/<int:pk>/delete/` | `views.supplierkpi_delete` | `supplierkpi_delete` | `@login_required` + **`@require_POST`** |
+| 5 | `supplier-kpis/<int:pk>/delete/` | `views.supplierkpi_delete` | `supplierkpi_delete` | `@login_required` + **`@require_POST`** + a **`ProtectedError` guard** |
+
+> **AMENDED after review (CD1 — this row was a contract defect, not a code defect).** As
+> originally written this row specified only `@login_required + @require_POST`, which would
+> **500** on any KPI carrying measured history: §1.2 pins `SupplierKpiScore.kpi` as
+> `on_delete=PROTECT`, so a bare `crud_delete` raises an uncaught `ProtectedError`. The view
+> must wrap the delete — `get_object_or_404` → `transaction.atomic()` → `except ProtectedError`
+> → `messages.error` naming the blockers → redirect to detail — following the app's existing
+> precedent at `apps/core/views/Party.py:47-72` and
+> `apps/accounting/views/GeneralLedger/Currencies.py:64-72`. Retirement is `is_active=False`,
+> not deletion. The build agent implemented the guard and flagged the divergence rather than
+> silently following the contract; that was the correct call and the contract is now corrected
+> to match the shipped code.
 
 Literal `add/` is declared **before** `<int:pk>/`.
 
@@ -1336,7 +1348,16 @@ Return shape:
   "refused": bool,
   "refusal_reason": str,     # "" when not refused
   "written": int,            # lines created or updated
-  "skipped": int,            # applicable KPIs that produced no line (no data, no resolver)
+  "skipped": int,            # applicable KPIs whose resolver returned NO MEASURED VALUE
+                            # (no data in the window, or no resolver for the metric).
+                            # AMENDED after review (CD2): this previously read "produced no
+                            # line", which the code never did and must not do. Every
+                            # applicable KPI gets a line — that is what makes a scorecard
+                            # readable as "these are the KPIs, and here is which of them we
+                            # could measure". So `written` ALREADY INCLUDES every `skipped`
+                            # one; the two do not sum to the applicable count. The code and
+                            # the success message were always consistent; only this line was
+                            # wrong.
   "dimensions": dict,        # {"delivery": Decimal|None, "quality": …, "price": …, "responsiveness": …}
   "alerts": int,             # ProcurementAlert rows raised for NEW critical crossings
 }
