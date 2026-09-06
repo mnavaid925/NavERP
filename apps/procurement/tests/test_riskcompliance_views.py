@@ -1115,3 +1115,329 @@ def test_riskcompliance_risksignal_refresh_board_marks_a_stale_observation(
     assert resp.context["rows"][0]["age_days"] == stale_days
     assert resp.context["stats"] == {"overdue": 0, "due_soon": 0, "stale": 1}
     assert stale.number in _riskcompliance_html(resp)
+
+
+# ================================================================== fraud register
+
+def test_riskcompliance_fraudalert_list_renders_the_seeded_rows_and_its_context(
+        client_a, riskcompliance_fraud_open, riskcompliance_fraud_resolved):
+    resp = client_a.get(reverse("procurement:fraudalert_list"))
+    html = _riskcompliance_html(resp)
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/fraudalert/list.html" in _riskcompliance_templates(resp)
+    assert riskcompliance_fraud_open.number in html
+    assert riskcompliance_fraud_resolved.number in html
+    assert "Northwind Components Ltd" in html
+    assert set(_riskcompliance_pks(resp)) == {riskcompliance_fraud_open.pk,
+                                              riskcompliance_fraud_resolved.pk}
+    assert len(resp.context["rule_choices"]) == 6
+    assert len(resp.context["status_choices"]) == 5
+    assert len(resp.context["severity_choices"]) == 3
+    assert resp.context["stats"] == {"open": 1, "investigating": 0, "confirmed": 1, "high": 0}
+    assert resp.context["is_admin"] is True
+
+
+def test_riskcompliance_fraudalert_list_each_valid_filter_value_returns_its_rows(
+        client_a, tenant_a, riskcompliance_party_a, admin_user,
+        riskcompliance_fraud_open, riskcompliance_fraud_resolved):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    other = _riskcompliance_supplier(_riskcompliance_party_named(tenant_a, "Contoso Fasteners"))
+    self_approval = _riskcompliance_new_alert(tenant_a, other, rule="self_approval",
+                                              severity="high", amount="2500.00")
+    url = reverse("procurement:fraudalert_list")
+
+    assert _riskcompliance_pks(client_a.get(url, {"rule": "new_vendor_rush"})) == [
+        riskcompliance_fraud_open.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"rule": "self_approval"})) == [
+        self_approval.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"rule": "vendor_employee_match"})) == [
+        riskcompliance_fraud_resolved.pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"status": "open"}))) == {
+        riskcompliance_fraud_open.pk, self_approval.pk}
+    assert _riskcompliance_pks(client_a.get(url, {"status": "substantiated"})) == [
+        riskcompliance_fraud_resolved.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"status": "investigating"})) == []
+    assert _riskcompliance_pks(client_a.get(url, {"severity": "medium"})) == [
+        riskcompliance_fraud_open.pk]
+    assert set(_riskcompliance_pks(client_a.get(url, {"severity": "high"}))) == {
+        self_approval.pk, riskcompliance_fraud_resolved.pk}
+    assert _riskcompliance_pks(client_a.get(url, {"severity": "low"})) == []
+    assert _riskcompliance_pks(client_a.get(url, {"vendor": str(other.pk)})) == [
+        self_approval.pk]
+    assert set(_riskcompliance_pks(
+        client_a.get(url, {"assigned_to": str(admin_user.pk)}))) == {
+            riskcompliance_fraud_open.pk, riskcompliance_fraud_resolved.pk}
+
+
+def test_riskcompliance_fraudalert_list_search_matches_each_declared_field(
+        client_a, tenant_a, riskcompliance_party_a):
+    by_detail = _riskcompliance_new_alert(tenant_a, riskcompliance_party_a,
+                                          detail="Split into four requisitions on one day.")
+    by_matched_on = _riskcompliance_new_alert(tenant_a, riskcompliance_party_a,
+                                              rule="duplicate_vendor",
+                                              matched_on="tax id ending 4471")
+    url = reverse("procurement:fraudalert_list")
+
+    assert _riskcompliance_pks(client_a.get(url, {"q": "four requisitions"})) == [by_detail.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"q": "ending 4471"})) == [by_matched_on.pk]
+    assert _riskcompliance_pks(client_a.get(url, {"q": by_detail.number})) == [by_detail.pk]
+    assert len(_riskcompliance_pks(client_a.get(url, {"q": "Northwind"}))) == 2
+
+
+def test_riskcompliance_fraudalert_list_query_budget_with_every_row_disposed(
+        client_a, tenant_a, riskcompliance_party_a, admin_user, django_assert_max_num_queries):
+    """15 alerts ALL disposed - ``resolved_by`` is non-null on every row, which is the hop."""
+    url = reverse("procurement:fraudalert_list")
+
+    def build(count, offset=0):
+        for index in range(offset, offset + count):
+            alert = _riskcompliance_new_alert(
+                tenant_a, riskcompliance_party_a, rule="backdated_po",
+                amount=f"{1000 + index}.00", matched_on=f"row {index:02d}")
+            alert.unsubstantiate(admin_user, "Checked and closed.")
+
+    build(3)
+    three_rows = _riskcompliance_count_queries(client_a, url)
+    build(12, offset=3)
+
+    # 12 = 9 page/auth reads (this register offers TWO dropdowns, vendors and users) + the
+    # 3-query session write every authenticated request makes.
+    with django_assert_max_num_queries(12):
+        resp = client_a.get(url)
+
+    assert resp.status_code == 200
+    assert len(_riskcompliance_pks(resp)) == 15
+    assert {alert.resolved_by_id for alert in resp.context["object_list"]} == {admin_user.pk}
+    assert _riskcompliance_count_queries(client_a, url) == three_rows
+
+
+def test_riskcompliance_fraudalert_detail_sources_carry_the_pinned_keys(
+        client_a, riskcompliance_fraud_resolved):
+    resp = client_a.get(reverse("procurement:fraudalert_detail",
+                                args=[riskcompliance_fraud_resolved.pk]))
+    html = _riskcompliance_html(resp)
+    sources = resp.context["sources"]
+
+    assert resp.status_code == 200
+    assert _riskcompliance_key_sets(sources) == {frozenset({"label", "value", "url"})}
+    assert [row["label"] for row in sources] == ["Supplier", "Employee"]
+    assert [row["value"] for row in sources] == ["Northwind Components Ltd", "R. Okonkwo"]
+    assert all(row["url"].startswith("/") for row in sources)
+    # A real source value reaches the markup rather than a row of em-dashes (L8).
+    assert "R. Okonkwo" in html
+    assert riskcompliance_fraud_resolved.number in html
+    # Terminal: no disposition button is offered.
+    assert resp.context["allowed_actions"] == []
+    assert resp.context["blocking_suspensions"] == []
+
+
+def test_riskcompliance_fraudalert_detail_offers_every_verb_on_an_open_alert(
+        client_a, riskcompliance_fraud_open):
+    resp = client_a.get(reverse("procurement:fraudalert_detail",
+                                args=[riskcompliance_fraud_open.pk]))
+    actions = resp.context["allowed_actions"]
+
+    assert resp.status_code == 200
+    assert _riskcompliance_key_sets(actions) == {frozenset(
+        {"key", "label", "css", "icon", "note_required"})}
+    assert [action["key"] for action in actions] == [
+        "investigate", "substantiate", "unsubstantiate", "refer"]
+    assert [action["note_required"] for action in actions] == [False, True, True, True]
+    assert [row["label"] for row in resp.context["sources"]] == ["Supplier"]
+
+
+def test_riskcompliance_fraudalert_create_post_saves_and_derives_the_dedupe_key(
+        client_a, tenant_a, riskcompliance_party_a, admin_user):
+    _riskcompliance_supplier(riskcompliance_party_a)
+    today = _riskcompliance_today()
+
+    resp = client_a.post(reverse("procurement:fraudalert_create"), {
+        "rule": "new_vendor_rush",
+        "severity": "high",
+        "document_date": today.isoformat(),
+        "amount": "48000.00",
+        "detail": "First order is 48,000.00 six days after approval.",
+        "matched_on": "",
+        "assigned_to": str(admin_user.pk),
+        "vendor": str(riskcompliance_party_a.pk),
+    })
+    saved = FraudAlert.objects.get(amount=Decimal("48000.00"))
+
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("procurement:fraudalert_detail", args=[saved.pk])
+    assert saved.tenant_id == tenant_a.pk
+    assert saved.status == "open"
+    assert saved.dedupe_key == f"nvrush:{riskcompliance_party_a.pk}"
+    assert saved.number.startswith("FRD-")
+
+
+def test_riskcompliance_fraudalert_disposition_walks_the_state_machine(
+        client_a, admin_user, riskcompliance_fraud_open):
+    url = reverse("procurement:fraudalert_disposition", args=[riskcompliance_fraud_open.pk])
+
+    no_note = client_a.post(url, {"action": "substantiate", "resolution_note": "   "})
+    riskcompliance_fraud_open.refresh_from_db()
+    assert no_note.status_code == 302
+    assert riskcompliance_fraud_open.status == "open"
+    assert len(_riskcompliance_messages(no_note)) == 1
+
+    took_it = client_a.post(url, {"action": "investigate", "resolution_note": ""})
+    riskcompliance_fraud_open.refresh_from_db()
+    assert took_it.status_code == 302
+    assert riskcompliance_fraud_open.status == "investigating"
+
+    closed = client_a.post(url, {"action": "substantiate",
+                                 "resolution_note": "Confirmed with the category manager."})
+    riskcompliance_fraud_open.refresh_from_db()
+    assert closed.status_code == 302
+    assert riskcompliance_fraud_open.status == "substantiated"
+    assert riskcompliance_fraud_open.resolved_by_id == admin_user.pk
+    assert riskcompliance_fraud_open.resolved_at is not None
+    assert riskcompliance_fraud_open.resolution_note == "Confirmed with the category manager."
+
+
+def test_riskcompliance_fraudalert_disposition_cannot_reopen_a_disposed_alert(
+        client_a, riskcompliance_fraud_resolved):
+    resp = client_a.post(
+        reverse("procurement:fraudalert_disposition", args=[riskcompliance_fraud_resolved.pk]),
+        {"action": "investigate", "resolution_note": ""})
+    riskcompliance_fraud_resolved.refresh_from_db()
+
+    assert resp.status_code == 302
+    assert riskcompliance_fraud_resolved.status == "substantiated"
+    assert any("cannot be investigated from substantiated" in message
+               for message in _riskcompliance_messages(resp))
+
+
+def test_riskcompliance_fraudalert_delete_is_post_only_and_refuses_a_disposed_row(
+        client_a, tenant_a, riskcompliance_party_a, riskcompliance_fraud_resolved):
+    live = _riskcompliance_new_alert(tenant_a, riskcompliance_party_a, rule="backdated_po",
+                                     matched_on="delete me")
+    live_url = reverse("procurement:fraudalert_delete", args=[live.pk])
+
+    got = client_a.get(live_url)
+    assert got.status_code == 405
+    assert FraudAlert.objects.filter(pk=live.pk).count() == 1
+
+    posted = client_a.post(live_url)
+    assert posted.status_code == 302
+    assert posted["Location"] == reverse("procurement:fraudalert_list")
+    assert FraudAlert.objects.filter(pk=live.pk).count() == 0
+
+    terminal = client_a.post(
+        reverse("procurement:fraudalert_delete", args=[riskcompliance_fraud_resolved.pk]))
+    assert terminal.status_code == 302
+    assert FraudAlert.objects.filter(pk=riskcompliance_fraud_resolved.pk).count() == 1
+
+
+# ================================================================== the fraud scan
+
+def test_riskcompliance_fraud_scan_get_renders_the_read_only_half(client_a):
+    resp = client_a.get(reverse("procurement:fraud_scan"))
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/fraud_scan.html" in _riskcompliance_templates(resp)
+    # "Not run yet" and "ran and found nothing" are different facts on a fraud page.
+    assert resp.context["results"] is None
+    assert len(resp.context["rule_labels"]) == 6
+    assert resp.context["skipped_groups"] == []
+    assert resp.context["capped"] == []
+    assert resp.context["not_buildable_note"] == FraudAlert.NOT_BUILDABLE_NOTE
+    assert resp.context["is_admin"] is True
+    assert len(resp.context["scan_limits"]) >= 1
+
+
+def test_riskcompliance_fraud_scan_post_raises_alerts_then_a_second_post_raises_zero(
+        client_a, tenant_a):
+    """Idempotence, over HTTP: the interesting number on the second run is the ZERO."""
+    first = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Contoso Fasteners Ltd"))
+    second = _riskcompliance_supplier(
+        _riskcompliance_party_named(tenant_a, "Contoso Fasteners (UK)"))
+    Party.objects.filter(pk__in=[first.pk, second.pk]).update(tax_id="GB-99887766")
+
+    today = _riskcompliance_today()
+    payload = {"start": (today - _riskcompliance_days(30)).isoformat(),
+               "end": (today + _riskcompliance_days(1)).isoformat(),
+               "rules": ["duplicate_vendor"]}
+    url = reverse("procurement:fraud_scan")
+
+    run_one = client_a.post(url, payload, follow=True)
+    assert run_one.status_code == 200
+    assert run_one.context["results"] == {"duplicate_vendor": 1}
+    assert FraudAlert.objects.filter(tenant=tenant_a, rule="duplicate_vendor").count() == 1
+    raised = FraudAlert.objects.get(tenant=tenant_a, rule="duplicate_vendor")
+    assert raised.vendor_id == min(first.pk, second.pk)
+    assert raised.related_party_id == max(first.pk, second.pk)
+    assert raised.dedupe_key == f"dupven:{min(first.pk, second.pk)}:{max(first.pk, second.pk)}:tax_id"
+    assert "1 new fraud alert(s) raised." in _riskcompliance_html(run_one)
+
+    run_two = client_a.post(url, payload, follow=True)
+    assert run_two.status_code == 200
+    assert run_two.context["results"] == {"duplicate_vendor": 0}
+    assert FraudAlert.objects.filter(tenant=tenant_a, rule="duplicate_vendor").count() == 1
+    assert "raised nothing new" in _riskcompliance_html(run_two)
+
+
+def test_riskcompliance_fraud_scan_post_with_a_backwards_window_is_refused(
+        client_a, tenant_a):
+    today = _riskcompliance_today()
+    resp = client_a.post(reverse("procurement:fraud_scan"), {
+        "start": today.isoformat(),
+        "end": (today - _riskcompliance_days(5)).isoformat(),
+    })
+
+    assert resp.status_code == 200
+    assert resp.context["results"] is None
+    assert resp.context["form"].errors
+    assert FraudAlert.objects.filter(tenant=tenant_a).count() == 0
+
+
+# ================================================================== the fraud board
+
+def test_riskcompliance_fraud_board_rows_carry_the_pinned_keys(
+        client_a, riskcompliance_fraud_open, riskcompliance_fraud_resolved):
+    resp = client_a.get(reverse("procurement:fraud_board"))
+    html = _riskcompliance_html(resp)
+    by_rule = resp.context["by_rule"]
+    by_severity = resp.context["by_severity"]
+    ageing = resp.context["ageing"]
+
+    assert resp.status_code == 200
+    assert "procurement/riskcompliance/fraud_board.html" in _riskcompliance_templates(resp)
+
+    assert _riskcompliance_key_sets(by_rule) == {frozenset(
+        {"rule", "label", "open", "total", "high", "amount", "url"})}
+    assert len(by_rule) == 6  # every rule appears, including the empty ones
+    rules = {row["rule"]: row for row in by_rule}
+    assert rules["new_vendor_rush"]["open"] == 1
+    assert rules["new_vendor_rush"]["total"] == 1
+    assert rules["new_vendor_rush"]["amount"] == Decimal("48000.00")
+    assert rules["vendor_employee_match"]["open"] == 0
+    assert rules["vendor_employee_match"]["total"] == 1
+    # No OPEN alert under this rule carries an amount - NULL, never a claimed 0.00.
+    assert rules["vendor_employee_match"]["amount"] is None
+    assert rules["self_approval"]["total"] == 0
+    assert rules["new_vendor_rush"]["url"].endswith("?rule=new_vendor_rush")
+
+    assert _riskcompliance_key_sets(by_severity) == {frozenset(
+        {"severity", "label", "css", "open", "total", "url"})}
+    assert [row["severity"] for row in by_severity] == ["high", "medium", "low"]
+    severities = {row["severity"]: row for row in by_severity}
+    assert severities["medium"]["open"] == 1
+    assert severities["high"]["open"] == 0
+    assert severities["high"]["total"] == 1
+
+    assert _riskcompliance_key_sets(ageing) == {frozenset(
+        {"key", "label", "count", "css"})}
+    # The one open alert is 3 days old, so exactly one bucket holds it and the rest are empty.
+    assert sum(row["count"] for row in ageing) == 1
+
+    assert resp.context["stats"] == {"total": 2, "open": 1, "investigating": 0,
+                                     "confirmed": 1, "high": 0}
+    assert resp.context["citation_invoice_url"] == reverse(
+        "procurement:supplierinvoice_duplicates")
+    assert resp.context["citation_maverick_url"] == reverse("procurement:maverick_dashboard")
+    # A real label from a row-dict reaches the markup (L8).
+    assert "New supplier with immediate high-value spend" in html
