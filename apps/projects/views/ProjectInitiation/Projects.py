@@ -5,6 +5,7 @@ advanced by 7.1's kickoff verbs (see ProjectKickoffs) rather than from here, so 
 "active" until the kickoff that started it says so.
 """
 from django.db import transaction
+from django.db.models import Count, Q
 
 from apps.projects.forms import ProjectForm
 from apps.projects.models import Project
@@ -73,7 +74,13 @@ def prj_detail(request, pk):
         # Capped: the register is a page, not the whole grid — the stakeholder list has its own
         # page with the influence/interest ordering.
         "stakeholders": obj.stakeholders.select_related("party", "user")[:50],
-        "kickoffs": obj.kickoffs.all(),
+        # Same annotation as pko_list: the template's Attending column would otherwise fire one
+        # COUNT per kickoff row. `attendee_total`, not `attendee_count` (the property is a data
+        # descriptor), and the explicit order_by because the aggregate drops Meta.ordering.
+        "kickoffs": obj.kickoffs.annotate(
+            attendee_total=Count("project__stakeholders",
+                                 filter=Q(project__stakeholders__attending_kickoff=True))
+        ).order_by("-created_at", "-id"),
         "source_request": obj.request,
     })
 
