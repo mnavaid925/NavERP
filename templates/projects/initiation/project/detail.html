@@ -150,7 +150,7 @@
 
   <div class="form-actions">
     <a href="{% url 'projects:prj_list' %}" class="btn btn-outline">Back to Projects</a>
-    <form method="post" action="{% url 'projects:prj_delete' obj.pk %}" onsubmit="return confirm('Delete project {{ obj.number }}? This cannot be undone.');">
+    <form method="post" action="{% url 'projects:prj_delete' obj.pk %}" onsubmit="return confirm('Delete project {{ obj.number }}? Its stakeholder rows and its kickoff are deleted with it{% if source_request %}, and request {{ source_request.number }} is reopened as approved{% endif %}. This cannot be undone.');">
       {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
     </form>
   </div>
