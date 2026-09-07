@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Stakeholder Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stakeholder Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Stakeholders</span></div>
+      <p class="text-muted">The RACI matrix and the engagement plan in one register. Rows are listed by influence, highest first — the power ranking the grid exists to show.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pst_create' %}" class="btn btn-primary"><i data-lucide="user-plus"></i> Add Stakeholder</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search scope or notes…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">All projects</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="stakeholder_type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in stakeholder_type_choices %}
+              <option value="{{ val }}" {% if request.GET.stakeholder_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="raci_role" aria-label="RACI" class="form-select">
+            <option value="">Any RACI role</option>
+            {% for val, label in raci_role_choices %}
+              <option value="{{ val }}" {% if request.GET.raci_role == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="influence" aria-label="Influence" class="form-select">
+            <option value="">Any influence</option>
+            {% for val, label in influence_choices %}
+              <option value="{{ val }}" {% if request.GET.influence == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="interest" aria-label="Interest" class="form-select">
+            <option value="">Any interest</option>
+            {% for val, label in interest_choices %}
+              <option value="{{ val }}" {% if request.GET.interest == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:pst_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Who</th><th>Project</th><th>Type</th><th>RACI</th><th>Scope</th><th>Influence</th><th>Interest</th><th>Engagement</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pst_detail' obj.pk %}">{{ obj.party.name|default:obj.user.get_full_name|default:obj.user.username|default:"—" }}</a><div class="text-muted">{{ obj.number }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.get_stakeholder_type_display }}</td>
+              <td>
+                {% if obj.raci_role == 'a' %}<span class="badge badge-red">{{ obj.get_raci_role_display }}</span>
+                {% elif obj.raci_role == 'r' %}<span class="badge badge-green">{{ obj.get_raci_role_display }}</span>
+                {% elif obj.raci_role == 'c' %}<span class="badge badge-info">{{ obj.get_raci_role_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_raci_role_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.raci_scope|default:"—" }}</td>
+              <td>
+                {% if obj.influence == 'high' %}<span class="badge badge-red">{{ obj.get_influence_display }}</span>
+                {% elif obj.influence == 'medium' %}<span class="badge badge-amber">{{ obj.get_influence_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_influence_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.interest == 'high' %}<span class="badge badge-red">{{ obj.get_interest_display }}</span>
+                {% elif obj.interest == 'medium' %}<span class="badge badge-amber">{{ obj.get_interest_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_interest_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.engagement_strategy == 'manage_closely' %}<span class="badge badge-red">{{ obj.get_engagement_strategy_display }}</span>
+                {% elif obj.engagement_strategy == 'keep_satisfied' %}<span class="badge badge-amber">{{ obj.get_engagement_strategy_display }}</span>
+                {% elif obj.engagement_strategy == 'keep_informed' %}<span class="badge badge-info">{{ obj.get_engagement_strategy_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_engagement_strategy_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pst_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:pst_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:pst_delete' obj.pk %}" onsubmit="return confirm('Remove this stakeholder from the register?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="users"></i><h3>No stakeholders match</h3><p>Add the people who need to be consulted, or reset the filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
