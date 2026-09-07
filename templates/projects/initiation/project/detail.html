@@ -35,7 +35,7 @@
           {% elif obj.charter_status == 'rejected' %}<span class="badge badge-red">{{ obj.get_charter_status_display }}</span>
           {% else %}<span class="badge badge-slate">{{ obj.get_charter_status_display }}</span>{% endif %}
         </dd>
-        <dt>Approved by</dt><dd>{{ obj.charter_approved_by.get_full_name|default:obj.charter_approved_by.username|default:"—" }}</dd>
+        <dt>Approved by</dt><dd>{% if obj.charter_approved_by %}{{ obj.charter_approved_by.get_full_name|default:obj.charter_approved_by.username }}{% else %}—{% endif %}</dd>
         <dt>Approved at</dt><dd>{{ obj.charter_approved_at|date:"M d, Y H:i"|default:"—" }}</dd>
         <dt>Charter document</dt><dd>{{ obj.charter_document|default:"—" }}</dd>
         <dt>Status</dt>
@@ -48,8 +48,8 @@
           {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
           {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
         </dd>
-        <dt>Executive sponsor</dt><dd>{{ obj.executive_sponsor.get_full_name|default:obj.executive_sponsor.username|default:"—" }}</dd>
-        <dt>Project manager</dt><dd>{{ obj.project_manager.get_full_name|default:obj.project_manager.username|default:"—" }}</dd>
+        <dt>Executive sponsor</dt><dd>{% if obj.executive_sponsor %}{{ obj.executive_sponsor.get_full_name|default:obj.executive_sponsor.username }}{% else %}—{% endif %}</dd>
+        <dt>Project manager</dt><dd>{% if obj.project_manager %}{{ obj.project_manager.get_full_name|default:obj.project_manager.username }}{% else %}—{% endif %}</dd>
         <dt>Client</dt><dd>{{ obj.client.name|default:"—" }}</dd>
         <dt>Start</dt><dd>{{ obj.start_date|date:"M d, Y"|default:"—" }}</dd>
         <dt>End</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}</dd>
@@ -85,7 +85,7 @@
             <tbody>
               {% for s in stakeholders %}
                 <tr>
-                  <td><a href="{% url 'projects:pst_detail' s.pk %}">{{ s.party.name|default:s.user.get_full_name|default:s.user.username|default:"—" }}</a></td>
+                  <td><a href="{% url 'projects:pst_detail' s.pk %}">{% if s.party %}{{ s.party.name }}{% elif s.user %}{{ s.user.get_full_name|default:s.user.username }}{% else %}—{% endif %}</a></td>
                   <td>{{ s.get_stakeholder_type_display }}</td>
                   <td>{{ s.get_raci_role_display }}</td>
                   <td>{{ s.raci_scope|default:"—" }}</td>
