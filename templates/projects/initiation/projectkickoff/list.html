@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Project Kickoffs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Project Kickoffs</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Kickoffs</span></div>
+      <p class="text-muted">The launch ceremony. Holding a kickoff moves its project to <em>kickoff</em>; completing it moves the project to <em>active</em>.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pko_create' %}" class="btn btn-primary"><i data-lucide="rocket"></i> Plan Kickoff</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search location, link or agenda…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">All projects</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="agenda_template" aria-label="Agenda" class="form-select">
+            <option value="">Any agenda</option>
+            {% for val, label in agenda_template_choices %}
+              <option value="{{ val }}" {% if request.GET.agenda_template == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:pko_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Kickoff</th><th>Project</th><th>Meeting</th><th>Agenda</th><th>Attending</th><th>Status</th><th>Baseline</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pko_detail' obj.pk %}">{{ obj.number }}</a></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.meeting_date|date:"M d, Y H:i"|default:"—" }}</td>
+              <td>{{ obj.get_agenda_template_display }}</td>
+              <td>{{ obj.attendee_count }}</td>
+              <td>
+                {% if obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'held' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'scheduled' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.baseline_acknowledged_at|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pko_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:pko_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:pko_delete' obj.pk %}" onsubmit="return confirm('Delete kickoff {{ obj.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="rocket"></i><h3>No kickoffs match</h3><p>Plan a kickoff for a chartered project, or reset the filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
