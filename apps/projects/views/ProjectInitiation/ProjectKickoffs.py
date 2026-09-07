@@ -5,6 +5,11 @@ Four verbs, all POST-only. Two of them advance the PROJECT's status as a side ef
 ceremony: a project is not "active" because someone typed it, it becomes active because the
 kickoff that started it was held and closed out.
 
+``complete`` therefore refuses a kickoff that was never ``held`` AND a project whose charter is
+not ``approved``: without both gates a member could go create-project → create-kickoff → Complete
+and land an `active` project on a draft charter, routing around the ``@tenant_admin_required`` on
+``prj_approve_charter``.
+
 ``baseline`` stamps an acknowledgement only — the baseline RECORD (the frozen schedule) is 7.2's.
 """
 from django.contrib.contenttypes.models import ContentType
@@ -152,10 +157,19 @@ def pko_complete(request, pk):
     if obj.status == "completed":
         messages.info(request, "That kickoff is already completed.")
         return redirect("projects:pko_detail", pk=obj.pk)
+    if obj.status != "held":
+        messages.error(request, "Hold the kickoff before completing it.")
+        return redirect("projects:pko_detail", pk=obj.pk)
+    project = obj.project
+    if project.charter_status != "approved":
+        messages.error(
+            request,
+            "Approve the charter before completing the kickoff — a project must not go live on "
+            "an unapproved charter.")
+        return redirect("projects:pko_detail", pk=obj.pk)
     obj.status = "completed"
     obj.completed_at = timezone.now()
     obj.save(update_fields=["status", "completed_at", "updated_at"])
-    project = obj.project
     if project.status in ("draft", "chartered", "kickoff"):
         project.status = "active"
         project.save(update_fields=["status", "updated_at"])
