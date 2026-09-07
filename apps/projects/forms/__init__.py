@@ -9,6 +9,12 @@ The shared toolkit lives in ``_common.py``: ``TenantModelForm`` (core), ``Tenant
 chosen FK's tenant can trust it) and ``_reject_foreign`` (a narrowed ``<select>`` is UX, not an
 authorization boundary).
 """
+# Re-export the shared toolkit, matching apps/accounting/forms/__init__.py and
+# apps/crm/forms/__init__.py: without it ``from apps.projects.forms import TenantUniqueMixin``
+# (or ``TenantModelForm`` / ``MAX_UPLOAD_BYTES``) raises ImportError — crm's own suite depends on
+# exactly this line, so the omission is a live trap for the projects test suite too.
+from ._common import *  # noqa: F401,F403
+
 # --- 7.1 Project Initiation & Charter ---------------------------------------------------------
 from .ProjectInitiation.ProjectKickoffs import ProjectKickoffForm  # noqa: F401
 from .ProjectInitiation.ProjectRequests import (  # noqa: F401
