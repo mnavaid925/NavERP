@@ -104,7 +104,6 @@
                 {% elif obj.status == 'converted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'needs_information' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
-                {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
                 {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
               </td>
               <td>{{ obj.target_start_date|date:"M d, Y"|default:"—" }}</td>
