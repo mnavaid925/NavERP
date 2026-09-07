@@ -112,6 +112,10 @@ def prq_delete(request, pk):
 
 
 # -- governance verbs ---------------------------------------------------------------------------
+#
+# Every verb captures ``previous = obj.status`` BEFORE mutating and logs that. A hard-coded
+# ``{"from": "draft"}`` made the immutable trail assert the gate was respected in exactly the
+# cases where it was not — a `needs_information` → `submitted` hop logged as coming from `draft`.
 
 @login_required
 @require_POST
@@ -122,11 +126,12 @@ def prq_submit(request, pk):
     if obj.status not in ("draft", "needs_information"):
         messages.info(request, f"That request is already {obj.get_status_display().lower()}.")
         return redirect("projects:prq_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "submitted"
     obj.submitted_at = timezone.now()
     obj.save(update_fields=["status", "submitted_at", "updated_at"])
     write_audit_log(request.user, obj, "submit",
-                    changes={"verb": "submit", "from": "draft", "to": obj.status})
+                    changes={"verb": "submit", "from": previous, "to": obj.status})
     messages.success(request, f"Submitted “{obj.title}” for screening.")
     return redirect("projects:prq_detail", pk=obj.pk)
 
@@ -143,13 +148,14 @@ def prq_approve(request, pk):
             f"Only a request under review can be approved — this one is "
             f"{obj.get_status_display().lower()}.")
         return redirect("projects:prq_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "approved"
     obj.decision = "go"
     obj.decided_by = request.user
     obj.decided_at = timezone.now()
     obj.save(update_fields=["status", "decision", "decided_by", "decided_at", "updated_at"])
     write_audit_log(request.user, obj, "approve",
-                    changes={"verb": "approve", "from": "submitted", "to": obj.status})
+                    changes={"verb": "approve", "from": previous, "to": obj.status})
     messages.success(request, f"Approved “{obj.title}” — it can now be converted to a project.")
     return redirect("projects:prq_detail", pk=obj.pk)
 
@@ -178,6 +184,7 @@ def prq_reject(request, pk):
             f"Only a request under review can be rejected — this one is "
             f"{obj.get_status_display().lower()}.")
         return redirect("projects:prq_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "rejected"
     obj.decision = "no_go"
     obj.rejection_reason = form.cleaned_data["reason"]
@@ -186,7 +193,7 @@ def prq_reject(request, pk):
     obj.save(update_fields=["status", "decision", "rejection_reason", "decided_by",
                             "decided_at", "updated_at"])
     write_audit_log(request.user, obj, "reject",
-                    changes={"verb": "reject", "from": "submitted", "to": obj.status})
+                    changes={"verb": "reject", "from": previous, "to": obj.status})
     messages.success(request, f"Rejected “{obj.title}”.")
     return redirect("projects:prq_detail", pk=obj.pk)
 
