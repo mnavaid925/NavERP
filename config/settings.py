@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "apps.scm",
     "apps.inventory",
     "apps.procurement",
+    "apps.projects",
 ]
 
 MIDDLEWARE = [
