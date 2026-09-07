@@ -5278,3 +5278,585 @@ pagination-ordering indexes, and the thrice-duplicated alert-raise skeleton.
 writes `"document_reminders_run"` (22 chars). SQLite ignores VARCHAR length so the suite is green;
 **MariaDB in strict mode would 500 the Run-reminders POST.** The fix is a `core` migration —
 single-writer work, and this dev DB is not in strict mode, which is why it has stayed invisible.
+
+---
+
+## 7.1 Project Initiation & Charter (Module 7: Project Management, `projects`) — plan from research-projects-7.1.md (2026-09-07)
+
+> **BRAND-NEW-APP RUN.** `apps/projects/` does not exist (`ls apps/projects` → No such file or
+> directory), `apps.projects` is not in `INSTALLED_APPS`, `templates/projects/` does not exist, and
+> `grep -c '"7\.' apps/core/navigation.py` → **0** (the last key is `"6.19"` at
+> `apps/core/navigation.py:1690`). Module 7 is fully greenfield, so this plan carries the scaffold.
+>
+> Backend sub-module folder: **`ProjectInitiation/`** (all four layers). Template sub-module slug:
+> **`initiation`** (`templates/projects/initiation/<entity>/{list,detail,form}.html`) — pinned by
+> the research at `research-projects-7.1.md:487-488`. Do NOT use `projectinitiation/`: the
+> as-built convention for a single-app namespace is the short slug (procurement ships
+> `documentknowledge/`, `spendanalytics/`, `budgetcost/`).
+
+### Scope (research's 4 models, unchanged — the repo did not contradict it)
+
+- [ ] 4 models: `ProjectRequest` [PRQ-] + `Project` [PRJ-] + `ProjectStakeholder` [PST-] +
+      `ProjectKickoff` [PKO-]. **No fifth.**
+- [ ] **`Project` ships in 7.1, not 7.2** (research ruling, upheld): every surveyed tool creates
+      the project at initiation, and 7.2's WBS / dependencies / milestones / frozen baseline must
+      hang off an existing record. 7.2 *inherits* `Project` and adds to it.
+- [ ] **Charter stays short.** No money columns on `Project` — `budget_amount`, commitments and
+      actuals are 7.4's, and `accounting.Project` already carries them for the costing lens.
+- [ ] **No second attachment store.** The signed charter is `charter_document` → `core.Document`
+      (nullable reuse), exactly the 6.19 ruling.
+- [ ] **No `BusinessCase` table and no `ProjectKickoffItem` table.** Bullet 2's economics are a
+      field set on `ProjectRequest`; bullet 5's onboarding checklist is `core.Activity(kind="task")`
+      rows GFK'd to the project. Both are the research's deliberate 4-model-cap trades and both are
+      reversible — say so in the model docstrings.
+- [ ] **If the pass runs long, `ProjectKickoff` is dropped first** (research: the only one of the
+      four whose content is fully re-expressible on existing spine).
+
+### ⚠️ The three `PRJ-` models — VERIFIED, and NOT to be "fixed" by a later session
+
+| Model | File | Prefix | Status |
+|---|---|---|---|
+| `accounting.Project` | `apps/accounting/models/ProjectCosting/Projects.py:6` | `NUMBER_PREFIX = "PRJ"` (`:9`) | pre-spine stand-in — **untouched this pass** |
+| `crm.CrmProject` | `apps/crm/models/ProjectDelivery/Projects.py:6` | `NUMBER_PREFIX = "PRJ"` (`:9`) | pre-spine stand-in — **untouched this pass** |
+| `projects.Project` | `apps/projects/models/ProjectInitiation/Projects.py` | `NUMBER_PREFIX = "PRJ"` | **the master, added this pass** |
+
+- [ ] `projects.Project`'s docstring MUST name both stand-ins and their paths, and state that
+      numbers are unique per `(tenant, number)` **within a model**, so there is no key collision —
+      but the sidebar copy and every page title must say which "project" the user is looking at.
+- [ ] **Do NOT rename, migrate, deprecate or touch `accounting.Project` / `crm.CrmProject`.** No
+      migration for either app this pass.
+
+### Spine: grep-VERIFIED this pass (L28 — the grep is the truth, not the ERD)
+
+| Target | Verified at | Used for |
+|---|---|---|
+| `core.Tenant` | `apps/core/models/Tenant.py` | every `tenant` FK (via the abstract bases) |
+| `core.Party` | `apps/core/models/Party.py:5` | `ProjectRequest.requester_party`, `Project.client`, `ProjectStakeholder.party` |
+| `core.OrgUnit` | `apps/core/models/OrgUnit.py:5` | `ProjectRequest.org_unit`, `Project.org_unit` |
+| `core.Document` | `apps/core/models/Document.py:5` | `Project.charter_document` (GFK attachment, has `tenant`) |
+| `core.Activity` | `apps/core/models/Activity.py:5` | kickoff meeting (`kind="meeting"`) + onboarding items (`kind="task"`), GFK to `Project`. **Has `due_at` DateTimeField, `status`, and NO `completed_at`** |
+| `accounting.Currency` | `apps/accounting/models/GeneralLedger/Currencies.py:6` | `ProjectRequest.currency` — **GLOBAL, no `tenant` column (L29)** |
+| `crm.Opportunity` | `apps/crm/models/SalesForceAutomation/Opportunities.py:5` | `ProjectRequest.source_opportunity` (`TenantNumbered`) |
+| `apps.core.utils.next_number` | `apps/core/utils.py:34` | the four number prefixes |
+| `apps.core.utils.write_audit_log` | `apps/core/utils.py:6` | audit rows — **see the `varchar(10)` trap below** |
+| `apps.core.crud` helpers | `apps/core/crud.py:115-224` | `crud_list`/`create`/`edit`/`detail`/`delete` |
+| `tenant_admin_required` | `apps/core/decorators.py:13` | gates the governance verbs |
+| `scm.Item` | `apps/scm/models/InventoryManagement/Items.py:73` | **NOT used by 7.1** — recorded only so nobody hunts for `core.Item` |
+
+- [ ] Confirmed absent, so nothing may hope for them: **no `core.Project`** (the ERD entry is
+      unbuilt intent — `grep -rn "^class Project" apps/core/models/` returns nothing), no
+      `core.Item` / `inventory.Item` (**`Item` is `scm.Item`** — the `/next-module` skill's "Item
+      not built yet" note is **stale**), no `hrm.Department` (that shape is
+      `hrm.EmployeeProfile`/`hrm.DepartmentProfile`), no `procurement.Contract`, no Celery.
+- [ ] Every FK is declared **by string** (`"core.Party"`, `"crm.Opportunity"`,
+      `"accounting.Currency"`, `"core.Document"`, `"projects.Project"`) — no cross-app model import
+      at module level.
+
+### 🚨 Two places this plan OVERRIDES the research (say it loudly)
+
+1. **`ProjectStakeholder.Meta.ordering` — research says `["-influence", "party__name"]`; that is
+   WRONG and must not ship.** `influence` is a `CharField` with values `high`/`medium`/`low`, so a
+   descending sort is **alphabetical**: `medium`, then `low`, then `high` — the exact inverse of the
+   power ranking the influence/interest grid exists to show. `party` is also nullable, so
+   `party__name` sorts NULLs inconsistently between SQLite (tests) and MariaDB (prod).
+   **Pinned instead:** `Meta.ordering = ["-created_at", "-id"]` (index-backed, deterministic), and
+   the list view annotates a numeric rank and orders by it — see Model 3.
+2. **`unique_together = ("tenant", "project", "party", "raci_scope")` is a partial constraint.**
+   `party` is nullable and SQL treats every NULL as distinct, so the DB happily stores unlimited
+   duplicates for stakeholder rows that carry only a `user`. **Pinned:** keep the constraint (it
+   does bind the common `party`-set case) **and** add a form-level `clean()` that raises on a
+   duplicate `(project, party, raci_scope)` — otherwise the register silently accepts doubles.
+   `clean()` also enforces "at least one of `party` / `user` must be set".
+
+### 🚨 `core.AuditLog.action` is `varchar(10)` — the 6.19 upstream bug, hit again
+
+Confirmed at `apps/core/models/AuditLog.py:17`. 6.19 recorded that it writes a 22-char action and
+would 500 on MariaDB in strict mode. **Every 7.1 action string is ≤ 10 characters — pinned:**
+`create` / `update` / `delete` (the `crud_*` helpers), `submit`, `approve`, `reject`, `convert`,
+`return`, `schedule`, `held`, `complete`, `baseline` (8). The verb itself goes in `changes`
+(`{"verb": "...", "from": ..., "to": ...}`), never in `action`. Do not file the `core` migration
+from this pass — it is single-writer `core` work; note it in the review file.
+
+---
+
+### Model 1 — `ProjectRequest` [PRQ-] (`models/ProjectInitiation/ProjectRequests.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PRQ"`. 32 declared + 4 inherited = **36 fields**.
+Realizes bullets **1 Project Request & Intake** and **2 Business Case & Feasibility**.
+
+#### Choices (exact machine values)
+- [ ] `REQUEST_TYPE_CHOICES` — `new_project`/New Project, `enhancement`/Enhancement,
+      `change_request`/Change Request, `defect`/Defect Repair, `idea`/Idea (ServiceNow)
+- [ ] `SOURCE_CHOICES` — `portal`/Portal, `internal`/Internal, `idea`/Idea, `opportunity`/
+      Opportunity, `email`/Email
+- [ ] `PRIORITY_CHOICES` — `low`/Low, `medium`/Medium, `high`/High, `critical`/Critical
+- [ ] `RISK_RATING_CHOICES` — `low`/Low, `medium`/Medium, `high`/High, `critical`/Critical
+- [ ] `FEASIBILITY_CHOICES` — `not_assessed`/Not Assessed, `feasible`/Feasible,
+      `feasible_with_constraints`/Feasible with Constraints, `not_feasible`/Not Feasible
+- [ ] `STATUS_CHOICES` — `draft`/Draft, `submitted`/Submitted, `screening`/Screening,
+      `assessment`/Assessment, `needs_information`/Needs Information, `approved`/Approved,
+      `rejected`/Rejected, `deferred`/Deferred, `converted`/Converted (BrightWork + send-back)
+- [ ] `DECISION_CHOICES` — `go`/Go, `no_go`/No-Go, `hold`/Hold, `deferred`/Deferred
+- [ ] Constants: `RISK_DISCOUNT = {"low": Decimal("1.00"), "medium": Decimal("0.85"),
+      "high": Decimal("0.70"), "critical": Decimal("0.50")}` — the documented flat factor behind
+      "risk-adjusted return". **Explicitly not Monte Carlo** (7.5's).
+
+#### Fields
+- [ ] `title` `CharField(max_length=200)`
+- [ ] `description` `TextField()`
+- [ ] `request_type` `CharField(max_length=20, choices=REQUEST_TYPE_CHOICES, default="new_project")`
+- [ ] `requested_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="prq_filed")`
+- [ ] `requester_party` `FK("core.Party", SET_NULL, null=True, blank=True, related_name="project_requests")`
+      — external submitter
+- [ ] `org_unit` `FK("core.OrgUnit", SET_NULL, null=True, blank=True, related_name="project_requests")`
+- [ ] `source` `CharField(max_length=20, choices=SOURCE_CHOICES, default="internal")`
+- [ ] `source_opportunity` `FK("crm.Opportunity", SET_NULL, null=True, blank=True, related_name="project_requests")`
+- [ ] `assigned_reviewer` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="prq_to_review")`
+- [ ] `assigned_approver` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="prq_to_approve")`
+- [ ] `priority` `CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")`
+- [ ] `strategic_alignment` `PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(5)])`
+      — 0–5 score (ServiceNow/Planview)
+- [ ] `estimated_cost` `DecimalField(max_digits=14, decimal_places=2, default=0)`
+- [ ] `estimated_benefit` `DecimalField(max_digits=14, decimal_places=2, default=0)`
+- [ ] `currency` `FK("accounting.Currency", SET_NULL, null=True, blank=True, related_name="project_requests")`
+      — **global table, no `tenant` column**: `TenantModelForm` will NOT scope it (it only scopes
+      models carrying `tenant`) and `clean()` must never compare `currency.tenant` (L29)
+- [ ] `risk_rating` `CharField(max_length=10, choices=RISK_RATING_CHOICES, default="low")`
+- [ ] `feasibility` `CharField(max_length=24, choices=FEASIBILITY_CHOICES, default="not_assessed")`
+- [ ] `feasibility_notes` `TextField(blank=True)`
+- [ ] `alternatives_considered` `TextField(blank=True)`
+- [ ] `required_resources` `TextField(blank=True, help_text="Free text — real resourcing is 7.3's")`
+- [ ] `target_start_date` `DateField(null=True, blank=True)`
+- [ ] `target_end_date` `DateField(null=True, blank=True)`
+- [ ] `status` `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")` — **verb-driven,
+      NOT on the form**
+- [ ] `decision` `CharField(max_length=10, choices=DECISION_CHOICES, default="", blank=True)` —
+      **verb-driven, NOT on the form**
+- [ ] `decided_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+- [ ] `decided_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `decision_notes` `TextField(blank=True)`
+- [ ] `rejection_reason` `TextField(blank=True)`
+- [ ] `information_requested` `TextField(blank=True)`
+- [ ] `submitted_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `converted_project` `FK("projects.Project", SET_NULL, null=True, blank=True, related_name="source_requests")`
+      — set by the convert verb
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+#### Derived (properties, **never columns**)
+- [ ] `roi_pct` — `(benefit - cost) / cost * 100` quantized 2dp; returns `None` when `cost == 0`
+      (never `ZeroDivisionError`, never a stored editable value)
+- [ ] `risk_adjusted_benefit` — `q2(estimated_benefit * RISK_DISCOUNT[risk_rating])`
+- [ ] `risk_adjusted_roi_pct` — the same formula over `risk_adjusted_benefit`
+
+#### Meta / behaviour
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant", "number")`
+- [ ] indexes (all ≤ 30 chars): `("tenant","status")` `prq_tnt_status_idx`,
+      `("tenant","request_type")` `prq_tnt_type_idx`, `("tenant","org_unit")` `prq_tnt_ou_idx`
+- [ ] `convert_to_project(user)` — the service method the verb calls: creates `Project` copying
+      `title`→`name`, `description`, `target_start_date`→`start_date`, `target_end_date`→`end_date`,
+      `org_unit`, `requester_party`→`client`, `assigned_approver`→`executive_sponsor`; sets
+      `Project.request = self`, `self.converted_project = project`, `self.status = "converted"`;
+      **one `transaction.atomic()`**; returns the project. Idempotent-guard: refuse if
+      `self.converted_project_id` is already set.
+- [ ] `form excludes:` `tenant`, `number` (auto), `status`, `decision`, `decided_by`,
+      `decided_at`, `submitted_at`, `converted_project`, `created_by`
+
+---
+
+### Model 2 — `Project` [PRJ-] (`models/ProjectInitiation/Projects.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PRJ"`. 23 declared + 4 inherited = **27 fields**.
+Realizes bullet **3 Project Charter Authoring**; the container every later `7.M` FKs into.
+
+#### Choices (exact machine values)
+- [ ] `METHODOLOGY_CHOICES` — `waterfall`/Waterfall, `agile`/Agile, `hybrid`/Hybrid (the template
+      *library* behind this is 7.19's)
+- [ ] `CHARTER_STATUS_CHOICES` — `draft`/Draft, `submitted`/Submitted, `approved`/Approved,
+      `rejected`/Rejected
+- [ ] `STATUS_CHOICES` — `draft`/Draft, `chartered`/Chartered, `kickoff`/Kickoff, `active`/Active,
+      `on_hold`/On Hold, `completed`/Completed, `cancelled`/Cancelled
+
+#### Fields
+- [ ] `name` `CharField(max_length=255)`
+- [ ] `code` `CharField(max_length=30, blank=True)`
+- [ ] `request` `FK("projects.ProjectRequest", SET_NULL, null=True, blank=True, related_name="projects")`
+      — provenance, **set by the convert verb only**
+- [ ] `methodology` `CharField(max_length=12, choices=METHODOLOGY_CHOICES, default="hybrid")`
+- [ ] `in_scope` `TextField(blank=True)`
+- [ ] `out_of_scope` `TextField(blank=True)`
+- [ ] `objectives` `TextField(blank=True)`
+- [ ] `success_criteria` `TextField(blank=True, help_text="Measurable — PM²")`
+- [ ] `assumptions` `TextField(blank=True)`
+- [ ] `constraints` `TextField(blank=True)`
+- [ ] `risk_summary` `TextField(blank=True, help_text="Charter-level; the register is 7.5's")`
+- [ ] `executive_sponsor` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="sponsored_projects")`
+- [ ] `project_manager` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="managed_projects")`
+- [ ] `org_unit` `FK("core.OrgUnit", SET_NULL, null=True, blank=True, related_name="projects")`
+- [ ] `client` `FK("core.Party", SET_NULL, null=True, blank=True, related_name="delivery_projects")`
+- [ ] `start_date` `DateField(null=True, blank=True, help_text="Charter target; the frozen baseline is 7.2's")`
+- [ ] `end_date` `DateField(null=True, blank=True)`
+- [ ] `charter_status` `CharField(max_length=12, choices=CHARTER_STATUS_CHOICES, default="draft")`
+      — **verb-driven, NOT on the form**
+- [ ] `charter_approved_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+- [ ] `charter_approved_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `charter_document` `FK("core.Document", SET_NULL, null=True, blank=True, related_name="project_charters")`
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="draft")` — **verb-driven,
+      NOT on the form**
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+#### Derived / Meta / behaviour
+- [ ] `is_overdue` property — `end_date` set and `< timezone.localdate()` and `status not in
+      ("completed","cancelled")`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant", "number")`
+- [ ] indexes: `("tenant","status")` `prj_tnt_status_idx`, `("tenant","charter_status")`
+      `prj_tnt_charter_idx`, `("tenant","client")` `prj_tnt_client_idx`, `("tenant","org_unit")`
+      `prj_tnt_ou_idx`
+- [ ] Docstring MUST carry the three-`PRJ-` stand-in note (table above)
+- [ ] `form excludes:` `tenant`, `number`, `request`, `charter_status`, `charter_approved_by`,
+      `charter_approved_at`, `status`, `created_by`
+
+---
+
+### Model 3 — `ProjectStakeholder` [PST-] (`models/ProjectInitiation/ProjectStakeholders.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PST"`. 13 declared + 4 inherited = **17 fields**.
+Realizes bullet **4 Stakeholder Identification & Analysis**. The register *is* the RACI matrix and
+the engagement plan — no second artefact table.
+
+#### Choices (exact machine values)
+- [ ] `STAKEHOLDER_TYPE_CHOICES` — `sponsor`/Sponsor, `approver`/Approver,
+      `resource_provider`/Resource Provider, `subject_matter_expert`/Subject Matter Expert,
+      `affected`/Affected Party, `team_member`/Team Member, `other`/Other
+- [ ] `RACI_ROLE_CHOICES` — `r`/"R (Responsible)", `a`/"A (Accountable)", `c`/"C (Consulted)",
+      `i`/"I (Informed)"
+- [ ] `INFLUENCE_CHOICES` — `high`/High, `medium`/Medium, `low`/Low
+- [ ] `INTEREST_CHOICES` — `high`/High, `medium`/Medium, `low`/Low
+- [ ] `COMMS_PREFERENCE_CHOICES` — `email`/Email, `meeting`/Meeting, `written_report`/Written
+      Report, `portal`/Portal, `none`/None
+- [ ] `COMMS_FREQUENCY_CHOICES` — `daily`/Daily, `weekly`/Weekly, `monthly`/Monthly,
+      `at_milestone`/At Milestone, `ad_hoc`/Ad-hoc
+- [ ] `ENGAGEMENT_STRATEGY_CHOICES` — `manage_closely`/Manage Closely, `keep_satisfied`/Keep
+      Satisfied, `keep_informed`/Keep Informed, `monitor`/Monitor — **a derived label set, NOT a
+      column** (it exists so the template has `get_…`-style labels to render)
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="stakeholders")`
+- [ ] `party` `FK("core.Party", SET_NULL, null=True, blank=True, related_name="project_stakeholders")`
+      — a person *or* an organisation, internal *or* external; **employees are a `PartyRole`,
+      never a second person master**
+- [ ] `user` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="project_stakeholders")`
+- [ ] `stakeholder_type` `CharField(max_length=24, choices=STAKEHOLDER_TYPE_CHOICES, default="other")`
+- [ ] `raci_role` `CharField(max_length=1, choices=RACI_ROLE_CHOICES, default="i")`
+- [ ] `raci_scope` `CharField(max_length=120, blank=True, help_text="What this RACI assignment covers, e.g. 'charter approval'")`
+- [ ] `influence` `CharField(max_length=8, choices=INFLUENCE_CHOICES, default="medium")`
+- [ ] `interest` `CharField(max_length=8, choices=INTEREST_CHOICES, default="medium")`
+- [ ] `comms_preference` `CharField(max_length=16, choices=COMMS_PREFERENCE_CHOICES, default="email")`
+- [ ] `comms_frequency` `CharField(max_length=16, choices=COMMS_FREQUENCY_CHOICES, default="weekly")`
+- [ ] `attending_kickoff` `BooleanField(default=False)` — the attendee list **without an M2M**
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+#### Derived / Meta / behaviour
+- [ ] `engagement_strategy` property — `hi_inf = (influence == "high")`,
+      `hi_int = (interest == "high")`; high/high → `manage_closely`, high/low → `keep_satisfied`,
+      low/high → `keep_informed`, else `monitor`. **Document that `medium` maps to the low side** —
+      it must not be left ambiguous.
+- [ ] `ordering = ["-created_at", "-id"]` — **the research's `["-influence","party__name"]` is
+      overridden, see override #1**
+- [ ] `unique_together = ("tenant", "number")` **and** `("tenant", "project", "party", "raci_scope")`
+      — plus the form-level `clean()` from override #2
+- [ ] indexes: `("tenant","project")` `pst_tnt_project_idx`, `("tenant","stakeholder_type")`
+      `pst_tnt_type_idx`
+- [ ] `form excludes:` `tenant`, `number`, `created_by`. `project` is an explicit, tenant-scoped
+      `ModelChoiceField`.
+- [ ] **`org_unit` is NOT added** (the research's optional 5th FK). Four nullables on one row is
+      enough; a department-as-stakeholder is modelled as a `party` of the organisation. Recorded
+      under Later passes.
+
+---
+
+### Model 4 — `ProjectKickoff` [PKO-] (`models/ProjectInitiation/ProjectKickoffs.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PKO"`. 13 declared + 4 inherited = **17 fields**.
+Realizes bullet **5 Project Kickoff & Launch**. **First to drop if the pass runs long.**
+
+#### Choices (exact machine values)
+- [ ] `AGENDA_TEMPLATE_CHOICES` — `standard`/Standard, `agile`/Agile, `client_facing`/Client-Facing,
+      `custom`/Custom (the reusable template *library* is 7.19's)
+- [ ] `STATUS_CHOICES` — `planned`/Planned, `scheduled`/Scheduled, `held`/Held, `completed`/Completed
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="kickoffs")` — **plain FK +
+      `unique_together`, NOT a `OneToOneField`** (a OneToOne fights a partially-created row)
+- [ ] `meeting_date` `DateTimeField(null=True, blank=True)`
+- [ ] `location_or_link` `CharField(max_length=255, blank=True)`
+- [ ] `agenda_template` `CharField(max_length=16, choices=AGENDA_TEMPLATE_CHOICES, default="standard")`
+- [ ] `agenda` `TextField(blank=True)`
+- [ ] `attendee_summary` `TextField(blank=True, help_text="External attendees not on the stakeholder register")`
+- [ ] `onboarding_notes` `TextField(blank=True, help_text="Individual items are core.Activity(kind='task') rows on the project")`
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="planned")` — **verb-driven,
+      NOT on the form**
+- [ ] `baseline_acknowledged_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `baseline_acknowledged_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+- [ ] `completed_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="+")`
+
+#### Derived / Meta / behaviour
+- [ ] `attendee_count` property — `project.stakeholders.filter(attending_kickoff=True).count()`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")` **and**
+      `("tenant","project")` `pko_tnt_project_idx`
+- [ ] indexes: `("tenant","project")` `pko_tnt_project_idx`, `("tenant","status")`
+      `pko_tnt_status_idx`
+- [ ] Docstring must state: **the baseline *record* is 7.2's** — this row attests that the ceremony
+      happened.
+- [ ] `form excludes:` `tenant`, `number`, `status`, `baseline_acknowledged_at`,
+      `baseline_acknowledged_by`, `completed_at`, `created_by`
+
+---
+
+## Scaffold (brand-new app — one file per commit)
+
+- [ ] `apps/projects/__init__.py`
+- [ ] `apps/projects/apps.py` — `ProjectsConfig(AppConfig)`: `default_auto_field =
+      "django.db.models.BigAutoField"`, `name = "apps.projects"`, `verbose_name = "Project
+      Management"` (mirror `apps/procurement/apps.py`)
+- [ ] `apps/projects/models/__init__.py` (re-export block added at Integrate),
+      `apps/projects/models/_base.py` — **copy `apps/scm/models/_base.py:53-86` verbatim in shape**:
+      `TenantOwned` (`tenant` FK `related_name="+"` + `created_at`/`updated_at`) and
+      `TenantNumbered` (`NUMBER_PREFIX = ""`, `number = CharField(max_length=20, editable=False)`,
+      `save()` minting via `next_number` with the 5-attempt `IntegrityError` retry), plus the
+      `q2`/`q4`/`ZERO` money helpers and `from apps.core.utils import next_number`
+- [ ] `apps/projects/forms/__init__.py` + `apps/projects/forms/_common.py` — `from
+      apps.core.forms import TenantModelForm`, `TenantUniqueMixin` (stamps `instance.tenant` before
+      `full_clean()`), and a `_reject_foreign` helper: a narrowed `<select>` is UX, **not an
+      authorization boundary**, so every tenant-scoped FK is re-checked on POST and rendered as a
+      field error. Copy the proven `apps/procurement/forms/_common.py` shape.
+- [ ] `apps/projects/views/__init__.py` + `apps/projects/views/_common.py` — star-import toolkit
+      (`login_required`, `messages`, `get_object_or_404`, `redirect`, `render`, `timezone`,
+      `require_POST`, the five `crud_*` helpers, `tenant_admin_required`,
+      `write_audit_log`) — copy `apps/procurement/views/_common.py`
+- [ ] `apps/projects/urls/__init__.py` — sets `app_name = "projects"` and concatenates; docstring
+      states the invariant that **every first path segment is a literal** (no converter in the
+      first component), so no module can shadow another
+- [ ] `apps/projects/admin.py` — `@admin.register(...)` + `ModelAdmin` per model with `list_display`
+      led by `number` (the `apps/procurement/admin.py:84-91` pattern)
+- [ ] `apps/projects/migrations/__init__.py`
+- [ ] `apps/projects/management/__init__.py`, `apps/projects/management/commands/__init__.py`,
+      `apps/projects/management/commands/seed_projects.py`
+- [ ] `apps/projects/tests/__init__.py`
+- [ ] **`config/settings.py`** — add `"apps.projects"` to `INSTALLED_APPS` after `"apps.procurement"`
+      (line ~53) — **Integrate phase only**; the check-after-edit hook blocks adding it before the
+      app files exist (L12)
+- [ ] **`config/urls.py`** — add `path("projects/", include("apps.projects.urls")),` after the
+      `procurement/` line (line 18) — **Integrate phase only**
+- [ ] `templates/projects/` directory created (the four entity folders come with the entities)
+
+## Backend (`apps/projects/{models,forms,views,urls}/ProjectInitiation/`)
+
+One `<Entity>.py` per model, the four layers lining up one-to-one. Entity files:
+`ProjectRequests.py`, `Projects.py`, `ProjectStakeholders.py`, `ProjectKickoffs.py`.
+
+- [ ] `models/ProjectInitiation/ProjectRequests.py` — `ProjectRequest` + choices + `convert_to_project()`
+- [ ] `models/ProjectInitiation/Projects.py` — `Project` + choices (docstring = the 3-`PRJ-` note)
+- [ ] `models/ProjectInitiation/ProjectStakeholders.py` — `ProjectStakeholder` + choices + `clean()`
+- [ ] `models/ProjectInitiation/ProjectKickoffs.py` — `ProjectKickoff` + choices
+- [ ] `forms/ProjectInitiation/<Entity>.py` — one `TenantUniqueMixin, TenantModelForm` per model with
+      the pinned `Meta.fields` and exclusions; **plus `ProjectRequestDecisionForm`**
+      (`reason = CharField(widget=Textarea, required=True)`) shared by the reject and
+      return-for-information verbs
+- [ ] `views/ProjectInitiation/<Entity>.py` — full CRUD + the verbs below
+- [ ] `urls/ProjectInitiation/<Entity>.py` — literal routes before `<int:pk>/`
+- [ ] **re-export blocks added to all four `__init__.py`** (models / forms / views / urls) at
+      Integrate — forgetting one is an `ImportError` at runtime
+- [ ] migration: `makemigrations projects` → `0001_initial`
+- [ ] extend `seed_projects` (the app is new, so the command is new — not an "extend")
+
+## Views, routes & CONTEXT KEYS (the contract — L7/L8: an unpinned name renders blank at 200)
+
+Entity stems are `prq_` / `prj_` / `pst_` / `pko_` (the `pdocument_list` precedent).
+
+- [ ] **ProjectRequest** — `prq_list` (list var `object_list` + `page_obj` + `q`),
+      `prq_create`, `prq_detail` (`obj`), `prq_edit` (`obj`), `prq_delete`
+      Routes: `project-requests/` (+ `add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`)
+      Verbs (all `@require_POST`): `project-requests/<int:pk>/submit/` `prq_submit`,
+      `…/approve/` `prq_approve` (**`@tenant_admin_required`**),
+      `…/reject/` `prq_reject` (**`@tenant_admin_required`**),
+      `…/return/` `prq_return_for_information`,
+      `…/convert/` `prq_convert` (**`@tenant_admin_required`** — the single highest-value verb in
+      the sub-module)
+      Extra list context: `status_choices`, `request_type_choices`, `priority_choices`,
+      `risk_rating_choices`, `feasibility_choices`, `decision_choices`, `org_units`
+      Extra detail context: `obj`, `decision_form`
+- [ ] **Project** — `prj_list`, `prj_create`, `prj_detail` (`obj`), `prj_edit` (`obj`), `prj_delete`
+      Routes: `projects/` (+ `add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`)
+      Verbs: `projects/<int:pk>/submit-charter/` `prj_submit_charter`,
+      `projects/<int:pk>/approve-charter/` `prj_approve_charter` (**`@tenant_admin_required`**)
+      Extra list context: `status_choices`, `charter_status_choices`, `methodology_choices`,
+      `org_units`, `clients`
+      Extra detail context: `obj`, `stakeholders` (reverse, capped at 50), `kickoffs` (reverse),
+      `source_request`
+- [ ] **ProjectStakeholder** — `pst_list`, `pst_create`, `pst_detail` (`obj`), `pst_edit` (`obj`),
+      `pst_delete`. Routes: `stakeholders/` (+ the four). No verbs.
+      List queryset annotates `influence_rank` with
+      `Case(When(influence="high", then=3), When(influence="medium", then=2), default=1)` and orders
+      `("-influence_rank", "id")` — **this is how override #1 keeps the research's intent with
+      correct semantics**
+      Extra list context: `projects`, `stakeholder_type_choices`, `raci_role_choices`,
+      `influence_choices`, `interest_choices`
+- [ ] **ProjectKickoff** — `pko_list`, `pko_create`, `pko_detail` (`obj`), `pko_edit` (`obj`),
+      `pko_delete`. Routes: `kickoffs/` (+ the four)
+      Verbs (`@require_POST`): `kickoffs/<int:pk>/schedule/` `pko_schedule`,
+      `…/mark-held/` `pko_mark_held` (sets `Project.status = "kickoff"`),
+      `…/complete/` `pko_complete` (sets `completed_at` **and** `Project.status = "active"`),
+      `…/baseline/` `pko_mark_baseline_set` (stamps `baseline_acknowledged_at/by`)
+      Extra list context: `projects`, `status_choices`, `agenda_template_choices`
+      Extra detail context: `obj`, `attending` (project stakeholders with `attending_kickoff=True`),
+      `activities` (`core.Activity` rows GFK'd to the project — `kind="meeting"` and `kind="task"`,
+      rendered read-only; **capture of individual items is 7.9's**)
+- [ ] Every queryset is `filter(tenant=request.tenant)` — never `.all()`
+- [ ] Every verb refuses a disallowed transition with a `messages.*` + redirect — never a 500,
+      never a silent no-op; an action already in its target state says so and writes nothing
+- [ ] Every `?enum=` filter value is allow-listed against the model's CHOICES before filtering
+      (L11 — a junk value must be ignored, not silently empty the register)
+
+## Wire-up (Integrate phase ONLY — single writer, surgical `Edit`, never a full rewrite: L43)
+
+- [ ] One new `LIVE_LINKS["7.1"]` entry in `apps/core/navigation.py` (immediately after the
+      `"6.19"` block at ~`:1701`), mapping each NavERP.md 7.1 bullet to a live route:
+      - [ ] `"Project Request & Intake"` → `"projects:prq_list"`
+      - [ ] `"Business Case & Feasibility"` → `"projects:prq_list?status=assessment"`
+      - [ ] `"Project Charter Authoring"` → `"projects:prj_list"`
+      - [ ] `"Stakeholder Identification & Analysis"` → `"projects:pst_list"`
+      - [ ] `"Project Kickoff & Launch"` → `"projects:pko_list"`
+- [ ] Add a comment recording the deliberate omissions, the house style: `Project` itself gets **no**
+      bullet (it is the container the other four hang off, not a feature), `ProjectRequest`'s
+      economics get no bullet of their own (they are bullet 2's field set), and no bullet points at
+      a login-gated portal view (L32).
+
+## Seeder (`apps/projects/management/commands/seed_projects.py`)
+
+Idempotent, per-tenant, reusing existing rows. Guard: `if ProjectRequest.objects.filter(
+tenant=tenant).exists(): print("Data already exists. Use --flush to re-seed."); continue`, and
+per-row guards on `(tenant, title)` so a second run is a no-op.
+
+- [ ] Reuse, never invent: `OrgUnit.objects.filter(tenant=tenant).order_by("id").first()`;
+      a `core.Party` carrying a customer `PartyRole` (`PartyRole.objects.filter(tenant=tenant,
+      role="customer")` → first, else any party); `Currency.objects.order_by("id").first()`
+      (**global, no tenant — L29**); `get_user_model().objects.filter(tenant=tenant).order_by("id")`
+      for requester / approver / sponsor / manager
+- [ ] Skip gracefully (message, not a crash) when the tenant has no `OrgUnit`/`Party`/`Currency` —
+      print "run seed_core / seed_accounting first"
+- [ ] **9 `ProjectRequest` rows** covering every status, so every badge and filter facet has an
+      honest row and `per_page=15` yields 2 pages: `draft`, `submitted`, `screening`,
+      `assessment` (cost 120000 / benefit 260000, `risk_rating="high"`,
+      `strategic_alignment=4`, `feasibility="feasible_with_constraints"`), `needs_information`
+      (`information_requested` filled), **`approved` #1 — converted at seed time through the real
+      `convert_to_project()` path** (so `converted_project` and `Project.request` are honest),
+      **`approved` #2 — left unconverted so the Convert verb is exercisable in smoke**,
+      `rejected` (`rejection_reason` + `decision="no_go"`), `deferred`
+- [ ] **3 `Project` rows**: the one converted from request #6 (`status="chartered"`), one standalone
+      (`status="draft"`, `charter_status="draft"`), one fully walked
+      (`charter_status="approved"`, `status="active"`)
+- [ ] **6 `ProjectStakeholder` rows** on the chartered project: one per RACI value (`r`/`a`/`c`/`i`),
+      covering sponsor / approver / subject_matter_expert / affected / team_member, covering all
+      four influence×interest quadrants at least once, mixed `comms_preference`/`comms_frequency`,
+      3 with `attending_kickoff=True`
+- [ ] **2 `ProjectKickoff` rows**: one `completed` (with `baseline_acknowledged_at` set, on the
+      active project) and one `scheduled` (on the chartered project)
+- [ ] **4 `core.Activity` rows** GFK'd to the active project: 1 `kind="meeting"` (the kickoff) + 3
+      `kind="task"` onboarding items (access provisioned, tooling set up, intro to sponsor)
+- [ ] `write_audit_log(user=None, …)` rows for the seeded decisions (rendered "System"), each with
+      an **action ≤ 10 chars**
+- [ ] Print the tenant-admin logins to use, plus the warning: *"Superuser 'admin' has no tenant —
+      data won't appear when logged in as admin"*
+
+## Templates (`templates/projects/initiation/<entity>/{list,detail,form}.html`)
+
+- [ ] `projectrequest/{list,detail,form}.html` — list: filter bar (status, request_type, priority,
+      risk_rating, feasibility, org_unit, decision) reflecting `request.GET` + Actions column
+      (view / edit / delete-POST + `onclick="return confirm(...)"` + `{% csrf_token %}`) +
+      pagination with `has_previous`/`has_next` guards (L9) + empty state
+- [ ] `project/{list,detail,form}.html` — filters: status, charter_status, methodology, org_unit,
+      client. Detail carries the stakeholder register, the kickoff list and the source request.
+- [ ] `projectstakeholder/{list,detail,form}.html` — filters: project, stakeholder_type, raci_role,
+      influence, interest
+- [ ] `projectkickoff/{list,detail,form}.html` — filters: project, status, agenda_template.
+      Detail renders the attendee list and the project's `core.Activity` rows.
+- [ ] Badges use **colour-named theme.css classes only** — `badge-green` / `badge-red` /
+      `badge-amber` / `badge-info` / `badge-muted` / `badge-slate`. `badge-success` /
+      `badge-danger` **do not exist** (L33). Every badge block ends with an
+      `{% else %}{{ obj.get_<field>_display }}{% endif %}` fallback.
+- [ ] FK `<select>` comparisons use `|stringformat:"d"` for pks — never `|slugify`
+- [ ] `{% extends "base.html" %}` unchanged; partials stay at the templates root
+
+## Verify
+
+- [ ] `python manage.py makemigrations projects` → `0001_initial`; `python manage.py migrate`
+- [ ] `python manage.py check` (run it *immediately after* the `INSTALLED_APPS` edit too)
+- [ ] `python manage.py seed_projects` ×2 — second run is a no-op without `--flush`
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`** (NOT the tenant-less `admin`):
+      - [ ] every new `projects:*` url returns 200 (or 302 for the POST-only verbs hit by GET)
+      - [ ] content assertions, not just status — page titles, a seeded record's number present,
+            no `{#` / `{% comment` leaks (L8: a mismatched context var returns 200 and renders blank)
+      - [ ] junk-params: `?status=nope`, `?project=0`, `?project=²`, `?page=9999` → default page,
+            never a 500 and never an empty register
+      - [ ] page 2 of the request register (9 rows / 15 per page → 2 pages)
+      - [ ] cross-tenant IDOR → 404 on every `<int:pk>` route
+      - [ ] the convert verb actually creates a `Project` and links both directions
+      - [ ] `admin` (superuser, `tenant=None`) sees empty lists — by design, not a bug
+- [ ] Sidebar shows **7.1 Live** with all five bullets linked
+
+## Close-out (Module Creation Sequence phases 4–7)
+
+- [ ] Review agents, **one after another**, each appending to
+      `.claude/tasks/review-projects-7.1.md`: `code-reviewer` → `explorer` → `frontend-reviewer` →
+      `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`
+- [ ] `code-fixer` burns the deduped, ID'd findings down (Critical → Important → Minor), one commit
+      per file
+- [ ] Tests: contract + `conftest.py`, then `test_initiation_models.py` →
+      `test_initiation_forms.py` → `test_initiation_views.py` → `test_initiation_security.py`, one
+      file per commit, then **one full unfiltered run** (never `-k`, L47)
+- [ ] **Author** `.claude/skills/projects/SKILL.md` — it does **not** exist yet (`.claude/skills/`
+      holds accounting, crm, hrm, inventory, procurement, scm only). Same body sections as the
+      siblings: overview, models + spine reuse, urls/routes, templates, seeder, conventions &
+      gotchas (tenant scoping, the context-var contract, **the three-`PRJ-` note**), common tasks,
+      sidebar wiring.
+- [ ] Mark 7.1 complete in `README.md`
+
+## Later passes / deferred (carried from the research so nothing is lost)
+
+- **7.2** — WBS, task sequencing & dependencies (FS/SS/lag/lead), critical path, duration &
+  effort estimating with confidence ranges, milestone & phase-gate definition, **schedule baseline
+  + baseline versions** (7.1 only attests the ceremony), what-if scenarios, fast-tracking/crashing.
+  7.2 also inherits the open `crm.CrmMilestone` (1.8) vs `projects.Milestone` question.
+- **7.3** — resource pool & skills inventory, allocation & leveling, team assembly & role
+  assignment, resource forecasting & demand planning, timesheets (7.1's `required_resources` is
+  free text only).
+- **7.4** — budget planning & estimation, cost baseline & control accounts, EVM, expense tracking &
+  commitments, EAC/CPI/SPI, change control. **7.1 ships no money columns on `Project`.**
+- **7.5** — risk register with probability/impact matrices, **Monte Carlo**, EMV, risk response
+  planning (7.1's `risk_adjusted_benefit` is a documented flat factor, deliberately not this).
+- **7.6 / 7.7** — quality management; the requirements register (7.1's `in_scope`/`out_of_scope`
+  are charter-level only).
+- **7.9** — meeting minutes and action-item tracking (7.1's `core.Activity` rows cover the action
+  items; minutes are 7.9's); stakeholder voting/reactions on ideas (JPD).
+- **7.12 / 7.16 / 7.17 / 7.19** — portfolio scoring & demand-vs-capacity ranking; reporting/BI and
+  dashboards; approval workflow engines and configurable intake forms; **project templates &
+  methodologies** (the reusable template library behind `methodology` and `agenda_template`, the
+  charter-from-template feature, intake form definitions and their submission analytics).
+- **7.14 / 7.15** — the client portal, SOW and project billing (7.1 carries only the `client`
+  identity).
+- **Not scheduled** — `ProjectStakeholder.org_unit` (the research's optional 5th FK, for "this whole
+  department is a stakeholder"); the `promoted_to` self-FK that would model ServiceNow/JPD
+  idea→demand promotion inside the one register (**deliberately left out of the model this pass —
+  it needs a promote verb to be meaningful, and `request_type="idea"` already carries the
+  lighter-weight case**); a split-out `BusinessCase` [PBC-] table if a charter-level business case
+  with its own approver and version history is ever wanted (the field names on `ProjectRequest` are
+  already grouped for it).
+- **Upstream, not this pass** — `core.AuditLog.action` is `varchar(10)` while the ecosystem keeps
+  writing longer verbs (6.19 hit this too). 7.1 stays inside 10 chars; the fix is a `core`
+  migration, which is single-writer work for a session that owns `core`.
+
+## Review notes
+(filled in at the end of the pass)
