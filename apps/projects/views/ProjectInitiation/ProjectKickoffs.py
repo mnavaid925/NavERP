@@ -13,6 +13,7 @@ and land an `active` project on a draft charter, routing around the ``@tenant_ad
 ``baseline`` stamps an acknowledgement only — the baseline RECORD (the frozen schedule) is 7.2's.
 """
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Count, Q
 
 from apps.projects.forms import ProjectKickoffForm
 from apps.projects.models import Project, ProjectKickoff
@@ -45,8 +46,18 @@ def _activities(project):
 
 @login_required
 def pko_list(request):
+    # `attendee_count` (the model property) is one COUNT per row — 25 queries on a 15-row page.
+    # Annotated as `attendee_total`, NOT `attendee_count`: a `property` is a data descriptor, so
+    # annotating over the name raises "AttributeError: can't set attribute".
+    # `.order_by()` is MANDATORY, not decoration: an aggregate over a multi-valued relation makes
+    # Django drop `Meta.ordering` entirely (no ORDER BY is emitted at all) and the register
+    # silently flips out of newest-first.
     qs = (ProjectKickoff.objects.filter(tenant=request.tenant)
-          .select_related("project"))
+          .select_related("project")
+          .annotate(attendee_total=Count(
+              "project__stakeholders",
+              filter=Q(project__stakeholders__attending_kickoff=True)))
+          .order_by("-created_at", "-id"))
     return crud_list(
         request, qs, "projects/initiation/projectkickoff/list.html",
         search_fields=["number", "location_or_link", "agenda"],
