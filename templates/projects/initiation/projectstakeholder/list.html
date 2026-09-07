@@ -68,7 +68,7 @@
         <tbody>
           {% for obj in object_list %}
             <tr>
-              <td class="fw-600"><a href="{% url 'projects:pst_detail' obj.pk %}">{{ obj.party.name|default:obj.user.get_full_name|default:obj.user.username|default:"—" }}</a><div class="text-muted">{{ obj.number }}</div></td>
+              <td class="fw-600"><a href="{% url 'projects:pst_detail' obj.pk %}">{% if obj.party %}{{ obj.party.name }}{% elif obj.user %}{{ obj.user.get_full_name|default:obj.user.username }}{% else %}—{% endif %}</a><div class="text-muted">{{ obj.number }}</div></td>
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>{{ obj.get_stakeholder_type_display }}</td>
               <td>
