@@ -85,7 +85,7 @@
                 {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
               </td>
               <td>{{ obj.client.name|default:"—" }}</td>
-              <td>{{ obj.project_manager.get_full_name|default:obj.project_manager.username|default:"—" }}</td>
+              <td>{% if obj.project_manager %}{{ obj.project_manager.get_full_name|default:obj.project_manager.username }}{% else %}—{% endif %}</td>
               <td>
                 {{ obj.end_date|date:"M d, Y"|default:"—" }}
                 {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
