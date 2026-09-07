@@ -18,10 +18,16 @@
             <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit Charter</button>
           </form>
         {% endif %}
-        {% if obj.charter_status == 'submitted' %}
-          <form method="post" action="{% url 'projects:prj_approve_charter' obj.pk %}">{% csrf_token %}
-            <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve Charter</button>
-          </form>
+        {% comment %}
+          prj_approve_charter is @tenant_admin_required — rendering it to an ordinary member is a
+          button that answers 403 (L32). Submit Charter stays login-only, like its view.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.charter_status == 'submitted' %}
+            <form method="post" action="{% url 'projects:prj_approve_charter' obj.pk %}">{% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve Charter</button>
+            </form>
+          {% endif %}
         {% endif %}
       {% endif %}
       {% comment %}
