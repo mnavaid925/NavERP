@@ -145,10 +145,12 @@ def prj_submit_charter(request, pk):
     if obj.charter_status not in ("draft", "rejected"):
         messages.info(request, "That charter is already submitted or approved.")
         return redirect("projects:prj_detail", pk=obj.pk)
+    previous = obj.charter_status
     obj.charter_status = "submitted"
     obj.save(update_fields=["charter_status", "updated_at"])
     write_audit_log(request.user, obj, "update",
-                    changes={"verb": "submit_charter", "from": "draft", "to": obj.charter_status})
+                    changes={"verb": "submit_charter", "from": previous,
+                             "to": obj.charter_status})
     messages.success(request, f"Charter for “{obj.name}” submitted for approval.")
     return redirect("projects:prj_detail", pk=obj.pk)
 
@@ -173,6 +175,7 @@ def prj_approve_charter(request, pk):
     if obj.charter_status != "submitted":
         messages.error(request, "Submit the charter before approving it.")
         return redirect("projects:prj_detail", pk=obj.pk)
+    previous = obj.charter_status
     obj.charter_status = "approved"
     obj.charter_approved_by = request.user
     obj.charter_approved_at = timezone.now()
@@ -181,6 +184,6 @@ def prj_approve_charter(request, pk):
     obj.save(update_fields=["charter_status", "charter_approved_by", "charter_approved_at",
                             "status", "updated_at"])
     write_audit_log(request.user, obj, "approve",
-                    changes={"verb": "approve_charter", "from": "submitted", "to": "approved"})
+                    changes={"verb": "approve_charter", "from": previous, "to": "approved"})
     messages.success(request, f"Charter approved — “{obj.name}” is chartered.")
     return redirect("projects:prj_detail", pk=obj.pk)
