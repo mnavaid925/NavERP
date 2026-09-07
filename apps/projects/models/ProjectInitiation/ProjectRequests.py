@@ -202,14 +202,28 @@ class ProjectRequest(TenantNumbered):
 
         One ``transaction.atomic()``: the project and the back-pointer must land together or not
         at all — a half-converted request is exactly the state that produces two projects for
-        one demand. Idempotent-guarded: a request that already has a ``converted_project`` is
-        refused rather than silently duplicated.
+        one demand.
+
+        The idempotency guard is a LOCKING RE-READ, not a check on this instance: two concurrent
+        POSTs each hold their own in-memory ``ProjectRequest``, so an ``if self.converted_project_id``
+        on a stale copy lets both through and mints two projects for one demand. The
+        ``select_for_update()`` below re-reads the row under an exclusive lock *inside* the
+        transaction and filters on ``converted_project__isnull=True`` in the same statement — a
+        compare-and-swap: the loser blocks until the winner commits, then reads the latest row,
+        matches nothing, and returns None. (The cheap ``self.converted_project_id`` check stays as
+        a fast path that avoids taking a lock in the common case.)
         """
         from apps.projects.models import Project
 
         if self.converted_project_id:
             return None
         with transaction.atomic():
+            unconverted = (type(self).objects
+                           .select_for_update()
+                           .filter(pk=self.pk, converted_project__isnull=True)
+                           .exists())
+            if not unconverted:
+                return None
             project = Project(
                 tenant=self.tenant,
                 name=self.title,
