@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Projects</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Charter Register</span></div>
+      <p class="text-muted">The charter register — scope, objectives, sponsor and the approval state of every project in this workspace.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:prj_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Project</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, code or number…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="charter_status" aria-label="Charter" class="form-select">
+            <option value="">Any charter state</option>
+            {% for val, label in charter_status_choices %}
+              <option value="{{ val }}" {% if request.GET.charter_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="methodology" aria-label="Methodology" class="form-select">
+            <option value="">Any methodology</option>
+            {% for val, label in methodology_choices %}
+              <option value="{{ val }}" {% if request.GET.methodology == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Department" class="form-select">
+            <option value="">Any department</option>
+            {% for ou in org_units %}
+              <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="client" aria-label="Client" class="form-select">
+            <option value="">Any client</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if request.GET.client == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:prj_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Project</th><th>Methodology</th><th>Charter</th><th>Status</th><th>Client</th><th>Manager</th><th>End date</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:prj_detail' obj.pk %}">{{ obj.name }}</a><div class="text-muted">{{ obj.number }}{% if obj.code %} · {{ obj.code }}{% endif %}</div></td>
+              <td>{{ obj.get_methodology_display }}</td>
+              <td>
+                {% if obj.charter_status == 'approved' %}<span class="badge badge-green">{{ obj.get_charter_status_display }}</span>
+                {% elif obj.charter_status == 'submitted' %}<span class="badge badge-amber">{{ obj.get_charter_status_display }}</span>
+                {% elif obj.charter_status == 'rejected' %}<span class="badge badge-red">{{ obj.get_charter_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_charter_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'chartered' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'completed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.client.name|default:"—" }}</td>
+              <td>{{ obj.project_manager.get_full_name|default:obj.project_manager.username|default:"—" }}</td>
+              <td>
+                {{ obj.end_date|date:"M d, Y"|default:"—" }}
+                {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:prj_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:prj_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:prj_delete' obj.pk %}" onsubmit="return confirm('Delete project {{ obj.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="folder-open"></i><h3>No projects match</h3><p>Create a project, convert an approved request, or reset the filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
