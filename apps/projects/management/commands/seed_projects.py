@@ -84,9 +84,15 @@ class Command(BaseCommand):
             requests = self._requests(tenant, now, org_unit, party, currency, requester, approver)
             converted = self._convert(tenant, requests, now)
             projects = self._projects(tenant, now, org_unit, party, sponsor, manager, converted)
-            self._stakeholders(tenant, projects[0], party, users, manager)
+            # Select by identity, never by list position: _projects() returns TWO rows instead of
+            # three whenever _convert() yields None, which silently shifts every index — the
+            # stakeholders would land on the standalone draft and _activities would IndexError.
+            # (_kickoffs already picks its two rows by status, which is the pattern followed here.)
+            chartered = next((p for p in projects if p.request_id is not None), None)
+            active = next((p for p in projects if p.status == "active"), None)
+            self._stakeholders(tenant, chartered, party, users, manager)
             self._kickoffs(tenant, now, projects)
-            self._activities(tenant, now, projects[2], manager)
+            self._activities(tenant, now, active, manager)
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {len(requests)} requests, {len(projects)} projects, "
