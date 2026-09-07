@@ -15,3 +15,8 @@ no tenant column) and ``crm.Opportunity`` (request provenance). Every one of tho
 numbers. They are pre-spine stand-ins and are NOT touched from here — see the note on
 ``Project`` itself.
 """
+# --- 7.1 Project Initiation & Charter ---------------------------------------------------------
+from .ProjectInitiation.ProjectKickoffs import ProjectKickoff  # noqa: F401
+from .ProjectInitiation.ProjectRequests import ProjectRequest  # noqa: F401
+from .ProjectInitiation.ProjectStakeholders import ProjectStakeholder  # noqa: F401
+from .ProjectInitiation.Projects import Project  # noqa: F401
