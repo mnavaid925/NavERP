@@ -134,6 +134,15 @@ class ProjectStakeholder(TenantNumbered):
             return "keep_informed"
         return "monitor"
 
+    def get_engagement_strategy_display(self):
+        """The label for ``engagement_strategy``.
+
+        Django only generates ``get_FOO_display`` for real FIELDS with choices; this is a derived
+        property, so without this method the template would render an empty cell — which is
+        exactly the L7 blank-at-200 failure mode, on a column that looks like it worked.
+        """
+        return dict(self.ENGAGEMENT_STRATEGY_CHOICES).get(self.engagement_strategy, "—")
+
     def clean(self):
         super().clean()
         if not self.party_id and not self.user_id:
