@@ -18,10 +18,18 @@
           <button class="btn btn-primary" type="submit"><i data-lucide="users"></i> Mark Held</button>
         </form>
       {% endif %}
-      {% if obj.status != 'completed' %}
-        <form method="post" action="{% url 'projects:pko_complete' obj.pk %}">{% csrf_token %}
-          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Complete</button>
-        </form>
+      {% comment %}
+        Complete mirrors pko_complete's gates exactly: the ceremony must have been HELD, and the
+        project's charter must be approved — a project must not go live on a draft charter.
+      {% endcomment %}
+      {% if obj.status == 'held' %}
+        {% if obj.project.charter_status == 'approved' %}
+          <form method="post" action="{% url 'projects:pko_complete' obj.pk %}">{% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Complete</button>
+          </form>
+        {% else %}
+          <span class="text-muted">Approve the charter to complete this kickoff</span>
+        {% endif %}
       {% endif %}
       <a href="{% url 'projects:pko_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     </div>
