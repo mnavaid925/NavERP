@@ -202,7 +202,9 @@ def pko_mark_baseline_set(request, pk):
     if obj.baseline_acknowledged_at:
         messages.info(request, "The baseline was already acknowledged for this kickoff.")
         return redirect("projects:pko_detail", pk=obj.pk)
-    if obj.status == "planned":
+    # `scheduled` is refused too, or the guard contradicts its own message: a merely scheduled
+    # ceremony has not happened yet, and this stamps who accepted the baseline AT it.
+    if obj.status in ("planned", "scheduled"):
         messages.error(request, "Hold the kickoff before acknowledging the baseline.")
         return redirect("projects:pko_detail", pk=obj.pk)
     obj.baseline_acknowledged_at = timezone.now()
