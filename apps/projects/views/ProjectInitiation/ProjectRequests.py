@@ -20,8 +20,13 @@ from apps.projects.views._helpers import org_units
 @login_required
 def prq_list(request):
     """The demand-intake register."""
-    qs = (ProjectRequest.objects.filter(tenant=request.tenant)
-          .select_related("org_unit", "assigned_approver", "converted_project"))
+    # NO select_related: the register renders only `title`, `number`, `target_start_date`, the
+    # decided_at/status edit gate and five get_*_display calls — not one joined column. The three
+    # joins were 88 columns and 3.7 KB per row (the `converted_project` join alone dragged all
+    # eight of Project's TextFields), for zero rendered output. Deliberately NOT narrowed with
+    # `.only()` either: a deferred field touched by a later template edit becomes one query PER
+    # ROW, which is exactly what the `decided_at` edit gate above would have caused.
+    qs = ProjectRequest.objects.filter(tenant=request.tenant)
     return crud_list(
         request, qs, "projects/initiation/projectrequest/list.html",
         search_fields=["title", "description", "number"],
