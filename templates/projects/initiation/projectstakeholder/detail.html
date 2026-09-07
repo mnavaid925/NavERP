@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Stakeholder{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.party.name|default:obj.user.get_full_name|default:obj.user.username|default:"Unnamed stakeholder" }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:pst_list' %}">Stakeholders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">On <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_stakeholder_type_display }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pst_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Assignment</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Party</dt><dd>{{ obj.party.name|default:"—" }}</dd>
+        <dt>User</dt><dd>{{ obj.user.get_full_name|default:obj.user.username|default:"—" }}</dd>
+        <dt>RACI role</dt>
+        <dd>
+          {% if obj.raci_role == 'a' %}<span class="badge badge-red">{{ obj.get_raci_role_display }}</span>
+          {% elif obj.raci_role == 'r' %}<span class="badge badge-green">{{ obj.get_raci_role_display }}</span>
+          {% elif obj.raci_role == 'c' %}<span class="badge badge-info">{{ obj.get_raci_role_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_raci_role_display }}</span>{% endif %}
+        </dd>
+        <dt>Scope</dt><dd>{{ obj.raci_scope|default:"—" }}</dd>
+        <dt>Attending kickoff</dt>
+        <dd>{% if obj.attending_kickoff %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Engagement plan</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Influence</dt><dd>{{ obj.get_influence_display }}</dd>
+        <dt>Interest</dt><dd>{{ obj.get_interest_display }}</dd>
+        <dt>Engagement strategy</dt>
+        <dd>
+          {% if obj.engagement_strategy == 'manage_closely' %}<span class="badge badge-red">{{ obj.get_engagement_strategy_display }}</span>
+          {% elif obj.engagement_strategy == 'keep_satisfied' %}<span class="badge badge-amber">{{ obj.get_engagement_strategy_display }}</span>
+          {% elif obj.engagement_strategy == 'keep_informed' %}<span class="badge badge-info">{{ obj.get_engagement_strategy_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_engagement_strategy_display }}</span>{% endif %}
+        </dd>
+        <dt>Communication</dt><dd>{{ obj.get_comms_preference_display }} · {{ obj.get_comms_frequency_display }}</dd>
+      </dl>
+      <p class="text-muted">The strategy is derived from the influence/interest grid: a medium rating counts as the low side on both axes.</p>
+      {% if obj.notes %}<p>{{ obj.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:pst_list' %}" class="btn btn-outline">Back to Register</a>
+    <form method="post" action="{% url 'projects:pst_delete' obj.pk %}" onsubmit="return confirm('Remove this stakeholder from the register?');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Remove</button>
+    </form>
+  </div>
+{% endblock %}
