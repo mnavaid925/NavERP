@@ -56,7 +56,7 @@
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>{{ obj.meeting_date|date:"M d, Y H:i"|default:"—" }}</td>
               <td>{{ obj.get_agenda_template_display }}</td>
-              <td>{{ obj.attendee_count }}</td>
+              <td>{{ obj.attendee_total }}</td>
               <td>
                 {% if obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'held' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
