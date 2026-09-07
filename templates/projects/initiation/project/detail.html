@@ -136,7 +136,7 @@
       {% if kickoffs %}
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>Number</th><th>Meeting</th><th>Status</th><th>Attending</th><th>Baseline</th><th></th></tr></thead>
+            <thead><tr><th>Number</th><th>Meeting</th><th>Status</th><th>Attending</th><th>Baseline</th><th class="table-actions">Actions</th></tr></thead>
             <tbody>
               {% for k in kickoffs %}
                 <tr>
@@ -150,7 +150,11 @@
                   </td>
                   <td>{{ k.attendee_total }}</td>
                   <td>{{ k.baseline_acknowledged_at|date:"M d, Y"|default:"—" }}</td>
-                  <td><a href="{% url 'projects:pko_detail' k.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+                  <td>
+                    <div class="table-actions">
+                      <a href="{% url 'projects:pko_detail' k.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                    </div>
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
