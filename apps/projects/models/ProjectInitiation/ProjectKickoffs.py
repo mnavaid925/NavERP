@@ -66,8 +66,14 @@ class ProjectKickoff(TenantNumbered):
         ordering = ["-created_at", "-id"]
         unique_together = (("tenant", "number"), ("tenant", "project"))
         indexes = [
-            models.Index(fields=["tenant", "project"], name="pko_tnt_project_idx"),
+            # NO ("tenant", "project") index: byte-identical to the index MySQL auto-creates for
+            # the ("tenant", "project") unique_together above.
             models.Index(fields=["tenant", "status"], name="pko_tnt_status_idx"),
+            # Serves `Meta.ordering` itself: every register page — including the unfiltered
+            # default, the most-requested URL — sorted with `Using filesort` over the tenant's
+            # whole row set before LIMIT 15, so page cost was O(tenant rows), not O(15). The
+            # in-pattern add: ["tenant", "created_at"] already ships on 20+ models app-wide.
+            models.Index(fields=["tenant", "-created_at"], name="pko_tnt_created_idx"),
         ]
 
     def __str__(self):
