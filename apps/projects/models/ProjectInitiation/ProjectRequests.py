@@ -128,8 +128,9 @@ class ProjectRequest(TenantNumbered):
         related_name="project_requests")
     risk_rating = models.CharField(max_length=10, choices=RISK_RATING_CHOICES, default="low")
 
+    # 32, not 24: "feasible_with_constraints" is 25 characters (fields.E009 caught this in check).
     feasibility = models.CharField(
-        max_length=24, choices=FEASIBILITY_CHOICES, default="not_assessed")
+        max_length=32, choices=FEASIBILITY_CHOICES, default="not_assessed")
     feasibility_notes = models.TextField(blank=True)
     alternatives_considered = models.TextField(blank=True)
     required_resources = models.TextField(
