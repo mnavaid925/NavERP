@@ -36,6 +36,11 @@ class Project(TenantNumbered):
         ("draft", "Draft"),
         ("submitted", "Submitted"),
         ("approved", "Approved"),
+        # RESERVED, not dead: 7.1 ships submit + approve only, so no verb SETS `rejected` yet —
+        # a charter an approver disagrees with is simply not approved. It stays in the choices
+        # (and `prj_submit_charter` accepts it as a source, so a rejected charter can be
+        # resubmitted) because the reject-charter verb belongs with 7.x's approval workflow;
+        # dropping it would cost a migration and have to be added straight back.
         ("rejected", "Rejected"),
     ]
     STATUS_CHOICES = [
