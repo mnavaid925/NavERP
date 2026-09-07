@@ -143,6 +143,12 @@ def pko_mark_held(request, pk):
     if obj.status in ("held", "completed"):
         messages.info(request, "That kickoff has already been held.")
         return redirect("projects:pko_detail", pk=obj.pk)
+    # `planned` is NOT an allowed source: it would skip pko_schedule and, with it, the
+    # "set a meeting date before scheduling" requirement — a ceremony marked held with
+    # meeting_date NULL, which also advances the PROJECT to `kickoff`.
+    if obj.status != "scheduled":
+        messages.error(request, "Schedule the kickoff before marking it held.")
+        return redirect("projects:pko_detail", pk=obj.pk)
     obj.status = "held"
     obj.save(update_fields=["status", "updated_at"])
     project = obj.project
