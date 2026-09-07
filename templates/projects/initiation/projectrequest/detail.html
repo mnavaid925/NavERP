@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:prq_list' %}">Requests</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">
+        {{ obj.get_request_type_display }} · raised via {{ obj.get_source_display }} · {{ obj.created_at|date:"M d, Y" }}
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' or obj.status == 'needs_information' %}
+        <form method="post" action="{% url 'projects:prq_submit' obj.pk %}">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'approved' and not obj.converted_project_id %}
+        <form method="post" action="{% url 'projects:prq_convert' obj.pk %}" onsubmit="return confirm('Convert {{ obj.number }} into a project?');">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="arrow-right-circle"></i> Convert to Project</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'projects:prq_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Intake</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'converted' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'needs_information' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        </dd>
+        <dt>Requested by</dt><dd>{{ obj.requested_by.get_full_name|default:obj.requested_by.username|default:"—" }}</dd>
+        <dt>Requester (external)</dt><dd>{{ obj.requester_party.name|default:"—" }}</dd>
+        <dt>Department</dt><dd>{{ obj.org_unit.name|default:"—" }}</dd>
+        <dt>Source opportunity</dt><dd>{{ obj.source_opportunity.number|default:"—" }}</dd>
+        <dt>Reviewer</dt><dd>{{ obj.assigned_reviewer.get_full_name|default:obj.assigned_reviewer.username|default:"—" }}</dd>
+        <dt>Approver</dt><dd>{{ obj.assigned_approver.get_full_name|default:obj.assigned_approver.username|default:"—" }}</dd>
+        <dt>Priority</dt><dd>{{ obj.get_priority_display }}</dd>
+        <dt>Strategic alignment</dt><dd>{{ obj.strategic_alignment }} / 5</dd>
+        <dt>Target window</dt><dd>{{ obj.target_start_date|date:"M d, Y"|default:"—" }} → {{ obj.target_end_date|date:"M d, Y"|default:"—" }}</dd>
+        <dt>Submitted</dt><dd>{{ obj.submitted_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Converted project</dt>
+        <dd>{% if obj.converted_project_id %}<a href="{% url 'projects:prj_detail' obj.converted_project_id %}">{{ obj.converted_project.number }}</a>{% else %}—{% endif %}</dd>
+      </dl>
+      {% if obj.description %}<p>{{ obj.description|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Business case &amp; feasibility</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Estimated cost</dt><dd>{{ obj.estimated_cost }}</dd>
+        <dt>Estimated benefit</dt><dd>{{ obj.estimated_benefit }}</dd>
+        <dt>Currency</dt><dd>{{ obj.currency.code|default:"—" }}</dd>
+        <dt>ROI</dt><dd>{% if obj.roi_pct is None %}<span class="text-muted">Needs a cost estimate</span>{% else %}{{ obj.roi_pct }}%{% endif %}</dd>
+        <dt>Risk rating</dt><dd>{{ obj.get_risk_rating_display }}</dd>
+        <dt>Risk-adjusted benefit</dt><dd>{{ obj.risk_adjusted_benefit }}</dd>
+        <dt>Risk-adjusted ROI</dt><dd>{% if obj.risk_adjusted_roi_pct is None %}<span class="text-muted">Needs a cost estimate</span>{% else %}{{ obj.risk_adjusted_roi_pct }}%{% endif %}</dd>
+        <dt>Feasibility</dt>
+        <dd>
+          {% if obj.feasibility == 'feasible' %}<span class="badge badge-green">{{ obj.get_feasibility_display }}</span>
+          {% elif obj.feasibility == 'feasible_with_constraints' %}<span class="badge badge-amber">{{ obj.get_feasibility_display }}</span>
+          {% elif obj.feasibility == 'not_feasible' %}<span class="badge badge-red">{{ obj.get_feasibility_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_feasibility_display }}</span>{% endif %}
+        </dd>
+      </dl>
+      <p class="text-muted">The risk adjustment is a documented flat factor (low 100% · medium 85% · high 70% · critical 50%), not a simulation — probabilistic modelling is 7.5's.</p>
+      {% if obj.feasibility_notes %}<p><strong>Feasibility notes.</strong> {{ obj.feasibility_notes|linebreaksbr }}</p>{% endif %}
+      {% if obj.alternatives_considered %}<p><strong>Alternatives considered.</strong> {{ obj.alternatives_considered|linebreaksbr }}</p>{% endif %}
+      {% if obj.required_resources %}<p><strong>Resources required.</strong> {{ obj.required_resources|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Decision</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Decision</dt><dd>{% if obj.decision %}{{ obj.get_decision_display }}{% else %}<span class="text-muted">Not decided</span>{% endif %}</dd>
+        <dt>Decided by</dt><dd>{{ obj.decided_by.get_full_name|default:obj.decided_by.username|default:"—" }}</dd>
+        <dt>Decided at</dt><dd>{{ obj.decided_at|date:"M d, Y H:i"|default:"—" }}</dd>
+      </dl>
+      {% if obj.decision_notes %}<p>{{ obj.decision_notes|linebreaksbr }}</p>{% endif %}
+      {% if obj.rejection_reason %}<p><strong>Rejection reason.</strong> {{ obj.rejection_reason|linebreaksbr }}</p>{% endif %}
+      {% if obj.information_requested %}<p><strong>Information requested.</strong> {{ obj.information_requested|linebreaksbr }}</p>{% endif %}
+
+      <form method="post" action="{% url 'projects:prq_return_for_information' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label" for="{{ decision_form.reason.id_for_label }}">{{ decision_form.reason.label }}</label>
+          {{ decision_form.reason }}
+        </div>
+        <button class="btn btn-outline" type="submit"><i data-lucide="help-circle"></i> Return for Information</button>
+      </form>
+      <form method="post" action="{% url 'projects:prq_reject' obj.pk %}" onsubmit="return confirm('Reject this request?');">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label" for="id_reject_reason">Rejection reason</label>
+          <textarea name="reason" id="id_reject_reason" class="form-textarea" rows="3" required></textarea>
+        </div>
+        <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:prq_list' %}" class="btn btn-outline">Back to Requests</a>
+    <form method="post" action="{% url 'projects:prq_delete' obj.pk %}" onsubmit="return confirm('Delete request {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
