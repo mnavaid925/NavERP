@@ -45,7 +45,7 @@
         <dt>Attending</dt><dd>{{ obj.attendee_count }}</dd>
         <dt>Completed</dt><dd>{{ obj.completed_at|date:"M d, Y H:i"|default:"—" }}</dd>
         <dt>Baseline acknowledged</dt><dd>{{ obj.baseline_acknowledged_at|date:"M d, Y H:i"|default:"—" }}</dd>
-        <dt>Acknowledged by</dt><dd>{{ obj.baseline_acknowledged_by.get_full_name|default:obj.baseline_acknowledged_by.username|default:"—" }}</dd>
+        <dt>Acknowledged by</dt><dd>{% if obj.baseline_acknowledged_by %}{{ obj.baseline_acknowledged_by.get_full_name|default:obj.baseline_acknowledged_by.username }}{% else %}—{% endif %}</dd>
       </dl>
       {% if obj.agenda %}<p><strong>Agenda.</strong> {{ obj.agenda|linebreaksbr }}</p>{% endif %}
       {% if obj.attendee_summary %}<p><strong>External attendees.</strong> {{ obj.attendee_summary|linebreaksbr }}</p>{% endif %}
@@ -64,7 +64,7 @@
             <tbody>
               {% for s in attending %}
                 <tr>
-                  <td class="fw-600"><a href="{% url 'projects:pst_detail' s.pk %}">{{ s.party.name|default:s.user.get_full_name|default:s.user.username|default:"—" }}</a></td>
+                  <td class="fw-600"><a href="{% url 'projects:pst_detail' s.pk %}">{% if s.party %}{{ s.party.name }}{% elif s.user %}{{ s.user.get_full_name|default:s.user.username }}{% else %}—{% endif %}</a></td>
                   <td>{{ s.get_stakeholder_type_display }}</td>
                   <td>{{ s.get_raci_role_display }}</td>
                   <td>{{ s.get_comms_preference_display }} · {{ s.get_comms_frequency_display }}</td>
@@ -97,7 +97,7 @@
                     {% elif a.status == 'cancelled' %}<span class="badge badge-red">{{ a.get_status_display }}</span>
                     {% else %}<span class="badge badge-muted">{{ a.get_status_display }}</span>{% endif %}
                   </td>
-                  <td>{{ a.owner.get_full_name|default:a.owner.username|default:"—" }}</td>
+                  <td>{% if a.owner %}{{ a.owner.get_full_name|default:a.owner.username }}{% else %}—{% endif %}</td>
                   <td>{{ a.due_at|date:"M d, Y"|default:"—" }}</td>
                 </tr>
               {% endfor %}
