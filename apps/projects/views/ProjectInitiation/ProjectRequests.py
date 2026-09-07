@@ -199,12 +199,27 @@ def prq_return_for_information(request, pk):
         messages.error(
             request, f"A {obj.get_status_display().lower()} request cannot be sent back.")
         return redirect("projects:prq_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "needs_information"
     obj.information_requested = form.cleaned_data["reason"]
-    obj.save(update_fields=["status", "information_requested", "updated_at"])
+    # Sending a DECIDED request back VOIDS the decision. Leaving `decision`/`decided_by`/
+    # `decided_at` stamped produced a row that rendered "Needs Information" and "No-Go" at once,
+    # answered `?decision=no_go` on the register while sitting with the requester, and — from
+    # `approved` — silently killed a Go (Convert requires status == "approved"). The void is
+    # explicit, and the decision it removes is written into the immutable trail first.
+    voided = {}
+    if obj.decision or obj.decided_at:
+        voided = {"voided_decision": obj.decision,
+                  "voided_reason": (obj.rejection_reason or "")[:500]}
+        obj.decision = ""
+        obj.decided_by = None
+        obj.decided_at = None
+        obj.rejection_reason = ""
+    obj.save(update_fields=["status", "information_requested", "decision", "decided_by",
+                            "decided_at", "rejection_reason", "updated_at"])
     write_audit_log(request.user, obj, "return",
-                    changes={"verb": "return_for_information", "from": "screening",
-                             "to": obj.status})
+                    changes={"verb": "return_for_information", "from": previous,
+                             "to": obj.status, **voided})
     messages.success(request, f"Sent “{obj.title}” back for information.")
     return redirect("projects:prq_detail", pk=obj.pk)
 
