@@ -3,7 +3,7 @@
 {% block content %}
   <div class="page-header">
     <div>
-      <h1 class="page-title">{{ obj.party.name|default:obj.user.get_full_name|default:obj.user.username|default:"Unnamed stakeholder" }}</h1>
+      <h1 class="page-title">{% if obj.party %}{{ obj.party.name }}{% elif obj.user %}{{ obj.user.get_full_name|default:obj.user.username }}{% else %}Unnamed stakeholder{% endif %}</h1>
       <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:pst_list' %}">Stakeholders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
       <p class="text-muted">On <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_stakeholder_type_display }}</p>
     </div>
@@ -18,7 +18,7 @@
       <dl class="detail-grid">
         <dt>Number</dt><dd>{{ obj.number }}</dd>
         <dt>Party</dt><dd>{{ obj.party.name|default:"—" }}</dd>
-        <dt>User</dt><dd>{{ obj.user.get_full_name|default:obj.user.username|default:"—" }}</dd>
+        <dt>User</dt><dd>{% if obj.user %}{{ obj.user.get_full_name|default:obj.user.username }}{% else %}—{% endif %}</dd>
         <dt>RACI role</dt>
         <dd>
           {% if obj.raci_role == 'a' %}<span class="badge badge-red">{{ obj.get_raci_role_display }}</span>
