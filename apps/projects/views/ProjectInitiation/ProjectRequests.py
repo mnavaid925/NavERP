@@ -169,6 +169,15 @@ def prq_reject(request, pk):
     if obj.status == "converted":
         messages.error(request, "A converted request cannot be rejected — reject the project.")
         return redirect("projects:prq_detail", pk=obj.pk)
+    # Same lower gate as prq_approve: a No-Go is a formal DECISION, so it needs something to
+    # decide on. Without this a never-submitted draft could be stamped `decided_at=<now>` while
+    # `submitted_at` was still NULL — a decision on a request nobody ever asked for.
+    if obj.status not in ProjectRequest.DECISION_STATUSES:
+        messages.error(
+            request,
+            f"Only a request under review can be rejected — this one is "
+            f"{obj.get_status_display().lower()}.")
+        return redirect("projects:prq_detail", pk=obj.pk)
     obj.status = "rejected"
     obj.decision = "no_go"
     obj.rejection_reason = form.cleaned_data["reason"]
