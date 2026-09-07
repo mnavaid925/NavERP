@@ -49,7 +49,12 @@
         </dd>
         <dt>Approved by</dt><dd>{% if obj.charter_approved_by %}{{ obj.charter_approved_by.get_full_name|default:obj.charter_approved_by.username }}{% else %}—{% endif %}</dd>
         <dt>Approved at</dt><dd>{{ obj.charter_approved_at|date:"M d, Y H:i"|default:"—" }}</dd>
-        <dt>Charter document</dt><dd>{{ obj.charter_document|default:"—" }}</dd>
+        <dt>Charter document</dt>
+        <dd>
+          {% if obj.charter_document %}
+            <a href="{{ obj.charter_document.file.url }}" target="_blank" rel="noopener"><i data-lucide="file-text"></i> {{ obj.charter_document.name }}</a>
+          {% else %}—{% endif %}
+        </dd>
         <dt>Status</dt>
         <dd>
           {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
