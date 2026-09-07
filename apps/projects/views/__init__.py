@@ -10,3 +10,44 @@ Context-var contract (pinned, L7 — an unpinned name renders blank at 200):
   * form  -> ``form`` + ``is_edit``
 The per-entity extras are frozen in ``.claude/tasks/contract-projects-7.1.md``.
 """
+# --- 7.1 Project Initiation & Charter ---------------------------------------------------------
+from .ProjectInitiation.Overview import overview  # noqa: F401
+from .ProjectInitiation.ProjectKickoffs import (  # noqa: F401
+    pko_complete,
+    pko_create,
+    pko_delete,
+    pko_detail,
+    pko_edit,
+    pko_list,
+    pko_mark_baseline_set,
+    pko_mark_held,
+    pko_schedule,
+)
+from .ProjectInitiation.ProjectRequests import (  # noqa: F401
+    prq_approve,
+    prq_convert,
+    prq_create,
+    prq_delete,
+    prq_detail,
+    prq_edit,
+    prq_list,
+    prq_reject,
+    prq_return_for_information,
+    prq_submit,
+)
+from .ProjectInitiation.ProjectStakeholders import (  # noqa: F401
+    pst_create,
+    pst_delete,
+    pst_detail,
+    pst_edit,
+    pst_list,
+)
+from .ProjectInitiation.Projects import (  # noqa: F401
+    prj_approve_charter,
+    prj_create,
+    prj_delete,
+    prj_detail,
+    prj_edit,
+    prj_list,
+    prj_submit_charter,
+)
