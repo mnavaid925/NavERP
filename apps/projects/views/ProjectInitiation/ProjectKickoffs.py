@@ -19,12 +19,7 @@ from apps.projects.forms import ProjectKickoffForm
 from apps.projects.models import Project, ProjectKickoff
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, redirect, render
-
-
-def _projects(tenant):
-    if tenant is None:
-        return Project.objects.none()
-    return Project.objects.filter(tenant=tenant).order_by("name")
+from apps.projects.views._helpers import projects
 
 
 def _activities(project):
@@ -65,7 +60,7 @@ def pko_list(request):
                  ("status", "status", False),
                  ("agenda_template", "agenda_template", False)],
         extra_context={
-            "projects": _projects(request.tenant),
+            "projects": projects(request.tenant),
             "status_choices": ProjectKickoff.STATUS_CHOICES,
             "agenda_template_choices": ProjectKickoff.AGENDA_TEMPLATE_CHOICES,
         },
