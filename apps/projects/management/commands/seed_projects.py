@@ -234,8 +234,6 @@ class Command(BaseCommand):
         """Six rows: every RACI value, every influence×interest quadrant, 3 attending."""
         if project is None or project.stakeholders.count() >= 6:
             return
-        ct = ContentType.objects.get_for_model(Project)
-        del ct  # stakeholders are a real FK, not a GFK - kept for symmetry with _activities
         rows = [
             ("sponsor", "a", "charter approval", "high", "high", True),
             ("approver", "r", "charter approval", "high", "low", True),
