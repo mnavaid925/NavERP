@@ -16,6 +16,7 @@ urlpatterns = [
     path("scm/", include("apps.scm.urls")),         # /scm/, requisitions/rfqs/orders/receipts
     path("inventory/", include("apps.inventory.urls")),  # /inventory/, catalog attributes/prices/files
     path("procurement/", include("apps.procurement.urls")),  # /procurement/, portal/alerts/reports
+    path("projects/", include("apps.projects.urls")),  # /projects/, requests/charters/stakeholders/kickoffs
 ]
 
 if settings.DEBUG:
