@@ -28,7 +28,7 @@ three, not three migrations.
 
 ## Critical
 
-- [ ] **C1 — `approved` is unreachable through the UI, so `prq_convert` is dead.**
+- [x] **C1 — `approved` is unreachable through the UI, so `prq_convert` is dead.**
   Merges R1-I1 + R5-C1. No template posts to `prq_approve`; `ProjectRequestForm` excludes `status`,
   so nothing can reach `approved` and Convert can never render. The verb itself is correct — this is
   a wiring gap that kills the sub-module's headline chain. The smoke gate missed it because the
@@ -36,8 +36,9 @@ three, not three migrations.
   *Fix:* add an Approve POST form to the Decision card in
   `templates/projects/initiation/projectrequest/detail.html`, gated on
   `obj.status in ProjectRequest.DECISION_STATUSES` **and** on tenant-admin (see I19).
+  **Status:** [x] fixed — fix(projects): wire the Approve verb into the request Decision card so approved is reachable
 
-- [ ] **C2 — `pko_complete` skips both ceremony gates and drives a project to `active` with an
+- [x] **C2 — `pko_complete` skips both ceremony gates and drives a project to `active` with an
   unapproved charter.** Merges R1-I3 + R3-M4 + R5-C2 + R6-F2. View gate only rejects an already
   `completed` kickoff; template offers Complete on a `planned` one. Any member can do
   `prj_create` -> `pko_create` -> Complete and the project goes live with `charter_status='draft'`,
@@ -46,8 +47,9 @@ three, not three migrations.
   *Fix, all three parts:* require `obj.status == "held"` in the view; refuse to promote the project
   unless `project.charter_status == "approved"`; tighten the template to
   `{% if obj.status == 'held' %}`.
+  **Status:** [x] fixed — security(projects): pko_complete now requires a held kickoff and an approved charter; fix(projects): only offer Complete on a held kickoff whose charter is approved
 
-- [ ] **C3 — `prq_convert`'s idempotency guard is per-instance, not per-row: two concurrent POSTs
+- [x] **C3 — `prq_convert`'s idempotency guard is per-instance, not per-row: two concurrent POSTs
   mint two projects.** R5-C3. `convert_to_project()` checks `if self.converted_project_id` on the
   in-memory instance *before* opening `transaction.atomic()`. Two live instances produce PRJ-00004
   and PRJ-00005 for one demand; `PRQ.converted_project_id` points at the second and the first is an
@@ -55,10 +57,11 @@ three, not three migrations.
   *Fix:* `select_for_update()` re-read **inside** the atomic block, or a compare-and-swap
   `filter(pk=…, converted_project__isnull=True).update(...)`. Consider a unique constraint on
   `Project.request` (would need the 0002 migration).
+  **Status:** [x] fixed — security(projects): make convert_to_project idempotent per ROW with a locking re-read
 
 ## Important
 
-- [ ] **I1 — Tenant-less users get unscoped FK dropdowns on all four create GETs (cross-tenant
+- [x] **I1 — Tenant-less users get unscoped FK dropdowns on all four create GETs (cross-tenant
   disclosure, incl. every user email).** Merges R1-I5 + R6-F1. The `request.tenant is None` guard
   sits inside `if form.is_valid():`, so a **GET** falls through to `Form(tenant=None)` and
   `TenantModelForm` leaves every FK on the default queryset. Reachable by any ordinary member whose
@@ -67,102 +70,141 @@ three, not three migrations.
   `apps/core/forms/_common.py` to `.none()` when `tenant` is falsy. **Note the clone at
   `apps/procurement/views/DashboardPortal/ProcurementAlerts.py:82` — out of scope for 7.1; flag it,
   do not fix it here (L43).**
-- [ ] **I2 — An approved charter and its signed document are rewritable while the stamp stays.**
+  **Status:** [x] fixed — security(projects): hoist the tenant guard to the first line of prq_create / prj_create / pst_create / pko_create (4 commits). The OPTIONAL apps/core/forms/_common.py fail-closed hardening was TRIED and REVERTED - it breaks 10 tests in apps/inventory and apps/procurement that deliberately encode the current contract (test_location_queryset_scoped_only_when_tenant_kwarg_passed, test_stocktake_program_without_tenant_kwarg_narrows_nothing, and four _reject_foreign tests that assert the 'belongs to another workspace' message the .none() would pre-empt). See Notes.
+- [x] **I2 — An approved charter and its signed document are rewritable while the stamp stays.**
   R6-F3. *Fix:* refuse `prj_edit` when `charter_status == "approved"` (peer pattern
   `apps/accounting/views/AccountsPayable/Bills.py:38`); gate the Edit button to match.
-- [ ] **I3 — `prq_edit` mass-assigns decision evidence and rewrites an approved business case.**
+  **Status:** [x] fixed — security(projects): refuse prj_edit once the charter is approved; Edit button hidden on both the detail page and the register
+- [x] **I3 — `prq_edit` mass-assigns decision evidence and rewrites an approved business case.**
   Merges R1-I4 + R6-F4. *Fix:* add `rejection_reason`, `information_requested`, `decision_notes` to
   `ProjectRequestForm.Meta.exclude`; add a status guard to `prq_edit`; **update the contract's
   exclusion list at `.claude/tasks/contract-projects-7.1.md:96-97` in the same change** or the fix
   reads as drift later.
-- [ ] **I4 — `prq_return_for_information` leaves `decision`/`decided_by`/`decided_at` stamped.**
+  **Status:** [x] fixed — security(projects): exclude the decision-evidence fields from ProjectRequestForm; lock prq_edit once a decision has been stamped; Edit buttons gated in both templates; contract exclusion list updated
+- [x] **I4 — `prq_return_for_information` leaves `decision`/`decided_by`/`decided_at` stamped.**
   Merges R1-M1 + R5-I1. A row renders "Needs Information" *and* "No-Go" at once; from `approved` it
   silently voids the Go. *Fix:* refuse decided statuses, or clear the decision stamps on return.
-- [ ] **I5 — `prq_return_for_information` is login-only, so a non-admin can reverse a tenant admin's
+  **Status:** [x] fixed — fix(projects): void the decision stamps when a request is returned for information (audit records what was voided)
+- [x] **I5 — `prq_return_for_information` is login-only, so a non-admin can reverse a tenant admin's
   decision.** R5-I2. *Fix:* `@tenant_admin_required`.
-- [ ] **I6 — `prq_reject` has no lower gate: a never-submitted `draft` gets a full decision stamp**
+  **Status:** [x] fixed — security(projects): gate prq_return_for_information at tenant admin
+- [x] **I6 — `prq_reject` has no lower gate: a never-submitted `draft` gets a full decision stamp**
   (`submitted_at=None` alongside `decided_at=<now>`). R5-I3. *Fix:* gate to `DECISION_STATUSES`.
-- [ ] **I7 — `pko_mark_held` skips the schedule gate and the meeting-date requirement.**
+  **Status:** [x] fixed — fix(projects): give prq_reject the same lower gate as prq_approve (DECISION_STATUSES)
+- [x] **I7 — `pko_mark_held` skips the schedule gate and the meeting-date requirement.**
   Merges R1-M2 + R5-I5. Makes "Set a meeting date before scheduling" unenforceable.
   *Fix:* require `scheduled`.
-- [ ] **I8 — `pko_mark_baseline_set` accepts a never-held kickoff, contradicting its own message.**
+  **Status:** [x] fixed — fix(projects): pko_mark_held now requires a scheduled kickoff; button gated to scheduled
+- [x] **I8 — `pko_mark_baseline_set` accepts a never-held kickoff, contradicting its own message.**
   Merges R1-M3 + R5-I6. *Fix:* `if obj.status in ("planned", "scheduled")`.
-- [ ] **I9 — `pko_mark_baseline_set` has no UI trigger, so two rendered fields can never populate.**
+  **Status:** [x] fixed — fix(projects): refuse a baseline acknowledgement on a scheduled kickoff
+- [x] **I9 — `pko_mark_baseline_set` has no UI trigger, so two rendered fields can never populate.**
   Merges R1-I2 + R5-I7. `projectkickoff/detail.html:47-48` and `list.html:66` render a permanently
   "—" baseline. *Fix:* add the POST form, shown when
   `obj.status != 'planned' and not obj.baseline_acknowledged_at`; gate it — it stamps a signature.
-- [ ] **I10 — Deleting a Project strands its source request in a dead `converted` state.** R5-I8.
+  **Status:** [x] fixed — feat(projects): add the Acknowledge Baseline trigger to the kickoff detail page (tenant-admin, held/completed, unstamped only)
+- [x] **I10 — Deleting a Project strands its source request in a dead `converted` state.** R5-I8.
   `converted_project` is `SET_NULL`, so the request reads "Converted" with project "—" and **every**
   verb then refuses it; the demand is unrecoverable. The delete also CASCADEs stakeholders and
   kickoffs with no warning. *Fix:* refuse the delete while `request` is set (or reopen the request
   and clear `converted`), and name the cascade in the confirm dialog.
-- [ ] **I11 — A charter can be submitted and approved on a `cancelled`/`completed` project.** R5-I9.
+  **Status:** [x] fixed — fix(projects): reopen the source request when its project is deleted (one transaction + audit row); cascade named in both confirm dialogs
+- [x] **I11 — A charter can be submitted and approved on a `cancelled`/`completed` project.** R5-I9.
   *Fix:* gate both charter verbs on `status`, not just `charter_status`.
-- [ ] **I12 — The audit trail records a fabricated `from` state on every verb.**
+  **Status:** [x] fixed — fix(projects): gate both charter verbs on the project status (TERMINAL_STATUSES); charter buttons hidden on completed/cancelled
+- [x] **I12 — The audit trail records a fabricated `from` state on every verb.**
   Merges R1-I7 + R5-I10. Hard-coded `{"from": "draft"}` etc. means the immutable trail **asserts the
   gate was respected in exactly the cases where it was skipped (C2, I7)**. *Fix:* capture
   `previous = obj.status` before mutating; applies to `ProjectRequests.py:111,134,162,188` and
   `ProjectKickoffs.py:124,143,163`.
-- [ ] **I13 — Non-admin members can advance the project lifecycle and delete governance rows.**
+  **Status:** [x] fixed — fix(projects): log the real previous status on the request verbs, the kickoff ceremony verbs and the charter verbs (3 commits)
+- [x] **I13 — Non-admin members can advance the project lifecycle and delete governance rows.**
   R5-I11. The deletes match house style (287/393 delete views are login-only) — the finding is the
   **inconsistency**: 7.1 gates approve/reject/convert/approve-charter at tenant-admin while leaving
   the kickoff verbs that set `Project.status` ungated. *Fix:* gate the three kickoff verbs.
-- [ ] **I14 — Return and Reject render on every status, including ones the view refuses.**
+  **Status:** [x] fixed — security(projects): gate mark-held, complete and baseline at tenant admin; buttons role-gated to match
+- [x] **I14 — Return and Reject render on every status, including ones the view refuses.**
   Merges R3-I1 + R5-M2. A required-looking textarea and a red button that can never succeed.
   *Fix:* mirror the view guards in the template.
-- [ ] **I15 — The signed charter document is rendered as dead text.** R3-I2.
+  **Status:** [x] fixed — fix(projects): render Return and Reject only on the statuses their views accept
+- [x] **I15 — The signed charter document is rendered as dead text.** R3-I2.
   `project/detail.html:40` prints `Document.name` with no link — the artefact the page is named
   after is unreachable. *Fix:* the `templates/accounting/payable/bill/detail.html:43` anchor pattern.
-- [ ] **I16 — `attendee_count` is a real 1+N on `pko_list` and `prj_detail` (25 queries at 15 rows
+  **Status:** [x] fixed — fix(projects): link the signed charter document instead of printing its name
+- [x] **I16 — `attendee_count` is a real 1+N on `pko_list` and `prj_detail` (25 queries at 15 rows
   vs 10 flat).** R4-I1. **Two traps:** you cannot annotate over the property name (data descriptor —
   `AttributeError`), so use `attendee_total`; and an aggregate over a multi-valued relation **drops
   `Meta.ordering`**, silently flipping the register out of newest-first — the explicit
   `.order_by("-created_at","-id")` is mandatory. Measured fix: 25 -> 10.
-- [ ] **I17 — `prq_list` ships an 88-column, 3-JOIN row for a template that renders none of it.**
+  **Status:** [x] fixed — perf(projects): annotate attendee_total on pko_list and the prj_detail kickoff table (25 -> 10 queries at 15 rows, order still newest-first, values identical)
+- [x] **I17 — `prq_list` ships an 88-column, 3-JOIN row for a template that renders none of it.**
   R4-I2. *Fix:* drop the `select_related`; optionally `.only(...)` the eight rendered columns.
-- [ ] **I18 — No index serves the `ordering` all four registers use** (`-created_at, -id`); every
+  **Status:** [x] fixed — perf(projects): drop the three unused joins from prq_list (88 cols/3 joins -> 37 cols/0 joins); .only() deliberately skipped, reason in the code comment
+- [x] **I18 — No index serves the `ordering` all four registers use** (`-created_at, -id`); every
   default register page is `Using filesort` over the tenant's whole row set. R4-I3.
   In-pattern add (20+ models already ship `["tenant","created_at"]`). **Needs migration 0002.**
-- [ ] **I19 — Three tenant-admin-only buttons are rendered to every member -> hard 403.**
+  **Status:** [x] fixed — perf(projects): (tenant, -created_at) index on all four models; EXPLAIN now uses prq_tnt_created_idx with no filesort. Migration 0002.
+- [x] **I19 — Three tenant-admin-only buttons are rendered to every member -> hard 403.**
   Merges R1-I6 + R6-F5. *Fix:* `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+  **Status:** [x] fixed — fix(projects): role-gate Convert, the whole Decision-card action block and Approve Charter
 
 ## Minor
 
-- [ ] **M1** — the "Business Case & Feasibility" sidebar bullet deep-links `?status=assessment`, but
+- [x] **M1** — the "Business Case & Feasibility" sidebar bullet deep-links `?status=assessment`, but
   no verb can reach `screening`/`assessment`, so it lands on an empty register (R1-M4). Fix with C1
   or repoint the bullet.
-- [ ] **M2** — `charter_status="rejected"` is a choice no verb can set, yet `prj_submit_charter`
+  **Status:** [x] fixed — fix(core): repoint the 7.1 Business Case bullet at ?status=submitted (reachable) instead of ?status=assessment
+- [~] **M2** — `charter_status="rejected"` is a choice no verb can set, yet `prj_submit_charter`
   accepts it as a source (R1-M5).
-- [ ] **M3** — `seed_projects.py:237-238` executes a `ContentType` query and `del`s it (R1-M6).
-- [ ] **M4** — `seed_projects.py:89` `projects[2]` is a hidden positional coupling (R1-M7).
-- [ ] **M5** — "Plan Kickoff" renders when a kickoff already exists (R1-M8).
-- [ ] **M6** — class-level `queryset=Project.objects.all()` should be `.none()` fail-closed (R1-M9).
-- [ ] **M7** — contract pins `feasibility(24)`; code is `max_length=32`. Also `Project.description`
+  **Status:** [~] skipped — not removed - documented as reserved in the model. Dropping the choice needs a second migration and forecloses the 7.x reject-charter verb; commit docs(projects): mark charter_status rejected as reserved, not dead
+- [x] **M3** — `seed_projects.py:237-238` executes a `ContentType` query and `del`s it (R1-M6).
+  **Status:** [x] fixed — refactor(projects): drop the dead ContentType query from the stakeholder seeder
+- [x] **M4** — `seed_projects.py:89` `projects[2]` is a hidden positional coupling (R1-M7).
+  **Status:** [x] fixed — refactor(projects): select the seeded projects by identity, not by list position
+- [x] **M5** — "Plan Kickoff" renders when a kickoff already exists (R1-M8).
+  **Status:** [x] fixed — fix(projects): hide Plan Kickoff once the project has one
+- [x] **M6** — class-level `queryset=Project.objects.all()` should be `.none()` fail-closed (R1-M9).
+  **Status:** [x] fixed — refactor(projects): fail-closed Project.objects.none() default on both forms project field
+- [x] **M7** — contract pins `feasibility(24)`; code is `max_length=32`. Also `Project.description`
   is missing from the contract's field list (R1-M10 + smoke-gate note). Doc-only.
-- [ ] **M8** — `models/__init__.py` and `forms/__init__.py` omit the `from ._base import *` /
+  **Status:** [x] fixed — docs(projects): correct the 7.1 contract - feasibility(32), Project.description, plus the 0002 index/validator schema
+- [x] **M8** — `models/__init__.py` and `forms/__init__.py` omit the `from ._base import *` /
   `from ._common import *` line both reference apps carry; a live trap for the Phase 6 tests (R2-M1).
-- [ ] **M9** — `_projects(tenant)` is copy-pasted byte-identically in two entity modules; belongs in
+  **Status:** [x] fixed — fix(projects): re-export the shared models/_base and forms/_common toolkits from the two package __init__ files
+- [x] **M9** — `_projects(tenant)` is copy-pasted byte-identically in two entity modules; belongs in
   `views/_helpers.py` (R2-M2).
-- [ ] **M10** — `data-lucide="seedling"` is not a Lucide icon (it is `sprout`); renders blank (R3-M1).
-- [ ] **M11** — the extra `<div>` inside each `.stat-card` collapses the flex gap (R3-M2).
-- [ ] **M12** — `badge-slate`/`badge-muted` are identical so the branch is dead weight, **and the
+  **Status:** [x] fixed — refactor(projects): move projects() into views/_helpers.py and use it from both registers (3 commits)
+- [x] **M10** — `data-lucide="seedling"` is not a Lucide icon (it is `sprout`); renders blank (R3-M1).
+  **Status:** [x] fixed — fix(projects): use the real Lucide icon name sprout on the overview empty state
+- [x] **M11** — the extra `<div>` inside each `.stat-card` collapses the flex gap (R3-M2).
+  **Status:** [x] fixed — fix(projects): flatten the stat-card markup so the flex gap applies
+- [x] **M12** — `badge-slate`/`badge-muted` are identical so the branch is dead weight, **and the
   live `kickoff` status has no badge branch** so a launching project looks like a draft (R3-M3).
-- [ ] **M13** — bare `<th></th>` above two action columns; one action cell not wrapped in
+  **Status:** [x] fixed — fix(projects): add the missing kickoff badge on both project templates and drop the duplicate slate branch on all four (4 commits)
+- [x] **M13** — bare `<th></th>` above two action columns; one action cell not wrapped in
   `.table-actions` (R3-M5).
-- [ ] **M14** — two of the nine shipped indexes are dead: `pko_tnt_project_idx` duplicates the
+  **Status:** [x] fixed — a11y(projects): name both bare action columns and wrap the unwrapped action cell
+- [x] **M14** — two of the nine shipped indexes are dead: `pko_tnt_project_idx` duplicates the
   `unique_together` index byte-for-byte, `pst_tnt_project_idx` is its leftmost prefix (R4-M1).
   **Migration 0002.**
-- [ ] **M15** — `Overview.py` uses 7 round trips for 7 stat cards; 4 is the floor (R4-M2).
-- [ ] **M16** — `projectkickoff/detail.html:45` `{{ obj.attendee_count }}` re-counts rows the view
+  **Status:** [x] fixed — perf(projects): dropped pko_tnt_project_idx (duplicate of the unique_together index) and pst_tnt_project_idx (leftmost prefix). Migration 0002.
+- [x] **M15** — `Overview.py` uses 7 round trips for 7 stat cards; 4 is the floor (R4-M2).
+  **Status:** [x] fixed — perf(projects): collapse the overview stat cards to one aggregate per table (14 -> 11 page queries, identical values)
+- [x] **M16** — `projectkickoff/detail.html:45` `{{ obj.attendee_count }}` re-counts rows the view
   already loaded; `{{ attending|length }}` saves a query (R4-M4).
-- [ ] **M17** — `prj_list` carries two joins the template never renders (R4-M5).
-- [ ] **M18** — admin changelists lack `list_select_related` (R4-M6).
-- [ ] **M19** — the seeder saves each request row up to three times. **Do NOT "fix" with
+  **Status:** [x] fixed — perf(projects): read {{ attending|length }} on the kickoff detail instead of re-counting
+- [x] **M17** — `prj_list` carries two joins the template never renders (R4-M5).
+  **Status:** [x] fixed — perf(projects): trim prj_list to select_related(client, project_manager) - 4 joins/73 cols -> 2 joins/51 cols
+- [x] **M18** — admin changelists lack `list_select_related` (R4-M6).
+  **Status:** [x] fixed — perf(projects): list_select_related on all four admin changelists (stakeholder 14 -> 8 queries)
+- [x] **M19** — the seeder saves each request row up to three times. **Do NOT "fix" with
   `bulk_create`** — `TenantNumbered.save()` allocates `number` and `bulk_create` bypasses it,
   shipping empty numbers (R4-M7).
-- [ ] **M20** — negative `estimated_cost`/`estimated_benefit` are accepted and reach the ROI
+  **Status:** [x] fixed — perf(projects): stamp the seeded request rows in one save instead of three (25 UPDATEs -> 4, numbers still allocated)
+- [x] **M20** — negative `estimated_cost`/`estimated_benefit` are accepted and reach the ROI
   properties (R6-F6). NaN/Inf/huge are already correctly rejected. *Fix:* `MinValueValidator(0)`.
   **Migration 0002.**
+  **Status:** [x] fixed — security(projects): MinValueValidator(0) on estimated_cost / estimated_benefit. Migration 0002.
 
 ## Recorded, no action — do NOT "fix" these
 
@@ -183,6 +225,42 @@ three, not three migrations.
   procurement/scm/hrm/crm.** Out of scope for 7.1 and a cross-module sweep risks L43 collisions;
   spun off as its own task.
 - [ ] **N7 — no test suite** (R2-I3). Not a fixer item — this is **Phase 6**, which runs next.
+
+---
+
+## Notes from the fixer pass (Phase 5)
+
+Recommendations that fall OUTSIDE 7.1 and must not be swept in from here (L18/L43) — each needs
+its own task:
+
+- **App-wide pass: the `crud_create` tenant-guard clone.** I1 was fixed in this sub-module's four
+  create views. The identical "guard inside `if form.is_valid()`" shape survives at
+  `apps/procurement/views/DashboardPortal/ProcurementAlerts.py:82` — the whole remaining family per
+  the reviewer's grep (`grep -rn -A 3 "if form.is_valid():" --include=*.py apps/ | grep
+  "request.tenant is None"`). Left alone deliberately: it is another module's file.
+- **App-wide pass: fail-closed FK scoping in `apps/core/forms/_common.py`.** The belt-and-braces
+  half of I1 (`field.queryset.none()` when `tenant` is falsy) was **applied, measured and
+  reverted** in this pass. It is a shared foundation file whose blast radius is every ModelForm in
+  the tree. Measured against the exact blast radius (an AST scan found 196 tenant-less form
+  instantiations across 23 test files; all 23 plus `core`/`crm`/`scm`/`procurement-receipts` were
+  run): **exactly 10 tests fail and the rest pass** — and the 10 are not incidental, they *encode
+  the current contract*:
+  `apps/inventory/tests/test_reporting_forms.py::…::test_location_queryset_scoped_only_when_tenant_kwarg_passed`,
+  `test_reporting_security.py::test_location_queryset_scoped_only_when_tenant_kwarg_passed`,
+  `test_stocktake_forms.py::…::test_stocktake_program_without_tenant_kwarg_narrows_nothing_and_saves_nothing`,
+  `…::test_stocktake_event_without_tenant_kwarg_rejects_even_an_owned_warehouse`, plus six
+  `apps/procurement` `_reject_foreign` tests that assert the message
+  *"That record belongs to another workspace."* which an empty queryset pre-empts with
+  *"Select a valid choice."*
+  Changing them is another module's test suite (L43) and would mean weakening/rewriting tests to
+  suit a hardening, so the change was backed out. A dedicated task should land the hardening AND
+  update those ten assertions together, with the full unfiltered suite (L47).
+- **App-wide pass: the `(tenant, -created_at)` ordering index.** I18 added it to 7.1's four models
+  only. Every register in the tree orders by `["-created_at", "-id"]` and most tables still have no
+  index containing `created_at`, so the same `Using filesort` is app-wide. In-pattern, but it is a
+  migration per app and belongs in its own task.
+- **7.x follow-up: no reject-charter verb.** M2 records `charter_status="rejected"` as reserved.
+  When 7.x adds the charter approval workflow, the verb that sets it lands there.
 
 ---
 
