@@ -128,10 +128,11 @@ def pko_schedule(request, pk):
     if not obj.meeting_date:
         messages.error(request, "Set a meeting date before scheduling the kickoff.")
         return redirect("projects:pko_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "scheduled"
     obj.save(update_fields=["status", "updated_at"])
     write_audit_log(request.user, obj, "schedule",
-                    changes={"verb": "schedule", "from": "planned", "to": obj.status})
+                    changes={"verb": "schedule", "from": previous, "to": obj.status})
     messages.success(request, "Kickoff scheduled.")
     return redirect("projects:pko_detail", pk=obj.pk)
 
@@ -149,6 +150,7 @@ def pko_mark_held(request, pk):
     if obj.status != "scheduled":
         messages.error(request, "Schedule the kickoff before marking it held.")
         return redirect("projects:pko_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "held"
     obj.save(update_fields=["status", "updated_at"])
     project = obj.project
@@ -156,7 +158,7 @@ def pko_mark_held(request, pk):
         project.status = "kickoff"
         project.save(update_fields=["status", "updated_at"])
     write_audit_log(request.user, obj, "held",
-                    changes={"verb": "mark_held", "from": "scheduled", "to": obj.status})
+                    changes={"verb": "mark_held", "from": previous, "to": obj.status})
     messages.success(request, "Kickoff marked as held.")
     return redirect("projects:pko_detail", pk=obj.pk)
 
@@ -178,6 +180,7 @@ def pko_complete(request, pk):
             "Approve the charter before completing the kickoff — a project must not go live on "
             "an unapproved charter.")
         return redirect("projects:pko_detail", pk=obj.pk)
+    previous = obj.status
     obj.status = "completed"
     obj.completed_at = timezone.now()
     obj.save(update_fields=["status", "completed_at", "updated_at"])
@@ -185,7 +188,7 @@ def pko_complete(request, pk):
         project.status = "active"
         project.save(update_fields=["status", "updated_at"])
     write_audit_log(request.user, obj, "complete",
-                    changes={"verb": "complete", "from": "held", "to": obj.status})
+                    changes={"verb": "complete", "from": previous, "to": obj.status})
     messages.success(request, f"Kickoff completed — “{project.name}” is now active.")
     return redirect("projects:pko_detail", pk=obj.pk)
 
@@ -211,6 +214,7 @@ def pko_mark_baseline_set(request, pk):
     obj.baseline_acknowledged_by = request.user
     obj.save(update_fields=["baseline_acknowledged_at", "baseline_acknowledged_by", "updated_at"])
     write_audit_log(request.user, obj, "baseline",
-                    changes={"verb": "mark_baseline_set", "from": "", "to": "acknowledged"})
+                    changes={"verb": "mark_baseline_set", "from": obj.status,
+                             "to": "acknowledged"})
     messages.success(request, "Baseline acknowledged.")
     return redirect("projects:pko_detail", pk=obj.pk)
