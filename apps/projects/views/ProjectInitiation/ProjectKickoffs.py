@@ -117,6 +117,12 @@ def pko_delete(request, pk):
 
 
 # -- ceremony verbs ------------------------------------------------------------------------------
+#
+# `mark-held`, `complete` and `baseline` are TENANT-ADMIN gated, matching the other verbs that
+# move governance state (prq_approve/reject/convert, prj_approve_charter): the first two set
+# `Project.status` and the third stamps a signature. `schedule` stays login-only — it books a
+# meeting, it does not advance the project. The deletes also stay login-only, which is house
+# style (287 of 393 delete views app-wide).
 
 @login_required
 @require_POST
@@ -138,6 +144,7 @@ def pko_schedule(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def pko_mark_held(request, pk):
     obj = get_object_or_404(ProjectKickoff, pk=pk, tenant=request.tenant)
@@ -164,6 +171,7 @@ def pko_mark_held(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def pko_complete(request, pk):
     obj = get_object_or_404(ProjectKickoff, pk=pk, tenant=request.tenant)
@@ -194,6 +202,7 @@ def pko_complete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def pko_mark_baseline_set(request, pk):
     """Attest that the baseline was acknowledged at the ceremony.
