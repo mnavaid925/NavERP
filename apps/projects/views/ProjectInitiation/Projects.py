@@ -78,6 +78,15 @@ def prj_detail(request, pk):
 
 @login_required
 def prj_edit(request, pk):
+    # An APPROVED charter is evidence: charter_approved_by/at attest that a tenant admin approved
+    # THIS text. You cannot forge that signature, but rewriting objectives / scope / dates / the
+    # charter_document underneath it has the same outcome, so the edit is refused outright — the
+    # peer pattern from apps/accounting/views/AccountsPayable/Bills.py's is_locked check.
+    obj = get_object_or_404(Project, pk=pk, tenant=request.tenant)
+    if obj.charter_status == "approved":
+        messages.error(request, "An approved charter cannot be edited — the approval stamp "
+                                "attests to this text.")
+        return redirect("projects:prj_detail", pk=obj.pk)
     return crud_edit(
         request, model=Project, pk=pk, form_class=ProjectForm,
         template="projects/initiation/project/form.html",
