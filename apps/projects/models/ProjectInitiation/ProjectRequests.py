@@ -120,8 +120,14 @@ class ProjectRequest(TenantNumbered):
     strategic_alignment = models.PositiveSmallIntegerField(
         default=0, validators=[MaxValueValidator(5)])
 
-    estimated_cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    estimated_benefit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # MinValueValidator(0) on both: a negative cost or benefit is not a business case, and it
+    # reaches `roi_pct` / `risk_adjusted_roi_pct`, where q2() clamps it to a fabricated
+    # -9999999999.99% that the ready-to-convert queue then ranks on. (NaN/Infinity and huge
+    # magnitudes are already rejected by Django's DecimalField + DecimalValidator(14, 2).)
+    estimated_cost = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(ZERO)])
+    estimated_benefit = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(ZERO)])
     #: accounting.Currency is GLOBAL — it has no `tenant` column (L29). Never compare its tenant.
     currency = models.ForeignKey(
         "accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True,
@@ -165,6 +171,11 @@ class ProjectRequest(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="prq_tnt_status_idx"),
             models.Index(fields=["tenant", "request_type"], name="prq_tnt_type_idx"),
             models.Index(fields=["tenant", "org_unit"], name="prq_tnt_ou_idx"),
+            # Serves `Meta.ordering` itself: every register page — including the unfiltered
+            # default, the most-requested URL — sorted with `Using filesort` over the tenant's
+            # whole row set before LIMIT 15, so page cost was O(tenant rows), not O(15). The
+            # in-pattern add: ["tenant", "created_at"] already ships on 20+ models app-wide.
+            models.Index(fields=["tenant", "-created_at"], name="prq_tnt_created_idx"),
         ]
 
     def __str__(self):
