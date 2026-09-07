@@ -151,21 +151,24 @@ class Command(BaseCommand):
                  estimated_cost=Decimal("90000.00"), estimated_benefit=Decimal("0.00")),
         ]
         created = []
-        for row in rows:
+        for i, row in enumerate(rows, start=1):
             status = row.pop("status")
+            decided = bool(row.get("decision"))
+            # Stamped in the CONSTRUCTOR, not by two follow-up saves: three saves per row was 25
+            # UPDATEs against 18 INSERTs across two tenants. NOT bulk_create — TenantNumbered
+            # .save() allocates `number` through next_number() and bulk_create bypasses save()
+            # entirely, which would ship every row with an empty number.
             obj = ProjectRequest(
                 tenant=tenant, requested_by=requester, requester_party=party,
                 org_unit=org_unit, currency=currency, assigned_approver=approver,
-                created_by=requester, status=status, **row)
+                created_by=requester, status=status,
+                submitted_at=None if status == "draft" else timezone.now() - timedelta(days=i),
+                decided_by=approver if decided else None,
+                decided_at=timezone.now() - timedelta(days=1) if decided else None,
+                **row)
             obj.save()
             created.append(obj)
-            if status not in ("draft",):
-                obj.submitted_at = timezone.now() - timedelta(days=len(created))
-                obj.save(update_fields=["submitted_at", "updated_at"])
-            if obj.decision:
-                obj.decided_by = approver
-                obj.decided_at = timezone.now() - timedelta(days=1)
-                obj.save(update_fields=["decided_by", "decided_at", "updated_at"])
+            if decided:
                 write_audit_log(None, obj, "approve",
                                 changes={"verb": "approve", "from": "submitted", "to": obj.status})
         return created
