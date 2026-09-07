@@ -72,7 +72,7 @@
         <dt>Meeting</dt><dd>{{ obj.meeting_date|date:"M d, Y H:i"|default:"—" }}</dd>
         <dt>Location / link</dt><dd>{{ obj.location_or_link|default:"—" }}</dd>
         <dt>Agenda template</dt><dd>{{ obj.get_agenda_template_display }}</dd>
-        <dt>Attending</dt><dd>{{ obj.attendee_count }}</dd>
+        <dt>Attending</dt><dd>{{ attending|length }}</dd>{% comment %}`attending` is the very queryset this page iterates below, so |length reads its cache; obj.attendee_count would fire a second COUNT for the same rows.{% endcomment %}
         <dt>Completed</dt><dd>{{ obj.completed_at|date:"M d, Y H:i"|default:"—" }}</dd>
         <dt>Baseline acknowledged</dt><dd>{{ obj.baseline_acknowledged_at|date:"M d, Y H:i"|default:"—" }}</dd>
         <dt>Acknowledged by</dt><dd>{% if obj.baseline_acknowledged_by %}{{ obj.baseline_acknowledged_by.get_full_name|default:obj.baseline_acknowledged_by.username }}{% else %}—{% endif %}</dd>
