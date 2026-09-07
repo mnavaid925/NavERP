@@ -13,7 +13,7 @@
           <button class="btn btn-primary" type="submit"><i data-lucide="calendar-check"></i> Schedule</button>
         </form>
       {% endif %}
-      {% if obj.status == 'planned' or obj.status == 'scheduled' %}
+      {% if obj.status == 'scheduled' %}
         <form method="post" action="{% url 'projects:pko_mark_held' obj.pk %}">{% csrf_token %}
           <button class="btn btn-primary" type="submit"><i data-lucide="users"></i> Mark Held</button>
         </form>
