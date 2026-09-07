@@ -85,6 +85,19 @@ def prq_detail(request, pk):
 
 @login_required
 def prq_edit(request, pk):
+    # A DECIDED request is closed to editing: `decided_by`/`decided_at` attest that a tenant admin
+    # weighed THIS business case, so leaving `title`, `estimated_cost`, `estimated_benefit` and
+    # `risk_rating` writable afterwards means the ROI on the page is not the ROI that was approved.
+    # The lock follows the evidence stamp rather than a status list, so a request an admin sends
+    # back for information (which clears the stamps) becomes editable again — that is the reopen
+    # path. `converted` is locked separately: its business case is now a project's charter.
+    obj = get_object_or_404(ProjectRequest, pk=pk, tenant=request.tenant)
+    if obj.decided_at or obj.status == "converted":
+        messages.error(
+            request,
+            "A decided request cannot be edited — the decision stamp attests to this business "
+            "case. Send it back for information to reopen it.")
+        return redirect("projects:prq_detail", pk=obj.pk)
     return crud_edit(
         request, model=ProjectRequest, pk=pk, form_class=ProjectRequestForm,
         template="projects/initiation/projectrequest/form.html",
