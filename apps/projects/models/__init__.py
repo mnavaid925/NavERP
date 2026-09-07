@@ -15,6 +15,11 @@ no tenant column) and ``crm.Opportunity`` (request provenance). Every one of tho
 numbers. They are pre-spine stand-ins and are NOT touched from here — see the note on
 ``Project`` itself.
 """
+# Re-export the shared base/toolkit, matching apps/accounting/models/__init__.py and
+# apps/crm/models/__init__.py: without it ``from apps.projects.models import TenantNumbered`` (or
+# ``q2`` / ``next_number``) raises ImportError, which is a live trap for the test suite.
+from ._base import *  # noqa: F401,F403
+
 # --- 7.1 Project Initiation & Charter ---------------------------------------------------------
 from .ProjectInitiation.ProjectKickoffs import ProjectKickoff  # noqa: F401
 from .ProjectInitiation.ProjectRequests import ProjectRequest  # noqa: F401
