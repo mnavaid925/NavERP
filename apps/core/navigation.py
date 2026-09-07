@@ -1704,7 +1704,11 @@ LIVE_LINKS = {
         # The business case lives ON the request (cost/benefit, risk-adjusted ROI, the go/no-go
         # decision verbs), so this bullet is the same register filtered to the gate where those
         # numbers are actually being weighed - the 2.15 `?category=` precedent.
-        "Business Case & Feasibility":           "projects:prq_list?status=assessment",
+        # `?status=submitted`, NOT `assessment`: no verb or form can put a request into
+        # `screening`/`assessment` (only the seeder does), so the assessment filter landed on an
+        # empty register on a real workspace. `submitted` is the reachable state where a business
+        # case is waiting to be weighed.
+        "Business Case & Feasibility":           "projects:prq_list?status=submitted",
         "Project Charter Authoring":             "projects:prj_list",
         "Stakeholder Identification & Analysis": "projects:pst_list",
         "Project Kickoff & Launch":              "projects:pko_list",
