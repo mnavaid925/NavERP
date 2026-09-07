@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:prj_list' %}">Charter Register</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.get_methodology_display }} · {{ obj.org_unit.name|default:"No department" }}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.charter_status == 'draft' or obj.charter_status == 'rejected' %}
+        <form method="post" action="{% url 'projects:prj_submit_charter' obj.pk %}">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit Charter</button>
+        </form>
+      {% endif %}
+      {% if obj.charter_status == 'submitted' %}
+        <form method="post" action="{% url 'projects:prj_approve_charter' obj.pk %}">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve Charter</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'projects:prj_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Charter</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Code</dt><dd>{{ obj.code|default:"—" }}</dd>
+        <dt>Charter state</dt>
+        <dd>
+          {% if obj.charter_status == 'approved' %}<span class="badge badge-green">{{ obj.get_charter_status_display }}</span>
+          {% elif obj.charter_status == 'submitted' %}<span class="badge badge-amber">{{ obj.get_charter_status_display }}</span>
+          {% elif obj.charter_status == 'rejected' %}<span class="badge badge-red">{{ obj.get_charter_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_charter_status_display }}</span>{% endif %}
+        </dd>
+        <dt>Approved by</dt><dd>{{ obj.charter_approved_by.get_full_name|default:obj.charter_approved_by.username|default:"—" }}</dd>
+        <dt>Approved at</dt><dd>{{ obj.charter_approved_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Charter document</dt><dd>{{ obj.charter_document|default:"—" }}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'chartered' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'completed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+        </dd>
+        <dt>Executive sponsor</dt><dd>{{ obj.executive_sponsor.get_full_name|default:obj.executive_sponsor.username|default:"—" }}</dd>
+        <dt>Project manager</dt><dd>{{ obj.project_manager.get_full_name|default:obj.project_manager.username|default:"—" }}</dd>
+        <dt>Client</dt><dd>{{ obj.client.name|default:"—" }}</dd>
+        <dt>Start</dt><dd>{{ obj.start_date|date:"M d, Y"|default:"—" }}</dd>
+        <dt>End</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}</dd>
+        <dt>From request</dt>
+        <dd>{% if source_request %}<a href="{% url 'projects:prq_detail' source_request.pk %}">{{ source_request.number }}</a>{% else %}<span class="text-muted">Created directly</span>{% endif %}</dd>
+      </dl>
+      {% if obj.description %}<p>{{ obj.description|linebreaksbr }}</p>{% endif %}
+      <p class="text-muted">Budget, commitments and actuals are 7.4 Cost &amp; Budget Management's — the charter deliberately carries no money columns.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Scope</h2></div>
+    <div class="card-body">
+      {% if obj.objectives %}<p><strong>Objectives.</strong> {{ obj.objectives|linebreaksbr }}</p>{% endif %}
+      {% if obj.success_criteria %}<p><strong>Success criteria.</strong> {{ obj.success_criteria|linebreaksbr }}</p>{% endif %}
+      {% if obj.in_scope %}<p><strong>In scope.</strong> {{ obj.in_scope|linebreaksbr }}</p>{% endif %}
+      {% if obj.out_of_scope %}<p><strong>Out of scope.</strong> {{ obj.out_of_scope|linebreaksbr }}</p>{% endif %}
+      {% if obj.assumptions %}<p><strong>Assumptions.</strong> {{ obj.assumptions|linebreaksbr }}</p>{% endif %}
+      {% if obj.constraints %}<p><strong>Constraints.</strong> {{ obj.constraints|linebreaksbr }}</p>{% endif %}
+      {% if obj.risk_summary %}<p><strong>Risk summary.</strong> {{ obj.risk_summary|linebreaksbr }} <span class="text-muted">(the register is 7.5's)</span></p>{% endif %}
+      {% if not obj.objectives and not obj.in_scope and not obj.out_of_scope %}<p class="text-muted">Nothing captured yet — edit the project to define scope.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Stakeholders</h2></div>
+    <div class="card-body">
+      {% if stakeholders %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Who</th><th>Type</th><th>RACI</th><th>Scope</th><th>Influence</th><th>Interest</th><th>Engagement</th></tr></thead>
+            <tbody>
+              {% for s in stakeholders %}
+                <tr>
+                  <td><a href="{% url 'projects:pst_detail' s.pk %}">{{ s.party.name|default:s.user.get_full_name|default:s.user.username|default:"—" }}</a></td>
+                  <td>{{ s.get_stakeholder_type_display }}</td>
+                  <td>{{ s.get_raci_role_display }}</td>
+                  <td>{{ s.raci_scope|default:"—" }}</td>
+                  <td>{{ s.get_influence_display }}</td>
+                  <td>{{ s.get_interest_display }}</td>
+                  <td>{{ s.get_engagement_strategy_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="users"></i><h3>No stakeholders registered</h3><p>The RACI matrix and the engagement plan are the stakeholder register — add the people who need to be consulted.</p></div>
+      {% endif %}
+      <div class="form-actions">
+        <a href="{% url 'projects:pst_create' %}?project={{ obj.pk }}" class="btn btn-primary"><i data-lucide="user-plus"></i> Add Stakeholder</a>
+        <a href="{% url 'projects:pst_list' %}?project={{ obj.pk }}" class="btn btn-outline">Full register</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Kickoff</h2></div>
+    <div class="card-body">
+      {% if kickoffs %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Number</th><th>Meeting</th><th>Status</th><th>Attending</th><th>Baseline</th><th></th></tr></thead>
+            <tbody>
+              {% for k in kickoffs %}
+                <tr>
+                  <td><a href="{% url 'projects:pko_detail' k.pk %}">{{ k.number }}</a></td>
+                  <td>{{ k.meeting_date|date:"M d, Y H:i"|default:"—" }}</td>
+                  <td>
+                    {% if k.status == 'completed' %}<span class="badge badge-green">{{ k.get_status_display }}</span>
+                    {% elif k.status == 'held' %}<span class="badge badge-info">{{ k.get_status_display }}</span>
+                    {% elif k.status == 'scheduled' %}<span class="badge badge-amber">{{ k.get_status_display }}</span>
+                    {% else %}<span class="badge badge-muted">{{ k.get_status_display }}</span>{% endif %}
+                  </td>
+                  <td>{{ k.attendee_count }}</td>
+                  <td>{{ k.baseline_acknowledged_at|date:"M d, Y"|default:"—" }}</td>
+                  <td><a href="{% url 'projects:pko_detail' k.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="rocket"></i><h3>No kickoff planned</h3><p>The launch ceremony is what moves a project from chartered to active.</p></div>
+      {% endif %}
+      <div class="form-actions">
+        <a href="{% url 'projects:pko_create' %}?project={{ obj.pk }}" class="btn btn-primary"><i data-lucide="rocket"></i> Plan Kickoff</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:prj_list' %}" class="btn btn-outline">Back to Projects</a>
+    <form method="post" action="{% url 'projects:prj_delete' obj.pk %}" onsubmit="return confirm('Delete project {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
