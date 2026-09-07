@@ -16,8 +16,11 @@ from apps.projects.views._helpers import clients, org_units
 
 @login_required
 def prj_list(request):
+    # Only the two joins the register renders (`client.name`, `project_manager`): org_unit and
+    # executive_sponsor were 4 joins / 73 columns per row for columns nothing prints. They are
+    # correctly kept on prj_detail, which does render them.
     qs = (Project.objects.filter(tenant=request.tenant)
-          .select_related("org_unit", "client", "project_manager", "executive_sponsor"))
+          .select_related("client", "project_manager"))
     return crud_list(
         request, qs, "projects/initiation/project/list.html",
         search_fields=["name", "code", "number"],
