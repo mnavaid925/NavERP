@@ -38,12 +38,12 @@
           {% elif obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
           {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
         </dd>
-        <dt>Requested by</dt><dd>{{ obj.requested_by.get_full_name|default:obj.requested_by.username|default:"—" }}</dd>
+        <dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.username }}{% else %}—{% endif %}</dd>
         <dt>Requester (external)</dt><dd>{{ obj.requester_party.name|default:"—" }}</dd>
         <dt>Department</dt><dd>{{ obj.org_unit.name|default:"—" }}</dd>
         <dt>Source opportunity</dt><dd>{{ obj.source_opportunity.number|default:"—" }}</dd>
-        <dt>Reviewer</dt><dd>{{ obj.assigned_reviewer.get_full_name|default:obj.assigned_reviewer.username|default:"—" }}</dd>
-        <dt>Approver</dt><dd>{{ obj.assigned_approver.get_full_name|default:obj.assigned_approver.username|default:"—" }}</dd>
+        <dt>Reviewer</dt><dd>{% if obj.assigned_reviewer %}{{ obj.assigned_reviewer.get_full_name|default:obj.assigned_reviewer.username }}{% else %}—{% endif %}</dd>
+        <dt>Approver</dt><dd>{% if obj.assigned_approver %}{{ obj.assigned_approver.get_full_name|default:obj.assigned_approver.username }}{% else %}—{% endif %}</dd>
         <dt>Priority</dt><dd>{{ obj.get_priority_display }}</dd>
         <dt>Strategic alignment</dt><dd>{{ obj.strategic_alignment }} / 5</dd>
         <dt>Target window</dt><dd>{{ obj.target_start_date|date:"M d, Y"|default:"—" }} → {{ obj.target_end_date|date:"M d, Y"|default:"—" }}</dd>
@@ -86,7 +86,7 @@
     <div class="card-body">
       <dl class="detail-grid">
         <dt>Decision</dt><dd>{% if obj.decision %}{{ obj.get_decision_display }}{% else %}<span class="text-muted">Not decided</span>{% endif %}</dd>
-        <dt>Decided by</dt><dd>{{ obj.decided_by.get_full_name|default:obj.decided_by.username|default:"—" }}</dd>
+        <dt>Decided by</dt><dd>{% if obj.decided_by %}{{ obj.decided_by.get_full_name|default:obj.decided_by.username }}{% else %}—{% endif %}</dd>
         <dt>Decided at</dt><dd>{{ obj.decided_at|date:"M d, Y H:i"|default:"—" }}</dd>
       </dl>
       {% if obj.decision_notes %}<p>{{ obj.decision_notes|linebreaksbr }}</p>{% endif %}
