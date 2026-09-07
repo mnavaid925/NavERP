@@ -111,7 +111,9 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'projects:prq_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'projects:prq_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if not obj.decided_at and obj.status != 'converted' %}
+                    <a href="{% url 'projects:prq_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
                   <form method="post" action="{% url 'projects:prq_delete' obj.pk %}" onsubmit="return confirm('Delete request {{ obj.number }}? This cannot be undone.');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
