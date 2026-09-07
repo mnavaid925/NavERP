@@ -183,10 +183,15 @@ def prq_reject(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def prq_return_for_information(request, pk):
     """Send back to the requester. The register's honesty depends on this being a real state and
-    not a silent no-op — a request stuck in "assessment" with no answer is invisible work."""
+    not a silent no-op — a request stuck in "assessment" with no answer is invisible work.
+
+    Tenant-admin gated like the other three decision verbs: this one VOIDS a recorded decision
+    (see below), so login-only would let an ordinary member reverse a tenant admin's Go.
+    """
     obj = get_object_or_404(ProjectRequest, pk=pk, tenant=request.tenant)
     form = ProjectRequestDecisionForm(request.POST)
     if not form.is_valid():
