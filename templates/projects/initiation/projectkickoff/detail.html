@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Kickoff{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Kickoff {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:pko_list' %}">Kickoffs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'planned' %}
+        <form method="post" action="{% url 'projects:pko_schedule' obj.pk %}">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="calendar-check"></i> Schedule</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'planned' or obj.status == 'scheduled' %}
+        <form method="post" action="{% url 'projects:pko_mark_held' obj.pk %}">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="users"></i> Mark Held</button>
+        </form>
+      {% endif %}
+      {% if obj.status != 'completed' %}
+        <form method="post" action="{% url 'projects:pko_complete' obj.pk %}">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Complete</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'projects:pko_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Ceremony</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'held' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'scheduled' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        </dd>
+        <dt>Meeting</dt><dd>{{ obj.meeting_date|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Location / link</dt><dd>{{ obj.location_or_link|default:"—" }}</dd>
+        <dt>Agenda template</dt><dd>{{ obj.get_agenda_template_display }}</dd>
+        <dt>Attending</dt><dd>{{ obj.attendee_count }}</dd>
+        <dt>Completed</dt><dd>{{ obj.completed_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Baseline acknowledged</dt><dd>{{ obj.baseline_acknowledged_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Acknowledged by</dt><dd>{{ obj.baseline_acknowledged_by.get_full_name|default:obj.baseline_acknowledged_by.username|default:"—" }}</dd>
+      </dl>
+      {% if obj.agenda %}<p><strong>Agenda.</strong> {{ obj.agenda|linebreaksbr }}</p>{% endif %}
+      {% if obj.attendee_summary %}<p><strong>External attendees.</strong> {{ obj.attendee_summary|linebreaksbr }}</p>{% endif %}
+      {% if obj.onboarding_notes %}<p><strong>Onboarding.</strong> {{ obj.onboarding_notes|linebreaksbr }}</p>{% endif %}
+      {% if obj.notes %}<p><strong>Notes.</strong> {{ obj.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Attendees</h2></div>
+    <div class="card-body">
+      {% if attending %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Who</th><th>Type</th><th>RACI</th><th>Communication</th></tr></thead>
+            <tbody>
+              {% for s in attending %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:pst_detail' s.pk %}">{{ s.party.name|default:s.user.get_full_name|default:s.user.username|default:"—" }}</a></td>
+                  <td>{{ s.get_stakeholder_type_display }}</td>
+                  <td>{{ s.get_raci_role_display }}</td>
+                  <td>{{ s.get_comms_preference_display }} · {{ s.get_comms_frequency_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="user-x"></i><h3>Nobody flagged as attending</h3><p>Tick “attending kickoff” on the stakeholder register — the register is the attendee list.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Project activity</h2></div>
+    <div class="card-body">
+      {% if activities %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Subject</th><th>Kind</th><th>Status</th><th>Owner</th><th>Due</th></tr></thead>
+            <tbody>
+              {% for a in activities %}
+                <tr>
+                  <td class="fw-600">{{ a.subject }}</td>
+                  <td>{{ a.get_kind_display }}</td>
+                  <td>
+                    {% if a.status == 'done' %}<span class="badge badge-green">{{ a.get_status_display }}</span>
+                    {% elif a.status == 'in_progress' %}<span class="badge badge-info">{{ a.get_status_display }}</span>
+                    {% elif a.status == 'cancelled' %}<span class="badge badge-red">{{ a.get_status_display }}</span>
+                    {% else %}<span class="badge badge-muted">{{ a.get_status_display }}</span>{% endif %}
+                  </td>
+                  <td>{{ a.owner.get_full_name|default:a.owner.username|default:"—" }}</td>
+                  <td>{{ a.due_at|date:"M d, Y"|default:"—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="list-checks"></i><h3>No activity on this project yet</h3><p>Individual onboarding items and meeting minutes are captured as activities — 7.9 owns the full collaboration surface.</p></div>
+      {% endif %}
+      <p class="text-muted">Shown read-only. The baseline <em>record</em> itself — the frozen schedule this ceremony acknowledges — is 7.2 Project Planning &amp; Scheduling's.</p>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:pko_list' %}" class="btn btn-outline">Back to Kickoffs</a>
+    <form method="post" action="{% url 'projects:pko_delete' obj.pk %}" onsubmit="return confirm('Delete kickoff {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
