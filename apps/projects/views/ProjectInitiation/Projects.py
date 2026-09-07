@@ -127,10 +127,21 @@ def prj_delete(request, pk):
 
 # -- charter verbs -------------------------------------------------------------------------------
 
+#: Both charter verbs gate on the PROJECT's status as well as `charter_status`: gating on the
+#: charter alone let a cancelled/completed project be walked to a green "Approved" charter
+#: with a fresh charter_approved_by/at stamp, while the success message claimed it "is
+#: chartered" and `status` stayed cancelled.
+TERMINAL_STATUSES = ("completed", "cancelled")
+
+
 @login_required
 @require_POST
 def prj_submit_charter(request, pk):
     obj = get_object_or_404(Project, pk=pk, tenant=request.tenant)
+    if obj.status in TERMINAL_STATUSES:
+        messages.error(request, f"A {obj.get_status_display().lower()} project's charter cannot "
+                                f"be changed.")
+        return redirect("projects:prj_detail", pk=obj.pk)
     if obj.charter_status not in ("draft", "rejected"):
         messages.info(request, "That charter is already submitted or approved.")
         return redirect("projects:prj_detail", pk=obj.pk)
@@ -152,6 +163,10 @@ def prj_approve_charter(request, pk):
     a second click must not overwrite the first approver's name.
     """
     obj = get_object_or_404(Project, pk=pk, tenant=request.tenant)
+    if obj.status in TERMINAL_STATUSES:
+        messages.error(request, f"A {obj.get_status_display().lower()} project's charter cannot "
+                                f"be approved.")
+        return redirect("projects:prj_detail", pk=obj.pk)
     if obj.charter_status == "approved":
         messages.info(request, "That charter is already approved.")
         return redirect("projects:prj_detail", pk=obj.pk)
