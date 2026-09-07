@@ -93,6 +93,19 @@
       {% if obj.rejection_reason %}<p><strong>Rejection reason.</strong> {{ obj.rejection_reason|linebreaksbr }}</p>{% endif %}
       {% if obj.information_requested %}<p><strong>Information requested.</strong> {{ obj.information_requested|linebreaksbr }}</p>{% endif %}
 
+      {% comment %}
+        Approve mirrors prq_approve's own gate: @tenant_admin_required plus
+        ProjectRequest.DECISION_STATUSES ("submitted", "screening", "assessment"). Without this
+        trigger `approved` is unreachable through the UI and Convert can never render.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status == 'submitted' or obj.status == 'screening' or obj.status == 'assessment' %}
+          <form method="post" action="{% url 'projects:prq_approve' obj.pk %}" onsubmit="return confirm('Record a Go decision on {{ obj.number }}?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve</button>
+          </form>
+        {% endif %}
+      {% endif %}
       <form method="post" action="{% url 'projects:prq_return_for_information' obj.pk %}">
         {% csrf_token %}
         <div class="form-group">
