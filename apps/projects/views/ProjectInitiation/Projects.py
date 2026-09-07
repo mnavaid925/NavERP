@@ -4,6 +4,8 @@ Two verbs own ``charter_status`` (``submit-charter`` / ``approve-charter``); ``s
 advanced by 7.1's kickoff verbs (see ProjectKickoffs) rather than from here, so a project is not
 "active" until the kickoff that started it says so.
 """
+from django.db import transaction
+
 from apps.projects.forms import ProjectForm
 from apps.projects.models import Project
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -97,7 +99,30 @@ def prj_edit(request, pk):
 @login_required
 @require_POST
 def prj_delete(request, pk):
-    return crud_delete(request, model=Project, pk=pk, success_url="projects:prj_list")
+    """Delete the project and REOPEN its source request.
+
+    ``ProjectRequest.converted_project`` is ``SET_NULL``, so a bare delete left the request
+    reading "Converted" with no project — a dead state every verb then refuses (submit "already
+    converted", approve "this one is converted", reject "reject the project" when the project is
+    gone, return "cannot be sent back", convert "only an approved request"), making the demand
+    permanently unrecoverable. Reopening it puts the demand back in the approved,
+    ready-to-convert queue instead, and the two writes land together or not at all.
+    """
+    obj = get_object_or_404(Project, pk=pk, tenant=request.tenant)
+    source = obj.request if obj.request_id and obj.request.status == "converted" else None
+    with transaction.atomic():
+        response = crud_delete(request, model=Project, pk=pk, success_url="projects:prj_list")
+        if source is not None:
+            source.status = "approved"
+            source.converted_project = None
+            source.save(update_fields=["status", "converted_project", "updated_at"])
+            write_audit_log(request.user, source, "update",
+                            changes={"verb": "reopen_on_project_delete", "from": "converted",
+                                     "to": source.status})
+            messages.info(
+                request,
+                f"Request {source.number} was reopened as approved — it can be converted again.")
+    return response
 
 
 # -- charter verbs -------------------------------------------------------------------------------
