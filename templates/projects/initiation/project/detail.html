@@ -142,7 +142,7 @@
                     {% elif k.status == 'scheduled' %}<span class="badge badge-amber">{{ k.get_status_display }}</span>
                     {% else %}<span class="badge badge-muted">{{ k.get_status_display }}</span>{% endif %}
                   </td>
-                  <td>{{ k.attendee_count }}</td>
+                  <td>{{ k.attendee_total }}</td>
                   <td>{{ k.baseline_acknowledged_at|date:"M d, Y"|default:"—" }}</td>
                   <td><a href="{% url 'projects:pko_detail' k.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
                 </tr>
