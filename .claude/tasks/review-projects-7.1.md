@@ -927,3 +927,51 @@ bypassable through a missing *state transition* guard even with the gate in plac
 that gating who may *stamp* an approval is worthless while any member may still edit *what was
 approved*. Fix the gate, the transition, and the post-approval edit lock **together**, or the audit
 trail keeps asserting a control that did not hold.
+
+---
+
+## Found during Phase 6 (tests) — after the fixer pass
+
+These surfaced while writing the test suite, so they are **not** in the triage above and were not
+seen by the six reviewers.
+
+- [ ] **P1 (Important) — the duplicate-stakeholder rule does not cover user-only rows.**
+  `apps/projects/models/ProjectInitiation/ProjectStakeholders.py:158` guards with
+  `if self.project_id and self.party_id:` — so a stakeholder identified by `user` instead of `party`
+  is never dupe-checked. The DB constraint `(tenant, project, party, raci_scope)` is **partial**
+  (a NULL `party` is always distinct) and Django's `validate_unique` skips any check containing a
+  NULL, so **the same platform user can be added twice for the same `raci_scope` on one project**,
+  double-counting them in the RACI grid — exactly the harm the party-side check exists to prevent.
+  A stakeholder is a Party **or** a User by design, so the user-only path is a first-class case, not
+  an edge.
+  *Fix:* build the dupe queryset from whichever of `party_id` / `user_id` is set
+  (`ProjectStakeholders.py:158-171`).
+  *Note:* the test module deliberately does **not** pin the permissive behaviour, so fixing this
+  will not fight the suite.
+
+- [~] **P2 (Minor, cross-app — not 7.1's to fix) — `TenantNumbered.save()` reads every
+  `IntegrityError` as a number collision.** `apps/projects/models/_base.py:68-75`, shared boilerplate
+  also present in crm/accounting/scm/inventory/procurement. A row refused by a *different*
+  constraint (`(tenant, project, party, raci_scope)`, `(tenant, project)`) burns all five re-mint
+  retries and then falls through to `super().save()` with `self.number = ""`. Today nothing lands,
+  because the final attempt violates the same constraint and raises — pinned by
+  `test_projectinitiation_a_refused_row_never_lands_with_an_empty_number`. But if the conflicting row
+  disappears between attempts, that fallthrough inserts a row with an **empty number**. Belongs to a
+  cross-app pass (L43), not to 7.1.
+
+- [~] **P3 (observation, deliberate) — `q2`'s ceiling is narrower than the columns it guards.**
+  `apps/projects/models/_base.py:33` sets `MAX_Q2 = Decimal("9999999999.99")` (10 integer digits)
+  while `estimated_cost`/`estimated_benefit` are `DecimalField(14, 2)` (12 integer digits), so a
+  legitimately storable benefit above ~10bn displays a clamped `risk_adjusted_benefit`. The clamp is
+  deliberate and shared with the peer apps; the suite asserts it as the documented contract and names
+  it as the clamp.
+
+- [~] **P4 (behaviour, not a defect) — numbers are re-armed by deletion.**
+  `apps.core.utils.next_number` is an existence-guarded max+1, so deleting a tenant's only
+  `PRJ-00001` frees that number for the next project. Pinned by two separate tests rather than one
+  that assumed monotonicity.
+
+- [~] **P5 (confirmed, restated) — `convert_to_project()` deliberately does not gate on `status`.**
+  The "only an approved request" rule belongs to the `prq_convert` **view**.
+  `test_projectinitiation_convert_does_not_gate_on_status` pins it with a comment, so a future
+  model-level guard has to be a decision rather than an accident.
