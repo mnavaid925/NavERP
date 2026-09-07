@@ -44,7 +44,8 @@ never in `action`. (Upstream `core` migration noted in the review file, not done
 Base `TenantNumbered`, `NUMBER_PREFIX = "PRQ"`. `ordering = ["-created_at", "-id"]`,
 `unique_together = ("tenant", "number")`.
 Indexes: `prq_tnt_status_idx (tenant,status)`, `prq_tnt_type_idx (tenant,request_type)`,
-`prq_tnt_ou_idx (tenant,org_unit)`.
+`prq_tnt_ou_idx (tenant,org_unit)`, `prq_tnt_created_idx (tenant,-created_at)` — the last one
+serves `Meta.ordering` itself (migration 0002).
 
 ### CHOICES (exact machine values — templates compare against these)
 
@@ -69,10 +70,11 @@ Indexes: `prq_tnt_status_idx (tenant,status)`, `prq_tnt_type_idx (tenant,request
 `source`(20, default `internal`), `source_opportunity`(FK `crm.Opportunity` SET_NULL
 `project_requests`), `assigned_reviewer`(FK User SET_NULL `prq_to_review`),
 `assigned_approver`(FK User SET_NULL `prq_to_approve`), `priority`(10, default `medium`),
-`strategic_alignment`(PosSmallInt 0–5 default 0), `estimated_cost`(Dec 14,2 default 0),
-`estimated_benefit`(Dec 14,2 default 0), `currency`(FK `accounting.Currency` SET_NULL
+`strategic_alignment`(PosSmallInt 0–5 default 0), `estimated_cost`(Dec 14,2 default 0, `MinValueValidator(0)`),
+`estimated_benefit`(Dec 14,2 default 0, `MinValueValidator(0)`), `currency`(FK `accounting.Currency` SET_NULL
 `project_requests` — **global table, no `tenant` column**, L29), `risk_rating`(10 default `low`),
-`feasibility`(24 default `not_assessed`), `feasibility_notes`(Text blank),
+`feasibility`(**32**, not 24 — `feasible_with_constraints` is 25 chars and 24 fails
+`fields.E009`; default `not_assessed`), `feasibility_notes`(Text blank),
 `alternatives_considered`(Text blank), `required_resources`(Text blank),
 `target_start_date`(Date null), `target_end_date`(Date null), `status`(20 default `draft`),
 `decision`(10 default `""` blank), `decided_by`(FK User SET_NULL `+` editable=False),
@@ -129,7 +131,8 @@ List filters: `q` over `title`/`description`/`number`; `status`, `request_type`,
 Base `TenantNumbered`, `NUMBER_PREFIX = "PRJ"`. `ordering = ["-created_at", "-id"]`,
 `unique_together = ("tenant", "number")`.
 Indexes: `prj_tnt_status_idx (tenant,status)`, `prj_tnt_charter_idx (tenant,charter_status)`,
-`prj_tnt_client_idx (tenant,client)`, `prj_tnt_ou_idx (tenant,org_unit)`.
+`prj_tnt_client_idx (tenant,client)`, `prj_tnt_ou_idx (tenant,org_unit)`,
+`prj_tnt_created_idx (tenant,-created_at)` (migration 0002).
 
 | Constant | Values |
 |---|---|
@@ -139,7 +142,8 @@ Indexes: `prj_tnt_status_idx (tenant,status)`, `prj_tnt_charter_idx (tenant,char
 
 ### Fields
 
-`name`(255), `code`(30 blank), `request`(FK `projects.ProjectRequest` SET_NULL `projects` — set
+`name`(255), `code`(30 blank), `description`(Text blank), `request`(FK
+`projects.ProjectRequest` SET_NULL `projects` — set
 by the convert verb only), `methodology`(12 default `hybrid`), `in_scope`(Text blank),
 `out_of_scope`(Text blank), `objectives`(Text blank), `success_criteria`(Text blank),
 `assumptions`(Text blank), `constraints`(Text blank), `risk_summary`(Text blank),
@@ -190,7 +194,10 @@ ordering `("-influence_rank", "id")`.
 NULL as distinct, so a form-level `clean()` also raises on a duplicate
 `(project, party, raci_scope)` and enforces "at least one of `party` / `user`".
 
-Indexes: `pst_tnt_project_idx (tenant,project)`, `pst_tnt_type_idx (tenant,stakeholder_type)`.
+Indexes: `pst_tnt_type_idx (tenant,stakeholder_type)`,
+`pst_tnt_created_idx (tenant,-created_at)`. **No `(tenant,project)` index** — it is the
+leftmost prefix of the `(tenant,project,party,raci_scope)` unique_together index (migration
+0002 dropped it).
 
 | Constant | Values |
 |---|---|
@@ -238,7 +245,9 @@ Filters: `q` over `number`/`raci_scope`/`notes`; `project` (int), `stakeholder_t
 
 Base `TenantNumbered`, `NUMBER_PREFIX = "PKO"`. `ordering = ["-created_at", "-id"]`,
 `unique_together = ("tenant","number")` and `("tenant","project")`.
-Indexes: `pko_tnt_project_idx (tenant,project)`, `pko_tnt_status_idx (tenant,status)`.
+Indexes: `pko_tnt_status_idx (tenant,status)`, `pko_tnt_created_idx (tenant,-created_at)`.
+**No `(tenant,project)` index** — byte-identical to the `(tenant,project)` unique_together
+index (migration 0002 dropped it).
 
 | Constant | Values |
 |---|---|
