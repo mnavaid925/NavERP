@@ -1698,6 +1698,17 @@ LIVE_LINKS = {
         # 6.13 `#discount` precedent), so the register's filter card carries `id="search"`.
         "Full-Text Search & Indexing":         "procurement:pdocument_list#search",
     },
+    # ----- Module 7: Project Management -----
+    "7.1": {
+        "Project Request & Intake":              "projects:prq_list",
+        # The business case lives ON the request (cost/benefit, risk-adjusted ROI, the go/no-go
+        # decision verbs), so this bullet is the same register filtered to the gate where those
+        # numbers are actually being weighed - the 2.15 `?category=` precedent.
+        "Business Case & Feasibility":           "projects:prq_list?status=assessment",
+        "Project Charter Authoring":             "projects:prj_list",
+        "Stakeholder Identification & Analysis": "projects:pst_list",
+        "Project Kickoff & Launch":              "projects:pko_list",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
