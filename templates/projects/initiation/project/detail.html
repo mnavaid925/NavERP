@@ -8,15 +8,21 @@
       <p class="text-muted">{{ obj.get_methodology_display }} · {{ obj.org_unit.name|default:"No department" }}</p>
     </div>
     <div class="page-actions">
-      {% if obj.charter_status == 'draft' or obj.charter_status == 'rejected' %}
-        <form method="post" action="{% url 'projects:prj_submit_charter' obj.pk %}">{% csrf_token %}
-          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit Charter</button>
-        </form>
-      {% endif %}
-      {% if obj.charter_status == 'submitted' %}
-        <form method="post" action="{% url 'projects:prj_approve_charter' obj.pk %}">{% csrf_token %}
-          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve Charter</button>
-        </form>
+      {% comment %}
+        Both charter verbs also gate on the PROJECT's status (views ... TERMINAL_STATUSES), so a
+        completed or cancelled project offers neither — its charter is history, not a workflow.
+      {% endcomment %}
+      {% if obj.status != 'completed' and obj.status != 'cancelled' %}
+        {% if obj.charter_status == 'draft' or obj.charter_status == 'rejected' %}
+          <form method="post" action="{% url 'projects:prj_submit_charter' obj.pk %}">{% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit Charter</button>
+          </form>
+        {% endif %}
+        {% if obj.charter_status == 'submitted' %}
+          <form method="post" action="{% url 'projects:prj_approve_charter' obj.pk %}">{% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Approve Charter</button>
+          </form>
+        {% endif %}
       {% endif %}
       {% comment %}
         prj_edit refuses an approved charter (the approval stamp attests to this text), so the
