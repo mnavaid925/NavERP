@@ -107,8 +107,15 @@ class ProjectStakeholder(TenantNumbered):
             ("tenant", "project", "party", "raci_scope"),
         )
         indexes = [
-            models.Index(fields=["tenant", "project"], name="pst_tnt_project_idx"),
+            # NO ("tenant", "project") index: it is the leftmost prefix of the index MySQL
+            # auto-creates for the ("tenant", "project", "party", "raci_scope") unique_together
+            # above, so it was write cost with no read benefit.
             models.Index(fields=["tenant", "stakeholder_type"], name="pst_tnt_type_idx"),
+            # Serves `Meta.ordering` itself: every register page — including the unfiltered
+            # default, the most-requested URL — sorted with `Using filesort` over the tenant's
+            # whole row set before LIMIT 15, so page cost was O(tenant rows), not O(15). The
+            # in-pattern add: ["tenant", "created_at"] already ships on 20+ models app-wide.
+            models.Index(fields=["tenant", "-created_at"], name="pst_tnt_created_idx"),
         ]
 
     def __str__(self):
