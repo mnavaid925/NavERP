@@ -10,7 +10,10 @@ from apps.projects.models import Project, ProjectKickoff
 
 
 class ProjectKickoffForm(TenantUniqueMixin, TenantModelForm):
-    project = forms.ModelChoiceField(queryset=Project.objects.all())
+    # .none(), not .all(): every __init__ branch below overwrites this, so the class-level value
+    # is only ever the fallback for a path that forgets to — and the fail-closed fallback is an
+    # empty dropdown, not every workspace's projects.
+    project = forms.ModelChoiceField(queryset=Project.objects.none())
 
     class Meta:
         model = ProjectKickoff
