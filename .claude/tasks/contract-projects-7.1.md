@@ -94,7 +94,10 @@ refuses when `converted_project_id` is already set.
 
 `ProjectRequestForm` — `TenantUniqueMixin, TenantModelForm`.
 **Excludes:** `tenant`, `number`, `status`, `decision`, `decided_by`, `decided_at`,
-`submitted_at`, `converted_project`, `created_by`.
+`submitted_at`, `converted_project`, `created_by`, `rejection_reason`, `information_requested`,
+`decision_notes` — the last three are DECISION EVIDENCE written only by the
+`@tenant_admin_required` verbs, so they must not be POST-settable through the ungated edit form
+(7.1 review I3).
 Tenant-scoped FK re-check via `_reject_foreign`: `org_unit`, `source_opportunity` — **not**
 `currency` (global, no tenant).
 
