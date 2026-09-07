@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Project Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Project Management</h1>
+      <div class="breadcrumb"><span>Projects</span></div>
+      <p class="text-muted">Intake, charter, stakeholders and kickoff — the 7.1 initiation chain. Planning, resourcing, cost, risk and the rest of Module 7 are separate sub-modules.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div><div class="stat-value">{{ request_count }}</div><div class="stat-label">Requests</div></div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="gavel"></i></div><div><div class="stat-value">{{ awaiting_decision }}</div><div class="stat-label">Awaiting decision</div></div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="arrow-right-circle"></i></div><div><div class="stat-value">{{ approved_unconverted }}</div><div class="stat-label">Ready to convert</div></div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="folder-open"></i></div><div><div class="stat-value">{{ project_count }}</div><div class="stat-label">Projects</div></div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="activity"></i></div><div><div class="stat-value">{{ active_projects }}</div><div class="stat-label">Active</div></div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div><div class="stat-value">{{ stakeholder_count }}</div><div class="stat-label">Stakeholders</div></div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="rocket"></i></div><div><div class="stat-value">{{ kickoff_count }}</div><div class="stat-label">Kickoffs</div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Start here</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Register</th><th>What it is</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:prq_list' %}">Project Requests</a></td>
+              <td>Demand intake, business case and the go/no-go decision.</td>
+              <td><a href="{% url 'projects:prq_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:prj_list' %}">Charter Register</a></td>
+              <td>Scope, objectives, success criteria and executive sponsor.</td>
+              <td><a href="{% url 'projects:prj_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pst_list' %}">Stakeholders</a></td>
+              <td>The RACI matrix and the influence/interest engagement plan.</td>
+              <td><a href="{% url 'projects:pst_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pko_list' %}">Kickoffs</a></td>
+              <td>The launch ceremony and the baseline acknowledgement.</td>
+              <td><a href="{% url 'projects:pko_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% if request_count == 0 and project_count == 0 %}
+        <div class="empty-state"><i data-lucide="seedling"></i><h3>Nothing seeded yet</h3><p>Run <code>python manage.py seed_projects</code> as a tenant admin workspace to load the demo chain.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
