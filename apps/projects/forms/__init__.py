@@ -9,3 +9,11 @@ The shared toolkit lives in ``_common.py``: ``TenantModelForm`` (core), ``Tenant
 chosen FK's tenant can trust it) and ``_reject_foreign`` (a narrowed ``<select>`` is UX, not an
 authorization boundary).
 """
+# --- 7.1 Project Initiation & Charter ---------------------------------------------------------
+from .ProjectInitiation.ProjectKickoffs import ProjectKickoffForm  # noqa: F401
+from .ProjectInitiation.ProjectRequests import (  # noqa: F401
+    ProjectRequestDecisionForm,
+    ProjectRequestForm,
+)
+from .ProjectInitiation.ProjectStakeholders import ProjectStakeholderForm  # noqa: F401
+from .ProjectInitiation.Projects import ProjectForm  # noqa: F401
