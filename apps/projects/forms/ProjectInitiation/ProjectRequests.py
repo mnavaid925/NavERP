@@ -22,6 +22,11 @@ class ProjectRequestForm(TenantUniqueMixin, TenantModelForm):
             "decided_by", "decided_at", "submitted_at",   # stamps
             "converted_project",           # set by the convert verb
             "created_by",                  # set in the view
+            # DECISION EVIDENCE — written only by the @tenant_admin_required verbs (`rejection_reason`
+            # by prq_reject, `information_requested` by prq_return_for_information, `decision_notes`
+            # alongside them). A field a gated verb writes must not also be POST-settable through the
+            # ungated edit form, or any member can rewrite or blank the admin's stated rationale.
+            "rejection_reason", "information_requested", "decision_notes",
         ]
 
     def clean(self):
