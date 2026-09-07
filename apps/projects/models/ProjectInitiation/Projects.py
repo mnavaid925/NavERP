@@ -107,6 +107,11 @@ class Project(TenantNumbered):
             models.Index(fields=["tenant", "charter_status"], name="prj_tnt_charter_idx"),
             models.Index(fields=["tenant", "client"], name="prj_tnt_client_idx"),
             models.Index(fields=["tenant", "org_unit"], name="prj_tnt_ou_idx"),
+            # Serves `Meta.ordering` itself: every register page — including the unfiltered
+            # default, the most-requested URL — sorted with `Using filesort` over the tenant's
+            # whole row set before LIMIT 15, so page cost was O(tenant rows), not O(15). The
+            # in-pattern add: ["tenant", "created_at"] already ships on 20+ models app-wide.
+            models.Index(fields=["tenant", "-created_at"], name="prj_tnt_created_idx"),
         ]
 
     def __str__(self):
