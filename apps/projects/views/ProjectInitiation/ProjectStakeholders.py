@@ -9,15 +9,10 @@ consumer.
 from django.db.models import Case, IntegerField, Value, When
 
 from apps.projects.forms import ProjectStakeholderForm
-from apps.projects.models import Project, ProjectStakeholder
+from apps.projects.models import ProjectStakeholder
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, redirect, render
-
-
-def _projects(tenant):
-    if tenant is None:
-        return Project.objects.none()
-    return Project.objects.filter(tenant=tenant).order_by("name")
+from apps.projects.views._helpers import projects
 
 
 @login_required
@@ -41,7 +36,7 @@ def pst_list(request):
                  ("influence", "influence", False),
                  ("interest", "interest", False)],
         extra_context={
-            "projects": _projects(request.tenant),
+            "projects": projects(request.tenant),
             "stakeholder_type_choices": ProjectStakeholder.STAKEHOLDER_TYPE_CHOICES,
             "raci_role_choices": ProjectStakeholder.RACI_ROLE_CHOICES,
             "influence_choices": ProjectStakeholder.INFLUENCE_CHOICES,
