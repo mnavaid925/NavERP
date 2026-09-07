@@ -63,12 +63,17 @@ def pko_list(request):
 
 @login_required
 def pko_create(request):
+    # FIRST LINE, not inside `if form.is_valid()`: a tenant-less user (User.tenant is SET_NULL,
+    # so any member of a deleted tenant, not just the superuser) must never reach the form. GET
+    # skips the POST branch entirely, and TenantModelForm only scopes its FK dropdowns when
+    # tenant is not None — so the un-hoisted guard rendered every workspace's parties, org units,
+    # documents and user emails. Same shape as apps/core/crud.py's crud_create.
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     if request.method == "POST":
         form = ProjectKickoffForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            if request.tenant is None:
-                messages.error(request, "Select a tenant workspace before creating records.")
-                return redirect("dashboard:home")
             obj = form.save(commit=False)
             obj.tenant = request.tenant
             obj.created_by = request.user
