@@ -79,8 +79,8 @@
               <td>
                 {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'chartered' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'kickoff' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
-                {% elif obj.status == 'completed' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
                 {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
                 {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
               </td>
