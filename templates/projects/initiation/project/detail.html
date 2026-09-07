@@ -159,9 +159,16 @@
       {% else %}
         <div class="empty-state"><i data-lucide="rocket"></i><h3>No kickoff planned</h3><p>The launch ceremony is what moves a project from chartered to active.</p></div>
       {% endif %}
-      <div class="form-actions">
-        <a href="{% url 'projects:pko_create' %}?project={{ obj.pk }}" class="btn btn-primary"><i data-lucide="rocket"></i> Plan Kickoff</a>
-      </div>
+      {% comment %}
+        unique_together ("tenant", "project") allows ONE kickoff per project, and
+        ProjectKickoffForm's __init__ then renders the form with the project unselectable — so
+        offering Plan Kickoff when one already exists is a dead end.
+      {% endcomment %}
+      {% if not kickoffs %}
+        <div class="form-actions">
+          <a href="{% url 'projects:pko_create' %}?project={{ obj.pk }}" class="btn btn-primary"><i data-lucide="rocket"></i> Plan Kickoff</a>
+        </div>
+      {% endif %}
     </div>
   </div>
 
