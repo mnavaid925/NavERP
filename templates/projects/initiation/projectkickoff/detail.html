@@ -31,6 +31,22 @@
           <span class="text-muted">Approve the charter to complete this kickoff</span>
         {% endif %}
       {% endif %}
+      {% comment %}
+        Acknowledging the baseline stamps a signature (baseline_acknowledged_by/at), so this
+        mirrors pko_mark_baseline_set exactly: tenant admin only, the ceremony must have been
+        held, and it is offered only while unstamped — the view refuses a re-stamp so the first
+        acknowledger's name can never be overwritten. Without this trigger the "Baseline
+        acknowledged" / "Acknowledged by" fields below could never be populated.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status == 'held' or obj.status == 'completed' %}
+          {% if not obj.baseline_acknowledged_at %}
+            <form method="post" action="{% url 'projects:pko_mark_baseline_set' obj.pk %}" onsubmit="return confirm('Acknowledge the baseline for {{ obj.number }}? This records your name and cannot be changed.');">{% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="clipboard-check"></i> Acknowledge Baseline</button>
+            </form>
+          {% endif %}
+        {% endif %}
+      {% endif %}
       <a href="{% url 'projects:pko_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     </div>
   </div>
