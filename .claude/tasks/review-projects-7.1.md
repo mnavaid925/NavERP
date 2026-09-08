@@ -975,3 +975,40 @@ seen by the six reviewers.
   The "only an approved request" rule belongs to the `prq_convert` **view**.
   `test_projectinitiation_convert_does_not_gate_on_status` pins it with a comment, so a future
   model-level guard has to be a decision rather than an accident.
+
+- [ ] **S1 (Important) — an ordinary member can DESTROY an approved charter.**
+  `apps/projects/views/ProjectInitiation/Projects.py:109-111`. `prj_delete` is `@login_required`
+  with no `@tenant_admin_required`, and it CASCADEs the project's stakeholders and kickoffs.
+  Fix **I2** refused `prj_edit` on an approved charter precisely because "the approval stamp attests
+  to this text" — but the delete leaves that same evidence reachable by the same actor, so I2 closed
+  the door and left the wall open. *Verified:* a member deletes a `charter_status="approved"` project
+  carrying `charter_approved_by`/`charter_approved_at` -> 302, row gone.
+  *Fix:* `@tenant_admin_required` on `prj_delete`, and/or refuse the delete while the charter is
+  approved. Note this interacts with **I10** (project delete reopens its source request) — keep that
+  behaviour, just gate who can trigger it.
+
+- [ ] **S2 (Important) — a completed kickoff's minutes are rewritable under its own completion
+  stamp.** `apps/projects/views/ProjectInitiation/ProjectKickoffs.py:110-111`. `pko_edit` is a
+  straight `crud_edit` with no lock. *Verified:* a member rewrote a `completed` kickoff's `agenda` to
+  "rewritten after the fact" and backdated `meeting_date` to 2020-01-01, while `completed_at` and
+  `baseline_acknowledged_by`/`baseline_acknowledged_at` stayed stamped and the project stayed
+  `active`. Exactly the "you cannot forge the signature, but you can change what it signs" class that
+  **I2** closed for `Project` and **I3** closed for `ProjectRequest` — left open on `ProjectKickoff`.
+  *Fix:* refuse `pko_edit` once `status == "completed"` (or once the baseline is acknowledged),
+  matching the I2/I3 pattern.
+
+- [~] **S3 (Minor, wording) — `pko_complete` can emit a lying success message.**
+  `apps/projects/views/ProjectInitiation/ProjectKickoffs.py:201-206` guards the status transition
+  (`if project.status in ("draft","chartered","kickoff")`) but the message sits **outside** the
+  guard. On a project deliberately `on_hold` with an approved charter and a `held` kickoff,
+  completing correctly leaves `status="on_hold"` but tells the user it "is now active" — the same
+  lying-success-message class the review pass fixed for the charter verbs (a cancelled project
+  reporting "is chartered"). *Fix:* move the sentence inside the `if`, with an `else` saying the
+  kickoff was closed out and the project's status is unchanged.
+  `test_projectinitiation_kickoff_complete_does_not_drag_a_paused_project_live` pins the **correct
+  status behaviour** and carries a NOTE explaining why the wording is deliberately not asserted.
+
+> **S1 and S2 are encoded in the suite as `@pytest.mark.xfail(strict=True)` tripwires**, which assert
+> the *intended* behaviour. The suite therefore **fails the day the view is fixed**, forcing the
+> marker to be deleted in that same change — the bug can never be quietly normalized, and no test
+> asserts the buggy behaviour as correct.
