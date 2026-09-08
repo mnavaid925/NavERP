@@ -117,8 +117,24 @@ def prj_delete(request, pk):
     gone, return "cannot be sent back", convert "only an approved request"), making the demand
     permanently unrecoverable. Reopening it puts the demand back in the approved,
     ready-to-convert queue instead, and the two writes land together or not at all.
+
+    REFUSED while the charter is approved. `prj_edit` already refuses one (charter_approved_by/at
+    attest to this text); the delete reaches that same evidence by a shorter route and CASCADEs
+    the stakeholder register and the kickoff with it, so the lock has to cover both verbs or it
+    covers neither. The guard is on the RECORD's state, not the actor's role: that is how this
+    codebase protects attested rows everywhere else (accounting's journal_entry_delete refuses
+    `is_locked`, bill_delete refuses anything but a draft - both login-only), a role gate would
+    still leave the evidence destroyable by the very tenant admin whose signature it is, and the
+    four 7.1 deletes are deliberately login-only house style, pinned by
+    `test_projectinitiation_the_admin_gate_is_exactly_these_eight`. An approved project that
+    should not go ahead is CANCELLED, the same way a posted entry is voided rather than deleted.
     """
     obj = get_object_or_404(Project, pk=pk, tenant=request.tenant)
+    if obj.charter_status == "approved":
+        messages.error(request, "An approved charter cannot be deleted — the approval stamp "
+                                "attests to this project, and its stakeholders and kickoff "
+                                "would go with it. Cancel the project instead.")
+        return redirect("projects:prj_detail", pk=obj.pk)
     source = obj.request if obj.request_id and obj.request.status == "converted" else None
     with transaction.atomic():
         response = crud_delete(request, model=Project, pk=pk, success_url="projects:prj_list")
