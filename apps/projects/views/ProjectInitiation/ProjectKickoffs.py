@@ -109,6 +109,22 @@ def pko_detail(request, pk):
 
 @login_required
 def pko_edit(request, pk):
+    # An ATTESTED ceremony is closed to editing. `completed_at` and `baseline_acknowledged_by`/
+    # `_at` are stamps over THIS agenda and THIS meeting_date, and pko_complete already took the
+    # project live on the strength of them; you cannot forge those signatures, but rewriting the
+    # minutes underneath them has the same outcome. Same lock prj_edit puts on an approved
+    # charter and prq_edit on a decided request - this is 7.1's third attested record.
+    #
+    # `is_locked` (the model, mirroring accounting's JournalEntry) rather than an inline
+    # condition, because both kickoff templates hide the Edit button on the same rule and a
+    # duplicated three-clause predicate is how the button and the guard drift apart.
+    obj = get_object_or_404(ProjectKickoff, pk=pk, tenant=request.tenant)
+    if obj.is_locked:
+        messages.error(
+            request,
+            "A completed or baselined kickoff cannot be edited — the completion and baseline "
+            "stamps attest to these minutes.")
+        return redirect("projects:pko_detail", pk=obj.pk)
     return crud_edit(
         request, model=ProjectKickoff, pk=pk, form_class=ProjectKickoffForm,
         template="projects/initiation/projectkickoff/form.html",
