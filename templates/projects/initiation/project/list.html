@@ -93,12 +93,17 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'projects:prj_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Both verbs refuse an approved charter: the approval stamp attests to this
+                    text, and the delete would CASCADE the stakeholder rows and the kickoff with
+                    it. Rendering either would just bounce back with an error.
+                  {% endcomment %}
                   {% if obj.charter_status != 'approved' %}
                     <a href="{% url 'projects:prj_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:prj_delete' obj.pk %}" onsubmit="return confirm('Delete project {{ obj.number }}? Its stakeholder rows and its kickoff are deleted with it, and any source request is reopened as approved. This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
                   {% endif %}
-                  <form method="post" action="{% url 'projects:prj_delete' obj.pk %}" onsubmit="return confirm('Delete project {{ obj.number }}? Its stakeholder rows and its kickoff are deleted with it, and any source request is reopened as approved. This cannot be undone.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
                 </div>
               </td>
             </tr>
