@@ -80,6 +80,25 @@ class ProjectKickoff(TenantNumbered):
         return f"{self.number} — {self.project} ({self.get_status_display()})"
 
     @property
+    def is_locked(self):
+        """True once the ceremony has been ATTESTED, closing its minutes to editing.
+
+        ``completed_at`` and ``baseline_acknowledged_by``/``_at`` are signatures over THIS agenda
+        and THIS ``meeting_date``, and ``pko_complete`` drove the project to ``active`` on the
+        strength of them. The lock follows the EVIDENCE rather than the status list alone, so a
+        ``held`` kickoff whose baseline a tenant admin acknowledged is closed too - that
+        acknowledgement is a signature over the agenda that was acknowledged. ``status`` is
+        checked as well, so a row that reads Completed is never editable even if its stamp is
+        missing.
+
+        Same idiom as ``accounting.JournalEntry.is_locked``, and deliberately the single source
+        for ``pko_edit`` AND both kickoff templates, so the guard and the button it hides can
+        never drift apart.
+        """
+        return bool(self.status == "completed" or self.completed_at
+                    or self.baseline_acknowledged_at)
+
+    @property
     def attendee_count(self):
         """Stakeholders flagged as attending — the register is the attendee list."""
         if not self.project_id:
