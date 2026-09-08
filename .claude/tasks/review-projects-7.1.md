@@ -935,7 +935,7 @@ trail keeps asserting a control that did not hold.
 These surfaced while writing the test suite, so they are **not** in the triage above and were not
 seen by the six reviewers.
 
-- [ ] **P1 (Important) — the duplicate-stakeholder rule does not cover user-only rows.**
+- [x] **P1 (Important) — the duplicate-stakeholder rule does not cover user-only rows.**
   `apps/projects/models/ProjectInitiation/ProjectStakeholders.py:158` guards with
   `if self.project_id and self.party_id:` — so a stakeholder identified by `user` instead of `party`
   is never dupe-checked. The DB constraint `(tenant, project, party, raci_scope)` is **partial**
@@ -948,6 +948,14 @@ seen by the six reviewers.
   (`ProjectStakeholders.py:158-171`).
   *Note:* the test module deliberately does **not** pin the permissive behaviour, so fixing this
   will not fight the suite.
+  **Status:** [x] fixed — fix(projects): dupe-check stakeholders by party OR user, not party alone.
+  The dupe queryset is now built from whichever of `party_id` / `user_id` is set, ORed, so it also
+  catches the mixed case (one row names the person as a Party, the other as their login). Each
+  clause is added **only** when its id is set — a `Q(party_id=None)` clause would match every
+  party-less row on the project and refuse two genuinely different user-only stakeholders. The
+  message's subject noun moves from "That party" to "That stakeholder" (the user-only path has no
+  party to name); the asserted `"double-count"` substring is unchanged. **Model `clean()` only —
+  no DB constraint, no migration** (`makemigrations projects --check` still reports no changes).
 
 - [~] **P2 (Minor, cross-app — not 7.1's to fix) — `TenantNumbered.save()` reads every
   `IntegrityError` as a number collision.** `apps/projects/models/_base.py:68-75`, shared boilerplate
@@ -976,7 +984,7 @@ seen by the six reviewers.
   `test_projectinitiation_convert_does_not_gate_on_status` pins it with a comment, so a future
   model-level guard has to be a decision rather than an accident.
 
-- [ ] **S1 (Important) — an ordinary member can DESTROY an approved charter.**
+- [x] **S1 (Important) — an ordinary member can DESTROY an approved charter.**
   `apps/projects/views/ProjectInitiation/Projects.py:109-111`. `prj_delete` is `@login_required`
   with no `@tenant_admin_required`, and it CASCADEs the project's stakeholders and kickoffs.
   Fix **I2** refused `prj_edit` on an approved charter precisely because "the approval stamp attests
@@ -986,8 +994,19 @@ seen by the six reviewers.
   *Fix:* `@tenant_admin_required` on `prj_delete`, and/or refuse the delete while the charter is
   approved. Note this interacts with **I10** (project delete reopens its source request) — keep that
   behaviour, just gate who can trigger it.
+  **Status:** [x] fixed — security(projects): refuse prj_delete while the charter is approved.
+  Took the **state guard**, not the role gate, on three grounds: (a) it is how this codebase
+  protects attested rows everywhere else — `journal_entry_delete` refuses `is_locked`, `bill_delete`
+  refuses anything but a draft, both `@login_required` only; (b) a role gate is the weaker half —
+  it would leave the same evidence destroyable by the very tenant admin whose signature it is,
+  while the state guard closes it for every actor; (c) `@tenant_admin_required` would have broken
+  `test_projectinitiation_the_admin_gate_is_exactly_these_eight`, which pins the four 7.1 deletes
+  as deliberately login-only house style (287 of 393 delete views app-wide). **I10 is untouched** —
+  a deletable project still reopens its source request in the same transaction. An approved project
+  that should not go ahead is *cancelled*, the way a posted entry is voided rather than deleted.
+  Delete button gated to match in `project/detail.html` and `project/list.html` (as I2 did).
 
-- [ ] **S2 (Important) — a completed kickoff's minutes are rewritable under its own completion
+- [x] **S2 (Important) — a completed kickoff's minutes are rewritable under its own completion
   stamp.** `apps/projects/views/ProjectInitiation/ProjectKickoffs.py:110-111`. `pko_edit` is a
   straight `crud_edit` with no lock. *Verified:* a member rewrote a `completed` kickoff's `agenda` to
   "rewritten after the fact" and backdated `meeting_date` to 2020-01-01, while `completed_at` and
@@ -996,6 +1015,15 @@ seen by the six reviewers.
   **I2** closed for `Project` and **I3** closed for `ProjectRequest` — left open on `ProjectKickoff`.
   *Fix:* refuse `pko_edit` once `status == "completed"` (or once the baseline is acknowledged),
   matching the I2/I3 pattern.
+  **Status:** [x] fixed — security(projects): refuse pko_edit on an attested kickoff. The predicate
+  is a new `ProjectKickoff.is_locked` property (`status == "completed" or completed_at or
+  baseline_acknowledged_at`), mirroring `accounting.JournalEntry.is_locked`, so the view guard and
+  the two templates that hide the Edit button read **one** rule instead of three copies of a
+  three-clause condition. Follows the *evidence* rather than the status list alone, like I3: a
+  `held` kickoff whose baseline was acknowledged is closed too, because that stamp signs the agenda
+  it acknowledged. Message and redirect match the I2/I3 shape. A property, so **no migration**.
+  Edit button gated on `not obj.is_locked` in `projectkickoff/detail.html` and
+  `projectkickoff/list.html`; Delete stays open (house style for the 7.1 deletes).
 
 - [~] **S3 (Minor, wording) — `pko_complete` can emit a lying success message.**
   `apps/projects/views/ProjectInitiation/ProjectKickoffs.py:201-206` guards the status transition
@@ -1008,7 +1036,9 @@ seen by the six reviewers.
   `test_projectinitiation_kickoff_complete_does_not_drag_a_paused_project_live` pins the **correct
   status behaviour** and carries a NOTE explaining why the wording is deliberately not asserted.
 
-> **S1 and S2 are encoded in the suite as `@pytest.mark.xfail(strict=True)` tripwires**, which assert
-> the *intended* behaviour. The suite therefore **fails the day the view is fixed**, forcing the
-> marker to be deleted in that same change — the bug can never be quietly normalized, and no test
-> asserts the buggy behaviour as correct.
+> **S1 and S2 were encoded in the suite as `@pytest.mark.xfail(strict=True)` tripwires**, which
+> assert the *intended* behaviour. The suite therefore **failed the day the views were fixed**
+> (XPASS), forcing the markers to be deleted in that same change — the bug could never be quietly
+> normalized, and no test ever asserted the buggy behaviour as correct. **Both markers were deleted
+> when S1 and S2 were fixed**; the two test bodies are unchanged and now stand as plain regression
+> tests. Suite: **1243 passed, 0 xfailed** (baseline 1241 passed, 2 xfailed).
