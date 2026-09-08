@@ -53,7 +53,14 @@
           {% endif %}
         {% endif %}
       {% endif %}
-      <a href="{% url 'projects:pko_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% comment %}
+        pko_edit refuses an attested ceremony (obj.is_locked - completed, or with the baseline
+        acknowledged): those stamps sign THIS agenda and THIS meeting date, so the button must
+        not be on screen for one. A live Edit here would just bounce back with an error.
+      {% endcomment %}
+      {% if not obj.is_locked %}
+        <a href="{% url 'projects:pko_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
     </div>
   </div>
 
