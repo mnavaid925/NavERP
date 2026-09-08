@@ -2012,21 +2012,16 @@ def test_projectinitiation_a_stored_title_of_markup_is_escaped_on_every_page(cli
 
 
 # ==================================================================================================
-# 11. Known gaps - encoded as STRICT XFAIL tripwires, reported as findings
+# 11. The two evidence gaps these tests reported - now FIXED, so they are plain regressions
 # ==================================================================================================
 #
-# Neither of these asserts the buggy behaviour as correct. Each states the behaviour the rest of
-# 7.1's evidence model implies, marks it strict-xfail, and therefore fails the suite the moment
-# somebody fixes the view - which is the prompt to delete the marker in that same change.
+# Both were written first as strict-xfail tripwires stating the behaviour the rest of 7.1's
+# evidence model implies. Strict xfail fails the suite the moment the view is fixed, which is what
+# forced the markers to be deleted in the change that fixed them (S1, S2). The assertions are
+# unchanged - they always described the correct behaviour - and now guard it going forward:
+# prj_delete refuses an approved charter (Projects.py), pko_edit refuses an attested kickoff
+# (ProjectKickoffs.py, via ProjectKickoff.is_locked).
 
-@pytest.mark.xfail(strict=True, reason=(
-    "REPORTED FINDING: prj_delete is login-only (apps/projects/views/ProjectInitiation/"
-    "Projects.py:109-111 - @login_required with no @tenant_admin_required), so an ordinary "
-    "member can DESTROY a project whose charter a tenant admin "
-    "approved - and CASCADE its stakeholders and kickoffs with it. I2 refused prj_edit on an "
-    "approved charter because 'the approval stamp attests to this text'; the delete leaves the "
-    "same evidence reachable by the same actor. Delete this marker in the change that gates the "
-    "delete (or that documents the risk as accepted)."))
 def test_projectinitiation_an_approved_charter_survives_a_member_delete(
         member_client, projectinitiation_project_charter_approved):
     obj = projectinitiation_project_charter_approved
@@ -2037,15 +2032,6 @@ def test_projectinitiation_an_approved_charter_survives_a_member_delete(
         "a non-admin member deleted a project whose charter a tenant admin had approved")
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "REPORTED FINDING: pko_edit has no lock (apps/projects/views/ProjectInitiation/"
-    "ProjectKickoffs.py:110-111 - a straight crud_edit), so a member can rewrite a COMPLETED "
-    "kickoff's meeting_date and "
-    "agenda after the ceremony - while completed_at and the baseline_acknowledged_by/at stamps "
-    "stay in place, and after pko_complete already drove the project to 'active'. That is the "
-    "same 'you cannot forge the signature, but you can change what it signs' class I2 closed for "
-    "Project and I3 closed for ProjectRequest, left open on ProjectKickoff. Delete this marker "
-    "in the change that adds the lock."))
 def test_projectinitiation_a_completed_kickoff_is_closed_to_editing(
         member_client, projectinitiation_kickoff_completed):
     obj = projectinitiation_kickoff_completed
