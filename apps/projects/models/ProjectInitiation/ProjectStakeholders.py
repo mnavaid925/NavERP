@@ -155,16 +155,34 @@ class ProjectStakeholder(TenantNumbered):
         if not self.party_id and not self.user_id:
             raise ValidationError(
                 "Name a party or a user — a stakeholder row with neither identifies nobody.")
-        if self.project_id and self.party_id:
+        # A stakeholder is a Party OR a User by design, so the identity to de-duplicate on is
+        # whichever of the two the row actually carries. Guarding on `party_id` alone left the
+        # user-only path unchecked and the database does not cover it either: the
+        # (tenant, project, party, raci_scope) unique_together is PARTIAL, because SQL treats
+        # every NULL `party` as distinct and Django's validate_unique skips any check containing
+        # a NULL. The same platform user could therefore be added twice for one scope on one
+        # project and be double-counted in the RACI grid - exactly the harm the party-side check
+        # exists to prevent.
+        #
+        # Each clause is added ONLY when its id is set. A `Q(party_id=None)` clause would match
+        # every party-less row on the project and refuse two genuinely different user-only
+        # stakeholders; ORing the two set ids is also what catches the mixed case, where one row
+        # names the person as a Party and the other as their login.
+        if self.project_id and (self.party_id or self.user_id):
+            identity = Q()
+            if self.party_id:
+                identity |= Q(party_id=self.party_id)
+            if self.user_id:
+                identity |= Q(user_id=self.user_id)
             dupes = ProjectStakeholder.objects.filter(
+                identity,
                 tenant_id=self.tenant_id,
                 project_id=self.project_id,
-                party_id=self.party_id,
                 raci_scope=self.raci_scope,
             )
             if self.pk:
                 dupes = dupes.exclude(pk=self.pk)
             if dupes.exists():
                 raise ValidationError(
-                    "That party already holds this RACI role for this scope on this project. "
-                    "A duplicate row would double-count them in the grid.")
+                    "That stakeholder already holds this RACI role for this scope on this "
+                    "project. A duplicate row would double-count them in the grid.")
