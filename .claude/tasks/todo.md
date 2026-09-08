@@ -5859,4 +5859,68 @@ per-row guards on `(tenant, title)` so a second run is a no-op.
   migration, which is single-writer work for a session that owns `core`.
 
 ## Review notes
-(filled in at the end of the pass)
+
+**Delivered.** 7.1 Project Initiation & Charter — 4 models (`ProjectRequest` [PRQ-], `Project`
+[PRJ-], `ProjectStakeholder` [PST-], `ProjectKickoff` [PKO-]), 5 forms, 32 routes / 27 views + 15
+POST verbs, 13 templates, `seed_projects` (9/3/6/2 per tenant, idempotent), migrations `0001` +
+`0002`, `LIVE_LINKS["7.1"]`, a new `.claude/skills/projects/SKILL.md`, and **1243 tests green on a
+full unfiltered run**. `manage.py check` clean; `makemigrations --check` clean.
+
+### What the phases actually caught
+
+The value was not evenly distributed, and it is worth recording where it came from.
+
+- **Smoke gate (Phase 3)** — four pages were **hard 500s** on real seeded data: a nullable FK
+  dereferenced inside a `|default:` **filter argument**. Django resolves filter arguments eagerly
+  and `string_if_invalid` only rescues the *main* variable, so a NULL FK in an argument takes the
+  whole page down. 15 sites / 6 templates. The seeder is what exposed it — half its stakeholder rows
+  deliberately leave `party` NULL.
+- **Six reviewers (Phase 4)** — 60 raw findings, deduped to 36. **Three Critical, all state-machine,
+  none visible to a status-code check:** `approved` was unreachable through the UI so the headline
+  `prq_convert` verb was dead (the seeder pre-baked an approved row and hid it); `pko_complete`
+  skipped both ceremony gates and drove a project to `active` with an unapproved charter, routing
+  *around* the tenant-admin gate on `prj_approve_charter`; and `convert_to_project()` guarded the
+  in-memory instance outside its atomic block, so two concurrent POSTs minted two projects.
+- **Tests (Phase 6)** — found **three more real defects the six reviewers missed** (P1 user-only
+  stakeholder duplicates, S1 an approved charter destroyable by any member, S2 a completed kickoff's
+  minutes rewritable under its own stamp). Writing tests against the as-fixed code turned out to be
+  its own review pass, not just regression insurance.
+
+### Judgement calls worth keeping
+
+- **S1 was closed with a state guard, not a role gate.** A role gate would have left the same
+  evidence destroyable by the very tenant admin whose signature it is, and it would have broken a
+  test that deliberately encodes the login-only delete house style (287 of 393 delete views
+  app-wide). The state guard closes it for every actor. This matches how the codebase already
+  protects attested rows (`journal_entry_delete` refuses `is_locked`; `bill_delete` refuses
+  non-drafts).
+- **The I1 core-forms hardening was tried, measured and reverted.** Making `TenantModelForm` fail
+  closed (`.none()` when tenant is falsy) fails 10 tests in `inventory` and `procurement` that
+  *encode the current contract*. The 7.1 half (hoisting the guard to the first line of the four
+  create views) landed; the shared-file half needs its own pass that can run the full suite.
+- **`influence_rank`'s filesort was left alone** — the `Case/When` is the correct *correctness* fix
+  (`"-influence"` sorts alphabetically wrong) and is N+1-free; making it index-supported needs
+  integer choice fields. Recorded as an explicit trade rather than assumed away.
+- **The evidence model is the module's organising idea**, and it is what made several findings
+  cohere: once a request is decided, a charter approved, or a ceremony attested, the row stops being
+  editable. *You cannot forge the signature, so you must not be able to change what it signs.*
+
+### Spun off deliberately (not silently dropped)
+
+- The **same `|default:` FK-argument idiom exists in ~59 more sites** across procurement (28), scm
+  (23), hrm (6) and crm (2) — each a 500 waiting for its FK to be NULL. Out of scope here and a
+  cross-module sweep risks L43 collisions; raised as its own task.
+- The **`apps/core/forms/_common.py` fail-closed hardening** and the **`ProcurementAlerts.py:82`
+  guard clone** (the only other place in the tree with the misplaced-guard shape).
+- **`core.AuditLog.action` is `varchar(10)`** while the ecosystem keeps writing longer verbs — a
+  `core` migration, single-writer work for a session that owns `core`.
+- **`TenantNumbered.save()` reads every `IntegrityError` as a number collision** — shared boilerplate
+  in six apps; today nothing lands with an empty number, but the fallthrough is latent.
+
+### Known-open, by decision
+
+`charter_status="rejected"` is a reserved choice no verb sets (dropping it needs a second migration
+and forecloses a 7.x reject-charter verb); `pko_complete`'s success message sits outside its status
+guard, so an `on_hold` project is told it "is now active" — wording only, the status behaviour is
+correct and pinned by a test.
+
