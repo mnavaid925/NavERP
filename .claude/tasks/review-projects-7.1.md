@@ -224,7 +224,10 @@ three, not three migrations.
 - [~] **N6 — the same unguarded `|default:` FK-argument idiom exists in ~59 sites across
   procurement/scm/hrm/crm.** Out of scope for 7.1 and a cross-module sweep risks L43 collisions;
   spun off as its own task.
-- [ ] **N7 — no test suite** (R2-I3). Not a fixer item — this is **Phase 6**, which runs next.
+- [x] **N7 — no test suite** (R2-I3). **Done** — Phase 6 delivered `conftest.py` (45 fixtures)
+  plus `test_initiation_{models,forms,views,security}.py`: **1243 tests, all green unfiltered**.
+  The suite found three further real defects (P1, S1, S2) that this wave's six reviewers did not,
+  all now fixed.
 
 ---
 
