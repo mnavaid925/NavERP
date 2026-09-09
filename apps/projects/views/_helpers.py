@@ -12,7 +12,7 @@ reaches it — their project dropdown is empty — and it returns an empty set f
 work packages.)
 """
 from apps.core.models import OrgUnit, Party
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectRequest, ResourceProfile
 
 
 def org_units(tenant):
@@ -43,6 +43,28 @@ def projects(tenant):
     if tenant is None:
         return Project.objects.none()
     return Project.objects.filter(tenant=tenant).order_by("name")
+
+
+def resource_profiles(tenant):
+    """This workspace's resource pool, ordered for a dropdown (7.3's registers and board).
+
+    Meta.ordering (the people-list order) serves it; ``.none()`` for a tenant-less user.
+    """
+    if tenant is None:
+        return ResourceProfile.objects.none()
+    return ResourceProfile.objects.filter(tenant=tenant)
+
+
+def project_requests(tenant):
+    """This workspace's project requests, ordered for a dropdown (7.3's demand lens).
+
+    Every status — a booking can hang off a request that is still being screened, and a
+    dropdown that silently omits the one you need is worse than one that lists everyone
+    (the ``clients()`` ruling).
+    """
+    if tenant is None:
+        return ProjectRequest.objects.none()
+    return ProjectRequest.objects.filter(tenant=tenant).order_by("title", "id")
 
 
 def critical_path_ids(project):
