@@ -101,3 +101,36 @@ None. No template 500 risks, no broken `{% url %}` targets, no missing CSRF toke
 - Form rendering: the 7.1 generic loop verbatim, with useful per-entity copy.
 - State-machine reflections match the views exactly (achieve button vs the view's refusals; Edit/Delete hidden exactly when `is_frozen`; Promote/Activate conditions; boolean select works via crud_list's stringified-boolean mapping).
 - Contract invariants: no nullable FK inside `|default:`, empty states actionable, colspans match, pagination included on all four lists, block titles on all 14.
+
+---
+
+## 4. performance-reviewer
+
+Verdict: **no Critical findings** — no N+1 anywhere, no unpaginated list, no aggregate-in-a-loop. One house-precedent violation (Important) plus hygiene items.
+
+### Critical
+
+None found. Cleared: every list routes through `crud_list` (filters before Paginator); the tree renders from one prefetched list with decorated instances on `node.kids` (no related-manager reads in any planning-template loop); overview and seeder follow their documented query budgets.
+
+### Important
+
+- **I-1. Unused `select_related` hops on the two hottest list views — the exact pattern 7.1 measured and removed.** `ProjectTasks.py:73` `tsk_list` selects `parent`, but `task/list.html` never renders `obj.parent` (3 joins, 84 columns/row; the parent join drags a full second row incl. `description` for nothing). `ProjectMilestones.py:18` `mst_list` selects `anchor_task`, never rendered by `milestone/list.html`. At 15 rows/page the cost is small, but it is precisely the mistake 7.1 quantified and fixed (`ProjectRequests.py:22-27` comment). Fix: drop `"parent"` from `tsk_list` and `"anchor_task"` from `mst_list` (detail views use theirs legitimately — keep those).
+
+### Minor
+
+- **M-1. tsk_detail: three chained joins nothing renders** — `child_tasks.select_related("owner")` (child table renders no owner), `predecessor_links.select_related("predecessor__project")` / `successor_links.select_related("successor__project")` (link tables render no project column; the predecessor hop re-fetches `obj` itself). Prune for hygiene under the same precedent.
+- **M-2. Default orderings all filesort; 7.1's 0002 added `(tenant,-created_at)` indexes to its four models, 0003 adds none for DEP/BSL; MST orders `(target_date,id)` unindexed; TSK `(project_id,sequence,id)` only prefix-covered.** Argued ~zero at plausible scale (sub-ms filesort of tens-to-hundreds rows). App-wide decision, not a 7.2 fork: `-created_at` without a tenant+created_at index is the app-wide norm; only 7.1 opted out. Either add the four indexes in a 0004 or accept the app-wide norm — don't fix one model only.
+- **M-3. Tree page fetches the task table twice** — `critical_path_ids` re-queries work packages though `_decorate_wbs` already loaded every node (measured: 3 queries where 2 would do). Pass the nodes in when a second consumer appears. Nit: tree fetch drags `description` the template never renders (`.only` would prune; single-consumer template makes it safe but low value).
+- **M-4. `freeze_snapshot()` loads full model rows to compute three scalars** — one `project.tasks.aggregate(Max/Count/Sum)` is a single round trip and matches house rule 5. Cold path (verbs + 3 seeder calls).
+- **M-5. `critical_path_ids` recursion depth is bounded by the recursion limit, not just node count** — a ~950-task linear chain would hit `sys.getrecursionlimit()`. Safe at tens-to-hundreds; convert to an explicit stack if 7.16 ever feeds it a whole tenant.
+- **M-6. Recursive include render cost — measured:** seeded 11-node tree ≈ 6-7 ms/render; the `tree_max_depth=5` cap bounds rendering at 121 nodes ≈ 60-80 ms regardless of total WBS size; unbounded parts O(V) sub-ms. Page stays flat at scale; no action.
+
+### Verified correct
+
+- List-view FK audit column-by-column: `dep_list`/`bsl_list` join exactly what renders (7.1 pruning precedent applied properly); all detail views match their templates.
+- `_decorate_wbs`: one query for the whole tree; `node.kids` decoration correct AND zero extra queries; children_of/walk/rollups O(V); cycle → skipped node, not stack overflow. Template per-row work query-free (`duration_days` pure date math on loaded columns; rollups computed once in the view).
+- `critical_path_ids`: shared memo → O(V+E) total, 2 SQL queries, deterministic; seeded project yields the intended 6-task chain.
+- Pagination & counts: filters before Paginator, `count()` not `len()`, nothing lists a queryset to count it; child/link collections sliced `[:50]`.
+- Overview's 8 queries fine (6 spans 6 tables — cannot share without UNION hacks).
+- Seeder 7.2 block: exactly 2 queries/row (index-backed next_number + INSERT), single transaction, no per-row audit logs or FK dereference surprises.
+- Filter index coverage: TSK/MST/BSL/DEP indexes serve the view filters, the sibling-deactivation UPDATE, and both `tsk_detail` link sides; unindexed facets are low-cardinality.
