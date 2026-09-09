@@ -45,67 +45,91 @@ def critical_path_ids(project):
     """The project's critical chain, as a set of ``ProjectTask`` pks.
 
     Bullet 2 of 7.2 ("critical path calculation"), planning-grade: the critical path is the
-    dependency chain of work packages whose summed durations is longest. A forward pass via
-    memoised DFS over ``TaskDependency`` edges (predecessor → successor), then a deterministic
-    walk back from the best endpoint marking the chain.
+    dependency chain of work packages whose summed durations is longest. One ITERATIVE longest-
+    path pass over ``TaskDependency`` edges (predecessor → successor) in Kahn topological order
+    (in-degree over the dependency edges), then a deterministic walk back from the best endpoint
+    marking the chain. Iterative on purpose: a member-triggerable ~1000-task chain must not be
+    able to RecursionError the tree page the way a memoised DFS could.
 
-    Deliberate simplifications, both documented rather than hidden: undated tasks count as one
-    day; ties break by ``(sequence, id)``; the result is ONE chain, not the full zero-float set
-    a backward CPM pass would produce (early/late starts and total float are 7.16 reporting's).
-    The ``visiting`` set makes a cycle in the data (not creatable through the forms) cost a
-    skipped edge, not a RecursionError — and the recursion is bounded by the node count.
+    Deliberate simplifications and bounds, documented rather than hidden:
+
+    * A task's contribution is ``max(duration_days or 1, 1)`` — undated tasks count one day, and
+      an inverted/negative window cannot go below one either, so the walk-back's strictly
+      decreasing invariant holds for any hand-entered dates.
+    * Ties break by ``(sequence, id)``: each successor's candidate predecessors are sorted that
+      way ONCE when ``preds`` is built, and both the forward pass (``max`` keeps the first
+      maximal candidate) and the walk-back (first match in that sorted order) consume them in it.
+    * A cycle in the data (not creatable through the forms) means its nodes' in-degrees never
+      reach zero: they never resolve, get no ``best`` entry, and are skipped — as are all nodes
+      downstream of the cycle. A defensive processed-count cap bounds the queue loop even if the
+      graph were somehow corrupt. The acyclic remainder of the plan still computes.
+    * The result is ONE chain, not the full zero-float set a backward CPM pass would produce
+      (early/late starts and total float are 7.16 reporting's).
     """
     from apps.projects.models import TaskDependency
 
     tasks = list(project.tasks.filter(node_type="work_package").order_by("sequence", "id"))
     if not tasks:
         return set()
-    preds = {}  # successor pk -> [predecessor tasks]
+    preds = {}  # successor pk -> [predecessor tasks], sorted by (sequence, id)
     deps = (TaskDependency.objects
             .filter(predecessor__project_id=project.pk, successor__project_id=project.pk)
             .select_related("predecessor", "successor")
             .order_by("predecessor_id", "successor_id"))
+    node_by_pk = {t.pk: t for t in tasks}  # dep endpoints may include non-work-package nodes
     for dep in deps:
         preds.setdefault(dep.successor_id, []).append(dep.predecessor)
+        node_by_pk.setdefault(dep.predecessor_id, dep.predecessor)
+        node_by_pk.setdefault(dep.successor_id, dep.successor)
+    for plist in preds.values():
+        plist.sort(key=lambda t: (t.sequence, t.pk))
 
     def duration(task):
-        return task.duration_days if task.duration_days else 1
+        return max(task.duration_days or 1, 1)
+
+    # Kahn's in-degree order over the dependency edges. Every dep endpoint belongs to the
+    # project (the queryset filters on it), so every edge below connects two graph nodes.
+    graph = set(node_by_pk)
+    succs = {pk: [] for pk in graph}
+    indegree = {pk: 0 for pk in graph}
+    for succ_pk, plist in preds.items():
+        for p in plist:
+            indegree[succ_pk] += 1
+            succs[p.pk].append(succ_pk)
 
     best = {}  # pk -> (total_days, task_count) of the longest chain ENDING at this task
-
-    def chain_length(task, visiting):
-        if task.pk in best:
-            return best[task.pk]
-        if task.pk in visiting:  # cycle in the data: break the edge, don't the stack
-            return (0, 0)
-        visiting.add(task.pk)
-        parents = preds.get(task.pk, [])
-        if parents:
-            length, count = max(
-                (chain_length(p, visiting) for p in parents),
-                key=lambda pair: (pair[0], pair[1]))
-            length += duration(task)
-            count += 1
+    queue = [pk for pk in graph if indegree[pk] == 0]
+    processed, cap = 0, len(graph)
+    while queue and processed < cap:
+        processed += 1
+        pk = queue.pop()
+        plist = preds.get(pk)
+        if plist:
+            days, count = max(
+                (best[p.pk] for p in plist), key=lambda pair: (pair[0], pair[1]))
+            best[pk] = (days + duration(node_by_pk[pk]), count + 1)
         else:
-            length, count = duration(task), 1
-        visiting.discard(task.pk)
-        best[task.pk] = (length, count)
-        return best[task.pk]
+            best[pk] = (duration(node_by_pk[pk]), 1)
+        for succ_pk in succs[pk]:
+            indegree[succ_pk] -= 1
+            if indegree[succ_pk] == 0:
+                queue.append(succ_pk)
+    if not any(t.pk in best for t in tasks):
+        return set()  # every work package sits in (or downstream of) a cycle — nothing to mark
 
-    for task in tasks:
-        chain_length(task, set())
-
-    # Walk back from the best endpoint, following the predecessor the forward pass actually chose.
-    end = max(tasks, key=lambda t: (best[t.pk][0], best[t.pk][1], -t.sequence, -t.pk))
+    # Walk back from the best endpoint, following the predecessor the forward pass actually
+    # chose: the first (sequence, id)-ordered parent whose chain length matches the target.
+    end = max((t for t in tasks if t.pk in best),
+              key=lambda t: (best[t.pk][0], best[t.pk][1], -t.sequence, -t.pk))
     chain, cursor = {end.pk}, end
     while True:
-        parents = [p for p in preds.get(cursor.pk, []) if p.pk in best]
+        parents = preds.get(cursor.pk)
         if not parents:
             break
         target = best[cursor.pk][0] - duration(cursor)
-        matches = [p for p in parents if best[p.pk][0] == target]
-        if not matches:
+        cursor = next((p for p in parents
+                       if p.pk in best and best[p.pk][0] == target), None)
+        if cursor is None:
             break
-        cursor = matches[0]
         chain.add(cursor.pk)
     return chain
