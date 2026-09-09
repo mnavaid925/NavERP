@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Budget Revision{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:bvr_list' %}">Budget Revisions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% if obj.currency %} · {{ obj.currency }}{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        Approve / Reject / Activate move governance state and are tenant-admin gated server-side
+        (7.1 precedent: rendering the buttons to an ordinary member would just serve a hard 403).
+        Submit stays login-only.
+      {% endcomment %}
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'projects:bvr_submit' obj.pk %}" onsubmit="return confirm('Submit this revision for approval?');">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for Approval</button>
+        </form>
+      {% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status == 'pending_approval' %}
+          <form method="post" action="{% url 'projects:bvr_approve' obj.pk %}" onsubmit="return confirm('Approve revision {{ obj.number }}? Activation is a separate step.');">{% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'projects:bvr_reject' obj.pk %}" onsubmit="return confirm('Reject revision {{ obj.number }}? A stated reason is required.');">{% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_reject_notes">Reason</label>
+              <textarea name="decision_notes" id="id_reject_notes" class="form-textarea" rows="3" required></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% elif obj.status == 'approved' and not obj.activated_at %}
+          <form method="post" action="{% url 'projects:bvr_activate' obj.pk %}" onsubmit="return confirm('Activate revision {{ obj.number }} as the cost baseline? Every other approved revision of this project is superseded.');">{% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="flag"></i> Activate as Baseline</button>
+          </form>
+        {% endif %}
+      {% endif %}
+      {% if not obj.is_locked %}<a href="{% url 'projects:bvr_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Revision</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Revision no</dt><dd>{% if obj.revision_no == 0 %}0 <span class="text-muted">(original plan)</span>{% else %}{{ obj.revision_no }}{% endif %}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</dd>
+        <dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.username }}{% else %}—{% endif %}</dd>
+        <dt>Requested at</dt><dd>{% if obj.requested_at %}{{ obj.requested_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Decided by</dt><dd>{% if obj.decided_by %}{{ obj.decided_by.get_full_name|default:obj.decided_by.username }}{% else %}—{% endif %}</dd>
+        <dt>Decided at</dt><dd>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Activated at</dt><dd>{% if obj.activated_at %}<span class="badge badge-green">Baseline {{ obj.activated_at|date:"M d, Y H:i" }}</span>{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}—{% endif %}</dd>
+      </dl>
+      <p><strong>Reason.</strong> {{ obj.reason|linebreaksbr }}</p>
+      {% if obj.impact_note %}<p><strong>Cost impact.</strong> {{ obj.impact_note|linebreaksbr }}</p>{% endif %}
+      {% if obj.schedule_impact_note %}<p><strong>Schedule impact.</strong> {{ obj.schedule_impact_note|linebreaksbr }}</p>{% endif %}
+      {% if obj.decision_notes %}<p><strong>Decision notes.</strong> {{ obj.decision_notes|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Impact vs active baseline</h2></div>
+    <div class="card-body">
+      <p class="stat-value">{{ obj.amount_delta }}</p>
+      <p class="text-muted">This revision's line total against the project's active baseline (zero when this row IS the baseline or no baseline exists yet).</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Budget lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Line</th><th>Category</th><th>WBS node</th><th>Control account</th><th>GL account</th><th class="ta-right">Amount</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pbl_detail' line.pk %}">{{ line.number }}</a></td>
+              <td>{{ line.get_category_display }}</td>
+              <td>{% if line.wbs_node %}<a href="{% url 'projects:tsk_detail' line.wbs_node_id %}">{{ line.wbs_node.name }}</a>{% else %}—{% endif %}</td>
+              <td>{% if line.control_account %}<a href="{% url 'projects:cca_detail' line.control_account_id %}">{{ line.control_account.code }}</a>{% else %}—{% endif %}</td>
+              <td>{% if line.gl_account %}{{ line.gl_account }}{% else %}—{% endif %}</td>
+              <td class="ta-right fw-600">{{ line.amount }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list"></i><h3>No budget lines yet</h3><p>Add lines to this revision — its totals are what the approver weighs.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if category_totals %}
+          <tfoot>
+            {% for cat, total in category_totals.items %}
+              <tr><td colspan="5">{{ cat|title }}</td><td class="ta-right fw-600">{{ total }}</td></tr>
+            {% endfor %}
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:bvr_list' %}" class="btn btn-outline">Back to Budget Revisions</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:bvr_delete' obj.pk %}" onsubmit="return confirm('Delete budget revision {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
