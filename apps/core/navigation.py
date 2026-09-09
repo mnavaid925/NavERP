@@ -1743,6 +1743,19 @@ LIVE_LINKS = {
         # Extra live leaf: the approval queue is the register's `?status=submitted` lens.
         "Time Approvals":                        "projects:rte_list?status=submitted",
     },
+    # ----- 7.4 Cost & Budget Management -----
+    "7.4": {
+        "Budget Planning & Estimation":         "projects:pbl_list",
+        "Cost Baseline & Control Accounts":     "projects:cca_list",
+        "Expense Tracking & Commitments":       "projects:pex_list",
+        # Forecasting & EAC is a lens on the same register as bullet 2 on purpose — the EVM
+        # columns (CPI/SPI/EAC/ETC/TCPI/VAC) are control-account columns, so the CA register and
+        # detail are where they render (7.2's lens-on-a-register precedent).
+        "Forecasting & EAC":                    "projects:cca_list",
+        "Change Control & Budget Revisions":    "projects:bvr_list",
+        # Extra live leaf: the flat register behind the revisions (7.2's "Task Register" precedent).
+        "Budget Register":                      "projects:pbl_list",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
