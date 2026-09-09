@@ -6,10 +6,15 @@ The one page that is not an entity's list/detail/form, so it sits at the app's t
 It is a jumping-off point plus one count per table, not a dashboard: 7.16 Reporting & Business
 Intelligence owns project analytics, and a half-built dashboard here would compete with it.
 """
-from django.db.models import Count, Q
+from decimal import Decimal
+
+from django.db.models import Count, DecimalField, Q, Sum, Value
+from django.db.models.functions import Coalesce
 
 from apps.projects.models import (
+    BudgetRevision,
     Project,
+    ProjectExpense,
     ProjectKickoff,
     ProjectMilestone,
     ProjectRequest,
@@ -23,6 +28,8 @@ from apps.projects.models import (
 )
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, render
+
+_MONEY = DecimalField(max_digits=20, decimal_places=2)
 
 
 @login_required
@@ -58,4 +65,14 @@ def overview(request):
         "resource_count": ResourceProfile.objects.filter(tenant=tenant).count(),
         "allocation_count": ResourceAllocation.objects.filter(tenant=tenant).count(),
         "time_entry_count": ResourceTimeEntry.objects.filter(tenant=tenant).count(),
+        # 7.4 cost & budget — one aggregate per table: the pending-approval COUNT is the
+        # approval queue's depth, and the posted-spend SUM is the money already burning
+        # (posted actuals + accruals; commitments and drafts don't count).
+        "pending_revisions": BudgetRevision.objects.filter(
+            tenant=tenant, status="pending_approval").count(),
+        "posted_spend": ProjectExpense.objects.filter(tenant=tenant).aggregate(
+            total=Coalesce(
+                Sum("amount", filter=Q(status="posted",
+                                       entry_type__in=("actual", "accrual"))),
+                Value(Decimal("0")), output_field=_MONEY))["total"],
     })
