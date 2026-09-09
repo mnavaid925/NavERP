@@ -817,3 +817,347 @@ def projectinitiation_activity_a(db, projectinitiation_project_draft):
     """One ``core.Activity`` GFK'd to tenant A's draft project — the ``activities`` block on the
     kickoff detail page."""
     return _projectinitiation_activity(projectinitiation_project_draft)
+
+
+# ==================================================================================================
+# 7.2 Project Planning & Scheduling (subslug ``planning``) — OWNED BY PHASE 6 STEP 1
+#
+# Same rules as the 7.1 block above, prefixed ``planning_`` / ``_planning_`` so the two lanes can
+# never shadow each other. See ``.claude/tasks/test-contract-projects-7.2.md`` for the test
+# contract these fixtures serve (test files: test_planning_models/_forms/_views/_security.py).
+#
+# * Factories construct + ``.save()`` — ``TenantNumbered.save()`` is where ``TSK-/DEP-/MST-/BSL-``
+#   numbers are minted; ``bulk_create`` would ship empty numbers and is never used here.
+# * Determinism (L16): every date derives from ``_planning_today()`` (``timezone.localdate()``),
+#   the same basis ``ProjectMilestone.is_late`` and the achievement stamp use.
+# * Projects reuse the 7.1 FACTORY ``_projectinitiation_project`` (function import, NOT the 7.1
+#   fixtures — the planning lane must not depend on 7.1's fixture rows). Host projects are ACTIVE
+#   with an approved charter, the lifecycle stage a plan actually lives in.
+# * The admin client for 7.2 is the ROOT conftest's ``client_a`` — exactly as 7.1, which defines
+#   no admin-client fixture of its own either. No ``planning_client`` exists on purpose.
+# * Tests NEVER touch ``management/commands/seed_projects.py`` (the demo seed) — every test builds
+#   exactly the rows it asserts on from the factories below.
+# ==================================================================================================
+
+#: ``apps.core.crud.crud_list``'s default ``per_page`` — every 7.2 register uses the default, so a
+#: pagination test needs ``PLANNING_PAGE_SIZE + 1`` rows for a second page (same rationale as
+#: ``PROJECTINITIATION_PAGE_SIZE`` above).
+PLANNING_PAGE_SIZE = 15
+
+
+def _planning_today():
+    """Today on the SAME basis the 7.2 code uses (``is_late`` / ``freeze_snapshot`` →
+    ``timezone.localdate()``)."""
+    return timezone.localdate()
+
+
+# ==================================================================================================
+# Factories — construct + ``.save()`` so TenantNumbered mints TSK-/DEP-/MST-/BSL-
+# ==================================================================================================
+
+def _planning_task(tenant, project, parent=None, **overrides):
+    """A ``ProjectTask`` work package on ``project``; ``parent=None`` roots it.
+
+    Defaults: ``node_type="work_package"``, ``status="planned"``, ``estimation_method="bottom_up"``,
+    ``confidence="medium"``, ``sequence=0``, a distinct per-tenant ``name`` ("Work package NN"),
+    ``planned_start=today`` / ``planned_end=today+4`` (``duration_days == 5``) and
+    ``effort_hours=40.00``. Pass ``node_type="deliverable"`` for a rollup node and ``sequence=``
+    wherever sibling order matters (the tree and the critical-path tie-breaks read it).
+    """
+    from apps.projects.models import ProjectTask
+    today = _planning_today()
+    seq = ProjectTask.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        parent=parent,
+        node_type="work_package",
+        name=f"Work package {seq:02d}",
+        description="A schedulable leaf of the work breakdown structure.",
+        status="planned",
+        planned_start=today,
+        planned_end=today + datetime.timedelta(days=4),
+        effort_hours=Decimal("40.00"),
+        estimation_method="bottom_up",
+        confidence="medium",
+        sequence=0,
+    )
+    fields.update(overrides)
+    obj = ProjectTask(**fields)
+    obj.save()
+    return obj
+
+
+def _planning_dependency(tenant, predecessor, successor, **overrides):
+    """A ``TaskDependency`` edge predecessor → successor (``finish_to_start``, ``lag_days=0``).
+
+    Both endpoints must belong to ONE project — ``clean()`` refuses self-links and cross-project /
+    cross-tenant pairs, so a malformed call raises at build time instead of seeding bad data.
+    """
+    from apps.projects.models import TaskDependency
+    fields = dict(
+        tenant=tenant,
+        predecessor=predecessor,
+        successor=successor,
+        link_type="finish_to_start",
+        lag_days=0,
+        note="",
+    )
+    fields.update(overrides)
+    obj = TaskDependency(**fields)
+    # ``clean()`` (NOT ``full_clean()`` — that would fail on the still-unminted blank ``number``)
+    # so a self-link or cross-project pair surfaces at build time instead of seeding bad data.
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _planning_milestone(tenant, project, **overrides):
+    """A ``ProjectMilestone`` on ``project``: ``status="planned"``, ``target_date=today+30``,
+    ``is_phase_gate=False``, a distinct per-tenant ``name`` ("Milestone NN").
+
+    Pass ``status="achieved"`` to let ``save()`` stamp ``actual_date`` itself — the stamping is the
+    model's job and the factory must not pre-empt it.
+    """
+    from apps.projects.models import ProjectMilestone
+    seq = ProjectMilestone.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        anchor_task=None,
+        name=f"Milestone {seq:02d}",
+        description="A date that matters.",
+        target_date=_planning_today() + datetime.timedelta(days=30),
+        is_phase_gate=False,
+        entry_criteria="",
+        exit_criteria="",
+        status="planned",
+    )
+    fields.update(overrides)
+    obj = ProjectMilestone(**fields)
+    obj.save()
+    return obj
+
+
+def _planning_baseline(tenant, project, **overrides):
+    """A ``ScheduleBaseline`` on ``project`` — ``what_if`` by default, so NOT frozen and NOT
+    active (the editable working-copy shape every verb accepts).
+
+    ``baseline_type="baseline"`` + ``is_active=True`` builds the project's managed baseline;
+    snapshot columns are left empty — filling them by hand would fake the freeze ``bsl_promote``
+    performs, and the views/tests must observe the REAL ``freeze_snapshot()`` output.
+    """
+    from apps.projects.models import ScheduleBaseline
+    seq = ScheduleBaseline.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        name=f"What-if {seq:02d}",
+        baseline_type="what_if",
+        is_active=False,
+        strategy_note="",
+        note="",
+    )
+    fields.update(overrides)
+    obj = ScheduleBaseline(**fields)
+    obj.save()
+    return obj
+
+
+def _planning_wbs_tree(tenant, project):
+    """A 2-deliverable × 2-work-package WBS on ``project``; returns named tasks in a dict.
+
+    Keys: ``d1`` / ``d2`` (``node_type="deliverable"``, undated and effort-less on purpose — their
+    rollups must come from the children) and ``wp11`` / ``wp12`` / ``wp21`` / ``wp22``. Sibling
+    order is explicit: d1 (seq 1) ← wp11 (seq 1) + wp12 (seq 2); d2 (seq 2) ← wp21 (seq 1) +
+    wp22 (seq 2) — so the tree view must code them 1 / 1.1 / 1.2 / 2 / 2.1 / 2.2.
+
+    Windows: wp11 today→today+2 (3 days, 24.00h), wp12 today+3→today+4 (2 days, 16.00h), wp21
+    today→today (1 day, 8.00h), wp22 today+1→today+2 (2 days, 8.00h). Deliverable rollups: d1 →
+    start today / end today+4 / 40.00h / count 2; d2 → start today / end today+2 / 16.00h / count 2.
+    """
+    d1 = _planning_task(tenant, project, node_type="deliverable", name="Deliverable One",
+                        sequence=1, planned_start=None, planned_end=None, effort_hours=None)
+    d2 = _planning_task(tenant, project, node_type="deliverable", name="Deliverable Two",
+                        sequence=2, planned_start=None, planned_end=None, effort_hours=None)
+    today = _planning_today()
+    wp11 = _planning_task(tenant, project, parent=d1, name="Survey", sequence=1,
+                          planned_start=today, planned_end=today + datetime.timedelta(days=2),
+                          effort_hours=Decimal("24.00"))
+    wp12 = _planning_task(tenant, project, parent=d1, name="Build", sequence=2,
+                          planned_start=today + datetime.timedelta(days=3),
+                          planned_end=today + datetime.timedelta(days=4),
+                          effort_hours=Decimal("16.00"))
+    wp21 = _planning_task(tenant, project, parent=d2, name="Pilot", sequence=1,
+                          planned_start=today, planned_end=today,
+                          effort_hours=Decimal("8.00"))
+    wp22 = _planning_task(tenant, project, parent=d2, name="Rollout", sequence=2,
+                          planned_start=today + datetime.timedelta(days=1),
+                          planned_end=today + datetime.timedelta(days=2),
+                          effort_hours=Decimal("8.00"))
+    return {"d1": d1, "d2": d2, "wp11": wp11, "wp12": wp12, "wp21": wp21, "wp22": wp22}
+
+
+def _planning_fill_tasks(tenant, project, count, **overrides):
+    """``count`` root work packages on ONE project with distinct names (``Backlog task 01`` …).
+    Returns the list."""
+    return [
+        _planning_task(tenant, project, name=f"Backlog task {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+# ==================================================================================================
+# Fixtures — host projects, one row per interesting state, the 7.2 client set
+# ==================================================================================================
+
+@pytest.fixture
+def planning_project_a(db, tenant_a, admin_user):
+    """Tenant A's ACTIVE planning host (charter approved — the stage a plan lives in).
+
+    Built through the 7.1 factory; every 7.2 row hangs off this or ``planning_project_b``.
+    """
+    return _projectinitiation_project(
+        tenant_a, name="Planning host Alpha", code="PLA-01", status="active",
+        charter_status="approved", charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def planning_project_b(db, tenant_b, admin_b):
+    """Tenant B's ACTIVE planning host — the cross-tenant target every 404/foreign-FK test needs."""
+    return _projectinitiation_project(
+        tenant_b, name="Planning host Beta", code="PLB-01", status="active",
+        charter_status="approved", charter_approved_by=admin_b,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        created_by=admin_b)
+
+
+@pytest.fixture
+def planning_task_a(db, planning_project_a):
+    """A default tenant A work package — the detail/edit/delete round-trip subject."""
+    return _planning_task(planning_project_a.tenant, planning_project_a)
+
+
+@pytest.fixture
+def planning_task_b(db, planning_project_b):
+    """Tenant B's work package — 404 as tenant A on detail/edit/delete, absent from A's register,
+    refused as a crafted ``parent`` / ``anchor_task`` / dependency-endpoint FK."""
+    return _planning_task(planning_project_b.tenant, planning_project_b)
+
+
+@pytest.fixture
+def planning_dependency_a(db, planning_project_a):
+    """A ``finish_to_start`` edge between two factory tasks on project A; the endpoints are
+    reachable as ``.predecessor`` / ``.successor``."""
+    tenant = planning_project_a.tenant
+    return _planning_dependency(
+        tenant,
+        _planning_task(tenant, planning_project_a),
+        _planning_task(tenant, planning_project_a))
+
+
+@pytest.fixture
+def planning_dependency_b(db, planning_project_b):
+    """Tenant B's dependency — 404 as tenant A on detail/edit/delete."""
+    tenant = planning_project_b.tenant
+    return _planning_dependency(
+        tenant,
+        _planning_task(tenant, planning_project_b),
+        _planning_task(tenant, planning_project_b))
+
+
+@pytest.fixture
+def planning_milestone_a(db, planning_project_a):
+    """A ``planned`` tenant A milestone — the ``mst_achieve`` happy path / the member I4 page."""
+    return _planning_milestone(planning_project_a.tenant, planning_project_a)
+
+
+@pytest.fixture
+def planning_milestone_b(db, planning_project_b):
+    """Tenant B's milestone — 404 as tenant A on detail/edit/delete and on ``mst_achieve``."""
+    return _planning_milestone(planning_project_b.tenant, planning_project_b)
+
+
+@pytest.fixture
+def planning_baseline_whatif_a(db, planning_project_a):
+    """An editable ``what_if`` scenario — ``bsl_promote``'s happy-path row, and the shape the
+    frozen-row refusals must NOT trigger on."""
+    return _planning_baseline(planning_project_a.tenant, planning_project_a)
+
+
+@pytest.fixture
+def planning_baseline_frozen_a(db, planning_project_a):
+    """A ``baseline``-typed row that is NOT active — frozen (``bsl_edit``/``bsl_delete`` refuse
+    it) and yet a valid ``bsl_activate`` target."""
+    return _planning_baseline(planning_project_a.tenant, planning_project_a,
+                              name="Frozen baseline", baseline_type="baseline")
+
+
+@pytest.fixture
+def planning_baseline_active_a(db, planning_project_a):
+    """The project's managed baseline: ``baseline`` type, ``is_active=True`` — what activate and
+    promote must TAKE OVER FROM, and what edit/delete refuse twice over."""
+    return _planning_baseline(planning_project_a.tenant, planning_project_a,
+                              name="Active baseline", baseline_type="baseline", is_active=True)
+
+
+@pytest.fixture
+def planning_baseline_b(db, planning_project_b):
+    """Tenant B's what-if — 404 as tenant A on detail/edit/delete and on both baseline verbs."""
+    return _planning_baseline(planning_project_b.tenant, planning_project_b)
+
+
+# ==================================================================================================
+# Extra actors + clients (mirror the 7.1 set one-for-one, with distinct identities)
+# ==================================================================================================
+
+@pytest.fixture
+def planning_member_b(db, tenant_b):
+    """A NON-admin member of tenant B (the admin_b-shaped member). Separates the two refusals on
+    the admin-gated verbs: a tenant-B member hitting a tenant-A pk must 404 on scope, never 403 on
+    role — and a tenant-A member (root ``member_user``) must 403 before any lookup."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="planning-member@globex.com", username="member_globex_plan",
+        password="TestPass123!", tenant=tenant_b, is_tenant_admin=False)
+
+
+@pytest.fixture
+def planning_tenantless_user(db):
+    """A logged-in user with ``tenant=None`` — the superuser shape. The four 7.2 create views guard
+    this on their FIRST line and redirect to ``dashboard:home``; the registers render empty."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="planning-drifter@example.com", username="planning_drifter",
+        password="TestPass123!", tenant=None)
+
+
+@pytest.fixture
+def planning_tenantless_client(db, planning_tenantless_user):
+    """Logged in, ``request.tenant is None``. Registers render empty; creates redirect away."""
+    client = Client()
+    client.force_login(planning_tenantless_user)
+    return client
+
+
+@pytest.fixture
+def planning_anon_client(db):
+    """Unauthenticated — every 7.2 view is ``@login_required``, so each must redirect to login."""
+    return Client()
+
+
+@pytest.fixture
+def planning_csrf_client(db, admin_user):
+    """Tenant A admin on a client that ENFORCES CSRF. A POST without a token must be 403."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    return client
+
+
+@pytest.fixture
+def planning_wbs_tree_a(db, planning_project_a):
+    """The 2-deliverable × 2-work-package tree (see ``_planning_wbs_tree``) on project A — the
+    tree-view, WBS-code, rollup and critical-chain tests all hang off this one dict."""
+    return _planning_wbs_tree(planning_project_a.tenant, planning_project_a)
