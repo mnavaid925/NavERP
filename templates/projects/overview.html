@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders and kickoff — the 7.1 initiation chain. Planning, resourcing, cost, risk and the rest of Module 7 are separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff — and now the 7.2 planning layer: WBS, dependencies, milestones and baselines. Resourcing, cost, risk and the rest of Module 7 are separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -20,6 +20,10 @@
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="activity"></i></div><div class="stat-value">{{ active_projects }}</div><div class="stat-label">Active</div></div>
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ stakeholder_count }}</div><div class="stat-label">Stakeholders</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="rocket"></i></div><div class="stat-value">{{ kickoff_count }}</div><div class="stat-label">Kickoffs</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="list-tree"></i></div><div class="stat-value">{{ task_count }}</div><div class="stat-label">WBS nodes</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="git-merge"></i></div><div class="stat-value">{{ dependency_count }}</div><div class="stat-label">Dependencies</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="flag"></i></div><div class="stat-value">{{ milestone_count }}</div><div class="stat-label">Milestones</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="history"></i></div><div class="stat-value">{{ baseline_count }}</div><div class="stat-label">Baselines</div></div>
   </div>
 
   <div class="card">
@@ -48,6 +52,26 @@
               <td class="fw-600"><a href="{% url 'projects:pko_list' %}">Kickoffs</a></td>
               <td>The launch ceremony and the baseline acknowledgement.</td>
               <td><a href="{% url 'projects:pko_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:tsk_tree' %}">WBS Tree</a></td>
+              <td>Hierarchical scope decomposition with the critical chain highlighted.</td>
+              <td><a href="{% url 'projects:tsk_tree' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:dep_list' %}">Dependencies</a></td>
+              <td>Task sequencing — link types, lag and lead between work packages.</td>
+              <td><a href="{% url 'projects:dep_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:mst_list' %}">Milestones</a></td>
+              <td>Decision points and phase-gate criteria on every timeline.</td>
+              <td><a href="{% url 'projects:mst_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:bsl_list' %}">Baselines</a></td>
+              <td>Frozen schedules and what-if scenarios, with the active baseline flagged.</td>
+              <td><a href="{% url 'projects:bsl_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>
