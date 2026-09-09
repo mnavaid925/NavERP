@@ -26,6 +26,13 @@ Per tenant it builds one honest end-to-end chain:
   units (named, placeholder, request-linked, and a released→successor substitution chain), and
   sixteen time entries across three ISO weeks covering all four statuses — the approval queue
   and the actuals-to-plan comparison ship with real rows.
+* **7.4 Cost & Budget Management** (``_cost``, its own guard): an approved-and-activated
+  revision 0 per planned project (it IS the cost baseline) plus a draft sketch revision and a
+  pending-approval scope change (+50,000.00 ``amount_delta``), budget lines across all seven
+  categories anchored to the WBS work packages, one control account per active-project
+  deliverable tuned so all three CPI health bands render, and expenses covering every entry
+  type and status — posted commitments with PO strings, actuals, accruals, one void row and one
+  draft.
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -43,7 +50,11 @@ from django.utils import timezone
 from apps.core.models import Activity, OrgUnit, Party, PartyRole, Tenant
 from apps.core.utils import write_audit_log
 from apps.projects.models import (
+    BudgetRevision,
+    CostControlAccount,
     Project,
+    ProjectBudgetLine,
+    ProjectExpense,
     ProjectKickoff,
     ProjectMilestone,
     ProjectRequest,
@@ -167,12 +178,14 @@ DRAFT_MILESTONES = [
 
 
 class Command(BaseCommand):
-    help = "Seed Module 7 Project Management demo data (7.1 Initiation, 7.2 Planning, 7.3 Resourcing)."
+    help = ("Seed Module 7 Project Management demo data (7.1 Initiation, 7.2 Planning, "
+            "7.3 Resourcing, 7.4 Cost & Budget).")
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(time entries, allocations, resource profiles, baselines, milestones, "
+                  "(expenses, budget lines, control accounts, budget revisions, "
+                  "time entries, allocations, resource profiles, baselines, milestones, "
                   "dependencies, tasks, kickoffs, stakeholders, projects, requests) - "
                   "not just seeder-created ones."))
 
@@ -180,7 +193,13 @@ class Command(BaseCommand):
         if options["flush"]:
             # Children first: dependencies and milestones hang off tasks, tasks and baselines
             # hang off projects, requests own the converted_project link (SET_NULL). 7.3's rows
-            # hang off all of the above, so they go before everything else.
+            # hang off all of the above, so they go before everything else. 7.4's hang off
+            # projects/tasks/revisions/accounts: expenses first, then lines, then the accounts
+            # and revisions they point at.
+            ProjectExpense.objects.all().delete()
+            ProjectBudgetLine.objects.all().delete()
+            CostControlAccount.objects.all().delete()
+            BudgetRevision.objects.all().delete()
             ResourceTimeEntry.objects.all().delete()
             ResourceAllocation.objects.all().delete()
             ResourceProfile.objects.all().delete()
@@ -246,6 +265,8 @@ class Command(BaseCommand):
         self._planning(tenant, now)
         # 7.3 has its OWN guard too, same reasoning as 7.2's.
         self._resourcing(tenant, now)
+        # 7.4 has its OWN guard, same reasoning again.
+        self._cost(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -502,6 +523,186 @@ class Command(BaseCommand):
             decision_note="Client call overran - re-log the extra hour under support.")
         rte(r1, this_monday + timedelta(days=3), Decimal("2.00"), project=None,
             description="Internal training")
+
+    # -- 7.4 cost & budget --------------------------------------------------------------------------
+
+    def _cost(self, tenant, now):
+        """Budget revisions + control accounts + budget lines + expenses, guarded per tenant.
+
+        Revision 0 of the active and chartered projects is approved AND activated — it IS the
+        cost baseline the EVM panel measures; the draft project's revision 0 stays draft. One
+        control account per deliverable of the active project, with progress + posted spend
+        tuned so all three CPI health bands appear: CA-1 over (spend past earned, available
+        negative), CA-2 watch (CPI between 0.95 and 1.00), CA-3 under (nothing posted yet). A
+        pending-approval revision 1 on the active project is the change request an approver
+        weighs (amount_delta +50,000.00). Expenses cover every entry type and status: posted
+        commitments whose ``source_number`` is a PO STRING (soft reference — 4.x/6.x own the PO
+        engine), posted actuals and accruals, one void row (visible, not counting) and one
+        draft (burns nothing). CA-3 deliberately receives no posted actual/accrual: its
+        "under" band is the no-actuals CPI-None case.
+        """
+        if BudgetRevision.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: cost rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        projects = list(Project.objects.filter(tenant=tenant))
+        active = next((p for p in projects if p.status == "active"), None)
+        chartered = next((p for p in projects if p.status == "chartered"), None)
+        draft = next((p for p in projects if p.status == "draft"), None)
+        currency = self._currency()
+        vendor = Party.objects.filter(tenant=tenant).order_by("id").first()
+        manager = next((p.project_manager for p in projects if p.project_manager_id), None)
+        today = timezone.localdate()
+
+        def revision(project, no, title, status, reason, activate=False):
+            obj = BudgetRevision(
+                tenant=tenant, project=project, revision_no=no, title=title,
+                currency=currency, status=status, reason=reason, requested_by=manager,
+                requested_at=now if status != "draft" else None,
+                decided_by=manager if status in ("approved", "rejected") else None,
+                decided_at=now if status in ("approved", "rejected") else None,
+                activated_at=now if activate else None)
+            obj.save()
+            return obj
+
+        def line(rev, category, amount, wbs=None, account=None, note=""):
+            obj = ProjectBudgetLine(
+                tenant=tenant, budget_revision=rev, project=rev.project,
+                category=category, amount=Decimal(amount), wbs_node=wbs,
+                control_account=account, note=note)
+            obj.save()
+            return obj
+
+        def account(project, code, name, wbs, contingency, pct, status="active"):
+            obj = CostControlAccount(
+                tenant=tenant, project=project, code=code, name=name, wbs_node=wbs,
+                contingency=Decimal(contingency), percent_complete=Decimal(pct),
+                status=status,
+                note="Progress attested at the weekly cost review; task-level execution "
+                     "supersedes it.")
+            obj.save()
+            return obj
+
+        def expense(proj, acct, entry_type, amount, day_offset, status="posted",
+                    source_kind="manual", source_number="", vendor_row=None,
+                    description=""):
+            obj = ProjectExpense(
+                tenant=tenant, project=proj, control_account=acct, entry_type=entry_type,
+                source_kind=source_kind, source_number=source_number,
+                vendor=vendor_row, amount=Decimal(amount), currency=currency,
+                entry_date=today + timedelta(days=day_offset), status=status,
+                description=description)
+            obj.save()
+            return obj
+
+        with transaction.atomic():
+            if active is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=active)}
+                base = revision(active, 0, "Original budget — release 3", "approved",
+                                "Bottom-up estimate from the WBS work packages, approved at "
+                                "the discovery gate.", activate=True)
+                ca1 = account(active, "CA-1.0", "Discovery & design",
+                              tasks.get("Discovery & design"), "10000.00", "95.00")
+                ca2 = account(active, "CA-2.0", "Self-service ordering",
+                              tasks.get("Self-service ordering"), "20000.00", "50.00")
+                ca3 = account(active, "CA-3.0", "Returns module",
+                              tasks.get("Returns module"), "15000.00", "0.00")
+                line(base, "labor", "60000.00", tasks.get("Requirements workshops"), ca1)
+                line(base, "labor", "80000.00", tasks.get("UX design: ordering"), ca1)
+                line(base, "material", "15000.00", tasks.get("Technical spike: SSO"), ca1)
+                line(base, "labor", "150000.00", tasks.get("Order API"), ca2)
+                line(base, "labor", "120000.00", tasks.get("Cart UI"), ca2)
+                line(base, "subcontract", "90000.00", tasks.get("Checkout integration"), ca2)
+                line(base, "equipment", "40000.00", tasks.get("Returns portal UI"), ca3)
+                line(base, "labor", "60000.00", tasks.get("Refund service hooks"), ca3)
+                line(base, "overhead", "18000.00",
+                     note="Workspace, tooling and licences — not charged to a control account.")
+                line(base, "contingency", "25000.00",
+                     note="Management-held reserve outside the control accounts.")
+
+                # The change request under approval: a full replacement budget (a revision
+                # carries the whole line set, so amount_delta reads total-vs-total) that adds
+                # security and monitoring scope and raises the Cart UI line by 10,000.
+                change = revision(active, 1, "Scope change: security & monitoring", "pending_approval",
+                                  "Client security review asked for hardening and observability "
+                                  "before beta.")
+                for src in base.lines.all():
+                    line(change, src.category, src.amount, src.wbs_node, src.control_account,
+                         note=src.note)
+                line(change, "labor", "25000.00", account=ca2, note="NEW: security hardening "
+                                                                     "of the order API.")
+                line(change, "equipment", "15000.00", account=ca2, note="NEW: monitoring "
+                                                                        "tooling.")
+                cl = change.lines.filter(category="labor",
+                                         wbs_node=tasks.get("Cart UI")).first()
+                if cl is not None:
+                    cl.amount = Decimal("130000.00")
+                    cl.save()
+
+                # CPI bands: CA-1 over (160,000 posted vs 147,250 earned), CA-2 watch
+                # (185,000 posted vs 180,000 earned -> CPI 0.97), CA-3 under (nothing posted).
+                expense(active, ca1, "actual", "95000.00", -50, source_kind="purchase_order",
+                        source_number="PO-00021", vendor_row=vendor,
+                        description="Discovery subcontract")
+                expense(active, ca1, "actual", "40000.00", -45,
+                        source_kind="supplier_invoice", source_number="SIV-00102",
+                        vendor_row=vendor, description="Research incentives")
+                expense(active, ca1, "accrual", "25000.00", -35, source_kind="accrual",
+                        description="Design contractor accrual")
+                expense(active, ca1, "actual", "8000.00", -15,
+                        source_kind="supplier_invoice", source_number="SIV-00131",
+                        vendor_row=vendor, status="void",
+                        description="Duplicate invoice — voided, does not count")
+                expense(active, ca2, "actual", "105000.00", -30, source_kind="purchase_order",
+                        source_number="PO-00031", vendor_row=vendor,
+                        description="Order API build sprint")
+                expense(active, ca2, "actual", "70000.00", -20,
+                        source_kind="supplier_invoice", source_number="SIV-00119",
+                        vendor_row=vendor, description="Cart UI contractor")
+                expense(active, ca2, "commitment", "45000.00", -5,
+                        source_kind="purchase_order", source_number="PO-00044",
+                        vendor_row=vendor, description="Checkout integration subcontract")
+                expense(active, ca2, "commitment", "12000.00", 10,
+                        source_kind="purchase_order", source_number="PO-00058",
+                        vendor_row=vendor, description="Load-testing rig")
+                expense(active, ca2, "accrual", "7000.00", -2, source_kind="accrual",
+                        description="Cloud spend accrual")
+                expense(active, ca2, "accrual", "3000.00", -1, source_kind="accrual",
+                        description="Monitoring licences accrual")
+                expense(active, ca3, "commitment", "20000.00", 3,
+                        source_kind="purchase_order", source_number="PO-00051",
+                        vendor_row=vendor, description="Returns kiosk hardware")
+                expense(active, ca2, "actual", "5000.00", 1, status="draft",
+                        description="Draft: awaiting the vendor's final invoice")
+            if chartered is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=chartered)}
+                base = revision(chartered, 0, "Original budget — scorecard rollout",
+                                "approved",
+                                "Planning-stage estimate; approved alongside the charter.",
+                                activate=True)
+                line(base, "labor", "60000.00", tasks.get("Metric definitions"))
+                line(base, "equipment", "45000.00", tasks.get("Data collection pipeline"))
+                line(base, "labor", "55000.00", tasks.get("Publishing workflow"))
+                line(base, "subcontract", "30000.00",
+                     note="Data migration partner — booking pending.")
+                line(base, "overhead", "12000.00")
+                line(base, "contingency", "15000.00")
+            if draft is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=draft)}
+                sketch = revision(draft, 0, "Draft budget — fleet programme", "draft",
+                                  "First sketch to size the programme — not yet submitted.")
+                line(sketch, "labor", "30000.00", tasks.get("Vehicle lifecycle audit"))
+                line(sketch, "material", "8000.00", tasks.get("Leasing market scan"))
+                line(sketch, "contingency", "10000.00")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {BudgetRevision.objects.filter(tenant=tenant).count()} budget "
+            f"revisions, {ProjectBudgetLine.objects.filter(tenant=tenant).count()} budget "
+            f"lines, {CostControlAccount.objects.filter(tenant=tenant).count()} control "
+            f"accounts, {ProjectExpense.objects.filter(tenant=tenant).count()} expenses."))
 
     def _wbs(self, tenant, project, manager, today, spec):
         """Build the WBS from a spec; return a name -> task map for the dependency specs.
