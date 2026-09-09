@@ -36,3 +36,9 @@ from .ProjectPlanningScheduling.TaskDependencies import TaskDependency  # noqa: 
 from .ResourceManagement.ResourceAllocations import ResourceAllocation  # noqa: F401
 from .ResourceManagement.ResourceProfiles import ResourceProfile  # noqa: F401
 from .ResourceManagement.ResourceTimeEntries import ResourceTimeEntry  # noqa: F401
+
+# --- 7.4 Cost & Budget Management -------------------------------------------------------------
+from .CostManagement.BudgetRevisions import BudgetRevision  # noqa: F401
+from .CostManagement.CostControlAccounts import CostControlAccount  # noqa: F401
+from .CostManagement.ProjectBudgetLines import ProjectBudgetLine  # noqa: F401
+from .CostManagement.ProjectExpenses import ProjectExpense  # noqa: F401
