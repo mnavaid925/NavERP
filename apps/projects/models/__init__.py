@@ -31,3 +31,8 @@ from .ProjectPlanningScheduling.ProjectMilestones import ProjectMilestone  # noq
 from .ProjectPlanningScheduling.ProjectTasks import ProjectTask  # noqa: F401
 from .ProjectPlanningScheduling.ScheduleBaselines import ScheduleBaseline  # noqa: F401
 from .ProjectPlanningScheduling.TaskDependencies import TaskDependency  # noqa: F401
+
+# --- 7.3 Resource Management ------------------------------------------------------------------
+from .ResourceManagement.ResourceAllocations import ResourceAllocation  # noqa: F401
+from .ResourceManagement.ResourceProfiles import ResourceProfile  # noqa: F401
+from .ResourceManagement.ResourceTimeEntries import ResourceTimeEntry  # noqa: F401
