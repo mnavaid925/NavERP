@@ -17,7 +17,7 @@
     <div class="card-body">
       <form method="get" class="filter-bar">
         <div class="form-group">
-          <select name="project" class="form-select" onchange="this.form.submit()">
+          <select name="project" aria-label="Project" class="form-select" onchange="this.form.submit()">
             <option value="">Choose a project…</option>
             {% for p in projects %}
               <option value="{{ p.pk }}" {% if project and project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
@@ -41,7 +41,7 @@
             <p>Add a deliverable (or a root work package) with the Parent field left empty to root the tree.</p>
           {% else %}
             <h3>No projects to break down</h3>
-            <p>Create a project first — the WBS decomposes a project's scope.</p>
+            <p><a href="{% url 'projects:prj_create' %}">Create a project first</a> — the WBS decomposes a project's scope.</p>
           {% endif %}
         </div>
       {% endif %}
