@@ -85,3 +85,36 @@ from .ProjectPlanningScheduling.TaskDependencies import (  # noqa: F401
     dep_edit,
     dep_list,
 )
+
+# --- 7.3 Resource Management ------------------------------------------------------------------
+from .ResourceManagement.CapacityDemand import capacity_demand  # noqa: F401
+from .ResourceManagement.ResourceAllocations import (  # noqa: F401
+    ral_assign,
+    ral_cancel,
+    ral_commit,
+    ral_complete,
+    ral_create,
+    ral_delete,
+    ral_detail,
+    ral_edit,
+    ral_list,
+    ral_substitute,
+)
+from .ResourceManagement.ResourceProfiles import (  # noqa: F401
+    rsp_create,
+    rsp_delete,
+    rsp_detail,
+    rsp_edit,
+    rsp_list,
+)
+from .ResourceManagement.ResourceTimeEntries import (  # noqa: F401
+    rte_approve,
+    rte_approve_week,
+    rte_create,
+    rte_delete,
+    rte_detail,
+    rte_edit,
+    rte_list,
+    rte_reject,
+    rte_submit,
+)
