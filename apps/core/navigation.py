@@ -1728,6 +1728,21 @@ LIVE_LINKS = {
         # NavERP.md bullet are appended to the sub-module by the parser).
         "Task Register":                         "projects:tsk_list",
     },
+    # ----- 7.3 Resource Management -----
+    "7.3": {
+        "Resource Pool & Skills Inventory":      "projects:rsp_list",
+        # The leveling bullet lands on the computed capacity board — bookings vs capacity with
+        # over-allocation alerts and the manual-rebalance lens (7.2's lens-on-a-register
+        # precedent; the smoothing engine is deliberately not built).
+        "Resource Allocation & Leveling":        "projects:capacity_demand",
+        "Team Assembly & Role Assignment":       "projects:ral_list",
+        # The forecasting bullet is the demand section of the same board (`#demand` fragment —
+        # the 6.13 `#search` precedent; `_safe_reverse` supports `url#frag`).
+        "Resource Forecasting & Demand Planning": "projects:capacity_demand#demand",
+        "Time Tracking & Timesheets":            "projects:rte_list",
+        # Extra live leaf: the approval queue is the register's `?status=submitted` lens.
+        "Time Approvals":                        "projects:rte_list?status=submitted",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
