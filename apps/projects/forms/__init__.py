@@ -34,3 +34,12 @@ from .ProjectPlanningScheduling.TaskDependencies import TaskDependencyForm  # no
 from .ResourceManagement.ResourceAllocations import ResourceAllocationForm  # noqa: F401
 from .ResourceManagement.ResourceProfiles import ResourceProfileForm  # noqa: F401
 from .ResourceManagement.ResourceTimeEntries import ResourceTimeEntryForm  # noqa: F401
+
+# --- 7.4 Cost & Budget Management -------------------------------------------------------------
+from .CostManagement.BudgetRevisions import (  # noqa: F401
+    BudgetRevisionDecisionForm,
+    BudgetRevisionForm,
+)
+from .CostManagement.CostControlAccounts import CostControlAccountForm  # noqa: F401
+from .CostManagement.ProjectBudgetLines import ProjectBudgetLineForm  # noqa: F401
+from .CostManagement.ProjectExpenses import ProjectExpenseForm  # noqa: F401
