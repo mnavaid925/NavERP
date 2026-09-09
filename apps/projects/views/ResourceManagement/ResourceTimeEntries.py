@@ -84,6 +84,14 @@ def rte_list(request):
     today = timezone.localdate()
     year = as_db_int(request.GET.get("year"))
     week = as_db_int(request.GET.get("week"))
+    # L11: a year that cannot exist (0, or 9999+ — the ISO bounds compute year+1, so 9999
+    # itself already overflows) can never match a row — but Django's year-lookup bounds
+    # RAISE on it inside .count(). Empty the register up front instead (qs.none()
+    # short-circuits the bounds compile). ?week=0/99 need no guard: SQL WEEK() simply
+    # matches nothing, which is the contract's documented behavior.
+    if year is not None and not 1 <= year <= 9998:
+        qs = qs.none()
+        year = None
     if year is None or week is None:
         iso = today.isocalendar()
         year, week = iso[0], iso[1]
