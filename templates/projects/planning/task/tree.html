@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Work Breakdown Structure{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Work Breakdown Structure</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><span>WBS Tree</span></div>
+      {% if project %}<p class="text-muted">{{ project.number }} — {{ project.name }}. Deliverables roll their children up; red nodes sit on the project's critical chain.</p>{% endif %}
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:tsk_list' %}" class="btn btn-outline"><i data-lucide="list"></i> List View</a>
+      {% if project %}<a href="{% url 'projects:tsk_create' %}?project={{ project.pk }}" class="btn btn-primary"><i data-lucide="plus"></i> New Task</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="project" class="form-select" onchange="this.form.submit()">
+            <option value="">Choose a project…</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project and project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <span class="text-muted">Hierarchical task decomposition — deliverables map to work packages, depth capped for rendering.</span>
+      </form>
+    </div>
+    <div class="card-body">
+      {% if roots %}
+        <ul style="list-style:none; margin:0; padding:0;">
+          {% for node in roots %}
+            {% include "projects/planning/task/_tree_node.html" with node=node depth=1 %}
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state"><i data-lucide="git-fork"></i>
+          {% if project %}
+            <h3>No WBS yet for {{ project.name }}</h3>
+            <p>Add a deliverable (or a root work package) with the Parent field left empty to root the tree.</p>
+          {% else %}
+            <h3>No projects to break down</h3>
+            <p>Create a project first — the WBS decomposes a project's scope.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
