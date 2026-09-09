@@ -134,3 +134,25 @@ None found. Cleared: every list routes through `crud_list` (filters before Pagin
 - Overview's 8 queries fine (6 spans 6 tables — cannot share without UNION hacks).
 - Seeder 7.2 block: exactly 2 queries/row (index-backed next_number + INSERT), single transaction, no per-row audit logs or FK dereference surprises.
 - Filter index coverage: TSK/MST/BSL/DEP indexes serve the view filters, the sibling-deactivation UPDATE, and both `tsk_detail` link sides; unindexed facets are low-cardinality.
+
+---
+
+## 5. qa-smoke-tester
+
+Runtime verification against dev DB (migrated + seeded), in-process test client, harness `temp/smoke_72_qa.py` (gitignored, not committed). Final run: **101/102 checks passed; 1 failed = F1 below; 0 source files touched; all throwaway rows deleted and seeded state restored.**
+
+### Verified
+
+- **Seeded render sweep (L8 content asserts):** all 16 sub-module URLs + overview → 200 as admin_acme with real seeded content (TSK/DEP/MST/BSL rows, "Finish-to-Start", frozen `badge badge-green`); WBS tree shows wbs_code badges (`1`, `1.1`), `>Critical<`, deliverable rollups, project picker with `?project=` selection; no `{#` / `{% comment` leaks.
+- **CRUD round-trips** (row counts restored): task create→detail (TSK- number)→edit→search→delete→404; dependency create/edit(lag −3)/delete; milestone create→achieve (stamped exactly once)→re-achieve refused→edit back to planned clears actual_date→delete.
+- **Baseline machinery:** what_if born without snapshot/inactive; activate-on-what_if refused; what_if editable; promote flips type + writes snapshot (11 / 2026-11-23 / 668.00 = live aggregates) + activates + deactivates the old active; frozen edit AND delete POSTs refused with message, row survives; born-frozen create snapshots and takes over.
+- **Validation guards:** date-order error; cross-project dep endpoints error; self-dependency error; parent=own-descendant error with parent unchanged; cross-tenant crafted POST → field error, no row.
+- **Tenancy:** 404 on all 15 Globex pk probes (detail/edit/delete ×4 entities + 3 verbs), rows untouched; superuser sees empty registers, zero leaks; junk enums/pks/pages all 200 with register intact.
+- **Pagination:** with 39 tasks, page 2 renders rows + "Showing 16–30 of 39" + windowed links; page 3 too.
+- **Sidebar:** 7.2 shows all five bullets + Task Register; all 11 `/projects/…` hrefs resolve 200.
+
+### Findings
+
+- **F1 — Important: a task can be nested under a parent from a *different project*, making it invisible in every WBS tree.** Repro: POST tsk_create with Acme project A + parent in Acme project B → 302, row created; the task renders in NEITHER project's tree (`_decorate_wbs` walks per-project tasks; the node is neither root nor rendered child). Same root cause as lane 1's Critical (missing `parent.project == project` check in `TaskForm.clean`/model clean). Expected: field error on `parent`, no row.
+- **F2 — Minor (informational, layered defense): `_reject_foreign` is a dead second layer for FK pks on creates** — TenantModelForm's queryset scoping rejects a foreign pk first ("Select a valid choice."), so the "That record belongs to another workspace." message is unreachable on that vector. Security outcome identical (no row, field error).
+- **F3 — Minor (housekeeping): pre-existing seeded-state drift on Acme from the earlier verb smoke run** (`temp/smoke_72_verbs.py` promoted BSL-00002 and achieved MST-00003 on Acme only). Not a seed bug; noted so the Acme/Globex asymmetry isn't misread.
