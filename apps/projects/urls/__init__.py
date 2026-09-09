@@ -27,6 +27,10 @@ from .ResourceManagement.CapacityDemand import urlpatterns as _rm_capacitydemand
 from .ResourceManagement.ResourceAllocations import urlpatterns as _rm_allocations
 from .ResourceManagement.ResourceProfiles import urlpatterns as _rm_profiles
 from .ResourceManagement.ResourceTimeEntries import urlpatterns as _rm_timeentries
+from .CostManagement.BudgetRevisions import urlpatterns as _cm_budgetrevisions
+from .CostManagement.CostControlAccounts import urlpatterns as _cm_controlaccounts
+from .CostManagement.ProjectBudgetLines import urlpatterns as _cm_budgetlines
+from .CostManagement.ProjectExpenses import urlpatterns as _cm_expenses
 
 app_name = "projects"
 
@@ -48,4 +52,10 @@ urlpatterns = (
     + _rm_allocations
     + _rm_timeentries
     + _rm_capacitydemand
+    # 7.4 Cost & Budget Management — first segments (budgetlines/, revisions/,
+    # controlaccounts/, expenses/) are disjoint literals from 7.1's, 7.2's and 7.3's.
+    + _cm_budgetlines
+    + _cm_controlaccounts
+    + _cm_budgetrevisions
+    + _cm_expenses
 )
