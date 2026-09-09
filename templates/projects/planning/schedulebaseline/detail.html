@@ -13,7 +13,7 @@
           <button class="btn btn-primary" type="submit"><i data-lucide="award"></i> Promote to Baseline</button>
         </form>
       {% elif not obj.is_active %}
-        <form method="post" action="{% url 'projects:bsl_activate' obj.pk %}" onsubmit="return confirm('Make baseline {{ obj.number }} the active baseline for {{ obj.project.name }}? The current active baseline is deactivated.');">{% csrf_token %}
+        <form method="post" action="{% url 'projects:bsl_activate' obj.pk %}" onsubmit="return confirm('Make baseline {{ obj.number }} the active baseline? The current active baseline is deactivated.');">{% csrf_token %}
           <button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Activate</button>
         </form>
       {% endif %}
