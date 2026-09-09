@@ -15,7 +15,7 @@
         booking and releases the current row.
       {% endcomment %}
       {% if request.user.is_superuser or request.user.is_tenant_admin %}
-        {% if not obj.resource_id and (obj.booking_status == 'requested' or obj.booking_status == 'soft') %}
+        {% if not obj.resource_id and obj.booking_status == 'requested' or obj.booking_status == 'soft' %}
           <form method="post" action="{% url 'projects:ral_assign' obj.pk %}" onsubmit="return confirm('Assign the selected resource to allocation {{ obj.number }}? A requested booking becomes soft-booked.');">
             {% csrf_token %}
             <select name="resource" aria-label="Resource to assign" class="form-select" style="width:auto;">
@@ -27,7 +27,7 @@
             <button class="btn btn-primary" type="submit"><i data-lucide="user-check"></i> Assign</button>
           </form>
         {% endif %}
-        {% if obj.resource_id and (obj.booking_status == 'soft' or obj.booking_status == 'firm') %}
+        {% if obj.resource_id and obj.booking_status == 'soft' or obj.booking_status == 'firm' %}
           <form method="post" action="{% url 'projects:ral_substitute' obj.pk %}" onsubmit="return confirm('Substitute the selected resource on allocation {{ obj.number }}? The current booking is released and a successor booking is created.');">
             {% csrf_token %}
             <select name="resource" aria-label="Replacement resource" class="form-select" style="width:auto;">
