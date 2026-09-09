@@ -103,3 +103,7 @@ class ProjectTask(TenantNumbered):
         super().clean()
         if self.planned_start and self.planned_end and self.planned_end < self.planned_start:
             raise ValidationError({"planned_end": "Planned end cannot precede planned start."})
+        if self.parent_id and self.project_id \
+                and self.parent.project_id != self.project_id:
+            raise ValidationError({"parent": "The parent task must belong to the same project "
+                                             "as the task."})
