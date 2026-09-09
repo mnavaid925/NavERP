@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Budget Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Budget Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Budget Register</span></div>
+      <p class="text-muted">Every budgeted amount, per category and per revision — the bottom-up rollup the cost baseline is built from. Lines of the approved-and-activated revision are the baseline.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pbl_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Budget Line</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Totals in the current filter</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th class="ta-right">Amount</th></tr></thead>
+        <tbody>
+          {% for cat, total in category_totals.items %}
+            <tr><td>{{ cat|title }}</td><td class="ta-right">{{ total }}</td></tr>
+          {% empty %}
+            <tr><td colspan="2" class="text-muted">No budget lines in the current filter.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td class="fw-600">Total</td><td class="ta-right fw-600">{{ grand_total }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or notes…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="budget_revision" aria-label="Revision" class="form-select">
+            <option value="">Any revision</option>
+            {% for r in revisions %}
+              <option value="{{ r.pk }}" {% if request.GET.budget_revision == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }} — {{ r.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">Any category</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="control_account" aria-label="Control account" class="form-select">
+            <option value="">Any control account</option>
+            {% for ca in control_accounts %}
+              <option value="{{ ca.pk }}" {% if request.GET.control_account == ca.pk|stringformat:"d" %}selected{% endif %}>{{ ca.code }} — {{ ca.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:pbl_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Line</th><th>Revision</th><th>Project</th><th>Category</th><th>WBS node</th><th>Control account</th><th class="ta-right">Amount</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pbl_detail' obj.pk %}">{{ obj.number }}</a></td>
+              <td><a href="{% url 'projects:bvr_detail' obj.budget_revision_id %}">{{ obj.budget_revision.number }}</a></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</td>
+              <td>{% if obj.control_account %}<a href="{% url 'projects:cca_detail' obj.control_account_id %}">{{ obj.control_account.code }}</a>{% else %}—{% endif %}</td>
+              <td class="ta-right fw-600">{{ obj.amount }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pbl_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:pbl_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:pbl_delete' obj.pk %}" onsubmit="return confirm('Delete budget line {{ obj.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-plus"></i><h3>No budget lines match</h3><p>Add lines to a budget revision — labor, material, equipment, subcontract, overhead and contingency.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
