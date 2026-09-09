@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Resource{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:rsp_list' %}">Resource Pool</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.get_resource_type_display }} · {{ obj.default_role }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:ral_create' %}?resource={{ obj.pk }}" class="btn btn-outline"><i data-lucide="calendar-plus"></i> Book</a>
+      <a href="{% url 'projects:rsp_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Resource</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Type</dt>
+        <dd>
+          {% if obj.resource_type == 'internal' %}<span class="badge badge-info">{{ obj.get_resource_type_display }}</span>
+          {% elif obj.resource_type == 'contractor' %}<span class="badge badge-amber">{{ obj.get_resource_type_display }}</span>
+          {% elif obj.resource_type == 'freelancer' %}<span class="badge badge-muted">{{ obj.get_resource_type_display }}</span>
+          {% elif obj.resource_type == 'consultant' %}<span class="badge badge-slate">{{ obj.get_resource_type_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_resource_type_display }}</span>{% endif %}
+        </dd>
+        <dt>Role</dt><dd>{{ obj.default_role }}</dd>
+        <dt>Team</dt><dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Capacity</dt><dd>{{ obj.weekly_capacity_hours }}h per week</dd>
+        <dt>Utilization target</dt><dd>{{ obj.utilization_target_pct }}%</dd>
+        <dt>Available from</dt><dd>{{ obj.available_from|date:"M d, Y"|default:"—" }}</dd>
+        <dt>Available to</dt><dd>{{ obj.available_to|date:"M d, Y"|default:"—" }}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        </dd>
+        <dt>Person</dt>
+        <dd>
+          {% if obj.employee_id %}<a href="{% url 'hrm:employee_detail' obj.employee_id %}">{{ obj.employee.party.name }}</a>
+          {% elif obj.party_id %}{{ obj.party.name }}
+          {% else %}{{ obj.number }}{% endif %}
+        </dd>
+        <dt>Skills</dt><dd>{% if obj.skill_summary %}{{ obj.skill_summary }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  {% if obj.employee_id %}
+    {% comment %}
+      The competency matrix and certifications are NOT re-declared in projects — HRM 3.40's
+      EmployeeSkill register owns them. Deep-link this person's rows in that lens.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2>Skills &amp; certifications</h2></div>
+      <div class="card-body">
+        <p class="text-muted">The competency matrix and certifications live in HRM's skills register (3.40) — this is that lens, filtered to this person.</p>
+        <a href="{% url 'hrm:employeeskill_list' %}?employee={{ obj.employee_id }}" class="btn btn-outline"><i data-lucide="award"></i> Open skills register</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2>Bookings</h2></div>
+    <div class="card-body">
+      <a href="{% url 'projects:ral_list' %}?resource={{ obj.pk }}" class="btn btn-outline"><i data-lucide="calendar-range"></i> This resource's allocations</a>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:rsp_list' %}" class="btn btn-outline">Back to Resource Pool</a>
+    <form method="post" action="{% url 'projects:rsp_delete' obj.pk %}" onsubmit="return confirm('Delete resource {{ obj.number }}? Its bookings and time entries are deleted with it. This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
