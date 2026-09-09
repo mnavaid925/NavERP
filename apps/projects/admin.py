@@ -5,7 +5,16 @@ Every changelist declares ``list_select_related`` for the FK columns it renders:
 """
 from django.contrib import admin
 
-from .models import Project, ProjectKickoff, ProjectRequest, ProjectStakeholder
+from .models import (
+    Project,
+    ProjectKickoff,
+    ProjectMilestone,
+    ProjectRequest,
+    ProjectStakeholder,
+    ProjectTask,
+    ScheduleBaseline,
+    TaskDependency,
+)
 
 
 @admin.register(ProjectRequest)
@@ -45,3 +54,45 @@ class ProjectKickoffAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "project")
     search_fields = ("number", "agenda")
     readonly_fields = ("created_at", "updated_at", "completed_at", "baseline_acknowledged_at")
+
+
+# --- 7.2 Project Planning & Scheduling --------------------------------------------------------
+
+@admin.register(ProjectTask)
+class ProjectTaskAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "node_type", "status", "owner", "tenant")
+    list_filter = ("node_type", "status", "estimation_method", "confidence")
+    list_select_related = ("tenant", "project", "owner")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("created_at", "updated_at", "created_by")
+
+
+@admin.register(TaskDependency)
+class TaskDependencyAdmin(admin.ModelAdmin):
+    list_display = ("number", "predecessor", "successor", "link_type", "lag_days", "tenant")
+    list_filter = ("link_type",)
+    # Both endpoints are joined: __str__ renders them, and the changelist calls str(obj) per row.
+    list_select_related = ("tenant", "predecessor", "successor")
+    search_fields = ("number", "note")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ProjectMilestone)
+class ProjectMilestoneAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "is_phase_gate", "status", "target_date",
+                    "actual_date", "tenant")
+    list_filter = ("status", "is_phase_gate")
+    list_select_related = ("tenant", "project", "anchor_task")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("created_at", "updated_at", "actual_date")
+
+
+@admin.register(ScheduleBaseline)
+class ScheduleBaselineAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "baseline_type", "is_active", "frozen_on",
+                    "planned_finish", "task_count", "tenant")
+    list_filter = ("baseline_type", "is_active")
+    list_select_related = ("tenant", "project")
+    search_fields = ("number", "name", "strategy_note", "note")
+    readonly_fields = ("created_at", "updated_at", "frozen_on", "planned_finish", "task_count",
+                       "total_effort_hours")
