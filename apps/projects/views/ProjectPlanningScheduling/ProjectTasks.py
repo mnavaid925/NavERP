@@ -70,7 +70,7 @@ def _decorate_wbs(project):
 @login_required
 def tsk_list(request):
     qs = (ProjectTask.objects.filter(tenant=request.tenant)
-          .select_related("project", "parent", "owner"))
+          .select_related("project", "owner"))
     return crud_list(
         request, qs, "projects/planning/task/list.html",
         search_fields=["name", "number", "description"],
