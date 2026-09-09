@@ -23,3 +23,9 @@ from .ProjectInitiation.ProjectRequests import (  # noqa: F401
 )
 from .ProjectInitiation.ProjectStakeholders import ProjectStakeholderForm  # noqa: F401
 from .ProjectInitiation.Projects import ProjectForm  # noqa: F401
+
+# --- 7.2 Project Planning & Scheduling --------------------------------------------------------
+from .ProjectPlanningScheduling.ProjectMilestones import MilestoneForm  # noqa: F401
+from .ProjectPlanningScheduling.ProjectTasks import TaskForm  # noqa: F401
+from .ProjectPlanningScheduling.ScheduleBaselines import BaselineForm  # noqa: F401
+from .ProjectPlanningScheduling.TaskDependencies import TaskDependencyForm  # noqa: F401
