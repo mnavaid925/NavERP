@@ -156,3 +156,48 @@ Runtime verification against dev DB (migrated + seeded), in-process test client,
 - **F1 — Important: a task can be nested under a parent from a *different project*, making it invisible in every WBS tree.** Repro: POST tsk_create with Acme project A + parent in Acme project B → 302, row created; the task renders in NEITHER project's tree (`_decorate_wbs` walks per-project tasks; the node is neither root nor rendered child). Same root cause as lane 1's Critical (missing `parent.project == project` check in `TaskForm.clean`/model clean). Expected: field error on `parent`, no row.
 - **F2 — Minor (informational, layered defense): `_reject_foreign` is a dead second layer for FK pks on creates** — TenantModelForm's queryset scoping rejects a foreign pk first ("Select a valid choice."), so the "That record belongs to another workspace." message is unreachable on that vector. Security outcome identical (no row, field error).
 - **F3 — Minor (housekeeping): pre-existing seeded-state drift on Acme from the earlier verb smoke run** (`temp/smoke_72_verbs.py` promoted BSL-00002 and achieved MST-00003 on Acme only). Not a seed bug; noted so the Acme/Globex asymmetry isn't misread.
+
+---
+
+# Consolidated triage (authoritative fix list)
+
+Deduped across the six lanes; Critical → Important → Minor; IDs are the fix order. Cross-lane
+duplicates are folded into one item with the lanes that raised it.
+
+## Critical
+
+- [ ] **C1 — A task can be nested under a parent from another project and silently vanishes from every WBS tree.** (code-reviewer Critical; qa F1.) `TaskForm.clean` checks tenant + cycles only; no `parent.project == project` check exists at model level either. Reproduced: cross-project POST → 302, row created, renders in neither tree. Fix in `apps/projects/models/ProjectPlanningScheduling/ProjectTasks.py::clean` (covers form + admin + any non-form path): when both `parent_id` and `project_id` are set and they disagree, `raise ValidationError({"parent": ...})` mirroring the milestone anchor_task guard.
+
+## Important
+
+- [ ] **I1 — `BaselineForm` exposes `baseline_type` on edit: a member can "freeze" a what-if without the gated `bsl_promote`, producing an evidence-less frozen row (no snapshot, audit says `update` not `promote`) that even `bsl_activate` will later accept.** (code-reviewer; explorer; frontend M (form copy contradicted); security I-1.) Fix in `forms/ProjectPlanningScheduling/ScheduleBaselines.py`: once `self.instance.pk` exists, a changed `baseline_type` is a field error ("type is fixed — promote a what-if instead of editing it"); 7.1 precedent: verb-driven fields are excluded/locked on edit.
+- [ ] **I2 — `MilestoneForm` exposes `status`: a member achieves a milestone (even a cancelled one) through the ungated `mst_edit`, bypassing `mst_achieve`'s tenant-admin gate and state guards — gate and guards are decorative.** (code-reviewer M; security I-2.) Fix: drop `"status"` from `MilestoneForm.fields` (7.1 excludes verb-driven status from `ProjectRequestForm`); `mst_achieve` stays the only path. `TaskForm` keeping `status` is correct (planning state, not gated).
+- [ ] **I3 — Stored XSS in the Activate confirm dialog: `{{ obj.project.name }}` interpolated into an `onsubmit` JS string in `schedulebaseline/detail.html:16`.** (security I-3.) HTML escaping does not protect the JS string context (entities decode before the JS engine compiles the handler); `project.name` is member-writable, and even an apostrophe kills the button. Fix: drop the name from the message — interpolate only `obj.number` (system-generated), matching every other confirm in the changeset.
+- [ ] **I4 — Tenant-admin-gated verb buttons render for members (403 buttons): Mark Achieved (milestone detail) and Promote/Activate (baseline detail).** (frontend Important; security M-1.) Fix: wrap each form in `{% if request.user.is_superuser or request.user.is_tenant_admin %}` exactly like 7.1's kickoff/project detail templates, with the why-comment.
+- [ ] **I5 — Task detail's "Add a dependency" links `dep_create?project=<pk>`, a parameter nothing consumes; the dependency form's task dropdowns are then unscoped.** (code-reviewer M; frontend Important.) Fix: link `?predecessor={{ obj.pk }}` (consumed by the view). Scoping the two task dropdowns by project dynamically is REJECTED for this pass (needs JS chaining; the model clean error catches cross-project pairs) — note it as accepted UX debt.
+- [ ] **I6 — Unused `select_related` hops on the two hottest lists: `tsk_list` selects `parent` (never rendered), `mst_list` selects `anchor_task` (never rendered)** — the exact pattern 7.1 measured and pruned (84 columns/row on the task register). (performance I-1.) Fix: drop `"parent"` from the `tsk_list` queryset and `"anchor_task"` from `mst_list`; keep both on the detail views where they render.
+- [ ] **I7 — No committed tests for 7.2.** NOT a code-fixer item: tests are Step 5c of this pipeline, queued after the fixer, and must pin the state guards, cycle guards, critical path, tenancy and this triage's fixes (`test_planning_*` naming, `planning_*` fixtures).
+
+## Minor
+
+- [ ] **M1 — `critical_path_ids` hardening + determinism (perf M-5/M-3 nit; security M-2; code-reviewer Ms):** (a) `duration()` must floor at 1 (`max(task.duration_days or 1, 1)`) so a negative duration can't break the walk-back's decreasing invariant; (b) forward-pass and walk-back tie-breaks must be by `(sequence, id)` as the docstring claims — sort candidate predecessors instead of relying on the dep queryset's pk order; (c) convert the memoised DFS to an ITERATIVE pass (explicit stack / Kahn ordering) with a hard hop cap so a ~1000-task chain cannot RecursionError the tree page; (d) make the docstring's cycle/simplification notes match the implementation exactly.
+- [ ] **M2 — `_decorate_wbs` walk → iterative with a hard depth cap (security M-2):** template recursion is capped at 5 but the Python `walk` is not; a deep parent chain is a member-triggerable 500. Convert to an explicit stack, cap depth (skip beyond cap, mark nothing), and fix the `rolled` docstring to describe real cycle behavior (duplicate subtree re-render up to the cap; disconnected cycle components vanish).
+- [ ] **M3 — TaskForm cycle walk does up to 250 lazy FK queries per POST** (code-reviewer M; security M-3). Fix while doing M1/M2: collect `parent_id`s in a Python loop over a prefetched `{pk: parent_id}` map (one query) instead of `node = node.parent` per hop.
+- [ ] **M4 — `freeze_snapshot()` loads full rows for three scalars** (perf M-4). Fix: one `aggregate(Max("planned_end"), Count("pk"), Sum("effort_hours"))`; keep the q2 clamp semantics.
+- [ ] **M5 — `LIVE_LINKS["7.2"]` order vs NavERP.md/contract:** move "Task Sequencing & Dependency Mapping" before "Duration & Effort Estimation" in `apps/core/navigation.py` (NavERP.md bullet order), then amend the contract's LIVE_LINKS block to match.
+- [ ] **M6 — Overview quick-links:** swap the "WBS Tree" row for a "Task Register" row (contract-pinned; the flat register is currently unreachable from the page body). WBS Tree stays reachable via the sidebar and the task register's button.
+- [ ] **M7 — `tree.html`: add `aria-label="Project"` to the project selector; link "Create a project first" to `projects:prj_create` in the empty state.** (frontend Ms.)
+- [ ] **M8 — `views/_helpers.py` module docstring stale ("These three")** — update for the fourth helper.
+- [ ] **M9 — `ScheduleBaselineAdmin` allows editing `is_active`/`baseline_type` in Django admin, bypassing the atomic deactivate-siblings invariant** (security M-4). Fix: add both to `readonly_fields`.
+- [ ] **M10 — Contract amendments to match as-built decisions** (explorer Ms; main session): (a) TaskForm `_reject_foreign` list is `project`/`parent` only — `owner` deliberately follows 7.1's User-FK precedent (contract line ~90 says owner; fix the contract); (b) seeded shape: active project carries the frozen baseline + what-if, chartered a what-if only, draft none (contract said all three); (c) flush delete order `ScheduleBaseline, TaskDependency, ProjectMilestone, ProjectTask`; (d) quick-links rows are Task Register/Dependencies/Milestones/Baselines; (e) LIVE_LINKS order after M5.
+- [ ] **M11 — Recorded, no action:** qa F2 (queryset scoping rejects foreign pks before `_reject_foreign` — layered defense intact); qa F3 (demo-data drift from the earlier verb smoke run — demo data); frontend's bare `dl.detail-grid` note (app-wide pattern, 7.1-identical); the `description`-TextField drag on the tree fetch (single-consumer template).
+
+## Already fixed during the build (before review)
+
+- `node.kids` decoration instead of `node.children.all` (prefetch-distinct-objects trap, found in smoke).
+
+## Fix order
+
+C1 → I1 → I2 → I3 → I4 → I5 → I6 → M1..M10 (M11 recorded). One file per commit; verify each fix
+(`venv\Scripts\python.exe manage.py check` + targeted re-probe) before marking `[x] fixed`.
+I7 (tests) is explicitly out of the fixer's scope — it is the next pipeline step.
