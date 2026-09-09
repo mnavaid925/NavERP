@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Time Entry{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:rte_list' %}">Time Entries</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.hours }}h on {{ obj.entry_date|date:"D, M d, Y" }}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'projects:rte_submit' obj.pk %}" onsubmit="return confirm('Submit entry {{ obj.number }} for approval?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit</button>
+        </form>
+      {% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status == 'submitted' %}
+          <form method="post" action="{% url 'projects:rte_approve' obj.pk %}" onsubmit="return confirm('Approve entry {{ obj.number }}? Approved hours count against the plan.');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+          </form>
+          <form method="post" action="{% url 'projects:rte_reject' obj.pk %}" onsubmit="return confirm('Reject entry {{ obj.number }}? The decision note is sent back to the resource.');">
+            {% csrf_token %}
+            <textarea name="reason" class="form-textarea" rows="1" aria-label="Rejection reason" placeholder="Reason (becomes the decision note)" style="width:220px;"></textarea>
+            <button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+      {% endif %}
+      <a href="{% url 'projects:rte_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Time entry</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Resource</dt><dd><a href="{% url 'projects:rsp_detail' obj.resource_id %}">{{ obj.resource.name }}</a></dd>
+        <dt>Project</dt>
+        <dd>{% if obj.project_id %}<a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% else %}<span class="text-muted">Non-project time</span>{% endif %}</dd>
+        <dt>Task</dt>
+        <dd>{% if obj.project_task_id %}<a href="{% url 'projects:tsk_detail' obj.project_task_id %}">{{ obj.project_task.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Date</dt><dd>{{ obj.entry_date|date:"D, M d, Y" }} <span class="text-muted">(week {{ obj.iso_week }}, {{ obj.iso_year }})</span></dd>
+        <dt>Hours</dt><dd>{{ obj.hours }}h</dd>
+        <dt>Description</dt><dd>{% if obj.task_description %}{{ obj.task_description }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'submitted' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        </dd>
+        <dt>Submitted at</dt><dd>{{ obj.submitted_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Approved at</dt><dd>{{ obj.approved_at|date:"M d, Y H:i"|default:"—" }}</dd>
+        <dt>Decision note</dt><dd>{% if obj.decision_note %}{{ obj.decision_note|linebreaksbr }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Notes</dt><dd>{% if obj.notes %}{{ obj.notes|linebreaksbr }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:rte_list' %}" class="btn btn-outline">Back to Time Entries</a>
+    <form method="post" action="{% url 'projects:rte_delete' obj.pk %}" onsubmit="return confirm('Delete time entry {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
