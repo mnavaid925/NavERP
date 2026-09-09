@@ -14,6 +14,13 @@ from apps.projects.views._common import get_object_or_404, login_required, redir
 from apps.projects.views._helpers import critical_path_ids, projects
 
 
+#: Hard ceiling on WBS depth the decoration walk will traverse. The template's own recursion is
+#: capped at ``tree_max_depth`` (5), so this only backstops pathological parent chains (a member
+#: can chain parents far deeper than anything renderable) — nodes beyond it keep ``wbs_code``
+#: unset and are simply absent from the rendered tree instead of risking unbounded work.
+WBS_MAX_DEPTH = 20
+
+
 def _decorate_wbs(project):
     """Prefetch the project's WBS once, decorate each node, return ``(roots, critical_ids)``.
 
@@ -21,10 +28,19 @@ def _decorate_wbs(project):
     position, never stored), ``is_critical`` (bullet 2's chain), ``kids`` (the decorated child
     nodes, for the recursive include), and the effective window/effort
     — own values on a work package, the post-order subtree rollup on a deliverable — as
-    ``rollup_start`` / ``rollup_end`` / ``rollup_effort_hours`` / ``rollup_count``. The ``rolled``
-    set is cycle insurance: a cycle in the data (not creatable through the forms) costs a skipped
-    node with unset rollups, never an infinite recursion — and every read of a child's rollup
-    tolerates it having never been set.
+    ``rollup_start`` / ``rollup_end`` / ``rollup_effort_hours`` / ``rollup_count``.
+
+    The walk is an ITERATIVE post-order over an explicit stack (the template recursion is capped,
+    so the Python walk must be too — a member-built parent chain cannot blow the interpreter
+    stack): nodes deeper than ``WBS_MAX_DEPTH`` are never decorated and never hung into a
+    ``kids`` chain, so they are gracefully absent from the tree.
+
+    The ``rolled`` set is cycle insurance, and its behavior is exactly this: a cycle REACHABLE
+    from a root decorates each of its nodes once, but the cycle's ``kids`` links still point at
+    each other, so the template re-renders the duplicated subtree until the template's own
+    ``tree_max_depth`` cap stops it; a cycle DISCONNECTED from every root (no root path into it)
+    is never walked at all and is absent from the tree. Either way the Python walk terminates and
+    every read of a child's rollup tolerates it having never been set.
     """
     # ONE query for the whole tree (the tree template renders no owner column, so nothing is
     # select_related). Children are hung on their parent as ``node.kids`` — the DECORATED
@@ -38,15 +54,11 @@ def _decorate_wbs(project):
     critical = critical_path_ids(project)
     rolled = set()
 
-    def walk(node, code):
-        if node.pk in rolled:
-            return
-        rolled.add(node.pk)
-        node.wbs_code = code
-        node.is_critical = node.pk in critical
-        node.kids = kids = children_of.get(node.pk, [])
-        for i, child in enumerate(kids, start=1):
-            walk(child, f"{code}.{i}")
+    def rollup(node):
+        """Post-order decoration: own window/effort on a work package, subtree rollup on a
+        deliverable. Child rollups are always set here EXCEPT across a cycle edge, where the
+        ``getattr`` defaults keep the parent's rollup well-defined anyway."""
+        kids = node.kids
         if node.node_type == "work_package":
             node.rollup_start = node.planned_start
             node.rollup_end = node.planned_end
@@ -62,8 +74,24 @@ def _decorate_wbs(project):
             node.rollup_count = sum(getattr(k, "rollup_count", 0) or 0 for k in kids)
 
     roots = children_of.get(None, [])
-    for i, root in enumerate(roots, start=1):
-        walk(root, str(i))
+    # LIFO discipline: push each level's children REVERSED (with their codes) so they pop in
+    # list order and every parent's finalize entry pops after its children's — a true post-order.
+    stack = [(root, str(i), 1, False)
+             for i, root in reversed(list(enumerate(roots, start=1)))]
+    while stack:
+        node, code, depth, finalize = stack.pop()
+        if finalize:
+            rollup(node)
+            continue
+        if node.pk in rolled:  # cycle re-entry: this node's subtree is already being processed
+            continue
+        rolled.add(node.pk)
+        node.wbs_code = code
+        node.is_critical = node.pk in critical
+        node.kids = children_of.get(node.pk, []) if depth < WBS_MAX_DEPTH else []
+        stack.append((node, code, depth, True))
+        for i, child in reversed(list(enumerate(node.kids, start=1))):
+            stack.append((child, f"{code}.{i}", depth + 1, False))
     return roots, critical
 
 
