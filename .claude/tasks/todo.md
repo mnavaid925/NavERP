@@ -6014,3 +6014,391 @@ Plan from `research-projects-7.3.md` (2026-09-10). Extends `apps/projects` — n
 - Parked for siblings: task execution & assignment UX (7.8), money columns (7.4/7.15), deep timesheet UX + billable/overtime (7.11/HRM), portfolio capacity governance (7.12).
 
 (Review notes: filled at close-out.)
+
+---
+
+## 7.4 Cost & Budget Management (Module 7: Project Management, `projects`) — plan from research-projects-7.4.md (2026-09-10)
+
+### Concurrency notes (read first — peers are live in this tree)
+
+- **7.2 is in review/fix** and **7.3 is building `ResourceManagement/`** in the same four layers of
+  `apps/projects`. Every shared-file touch (`models/forms/views/urls __init__.py`, `admin.py`,
+  `seed_projects.py`, `navigation.py`, `overview.html`, `tests/conftest.py`) is an **Integrate-step
+  item**, done once, as a **surgical `Edit` with a re-read anchor** immediately before the edit.
+- Commits are path-limited: `git add '<f>'; git commit -m '<msg>' -- '<f>'`.
+- **Models are NOT re-exported from `models/__init__.py` until Integrate** — an early re-export
+  changes the app's import surface under both peers. Entity files may be written and
+  `makemigrations --dry-run`-checked, but the app must not import them until the block lands.
+- The migration number is **assigned at generation time by the disk leaf** — never reserve `0004`
+  (the research's guess; 7.3's plan also pins `0004`, so 7.4's is whatever the leaf says when the
+  dry-run runs — likely `0005`).
+- `research-projects-7.3.md` **has landed since the 7.4 research was written** (the research greps
+  it as absent; 7.3's plan defers "role rate cards (7.4/7.15)" — consistent with Ruling 1).
+  **Re-read it before Model 1**: 7.4 stores amounts, never rates; a 7.3 rate card may *generate*
+  `amount`, it may not add rate fields to 7.4 rows.
+
+### Scope, conventions, build order (research's 4 models — order rearranged for FK flow)
+
+- [ ] 4 models, no fifth: `BudgetRevision` [BVR-], `CostControlAccount` [CCA-],
+      `ProjectBudgetLine` [PBL-], `ProjectExpense` [PEX-]. Prefixes `PBL`/`BVR`/`CCA`/`PEX`
+      verified free repo-wide; the cost baseline is the **approved `BudgetRevision`** — never a
+      `CostBaseline`, never `BSL` (Ruling 2), and no `ChangeRequest` model (Ruling 3).
+- [ ] **Build order: BudgetRevision → CostControlAccount → ProjectBudgetLine → ProjectExpense**
+      (the research lists PBL first — catalog order, not dependency order; PBL FKs both BVR and
+      CCA, PEX FKs CCA, while BVR/CCA touch only the spine, so they come first).
+- [ ] All four: `TenantNumbered` subclasses, `NUMBER_PREFIX` as above, money = `DecimalField(14,2)`
+      through `q2()`/`MAX_Q2` (`models/_base.py:28-38`), `MinValueValidator(0)` on every amount
+      (the 0002 precedent), **rollups and ALL EVM metrics are computed properties/annotations,
+      never stored columns**, audit actions ≤ 10 chars, `unique_together ("tenant","number")`.
+- [ ] Layers: `apps/projects/{models,forms,views,urls}/CostManagement/<Entity>.py` (same file name
+      in all four; sub-package `__init__.py` files stay EMPTY; re-exports only in the four
+      top-level `__init__.py`). Files: `BudgetRevisions.py`, `CostControlAccounts.py`,
+      `ProjectBudgetLines.py`, `ProjectExpenses.py` (plural, the 7.1/7.2 idiom).
+- [ ] Templates: `templates/projects/cost/<entity>/{list,detail,form}.html` — **`cost/` confirmed
+      consistent**: 7.1 used `initiation/`, 7.2 used `planning/` (short-slug rule; tree checked).
+      Entity folders lowercase singular: `budgetrevision/`, `costcontrolaccount/`,
+      `projectbudgetline/`, `projectexpense/`.
+- [ ] FKs are declared **by string** (`"projects.Project"`, `"projects.ProjectTask"`,
+      `"accounting.GLAccount"`, `"accounting.Currency"`, `"core.Party"`) — no cross-app model
+      import at module level. `accounting.Currency` is GLOBAL, no `tenant` column (L29): form
+      querysets never scope it and `clean()` never compares its tenant.
+
+### Pinned deviations from the research sketches (each one line, said loudly)
+
+1. **`BudgetRevision.decision_notes` is ADDED** — bullet 5's "rejection with a reason" row names
+   it, but the sketch's field list omits it.
+2. **`CostControlAccount.status` collapses to `planning/active/closed`** (sketch says four values
+   then its own "keep it simple" parenthetical says leave it to planning/closed) — baseline
+   membership is *derived* from the active revision, never a status value.
+3. **`pex_edit`/`pex_delete` refuse `posted`/`void` rows** — posted cost rows are the evidence the
+   EVM math reads; `pex_void` is the correction path (7.1's evidence model; the sketch only fixes
+   edit refusal for approved revisions).
+4. **`entry_date` pinned non-nullable and `source_kind` defaults to `manual`** — pins of values
+   the sketch left unstated (a burn-trend row without a date is meaningless; manual is the only
+   kind that needs no source document).
+5. **Health cut-points pinned**: `over` = `cpi < 0.95` or `available < 0`, `watch` = `cpi < 1.00`
+   — the sketch names the bands but not the numbers.
+
+---
+
+### Model 1 — `BudgetRevision` [BVR-] (`models/CostManagement/BudgetRevisions.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "BVR"`. 14 declared + 4 inherited = **18 fields**.
+Realizes bullets **1 (the planning document)** and **5 (Change Control & Budget Revisions)** — one
+table, both halves. The approved revision **is** the cost baseline; there is **no `is_active`
+boolean**: the single row with `status="approved"` and `activated_at` set is the active baseline,
+kept unique by the `bvr_activate` verb inside `transaction.atomic()` (the `ScheduleBaseline`
+no-conditional-unique precedent).
+
+#### Choices (exact machine values)
+- [ ] `STATUS_CHOICES` — `draft`/Draft, `pending_approval`/Pending Approval, `approved`/Approved,
+      `rejected`/Rejected, `superseded`/Superseded (machine values verbatim from the research)
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="budget_revisions")`
+- [ ] `revision_no` `PositiveSmallIntegerField(default=0)` — 0 = the original plan
+- [ ] `title` `CharField(max_length=255)`
+- [ ] `currency` `FK("accounting.Currency", SET_NULL, null=True, blank=True)` — face-value sums,
+      nothing converted
+- [ ] `status` `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")` — **verb-driven,
+      NOT on the form**
+- [ ] `reason` `TextField()` — why this change
+- [ ] `impact_note` `TextField(blank=True)` and `schedule_impact_note` `TextField(blank=True)`
+      (cost impact is 7.4's; schedule-impact *ownership* stays 7.2/7.7 — 7.4 records the note)
+- [ ] `requested_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True)`
+- [ ] `requested_at` `DateTimeField(null=True, blank=True, editable=False)` — stamped by
+      `bvr_submit`
+- [ ] `decided_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+      and `decided_at` `DateTimeField(null=True, blank=True, editable=False)` — stamped by
+      approve/reject only
+- [ ] `decision_notes` `TextField(blank=True)` — **the added field** (deviation #1)
+- [ ] `activated_at` `DateTimeField(null=True, blank=True, editable=False)` — the re-baseline stamp
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+
+#### Derived / Meta / behaviour
+- [ ] `amount_delta` property — SUM(this revision's lines) − SUM(the active revision's lines),
+      `q2()`-clamped; with no active revision the baseline sum is 0. The approver's headline number.
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")` **and**
+      `("tenant","project","revision_no")` (two originals is a bug, not a limit)
+- [ ] index: `("tenant","project","status")` `bvr_tnt_prj_status_idx`
+- [ ] Verbs (POST-only, audit actions ≤ 10): `bvr_submit` (login, draft→pending_approval, stamps
+      `requested_at`), `bvr_approve` (**tenant_admin**, pending_approval→approved, stamps
+      `decided_by/_at`, does NOT activate), `bvr_reject` (**tenant_admin**, →rejected, stamps +
+      `decision_notes`), `bvr_activate` (**tenant_admin**, approved only) — inside
+      `transaction.atomic()` flips **every other** `approved` revision of the project to
+      `superseded` (+ their `activated_at` kept as history) and stamps this one; audit
+      `activate`/`supersede` (approve-does-not-activate means two `approved` rows can coexist, so
+      the verb supersedes all, not "the" previous one)
+- [ ] Approved/superseded rows **refuse edit+delete** (the frozen-row `bsl_edit` guard)
+- [ ] Form: `BudgetRevisionForm` excludes `tenant`, `number`, `status`, `requested_at`,
+      `decided_by`, `decided_at`, `decision_notes`, `activated_at`, `created_by`; plus
+      `BudgetRevisionDecisionForm` (`decision_notes` Textarea, required) for the reject verb —
+      the `ProjectRequestDecisionForm` mirror
+
+---
+
+### Model 2 — `CostControlAccount` [CCA-] (`models/CostManagement/CostControlAccounts.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "CCA"`. 9 declared + 4 inherited = **13 fields**.
+Realizes bullets **2 (Cost Baseline & Control Accounts)** and **4 (Forecasting & EAC)** (Ruling 4:
+the metrics have no other honest home).
+
+#### Choices
+- [ ] `STATUS_CHOICES` — `planning`/Planning, `active`/Active, `closed`/Closed (deviation #2)
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="control_accounts")`
+- [ ] `name` `CharField(max_length=255)`; `code` `CharField(max_length=30)` (the tenant's CA id,
+      e.g. "CA-1.2")
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True,
+      related_name="control_accounts")` — a deliverable node or the project root; `clean()`
+      same-project guard (the `anchor_task` pattern)
+- [ ] `gl_account` `FK("accounting.GLAccount", PROTECT, null=True, blank=True,
+      related_name="project_control_accounts")` — the ledger lens; **never posts** (Ruling 6)
+- [ ] `contingency` `DecimalField(max_digits=14, decimal_places=2, default=0,
+      validators=[MinValueValidator(0)])` — the CA-held reserve; **sized by 7.5, recorded here**
+- [ ] `percent_complete` `DecimalField(max_digits=5, decimal_places=2, default=0,
+      validators=[MinValueValidator(0), MaxValueValidator(100)])` — manually attested; **the
+      docstring MUST name the 7.8 hand-off** (execution fields supersede it)
+- [ ] `status` `CharField(max_length=10, choices=STATUS_CHOICES, default="planning")`
+- [ ] `note` `TextField(blank=True)`
+
+#### Derived properties (ALL guarded, ALL Decimal — never columns)
+- [ ] `active_revision` — the project's approved+activated `BudgetRevision` (None when none)
+- [ ] `bac` — SUM of the **active** revision's `ProjectBudgetLine.amount` mapped to this CA;
+      `bac_with_contingency` adds `contingency` (PMBOK keeps them separable)
+- [ ] `ev` — `bac × percent_complete / 100`
+- [ ] `pv` — `bac ×` linear fraction of the anchored node's (else the project's) planned window
+      elapsed at `timezone.localdate()`; 0 before start, 1 after finish; **docstring states this is
+      planning-grade, not a time-phased BCWS curve** (the `critical_path_ids` honesty precedent)
+- [ ] `ac` — SUM of `ProjectExpense.amount` where `control_account=self`, `status="posted"`,
+      `entry_type in ("actual","accrual")`; `committed` — same aggregate with
+      `entry_type="commitment"`; `available` — `q2(bac − committed − ac)`
+- [ ] `cv = ev − ac`; `sv = ev − pv`; `cpi = ev/ac` (None when ac == 0); `spi = ev/pv` (None when
+      pv == 0); `eac = bac/cpi` when cpi else `bac` (one documented technique, no method selector);
+      `etc = eac − ac`; `tcpi = (bac − ev)/(bac − ac)` (None when denominator 0); `vac = bac − eac`
+- [ ] `health` — under/watch/over (cut-points in deviation #5) → dict carrying colour-named badge
+      classes `badge-green/-amber/-red` only (the semantic variants do not exist)
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")` **and**
+      `("tenant","project","code")`; indexes `("tenant","project")` `cca_tnt_project_idx`,
+      `("tenant","status")` `cca_tnt_status_idx`
+- [ ] No verbs — the register is read + CRUD; form excludes `tenant`, `number`
+
+---
+
+### Model 3 — `ProjectBudgetLine` [PBL-] (`models/CostManagement/ProjectBudgetLines.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PBL"`. 9 declared + 4 inherited = **13 fields**.
+Realizes bullet **1** and carries bullet 5's substance (lines belong to a revision). **The row the
+whole sub-module rolls up from. No `hours`, no `rate`** (Ruling 1).
+
+#### Choices
+- [ ] `CATEGORY_CHOICES` — `labor`/Labor, `material`/Material, `equipment`/Equipment,
+      `subcontract`/Subcontract, `overhead`/Overhead, `contingency`/Contingency, `other`/Other
+      (`max_length=14`); **no default** — a required choice on the form
+
+#### Fields
+- [ ] `budget_revision` `FK(BudgetRevision, CASCADE, related_name="lines")` — **the line is only
+      real inside a revision**
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="budget_lines")` — denormalised for
+      filters; `clean()` requires it to equal the revision's project
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True,
+      related_name="budget_lines")` — the bottom-up rollup source; `clean()` same-project guard
+- [ ] `control_account` `FK(CostControlAccount, SET_NULL, null=True, blank=True,
+      related_name="budget_lines")`
+- [ ] `gl_account` `FK("accounting.GLAccount", PROTECT, null=True, blank=True,
+      related_name="project_budget_lines")`
+- [ ] `amount` `DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(0)])`
+- [ ] `note` `TextField(blank=True)`
+
+#### Derived / Meta / behaviour
+- [ ] View-level derived ONLY (annotations/`Sum`, never columns): category totals, project total,
+      per-CA BAC; `clean()` also checks `wbs_node.project` / `control_account.project` == `project`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes
+      `("tenant","project")` `pbl_tnt_project_idx`, `("tenant","budget_revision")`
+      `pbl_tnt_rev_idx`, `("tenant","control_account")` `pbl_tnt_ca_idx`
+- [ ] Form excludes `tenant`, `number`; `budget_revision`/`control_account`/`wbs_node` are
+      tenant-scoped `ModelChoiceField`s (`_reject_foreign` still re-checks on POST)
+
+---
+
+### Model 4 — `ProjectExpense` [PEX-] (`models/CostManagement/ProjectExpenses.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "PEX"`. 13 declared + 4 inherited = **17 fields**.
+Realizes bullet **3 (Expense Tracking & Commitments)**; feeds `ac`/`committed` into bullets 2/4.
+
+#### Choices
+- [ ] `ENTRY_TYPE_CHOICES` — `commitment`/Commitment, `actual`/Actual, `accrual`/Accrual
+      (default `actual`); `SOURCE_KIND_CHOICES` — `purchase_order`/Purchase Order,
+      `supplier_invoice`/Supplier Invoice, `contract`/Contract, `timesheet`/Timesheet,
+      `manual`/Manual, `accrual`/Accrual (default `manual` — deviation #4); `STATUS_CHOICES` —
+      `draft`/Draft, `posted`/Posted, `void`/Void (default `draft`, **verb-driven, NOT on form**)
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="expenses")`
+- [ ] `control_account` `FK(CostControlAccount, PROTECT, related_name="expenses")` — **required,
+      non-nullable**: a CA-less cost row would silently drop out of every index
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True,
+      related_name="expenses")`
+- [ ] `entry_type` and `source_kind` as above
+- [ ] `source_number` `CharField(max_length=30, blank=True)` — e.g. `PO-00042`, `SIV-00187`; **a
+      soft reference, NEVER an FK** — 4.x/6.x own those engines and neither carries a project link
+      (Ruling 5)
+- [ ] `vendor` `FK("core.Party", SET_NULL, null=True, blank=True,
+      related_name="project_expenses")` (the `scm.PurchaseOrder.vendor` pattern)
+- [ ] `gl_account` `FK("accounting.GLAccount", PROTECT, null=True, blank=True,
+      related_name="project_expenses")`
+- [ ] `amount` `DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(0)])`
+      — non-negative like 0002; reversals are paired void/adjustment rows, not negatives
+- [ ] `currency` `FK("accounting.Currency", SET_NULL, null=True, blank=True)` — form `initial` =
+      the project's active revision's currency, else the tenant's first Currency
+- [ ] `entry_date` `DateField()` — required (deviation #4); the burn-trend dimension
+- [ ] `status` as above; `description` `CharField(max_length=255, blank=True)`
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+
+#### Derived / Meta / behaviour
+- [ ] Burn trend = aggregation over `entry_date` in the views — **no snapshot table**; charts are
+      7.16's
+- [ ] `ordering = ["-entry_date", "-id"]` (the burn register reads chronologically; research is
+      silent on ordering — pinned to the data's own axis); `unique_together = ("tenant","number")`
+- [ ] indexes `("tenant","project")` `pex_tnt_project_idx`, `("tenant","control_account")`
+      `pex_tnt_ca_idx`, `("tenant","entry_type")` `pex_tnt_etype_idx`, `("tenant","entry_date")`
+      `pex_tnt_date_idx`
+- [ ] Verbs (POST-only): `pex_post` (login, draft→posted, audit `post` — drafts never burn
+      budget), `pex_void` (**tenant_admin**, posted→void, audit `void`; void rows stay visible and
+      stop counting); edit/delete refuse posted+void (deviation #3)
+- [ ] Form excludes `tenant`, `number`, `status`, `created_by`; `control_account`/`vendor`/
+      `wbs_node`/`project` tenant-scoped; `currency` unscoped (L29)
+
+---
+
+## Backend (`apps/projects/{models,forms,views,urls}/CostManagement/`) — one file per entity per layer
+
+- [ ] `models/CostManagement/<Entity>.py` ×4 as specified above; sub-package `__init__.py` files
+      EMPTY; nothing added to the top-level `__init__.py` until Integrate
+- [ ] `forms/CostManagement/<Entity>.py` — `BudgetRevisionForm` +
+      `BudgetRevisionDecisionForm`, `CostControlAccountForm`, `ProjectBudgetLineForm`,
+      `ProjectExpenseForm` (exclusions pinned per model)
+- [ ] `views/CostManagement/<Entity>.py` — full CRUD via the `crud_*` helpers + the 6 verbs; every
+      queryset `filter(tenant=request.tenant)`, never `.all()`; every verb refuses a disallowed
+      transition with `messages.*` + redirect (an action already in its target state says so and
+      writes nothing); every `?enum=` value allow-listed against CHOICES (L11); capture
+      `previous = obj.status` BEFORE mutating (audit `changes` carries `{"verb", "from", "to"}`)
+- [ ] `urls/CostManagement/<Entity>.py` — literal first segments `budgetlines/`, `revisions/`,
+      `controlaccounts/`, `expenses/` (all disjoint from the existing inventory — re-check the
+      concatenated `urls/__init__.py` at Integrate in case 7.3 added segments); literal routes
+      before `<int:pk>/`
+
+## Views, routes & CONTEXT KEYS (the contract — L7/L8: an unpinned name renders blank at 200)
+
+- [ ] **ProjectBudgetLine** — `pbl_list` (`object_list`+`page_obj`+`q`), `pbl_create`,
+      `pbl_detail` (`obj`), `pbl_edit` (`obj`), `pbl_delete`. Routes: `budgetlines/` + the four.
+      No verbs. List filters: project, budget_revision, category, control_account. Extra list
+      context: `projects`, `revisions`, `category_choices`, `control_accounts`; list annotates
+      category/project totals read-only
+- [ ] **BudgetRevision** — `bvr_{list,create,detail,edit,delete}`. Routes: `revisions/` + the four
+      + `revisions/<int:pk>/submit/` `bvr_submit`, `…/approve/` `bvr_approve`
+      (**tenant_admin**), `…/reject/` `bvr_reject` (**tenant_admin**), `…/activate/`
+      `bvr_activate` (**tenant_admin**). List filters: project, status. Extra list context:
+      `projects`, `status_choices`. Detail: `obj`, `lines` (with category totals), `amount_delta`
+      rendered as the approver's headline
+- [ ] **CostControlAccount** — `cca_{list,create,detail,edit,delete}`. Routes:
+      `controlaccounts/` + the four. No verbs. List filters: project, status. Extra list context:
+      `projects`, `status_choices`; the register renders the `health` badge + `cpi` per row.
+      Detail: `obj` + the EVM panel reading `obj.bac/ev/pv/ac/committed/available/cv/sv/cpi/spi/
+      eac/etc/tcpi/vac` straight off the properties (no computed context keys), the CA's
+      active-revision `budget_lines`, and recent posted `expenses` (capped 25)
+- [ ] **ProjectExpense** — `pex_{list,create,detail,edit,delete}`. Routes: `expenses/` + the four
+      + `expenses/<int:pk>/post/` `pex_post`, `…/void/` `pex_void` (**tenant_admin**). List
+      filters: project, entry_type, status, control_account. Extra list context: `projects`,
+      `entry_type_choices`, `status_choices`, `source_kind_choices`, `control_accounts`
+
+## Templates (`templates/projects/cost/<entity>/{list,detail,form}.html`)
+
+- [ ] `budgetrevision/{list,detail,form}.html` — list: status badge incl. `superseded`, filter bar
+      reflecting `request.GET`; detail: the line table with category totals + the `amount_delta`
+      headline + the verb buttons gated by status
+- [ ] `costcontrolaccount/{list,detail,form}.html` — list carries the health badge column
+      (`badge-green/-amber/-red`); detail is the EVM panel (BAC/EV/PV/AC/committed/available/CV/
+      SV/CPI/SPI/EAC/ETC/TCPI/VAC) with a documented "planning-grade PV" caption, the CA's budget
+      lines and its posted expenses
+- [ ] `projectbudgetline/{list,detail,form}.html`; `projectexpense/{list,detail,form}.html` —
+      filters per the view contract; Actions column with delete-POST + `confirm()` +
+      `{% csrf_token %}`; pagination with `has_previous`/`has_next` guards; empty states
+- [ ] Colour-named badge classes only; every badge block ends `{% else %}{{ obj.get_<field>_display }}{% endif %}`
+- [ ] **No nullable FK inside a `|default:` filter argument** — the 7.1 four-500 idiom; use
+      `{% if %}…{% else %}—{% endif %}`. FK `<select>` comparisons use `|stringformat:"d"`.
+      `{% extends "base.html" %}` unchanged
+
+## Integrate (single writer — the ONLY shared-file step; surgical `Edit`, re-read anchors)
+
+- [ ] Re-export blocks `# --- 7.4 Cost & Budget Management` appended to all four top-level
+      `__init__.py` (models: 4 models; forms: 5 forms; views: 26 view names; urls: 4 urlpatterns
+      imports + concat). A missing re-export is a runtime `ImportError`
+- [ ] `admin.py` — 4 registrations appended after the 7.2 block (`list_display` led by `number`,
+      `list_select_related` for every rendered FK, stamped fields readonly)
+- [ ] `seed_projects.py` — `_cost` block with its OWN guard
+      (`BudgetRevision.objects.filter(tenant=tenant).exists()`), called per tenant: revision 0
+      (`approved` + `activated_at` stamped) per seeded project with **7–10 lines across all
+      categories** anchored to the existing WBS work packages; one CA per deliverable of the
+      active project with `percent_complete` values landing CPI in all three health bands; ~12
+      `ProjectExpense` rows (commitments with `source_number="PO-…"` **strings only**, actuals +
+      one accrual pair); one `pending_approval` revision with a visible positive `amount_delta`.
+      Enough PBL rows for page 2 (3 projects × ~8 = 24 > 15). `--flush` deletes children-first:
+      `ProjectExpense, ProjectBudgetLine, CostControlAccount, BudgetRevision`
+- [ ] `apps/core/navigation.py` — one new `LIVE_LINKS["7.4"]` immediately after the `"7.2"` block
+      (~`:1729`), verbatim from the research: Budget Planning & Estimation → `projects:pbl_list`;
+      Cost Baseline & Control Accounts → `projects:cca_list`; Expense Tracking & Commitments →
+      `projects:pex_list`; Forecasting & EAC → `projects:cca_list` (a lens on the CA register);
+      Change Control & Budget Revisions → `projects:bvr_list`; extra leaf "Budget Register" →
+      `projects:pbl_list`; comment records the deliberate lens-mapping
+- [ ] `templates/projects/overview.html` — 7.4 quick links + counts (pending-approval revisions,
+      posted spend), mirroring the 7.2 block
+- [ ] **DB LAST**: `python manage.py makemigrations projects --dry-run` — **read every model the
+      dry-run lists; if it names a model you did not write, STOP and report** (7.3 writes models
+      into this same app). Then generate (number = disk leaf), `migrate`, `seed_projects` ×2
+      (second run a no-op), `manage.py check`
+
+## Verify
+
+- [ ] `temp/` smoke sweep as `admin_acme` / `password` (NOT the tenant-less `admin`):
+      - [ ] every new `projects:*` url 200 (405 for the POST-only verbs hit by GET); content
+            asserts, not just status — page titles, a seeded `BVR-`/`CCA-`/`PBL-`/`PEX-` number,
+            EVM figures render, no `{#` / `{% comment` leaks
+      - [ ] junk params `?status=nope`, `?project=0`, `?entry_type=²`, `?page=9999` → default
+            page, never a 500, never a silently emptied register (L11 allow-list)
+      - [ ] page 2 of the budget-line register; cross-tenant IDOR → 404 on every `<int:pk>` route
+      - [ ] state machine holds: approve-on-draft refused, activate-before-approve refused,
+            posted expense refuses edit/delete, approved revision refuses edit/delete, member
+            403 on the tenant_admin verbs, void stops a row counting without hiding it
+      - [ ] EVM spot-check on one seeded CA: `ac`, `committed`, `available`, `cpi` arithmetic
+            matches hand-computed values; one CA per health band renders its badge
+- [ ] Sidebar shows **7.4 Live** with all five bullets + the register leaf
+
+## Close-out (Module Creation Sequence phases 4–7)
+
+- [ ] Review agents, one after another, each appending to
+      `.claude/tasks/review-projects-7.4.md`: `code-reviewer` → `explorer` → `frontend-reviewer` →
+      `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`
+- [ ] `code-fixer` burns the deduped, ID'd findings (Critical → Important → Minor), one commit
+      per file
+- [ ] Tests: append `cost_*` fixtures to `conftest.py` (**owned by itself — only with a full
+      unfiltered re-run**), then `test_cost_models.py` → `test_cost_forms.py` →
+      `test_cost_views.py` → `test_cost_security.py`, one file per commit, tests named
+      `test_cost_*`, helpers `_cost_*` (no shadowing of the `test_initiation_*` namespace), then
+      **one full unfiltered run** (never `-k`, L47; iterate with `--nomigrations`)
+- [ ] `.claude/skills/projects/SKILL.md` — append the 7.4 section (models + the
+      baseline-is-the-approved-revision ruling, verb table, routes, seeder, gotchas incl. the
+      `percent_complete` 7.8 hand-off and the property-not-annotation trap for `cpi` etc.) and
+      update the frontmatter "As-built" line
+- [ ] Mark 7.4 complete in `README.md`
+
+## Later passes / deferred (carried verbatim from the research so nothing is lost)
+
+Time-phased EVM (`EVMPeriod`, period BCWS curves) · `EACSnapshot` per CA per period · what-if
+budget scenarios (`budget_type = baseline | what_if`) · `revision_kind = forecast` versions ·
+rate-based labor budgeting (7.3 owns rates) · timesheet → labor-actual sync (7.3/7.11) ·
+commitment change-order sub-workflow (4.x/6.x) · top-down budget target rows · management reserve
+split from `contingency` · `BudgetRevision.source_change_request` FK → 7.7 · FX conversion (2.x/
+7.15) · the `accounting.Project ↔ projects.Project` bridge and GL postings (2.x) · over-budget
+notifications (7.17) · portfolio cost rollups (7.12).
