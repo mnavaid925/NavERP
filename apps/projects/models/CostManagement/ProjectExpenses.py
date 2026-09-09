@@ -54,7 +54,7 @@ class ProjectExpense(TenantNumbered):
     entry_type = models.CharField(
         max_length=10, choices=ENTRY_TYPE_CHOICES, default="actual")
     source_kind = models.CharField(
-        max_length=15, choices=SOURCE_KIND_CHOICES, default="manual")
+        max_length=16, choices=SOURCE_KIND_CHOICES, default="manual")
     source_number = models.CharField(
         max_length=30, blank=True,
         help_text="Reference in the owning system, e.g. PO-00042 or SIV-00187 — soft, never "
