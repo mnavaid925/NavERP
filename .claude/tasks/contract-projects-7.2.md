@@ -78,16 +78,21 @@ Indexes: `("tenant","project")` → `tsk_tnt_project_idx`; `("tenant","status")`
 `("tenant","node_type")` → `tsk_tnt_ntype_idx`.
 
 Derived (properties, NEVER columns): `duration_days` = `(end - start).days + 1` when both dates
-set else `None`. `clean()`: `planned_end >= planned_start` (scm.WorkOrder precedent). WBS codes
-(`1.2.3`) are view-computed from the prefetched tree — never stored.
+set else `None`. `clean()`: `planned_end >= planned_start` (scm.WorkOrder precedent), and —
+mirroring the milestone anchor_task guard — `parent` (when set) must belong to the same project
+as the task. WBS codes (`1.2.3`) are view-computed from the prefetched tree — never stored.
 
 ### Form — TaskForm
 
 `fields` = project, parent, node_type, name, description, owner, status, planned_start,
 planned_end, effort_hours, estimation_method, confidence, sequence. Excludes tenant, number,
-created_by. `clean()`: parent must belong to the chosen project; walking the new parent's
-ancestor chain must never reach `self` (cycle guard, bounded walk); `_reject_foreign` on
-`project`, `parent`, `owner` (owner is a User — users carry `tenant`; `_reject_foreign` works).
+created_by. `clean()`: parent must belong to the chosen project (also enforced in the model
+`clean()`, so admin + any non-form path are covered); walking the candidate parent's ancestor
+chain over a one-query `{pk: parent_id}` map (tenant-scoped, bounded at 250 hops) must never
+reach `self` (cycle guard); `_reject_foreign` on `project`, `parent` ONLY — `owner` is
+deliberately excluded: it is a User FK and users can be tenant-less (the superuser), so a tenant
+comparison would reject legitimate picks (7.1 precedent on ProjectForm's `project_manager` /
+`executive_sponsor`).
 
 ### Routes (`tasks/`) + context keys
 
@@ -180,8 +185,10 @@ Indexes: `("tenant","project")` → `mst_tnt_project_idx`; `("tenant","status")`
 ### Form — MilestoneForm
 
 `fields` = project, anchor_task, name, description, target_date, is_phase_gate, entry_criteria,
-exit_criteria, status. Excludes tenant, number, actual_date. `_reject_foreign` on project +
-anchor_task.
+exit_criteria. Excludes tenant, number, actual_date AND `status` — status is verb-driven
+governance state that moves only through the tenant-admin-gated `mst_achieve` (with its
+cancelled/already-achieved guards); leaving it on the form would let any member achieve a
+milestone through the ungated edit view. `_reject_foreign` on project + anchor_task.
 
 ### Routes (`milestones/`) + context keys
 
@@ -237,6 +244,9 @@ State guards: a `baseline` row is frozen — `bsl_edit`/`bsl_delete` refuse it w
 ### Form — BaselineForm
 
 `fields` = project, name, baseline_type, strategy_note, note. `_reject_foreign` on project.
+`baseline_type` stays on the form (create needs it) but is LOCKED on edit: a changed type on a
+saved row is a field error — a row's type only moves through the gated, audited `bsl_promote`
+verb, which snapshots and freezes it.
 
 ### Routes (`baselines/`) + context keys
 
@@ -253,19 +263,26 @@ State guards: a `baseline` row is frozen — `bsl_edit`/`bsl_delete` refuse it w
 ## Shared helpers
 
 - `views/_helpers.py` gains `critical_path_ids(project)` — longest-chain pass over the
-  dependency DAG (visited-set cycle guard, deterministic by (sequence, id)); returns a set of
-  task pks; simplification (planning-grade longest chain, not full CPM backward pass)
-  documented in its docstring. Tree decorations + WBS coding helper live in the ProjectTasks
-  view module (single-consumer).
+  dependency DAG: ONE iterative pass in Kahn topological order (in-degree over the dependency
+  edges; cycle nodes and everything downstream of a cycle never resolve and are skipped, with a
+  processed-count cap), tie-breaks deterministic by `(sequence, id)` in both the forward pass
+  and the walk-back, task durations floored at one day; returns a set of task pks;
+  simplification (planning-grade longest chain, not full CPM backward pass) documented in its
+  docstring. Tree decorations + WBS coding helper live in the ProjectTasks view module
+  (single-consumer); the WBS decoration walk is an iterative post-order with its own hard depth
+  cap (`WBS_MAX_DEPTH = 20`).
 
 ## Seeded shape (per tenant, idempotent guard `ProjectTask.objects.filter(tenant=...).exists()`)
 
-For each of the tenant's 3 seeded projects: a 3-deliverable WBS with 2–3 work packages each
-(~8–10 `TSK-` rows, varied estimation_method/confidence, chained dates), one FS chain long
-enough to be the critical path + one SS link + one lagged link (`DEP-` rows), 3 `MST-` rows
-(one achieved phase gate with actual_date, one in_review, one planned), 1 active frozen
-`BSL-` baseline + 1 `what_if`. `--flush` deletes children-first: ScheduleBaseline,
-ProjectMilestone, TaskDependency, ProjectTask.
+Sized to each project's lifecycle stage. The ACTIVE project carries the full plan: an 11-node
+WBS (deliverables + work packages, varied estimation_method/confidence, chained dates), the
+dependency network (one long FS chain that is the critical path, one SS link, one lagged and one
+led link), an achieved discovery gate plus two live milestones, and the FROZEN baseline the
+completed kickoff acknowledged + one `what_if` scenario. The CHARTERED project is mid-planning —
+a smaller WBS, a two-link chain, a gate in review, and a `what_if` only (no frozen baseline).
+The DRAFT project has sketch nodes and a planned milestone — no dependencies, NO baselines: you
+don't freeze a plan for a project whose charter isn't approved. `--flush` deletes children-first:
+ScheduleBaseline, TaskDependency, ProjectMilestone, ProjectTask.
 
 ## `LIVE_LINKS["7.2"]`
 
