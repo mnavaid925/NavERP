@@ -67,3 +67,37 @@ Minor, given IDs (C1, I3, M7) and handed to the `code-fixer` agent.
 - **Convention conformance:** package layout (empty sub-package inits, top-level re-exports, absolute imports), template shape, url stems, admin shape, seeder guard style (per-row `.save()`, children-first `--flush`), `?query=` deep-link nav convention — all match 7.1 and the peer apps.
 - **Spine reuse / naming collisions:** clean. Four novel tables, string FKs, no cross-app module-level imports; no pre-existing `ProjectTask`/`WbsNode`/`TaskDependency`/`ScheduleBaseline`; `crm.CrmMilestone` and `procurement.ContractMilestone` neither shadowed nor shadowing; no reverse-accessor clash on `projects.Project`/`ProjectTask`/User; scope guard honored (no money, no risk rows, no timesheets, no FileFields).
 - **Cross-module contract:** nothing blocks 7.3 (resource booking over `node_type="work_package"`, free related_name space, derived `duration_days` usable for capacity math) or 7.8 (additive execution columns on `ProjectTask`).
+
+---
+
+## 3. frontend-reviewer
+
+### Critical
+
+None. No template 500 risks, no broken `{% url %}` targets, no missing CSRF tokens, no off-system classes or invalid icon names.
+
+### Important
+
+- **`templates/projects/planning/milestone/detail.html:11-15` and `templates/projects/planning/schedulebaseline/detail.html:11-19` — tenant-admin-gated verb buttons are rendered unconditionally, violating the 7.1 precedent.** `mst_achieve`, `bsl_promote` and `bsl_activate` are all `@tenant_admin_required` in the views, but the templates gate them only on object state, never on the user. 7.1 explicitly establishes the opposite idiom — `templates/projects/initiation/project/detail.html:25-31` wraps Approve Charter in `{% if request.user.is_superuser or request.user.is_tenant_admin %}` ("rendering it to an ordinary member is a button that answers 403"). Fix: wrap the three `<form>` blocks in the same guard.
+- **`templates/projects/planning/task/detail.html:80` — "Add a dependency" deep-link passes a parameter nothing consumes, and lands the user on a form whose two task dropdowns are project-unscoped.** The link is `dep_create?project={{ obj.project_id }}`, but `dep_create` reads only `?predecessor=` / `?successor=`, and `TaskDependencyForm.fields` has no `project` — predecessor and successor selects list every task of every project in the tenant, and a cross-project pair is only caught at `clean()` as a validation bounce. Fix: point the link at `?predecessor={{ obj.pk }}`; consider also scoping the two task querysets when `?project=` is present.
+
+### Minor
+
+- **`templates/projects/planning/task/tree.html:20` — the project selector has no `aria-label`.** Every control in the four list filter-bars is labelled, but the tree's `onchange`-submitting select is unlabelled (the hrm tree it mirrors has the same gap). Fix: `aria-label="Project"`.
+- **`templates/projects/overview.html:57-75` — quick-link rows drift from the frozen spec and leave the flat Task Register unreachable from the page body.** Contract pins "Task Register, Dependencies, Milestones, Baselines"; the template ships WBS Tree / Dependencies / Milestones / Baselines. Fix: swap the WBS Tree row for Task Register, or amend the contract.
+- **`templates/projects/planning/schedulebaseline/form.html:23` — the help text contradicts the form's own editable `baseline_type` field.** The note promises "a what-if scenario stays editable until you promote it", yet the same page renders `baseline_type` as a live select — exactly lane 1's Important backend finding, visible as UI copy the form refutes. Fix the form field per lane 1; once `baseline_type` is pinned on edit, this text becomes true.
+- **All four detail pages use bare `<dt>/<dd>` inside `dl.detail-grid`, the variant the stylesheet does not style** (`theme.css` scopes its dt/dd treatments to `.detail-item dt/dd`). This is the dominant house pattern and byte-matches the 7.1 sibling — flagging once so a future cleanup picks one pattern app-wide.
+- **`templates/projects/planning/task/tree.html:43-45` — the "no projects" empty state says "Create a project first" without a link.** Add `<a href="{% url 'projects:prj_create' %}">`.
+
+### Verified correct
+
+- Design-system classes: every class used exists in theme.css (layout, cards, filter-bar, table-wrap, empty-state, form-grid, detail-grid, form-actions, btn variants, fw-600/text-muted, tree-node/tree-children); inline styles replicate the 7.1/hrm idioms exactly.
+- Badges: only the six colour-named variants; status→colour maps follow 7.1 semantics; `badge-slate` WBS codes a sensible first use in this app.
+- Stat grid 7→11: new cards use only the five allowed stat-icon colours and valid icons; auto-fit grid wraps cleanly; counts wired 1:1 with Overview.py.
+- Icons: every `data-lucide` value verified present in the actual lucide v1.43.0 UMD bundle. No invented names.
+- URLs: all `{% url %}` targets resolve against the 23 planning names + 7.1 modules. No dead targets.
+- Accessibility/destructive actions: aria-labels on list filters, csrf + accurate confirm() on every destructive POST, task delete copy matches the real cascade semantics.
+- WBS tree include: bounded recursion, walks `node.kids` (never `children.all`), rollup display tolerates unset attributes.
+- Form rendering: the 7.1 generic loop verbatim, with useful per-entity copy.
+- State-machine reflections match the views exactly (achieve button vs the view's refusals; Edit/Delete hidden exactly when `is_frozen`; Promote/Activate conditions; boolean select works via crud_list's stringified-boolean mapping).
+- Contract invariants: no nullable FK inside `|default:`, empty states actionable, colspans match, pagination included on all four lists, block titles on all 14.
