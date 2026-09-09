@@ -12,6 +12,9 @@ from .models import (
     ProjectRequest,
     ProjectStakeholder,
     ProjectTask,
+    ResourceAllocation,
+    ResourceProfile,
+    ResourceTimeEntry,
     ScheduleBaseline,
     TaskDependency,
 )
@@ -99,3 +102,39 @@ class ScheduleBaselineAdmin(admin.ModelAdmin):
     # deactivate-siblings activate/promote verbs — an admin-form edit would bypass both.
     readonly_fields = ("baseline_type", "is_active", "created_at", "updated_at", "frozen_on",
                        "planned_finish", "task_count", "total_effort_hours")
+
+
+@admin.register(ResourceProfile)
+class ResourceProfileAdmin(admin.ModelAdmin):
+    list_display = ("number", "resource_type", "default_role", "org_unit",
+                    "weekly_capacity_hours", "status", "tenant")
+    list_filter = ("resource_type", "status")
+    # employee__party/party join for the name rendering; org_unit for the team column.
+    list_select_related = ("tenant", "org_unit", "employee__party", "party")
+    search_fields = ("number", "skill_summary")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ResourceAllocation)
+class ResourceAllocationAdmin(admin.ModelAdmin):
+    list_display = ("number", "role_name", "project", "resource", "allocation_unit",
+                    "start_date", "end_date", "booking_status", "tenant")
+    list_filter = ("booking_status", "allocation_unit")
+    list_select_related = ("tenant", "project", "project_request", "resource")
+    search_fields = ("number", "role_name", "skill_requirements")
+    # booking_status and substitute_of are verb-driven — only the audited POST-only verbs move
+    # them, so an admin-form edit cannot bypass the state machine.
+    readonly_fields = ("booking_status", "substitute_of", "requested_by",
+                       "created_at", "updated_at")
+
+
+@admin.register(ResourceTimeEntry)
+class ResourceTimeEntryAdmin(admin.ModelAdmin):
+    list_display = ("number", "resource", "project", "entry_date", "hours", "status", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "resource", "project", "approved_by")
+    search_fields = ("number", "task_description")
+    # status and the approval stamps are verb-driven — the verbs write them exactly once and
+    # nothing else may move them.
+    readonly_fields = ("status", "submitted_at", "approved_at", "approved_by", "decision_note",
+                       "created_at", "updated_at")
