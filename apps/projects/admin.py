@@ -6,7 +6,11 @@ Every changelist declares ``list_select_related`` for the FK columns it renders:
 from django.contrib import admin
 
 from .models import (
+    BudgetRevision,
+    CostControlAccount,
     Project,
+    ProjectBudgetLine,
+    ProjectExpense,
     ProjectKickoff,
     ProjectMilestone,
     ProjectRequest,
@@ -138,3 +142,50 @@ class ResourceTimeEntryAdmin(admin.ModelAdmin):
     # nothing else may move them.
     readonly_fields = ("status", "submitted_at", "approved_at", "approved_by", "decision_note",
                        "created_at", "updated_at")
+
+
+@admin.register(BudgetRevision)
+class BudgetRevisionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "revision_no", "status", "requested_at",
+                    "decided_at", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project")
+    search_fields = ("number", "title", "reason")
+    # status and every stamp are verb-driven (submit/approve/reject/activate) — an admin-form
+    # edit would mint evidence-less governance state.
+    readonly_fields = ("status", "created_at", "updated_at", "created_by", "requested_at",
+                       "decided_by", "decided_at", "activated_at")
+
+
+@admin.register(CostControlAccount)
+class CostControlAccountAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "project", "wbs_node", "status",
+                    "percent_complete", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project", "wbs_node")
+    search_fields = ("number", "name", "code", "note")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ProjectBudgetLine)
+class ProjectBudgetLineAdmin(admin.ModelAdmin):
+    list_display = ("number", "budget_revision", "project", "category", "control_account",
+                    "amount", "tenant")
+    list_filter = ("category",)
+    # wbs_node is selected for the changelist even though it is not a column: the model's
+    # __str__-free rows render category/control_account, and budget_revision joins its project.
+    list_select_related = ("tenant", "budget_revision", "project", "control_account")
+    search_fields = ("number", "note")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ProjectExpense)
+class ProjectExpenseAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "control_account", "entry_type", "source_kind",
+                    "source_number", "amount", "entry_date", "status", "tenant")
+    list_filter = ("entry_type", "status")
+    list_select_related = ("tenant", "project", "control_account")
+    search_fields = ("number", "description", "source_number")
+    # status is verb-driven (post/void) — the verbs write it exactly once; created_by is the
+    # authorship stamp.
+    readonly_fields = ("status", "created_by", "created_at", "updated_at")
