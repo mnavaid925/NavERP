@@ -118,3 +118,39 @@ from .ResourceManagement.ResourceTimeEntries import (  # noqa: F401
     rte_reject,
     rte_submit,
 )
+
+# --- 7.4 Cost & Budget Management -------------------------------------------------------------
+from .CostManagement.BudgetRevisions import (  # noqa: F401
+    bvr_activate,
+    bvr_approve,
+    bvr_create,
+    bvr_delete,
+    bvr_detail,
+    bvr_edit,
+    bvr_list,
+    bvr_reject,
+    bvr_submit,
+)
+from .CostManagement.CostControlAccounts import (  # noqa: F401
+    cca_create,
+    cca_delete,
+    cca_detail,
+    cca_edit,
+    cca_list,
+)
+from .CostManagement.ProjectBudgetLines import (  # noqa: F401
+    pbl_create,
+    pbl_delete,
+    pbl_detail,
+    pbl_edit,
+    pbl_list,
+)
+from .CostManagement.ProjectExpenses import (  # noqa: F401
+    pex_create,
+    pex_delete,
+    pex_detail,
+    pex_edit,
+    pex_list,
+    pex_post,
+    pex_void,
+)
