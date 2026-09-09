@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Milestone{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:mst_list' %}">Milestones</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">On <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% if obj.anchor_task %} · anchored to <a href="{% url 'projects:tsk_detail' obj.anchor_task_id %}">{{ obj.anchor_task.name }}</a>{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'planned' or obj.status == 'in_review' or obj.status == 'missed' %}
+        <form method="post" action="{% url 'projects:mst_achieve' obj.pk %}" onsubmit="return confirm('Mark milestone {{ obj.number }} achieved? The achieved date is stamped today and reopening it clears the stamp.');">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="flag"></i> Mark Achieved</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'projects:mst_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Milestone</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'achieved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'in_review' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'missed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          {% if obj.is_late %}<span class="badge badge-red">Overdue</span>{% endif %}
+        </dd>
+        <dt>Phase gate</dt><dd>{% if obj.is_phase_gate %}<span class="badge badge-info">Phase gate</span>{% else %}Plain milestone{% endif %}</dd>
+        <dt>Target date</dt><dd>{{ obj.target_date|date:"M d, Y" }}</dd>
+        <dt>Achieved on</dt><dd>{{ obj.actual_date|date:"M d, Y"|default:"—" }}</dd>
+      </dl>
+      {% if obj.description %}<p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_phase_gate %}
+    <div class="card">
+      <div class="card-header"><h2>Gate criteria</h2></div>
+      <div class="card-body">
+        <p><strong>Entry criteria.</strong></p>
+        {% if obj.entry_criteria %}<p>{{ obj.entry_criteria|linebreaksbr }}</p>{% else %}<p class="text-muted">None recorded.</p>{% endif %}
+        <p><strong>Exit criteria.</strong></p>
+        {% if obj.exit_criteria %}<p>{{ obj.exit_criteria|linebreaksbr }}</p>{% else %}<p class="text-muted">None recorded.</p>{% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'projects:mst_list' %}" class="btn btn-outline">Back to Milestones</a>
+    <form method="post" action="{% url 'projects:mst_delete' obj.pk %}" onsubmit="return confirm('Delete milestone {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
