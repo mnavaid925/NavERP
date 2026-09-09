@@ -15,6 +15,9 @@ from apps.projects.models import (
     ProjectRequest,
     ProjectStakeholder,
     ProjectTask,
+    ResourceAllocation,
+    ResourceProfile,
+    ResourceTimeEntry,
     ScheduleBaseline,
     TaskDependency,
 )
@@ -51,4 +54,8 @@ def overview(request):
         "dependency_count": TaskDependency.objects.filter(tenant=tenant).count(),
         "milestone_count": ProjectMilestone.objects.filter(tenant=tenant).count(),
         "baseline_count": ScheduleBaseline.objects.filter(tenant=tenant).count(),
+        # 7.3 resourcing — flat counts, same one-COUNT-per-table rule.
+        "resource_count": ResourceProfile.objects.filter(tenant=tenant).count(),
+        "allocation_count": ResourceAllocation.objects.filter(tenant=tenant).count(),
+        "time_entry_count": ResourceTimeEntry.objects.filter(tenant=tenant).count(),
     })
