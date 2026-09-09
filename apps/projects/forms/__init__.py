@@ -29,3 +29,8 @@ from .ProjectPlanningScheduling.ProjectMilestones import MilestoneForm  # noqa: 
 from .ProjectPlanningScheduling.ProjectTasks import TaskForm  # noqa: F401
 from .ProjectPlanningScheduling.ScheduleBaselines import BaselineForm  # noqa: F401
 from .ProjectPlanningScheduling.TaskDependencies import TaskDependencyForm  # noqa: F401
+
+# --- 7.3 Resource Management ------------------------------------------------------------------
+from .ResourceManagement.ResourceAllocations import ResourceAllocationForm  # noqa: F401
+from .ResourceManagement.ResourceProfiles import ResourceProfileForm  # noqa: F401
+from .ResourceManagement.ResourceTimeEntries import ResourceTimeEntryForm  # noqa: F401
