@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Task{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">On <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% if obj.parent %} · under <a href="{% url 'projects:tsk_detail' obj.parent_id %}">{{ obj.parent.name }}</a>{% else %} · a WBS root{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:tsk_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Plan</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Type</dt><dd>{% if obj.node_type == 'work_package' %}<span class="badge badge-info">{{ obj.get_node_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_node_type_display }}</span>{% endif %}</dd>
+        <dt>Status</dt>
+        <dd>
+          {% if obj.status == 'done' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        </dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd>
+        <dt>Planned start</dt><dd>{{ obj.planned_start|date:"M d, Y"|default:"—" }}</dd>
+        <dt>Planned end</dt><dd>{{ obj.planned_end|date:"M d, Y"|default:"—" }}</dd>
+        <dt>Duration</dt><dd>{% if obj.duration_days %}{{ obj.duration_days }} days{% else %}—{% endif %}</dd>
+        <dt>Effort estimate</dt><dd>{{ obj.effort_hours|default:"—" }}</dd>
+        <dt>Estimation method</dt><dd>{{ obj.get_estimation_method_display }}</dd>
+        <dt>Confidence</dt><dd>{{ obj.get_confidence_display }}</dd>
+        <dt>Sequence</dt><dd>{{ obj.sequence }}</dd>
+      </dl>
+      {% if obj.description %}<p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Dependencies</h2></div>
+    <div class="card-body">
+      <h3 class="text-muted">Predecessors</h3>
+      {% if predecessor_links %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Dependency</th><th>From</th><th>Link type</th><th>Lag / lead</th></tr></thead>
+            <tbody>
+              {% for dep in predecessor_links %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:dep_detail' dep.pk %}">{{ dep.number }}</a></td>
+                  <td><a href="{% url 'projects:tsk_detail' dep.predecessor_id %}">{{ dep.predecessor.name }}</a></td>
+                  <td>{{ dep.get_link_type_display }}</td>
+                  <td>{% if dep.lag_days %}{{ dep.lag_days }} day{{ dep.lag_days|pluralize }}{% if dep.lag_days < 0 %} (lead){% endif %}{% else %}—{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}<p class="text-muted">Nothing must finish (or start) before this task.</p>{% endif %}
+      <h3 class="text-muted">Successors</h3>
+      {% if successor_links %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Dependency</th><th>To</th><th>Link type</th><th>Lag / lead</th></tr></thead>
+            <tbody>
+              {% for dep in successor_links %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:dep_detail' dep.pk %}">{{ dep.number }}</a></td>
+                  <td><a href="{% url 'projects:tsk_detail' dep.successor_id %}">{{ dep.successor.name }}</a></td>
+                  <td>{{ dep.get_link_type_display }}</td>
+                  <td>{% if dep.lag_days %}{{ dep.lag_days }} day{{ dep.lag_days|pluralize }}{% if dep.lag_days < 0 %} (lead){% endif %}{% else %}—{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}<p class="text-muted">Nothing waits on this task.</p>{% endif %}
+      <p class="text-muted"><a href="{% url 'projects:dep_create' %}?project={{ obj.project_id }}">Add a dependency</a> in the dependency register.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Child nodes</h2></div>
+    <div class="card-body">
+      {% if child_tasks %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Task</th><th>Type</th><th>Status</th><th>Planned window</th><th>Effort</th></tr></thead>
+            <tbody>
+              {% for t in child_tasks %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.name }}</a><div class="text-muted">{{ t.number }}</div></td>
+                  <td>{{ t.get_node_type_display }}</td>
+                  <td>{{ t.get_status_display }}</td>
+                  <td>{{ t.planned_start|date:"M d, Y"|default:"—" }} → {{ t.planned_end|date:"M d, Y"|default:"—" }}</td>
+                  <td>{{ t.effort_hours|default:"—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="list-tree"></i><h3>No child nodes</h3><p>This task is a WBS leaf. Nest work packages beneath a deliverable from the task form's Parent field.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:tsk_list' %}" class="btn btn-outline">Back to Tasks</a>
+    <form method="post" action="{% url 'projects:tsk_delete' obj.pk %}" onsubmit="return confirm('Delete task {{ obj.number }}? Its dependencies are deleted with it, its child nodes re-root, and any anchored milestone is unanchored. This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
