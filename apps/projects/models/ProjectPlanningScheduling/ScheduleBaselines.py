@@ -65,13 +65,14 @@ class ScheduleBaseline(TenantNumbered):
         """Copy the project's live plan into the snapshot columns, and stamp the freeze date.
 
         Called by the create view (when the row is born a baseline) and by ``bsl_promote``
-        BEFORE ``save()``. Undated tasks count toward ``task_count`` but contribute nothing to
-        the finish; ``effort`` is q2-clamped like every money-shaped decimal in this app.
+        BEFORE ``save()``. ONE aggregate over the project's tasks — no full-row load. Undated
+        tasks count toward ``task_count`` but contribute nothing to the finish (``Max`` skips
+        NULLs, and an all-undated plan snapshots a NULL finish); ``effort`` is q2-clamped like
+        every money-shaped decimal in this app.
         """
-        tasks = list(self.project.tasks.all())
-        ends = [t.planned_end for t in tasks if t.planned_end]
-        self.planned_finish = max(ends) if ends else None
-        self.task_count = len(tasks)
-        self.total_effort_hours = q2(sum(
-            (t.effort_hours or ZERO for t in tasks), ZERO))
+        row = self.project.tasks.aggregate(
+            finish=Max("planned_end"), n=Count("pk"), effort=Sum("effort_hours"))
+        self.planned_finish = row["finish"]
+        self.task_count = row["n"]
+        self.total_effort_hours = q2(row["effort"] or ZERO)
         self.frozen_on = timezone.localdate()
