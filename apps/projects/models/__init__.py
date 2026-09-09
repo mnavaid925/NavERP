@@ -25,3 +25,9 @@ from .ProjectInitiation.ProjectKickoffs import ProjectKickoff  # noqa: F401
 from .ProjectInitiation.ProjectRequests import ProjectRequest  # noqa: F401
 from .ProjectInitiation.ProjectStakeholders import ProjectStakeholder  # noqa: F401
 from .ProjectInitiation.Projects import Project  # noqa: F401
+
+# --- 7.2 Project Planning & Scheduling --------------------------------------------------------
+from .ProjectPlanningScheduling.ProjectMilestones import ProjectMilestone  # noqa: F401
+from .ProjectPlanningScheduling.ProjectTasks import ProjectTask  # noqa: F401
+from .ProjectPlanningScheduling.ScheduleBaselines import ScheduleBaseline  # noqa: F401
+from .ProjectPlanningScheduling.TaskDependencies import TaskDependency  # noqa: F401
