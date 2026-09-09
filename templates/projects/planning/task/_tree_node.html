@@ -1,0 +1,38 @@
+{% comment %}
+Recursive WBS node. Expects: node (a ProjectTask, decorated by the tree view with wbs_code /
+is_critical / rollup_* attrs and its decorated child nodes on node.kids), depth (int),
+tree_max_depth (int). Renders the node then recurses into node.kids up to the bounded depth.
+{% endcomment %}
+<li style="margin-block:.35rem;">
+  <div class="tree-node">
+    {% if node.node_type == 'deliverable' %}<i data-lucide="package"></i>{% else %}<i data-lucide="square-check"></i>{% endif %}
+    <span class="badge badge-slate">{{ node.wbs_code }}</span>
+    <a href="{% url 'projects:tsk_detail' node.pk %}" class="fw-600">{{ node.name }}</a>
+    {% if node.node_type == 'work_package' %}<span class="badge badge-info">{{ node.get_node_type_display }}</span>{% else %}<span class="badge badge-slate">{{ node.get_node_type_display }}</span>{% endif %}
+    {% if node.is_critical %}<span class="badge badge-red">Critical</span>{% endif %}
+    {% if node.node_type == 'deliverable' %}
+      {% comment %}Deliverable rows show the post-order subtree rollup the view computed.{% endcomment %}
+      <span class="text-muted">{{ node.rollup_count }} package{{ node.rollup_count|pluralize }}</span>
+      <span class="text-muted">· {{ node.rollup_start|date:"M d, Y"|default:"—" }} → {{ node.rollup_end|date:"M d, Y"|default:"—" }}</span>
+      <span class="text-muted">· {{ node.rollup_effort_hours }}h</span>
+    {% else %}
+      <span class="text-muted">{{ node.planned_start|date:"M d, Y"|default:"—" }} → {{ node.planned_end|date:"M d, Y"|default:"—" }}</span>
+      <span class="text-muted">· {{ node.effort_hours|default:"—" }}h</span>
+    {% endif %}
+    {% if node.status == 'done' %}<span class="badge badge-green">{{ node.get_status_display }}</span>
+    {% elif node.status == 'in_progress' %}<span class="badge badge-info">{{ node.get_status_display }}</span>
+    {% elif node.status == 'cancelled' %}<span class="badge badge-red">{{ node.get_status_display }}</span>
+    {% else %}<span class="badge badge-muted">{{ node.get_status_display }}</span>{% endif %}
+  </div>
+  {% if depth < tree_max_depth %}
+    {% with children=node.kids %}
+      {% if children %}
+        <ul class="tree-children">
+          {% for child in children %}
+            {% include "projects/planning/task/_tree_node.html" with node=child depth=depth|add:1 %}
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+  {% endif %}
+</li>
