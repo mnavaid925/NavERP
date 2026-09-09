@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Expense{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:pex_list' %}">Expenses</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · <a href="{% url 'projects:cca_detail' obj.control_account_id %}">{{ obj.control_account.code }} — {{ obj.control_account.name }}</a></p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'projects:pex_post' obj.pk %}" onsubmit="return confirm('Post expense {{ obj.number }}? It will count against the budget.');">{% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Post</button>
+        </form>
+      {% elif obj.status == 'posted' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'projects:pex_void' obj.pk %}" onsubmit="return confirm('Void expense {{ obj.number }}? It stops counting against the budget but stays visible.');">{% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Void</button>
+          </form>
+        {% endif %}
+      {% endif %}
+      {% if not obj.is_locked %}<a href="{% url 'projects:pex_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Expense</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'posted' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% endif %}</dd>
+        <dt>Entry type</dt><dd>{{ obj.get_entry_type_display }}</dd>
+        <dt>Amount</dt><dd class="fw-600">{{ obj.amount }}{% if obj.currency %} {{ obj.currency }}{% endif %}</dd>
+        <dt>Entry date</dt><dd>{{ obj.entry_date|date:"M d, Y" }}</dd>
+        <dt>Source</dt><dd>{{ obj.get_source_kind_display }}{% if obj.source_number %} <span class="text-muted">{{ obj.source_number }}</span>{% endif %}</dd>
+        <dt>Vendor</dt><dd>{% if obj.vendor %}{{ obj.vendor.name }}{% else %}—{% endif %}</dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>GL account</dt><dd>{% if obj.gl_account %}{{ obj.gl_account }}{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}—{% endif %}</dd>
+        <dt>Created at</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+      {% if obj.description %}<p><strong>Description.</strong> {{ obj.description }}</p>{% endif %}
+      {% if obj.status == 'posted' %}<p class="text-muted">This row is posted — it counts against its control account's AC (actuals and accruals) or commitments. Void it to stop it counting; posted evidence cannot be edited.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:pex_list' %}" class="btn btn-outline">Back to Expenses</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:pex_delete' obj.pk %}" onsubmit="return confirm('Delete expense {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
