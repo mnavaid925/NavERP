@@ -1,11 +1,15 @@
 """Private helpers used by MORE THAN ONE sub-module's views.
 
-A helper used by a single entity stays in that entity's module. These three are each shared by
-more than one of 7.1's registers, so they live here rather than being copy-pasted forward.
+A helper used by a single entity stays in that entity's module. The first three here are the
+filter-dropdown builders shared by more than one of 7.1's/7.2's registers; the fourth,
+``critical_path_ids``, is 7.2's critical-chain pass over dependency edges. Same rule for all
+four: if only one consumer ever needs a helper, it moves to that consumer's module.
 
-Both return ``.none()`` for a tenant-less user instead of raising: the superuser has
-``tenant=None`` and sees no module data by design, so a filter dropdown for them is empty, not an
-error.
+The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
+superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
+is empty, not an error. (``critical_path_ids`` is project-scoped, and a tenant-less user never
+reaches it — their project dropdown is empty — and it returns an empty set for a plan with no
+work packages.)
 """
 from apps.core.models import OrgUnit, Party
 from apps.projects.models import Project
