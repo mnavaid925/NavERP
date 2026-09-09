@@ -5924,3 +5924,36 @@ and forecloses a 7.x reject-charter verb); `pko_complete`'s success message sits
 guard, so an `on_hold` project is told it "is now active" — wording only, the status behaviour is
 correct and pinned by a test.
 
+
+---
+
+## Projects 7.2 — Project Planning & Scheduling (build record)
+
+**Delivered (one sub-module, per the /next-module rule):** 4 models — `ProjectTask` [TSK-]
+(the WBS node and the schedulable activity in one row: `deliverable` rollups + the `1.2.3` code
+are computed in the tree view, never stored; `duration_days` is a property), `TaskDependency`
+[DEP-] (four link kinds, signed lag/lead, same-project clean() guard), `ProjectMilestone` [MST-]
+(phase gates with entry/exit criteria; `save()` stamps `actual_date` exactly once on `achieved`
+and clears it on reopen), `ScheduleBaseline` [BSL-] (frozen rows refuse edit/delete;
+`freeze_snapshot()` writes the summary snapshot columns at freeze time; `bsl_activate` /
+`bsl_promote` keep exactly one active baseline per project atomically — deliberately NO
+conditional unique constraint, MariaDB can't enforce one).
+
+**Surfaces:** 4 forms, 22 routes (tsk 6 incl. `tasks/tree/`, dep 5, mst 6, bsl 7), 19 views
+(3 admin-gated verbs `mst_achieve` / `bsl_activate` / `bsl_promote`), 14 templates incl. the
+recursive WBS tree (`_tree_node.html`), migration 0003, seeder 7.2 block (idempotent, own guard —
+19 TSK / 9 DEP / 9 MST / 3 BSL per tenant, `--flush` extended), admin registrations,
+`LIVE_LINKS["7.2"]` (5 bullets + extra "Task Register"), overview page counts + quick links.
+
+**Key design decisions:** the critical path is the longest dependency chain, computed on read by
+`critical_path_ids()` (memoised DFS, cycle-guarded; full CPM float is 7.16's); the tree walks
+`node.kids` (decorated instances) NOT `node.children.all` — prefetch_related would fetch
+children as distinct Python objects and render undecorated rows (caught in smoke); no money
+columns (7.4) and no execution actuals (7.8 extends `ProjectTask` in place); baselines snapshot
+summary figures only — task-level snapshots are a documented future extension.
+
+**Verification:** migrate OK; seed x2 idempotent; `manage.py check` + `makemigrations --check`
+clean; smoke script (`temp/smoke_72.py` + `temp/smoke_72_verbs.py`): all 17 GET pages 200 with
+content asserts, junk params safe, page 2 works, verbs POST-only (405 on GET), frozen guards
+hold, promote/achieve stamps written once, member users 403 on gated verbs, cross-tenant IDOR
+404 on all four entities. 7.1 behavior untouched (stakeholder/kickoff/selection flow byte-faithful).
