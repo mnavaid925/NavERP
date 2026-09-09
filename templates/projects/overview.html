@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines) and the 7.3 resourcing layer (pool, allocations, time). Cost, risk and the rest of Module 7 are separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time) and the 7.4 cost layer (budgets, control accounts, expenses). Risk and the rest of Module 7 are separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -27,6 +27,8 @@
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div class="stat-value">{{ resource_count }}</div><div class="stat-label">Resources</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-range"></i></div><div class="stat-value">{{ allocation_count }}</div><div class="stat-label">Allocations</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="clock"></i></div><div class="stat-value">{{ time_entry_count }}</div><div class="stat-label">Time entries</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="gavel"></i></div><div class="stat-value">{{ pending_revisions }}</div><div class="stat-label">Revisions pending</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="wallet"></i></div><div class="stat-value">{{ posted_spend }}</div><div class="stat-label">Posted spend</div></div>
   </div>
 
   <div class="card">
@@ -95,6 +97,26 @@
               <td class="fw-600"><a href="{% url 'projects:capacity_demand' %}">Capacity &amp; Demand</a></td>
               <td>Over-allocation alerts and the unfilled demand that is the hiring trigger.</td>
               <td><a href="{% url 'projects:capacity_demand' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:bvr_list' %}">Budget Revisions</a></td>
+              <td>Budget versions and change control — the approved-and-activated one is the baseline.</td>
+              <td><a href="{% url 'projects:bvr_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pbl_list' %}">Budget Register</a></td>
+              <td>Every budgeted line by category, revision, WBS package and control account.</td>
+              <td><a href="{% url 'projects:pbl_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:cca_list' %}">Control Accounts</a></td>
+              <td>The EVM panels — BAC, EV, CPI/SPI and the EAC forecast per deliverable.</td>
+              <td><a href="{% url 'projects:cca_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pex_list' %}">Expenses</a></td>
+              <td>Commitments, actuals and accruals; only posted rows count against the budget.</td>
+              <td><a href="{% url 'projects:pex_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>
