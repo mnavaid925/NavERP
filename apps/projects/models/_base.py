@@ -19,7 +19,7 @@ from django.conf import settings  # noqa: F401  (entity modules reference AUTH_U
 from django.core.exceptions import ValidationError  # noqa: F401
 from django.core.validators import MaxValueValidator, MinValueValidator  # noqa: F401
 from django.db import IntegrityError, models, transaction
-from django.db.models import F, Q, Sum  # noqa: F401
+from django.db.models import Count, F, Max, Q, Sum  # noqa: F401
 from django.utils import timezone  # noqa: F401
 
 from apps.core.utils import next_number
