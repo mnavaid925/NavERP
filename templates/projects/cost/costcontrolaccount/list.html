@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Control Accounts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cost Control Accounts</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Control Accounts</span></div>
+      <p class="text-muted">The EVM management points: each account measures a slice of the WBS against the project's active cost baseline — budget, earned value, actuals, and the CPI/SPI/EAC forecast roll up from here.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:cca_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Control Account</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, name, code or notes…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:cca_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Control account</th><th>Project</th><th>Code</th><th>Status</th><th class="ta-right">% complete</th><th class="ta-right">BAC</th><th class="ta-right">CPI</th><th>Health</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:cca_detail' obj.pk %}">{{ obj.name }}</a><div class="text-muted">{{ obj.number }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.code }}</td>
+              <td>{% if obj.status == 'planning' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td class="ta-right">{{ obj.percent_complete }}</td>
+              <td class="ta-right fw-600">{{ obj.bac }}</td>
+              <td class="ta-right">{% if obj.cpi is not None %}{{ obj.cpi }}{% else %}—{% endif %}</td>
+              <td><span class="badge {{ obj.health.badge }}">{{ obj.health.state }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:cca_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:cca_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:cca_delete' obj.pk %}" onsubmit="return confirm('Delete control account {{ obj.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="gauge"></i><h3>No control accounts match</h3><p>Carve the project's budget into control accounts — one per deliverable you need to measure and forecast.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
