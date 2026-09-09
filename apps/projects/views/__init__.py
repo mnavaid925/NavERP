@@ -51,3 +51,37 @@ from .ProjectInitiation.Projects import (  # noqa: F401
     prj_list,
     prj_submit_charter,
 )
+
+# --- 7.2 Project Planning & Scheduling --------------------------------------------------------
+from .ProjectPlanningScheduling.ProjectMilestones import (  # noqa: F401
+    mst_achieve,
+    mst_create,
+    mst_delete,
+    mst_detail,
+    mst_edit,
+    mst_list,
+)
+from .ProjectPlanningScheduling.ProjectTasks import (  # noqa: F401
+    tsk_create,
+    tsk_delete,
+    tsk_detail,
+    tsk_edit,
+    tsk_list,
+    tsk_tree,
+)
+from .ProjectPlanningScheduling.ScheduleBaselines import (  # noqa: F401
+    bsl_activate,
+    bsl_create,
+    bsl_delete,
+    bsl_detail,
+    bsl_edit,
+    bsl_list,
+    bsl_promote,
+)
+from .ProjectPlanningScheduling.TaskDependencies import (  # noqa: F401
+    dep_create,
+    dep_delete,
+    dep_detail,
+    dep_edit,
+    dep_list,
+)
