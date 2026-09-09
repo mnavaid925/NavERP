@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Budget Line{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.get_category_display }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:pbl_list' %}">Budget Register</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pbl_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Budget line</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Budget revision</dt><dd><a href="{% url 'projects:bvr_detail' obj.budget_revision_id %}">{{ obj.budget_revision.number }}</a> — {{ obj.budget_revision.title }} <span class="badge {% if obj.budget_revision.status == 'approved' %}badge-green{% elif obj.budget_revision.status == 'pending_approval' %}badge-amber{% else %}badge-slate{% endif %}">{{ obj.budget_revision.get_status_display }}</span></dd>
+        <dt>Category</dt><dd>{{ obj.get_category_display }}</dd>
+        <dt>Amount</dt><dd class="fw-600">{{ obj.amount }}</dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Control account</dt><dd>{% if obj.control_account %}<a href="{% url 'projects:cca_detail' obj.control_account_id %}">{{ obj.control_account.code }} — {{ obj.control_account.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>GL account</dt><dd>{% if obj.gl_account %}{{ obj.gl_account }}{% else %}—{% endif %}</dd>
+        <dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+      {% if obj.note %}<p><strong>Notes.</strong> {{ obj.note|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:pbl_list' %}" class="btn btn-outline">Back to Budget Register</a>
+    <form method="post" action="{% url 'projects:pbl_delete' obj.pk %}" onsubmit="return confirm('Delete budget line {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
