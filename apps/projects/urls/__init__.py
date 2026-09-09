@@ -23,6 +23,10 @@ from .ProjectPlanningScheduling.ProjectMilestones import urlpatterns as _pp_mile
 from .ProjectPlanningScheduling.ProjectTasks import urlpatterns as _pp_tasks
 from .ProjectPlanningScheduling.ScheduleBaselines import urlpatterns as _pp_baselines
 from .ProjectPlanningScheduling.TaskDependencies import urlpatterns as _pp_dependencies
+from .ResourceManagement.CapacityDemand import urlpatterns as _rm_capacitydemand
+from .ResourceManagement.ResourceAllocations import urlpatterns as _rm_allocations
+from .ResourceManagement.ResourceProfiles import urlpatterns as _rm_profiles
+from .ResourceManagement.ResourceTimeEntries import urlpatterns as _rm_timeentries
 
 app_name = "projects"
 
@@ -38,4 +42,10 @@ urlpatterns = (
     + _pp_dependencies
     + _pp_milestones
     + _pp_baselines
+    # 7.3 Resource Management — first segments (resource-profiles/, allocations/,
+    # time-entries/, capacity-demand/) are disjoint literals from 7.1's and 7.2's.
+    + _rm_profiles
+    + _rm_allocations
+    + _rm_timeentries
+    + _rm_capacitydemand
 )
