@@ -20,6 +20,12 @@ Per tenant it builds one honest end-to-end chain:
   project carries the full plan incl. its achieved discovery gate and the frozen baseline the
   completed kickoff acknowledged; the chartered project is mid-planning; the draft has sketch
   rows and no commitments).
+* **7.3 Resource Management** (``_resourcing``, its own guard): a resource pool of internal
+  staff (one per existing EmployeeProfile, varied capacities incl. a 24h part-timer) plus a
+  windowed contractor, ten allocations exercising every booking status and all three magnitude
+  units (named, placeholder, request-linked, and a released→successor substitution chain), and
+  sixteen time entries across three ISO weeks covering all four statuses — the approval queue
+  and the actuals-to-plan comparison ship with real rows.
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -43,6 +49,9 @@ from apps.projects.models import (
     ProjectRequest,
     ProjectStakeholder,
     ProjectTask,
+    ResourceAllocation,
+    ResourceProfile,
+    ResourceTimeEntry,
     ScheduleBaseline,
     TaskDependency,
 )
@@ -158,18 +167,23 @@ DRAFT_MILESTONES = [
 
 
 class Command(BaseCommand):
-    help = "Seed Module 7 Project Management demo data (7.1 Initiation & 7.2 Planning)."
+    help = "Seed Module 7 Project Management demo data (7.1 Initiation, 7.2 Planning, 7.3 Resourcing)."
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(baselines, milestones, dependencies, tasks, kickoffs, stakeholders, "
-                  "projects, requests) - not just seeder-created ones."))
+                  "(time entries, allocations, resource profiles, baselines, milestones, "
+                  "dependencies, tasks, kickoffs, stakeholders, projects, requests) - "
+                  "not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
             # Children first: dependencies and milestones hang off tasks, tasks and baselines
-            # hang off projects, requests own the converted_project link (SET_NULL).
+            # hang off projects, requests own the converted_project link (SET_NULL). 7.3's rows
+            # hang off all of the above, so they go before everything else.
+            ResourceTimeEntry.objects.all().delete()
+            ResourceAllocation.objects.all().delete()
+            ResourceProfile.objects.all().delete()
             ScheduleBaseline.objects.all().delete()
             TaskDependency.objects.all().delete()
             ProjectMilestone.objects.all().delete()
@@ -230,6 +244,8 @@ class Command(BaseCommand):
         # 7.2 has its OWN guard so an already-seeded workspace (7.1's guard above) still gets
         # its planning rows on this run's first execution.
         self._planning(tenant, now)
+        # 7.3 has its OWN guard too, same reasoning as 7.2's.
+        self._resourcing(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -283,6 +299,209 @@ class Command(BaseCommand):
                 f"nodes, {TaskDependency.objects.filter(tenant=tenant).count()} dependencies, "
                 f"{ProjectMilestone.objects.filter(tenant=tenant).count()} milestones, "
                 f"{ScheduleBaseline.objects.filter(tenant=tenant).count()} baselines."))
+
+    # -- 7.3 resourcing -------------------------------------------------------------------------
+
+    def _resourcing(self, tenant, now):
+        """Resource pool + bookings + time entries, guarded per tenant.
+
+        The pool reuses the workspace's existing EmployeeProfiles (one pool row each, varied
+        capacities incl. a 24h part-timer) and the first Party as a windowed contractor — never
+        a second person master. The allocations exercise every booking status, all three
+        magnitude units, both placeholder kinds (project-linked and request-linked) and a
+        released→successor substitution chain. The time entries cover all four statuses across
+        three ISO weeks; the submitted trio IS the approval queue and the approved past rows are
+        what the actuals-to-plan section compares. A workspace without an active project or an
+        unconverted approved request still gets its pool — only the rows that would have used
+        the missing anchor are skipped, never a crash.
+        """
+        from apps.hrm.models import EmployeeProfile
+
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        parties = list(Party.objects.filter(tenant=tenant).order_by("id"))
+        if not users or not parties:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: missing users/Party - run seed_core and seed_accounts "
+                f"first. Skipping resourcing."))
+            return
+        if ResourceProfile.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: resource rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+
+        org_unit = OrgUnit.objects.filter(tenant=tenant).order_by("id").first()
+        employees = list(EmployeeProfile.objects.filter(tenant=tenant).order_by("id"))
+        today = timezone.localdate()
+        active = Project.objects.filter(tenant=tenant, status="active").first()
+        pipeline_request = ProjectRequest.objects.filter(
+            tenant=tenant, status="approved", converted_project__isnull=True).first()
+        manager = (active.project_manager if active and active.project_manager_id
+                   else users[0])
+
+        with transaction.atomic():
+            profiles = self._pool(tenant, org_unit, employees, parties, today)
+            if active is not None:
+                self._allocations(tenant, active, profiles, manager, today)
+                if pipeline_request is not None:
+                    self._request_demand(tenant, pipeline_request, manager, today)
+                else:
+                    self.stdout.write(self.style.WARNING(
+                        f"  {tenant.name}: no unconverted approved request - skipping the "
+                        f"request-linked demand row."))
+                self._time_entries(tenant, active, profiles, manager, today, now)
+            else:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: no active project - skipping the allocation and time "
+                    f"entry rows."))
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {ResourceProfile.objects.filter(tenant=tenant).count()} "
+            f"resources, {ResourceAllocation.objects.filter(tenant=tenant).count()} "
+            f"allocations, {ResourceTimeEntry.objects.filter(tenant=tenant).count()} "
+            f"time entries."))
+
+    def _pool(self, tenant, org_unit, employees, parties, today):
+        """Five pool rows: four internal (one per EmployeeProfile, capacities 40/40/32/24) and
+        one windowed contractor. A workspace with fewer employees than four falls back to
+        party-keyed internal rows — the exactly-one-of clean() allows party-keyed internals."""
+        roles = ["Backend developer", "Frontend developer", "Data engineer", "QA analyst"]
+        capacities = [Decimal("40.00"), Decimal("40.00"), Decimal("32.00"), Decimal("24.00")]
+        targets = [80, 80, 80, 50]
+        skills = ["Python, Django, Airflow", "React, TypeScript", "Python, dbt, SQL",
+                  "Playwright, pytest"]
+        profiles = []
+        for i in range(4):
+            kw = dict(
+                tenant=tenant, resource_type="internal", default_role=roles[i],
+                org_unit=org_unit, skill_summary=skills[i],
+                weekly_capacity_hours=capacities[i], utilization_target_pct=targets[i])
+            if i < len(employees):
+                kw["employee"] = employees[i]
+            else:
+                kw["party"] = parties[i % len(parties)]
+            profile = ResourceProfile(**kw)
+            profile.save()
+            profiles.append(profile)
+        contractor = ResourceProfile(
+            tenant=tenant, party=parties[0], resource_type="contractor",
+            default_role="Site reliability engineer", org_unit=org_unit,
+            skill_summary="Terraform, AWS, Go", weekly_capacity_hours=Decimal("40.00"),
+            available_from=today - timedelta(days=30),
+            available_to=today + timedelta(days=90))
+        contractor.save()
+        profiles.append(contractor)
+        return profiles
+
+    def _allocations(self, tenant, active, profiles, manager, today):
+        """Nine project-linked bookings on the active project: every status, all three units,
+        two placeholders, and the released→successor substitution chain (rows 8 and 9)."""
+        first_task = ProjectTask.objects.filter(
+            tenant=tenant, project=active, node_type="work_package"
+        ).order_by("sequence", "id").first()
+
+        def ral(**kw):
+            obj = ResourceAllocation(tenant=tenant, requested_by=manager, **kw)
+            obj.save()
+            return obj
+
+        ral(project=active, resource=profiles[0], role_name="Backend developer",
+            skill_requirements="Python, Django", allocation_unit="hours_per_week",
+            hours_per_week=Decimal("16.00"),
+            start_date=today - timedelta(days=14), end_date=today + timedelta(days=28),
+            booking_status="firm")
+        ral(project=active, resource=profiles[1], role_name="Frontend developer",
+            skill_requirements="React", allocation_unit="hours_per_week",
+            hours_per_week=Decimal("12.00"), project_task=first_task,
+            start_date=today - timedelta(days=7), end_date=today + timedelta(days=35),
+            booking_status="firm")
+        ral(project=active, resource=profiles[3], role_name="QA analyst",
+            skill_requirements="Playwright", allocation_unit="pct_capacity", pct_capacity=50,
+            start_date=today - timedelta(days=7), end_date=today + timedelta(days=35),
+            booking_status="soft")
+        ral(project=active, resource=None, role_name="Data engineer",
+            skill_requirements="Python, Airflow", allocation_unit="hours_per_week",
+            hours_per_week=Decimal("20.00"),
+            start_date=today + timedelta(days=7), end_date=today + timedelta(days=49),
+            booking_status="requested")
+        ral(project=active, resource=None, role_name="QA analyst",
+            allocation_unit="hours_per_week", hours_per_week=Decimal("10.00"),
+            start_date=today - timedelta(days=21), end_date=today + timedelta(days=21),
+            booking_status="soft")
+        ral(project=active, resource=profiles[0], role_name="Backend developer",
+            allocation_unit="hours_per_week", hours_per_week=Decimal("16.00"),
+            start_date=today - timedelta(days=90), end_date=today - timedelta(days=30),
+            booking_status="completed")
+        released = ral(project=active, resource=profiles[1], role_name="Frontend developer",
+                       allocation_unit="hours_per_week", hours_per_week=Decimal("12.00"),
+                       start_date=today - timedelta(days=28), end_date=today + timedelta(days=28),
+                       booking_status="released")
+        ral(project=active, resource=profiles[2], role_name="Frontend developer",
+            allocation_unit="hours_per_week", hours_per_week=Decimal("12.00"),
+            start_date=today - timedelta(days=28), end_date=today + timedelta(days=28),
+            booking_status="firm", substitute_of=released)
+        ral(project=active, resource=profiles[4], role_name="Site reliability engineer",
+            skill_requirements="Terraform", allocation_unit="total_hours",
+            total_hours=Decimal("40.00"),
+            start_date=today + timedelta(days=7), end_date=today + timedelta(days=21),
+            booking_status="soft")
+
+    def _request_demand(self, tenant, request_row, manager, today):
+        """The pipeline-demand placeholder: an unconverted approved request still needing a
+        role — the coverage-gap flag on the demand board."""
+        ResourceAllocation(
+            tenant=tenant, project_request=request_row, resource=None,
+            role_name="Backend developer", skill_requirements="Django",
+            allocation_unit="hours_per_week", hours_per_week=Decimal("20.00"),
+            start_date=today + timedelta(days=14), end_date=today + timedelta(days=70),
+            booking_status="requested", requested_by=manager).save()
+
+    def _time_entries(self, tenant, active, profiles, manager, today, now):
+        """Sixteen entries across resources #1-#3 and three ISO weeks: nine approved past
+        (6h each, on the active project, incl. the remainder row), three submitted this week
+        (the approval queue), two drafts, one rejected with its decision note, and one approved
+        non-project row."""
+        this_monday = today - timedelta(days=today.weekday())
+        last_monday = this_monday - timedelta(days=7)
+        prev_monday = this_monday - timedelta(days=14)
+
+        def rte(resource, day, hours, status="approved", project=active, description="",
+                decision_note=""):
+            row = ResourceTimeEntry(
+                tenant=tenant, resource=resource, project=project, entry_date=day,
+                hours=hours, status=status, task_description=description,
+                decision_note=decision_note)
+            if status == "submitted":
+                row.submitted_at = now
+            if status in ("approved", "rejected"):
+                row.approved_by = manager
+                row.approved_at = now
+            row.save()
+
+        r1, r2, r3 = profiles[0], profiles[1], profiles[2]
+        six = Decimal("6.00")
+        rte(r1, prev_monday, six, description="Order API work")
+        rte(r2, prev_monday + timedelta(days=1), six, description="Checkout UI")
+        rte(r3, prev_monday + timedelta(days=2), six, description="Data model")
+        rte(r1, prev_monday + timedelta(days=3), six, description="Order API tests")
+        rte(r2, last_monday, six, description="Checkout UI polish")
+        rte(r3, last_monday + timedelta(days=1), six, description="ETL pipeline")
+        rte(r1, last_monday + timedelta(days=2), six, description="Refund hooks")
+        rte(r2, last_monday + timedelta(days=3), six, description="Spike cleanup")
+        rte(r3, last_monday + timedelta(days=4), six, description="Warehouse backfill")
+        rte(r1, this_monday, six, status="submitted", description="Cart integration")
+        rte(r1, this_monday + timedelta(days=1), six, status="submitted",
+            description="Cart integration (cont.)")
+        rte(r2, this_monday + timedelta(days=2), six, status="submitted",
+            description="Checkout regression fixes")
+        rte(r3, this_monday + timedelta(days=1), Decimal("5.00"), status="draft",
+            description="dbt model review")
+        rte(r3, this_monday + timedelta(days=2), Decimal("4.00"), status="draft",
+            description="Dashboard mocks")
+        rte(r2, this_monday, six, status="rejected",
+            description="Support escalation",
+            decision_note="Client call overran - re-log the extra hour under support.")
+        rte(r1, this_monday + timedelta(days=3), Decimal("2.00"), project=None,
+            description="Internal training")
 
     def _wbs(self, tenant, project, manager, today, spec):
         """Build the WBS from a spec; return a name -> task map for the dependency specs.
