@@ -1,4 +1,4 @@
-"""Seed Project Management (Module 7) demo data — 7.1 Project Initiation & Charter.
+"""Seed Project Management (Module 7) demo data — 7.1 Initiation & 7.2 Planning & Scheduling.
 
 Per tenant it builds one honest end-to-end chain:
 
@@ -14,6 +14,12 @@ Per tenant it builds one honest end-to-end chain:
 * **2 ProjectKickoffs** — one completed with its baseline acknowledged, one merely scheduled.
 * **4 core.Activity rows** GFK'd to the active project: the kickoff meeting plus three onboarding
   tasks. No second checklist table — the activities ARE the onboarding checklist.
+* **7.2 Planning & Scheduling** (``_planning``, its own guard): a WBS of deliverables + work
+  packages per project, a dependency network whose longest FS chain is the critical path, phase
+  gates and milestones, and baselines — sized to each project's lifecycle stage (the active
+  project carries the full plan incl. its achieved discovery gate and the frozen baseline the
+  completed kickoff acknowledged; the chartered project is mid-planning; the draft has sketch
+  rows and no commitments).
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -30,22 +36,144 @@ from django.utils import timezone
 
 from apps.core.models import Activity, OrgUnit, Party, PartyRole, Tenant
 from apps.core.utils import write_audit_log
-from apps.projects.models import Project, ProjectKickoff, ProjectRequest, ProjectStakeholder
+from apps.projects.models import (
+    Project,
+    ProjectKickoff,
+    ProjectMilestone,
+    ProjectRequest,
+    ProjectStakeholder,
+    ProjectTask,
+    ScheduleBaseline,
+    TaskDependency,
+)
+
+
+# -- 7.2 WBS specs -----------------------------------------------------------------------------
+#
+# Date offsets are days relative to today (negative = past). Deliverables carry no dates of
+# their own — the tree view rolls their children up. Work-package names double as the keys the
+# dependency/milestone specs reference, so a rename must move through all three specs.
+
+#: The active project — the full plan. The FS chain workshops -> SSO spike -> order API ->
+#: cart UI -> checkout -> refund hooks is the longest chain, i.e. the critical path.
+ACTIVE_WBS = [
+    dict(name="Discovery & design", node_type="deliverable", sequence=1),
+    dict(name="Requirements workshops", parent="Discovery & design", node_type="work_package",
+         start=-60, end=-52, effort="48.00", method="bottom_up", confidence="high",
+         status="done", sequence=1),
+    dict(name="UX design: ordering", parent="Discovery & design", node_type="work_package",
+         start=-51, end=-35, effort="80.00", method="analogous", confidence="high",
+         status="done", sequence=2),
+    dict(name="Technical spike: SSO", parent="Discovery & design", node_type="work_package",
+         start=-50, end=-40, effort="40.00", method="parametric", confidence="medium",
+         status="done", sequence=3),
+    dict(name="Self-service ordering", node_type="deliverable", sequence=2),
+    dict(name="Order API", parent="Self-service ordering", node_type="work_package",
+         start=-38, end=-18, effort="120.00", method="bottom_up", confidence="high",
+         status="in_progress", sequence=1),
+    dict(name="Cart UI", parent="Self-service ordering", node_type="work_package",
+         start=-38, end=-8, effort="96.00", method="top_down", confidence="medium",
+         status="in_progress", sequence=2),
+    dict(name="Checkout integration", parent="Self-service ordering", node_type="work_package",
+         start=-5, end=25, effort="140.00", method="bottom_up", confidence="low",
+         status="planned", sequence=3),
+    dict(name="Returns module", node_type="deliverable", sequence=3),
+    dict(name="Returns portal UI", parent="Returns module", node_type="work_package",
+         start=20, end=55, effort="88.00", method="analogous", confidence="medium",
+         status="planned", sequence=1),
+    dict(name="Refund service hooks", parent="Returns module", node_type="work_package",
+         start=55, end=75, effort="56.00", method="parametric", confidence="low",
+         status="planned", sequence=2),
+]
+
+#: Deliverable 1's pairs plus the cross-deliverable chain; one SS link, one lag, one lead.
+ACTIVE_DEPS = [
+    ("Requirements workshops", "UX design: ordering", "finish_to_start", 0),
+    ("Requirements workshops", "Technical spike: SSO", "finish_to_start", 2),
+    ("Technical spike: SSO", "Order API", "finish_to_start", 0),
+    ("Order API", "Cart UI", "start_to_start", 0),
+    ("Cart UI", "Checkout integration", "finish_to_start", 3),
+    ("Checkout integration", "Refund service hooks", "finish_to_start", -1),
+    ("UX design: ordering", "Returns portal UI", "finish_to_start", 0),
+]
+
+ACTIVE_MILESTONES = [
+    dict(name="Discovery gate passed", gate=True, target=-20, actual=-19, status="achieved",
+         entry="Workshops held, UX signed off, SSO spike concluded.",
+         exit="Client product owner accepts scope for release 3."),
+    dict(name="Beta ordering live", target=35, status="in_review",
+         anchor="Checkout integration",
+         description="Ordering open to a beta cohort of customers."),
+    dict(name="Go/no-go: returns module", gate=True, target=70, status="planned",
+         entry="Returns UI demoable end to end on staging.",
+         exit="Refund service integration signed off by finance."),
+]
+
+#: The chartered project — mid-planning, a smaller tree and a two-link chain.
+CHARTERED_WBS = [
+    dict(name="Scorecard framework", node_type="deliverable", sequence=1),
+    dict(name="Metric definitions", parent="Scorecard framework", node_type="work_package",
+         start=5, end=25, effort="60.00", method="bottom_up", confidence="medium",
+         status="planned", sequence=1),
+    dict(name="Data collection pipeline", parent="Scorecard framework",
+         node_type="work_package", start=20, end=60, effort="110.00", method="top_down",
+         confidence="low", status="planned", sequence=2),
+    dict(name="Quarterly publication", node_type="deliverable", sequence=2),
+    dict(name="Publishing workflow", parent="Quarterly publication", node_type="work_package",
+         start=45, end=90, effort="70.00", method="analogous", confidence="medium",
+         status="planned", sequence=1),
+]
+
+CHARTERED_DEPS = [
+    ("Metric definitions", "Data collection pipeline", "finish_to_start", 0),
+    ("Data collection pipeline", "Publishing workflow", "finish_to_start", 5),
+]
+
+CHARTERED_MILESTONES = [
+    dict(name="Gate: metrics agreed", gate=True, target=25, status="in_review",
+         entry="Draft metric pack circulated to tier-1 suppliers.",
+         exit="Procurement council signs the metric definitions."),
+    dict(name="First scorecard published", target=95, status="planned"),
+    dict(name="Supplier comms pack ready", target=40, status="planned"),
+]
+
+#: The draft project — sketch rows only: no dependencies, no baselines, nothing achieved.
+DRAFT_WBS = [
+    dict(name="Fleet programme setup", node_type="deliverable", sequence=1),
+    dict(name="Vehicle lifecycle audit", parent="Fleet programme setup",
+         node_type="work_package", start=30, end=60, effort="40.00", method="top_down",
+         confidence="low", status="planned", sequence=1),
+    dict(name="Leasing market scan", parent="Fleet programme setup", node_type="work_package",
+         start=45, end=90, effort="24.00", method="analogous", confidence="low",
+         status="planned", sequence=2),
+]
+
+DRAFT_MILESTONES = [
+    dict(name="Fleet programme kickoff", target=95, status="planned"),
+    dict(name="Replacement strategy chosen", target=150, status="planned"),
+    dict(name="Board review", gate=True, target=180, status="planned",
+         entry="Lifecycle audit and market scan concluded.",
+         exit="Board approves the five-year replacement plan."),
+]
 
 
 class Command(BaseCommand):
-    help = "Seed Module 7 Project Management demo data (7.1 Project Initiation & Charter)."
-
+    help = "Seed Module 7 Project Management demo data (7.1 Initiation & 7.2 Planning)."
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(kickoffs, stakeholders, projects, requests) - not just seeder-created ones."))
+                  "(baselines, milestones, dependencies, tasks, kickoffs, stakeholders, "
+                  "projects, requests) - not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
-            # Children first: stakeholders and kickoffs reference their project (CASCADE, but
-            # cleanest in order); requests own the converted_project link (SET_NULL).
+            # Children first: dependencies and milestones hang off tasks, tasks and baselines
+            # hang off projects, requests own the converted_project link (SET_NULL).
+            ScheduleBaseline.objects.all().delete()
+            TaskDependency.objects.all().delete()
+            ProjectMilestone.objects.all().delete()
+            ProjectTask.objects.all().delete()
             ProjectKickoff.objects.all().delete()
             ProjectStakeholder.objects.all().delete()
             Project.objects.all().delete()
@@ -70,36 +198,156 @@ class Command(BaseCommand):
                 f"  {tenant.name}: missing OrgUnit/Party/users - run seed_core and "
                 f"seed_accounts first. Skipping."))
             return
+
         if ProjectRequest.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: project requests already exist. "
                               f"Use --flush to re-seed.")
-            return
+        else:
+            currency = self._currency()
+            requester, approver = users[0], users[-1]
+            sponsor = users[1] if len(users) > 1 else approver
+            manager = users[2] if len(users) > 2 else approver
+            with transaction.atomic():
+                requests = self._requests(tenant, now, org_unit, party, currency,
+                                          requester, approver)
+                converted = self._convert(tenant, requests, now)
+                projects = self._projects(tenant, now, org_unit, party, sponsor, manager,
+                                          converted)
+                # Select by identity, never by list position: _projects() returns TWO rows
+                # instead of three whenever _convert() yields None, which silently shifts every
+                # index — the stakeholders would land on the standalone draft and _activities
+                # would IndexError. (_kickoffs picks its two rows by status, same pattern.)
+                chartered = next((p for p in projects if p.request_id is not None), None)
+                active = next((p for p in projects if p.status == "active"), None)
+                self._stakeholders(tenant, chartered, party, users, manager)
+                self._kickoffs(tenant, now, projects)
+                self._activities(tenant, now, active, manager)
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {len(requests)} requests, {len(projects)} projects, "
+                f"{ProjectStakeholder.objects.filter(tenant=tenant).count()} stakeholders, "
+                f"{ProjectKickoff.objects.filter(tenant=tenant).count()} kickoffs."))
 
-        currency = self._currency()
-        requester, approver = users[0], users[-1]
-        sponsor = users[1] if len(users) > 1 else approver
-        manager = users[2] if len(users) > 2 else approver
+        # 7.2 has its OWN guard so an already-seeded workspace (7.1's guard above) still gets
+        # its planning rows on this run's first execution.
+        self._planning(tenant, now)
+
+    # -- 7.2 planning ---------------------------------------------------------------------------
+
+    def _planning(self, tenant, now):
+        """WBS + dependencies + milestones + baselines, sized to each project's stage.
+
+        Guarded per tenant. The ACTIVE project carries the full plan: an 11-node WBS, the
+        dependency network (one long FS chain that is the critical path, one SS link, one lagged
+        and one led link), an achieved discovery gate plus two live milestones, and the frozen
+        baseline the completed kickoff acknowledged. The chartered project is mid-planning (a
+        smaller WBS, a two-link chain, a gate in review, a what-if). The draft has sketch nodes
+        and a planned milestone — no dependencies, no baselines: you don't freeze a plan for a
+        project whose charter isn't approved.
+        """
+        if ProjectTask.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: planning rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        projects = list(Project.objects.filter(tenant=tenant))
+        active = next((p for p in projects if p.status == "active"), None)
+        chartered = next((p for p in projects if p.status == "chartered"), None)
+        draft = next((p for p in projects if p.status == "draft"), None)
+        # Any project's manager — only used as the WBS node owner; None is a valid owner.
+        manager = next((p.project_manager for p in projects if p.project_manager_id), None)
+        today = timezone.localdate()
 
         with transaction.atomic():
-            requests = self._requests(tenant, now, org_unit, party, currency, requester, approver)
-            converted = self._convert(tenant, requests, now)
-            projects = self._projects(tenant, now, org_unit, party, sponsor, manager, converted)
-            # Select by identity, never by list position: _projects() returns TWO rows instead of
-            # three whenever _convert() yields None, which silently shifts every index — the
-            # stakeholders would land on the standalone draft and _activities would IndexError.
-            # (_kickoffs already picks its two rows by status, which is the pattern followed here.)
-            chartered = next((p for p in projects if p.request_id is not None), None)
-            active = next((p for p in projects if p.status == "active"), None)
-            self._stakeholders(tenant, chartered, party, users, manager)
-            self._kickoffs(tenant, now, projects)
-            self._activities(tenant, now, active, manager)
+            if active is not None:
+                tasks = self._wbs(tenant, active, manager, today, ACTIVE_WBS)
+                self._deps(tenant, tasks, ACTIVE_DEPS)
+                self._milestones(tenant, active, tasks, today, ACTIVE_MILESTONES)
+                self._baseline(tenant, active, "Release 3 baseline v1", "baseline",
+                               is_active=True, frozen_offset=58)
+                self._baseline(tenant, active, "Compression experiment: crash checkout",
+                               "what_if", strategy_note="Crash the checkout integration by "
+                               "adding a second engineer (4 weeks -> 3).")
+            if chartered is not None:
+                tasks = self._wbs(tenant, chartered, manager, today, CHARTERED_WBS)
+                self._deps(tenant, tasks, CHARTERED_DEPS)
+                self._milestones(tenant, chartered, tasks, today, CHARTERED_MILESTONES)
+                self._baseline(tenant, chartered, "Scorecard rollout: publish-only scenario",
+                               "what_if", strategy_note="Fast-track the data-collection "
+                               "package by starting it before design sign-off.")
+            if draft is not None:
+                self._wbs(tenant, draft, manager, today, DRAFT_WBS)
+                self._milestones(tenant, draft, {}, today, DRAFT_MILESTONES)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: {len(requests)} requests, {len(projects)} projects, "
-            f"{ProjectStakeholder.objects.filter(tenant=tenant).count()} stakeholders, "
-            f"{ProjectKickoff.objects.filter(tenant=tenant).count()} kickoffs."))
+        if ProjectTask.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {ProjectTask.objects.filter(tenant=tenant).count()} WBS "
+                f"nodes, {TaskDependency.objects.filter(tenant=tenant).count()} dependencies, "
+                f"{ProjectMilestone.objects.filter(tenant=tenant).count()} milestones, "
+                f"{ScheduleBaseline.objects.filter(tenant=tenant).count()} baselines."))
 
-    # -- blocks ----------------------------------------------------------------------------------
+    def _wbs(self, tenant, project, manager, today, spec):
+        """Build the WBS from a spec; return a name -> task map for the dependency specs.
+
+        Rows are constructed and ``.save()``d individually — never ``bulk_create``: it bypasses
+        ``TenantNumbered.save()`` and would ship every row with an empty number.
+        """
+        by_name = {}
+        for entry in spec:
+            parent = by_name.get(entry["parent"]) if entry.get("parent") else None
+            task = ProjectTask(
+                tenant=tenant, project=project, parent=parent,
+                node_type=entry["node_type"], name=entry["name"],
+                description=entry.get("description", ""),
+                owner=manager if entry["node_type"] == "work_package" else None,
+                status=entry.get("status", "planned"),
+                # Deliverables carry no planned dates — the tree view rolls their children up.
+                planned_start=today + timedelta(days=entry["start"])
+                if entry.get("start") is not None else None,
+                planned_end=today + timedelta(days=entry["end"])
+                if entry.get("end") is not None else None,
+                effort_hours=Decimal(entry["effort"]) if entry.get("effort") else None,
+                estimation_method=entry.get("method", "bottom_up"),
+                confidence=entry.get("confidence", "medium"),
+                sequence=entry.get("sequence", 0))
+            task.save()
+            by_name[entry["name"]] = task
+        return by_name
+
+    def _deps(self, tenant, tasks, spec):
+        for predecessor, successor, link_type, lag in spec:
+            a, b = tasks.get(predecessor), tasks.get(successor)
+            if a is None or b is None:
+                continue
+            TaskDependency(tenant=tenant, predecessor=a, successor=b,
+                           link_type=link_type, lag_days=lag).save()
+
+    def _milestones(self, tenant, project, tasks, today, spec):
+        for entry in spec:
+            anchor = tasks.get(entry["anchor"]) if entry.get("anchor") else None
+            ProjectMilestone(
+                tenant=tenant, project=project, anchor_task=anchor,
+                name=entry["name"], description=entry.get("description", ""),
+                target_date=today + timedelta(days=entry["target"]),
+                is_phase_gate=entry.get("gate", False),
+                entry_criteria=entry.get("entry", ""),
+                exit_criteria=entry.get("exit", ""),
+                status=entry["status"],
+                actual_date=today + timedelta(days=entry["actual"])
+                if entry.get("actual") is not None else None).save()
+
+    def _baseline(self, tenant, project, name, baseline_type, is_active=False,
+                  frozen_offset=None, strategy_note=""):
+        baseline = ScheduleBaseline(
+            tenant=tenant, project=project, name=name, baseline_type=baseline_type,
+            is_active=is_active, strategy_note=strategy_note)
+        if baseline_type == "baseline":
+            # Snapshot the plan as it stands, then backdate the freeze to the kickoff's
+            # acknowledgement — the row attests to the schedule the ceremony accepted.
+            baseline.freeze_snapshot()
+            if frozen_offset:
+                baseline.frozen_on = timezone.localdate() - timedelta(days=frozen_offset)
+        baseline.save()
+
+    # -- 7.1 blocks -------------------------------------------------------------------------------
 
     def _requests(self, tenant, now, org_unit, party, currency, requester, approver):
         """Nine rows, one per status. Guarded as a block — see the module docstring."""
