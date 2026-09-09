@@ -24,15 +24,22 @@ class TaskForm(TenantUniqueMixin, TenantModelForm):
         _reject_foreign(self, cleaned, ["project", "parent"])
         # A task must not be nested beneath its own descendant — walking UP from the candidate
         # parent reaches ``self`` exactly when the candidate sits in self's subtree, which would
-        # make the tree unrenderable. The walk is bounded so a pre-existing cycle in the data
-        # (not creatable through this form) costs a bounded loop, not a hang.
+        # make the tree unrenderable. The walk runs over a {pk: parent_id} map built with ONE
+        # tenant-scoped query for the project — never ``node.parent`` per hop, which cost one
+        # lazy FK query per ancestor level (up to 250 per POST). The cap keeps a pre-existing
+        # cycle in the data (not creatable through this form) a bounded loop, not a hang.
         parent = cleaned.get("parent")
-        if parent is not None and self.instance.pk:
-            node, hops = parent, 0
-            while node is not None and hops < 250:
-                if node.pk == self.instance.pk:
-                    self.add_error("parent", "A task cannot be nested beneath its own descendant.")
+        project = cleaned.get("project")
+        if parent is not None and self.instance.pk and project is not None:
+            pairs = dict(ProjectTask.objects.filter(
+                tenant=self.tenant, project_id=project.pk,
+            ).values_list("id", "parent_id"))
+            node_id, hops = parent.pk, 0
+            while node_id is not None and hops < 250:
+                if node_id == self.instance.pk:
+                    self.add_error("parent",
+                                   "A task cannot be nested beneath its own descendant.")
                     break
-                node = node.parent
+                node_id = pairs.get(node_id)
                 hops += 1
         return cleaned
