@@ -94,5 +94,8 @@ class ScheduleBaselineAdmin(admin.ModelAdmin):
     list_filter = ("baseline_type", "is_active")
     list_select_related = ("tenant", "project")
     search_fields = ("number", "name", "strategy_note", "note")
-    readonly_fields = ("created_at", "updated_at", "frozen_on", "planned_finish", "task_count",
-                       "total_effort_hours")
+    # `baseline_type` and `is_active` are read-only like the snapshot columns: a row's type only
+    # moves through the audited bsl_promote verb, and is_active through the atomic
+    # deactivate-siblings activate/promote verbs — an admin-form edit would bypass both.
+    readonly_fields = ("baseline_type", "is_active", "created_at", "updated_at", "frozen_on",
+                       "planned_finish", "task_count", "total_effort_hours")
