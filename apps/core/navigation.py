@@ -1716,11 +1716,12 @@ LIVE_LINKS = {
     # ----- 7.2 Project Planning & Scheduling -----
     "7.2": {
         "Work Breakdown Structure (WBS)":        "projects:tsk_tree",
-        # The estimation bullet lands on the task register filtered to work packages — the
+        # NavERP.md bullet order: Task Sequencing precedes Duration & Effort Estimation. The
+        # estimation bullet lands on the task register filtered to work packages — the
         # rows that actually carry planned dates, effort and an estimation method (7.1's
         # `?query=` precedent: a bullet may map to a lens on a register, not a new page).
-        "Duration & Effort Estimation":          "projects:tsk_list?node_type=work_package",
         "Task Sequencing & Dependency Mapping":  "projects:dep_list",
+        "Duration & Effort Estimation":          "projects:tsk_list?node_type=work_package",
         "Milestone & Phase-Gate Definition":     "projects:mst_list",
         "Schedule Baseline & Version Control":   "projects:bsl_list",
         # Extra live leaf: the flat register behind the WBS tree (labels that don't match a
