@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Project Tasks{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Task Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Tasks</span></div>
+      <p class="text-muted">Every WBS node in this workspace — work packages carry the planned window, effort and estimation method; deliverables roll their children up in the <a href="{% url 'projects:tsk_tree' %}">WBS tree</a>.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:tsk_tree' %}" class="btn btn-outline"><i data-lucide="git-fork"></i> WBS Tree</a>
+      <a href="{% url 'projects:tsk_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Task</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, number or description…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="node_type" aria-label="Node type" class="form-select">
+            <option value="">Any node type</option>
+            {% for val, label in node_type_choices %}
+              <option value="{{ val }}" {% if request.GET.node_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="estimation_method" aria-label="Estimation method" class="form-select">
+            <option value="">Any estimation</option>
+            {% for val, label in estimation_method_choices %}
+              <option value="{{ val }}" {% if request.GET.estimation_method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:tsk_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Task</th><th>Project</th><th>Type</th><th>Status</th><th>Planned window</th><th>Effort</th><th>Estimate</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:tsk_detail' obj.pk %}">{{ obj.name }}</a><div class="text-muted">{{ obj.number }}{% if obj.owner %} · {{ obj.owner.get_full_name|default:obj.owner.username }}{% endif %}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{% if obj.node_type == 'work_package' %}<span class="badge badge-info">{{ obj.get_node_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_node_type_display }}</span>{% endif %}</td>
+              <td>
+                {% if obj.status == 'done' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.planned_start|date:"M d, Y"|default:"—" }} → {{ obj.planned_end|date:"M d, Y"|default:"—" }}{% if obj.duration_days %} <span class="text-muted">({{ obj.duration_days }}d)</span>{% endif %}</td>
+              <td>{{ obj.effort_hours|default:"—" }}</td>
+              <td>{{ obj.get_estimation_method_display }} <span class="text-muted">· {{ obj.get_confidence_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:tsk_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:tsk_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:tsk_delete' obj.pk %}" onsubmit="return confirm('Delete task {{ obj.number }}? Its dependencies are deleted with it, its child nodes re-root, and any anchored milestone is unanchored. This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-tree"></i><h3>No tasks match</h3><p>Add a work package to a project's WBS, or reset the filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
