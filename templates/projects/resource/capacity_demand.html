@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Capacity &amp; Demand{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Capacity &amp; Demand</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Capacity &amp; Demand</span></div>
+      <p class="text-muted">Booked hours against weekly capacity per resource-week — over-allocation alerts and the unfilled demand that is the hiring/outsourcing trigger. Rebalance from the allocation's Assign and Substitute actions.</p>
+    </div>
+    <div class="page-actions">
+      <form method="get" style="display:flex; gap:6px; align-items:center;">
+        <label class="form-label" for="weeks-select" style="margin:0;">Horizon</label>
+        <select name="weeks" id="weeks-select" class="form-select" style="width:auto;" onchange="this.form.submit();">
+          <option value="4" {% if weeks == 4 %}selected{% endif %}>4 weeks</option>
+          <option value="5" {% if weeks == 5 %}selected{% endif %}>5 weeks</option>
+          <option value="6" {% if weeks == 6 %}selected{% endif %}>6 weeks</option>
+          <option value="7" {% if weeks == 7 %}selected{% endif %}>7 weeks</option>
+          <option value="8" {% if weeks == 8 %}selected{% endif %}>8 weeks</option>
+          <option value="9" {% if weeks == 9 %}selected{% endif %}>9 weeks</option>
+          <option value="10" {% if weeks == 10 %}selected{% endif %}>10 weeks</option>
+          <option value="11" {% if weeks == 11 %}selected{% endif %}>11 weeks</option>
+          <option value="12" {% if weeks == 12 %}selected{% endif %}>12 weeks</option>
+          <option value="13" {% if weeks == 13 %}selected{% endif %}>13 weeks</option>
+        </select>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Capacity — soft/firm bookings per week</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Capacity is uniform weekly hours — leave and absence (HRM 3.10) are not deducted yet.</p>
+      {% if over_count > 0 %}
+        <p><span class="badge badge-red">{{ over_count }} over-booked resource-week{{ over_count|pluralize }}</span> — rebalance by re-assigning or substituting from the allocation detail pages.</p>
+      {% else %}
+        <p><span class="badge badge-green">No over-booked resource-weeks</span> in the {{ weeks }}-week horizon.</p>
+      {% endif %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Resource</th>
+              {% for w in week_windows %}<th>{{ w.label }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for obj in capacity_rows %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:rsp_detail' obj.pk %}">{{ obj.name }}</a><div class="text-muted">{{ obj.number }} · {{ obj.weekly_capacity_hours }}h</div></td>
+                {% for cell in obj.cells %}
+                  <td>
+                    {{ cell.planned }}h
+                    {% if cell.over %}<span class="badge badge-red">Over</span>{% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% empty %}
+              <tr><td colspan="{% if week_windows %}{{ week_windows|length|add:"1" }}{% else %}2{% endif %}"><div class="empty-state"><i data-lucide="users"></i><h3>No active resources</h3><p>Add bookable people to the resource pool first.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <section id="demand">
+    <div class="card">
+      <div class="card-header"><h2>Unfilled demand</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Unfilled demand is the hiring/outsourcing trigger — placeholders and soft bookings against pipeline work.</p>
+        {% if gap_count > 0 %}
+          <p><span class="badge badge-red">{{ gap_count }} unassigned booking{{ gap_count|pluralize }}</span> in the horizon.</p>
+        {% else %}
+          <p><span class="badge badge-green">Every demand booking in the horizon carries a named resource.</span></p>
+        {% endif %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Booking</th><th>Demand on</th><th>Hours</th><th>Window</th><th>Status</th><th>Gap</th></tr></thead>
+            <tbody>
+              {% for r in demand_rows %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:ral_detail' r.pk %}">{{ r.role_name }}</a><div class="text-muted">{{ r.number }}</div></td>
+                  <td>{% if r.demand_url_name %}<a href="{% url r.demand_url_name r.demand_url_pk %}">{{ r.demand_label }}</a>{% else %}{{ r.demand_label }}{% endif %}</td>
+                  <td>{{ r.demand_hours }}h</td>
+                  <td>{{ r.start_date|date:"M d" }} – {% if r.end_date %}{{ r.end_date|date:"M d, Y" }}{% else %}<span class="text-muted">ongoing</span>{% endif %}</td>
+                  <td>
+                    {% if r.booking_status == 'requested' %}<span class="badge badge-muted">{{ r.get_booking_status_display }}</span>
+                    {% elif r.booking_status == 'soft' %}<span class="badge badge-amber">{{ r.get_booking_status_display }}</span>
+                    {% else %}<span class="badge badge-muted">{{ r.get_booking_status_display }}</span>{% endif %}
+                  </td>
+                  <td>{% if r.is_gap %}<span class="badge badge-red">Unassigned</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6"><div class="empty-state"><i data-lucide="calendar-range"></i><h3>No demand in the horizon</h3><p>Requested and soft bookings overlapping the next {{ weeks }} weeks appear here.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
