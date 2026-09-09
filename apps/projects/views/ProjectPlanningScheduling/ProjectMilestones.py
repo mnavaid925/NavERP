@@ -15,7 +15,7 @@ from apps.projects.views._helpers import projects
 @login_required
 def mst_list(request):
     qs = (ProjectMilestone.objects.filter(tenant=request.tenant)
-          .select_related("project", "anchor_task"))
+          .select_related("project"))
     return crud_list(
         request, qs, "projects/planning/milestone/list.html",
         search_fields=["name", "number", "description"],
