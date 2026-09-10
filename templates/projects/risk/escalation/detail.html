@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Escalation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — L{{ obj.level }} {{ obj.issue.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:esc_list' %}">Escalations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Escalation of <a href="{% url 'projects:iss_detail' obj.issue_id %}">{{ obj.issue.number }} — {{ obj.issue.title }}</a> on <a href="{% url 'projects:prj_detail' obj.issue.project_id %}">{{ obj.issue.project.name }}</a></p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:esc_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="arrow-up-circle"></i></div><div class="stat-value">L{{ obj.level }}</div><div class="stat-label">Level</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="user"></i></div><div class="stat-value">{% if obj.target_user %}{{ obj.target_user.get_full_name|default:obj.target_user.email }}{% else %}—{% endif %}</div><div class="stat-label">Target user</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="user-check"></i></div><div class="stat-value">{% if obj.escalated_by %}{{ obj.escalated_by.get_full_name|default:obj.escalated_by.email }}{% else %}—{% endif %}</div><div class="stat-label">Escalated by</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock"></i></div><div class="stat-value">{{ obj.escalated_at|date:"M d, Y" }}</div><div class="stat-label">Escalated at</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Escalation record</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Escalation</dt><dd>{{ obj.number }}</dd>
+        <dt>Issue</dt><dd><a href="{% url 'projects:iss_detail' obj.issue_id %}">{{ obj.issue.number }} — {{ obj.issue.title }}</a></dd>
+        <dt>Issue owner</dt><dd>{% if obj.issue.owner %}{{ obj.issue.owner.get_full_name|default:obj.issue.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Level</dt><dd><span class="badge badge-amber">L{{ obj.level }}</span></dd>
+        <dt>Target role</dt><dd>{{ obj.target_role|default:"—" }}</dd>
+        <dt>Target user</dt><dd>{% if obj.target_user %}{{ obj.target_user.get_full_name|default:obj.target_user.email }}{% else %}—{% endif %}</dd>
+        <dt>Escalated by</dt><dd>{% if obj.escalated_by %}{{ obj.escalated_by.get_full_name|default:obj.escalated_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Escalated at</dt><dd>{{ obj.escalated_at|date:"M d, Y H:i" }}</dd>
+        <dt>Resolved at</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Created at</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+        <dt>Reason</dt><dd>{{ obj.reason|linebreaksbr }}</dd>
+        <dt>Outcome</dt><dd>{% if obj.outcome %}{{ obj.outcome|linebreaksbr }}{% else %}—{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:esc_list' %}" class="btn btn-outline">Back to Escalations</a>
+    <form method="post" action="{% url 'projects:esc_delete' obj.pk %}" onsubmit="return confirm('Delete escalation {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
