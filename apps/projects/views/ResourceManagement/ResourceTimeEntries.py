@@ -271,7 +271,11 @@ def rte_approve_week(request, resource, year, week):
             entry.status = "approved"
             entry.approved_by = request.user
             entry.approved_at = now
-            entry.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+            # bulk_update skips auto_now — stamp updated_at so the "updated this week" audit
+            # trail still moves for every row.
+            entry.updated_at = now
+        ResourceTimeEntry.objects.bulk_update(
+            entries, ["status", "approved_by", "approved_at", "updated_at"])
         write_audit_log(request.user, person, "approve",
                         changes={"verb": "approve_week", "week": f"{year}-W{week:02d}",
                                  "count": len(entries)})
