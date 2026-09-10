@@ -60,7 +60,7 @@
           {% regroup object_list by week_key as week_groups %}
           {% for group in week_groups %}
             <tr>
-              <td colspan="7" style="background:var(--surface-muted, #f8fafc);">
+              <td colspan="7" style="background:var(--page-bg);">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                   <span class="fw-600">{{ group.list.0.resource.name }} · Week {{ group.list.0.iso_week }}, {{ group.list.0.iso_year }}</span>
                   {% if request.user.is_superuser or request.user.is_tenant_admin %}
