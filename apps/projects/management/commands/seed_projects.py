@@ -33,6 +33,12 @@ Per tenant it builds one honest end-to-end chain:
   deliverable tuned so all three CPI health bands render, and expenses covering every entry
   type and status — posted commitments with PO strings, actuals, accruals, one void row and one
   draft.
+* **7.5 Risk & Issue Management** (``_risk``, its own guard): 17 risks per tenant (12 on the
+  active project, 5 on the chartered one) covering all nine categories, both threat/opportunity
+  values, all four severity bands and all six statuses — one realized risk carrying the issue the
+  realize verb would have minted, one closed with a lesson, three with a past review date — plus
+  response actions on the top risks (one completed, one overdue), seven issues across all four
+  severities with two resolved and one escalated to level 2 with a two-step escalation path.
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -52,17 +58,21 @@ from apps.core.utils import write_audit_log
 from apps.projects.models import (
     BudgetRevision,
     CostControlAccount,
+    IssueEscalation,
     Project,
     ProjectBudgetLine,
     ProjectExpense,
+    ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
     ProjectRequest,
+    ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
     ResourceAllocation,
     ResourceProfile,
     ResourceTimeEntry,
+    RiskResponseAction,
     ScheduleBaseline,
     TaskDependency,
 )
@@ -184,10 +194,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(expenses, budget lines, control accounts, budget revisions, "
-                  "time entries, allocations, resource profiles, baselines, milestones, "
-                  "dependencies, tasks, kickoffs, stakeholders, projects, requests) - "
-                  "not just seeder-created ones."))
+                  "(escalations, issues, response actions, risks, expenses, budget lines, "
+                  "control accounts, budget revisions, time entries, allocations, resource "
+                  "profiles, baselines, milestones, dependencies, tasks, kickoffs, "
+                  "stakeholders, projects, requests) - not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
@@ -195,11 +205,17 @@ class Command(BaseCommand):
             # hang off projects, requests own the converted_project link (SET_NULL). 7.3's rows
             # hang off all of the above, so they go before everything else. 7.4's hang off
             # projects/tasks/revisions/accounts: expenses first, then lines, then the accounts
-            # and revisions they point at.
+            # and revisions they point at. 7.5's hang off projects/tasks/risks/issues: the
+            # escalation is the deepest child, then the issues (which point at risks), then the
+            # response actions, then the risks.
             ProjectExpense.objects.all().delete()
             ProjectBudgetLine.objects.all().delete()
             CostControlAccount.objects.all().delete()
             BudgetRevision.objects.all().delete()
+            IssueEscalation.objects.all().delete()
+            ProjectIssue.objects.all().delete()
+            RiskResponseAction.objects.all().delete()
+            ProjectRisk.objects.all().delete()
             ResourceTimeEntry.objects.all().delete()
             ResourceAllocation.objects.all().delete()
             ResourceProfile.objects.all().delete()
@@ -267,6 +283,9 @@ class Command(BaseCommand):
         self._resourcing(tenant, now)
         # 7.4 has its OWN guard, same reasoning again.
         self._cost(tenant, now)
+        # 7.5 has its OWN guard too — the risk register, its response actions, the issue log and
+        # the recorded escalation path.
+        self._risk(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -707,6 +726,226 @@ class Command(BaseCommand):
             f"revisions, {ProjectBudgetLine.objects.filter(tenant=tenant).count()} budget "
             f"lines, {CostControlAccount.objects.filter(tenant=tenant).count()} control "
             f"accounts, {ProjectExpense.objects.filter(tenant=tenant).count()} expenses."))
+
+    def _risk(self, tenant, now):
+        """Risks + response actions + issues + escalations, guarded per tenant.
+
+        The register is sized so the analysis and monitoring pages have something real to compute
+        over: 17 rows per tenant (12 on the active project, 5 on the chartered one) so the
+        register paginates, every one of the nine categories and both ``risk_type`` values appear,
+        and the probability × impact pairs land rows in **all four severity bands** (low 1–3,
+        medium 4–7, high 8–14, critical 15–25). All six statuses are represented, one row is
+        ``realized`` and carries the ``ProjectIssue`` the realize verb would have minted, and one
+        is ``closed`` with a lesson so the monitoring page's lessons lens is non-empty.
+
+        ``identified_date`` values are spread over ~4 months on purpose: the burn-down aggregates
+        by month, and a register seeded entirely inside one period would render a one-row chart
+        and prove nothing. Three live rows carry a past ``review_date`` so the review queue and the
+        ``?review_due=1`` lens have hits.
+
+        Response actions implement bullet 3 on the top risks (one completed, one overdue, the rest
+        planned/in-progress). Issues cover all four severities with two resolved (stamps written)
+        and one escalated to level 2 with a two-step ``IssueEscalation`` path — the escalation
+        register is otherwise empty on a fresh workspace.
+        """
+        if ProjectRisk.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: risk rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        projects = list(Project.objects.filter(tenant=tenant))
+        active = next((p for p in projects if p.status == "active"), None)
+        chartered = next((p for p in projects if p.status == "chartered"), None)
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        manager = next((p.project_manager for p in projects if p.project_manager_id), None)
+        owner = users[1] if len(users) > 1 else manager
+        today = timezone.localdate()
+
+        def risk(project, title, category, risk_type, probability, impact, cost_impact,
+                 status="identified", wbs=None, strategy="mitigate", day_offset=0,
+                 review_offset=None, description="", trigger="", contingency_plan="",
+                 residual=None, lessons=""):
+            obj = ProjectRisk(
+                tenant=tenant, project=project, wbs_node=wbs, title=title,
+                description=description or f"{title}. Identified during the project's risk review.",
+                cause="", effect="", category=category, risk_type=risk_type,
+                probability=probability, impact=impact, cost_impact=Decimal(cost_impact),
+                response_strategy=strategy, response_note="", trigger=trigger,
+                contingency_plan=contingency_plan, status=status, owner=owner,
+                identified_by=owner, identified_date=today - timedelta(days=day_offset),
+                review_date=(today + timedelta(days=review_offset)
+                             if review_offset is not None else None),
+                residual_probability=residual[0] if residual else None,
+                residual_impact=residual[1] if residual else None,
+                lessons_learned=lessons,
+                closed_at=now if status == "closed" else None)
+            obj.save()
+            return obj
+
+        def action(risk_row, title, strategy, offset, cost, status="planned", trigger=""):
+            obj = RiskResponseAction(
+                tenant=tenant, risk=risk_row, title=title,
+                description=f"{title} — the action that implements the risk's response strategy.",
+                strategy=strategy, owner=owner,
+                due_date=today + timedelta(days=offset), cost=Decimal(cost),
+                trigger=trigger or "Activated when the risk's trigger condition is observed.",
+                status=status,
+                completed_at=now if status == "completed" else None)
+            obj.save()
+            return obj
+
+        def issue(project, title, severity, status, wbs=None, risk_row=None, offset=0,
+                  due_offset=None, description="", escalated_to=None, level=0,
+                  resolved=False, lessons=""):
+            obj = ProjectIssue(
+                tenant=tenant, project=project, wbs_node=wbs, risk=risk_row, title=title,
+                description=description or f"{title}. Raised from the weekly project review.",
+                issue_type="issue", severity=severity, status=status, owner=owner,
+                raised_by=owner, identified_date=today - timedelta(days=offset),
+                due_date=(today + timedelta(days=due_offset) if due_offset is not None else None),
+                escalation_level=level,
+                escalated_to=escalated_to if level else None,
+                escalated_at=now if level else None,
+                root_cause=("Root cause established during the post-incident review."
+                            if resolved else ""),
+                resolution_note=("Resolved — the corrective action was verified at the "
+                                 "following review." if resolved else ""),
+                resolved_by=owner if resolved else None,
+                resolved_at=now if resolved else None,
+                lessons_learned=lessons)
+            obj.save()
+            return obj
+
+        def escalation(issue_row, level, target_role, reason, outcome="", resolved=False):
+            obj = IssueEscalation(
+                tenant=tenant, issue=issue_row, level=level, target_role=target_role,
+                target_user=owner, reason=reason, escalated_by=owner,
+                outcome=outcome, resolved_at=now if resolved else None)
+            obj.save()
+            return obj
+
+        with transaction.atomic():
+            if active is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=active)}
+                r1 = risk(active, "Single sign-on dependency slips",
+                          "technical", "threat", 5, 5, "250000.00", "response_planned",
+                          tasks.get("Technical spike: SSO"), "mitigate", 118,
+                          review_offset=14, residual=(3, 4),
+                          trigger="The identity provider misses the integration milestone.",
+                          contingency_plan="Fall back to the in-house credential store for "
+                                           "release 3 and re-plan SSO for the next increment.")
+                r2 = risk(active, "Checkout integration partner delays the interface",
+                          "external", "threat", 3, 5, "180000.00", "assessing",
+                          tasks.get("Checkout integration"), "transfer", 96, review_offset=-6,
+                          trigger="The partner's sandbox does not pass certification on schedule.")
+                r3 = risk(active, "Order API throughput below the target profile",
+                          "technical", "threat", 4, 3, "120000.00", "monitoring",
+                          tasks.get("Order API"), "mitigate", 74, review_offset=-11,
+                          residual=(2, 3),
+                          trigger="Load test shows p95 latency above the agreed budget.")
+                r4 = risk(active, "Cart UI usability rework after first user testing",
+                          "quality", "threat", 3, 3, "90000.00", "identified",
+                          tasks.get("Cart UI"), "mitigate", 61)
+                r5 = risk(active, "Returns module scope growth",
+                          "organizational", "threat", 2, 5, "150000.00", "response_planned",
+                          tasks.get("Returns module"), "avoid", 47, residual=(2, 3),
+                          trigger="A stakeholder requests a returns capability outside the "
+                                  "charter's in-scope list.")
+                r6 = risk(active, "Refund service compliance review findings",
+                          "compliance", "threat", 2, 3, "40000.00", "monitoring",
+                          tasks.get("Refund service hooks"), "mitigate", 35, review_offset=-3)
+                r7 = risk(active, "UX designer availability across two workstreams",
+                          "resource", "threat", 3, 2, "30000.00", "identified",
+                          tasks.get("UX design: ordering"), "mitigate", 28)
+                r8 = risk(active, "Requirements workshop attendance below quorum",
+                          "resource", "threat", 4, 1, "20000.00", "closed",
+                          tasks.get("Requirements workshops"), "accept", 24,
+                          lessons="Book the workshop two weeks out with named attendees. The "
+                                  "one session that slipped cost a week of rework on the "
+                                  "ordering journey.")
+                r9 = risk(active, "Design system version drift across screens",
+                          "technical", "threat", 1, 3, "15000.00", "identified",
+                          tasks.get("UX design: ordering"), "accept", 18)
+                r10 = risk(active, "Release documentation lags the build",
+                           "other", "threat", 1, 2, "8000.00", "assessing", None, "accept", 11)
+                r11 = risk(active, "Reusable SSO component for later projects",
+                           "technical", "opportunity", 3, 3, "75000.00", "monitoring",
+                           tasks.get("Technical spike: SSO"), "exploit", 9,
+                           trigger="The spike produces a component the platform team can adopt.")
+                r12 = risk(active, "Vendor invoice processing delay",
+                           "cost", "threat", 4, 3, "60000.00", "realized", None, "mitigate", 5,
+                           trigger="An invoice is not matched within the payment terms window.")
+
+                action(r1, "Run the SSO spike as a time-boxed proof", "mitigate", 21, "12000.00",
+                       "completed", "Spike kicks off when the partner confirms the interface.")
+                action(r1, "Agree a written fallback with the platform team", "avoid", -4,
+                       "4000.00", "in_progress",
+                       "Activated if the partner misses the certification date.")
+                action(r1, "Escalate the dependency to the steering group", "escalate", 30,
+                       "0.00", "planned")
+                action(r2, "Certify the partner sandbox early", "mitigate", -9, "6000.00",
+                       "planned", "Starts as soon as the sandbox credentials arrive.")
+                action(r2, "Add a contractual interface SLA to the partner agreement",
+                       "transfer", 45, "2500.00", "planned")
+                action(r3, "Tune the query plan and re-run the load test", "mitigate", 14,
+                       "9000.00", "in_progress")
+                action(r3, "Cache the product catalogue read path", "mitigate", 40, "15000.00",
+                       "planned")
+
+                i1 = issue(active, "Vendor invoice for the SSO spike is unmatched", "medium",
+                           "in_progress", None, r12, 4, due_offset=6,
+                           description="The realized vendor-invoice risk materialized: the "
+                                       "invoice has no matching purchase order.")
+                i2 = issue(active, "Load test fails the p95 latency target", "critical", "open",
+                           tasks.get("Order API"), r3, 12, due_offset=3)
+                esc_issue = issue(active, "Partner sandbox certification blocked on credentials",
+                                  "high", "blocked", tasks.get("Checkout integration"), r2, 20,
+                                  due_offset=-2, escalated_to=owner, level=2)
+                issue(active, "Returns portal design review outstanding", "medium", "open",
+                      tasks.get("Returns portal UI"), None, 8, due_offset=9)
+                issue(active, "Workshop quorum missed for the ordering journey", "medium",
+                      "resolved", tasks.get("Requirements workshops"), r8, 24, resolved=True,
+                      lessons="Name the attendees and confirm them in writing — an open invite "
+                              "does not produce a quorum.")
+                issue(active, "Stale design-system tokens in the cart screens", "low", "resolved",
+                      tasks.get("Cart UI"), None, 30, resolved=True,
+                      lessons="Pin the design-system version in the build, not in a wiki page.")
+                issue(active, "Refund service review notes outstanding", "low", "closed", None,
+                      r6, 40)
+
+                escalated = esc_issue
+                escalation(escalated, 1, "Project Manager",
+                           "The partner's certification owner is unresponsive and the "
+                           "interface date is at risk.", "Project manager took the "
+                           "escalation and chased the partner directly.", resolved=True)
+                escalation(escalated, 2, "Program Manager",
+                           "Certification is still blocked after a week and the interface "
+                           "date cannot absorb further delay.")
+
+            if chartered is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=chartered)}
+                risk(chartered, "Metric definitions churn between stakeholders",
+                     "organizational", "threat", 4, 2, "45000.00", "monitoring",
+                     tasks.get("Metric definitions"), "mitigate", 33, review_offset=10)
+                risk(chartered, "Data pipeline capacity for the quarterly volume",
+                     "technical", "threat", 2, 3, "25000.00", "assessing",
+                     tasks.get("Data collection pipeline"), "mitigate", 26)
+                risk(chartered, "Publishing workflow ownership undecided",
+                     "resource", "threat", 3, 2, "18000.00", "identified",
+                     tasks.get("Publishing workflow"), "mitigate", 19)
+                risk(chartered, "Quarterly publication cadence slips",
+                     "schedule", "threat", 1, 2, "6000.00", "identified",
+                     tasks.get("Quarterly publication"), "accept", 12)
+                risk(chartered, "Benchmark data licensing opportunity",
+                     "external", "opportunity", 2, 4, "50000.00", "monitoring", None, "exploit",
+                     7, trigger="A benchmark provider offers a discounted multi-year licence.")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {ProjectRisk.objects.filter(tenant=tenant).count()} risks, "
+            f"{RiskResponseAction.objects.filter(tenant=tenant).count()} response actions, "
+            f"{ProjectIssue.objects.filter(tenant=tenant).count()} issues, "
+            f"{IssueEscalation.objects.filter(tenant=tenant).count()} escalations."))
 
     def _wbs(self, tenant, project, manager, today, spec):
         """Build the WBS from a spec; return a name -> task map for the dependency specs.
