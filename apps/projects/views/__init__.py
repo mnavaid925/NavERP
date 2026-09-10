@@ -154,3 +154,44 @@ from .CostManagement.ProjectExpenses import (  # noqa: F401
     pex_post,
     pex_void,
 )
+
+# --- 7.5 Risk & Issue Management --------------------------------------------------------------
+# The four registers' CRUD sets, their seven lifecycle verbs (all POST-only, so a GET is a 405),
+# and the two computed pages (no model — the 7.3 capacity_demand precedent).
+from .RiskManagement.IssueEscalations import (  # noqa: F401
+    esc_create,
+    esc_delete,
+    esc_detail,
+    esc_edit,
+    esc_list,
+)
+from .RiskManagement.ProjectIssues import (  # noqa: F401
+    iss_close,
+    iss_create,
+    iss_delete,
+    iss_detail,
+    iss_edit,
+    iss_escalate,
+    iss_list,
+    iss_resolve,
+)
+from .RiskManagement.ProjectRisks import (  # noqa: F401
+    rsk_close,
+    rsk_create,
+    rsk_delete,
+    rsk_detail,
+    rsk_edit,
+    rsk_list,
+    rsk_realize,
+    rsk_reopen,
+)
+from .RiskManagement.RiskAnalysis import risk_analysis  # noqa: F401
+from .RiskManagement.RiskMonitoring import risk_monitoring  # noqa: F401
+from .RiskManagement.RiskResponseActions import (  # noqa: F401
+    rra_complete,
+    rra_create,
+    rra_delete,
+    rra_detail,
+    rra_edit,
+    rra_list,
+)
