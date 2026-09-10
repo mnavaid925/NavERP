@@ -144,6 +144,8 @@ class ResourceTimeEntryAdmin(admin.ModelAdmin):
                        "created_at", "updated_at")
 
 
+# --- 7.4 Cost & Budget Management -------------------------------------------------------------
+
 @admin.register(BudgetRevision)
 class BudgetRevisionAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "revision_no", "status", "requested_at",
@@ -172,8 +174,8 @@ class ProjectBudgetLineAdmin(admin.ModelAdmin):
     list_display = ("number", "budget_revision", "project", "category", "control_account",
                     "amount", "tenant")
     list_filter = ("category",)
-    # wbs_node is selected for the changelist even though it is not a column: the model's
-    # __str__-free rows render category/control_account, and budget_revision joins its project.
+    # wbs_node is deliberately NOT joined (the contract's pinned tuple includes it): it renders
+    # in no changelist column, so the join would be dead weight — as-built wins.
     list_select_related = ("tenant", "budget_revision", "project", "control_account")
     search_fields = ("number", "note")
     readonly_fields = ("created_at", "updated_at")
