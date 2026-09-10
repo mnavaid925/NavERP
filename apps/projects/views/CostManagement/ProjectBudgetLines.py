@@ -23,6 +23,9 @@ from apps.projects.views._helpers import projects
 
 _MONEY = DecimalField(max_digits=20, decimal_places=2)
 
+_LOCKED_MSG = ("An approved or superseded revision is frozen cost history — its lines cannot be "
+               "edited or deleted; submit a new revision to change the baseline.")
+
 _PBL_FILTERS = [
     ("project", "project_id", True),
     ("budget_revision", "budget_revision_id", True),
@@ -111,6 +114,11 @@ def pbl_detail(request, pk):
 
 @login_required
 def pbl_edit(request, pk):
+    obj = get_object_or_404(
+        ProjectBudgetLine.objects.select_related("budget_revision"), pk=pk, tenant=request.tenant)
+    if obj.budget_revision.is_locked:
+        messages.error(request, _LOCKED_MSG)
+        return redirect("projects:pbl_detail", pk=obj.pk)
     return crud_edit(
         request, model=ProjectBudgetLine, pk=pk, form_class=ProjectBudgetLineForm,
         template="projects/cost/projectbudgetline/form.html", success_url="projects:pbl_list")
@@ -119,5 +127,10 @@ def pbl_edit(request, pk):
 @login_required
 @require_POST
 def pbl_delete(request, pk):
+    obj = get_object_or_404(
+        ProjectBudgetLine.objects.select_related("budget_revision"), pk=pk, tenant=request.tenant)
+    if obj.budget_revision.is_locked:
+        messages.error(request, _LOCKED_MSG)
+        return redirect("projects:pbl_detail", pk=obj.pk)
     return crud_delete(request, model=ProjectBudgetLine, pk=pk,
                        success_url="projects:pbl_list")
