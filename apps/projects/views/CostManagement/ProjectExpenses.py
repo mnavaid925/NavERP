@@ -46,6 +46,7 @@ def pex_list(request):
         search_fields=["number", "description", "source_number"],
         filters=[("project", "project_id", True),
                  ("entry_type", "entry_type", False),
+                 ("source_kind", "source_kind", False),
                  ("status", "status", False),
                  ("control_account", "control_account_id", True)],
         extra_context={
