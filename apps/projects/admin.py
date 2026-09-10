@@ -8,17 +8,21 @@ from django.contrib import admin
 from .models import (
     BudgetRevision,
     CostControlAccount,
+    IssueEscalation,
     Project,
     ProjectBudgetLine,
     ProjectExpense,
+    ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
     ProjectRequest,
+    ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
     ResourceAllocation,
     ResourceProfile,
     ResourceTimeEntry,
+    RiskResponseAction,
     ScheduleBaseline,
     TaskDependency,
 )
@@ -192,3 +196,51 @@ class ProjectExpenseAdmin(admin.ModelAdmin):
     # status is verb-driven (post/void) — the verbs write it exactly once; created_by is the
     # authorship stamp.
     readonly_fields = ("status", "created_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectRisk)
+class ProjectRiskAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "category", "risk_type", "probability",
+                    "impact", "status", "owner", "tenant")
+    list_filter = ("status", "category", "risk_type")
+    list_select_related = ("tenant", "project", "wbs_node", "owner", "identified_by",
+                           "contingency_account")
+    search_fields = ("number", "title", "description", "cause", "effect")
+    # status is verb-driven (realize/close/reopen) and closed_at is stamped by the close verb —
+    # neither is an editable field.
+    readonly_fields = ("status", "closed_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(RiskResponseAction)
+class RiskResponseActionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "risk", "strategy", "owner", "due_date", "cost", "status",
+                    "tenant")
+    list_filter = ("status", "strategy")
+    list_select_related = ("tenant", "risk", "owner")
+    search_fields = ("number", "title", "description", "trigger")
+    readonly_fields = ("status", "completed_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectIssue)
+class ProjectIssueAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "severity", "status", "owner",
+                    "escalation_level", "escalated_to", "tenant")
+    list_filter = ("status", "severity", "issue_type")
+    list_select_related = ("tenant", "project", "wbs_node", "risk", "owner", "raised_by",
+                           "escalated_to", "resolved_by")
+    search_fields = ("number", "title", "description")
+    # status, the escalation state and the resolution evidence are all verb-written — the log
+    # keeps its stamps.
+    readonly_fields = ("status", "escalation_level", "escalated_to", "escalated_at", "root_cause",
+                       "resolution_note", "resolved_by", "resolved_at", "created_by", "created_at",
+                       "updated_at")
+
+
+@admin.register(IssueEscalation)
+class IssueEscalationAdmin(admin.ModelAdmin):
+    list_display = ("number", "issue", "level", "target_role", "target_user", "escalated_at",
+                    "tenant")
+    list_filter = ("level",)
+    list_select_related = ("tenant", "issue", "target_user", "escalated_by")
+    search_fields = ("number", "target_role", "reason", "outcome")
+    readonly_fields = ("escalated_at", "created_by", "created_at", "updated_at")
