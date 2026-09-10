@@ -72,7 +72,7 @@
 
   <div class="form-actions">
     <a href="{% url 'projects:rsp_list' %}" class="btn btn-outline">Back to Resource Pool</a>
-    <form method="post" action="{% url 'projects:rsp_delete' obj.pk %}" onsubmit="return confirm('Delete resource {{ obj.number }}? Its bookings and time entries are deleted with it. This cannot be undone.');">
+    <form method="post" action="{% url 'projects:rsp_delete' obj.pk %}" onsubmit="return confirm('Delete resource {{ obj.number }}? Its time entries are deleted with it; its bookings stay on as placeholders. This cannot be undone.');">
       {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
     </form>
   </div>
