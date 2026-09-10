@@ -51,7 +51,7 @@
         <dt>Requested at</dt><dd>{% if obj.requested_at %}{{ obj.requested_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
         <dt>Decided by</dt><dd>{% if obj.decided_by %}{{ obj.decided_by.get_full_name|default:obj.decided_by.username }}{% else %}—{% endif %}</dd>
         <dt>Decided at</dt><dd>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
-        <dt>Activated at</dt><dd>{% if obj.activated_at %}<span class="badge badge-green">Baseline {{ obj.activated_at|date:"M d, Y H:i" }}</span>{% else %}—{% endif %}</dd>
+        <dt>Activated at</dt><dd>{% if obj.activated_at and obj.status == 'approved' %}<span class="badge badge-green">Baseline {{ obj.activated_at|date:"M d, Y H:i" }}</span>{% elif obj.activated_at %}<span class="text-muted">{{ obj.activated_at|date:"M d, Y H:i" }}</span>{% else %}—{% endif %}</dd>
         <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}—{% endif %}</dd>
       </dl>
       <p><strong>Reason.</strong> {{ obj.reason|linebreaksbr }}</p>
