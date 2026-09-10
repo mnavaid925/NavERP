@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Scope Change Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Scope Change Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Change Requests</span></div>
+      <p class="text-muted">Every scope change proposal with its impact analysed on all three dimensions — schedule, cost and quality — and the change control board's recorded decision.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:scr_list' %}?high_impact=1" class="btn btn-outline"><i data-lucide="triangle-alert"></i> High impact only</a>
+      <a href="{% url 'projects:scr_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Change Request</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, description or justification…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="requirement" aria-label="Requirement" class="form-select">
+            <option value="">Any requirement</option>
+            {% for r in requirements %}
+              <option value="{{ r.pk }}" {% if request.GET.requirement == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Priority" class="form-select">
+            <option value="">Any priority</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="pending"><input type="checkbox" id="pending" name="pending" value="1" {% if request.GET.pending == '1' %}checked{% endif %}> Before the board</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:scr_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Change</th><th>Project</th><th>Source</th><th>Priority</th><th class="text-right">Cost impact</th><th>Schedule</th><th>Quality</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:scr_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.get_source_display }}</td>
+              <td>
+                {% if obj.priority == 'critical' %}<span class="badge badge-red">{{ obj.get_priority_display }}</span>
+                {% elif obj.priority == 'high' %}<span class="badge badge-amber">{{ obj.get_priority_display }}</span>
+                {% elif obj.priority == 'medium' %}<span class="badge badge-info">{{ obj.get_priority_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_priority_display }}</span>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ obj.cost_impact }}{% if obj.is_high_impact %} <span class="badge badge-red">Material</span>{% endif %}</td>
+              <td>{% if obj.schedule_impact_days %}{{ obj.schedule_impact_days }} days{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.get_quality_impact_display }}</td>
+              <td>
+                {% if obj.status == 'approved' or obj.status == 'implemented' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'under_review' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:scr_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'projects:scr_submit' obj.pk %}" onsubmit="return confirm('Submit {{ obj.number }} to the change control board?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Submit"><i data-lucide="send"></i></button>
+                    </form>
+                  {% elif obj.status == 'approved' %}
+                    <form method="post" action="{% url 'projects:scr_implement' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} implemented?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Mark implemented"><i data-lucide="package-check"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if not obj.is_locked %}
+                    <a href="{% url 'projects:scr_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:scr_delete' obj.pk %}" onsubmit="return confirm('Delete change request {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="file-diff"></i><h3>No change requests match</h3><p>A scope change is a proposal until the board decides — record it here so the decision has a home.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
