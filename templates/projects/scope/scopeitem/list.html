@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Scope &amp; Boundary Registry{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Scope &amp; Boundary Registry</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Scope Items</span></div>
+      <p class="text-muted">The itemised scope boundary plus every assumption, constraint and dependency — each one owned, dated and closable. The charter's in-scope / out-of-scope narrative lives on the project; this is the registry behind it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:sci_list' %}?boundaries=1" class="btn btn-outline"><i data-lucide="scan-line"></i> Boundaries only</a>
+      <a href="{% url 'projects:sci_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Scope Item</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, statement, description or outcome…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item_type" aria-label="Item type" class="form-select">
+            <option value="">Any type</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.item_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="impact_area" aria-label="Impact area" class="form-select">
+            <option value="">Any impact area</option>
+            {% for val, label in impact_choices %}
+              <option value="{{ val }}" {% if request.GET.impact_area == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="open"><input type="checkbox" id="open" name="open" value="1" {% if request.GET.open == '1' %}checked{% endif %}> Live only</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:sci_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Project</th><th>Type</th><th>Impact area</th><th>Review</th><th>Owner</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:sci_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.statement }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>
+                {% if obj.item_type == 'in_scope' %}<span class="badge badge-green">{{ obj.get_item_type_display }}</span>
+                {% elif obj.item_type == 'out_of_scope' %}<span class="badge badge-muted">{{ obj.get_item_type_display }}</span>
+                {% elif obj.item_type == 'constraint' %}<span class="badge badge-amber">{{ obj.get_item_type_display }}</span>
+                {% else %}<span class="badge badge-info">{{ obj.get_item_type_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.get_impact_area_display }}</td>
+              <td>{% if obj.review_date %}{{ obj.review_date|date:"M d, Y" }}{% if obj.is_review_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.status == 'validated' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'realized' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'retired' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:sci_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'open' %}
+                    <form method="post" action="{% url 'projects:sci_validate' obj.pk %}" onsubmit="return confirm('Validate {{ obj.number }}?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Validate"><i data-lucide="check"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if not obj.is_locked %}
+                    <a href="{% url 'projects:sci_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:sci_delete' obj.pk %}" onsubmit="return confirm('Delete scope item {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="scan-line"></i><h3>No scope items match</h3><p>Write down what is in scope, what is out, and what you are assuming — the registry is where those stop being tribal knowledge.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
