@@ -207,7 +207,8 @@ notes). Realizes bullet 3; feeds `ac`/`committed`. `__str__` = `f"{self.number} 
 
 - `ENTRY_TYPE_CHOICES` (`max_length=10`, default `actual`): `commitment`/Commitment ·
   `actual`/Actual · `accrual`/Accrual.
-- `SOURCE_KIND_CHOICES` (`max_length=15`, default `manual` — deviation #4): `purchase_order`/
+- `SOURCE_KIND_CHOICES` (`max_length=16` — as-built 5027e436; 15 fails `fields.E009` because
+  `supplier_invoice` is 16 chars, default `manual` — deviation #4): `purchase_order`/
   Purchase Order · `supplier_invoice`/Supplier Invoice · `contract`/Contract · `timesheet`/
   Timesheet · `manual`/Manual · `accrual`/Accrual.
 - `STATUS_CHOICES` (`max_length=6`, default `draft`, **verb-driven, NOT on form**): `draft`/Draft
@@ -219,7 +220,7 @@ notes). Realizes bullet 3; feeds `ac`/`committed`. `__str__` = `f"{self.number} 
 | `control_account` | `FK(CostControlAccount, PROTECT)` | **required, non-nullable** — a CA-less cost row would silently drop out of every index | — | `expenses` |
 | `wbs_node` | `FK("projects.ProjectTask", SET_NULL)` | null, blank | `clean()`: same-project | `expenses` |
 | `entry_type` | `CharField(max_length=10, choices=ENTRY_TYPE_CHOICES)` | default `"actual"` | — | — |
-| `source_kind` | `CharField(max_length=15, choices=SOURCE_KIND_CHOICES)` | default `"manual"` | — | — |
+| `source_kind` | `CharField(max_length=16, choices=SOURCE_KIND_CHOICES)` | default `"manual"` | — | — |
 | `source_number` | `CharField(max_length=30)` | blank | **soft reference, NEVER an FK** (Ruling 5 — e.g. `PO-00042`, `SIV-00187`) | — |
 | `vendor` | `FK("core.Party", SET_NULL)` | null, blank | — | `project_expenses` |
 | `gl_account` | `FK("accounting.GLAccount", PROTECT)` | null, blank | — | `project_expenses` |
@@ -255,12 +256,16 @@ notes). Realizes bullet 3; feeds `ac`/`committed`. `__str__` = `f"{self.number} 
 | `BudgetRevisionDecisionForm(forms.Form)` | field `decision_notes` = `forms.CharField(widget=forms.Textarea(attrs={"class":"form-textarea","rows":3}), required=True, label="Reason")` | — (plain `forms.Form`, not a ModelForm) | — | The `ProjectRequestDecisionForm` mirror (shape from as-built, field name = the model column); used ONLY by `bvr_reject` |
 | `CostControlAccountForm` | `["project","name","code","wbs_node","gl_account","contingency","percent_complete","status","note"]` | `tenant`, `number` | `["project","wbs_node","gl_account"]` | `status` IS on this form (CCA has no verbs) |
 | `ProjectBudgetLineForm` | `["budget_revision","project","category","wbs_node","control_account","gl_account","amount","note"]` | `tenant`, `number` | `["budget_revision","project","wbs_node","control_account","gl_account"]` | model `clean()` re-checks revision/wbs/CA same-project on POST |
-| `ProjectExpenseForm` | `["project","control_account","wbs_node","entry_type","source_kind","source_number","vendor","gl_account","amount","currency","entry_date","description"]` | `tenant`, `number`, `status`, `created_by` | `["project","control_account","wbs_node","vendor","gl_account"]` | `currency` unscoped (L29); `currency` initial = the project's active revision's currency, else the tenant's first Currency (supplied by the create view) |
+| `ProjectExpenseForm` | `["project","control_account","wbs_node","entry_type","source_kind","source_number","vendor","gl_account","amount","currency","entry_date","description"]` | `tenant`, `number`, `status`, `created_by` | `["project","control_account","wbs_node","vendor","gl_account"]` | `currency` unscoped (L29); `currency` initial = the project's active revision's currency, else the first Currency on file (global table, L29 — supplied by the create view) |
 
 Tenant-scoped querysets: every `ModelChoiceField` above is auto-scoped by `TenantModelForm`
 (target model has `tenant`), including `requested_by`/`vendor` (both tenant-carrying). Only
 `currency` stays unscoped. `_reject_foreign` still re-checks on POST (a narrowed `<select>` is
-UX, not an authorization boundary).
+UX, not an authorization boundary). **Close-out note (2026-09-10):** on these forms
+`_reject_foreign`'s "That record belongs to another workspace." message is unreachable
+second-layer defense — every FK target is tenant-scoped, so Django's generic "Select a valid
+choice." error refuses a forged foreign pk first (200 + field error, no row created; the
+security outcome is unchanged).
 
 ## 8. URLs (`urls/CostManagement/<Entity>.py`; `app_name = "projects"` set ONCE in `urls/__init__.py`; literal routes before `<int:pk>/`)
 
