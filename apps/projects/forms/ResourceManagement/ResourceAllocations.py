@@ -25,6 +25,13 @@ class ResourceAllocationForm(TenantUniqueMixin, TenantModelForm):
                                "others stay blank.",
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # ResourceProfile.name walks employee → party — select_related it so the resource
+        # dropdown's option labels do not pay two queries per pool row.
+        self.fields["resource"].queryset = (self.fields["resource"].queryset
+                                            .select_related("employee__party", "party"))
+
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned,
