@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Scope Traceability Matrix{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Scope Traceability Matrix</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Scope Matrix</span></div>
+      <p class="text-muted">Requirements against the work packages that deliver them, with the coverage gaps and the accumulated cost of approved scope change. Every figure is computed on read — nothing here is stored.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:req_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Requirements</a>
+      <a href="{% url 'projects:scr_list' %}?pending=1" class="btn btn-outline"><i data-lucide="inbox"></i> Board queue</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Whole workspace (no matrix columns)</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project and project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+        <a href="{% url 'projects:scope_matrix' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ coverage.total }}</div><div class="stat-label">Requirements</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ coverage.coverage_pct }}%</div><div class="stat-label">Traced</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div><div class="stat-value">{{ coverage.untraced }}</div><div class="stat-label">Untraced</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ coverage.verified }}</div><div class="stat-label">Verified</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-diff"></i></div><div class="stat-value">{{ creep.count }}</div><div class="stat-label">Approved changes</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="banknote"></i></div><div class="stat-value">{{ creep.cost_total }}</div><div class="stat-label">Approved cost impact</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ creep.schedule_days }}d</div><div class="stat-label">Approved schedule impact</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="flame"></i></div><div class="stat-value">{{ creep.high_impact_count }}</div><div class="stat-label">Material changes</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Traceability matrix</h2>
+      {% if project %}<span class="text-muted">{{ project.name }} — showing {{ work_packages|length }} of {{ wp_total }} work packages</span>{% endif %}
+    </div>
+    {% if not project %}
+      <div class="card-body">
+        <div class="empty-state"><i data-lucide="grid-3x3"></i><h3>Pick a project</h3><p>The matrix's columns are that project's work packages, so a project has to be selected. The coverage figures above are already workspace-wide.</p></div>
+      </div>
+    {% elif not work_packages %}
+      <div class="card-body">
+        <div class="empty-state"><i data-lucide="list-tree"></i><h3>No work packages</h3><p>{{ project.name }} has no <em>work package</em> WBS nodes yet — deliverables roll up from their children, so the matrix has nothing to trace against.</p></div>
+      </div>
+    {% else %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Requirement</th>
+              {% for wp in work_packages %}<th class="text-center" title="{{ wp.name }}">{{ wp.number }}</th>{% endfor %}
+              <th>Inspections</th>
+              <th>Traced</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in matrix_rows %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:req_detail' row.requirement.pk %}">{{ row.requirement.number }}</a><div class="text-muted">{{ row.requirement.title }}</div></td>
+                {% for cell in row.cells %}
+                  <td class="text-center">{% if cell %}<span class="badge badge-green">✓</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                {% endfor %}
+                <td>{{ row.verified_count }} / {{ row.verification_count }}</td>
+                <td>{% if row.traced %}<span class="badge badge-green">Traced</span>{% else %}<span class="badge badge-amber">Gap</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="{{ work_packages|length|add:3 }}"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No requirements</h3><p>This project has no requirements recorded yet.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Coverage gaps</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Gap</th><th>Requirement</th><th>Project</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for r in untraced %}
+            <tr>
+              <td><span class="badge badge-amber">No work package</span></td>
+              <td class="fw-600"><a href="{% url 'projects:req_detail' r.pk %}">{{ r.number }}</a><div class="text-muted">{{ r.title }}</div></td>
+              <td>{{ r.project.name }}</td>
+              <td><span class="badge badge-{{ r.badge_class }}">{{ r.get_status_display }}</span></td>
+              <td><a href="{% url 'projects:req_edit' r.pk %}" class="btn-icon" title="Link a work package"><i data-lucide="pencil"></i></a></td>
+            </tr>
+          {% endfor %}
+          {% for r in unverified %}
+            <tr>
+              <td><span class="badge badge-red">Never verified</span></td>
+              <td class="fw-600"><a href="{% url 'projects:req_detail' r.pk %}">{{ r.number }}</a><div class="text-muted">{{ r.title }}</div></td>
+              <td>{{ r.project.name }}</td>
+              <td><span class="badge badge-{{ r.badge_class }}">{{ r.get_status_display }}</span></td>
+              <td><a href="{% url 'projects:req_detail' r.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            {% if not untraced %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No gaps</h3><p>Every requirement in scope names a delivering work package and has been through verification.</p></div></td></tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Scope creep — approved change per month</h2></div>
+    <div class="card-body">
+      {% for row in creep_rows %}
+        <div class="form-group">
+          <div class="text-muted">{{ row.label }} — {{ row.count }} change{{ row.count|pluralize }}, {{ row.cost_total }} cost, {{ row.schedule_days }} day{{ row.schedule_days|pluralize }}</div>
+          <div class="progress"><div class="progress-bar" style="width: {{ row.bar_pct }}%"></div></div>
+        </div>
+      {% empty %}
+        <div class="empty-state"><i data-lucide="shield-check"></i><h3>No approved change</h3><p>Nothing has been approved by the change control board yet — there is no scope creep to report.</p></div>
+      {% endfor %}
+      {% if creep_rows %}
+        <p class="text-muted">Bars are each month's approved cost impact as a share of the largest month. The accumulation is the creep signal: a change approved in isolation is cheap; twelve of them are a re-baseline.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Register summary</h2></div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div>
+          <h3>By requirement type</h3>
+          <table class="table">
+            <tbody>
+              {% for row in type_rows %}<tr><td>{{ row.label }}</td><td class="text-right fw-600">{{ row.count }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h3>By MoSCoW priority</h3>
+          <table class="table">
+            <tbody>
+              {% for row in priority_rows %}<tr><td>{{ row.label }}</td><td class="text-right fw-600">{{ row.count }}</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <dl class="detail-grid">
+        <dt>Scope registry rows</dt><dd>{{ scope_summary.items }}</dd>
+        <dt>Boundaries (in / out of scope)</dt><dd>{{ scope_summary.boundaries }}</dd>
+        <dt>Assumptions</dt><dd>{{ scope_summary.assumptions }}</dd>
+        <dt>Constraints</dt><dd>{{ scope_summary.constraints }}</dd>
+        <dt>Still live</dt><dd>{{ scope_summary.open_items }}</dd>
+        <dt>Review overdue</dt><dd>{{ scope_summary.overdue_items }}</dd>
+      </dl>
+    </div>
+  </div>
+{% endblock %}
