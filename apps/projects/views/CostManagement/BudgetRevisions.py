@@ -19,6 +19,7 @@ idiom — a hard-coded ``{"from": ...}`` asserts the gate was respected in exact
 it was not).
 """
 from django.db import transaction
+from django.db.models import Sum
 
 from apps.projects.forms import BudgetRevisionDecisionForm, BudgetRevisionForm
 from apps.projects.models import BudgetRevision
