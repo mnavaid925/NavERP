@@ -15,9 +15,11 @@ from apps.projects.models import (
     BudgetRevision,
     Project,
     ProjectExpense,
+    ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
     ProjectRequest,
+    ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
     ResourceAllocation,
@@ -75,4 +77,17 @@ def overview(request):
                 Sum("amount", filter=Q(status="posted",
                                        entry_type__in=("actual", "accrual"))),
                 Value(Decimal("0")), output_field=_MONEY))["total"],
+        # 7.5 risk & issue — flat counts again. "Above tolerance" and "review due" are the two
+        # figures that need a decision (they are what the monitoring page opens with), so they
+        # are counted here rather than the raw register size. Both are Python-side because
+        # `severity_band` and `is_review_overdue` are properties, not columns — the register is
+        # small, and the alternative would be a duplicated band table.
+        "risk_count": ProjectRisk.objects.filter(tenant=tenant).count(),
+        "above_tolerance": sum(
+            1 for risk in ProjectRisk.objects.filter(tenant=tenant)
+            if risk.status not in ("realized", "closed")
+            and risk.severity_band in ProjectRisk.TOLERANCE_BANDS),
+        "review_due_count": sum(
+            1 for risk in ProjectRisk.objects.filter(tenant=tenant) if risk.is_review_overdue),
+        "issue_count": ProjectIssue.objects.filter(tenant=tenant).count(),
     })
