@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Requirement{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:req_list' %}">Requirements</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_requirement_type_display }} · {{ obj.get_elicitation_method_display }} · v{{ obj.version }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:req_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      <a href="{% url 'projects:scr_create' %}?project={{ obj.project_id }}" class="btn btn-outline"><i data-lucide="file-diff"></i> Raise a change</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="flag"></i></div><div class="stat-value">{{ obj.get_priority_display }}</div><div class="stat-label">MoSCoW priority</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="git-branch"></i></div><div class="stat-value">{% if obj.is_traced %}Traced{% else %}Untraced{% endif %}</div><div class="stat-label">Traceability</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ verifications|length }}</div><div class="stat-label">Inspections</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Requirement statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>Parent requirement</dt><dd>{% if obj.parent %}<a href="{% url 'projects:req_detail' obj.parent_id %}">{{ obj.parent.number }} — {{ obj.parent.title }}</a>{% else %}—{% endif %}</dd>
+        <dt>Type</dt><dd>{{ obj.get_requirement_type_display }}</dd>
+        <dt>Priority</dt><dd>{{ obj.get_priority_display }}</dd>
+        <dt>Version</dt><dd>{{ obj.version }}</dd>
+        <dt>Elicited by</dt><dd>{{ obj.get_elicitation_method_display }}</dd>
+        <dt>Source</dt><dd>{% if obj.source_party %}<a href="{% url 'projects:pst_list' %}?q={{ obj.source_party.name|urlencode }}">{{ obj.source_party.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Delivered by</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}<span class="badge badge-amber">No work package linked</span>{% endif %}</dd>
+        <dt>Verification method</dt><dd>{{ obj.get_verification_method_display }}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+      <p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>
+      {% if obj.acceptance_criteria %}<p><strong>Acceptance criteria.</strong> {{ obj.acceptance_criteria|linebreaksbr }}</p>{% else %}<p class="text-muted">No acceptance criteria recorded — without one the verification gate has nothing to check against.</p>{% endif %}
+      {% if obj.elicitation_note %}<p><strong>Elicitation note.</strong> {{ obj.elicitation_note|linebreaksbr }}</p>{% endif %}
+      {% comment %}
+        The approval and verification evidence. Both pairs are written only by the audited verbs, so
+        a missing stamp means the gate genuinely has not been passed — not that somebody forgot.
+      {% endcomment %}
+      {% if obj.approved_at %}<p class="text-muted">Approved by {% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.email }}{% else %}—{% endif %} on {{ obj.approved_at|date:"M d, Y H:i" }}.</p>{% endif %}
+      {% if obj.rejection_reason %}<p><strong>Rejected.</strong> {{ obj.rejection_reason|linebreaksbr }}</p>{% endif %}
+      {% if obj.verified_at %}<p class="text-muted">Verified by {% if obj.verified_by %}{{ obj.verified_by.get_full_name|default:obj.verified_by.email }}{% else %}—{% endif %} on {{ obj.verified_at|date:"M d, Y H:i" }}.</p>{% endif %}
+      {% if obj.verification_note %}<p><strong>Verification note.</strong> {{ obj.verification_note|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Lifecycle</h2>
+      <span class="badge badge-{{ obj.badge_class }}">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if obj.is_locked %}
+        <p class="text-muted">Verified on {{ obj.verified_at|date:"M d, Y H:i" }}. A verified requirement is frozen evidence — it cannot be edited or deleted.</p>
+      {% else %}
+        <div class="form-grid">
+          {% if obj.status == 'draft' or obj.status == 'rejected' %}
+            <form method="post" action="{% url 'projects:req_submit' obj.pk %}" onsubmit="return confirm('Submit {{ obj.number }} for approval?');">
+              {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for approval</button>
+            </form>
+          {% elif obj.status == 'submitted' and request.user.is_superuser or obj.status == 'submitted' and request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'projects:req_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}?');">
+              {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+            </form>
+            <form method="post" action="{% url 'projects:req_reject' obj.pk %}" onsubmit="return confirm('Reject {{ obj.number }}?');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="reject_reason">Reason (required)</label>
+                <textarea class="form-textarea" id="reject_reason" name="reason" rows="3" placeholder="Why the requirement is turned down."></textarea>
+              </div>
+              <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+            </form>
+          {% elif obj.status == 'approved' %}
+            <form method="post" action="{% url 'projects:req_implement' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} implemented?');">
+              {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Mark implemented</button>
+            </form>
+          {% elif obj.status == 'implemented' and request.user.is_superuser or obj.status == 'implemented' and request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'projects:req_verify' obj.pk %}" onsubmit="return confirm('Verify {{ obj.number }}? The row freezes.');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="verify_note">Verification note (optional)</label>
+                <textarea class="form-textarea" id="verify_note" name="note" rows="3" placeholder="How the acceptance criteria were confirmed."></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Verify</button>
+            </form>
+          {% else %}
+            <p class="text-muted">No lifecycle action is available from <strong>{{ obj.get_status_display }}</strong> for your role.</p>
+          {% endif %}
+        </div>
+        <p class="text-muted">The lifecycle is verb-driven: submitting, approving, rejecting, implementing and verifying are the only ways the status moves, so the approval trail stays honest.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Derived requirements</h2>
+      <a href="{% url 'projects:req_create' %}?project={{ obj.project_id }}" class="btn btn-outline"><i data-lucide="plus"></i> Add requirement</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requirement</th><th>Type</th><th>Priority</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for child in child_requirements %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:req_detail' child.pk %}">{{ child.number }}</a><div class="text-muted">{{ child.title }}</div></td>
+              <td>{{ child.get_requirement_type_display }}</td>
+              <td>{{ child.get_priority_display }}</td>
+              <td><span class="badge badge-{{ child.badge_class }}">{{ child.get_status_display }}</span></td>
+              <td><a href="{% url 'projects:req_detail' child.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No derived requirements</h3><p>Nothing hangs off this requirement yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Change requests</h2>
+      <a href="{% url 'projects:scr_create' %}?project={{ obj.project_id }}" class="btn btn-outline"><i data-lucide="plus"></i> Raise a change</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Change</th><th>Priority</th><th class="text-right">Cost impact</th><th>Schedule</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for c in change_requests %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:scr_detail' c.pk %}">{{ c.number }}</a><div class="text-muted">{{ c.title }}</div></td>
+              <td>{{ c.get_priority_display }}</td>
+              <td class="text-right">{{ c.cost_impact }}</td>
+              <td>{% if c.schedule_impact_days %}{{ c.schedule_impact_days }} days{% else %}—{% endif %}</td>
+              <td>
+                {% if c.status == 'approved' or c.status == 'implemented' %}<span class="badge badge-green">{{ c.get_status_display }}</span>
+                {% elif c.status == 'rejected' %}<span class="badge badge-red">{{ c.get_status_display }}</span>
+                {% elif c.status == 'under_review' %}<span class="badge badge-info">{{ c.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ c.get_status_display }}</span>{% endif %}
+              </td>
+              <td><a href="{% url 'projects:scr_detail' c.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="file-diff"></i><h3>No change requests</h3><p>This requirement has not been changed since it was written.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Inspections &amp; acceptance</h2>
+      <a href="{% url 'projects:svr_create' %}?project={{ obj.project_id }}" class="btn btn-outline"><i data-lucide="plus"></i> Record an inspection</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Inspection</th><th>Deliverable</th><th>Method</th><th>Result</th><th>Acceptance</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for v in verifications %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:svr_detail' v.pk %}">{{ v.number }}</a><div class="text-muted">{{ v.inspection_date|date:"M d, Y" }}</div></td>
+              <td>{{ v.deliverable }}</td>
+              <td>{{ v.get_method_display }}</td>
+              <td>
+                {% if v.result == 'pass' %}<span class="badge badge-green">{{ v.get_result_display }}</span>
+                {% elif v.result == 'conditional' %}<span class="badge badge-amber">{{ v.get_result_display }}</span>
+                {% else %}<span class="badge badge-red">{{ v.get_result_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if v.acceptance_status == 'accepted' or v.acceptance_status == 'waived' %}<span class="badge badge-green">{{ v.get_acceptance_status_display }}</span>
+                {% elif v.acceptance_status == 'rejected' %}<span class="badge badge-red">{{ v.get_acceptance_status_display }}</span>
+                {% else %}<span class="badge badge-amber">{{ v.get_acceptance_status_display }}</span>{% endif %}
+              </td>
+              <td><a href="{% url 'projects:svr_detail' v.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="badge-check"></i><h3>Not inspected</h3><p>Nothing has been put in front of a reviewer for this requirement yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Scope items attached</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Type</th><th>Impact area</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in linked_scope_items %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:sci_detail' s.pk %}">{{ s.number }}</a><div class="text-muted">{{ s.statement }}</div></td>
+              <td>{{ s.get_item_type_display }}</td>
+              <td>{{ s.get_impact_area_display }}</td>
+              <td>{{ s.get_status_display }}</td>
+              <td><a href="{% url 'projects:sci_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="shield"></i><h3>No scope items</h3><p>No boundary, assumption or constraint qualifies this requirement.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:req_list' %}" class="btn btn-outline">Back to Register</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:req_delete' obj.pk %}" onsubmit="return confirm('Delete requirement {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
