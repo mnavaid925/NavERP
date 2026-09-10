@@ -86,8 +86,8 @@
     {% include "partials/pagination.html" %}
   </div>
 
-  {# Totals sit BELOW the register: the user scopes the filter first, then reads the totals it
-     produced (every other 7.x list leads with its filter bar). #}
+  {% comment %} Totals sit BELOW the register: the user scopes the filter first, then reads the
+     totals it produced (every other 7.x list leads with its filter bar). {% endcomment %}
   <div class="card">
     <div class="card-header"><h2>Totals in the current filter</h2></div>
     <div class="table-wrap">
