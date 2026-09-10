@@ -37,6 +37,11 @@ from .RiskManagement.ProjectRisks import urlpatterns as _rm_risks
 from .RiskManagement.RiskAnalysis import urlpatterns as _rm_riskanalysis
 from .RiskManagement.RiskMonitoring import urlpatterns as _rm_riskmonitoring
 from .RiskManagement.RiskResponseActions import urlpatterns as _rm_responses
+from .ScopeRequirements.Requirements import urlpatterns as _sr_requirements
+from .ScopeRequirements.ScopeChangeRequests import urlpatterns as _sr_changes
+from .ScopeRequirements.ScopeItems import urlpatterns as _sr_items
+from .ScopeRequirements.ScopeMatrix import urlpatterns as _sr_matrix
+from .ScopeRequirements.ScopeVerifications import urlpatterns as _sr_verifications
 
 app_name = "projects"
 
@@ -73,4 +78,11 @@ urlpatterns = (
     + _rm_escalations
     + _rm_riskanalysis
     + _rm_riskmonitoring
+    # 7.7 Scope & Requirements Management — first segments (requirements/, scope-items/,
+    # scope-changes/, scope-verifications/, scope-matrix/) are disjoint literals from 7.1's–7.5's.
+    + _sr_requirements
+    + _sr_items
+    + _sr_changes
+    + _sr_verifications
+    + _sr_matrix
 )
