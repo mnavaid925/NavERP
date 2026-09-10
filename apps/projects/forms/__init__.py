@@ -43,3 +43,16 @@ from .CostManagement.BudgetRevisions import (  # noqa: F401
 from .CostManagement.CostControlAccounts import CostControlAccountForm  # noqa: F401
 from .CostManagement.ProjectBudgetLines import ProjectBudgetLineForm  # noqa: F401
 from .CostManagement.ProjectExpenses import ProjectExpenseForm  # noqa: F401
+
+# --- 7.5 Risk & Issue Management --------------------------------------------------------------
+# Six forms: the four register ModelForms plus the two plain ``forms.Form`` companions the
+# verb-driven steps need (``RiskClosureForm`` for ``rsk_close``, ``IssueResolutionForm`` for
+# ``iss_resolve``) — the closure note and the resolution evidence are written by the verb that
+# also stamps the evidence fields, never by a generic edit.
+from .RiskManagement.IssueEscalations import IssueEscalationForm  # noqa: F401
+from .RiskManagement.ProjectIssues import (  # noqa: F401
+    IssueResolutionForm,
+    ProjectIssueForm,
+)
+from .RiskManagement.ProjectRisks import ProjectRiskForm, RiskClosureForm  # noqa: F401
+from .RiskManagement.RiskResponseActions import RiskResponseActionForm  # noqa: F401
