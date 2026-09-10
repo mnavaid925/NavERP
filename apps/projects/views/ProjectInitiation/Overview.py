@@ -22,10 +22,13 @@ from apps.projects.models import (
     ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
+    Requirement,
     ResourceAllocation,
     ResourceProfile,
     ResourceTimeEntry,
     ScheduleBaseline,
+    ScopeChangeRequest,
+    ScopeVerification,
     TaskDependency,
 )
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -90,4 +93,16 @@ def overview(request):
         "review_due_count": sum(
             1 for risk in ProjectRisk.objects.filter(tenant=tenant) if risk.is_review_overdue),
         "issue_count": ProjectIssue.objects.filter(tenant=tenant).count(),
+        # 7.7 scope & requirements — flat counts again, plus the two figures that need a decision:
+        # the requirements nobody has linked to a delivering work package (the traceability gap) and
+        # the change requests still in front of the board. Both are plain column filters, so no
+        # Python-side pass is needed here.
+        "requirement_count": Requirement.objects.filter(tenant=tenant).count(),
+        "untraced_count": Requirement.objects.filter(tenant=tenant,
+                                                     wbs_node__isnull=True).count(),
+        "scope_change_count": ScopeChangeRequest.objects.filter(tenant=tenant).count(),
+        "pending_change_count": ScopeChangeRequest.objects.filter(
+            tenant=tenant, status__in=("draft", "submitted", "under_review")).count(),
+        "pending_verification_count": ScopeVerification.objects.filter(
+            tenant=tenant, acceptance_status="pending").count(),
     })
