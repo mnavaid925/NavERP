@@ -1756,6 +1756,27 @@ LIVE_LINKS = {
         # Extra live leaf: the flat register behind the revisions (7.2's "Task Register" precedent).
         "Budget Register":                      "projects:pbl_list",
     },
+    # ----- 7.5 Risk & Issue Management -----
+    # Two of the five bullets map to COMPUTED pages rather than registers, and deliberately so:
+    # the probability/impact matrix, the EMV table and the Monte Carlo are *computations over* the
+    # register, and so are the top-risk board, the exposure burn-down and the review queue. 7.3's
+    # `capacity_demand` board is the precedent — a computed page, not a model. Neither stores
+    # anything: a saved simulation goes stale the instant a register row changes, so the run is
+    # seeded and reproducible from `?seed=` instead.
+    "7.5": {
+        "Risk Identification & Register":        "projects:rsk_list",
+        # The matrix + EMV + seeded Monte Carlo, all computed over the register (no stored table).
+        "Qualitative & Quantitative Analysis":   "projects:risk_analysis",
+        # The response ACTIONS are their own register; the strategy column also renders on the
+        # risk register, but "action owners and triggers" is what the action rows carry.
+        "Risk Response Planning":                "projects:rra_list",
+        "Issue Logging & Escalation":            "projects:iss_list",
+        # Top-risk board + exposure burn-down + review queue + lessons lens — computed over the
+        # same register, no snapshot table.
+        "Risk Monitoring & Reporting":           "projects:risk_monitoring",
+        # Extra live leaf: the escalation queue is the issue log's `?escalated=1` lens.
+        "Issue Escalation Queue":                "projects:iss_list?escalated=1",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
