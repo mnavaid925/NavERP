@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Risk Analysis{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Qualitative &amp; Quantitative Analysis</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:rsk_list' %}">Risk &amp; Issue Management</a><span class="sep">›</span><span>Analysis</span></div>
+      <p class="text-muted">The probability × impact matrix and the EMV table are computed from the register on every load; the Monte Carlo below is seeded and re-run on demand.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:rsk_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Risk Register</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">All risks in this workspace</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project and project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Analyse</button>
+        <a href="{% url 'projects:risk_analysis' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}
+    The matrix is a plain HTML table: rows are probability 5 -> 1, columns are impact 1 -> 5.
+    Each cell carries the count of register rows in it and the severity band's badge. When no
+    risk is in a cell the count is 0 and a muted dot stands in — matrix_max is 0-safe, so an
+    empty register renders the same grid with every cell empty and no division anywhere.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Probability × Impact matrix</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Cell colour is the severity band of the probability × impact score. Largest cell: {{ matrix_max }} risk{{ matrix_max|pluralize }}.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Probability \ Impact</th>
+              <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in matrix %}
+              <tr>
+                <th>{{ row.0.probability }}</th>
+                {% for cell in row %}
+                  <td>
+                    {% if cell.count %}<span class="badge {{ cell.badge }}">{{ cell.count }}</span>{% else %}<span class="text-muted">·</span>{% endif %}
+                    {% for r in cell.risks %}
+                      <div><a href="{% url 'projects:rsk_detail' r.pk %}">{{ r.number }}</a></div>
+                    {% endfor %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted">Bands: <span class="badge badge-green">Low</span> <span class="badge badge-info">Medium</span> <span class="badge badge-amber">High</span> <span class="badge badge-red">Critical</span></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Expected monetary value</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Risk</th><th>Project</th><th class="text-right">P</th>
+              <th class="text-right">Cost impact</th><th class="text-right">EMV</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in emv_rows %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:rsk_detail' row.risk.pk %}">{{ row.risk.number }}</a><div class="text-muted">{{ row.risk.title }}</div></td>
+                <td>{{ row.risk.project.name }}</td>
+                <td class="text-right">{{ row.probability_pct }}%</td>
+                <td class="text-right">{{ row.cost_impact }}</td>
+                <td class="text-right fw-600">{{ row.emv }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="grid-3x3"></i><h3>No risks to value</h3><p>Log a risk with a cost impact — its EMV appears here.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="4" class="text-right">Total EMV</th>
+              <th class="text-right">{{ emv_total }}</th>
+            </tr>
+            <tr>
+              <th colspan="4" class="text-right">Residual EMV (after planned responses)</th>
+              <th class="text-right">{{ residual_emv_total }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% if emv_rows|length == 50 %}<p class="text-muted">Showing the 50 largest EMV rows.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Monte Carlo exposure</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Each iteration draws one Bernoulli per open risk with a cost impact, using the register's probability map; the sampled totals are summarised by nearest-rank percentiles.</p>
+      <form method="post" action="{% url 'projects:risk_analysis' %}{% if project %}?project={{ project.pk }}{% endif %}" class="filter-bar">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label" for="seed-input">Seed</label>
+          <input type="number" id="seed-input" name="seed" value="{{ seed }}" class="form-input" style="width:auto;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="iterations-input">Iterations (100–10000)</label>
+          <input type="number" id="iterations-input" name="iterations" value="{{ iterations }}" min="100" max="10000" class="form-input" style="width:auto;">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Run simulation</button>
+      </form>
+      <p class="text-muted">Seed <span class="fw-600">{{ seed }}</span> · {{ iterations }} iteration{{ iterations|pluralize }}.</p>
+
+      {% if run and simulation %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Statistic</th><th class="text-right">Exposure</th></tr></thead>
+            <tbody>
+              <tr><td>Mean</td><td class="text-right fw-600">{{ simulation.mean }}</td></tr>
+              <tr><td>P10</td><td class="text-right">{{ simulation.p10 }}</td></tr>
+              <tr><td>P50 (median)</td><td class="text-right">{{ simulation.p50 }}</td></tr>
+              <tr><td>P80</td><td class="text-right fw-600">{{ simulation.p80 }}</td></tr>
+              <tr><td>P90</td><td class="text-right">{{ simulation.p90 }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue"><i data-lucide="percent"></i></div>
+            <div class="stat-value">{% if simulation.overrun_probability is not None %}{{ simulation.overrun_probability }}%{% else %}—{% endif %}</div>
+            <div class="stat-label">Overrun probability</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon orange"><i data-lucide="wallet"></i></div>
+            <div class="stat-value">{% if simulation.contingency_delta is not None %}{{ simulation.contingency_delta }}{% else %}—{% endif %}</div>
+            <div class="stat-label">Contingency over P80</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon slate"><i data-lucide="target"></i></div>
+            <div class="stat-value">{% if simulation.baseline_total is not None %}{{ simulation.baseline_total }}{% else %}—{% endif %}</div>
+            <div class="stat-label">Cost baseline</div>
+          </div>
+        </div>
+      {% elif run %}
+        <p><span class="badge badge-amber">Nothing to simulate</span> — no open risk with a cost impact was found for this scope.</p>
+      {% else %}
+        <p class="text-muted">Run the simulation to size the exposure percentiles and the contingency delta.</p>
+      {% endif %}
+
+      {% comment %}
+        Ruling 4 — this page SIZES the contingency and DISPLAYS it; it never writes it. The write
+        to the control account's contingency column stays 7.4's (Cost & Budget Management). With no
+        approved-and-activated revision for the project there is no baseline, so overrun
+        probability and the delta are shown as em-dashes rather than invented.
+      {% endcomment %}
+      <p class="text-muted">The contingency figure is <span class="fw-600">sized here</span> and written on the control account by <a href="{% url 'projects:overview' %}">7.4 Cost &amp; Budget Management</a> — this page does not write it.{% if not baseline %} No approved, activated budget revision exists for this project yet, so the overrun probability and delta are unavailable.{% endif %}</p>
+    </div>
+  </div>
+{% endblock %}
