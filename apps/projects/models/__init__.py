@@ -42,3 +42,12 @@ from .CostManagement.BudgetRevisions import BudgetRevision  # noqa: F401
 from .CostManagement.CostControlAccounts import CostControlAccount  # noqa: F401
 from .CostManagement.ProjectBudgetLines import ProjectBudgetLine  # noqa: F401
 from .CostManagement.ProjectExpenses import ProjectExpense  # noqa: F401
+
+# --- 7.5 Risk & Issue Management --------------------------------------------------------------
+# Four new tables, no fifth: the register, its response actions, the issue log and the recorded
+# escalation path. Every score, band, EMV and simulation figure is a derived property or a
+# computed view — none of them is a column (the 7.1 ROI / 7.4 EVM ruling).
+from .RiskManagement.IssueEscalations import IssueEscalation  # noqa: F401
+from .RiskManagement.ProjectIssues import ProjectIssue  # noqa: F401
+from .RiskManagement.ProjectRisks import ProjectRisk  # noqa: F401
+from .RiskManagement.RiskResponseActions import RiskResponseAction  # noqa: F401
