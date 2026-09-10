@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses) and the 7.5 risk layer (register, response actions, issues, escalations). The rest of Module 7 is separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations) and the 7.7 scope layer (requirements, boundaries, change control, acceptance). The rest of Module 7 is separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -29,6 +29,11 @@
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="clock"></i></div><div class="stat-value">{{ time_entry_count }}</div><div class="stat-label">Time entries</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="gavel"></i></div><div class="stat-value">{{ pending_revisions }}</div><div class="stat-label">Revisions pending</div></div>
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="wallet"></i></div><div class="stat-value">{{ posted_spend }}</div><div class="stat-label">Posted spend</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ requirement_count }}</div><div class="stat-label">Requirements</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ untraced_count }}</div><div class="stat-label">Untraced requirements</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-diff"></i></div><div class="stat-value">{{ scope_change_count }}</div><div class="stat-label">Change requests</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="inbox"></i></div><div class="stat-value">{{ pending_change_count }}</div><div class="stat-label">Before the board</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ pending_verification_count }}</div><div class="stat-label">Awaiting acceptance</div></div>
   </div>
 
   <div class="card">
@@ -147,6 +152,31 @@
               <td class="fw-600"><a href="{% url 'projects:risk_monitoring' %}">Risk Monitoring</a></td>
               <td>Top risks, the exposure burn-down, the review queue and the lessons lens.</td>
               <td><a href="{% url 'projects:risk_monitoring' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:req_list' %}">Requirements</a></td>
+              <td>Elicited requirements with their technique, priority and delivering work package.</td>
+              <td><a href="{% url 'projects:req_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:scope_matrix' %}">Scope Matrix</a></td>
+              <td>Requirements against delivering work packages, the coverage gaps and the creep board.</td>
+              <td><a href="{% url 'projects:scope_matrix' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:sci_list' %}">Scope Registry</a></td>
+              <td>Boundaries, assumptions, constraints and dependencies — each owned and closable.</td>
+              <td><a href="{% url 'projects:sci_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:scr_list' %}">Change Requests</a></td>
+              <td>Scope change proposals with schedule, cost and quality impact and the board's decision.</td>
+              <td><a href="{% url 'projects:scr_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:svr_list' %}">Deliverable Acceptance</a></td>
+              <td>Deliverable inspections with the formal accept / reject / waive gate.</td>
+              <td><a href="{% url 'projects:svr_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>
