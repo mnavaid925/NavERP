@@ -47,7 +47,7 @@
               <td class="fw-600"><a href="{% url 'projects:bvr_detail' obj.pk %}">{{ obj.title }}</a><div class="text-muted">{{ obj.number }}</div></td>
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>{{ obj.revision_no }}</td>
-              <td>{% if obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{% if obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == 'superseded' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td>{% if obj.requested_at %}{{ obj.requested_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if obj.activated_at %}<span class="badge badge-green">Baseline</span>{% else %}—{% endif %}</td>
