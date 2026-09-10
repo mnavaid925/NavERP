@@ -31,6 +31,12 @@ from .CostManagement.BudgetRevisions import urlpatterns as _cm_budgetrevisions
 from .CostManagement.CostControlAccounts import urlpatterns as _cm_controlaccounts
 from .CostManagement.ProjectBudgetLines import urlpatterns as _cm_budgetlines
 from .CostManagement.ProjectExpenses import urlpatterns as _cm_expenses
+from .RiskManagement.IssueEscalations import urlpatterns as _rm_escalations
+from .RiskManagement.ProjectIssues import urlpatterns as _rm_issues
+from .RiskManagement.ProjectRisks import urlpatterns as _rm_risks
+from .RiskManagement.RiskAnalysis import urlpatterns as _rm_riskanalysis
+from .RiskManagement.RiskMonitoring import urlpatterns as _rm_riskmonitoring
+from .RiskManagement.RiskResponseActions import urlpatterns as _rm_responses
 
 app_name = "projects"
 
@@ -58,4 +64,13 @@ urlpatterns = (
     + _cm_controlaccounts
     + _cm_budgetrevisions
     + _cm_expenses
+    # 7.5 Risk & Issue Management — first segments (risks/, responses/, issues/, escalations/,
+    # risk-analysis/, risk-monitoring/) are disjoint literals from 7.1's–7.4's. The two computed
+    # routes are literal too, so nothing here can shadow another module's namespace.
+    + _rm_risks
+    + _rm_responses
+    + _rm_issues
+    + _rm_escalations
+    + _rm_riskanalysis
+    + _rm_riskmonitoring
 )
