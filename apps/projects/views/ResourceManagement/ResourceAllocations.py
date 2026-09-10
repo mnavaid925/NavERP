@@ -89,7 +89,8 @@ def ral_create(request):
 def ral_detail(request, pk):
     obj = get_object_or_404(
         ResourceAllocation.objects.select_related(
-            "project", "project_request", "project_task", "resource", "substitute_of"),
+            "project", "project_request", "project_task",
+            "resource__employee__party", "resource__party", "substitute_of", "requested_by"),
         pk=pk, tenant=request.tenant)
     return render(request, "projects/resource/resourceallocation/detail.html", {
         "obj": obj,
