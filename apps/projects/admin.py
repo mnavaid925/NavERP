@@ -19,11 +19,15 @@ from .models import (
     ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
+    Requirement,
     ResourceAllocation,
     ResourceProfile,
     ResourceTimeEntry,
     RiskResponseAction,
     ScheduleBaseline,
+    ScopeChangeRequest,
+    ScopeItem,
+    ScopeVerification,
     TaskDependency,
 )
 
@@ -244,3 +248,55 @@ class IssueEscalationAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "issue", "target_user", "escalated_by")
     search_fields = ("number", "target_role", "reason", "outcome")
     readonly_fields = ("escalated_at", "created_by", "created_at", "updated_at")
+
+
+# --- 7.7 Scope & Requirements Management ------------------------------------------------------
+
+@admin.register(Requirement)
+class RequirementAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "requirement_type", "priority", "status",
+                    "wbs_node", "owner", "tenant")
+    list_filter = ("status", "requirement_type", "priority", "elicitation_method")
+    list_select_related = ("tenant", "project", "parent", "wbs_node", "source_party", "owner",
+                           "requested_by", "approved_by", "verified_by")
+    search_fields = ("number", "title", "description", "acceptance_criteria")
+    # status is verb-driven (submit/approve/reject/implement/verify) and every stamp is written by
+    # the verb that owns the transition — an admin-form edit would mint evidence-less approvals.
+    readonly_fields = ("status", "rejection_reason", "approved_by", "approved_at", "verified_by",
+                       "verified_at", "verification_note", "created_by", "created_at",
+                       "updated_at")
+
+
+@admin.register(ScopeItem)
+class ScopeItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "statement", "project", "item_type", "impact_area", "status",
+                    "owner", "review_date", "tenant")
+    list_filter = ("item_type", "status", "impact_area")
+    list_select_related = ("tenant", "project", "requirement", "owner")
+    search_fields = ("number", "statement", "description", "outcome")
+    readonly_fields = ("status", "outcome", "closed_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(ScopeChangeRequest)
+class ScopeChangeRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "source", "priority", "cost_impact",
+                    "schedule_impact_days", "quality_impact", "status", "decided_by", "tenant")
+    list_filter = ("status", "priority", "source", "quality_impact")
+    list_select_related = ("tenant", "project", "requirement", "risk", "requested_by", "decided_by")
+    search_fields = ("number", "title", "description", "justification")
+    # status and the whole decision trail are verb-driven (submit/review/approve/reject/implement) —
+    # the board's decision is evidence, so an admin-form edit must not be able to forge it.
+    readonly_fields = ("status", "decision_note", "decided_by", "decided_at", "implemented_at",
+                       "created_by", "created_at", "updated_at")
+
+
+@admin.register(ScopeVerification)
+class ScopeVerificationAdmin(admin.ModelAdmin):
+    list_display = ("number", "deliverable", "project", "method", "result", "acceptance_status",
+                    "inspected_by", "inspection_date", "tenant")
+    list_filter = ("acceptance_status", "result", "method")
+    list_select_related = ("tenant", "project", "wbs_node", "requirement", "inspected_by",
+                           "accepted_by")
+    search_fields = ("number", "deliverable", "findings", "decision_note")
+    readonly_fields = ("acceptance_status", "decision_note", "accepted_by", "accepted_at",
+                       "created_by", "created_at", "updated_at")
