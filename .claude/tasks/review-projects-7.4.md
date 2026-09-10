@@ -84,3 +84,46 @@ All 4 model files otherwise field-by-field per §3–§6; EVM properties correct
 budgetrevision/list.html PASS; budgetrevision/detail.html PASS with findings 2-4 (state machine verified live); budgetrevision/form.html PASS (status/decision_notes verifiably absent); costcontrolaccount/list.html PASS with findings 1,7; costcontrolaccount/detail.html PASS with finding 1 (all 15 EVM rows match the model math); costcontrolaccount/form.html PASS; projectbudgetline/list.html PASS with findings 1,6,8 (totals track the filter); projectbudgetline/detail.html PASS; projectbudgetline/form.html PASS; projectexpense/list.html PASS with findings 1,5 (actions match status rules exactly; member sees 0 void buttons); projectexpense/detail.html PASS; projectexpense/form.html PASS; overview.html 7.4 blocks PASS.
 
 **Lane 3 count: 0 Critical / 2 Important / 6 Minor**
+
+---
+
+## Lane 4 — performance-reviewer (2026-09-10)
+
+**Method.** Live seeded MariaDB, django.test.Client + CaptureQueriesContext, warmed render, two stable passes; throwaway scripts deleted; EXPLAIN on migration 0005's shipped predicates.
+
+### Findings
+
+**[Critical] apps/projects/models/CostManagement/CostControlAccounts.py:86-167 (surfaces at templates/projects/cost/costcontrolaccount/list.html:52-54) — Lane-1 N+1 CONFIRMED: the CCA register re-derives EVM inputs per property access and the ORM does not cache across separate `.filter().aggregate()` calls; the register renders `bac`, `cpi`, `health.badge`, `health.state` per row, and `health` is resolved TWICE per row (two template lookups). Measured: 13-22 queries/row (worst case: bac 2 + cpi 4 + health.badge 8 + health.state 8), 75 queries/page at only 3 seeded rows vs sibling bar 10-13 — a full 15-row page projects to ~300. Suggested fix (either): (A) minimal — make `active_revision`, `bac`, `ac`, `committed` `cached_property` (per-instance, per-request safe); collapses to 4 queries/row, all 16 public properties stay plain properties reading the cached primitives, contract untouched; or (B) at-bar — annotate the `cca_list` queryset with three grouped sums (`ProjectBudgetLine` Sum grouped by control_account over approved+activated revisions; `ProjectExpense` conditional Sum grouped by control_account for actual/accrual and for commitment), properties prefer the annotation and fall back to computing (the 6.11 DeliverySchedule "prefer annotation, fall back to property" precedent; the scm Reports grouped-aggregate idiom). B lands the register at ~15 queries/page, matching siblings. The per-row SUMs are indexed and bounded per CA — this is a round-trip-count problem, not a scan problem; no new index fixes it.**
+
+**[Important] apps/projects/models/CostManagement/CostControlAccounts.py:86-236 (surfaces at templates/projects/cost/costcontrolaccount/detail.html:11,32,36-50) — same root cause on the detail page: the EV panel renders all 16 metrics plus `health` twice, with no memoization, so `bac` is re-queried ~15 times, `ac` ~10, `active_revision` ~20. Measured: 119 queries for ONE object vs `bvr_detail` 13 and `pex_detail` 8 (clears the >100 bar today at seed scale of 1 CA). Fix is the same property-side change as above — Option A alone collapses this page to ~20 queries; no template or view change needed.**
+
+**[Minor] apps/projects/migrations/0005:146-148 / models/CostManagement/ProjectBudgetLines.py:58-65 — the `category` filter and the `_pbl_totals` per-category aggregate (`category=cat` conditional Sum over tenant scope) have no `(tenant, category)` composite; EXPLAIN falls back to the tenant-leading prefix of the (tenant, number) unique (ref, 31 rows on acme). Correct-but-uncovered combination; the other three PBL filters all have their shipped composite. Add `pbl_tnt_category_idx` only if category filters prove common.**
+
+**[Minor] apps/projects/migrations/0005:154-168 — PEX `tenant+status` (the register's status filter, and Overview.py:73-77 `posted_spend` conditional Sum) and BVR `tenant+status` without project (Overview.py:71-72 `pending_revisions` count) likewise ride the tenant prefix (`pex_tnt_date_idx` / `bvr_tnt_prj_status_idx` leading tenant). Tenant partition is the real selectivity here; fine at tenant scale — note only.**
+
+**[Minor] apps/projects/migrations/0005:44-68,86-116 — every register orders `["-created_at","-id"]` (PEX `["-entry_date","-id"]`) with no `(tenant, created_at)` composite → EXPLAIN shows `Using filesort` on the tenant partition for base-list queries. Identical shape to the 7.1/7.2 siblings' orderings — house convention, not a 7.4 defect; index only if a register ever goes wide.**
+
+### Measured numbers (acme: 3 Projects / 4 BVR / 3 CCA / 31 PBL / 12 PEX)
+
+| page | queries | sql time | sibling bar (7.1/7.2) |
+|---|---|---|---|
+| cca_list | **75** | 46-141 ms | 10-13 |
+| cca_list?project= | **75** | 141 ms | — |
+| cca_detail (CCA-00001) | **119** | 142 ms | 8-13 (bvr/pex detail) |
+| bvr_list | 10 | 15 ms | 10-13 |
+| pbl_list | 13 (incl. totals strip + 3 dropdowns) | 32 ms | 10-13 |
+| pex_list | 11 | <1 ms | 10-13 |
+| bvr_detail (BVR-00001) | 13 (incl. amount_delta = 3) | <1 ms | 8-13 |
+| pex_detail | 8 | 32 ms | 8-13 |
+| projects overview | 20 (7.4 hunk adds exactly 2) | <1 ms | — |
+| prj_list / bsl_list / tsk_tree (baselines) | 11 / 10 / 12 | — | — |
+
+Per-row probe: `bac` 2 q · `cpi` 1-4 q · `health` 5-8 q × two template resolutions → 19.0 q/row average, 22 worst → 12 + 15×19 ≈ **297 queries at a full page**.
+
+### Index audit
+All composites present as declared; `active_revision`'s project+status lookup uses the project_id FK index; `bvr_activate`'s select_for_update hits `bvr_tnt_prj_status_idx` exactly; per-CA expense aggregates use the control_account FK index. No shipped filter is index-less; the three Minors are the only uncovered combos.
+
+### Clean bills
+bvr_list / pbl_list / pex_list / pex_detail / bvr_detail / overview within sibling bar; pbl totals strip aggregates in ONE conditional-Sum query; pagination LIMIT-bounded with indexed counts; seeder _cost strictly linear; forms carry no chained-FK `__str__` hop; admin list_select_related everywhere.
+
+**Lane 4 count: 1 Critical / 1 Important / 3 Minor** (one root cause shared with lane 1's handoff; fix = cached_property floor, grouped-annotate at-bar)
