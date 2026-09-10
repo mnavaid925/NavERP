@@ -427,7 +427,9 @@ class Command(BaseCommand):
 
         ral(project=active, resource=profiles[0], role_name="Backend developer",
             skill_requirements="Python, Django", allocation_unit="hours_per_week",
-            hours_per_week=Decimal("16.00"),
+            # 48h/wk against RSP-00001's 40h capacity — one seeded cell deliberately exceeds
+            # capacity so the board's over-allocation alert state is reachable from seed data.
+            hours_per_week=Decimal("48.00"),
             start_date=today - timedelta(days=14), end_date=today + timedelta(days=28),
             booking_status="firm")
         ral(project=active, resource=profiles[1], role_name="Frontend developer",
