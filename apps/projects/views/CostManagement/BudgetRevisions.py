@@ -162,15 +162,18 @@ def bvr_approve(request, pk):
 @require_POST
 def bvr_reject(request, pk):
     obj = get_object_or_404(BudgetRevision, pk=pk, tenant=request.tenant)
-    form = BudgetRevisionDecisionForm(request.POST)
-    if not form.is_valid():
-        messages.error(request, "A rejection needs a stated reason.")
-        return redirect("projects:bvr_detail", pk=obj.pk)
+    # The status precondition fires BEFORE form validation — a stale POST against a non-pending
+    # revision must get the status refusal, not "A rejection needs a stated reason." (messages
+    # identical either way; only the order is pinned).
     if obj.status != "pending_approval":
         messages.error(
             request,
             f"Only a revision pending approval can be rejected — this one is "
             f"{obj.get_status_display().lower()}.")
+        return redirect("projects:bvr_detail", pk=obj.pk)
+    form = BudgetRevisionDecisionForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "A rejection needs a stated reason.")
         return redirect("projects:bvr_detail", pk=obj.pk)
     previous = obj.status
     obj.status = "rejected"
