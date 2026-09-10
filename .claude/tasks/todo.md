@@ -6402,3 +6402,553 @@ commitment change-order sub-workflow (4.x/6.x) · top-down budget target rows ·
 split from `contingency` · `BudgetRevision.source_change_request` FK → 7.7 · FX conversion (2.x/
 7.15) · the `accounting.Project ↔ projects.Project` bridge and GL postings (2.x) · over-budget
 notifications (7.17) · portfolio cost rollups (7.12).
+
+---
+
+## 7.5 Risk & Issue Management (Module 7: Project Management, `projects`) — plan from research-projects-7.5.md (2026-09-11)
+
+### Scope, conventions, rulings, build order (research's 4 models — order for FK flow)
+
+- [ ] **Concurrency (read first):** 7.1–7.4 are all built and live in this tree; **no peer is writing
+      `RiskManagement/`** — every shared-file touch (`models/forms/views/urls __init__.py`, `admin.py`,
+      `seed_projects.py`, `navigation.py`, `overview.html`, `tests/conftest.py`) is an **Integrate-step
+      item**, done once, as a **surgical `Edit` with a re-read anchor** immediately before the edit
+      (**L43: never full-rewrite a shared 6400-line file**). Commits are path-limited:
+      `git add '<f>'; git commit -m '<msg>' -- '<f>'`.
+- [ ] **NavERP.md 7.5 bullets (verbatim — the `LIVE_LINKS["7.5"]` keys must match character-for-character,
+      the sidebar maps bullet text → route):**
+      1. **Risk Identification & Register** — Risk taxonomy, brainstorming tools, and checklists for
+         common project types.
+      2. **Qualitative & Quantitative Analysis** — Probability/impact matrices, Monte Carlo simulation,
+         and expected monetary value.
+      3. **Risk Response Planning** — Avoid, transfer, mitigate, accept strategies with action owners
+         and triggers.
+      4. **Issue Logging & Escalation** — Issue capture, severity classification, resolution tracking,
+         and escalation paths.
+      5. **Risk Monitoring & Reporting** — Top-risk dashboards, burn-down of risk exposure, and
+         lessons learned integration.
+- [ ] 4 models, **no fifth**: `ProjectRisk` [RSK-], `RiskResponseAction` [RRA-], `ProjectIssue` [ISS-],
+      `IssueEscalation` [ESC-]. Prefixes `RSK`/`RRA`/`ISS`/`ESC` verified free repo-wide (`RSP` is
+      7.3's; `RPL`/`RSV`/`RPT`/`RA`/`RAL`/`RAM`/`CR`/`PRJ` are the standing squats — none of the four
+      touches them). **Do not add a `RiskAssessment`, `RiskSimulation`, `LessonsLearned`, `RiskCategory`
+      or `EscalationPolicy` table** — Rulings 2/3/6 and Ruling 1.
+- [ ] **Build order: ProjectRisk → RiskResponseAction → ProjectIssue → IssueEscalation** (RRA FKs
+      ProjectRisk; ISS FKs Project + ProjectRisk; ESC FKs ProjectIssue — dependency order, not the
+      research's catalog order).
+- [ ] **Rulings 1–6, each restated as one-line build constraint:**
+      1. **Escalation is recorded events, not a policy engine** — `IssueEscalation` rows + the current
+         level denormalized on `ProjectIssue`; a tenant-configurable matrix / SLA timers are 7.17's, and
+         6.3's `procurement.EscalationPolicy` (`Escalations.py:31`) already exists — **never re-declare
+         it** (**L36**: the ships-first module owns the shared entity).
+      2. **Monte Carlo is a computed, seeded, POST-run page over the register — never a stored table** —
+         stdlib `random.Random(seed)` + `statistics` only (no numpy); `?seed=` shown for a byte-identical
+         re-run; a stored simulation goes stale the instant a register row changes.
+      3. **`lessons_learned` is a `TextField` on closed `ProjectRisk`/`ProjectIssue`, not a store** —
+         7.10 owns the repository; a lens listing non-empty lessons + a link-out is the whole
+         integration.
+      4. **Contingency is *sized* by 7.5, *recorded* by 7.4** — 7.5 displays the EMV total and the
+         P80−deterministic delta; the write to `CostControlAccount.contingency` stays 7.4's (one writer
+         per column); `contingency_account` is a read-only lens, **no automated write verb this pass**.
+      5. **Schedule risk is *recorded*, not simulated** — `schedule_impact_days` is a figure rolled into
+         exposure; the WBS-network simulation waits on 7.2 activity uncertainty.
+      6. **The taxonomy is a choices vocabulary** — `category` is a `CharField(choices=…)`, not a table;
+         the reusable library / per-project-type checklists are 7.19's.
+- [ ] **Spine verified (L28), do not re-derive:** `projects.Project` (`Projects.py:27`),
+      `projects.ProjectTask` (`ProjectTasks.py:22`), `projects.ProjectMilestone` (`ProjectMilestones.py:17`
+      — idiom only, not FK'd), `projects.ProjectStakeholder` (`ProjectStakeholders.py:24` — role lens
+      only, not FK'd), `projects.CostControlAccount` (`CostControlAccounts.py:29`), `projects.BudgetRevision`
+      (`BudgetRevisions.py:27` — read-only baseline lens), `core.Document`/`core.Activity`/`core.AuditLog`.
+      **No `Risk`/`Issue`/`LessonsLearned` class exists anywhere.** 7.5 FKs only
+      `Project`/`ProjectTask`/`ProjectRisk`/`ProjectIssue`/`CostControlAccount`/`AUTH_USER_MODEL` and
+      re-declares none of 7.1–7.4 (**L36**).
+- [ ] All four: `TenantNumbered` subclasses, `NUMBER_PREFIX` as above, money = `DecimalField(14,2)`
+      through `q2()`/`MAX_Q2` (`models/_base.py:28-38`), `MinValueValidator(0)` on every amount, **all
+      scores, bands, EMV and simulation figures are derived properties / computed views, NEVER stored
+      columns** (the 7.1 ROI / 7.4 EVM ruling), audit actions ≤ 10 chars, `unique_together ("tenant","number")`.
+- [ ] Layers: `apps/projects/{models,forms,views,urls}/RiskManagement/<Entity>.py` (same file name in all
+      four; sub-package `__init__.py` files stay EMPTY; re-exports only in the four top-level
+      `__init__.py`). Files: `ProjectRisks.py`, `RiskResponseActions.py`, `ProjectIssues.py`,
+      `IssueEscalations.py` (plural, the 7.1/7.2 idiom).
+- [ ] Templates: `templates/projects/risk/<entity>/{list,detail,form}.html`; entity folders
+      lowercase-singular: `projectrisk/`, `responseaction/`, `issue/`, `escalation/`; the two computed
+      pages are standalone at the sub-module level (`templates/projects/risk/risk_analysis.html`,
+      `risk_monitoring.html`). `templates/projects/` verified: `cost/ initiation/ planning/ resource/
+      overview.html` — **no `risk/` yet**.
+- [ ] Migration is `0006_…` (7.4 shipped `0005`); **number assigned at generation by the disk leaf**,
+      never reserved. Tests `test_risk_*` / `risk_*` / `_risk_*` (no collision with `test_initiation_*`,
+      `test_planning_*`, `test_resource_*` or the 7.4 `cost_*` namespace).
+- [ ] **L31 — one sub-module per run:** 7.5 builds its own new tables only; nothing here reaches into
+      7.6 (quality/defects), 7.7 (scope change/CCB), 7.8 (task execution), 7.10 (document/knowledge
+      repository), 7.12 (portfolio rollup), 7.16 (charts), 7.17 (notifications/workflow) or 7.19
+      (master data).
+- [ ] **L29 — no second ledger:** 7.5's `cost_impact` is a project figure; if a mitigation becomes real
+      spend it is a 7.4 `ProjectExpense`, and the ledger is accounting's. No FK targets
+      `accounting.Currency` this pass (sums at face value); no FK targets `core.Party` (an external risk
+      owner is deferred).
+- [ ] FKs declared **by string** (`"projects.Project"`, `"projects.ProjectTask"`, `"projects.ProjectRisk"`,
+      `"projects.ProjectIssue"`, `"projects.CostControlAccount"`, `settings.AUTH_USER_MODEL`) — no
+      cross-app model import at module level.
+- [ ] **L16 — every date comparison uses `timezone.localdate()`**, never `datetime.date.today()`
+      (`identified_date` default, `review_date`/`due_date` overdue flags, `age_days`).
+
+---
+
+### Model 1 — `ProjectRisk` [RSK-] (`models/RiskManagement/ProjectRisks.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "RSK"`. 24 declared + 4 inherited = **28 fields**. Realizes
+bullets **1 (register)**, **2 (the inputs + EMV)**, **3 (strategy/trigger/contingency)** and **5
+(review date + lessons field)** — the register row where four of the five bullets meet.
+
+#### Choices (exact machine values)
+- [ ] `CATEGORY_CHOICES` (`max_length=16`) — `technical`/Technical, `schedule`/Schedule, `cost`/Cost,
+      `resource`/Resource, `external`/External, `organizational`/Organizational, `quality`/Quality,
+      `compliance`/Compliance, `other`/Other
+- [ ] `RISK_TYPE_CHOICES` (`max_length=12`) — `threat`/Threat, `opportunity`/Opportunity
+- [ ] `RESPONSE_STRATEGY_CHOICES` (`max_length=12`) — `avoid`/Avoid, `mitigate`/Mitigate,
+      `transfer`/Transfer, `accept`/Accept, `exploit`/Exploit, `escalate`/Escalate
+- [ ] `STATUS_CHOICES` (`max_length=16`) — `identified`/Identified, `assessing`/Assessing,
+      `response_planned`/Response Planned, `monitoring`/Monitoring, `realized`/Realized, `closed`/Closed
+- [ ] `PROBABILITY_PCT = {1: 10, 2: 30, 3: 50, 4: 70, 5: 90}` — **the documented constant map** (the 7.1
+      `RISK_DISCOUNT` idiom, `ProjectRequests.py:78-86`); drives `emv` and the Monte Carlo Bernoulli draw
+- [ ] `SEVERITY_BANDS` documented constant map — `1–3 → low`, `4–7 → medium`, `8–14 → high`,
+      `15–25 → critical` (the `severity_band` property reads it)
+- [ ] `TOLERANCE_BANDS` documented constant — the tolerance-exceeding set is **`{"high","critical"}`**
+      (Ruling 6: a constant band map this pass, not a per-tenant config table)
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="risks")` — the container
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True, related_name="risks")`
+- [ ] `title` `CharField(max_length=255)`; `description` `TextField()`; `cause` `TextField(blank=True)`;
+      `effect` `TextField(blank=True)` (the "If…then" structure)
+- [ ] `category` `CharField(max_length=16, choices=CATEGORY_CHOICES, default="other")`
+- [ ] `risk_type` `CharField(max_length=12, choices=RISK_TYPE_CHOICES, default="threat")`
+- [ ] `probability` `PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])`
+- [ ] `impact` `PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])`
+- [ ] `cost_impact` `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"),
+      validators=[MinValueValidator(0)])` — the EMV and Monte Carlo input
+- [ ] `schedule_impact_days` `PositiveIntegerField(null=True, blank=True)` — **recorded, not simulated**
+      (Ruling 5)
+- [ ] `response_strategy` `CharField(max_length=12, choices=RESPONSE_STRATEGY_CHOICES, default="mitigate")`
+- [ ] `response_note` `TextField(blank=True)`; `trigger` `TextField(blank=True)`;
+      `contingency_plan` `TextField(blank=True)`
+- [ ] `status` `CharField(max_length=16, choices=STATUS_CHOICES, default="identified")` — **verb-driven,
+      NOT on the form**
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="owned_risks")`
+      — the named human owner
+- [ ] `identified_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+      related_name="raised_risks")`
+- [ ] `identified_date` `DateField(default=timezone.localdate)`
+- [ ] `review_date` `DateField(null=True, blank=True)` — the register's cadence column
+- [ ] `residual_probability` / `residual_impact` `PositiveSmallIntegerField(null=True, blank=True,
+      validators=[MinValueValidator(1), MaxValueValidator(5)])` — the post-response estimate
+- [ ] `contingency_account` `FK("projects.CostControlAccount", SET_NULL, null=True, blank=True,
+      related_name="risks")` — read-only lens; **the write to `contingency` stays 7.4's** (Ruling 4)
+- [ ] `lessons_learned` `TextField(blank=True)` — the closed-row takeaway, **not a store** (Ruling 3)
+- [ ] `closed_at` `DateTimeField(null=True, blank=True, editable=False)` — stamped by `rsk_close`
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+
+#### Derived / Meta / behaviour
+- [ ] `score` property = `probability * impact` (never stored)
+- [ ] `severity_band` property → `low`/`medium`/`high`/`critical` via `SEVERITY_BANDS`; plus a
+      **`get_severity_band_display()` helper** returning the label (the
+      `ProjectStakeholder.get_engagement_strategy_display` precedent, `ProjectStakeholders.py:144` —
+      without it the template renders an empty cell, the L7 blank-at-200 failure)
+- [ ] `emv` property = `q2(cost_impact × PROBABILITY_PCT[probability] / 100)`; `exposure` property =
+      `emv` (the burn-down sum term)
+- [ ] `residual_score` = `residual_probability × residual_impact` (None if either is None);
+      `residual_band` via `SEVERITY_BANDS`
+- [ ] `is_review_overdue` property = `review_date` passed and `status not in ("realized","closed")`
+      (the `ProjectMilestone.is_late` idiom, `ProjectMilestones.py:60-64`)
+- [ ] `is_locked` property = `status in ("realized","closed")` — edit/delete refuse these rows (the
+      `ProjectExpense.is_locked` frozen-row guard, `ProjectExpenses.py:98-101`)
+- [ ] `clean()` same-project guards: `wbs_node.project_id == project_id` (the `anchor_task` pattern) and
+      `contingency_account.project_id == project_id`; each raised as a field-keyed `ValidationError`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes
+      `("tenant","project")` `rsk_tnt_project_idx`, `("tenant","status")` `rsk_tnt_status_idx`,
+      `("tenant","category")` `rsk_tnt_category_idx`, `("tenant","risk_type")` `rsk_tnt_rtype_idx`,
+      `("tenant","-created_at")` `rsk_tnt_created_idx` (serves `Meta.ordering` itself)
+- [ ] Verbs (POST-only, audit actions ≤ 10 chars; each refuses a disallowed transition with `messages.*`
+      + redirect, captures `previous = obj.status` BEFORE mutating, writes
+      `changes={"verb","from","to"}`):
+      `rsk_realize` (login; `monitoring`/`response_planned` → `realized`, **may create the linked
+      `ProjectIssue`** — the risk→issue bridge; audit `realize`; **refused on a closed row**);
+      `rsk_close` (login; → `closed`, stamps `closed_at`; audit `close`);
+      `rsk_reopen` (**tenant_admin**; `closed` → `monitoring`, clears `closed_at`; audit `reopen`)
+- [ ] Form `ProjectRiskForm` excludes `tenant`, `number`, `status`, `closed_at`, `created_by`;
+      `owner`/`identified_by` tenant-scoped `ModelChoiceField`s (`_reject_foreign` re-checks);
+      `contingency_account`/`wbs_node`/`project` tenant-scoped; `TenantUniqueMixin` FIRST on the form
+      (its `clean()` compares FKs' project)
+
+---
+
+### Model 2 — `RiskResponseAction` [RRA-] (`models/RiskManagement/RiskResponseActions.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "RRA"`. 11 declared + 4 inherited = **15 fields**. Realizes
+bullet **3's "action owners and triggers"** — one risk carries many actions, each with its own owner,
+due date, cost and expected residual.
+
+#### Choices
+- [ ] `STRATEGY_CHOICES` (`max_length=12`) — same vocabulary as `ProjectRisk.RESPONSE_STRATEGY_CHOICES`
+      (`avoid`/`mitigate`/`transfer`/`accept`/`exploit`/`escalate`)
+- [ ] `STATUS_CHOICES` (`max_length=12`) — `planned`/Planned, `in_progress`/In Progress,
+      `completed`/Completed, `cancelled`/Cancelled
+
+#### Fields
+- [ ] `risk` `FK("projects.ProjectRisk", CASCADE, related_name="response_actions")` — the action is only
+      real inside a risk
+- [ ] `title` `CharField(max_length=255)`; `description` `TextField(blank=True)`
+- [ ] `strategy` `CharField(max_length=12, choices=STRATEGY_CHOICES, default="mitigate")`
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="risk_actions")`
+      — the **action** owner, distinct from the risk owner
+- [ ] `due_date` `DateField(null=True, blank=True)`
+- [ ] `cost` `DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"),
+      validators=[MinValueValidator(0)])` — estimated mitigation cost (a real spend is a 7.4
+      `ProjectExpense` — soft)
+- [ ] `trigger` `TextField(blank=True)` — the observable event that activates THIS action
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="planned")` — **verb-driven,
+      NOT on the form**
+- [ ] `residual_probability` / `residual_impact` `PositiveSmallIntegerField(null=True, blank=True,
+      validators=[MinValueValidator(1), MaxValueValidator(5)])`
+- [ ] `completed_at` `DateTimeField(null=True, blank=True, editable=False)`;
+      `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+
+#### Derived / Meta / behaviour
+- [ ] `is_overdue` property = `due_date` passed and `status not in ("completed","cancelled")` (the
+      `is_late` idiom)
+- [ ] `residual_score` property = `residual_probability × residual_impact` (None if either None)
+- [ ] `is_locked` property = `status == "completed"` — a completed action refuses edit/delete
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes
+      `("tenant","risk")` `rra_tnt_risk_idx`, `("tenant","status")` `rra_tnt_status_idx`,
+      `("tenant","owner")` `rra_tnt_owner_idx`, `("tenant","due_date")` `rra_tnt_due_idx`
+- [ ] Verb `rra_complete` (login; → `completed`, stamps `completed_at`; audit `complete`; already-completed
+      says so and writes nothing)
+- [ ] Form `RiskResponseActionForm` excludes `tenant`, `number`, `status`, `completed_at`, `created_by`;
+      `risk`/`owner` tenant-scoped
+
+---
+
+### Model 3 — `ProjectIssue` [ISS-] (`models/RiskManagement/ProjectIssues.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "ISS"`. 20 declared + 4 inherited = **24 fields**. Realizes
+bullet **4's capture / severity / resolution / current escalation state**.
+
+#### Choices
+- [ ] `ISSUE_TYPE_CHOICES` (`max_length=12`) — `issue`/Issue, `action_item`/Action Item,
+      `decision`/Decision, `other`/Other
+- [ ] `SEVERITY_CHOICES` (`max_length=8`) — `critical`/Critical, `high`/High, `medium`/Medium, `low`/Low
+- [ ] `STATUS_CHOICES` (`max_length=12`) — `open`/Open, `in_progress`/In Progress, `blocked`/Blocked,
+      `resolved`/Resolved, `closed`/Closed, `cancelled`/Cancelled
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="issues")`
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True, related_name="issues")`
+- [ ] `risk` `FK("projects.ProjectRisk", SET_NULL, null=True, blank=True, related_name="issues")` —
+      provenance, set by `rsk_realize`
+- [ ] `title` `CharField(max_length=255)`; `description` `TextField()`
+- [ ] `issue_type` `CharField(max_length=12, choices=ISSUE_TYPE_CHOICES, default="issue")`
+- [ ] `severity` `CharField(max_length=8, choices=SEVERITY_CHOICES, default="medium")`
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="open")` — **verb-driven, NOT
+      on the form**
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="owned_issues")`
+- [ ] `raised_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+      related_name="raised_issues")`
+- [ ] `identified_date` `DateField(default=timezone.localdate)`; `due_date` `DateField(null=True,
+      blank=True)`
+- [ ] **Escalation current state (denormalized for the register lens):** `escalation_level`
+      `PositiveSmallIntegerField(default=0)` (0 = not escalated, 1–4 = tier); `escalated_to`
+      `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="escalated_issues")`;
+      `escalated_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] **Resolution (verb-written evidence, NEVER form fields — the 7.4 `decision_notes` rule):**
+      `root_cause` `TextField(blank=True)`; `resolution_note` `TextField(blank=True)`;
+      `resolved_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`;
+      `resolved_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `lessons_learned` `TextField(blank=True)` (Ruling 3);
+      `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+
+#### Derived / Meta / behaviour
+- [ ] `is_overdue` = `due_date` passed and `status in ("open","in_progress","blocked")` (the `is_late`
+      idiom); `age_days` = days since `identified_date` (L16: `timezone.localdate()`)
+- [ ] `is_open` = `status in ("open","in_progress","blocked")`
+- [ ] `severity_badge` property → dict `{"state","badge"}` using **colour-named classes only**
+      (`badge-red`/`badge-amber`/`badge-green`, **L33**); `get_severity_display()` comes free from the field
+- [ ] `is_locked` = `status in ("resolved","closed")` — the resolution fields refuse edit/delete
+- [ ] `clean()` same-project guards: `wbs_node.project_id == project_id` and `risk.project_id == project_id`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes
+      `("tenant","project")` `iss_tnt_project_idx`, `("tenant","status")` `iss_tnt_status_idx`,
+      `("tenant","severity")` `iss_tnt_severity_idx`, `("tenant","escalation_level")` `iss_tnt_esc_idx`,
+      `("tenant","-created_at")` `iss_tnt_created_idx`
+- [ ] Verbs (POST-only, audited, `changes={"verb","from","to"}`):
+      `iss_escalate` (**tenant_admin**, **L27** — appends an `IssueEscalation` row, increments
+      `escalation_level`, sets `escalated_to`/`escalated_at`; audit `escalate`; **refused when the issue
+      is resolved/closed**);
+      `iss_resolve` (login — stamps `resolved_by`/`resolved_at`, status → `resolved`; audit `resolve`;
+      **resolve-twice refused**);
+      `iss_close` (login — `resolved` → `closed`; audit `close`; refused unless resolved)
+- [ ] Form `ProjectIssueForm` excludes `tenant`, `number`, `status`, `root_cause`, `resolution_note`,
+      `resolved_by`, `resolved_at`, `escalation_level`, `escalated_to`, `escalated_at`, `created_by`;
+      `project`/`wbs_node`/`risk`/`owner`/`raised_by` tenant-scoped
+
+---
+
+### Model 4 — `IssueEscalation` [ESC-] (`models/RiskManagement/IssueEscalations.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "ESC"`. 9 declared + 4 inherited = **13 fields**. Realizes
+bullet **4's escalation-path requirement** explicitly — one row per escalation event, recorded, **not a
+configurable policy engine** (Ruling 1).
+
+#### Fields
+- [ ] `issue` `FK("projects.ProjectIssue", CASCADE, related_name="escalations")`
+- [ ] `level` `PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(4)])` —
+      levels 1–4 (Team Lead → PM → Program Manager → Executive Sponsor)
+- [ ] `target_role` `CharField(max_length=80, blank=True)` — the role label ("Program Manager",
+      "Executive Sponsor"); grounded in the `pst_list` RACI/type register, linked as a lens
+- [ ] `target_user` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+      related_name="issue_escalations")` — the named target (the practice's "primary + backup" is two
+      rows, not two columns)
+- [ ] `reason` `TextField()` — required (why it was escalated)
+- [ ] `escalated_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+      related_name="escalations_raised")`; `escalated_at` `DateTimeField(auto_now_add=True)`
+- [ ] `resolved_at` `DateTimeField(null=True, blank=True)`; `outcome` `TextField(blank=True)` (what was
+      decided at this level)
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False)`
+
+#### Meta / behaviour
+- [ ] `ordering = ["issue_id", "level", "id"]` (the path reads in level order); `unique_together =
+      ("tenant","number")`; indexes `("tenant","issue")` `esc_tnt_issue_idx`, `("tenant","level")`
+      `esc_tnt_level_idx`
+- [ ] No verbs of its own — rows are appended by `iss_escalate`; form `IssueEscalationForm` excludes
+      `tenant`, `number`, `escalated_at`, `created_by`
+
+---
+
+## Backend (`apps/projects/{models,forms,views,urls}/RiskManagement/`) — one file per entity per layer
+
+- [ ] `models/RiskManagement/<Entity>.py` ×4 as specified above; sub-package `__init__.py` files EMPTY;
+      nothing added to the top-level `__init__.py` until Integrate
+- [ ] `forms/RiskManagement/<Entity>.py` — `ProjectRiskForm`, `RiskResponseActionForm`,
+      `ProjectIssueForm`, `IssueEscalationForm` (exclusions pinned per model; `TenantUniqueMixin`
+      BEFORE `TenantModelForm` on every form whose `clean()` compares an FK's project)
+- [ ] `views/RiskManagement/<Entity>.py` — full CRUD via the `crud_*` helpers + the 7 verbs; every
+      queryset `filter(tenant=request.tenant)`, never `.all()`; `_reject_foreign(form, cleaned,
+      [<tenant-scoped FK names>])` per form (never `accounting.Currency` — none this pass); every verb
+      refuses a disallowed transition with `messages.*` + redirect; every `?enum=` value allow-listed
+      against CHOICES (**L11**); capture `previous = obj.status` BEFORE mutating
+- [ ] `urls/RiskManagement/<Entity>.py` — literal first segments `risks/`, `responses/`, `issues/`,
+      `escalations/` plus the two computed `risk-analysis/`, `risk-monitoring/`; literal routes before
+      `<int:pk>/` (first-match-wins)
+- [ ] `views/RiskManagement/RiskAnalysis.py` + `views/RiskManagement/RiskMonitoring.py` — the two
+      computed pages (no model; the 7.3 `CapacityDemand.py` precedent — a computed board, not a model);
+      absolute imports only
+
+## Views, routes & CONTEXT KEYS — the contract (L7/L8: an unpinned name renders blank at 200)
+
+- [ ] **ProjectRisk** — `rsk_list`, `rsk_create`, `rsk_detail`, `rsk_edit`, `rsk_delete`.
+      Routes (prefix `risks/`): `risks/`, `risks/add/`, `risks/<int:pk>/`, `risks/<int:pk>/edit/`,
+      `risks/<int:pk>/delete/`; verbs `risks/<int:pk>/realize/` `rsk_realize`,
+      `risks/<int:pk>/close/` `rsk_close`, `risks/<int:pk>/reopen/` `rsk_reopen` (**tenant_admin**).
+      `rsk_list`: `search_fields=["number","title","description","cause","effect"]`;
+      `filters=[("project","project_id",True), ("category","category",False),
+      ("risk_type","risk_type",False), ("status","status",False), ("owner","owner_id",True)]`.
+      **Derived lenses are PRE-SCOPED in the view before `crud_list` (they are Python properties, not
+      model fields — `crud_list`'s `filters` are field lookups only, L11):** `?band=<low|medium|high|
+      critical>` → `Q` OR of `Q(probability=p, impact=i)` pairs in that band's score range (DB-side,
+      exact); `?review_due=1`/`?overdue=1` → `Q(review_date__lt=timezone.localdate(),
+      status__in=("identified","assessing","response_planned","monitoring"))`; `?top=1` → order by
+      `-score` then `-emv`. `extra_context`: `projects`, `category_choices`, `risk_type_choices`,
+      `status_choices`, `strategy_choices`, `band_choices`, `owners`
+      (`User.objects.filter(tenant=request.tenant).only("id","email","first_name","last_name")`).
+      Detail: `obj` + `response_actions` (obj.response_actions `select_related("owner")`) +
+      `linked_issues` (obj.issues); the derived figures render straight off `obj` (no computed context
+      keys — the 7.4 CCA-detail rule)
+- [ ] **RiskResponseAction** — `rra_list`, `rra_create`, `rra_detail`, `rra_edit`, `rra_delete`.
+      Routes (prefix `responses/`): `responses/`, `responses/add/`, `responses/<int:pk>/`,
+      `responses/<int:pk>/edit/`, `responses/<int:pk>/delete/`; verb
+      `responses/<int:pk>/complete/` `rra_complete`.
+      `rra_list`: `search_fields=["number","title","description","trigger"]`;
+      `filters=[("risk","risk_id",True), ("strategy","strategy",False), ("status","status",False),
+      ("owner","owner_id",True)]`; derived `?overdue=1` pre-scoped
+      (`Q(due_date__lt=today, status__in=("planned","in_progress"))`).
+      `extra_context`: `risks` (`ProjectRisk.objects.filter(tenant=…)`), `strategy_choices`,
+      `status_choices`, `owners`. Detail: `obj` + `risk` (via obj.risk)
+- [ ] **ProjectIssue** — `iss_list`, `iss_create`, `iss_detail`, `iss_edit`, `iss_delete`.
+      Routes (prefix `issues/`): `issues/`, `issues/add/`, `issues/<int:pk>/`, `issues/<int:pk>/edit/`,
+      `issues/<int:pk>/delete/`; verbs `issues/<int:pk>/escalate/` `iss_escalate` (**tenant_admin**),
+      `issues/<int:pk>/resolve/` `iss_resolve`, `issues/<int:pk>/close/` `iss_close`.
+      `iss_list`: `search_fields=["number","title","description"]`;
+      `filters=[("project","project_id",True), ("severity","severity",False), ("status","status",False),
+      ("issue_type","issue_type",False), ("owner","owner_id",True), ("risk","risk_id",True)]`; derived
+      `?escalated=1` → `Q(escalation_level__gt=0)`; `?overdue=1` → `Q(due_date__lt=today,
+      status__in=("open","in_progress","blocked"))` (both pre-scoped).
+      `extra_context`: `projects`, `severity_choices`, `status_choices`, `issue_type_choices`,
+      `owners`, `risks`. Detail: `obj` + `escalations` (obj.escalations ordered by `level`,`id`) + the
+      resolution/verb panels
+- [ ] **IssueEscalation** — `esc_list`, `esc_create`, `esc_detail`, `esc_edit`, `esc_delete`.
+      Routes (prefix `escalations/`): `escalations/`, `escalations/add/`, `escalations/<int:pk>/`,
+      `escalations/<int:pk>/edit/`, `escalations/<int:pk>/delete/`. No verbs.
+      `esc_list`: `search_fields=["number","target_role","reason","outcome"]`;
+      `filters=[("issue","issue_id",True), ("level","level",True), ("target_user","target_user_id",True)]`.
+      `extra_context`: `issues` (`ProjectIssue.objects.filter(tenant=…)`), `level_choices`
+      (`[(1,"Level 1"),(2,"Level 2"),(3,"Level 3"),(4,"Level 4")]`), `owners`. Detail: `obj` + `issue`
+- [ ] **`risk_analysis`** — route `risk-analysis/`, name `risk_analysis`, template
+      `projects/risk/risk_analysis.html`. GET renders the matrix + EMV tables (no simulation);
+      **POST runs the seeded Monte Carlo** and re-renders. Full context:
+      - `projects` (tenant `Project` queryset), `project` (the selected `Project` from `?project=`, else
+        None; `as_db_int`-guarded), `baseline` (the project's approved+activated `BudgetRevision`, else None)
+      - `matrix` — 5 rows (probability 5→1) × 5 cells; each cell `{"probability","impact","count",
+        "badge","risks"}` where `badge` is the colour-named class for that cell's band (**L33**);
+        `matrix_max` — max cell count (0-safe, for CSS bar shading)
+      - `emv_rows` — per-risk `{"risk","probability_pct","cost_impact","emv"}` ordered `-emv`;
+        `emv_total` — `q2(Σ emv)`; `residual_emv_total` — `q2(Σ residual emv)` when both residual
+        fields are set
+      - `seed` (effective int, default pinned constant `42`, shown on the page), `iterations` (effective
+        int, default `1000`, clamped `100..10000`), `run` (bool — True only on a POST that ran)
+      - `simulation` — None on a plain GET, else `{"mean","p10","p50","p80","p90","samples",
+        "baseline_total","overrun_probability","contingency_delta"}`; `baseline_total` = the active
+        revision's line total (7.4 read-only lens); `overrun_probability` = % of iterations whose sampled
+        exposure exceeds `baseline_total`; `contingency_delta` = `q2(p80 − baseline_total)` (Ruling 4 —
+        **displayed, never written** to the CA)
+      - `?seed=`/`?iterations=` parsed through a `forms.Form` (`IntegerField`, `is_finite` + magnitude
+        cap — **L35**, never raw `request.GET` parsing); junk seed → default, never a 500
+- [ ] **`risk_monitoring`** — route `risk-monitoring/`, name `risk_monitoring`, template
+      `projects/risk/risk_monitoring.html`, **GET-only**. Full context:
+      - `projects`, `project` (from `?project=`, `as_db_int`-guarded), `open_count`, `closed_count`,
+        `realized_count`
+      - `top_risks` — register ordered `-score` then `-emv` (the top-risk list, cap 25)
+      - `burndown_rows` — period rows `{"period","label","count","score_total","emv_total","bar_pct"}`
+        aggregated by `identified_date` month over the selected project; `bar_pct` = `score_total` as %
+        of the max row (0-safe, **CSS bars, no chart library — 7.16 owns charts**); `burndown_max`
+      - `review_queue` — risks with `review_date` passed and status not closed, ordered `review_date`;
+        `review_due_count`
+      - `tolerance` — `{"threshold","band","above"}` from the documented `TOLERANCE_BANDS` constant
+        (`above` = count of open risks whose `severity_band` is in `{"high","critical"}`);
+        `above_tolerance_count`
+      - `lessons` — closed risks/issues with non-empty `lessons_learned`, each row
+        `{"kind","obj","lesson"}` (the lessons lens); `lessons_count`
+      - `by_category`, `by_band` — small dicts for the summary strip
+- [ ] **Four url prefixes pinned — `risks/`, `responses/`, `issues/`, `escalations/` — plus the two
+      computed routes `risk-analysis/`, `risk-monitoring/`.** All six are **disjoint literals** from
+      7.1–7.4's existing first segments (`""`, `project-requests/`, `projects/`, `stakeholders/`,
+      `kickoffs/`, `tasks/`, `dependencies/`, `milestones/`, `baselines/`, `resource-profiles/`,
+      `allocations/`, `time-entries/`, `capacity-demand/`, `budgetlines/`, `revisions/`,
+      `controlaccounts/`, `expenses/`) — **re-check the concatenated `urls/__init__.py` at Integrate** in
+      case a peer added a segment. No route uses a converter in its first component.
+
+## Templates (`templates/projects/risk/`)
+
+- [ ] `projectrisk/{list,detail,form}.html`; `responseaction/{list,detail,form}.html`;
+      `issue/{list,detail,form}.html`; `escalation/{list,detail,form}.html` — list: filter bar
+      reflecting `request.GET` (including the derived `?band=`/`?overdue=`/`?review_due=`/`?escalated=1`
+      lenses), Actions column (view/edit/delete-POST + `confirm()` + `{% csrf_token %}`), pagination with
+      `has_previous`/`has_next` guards (**L9**), empty state
+- [ ] The two computed pages live at the sub-module level: `risk_analysis.html`, `risk_monitoring.html`
+      (not inside an entity folder) — matrix as an HTML grid, EMV/percentile tables, burn-down as CSS
+      bars, review queue + tolerance flag + lessons lens
+- [ ] Colour-named badge classes only (`badge-green/-amber/-red/-info/-muted/-slate`, **L33**) — run
+      `grep -n '\.badge-' static/css/theme.css` before writing them; every badge block ends
+      `{% else %}{{ obj.get_<field>_display }}{% endif %}`
+- [ ] **No nullable FK inside a `|default:` filter argument** (the 7.1 four-500 idiom, **L10**) — use
+      `{% if fk %}…{% else %}—{% endif %}` for `owner`/`escalated_to`/`target_user`/`resolved_by`/
+      `identified_by` (all nullable user FKs)
+- [ ] **Multi-line notes use `{% comment %} … {% endcomment %}`** — never a multi-line `{# … #}`
+      (**L2**); the analysis/monitoring pages carry long caveats (simple random sampling, planning-grade
+      exposure)
+- [ ] FK `<select>` comparisons use `|stringformat:"d"`; `{% extends "base.html" %}` unchanged
+
+## Integrate (single writer — the ONLY shared-file step; surgical `Edit`, re-read anchors)
+
+- [ ] Re-export blocks `# --- 7.5 Risk & Issue Management` appended to all four top-level
+      `__init__.py` (models: 4 models; forms: 4 forms; views: 4 CRUD sets + 2 computed views + 7 verbs;
+      urls: 6 urlpatterns imports + concat). A missing re-export is a runtime `ImportError`
+- [ ] `admin.py` — 4 registrations appended after the 7.4 block (`list_display` led by `number`,
+      `list_select_related` for every rendered FK, `closed_at`/`resolved_at`/`completed_at`/`escalated_at`
+      readonly)
+- [ ] `seed_projects.py` — `_risk` block with its OWN guard
+      (`ProjectRisk.objects.filter(tenant=tenant).exists()`), called per tenant: 8–12 `ProjectRisk` rows
+      per seeded active project spanning all `category` values and both `risk_type`s, anchored to the
+      existing WBS work packages, with `probability`/`impact`/`cost_impact` chosen to populate all four
+      severity bands and land the EMV total in a meaningful range; one `realized` risk linked to one
+      `ProjectIssue`; 2–3 `RiskResponseAction` rows per top risk (one `completed`, one overdue); 5–7
+      `ProjectIssue` rows across all severities (2 `resolved` with stamps) and one carrying an
+      `IssueEscalation` at level 2 with a populated `target_role`/`reason`; one closed risk with a
+      non-empty `lessons_learned`. Enough rows for page 2. `--flush` deletes children-first:
+      `IssueEscalation, ProjectIssue, RiskResponseAction, ProjectRisk`
+- [ ] `apps/core/navigation.py` — one new `LIVE_LINKS["7.5"]` immediately after the `"7.4"` block
+      (~`:1758`), verbatim from the research: Risk Identification & Register → `projects:rsk_list`;
+      Qualitative & Quantitative Analysis → `projects:risk_analysis`; Risk Response Planning →
+      `projects:rra_list`; Issue Logging & Escalation → `projects:iss_list`; Risk Monitoring & Reporting
+      → `projects:risk_monitoring`; extra live leaf "Issue Escalation Queue" →
+      `projects:iss_list?escalated=1`; the justification comments record the deliberate computed-page
+      mapping (bullet 2/5 are computations over the register). `_safe_reverse` supports both `url#frag`
+      and `?query=` (`navigation.py:1964-1975` — confirmed)
+- [ ] `templates/projects/overview.html` — 7.5 quick links + counts (open risks above tolerance,
+      review-due, open issues), mirroring the 7.4 block
+- [ ] **DB LAST**: `python manage.py makemigrations projects --dry-run` — **read every model the
+      dry-run lists; if it names a model you did not write, STOP and report** (a missing re-export, or a
+      peer's model). Then generate (number = disk leaf `0006_…`), `migrate`, `seed_projects` ×2 (second
+      run a no-op), `manage.py check`
+
+## Verify
+
+- [ ] `temp/` smoke sweep as `admin_acme` / `password` (NOT the tenant-less `admin`):
+      - [ ] every new `projects:*` url 200 (405 for the POST-only verbs hit by GET — `rsk_realize`,
+            `rsk_close`, `rsk_reopen`, `rra_complete`, `iss_escalate`, `iss_resolve`, `iss_close`);
+            content asserts, not just status — page titles, a seeded `RSK-`/`ISS-` number, the matrix
+            renders, the EMV total renders, no `{#` / `{% comment` leaks (**L8**)
+      - [ ] junk params `?status=nope`, `?project=0`, `?probability=²`, `?seed=abc`, `?page=9999` →
+            default page, never a 500, never a silently emptied register (**L11** allow-list + **L35**
+            seed parse)
+      - [ ] page 2 of the risk register; cross-tenant IDOR → 404 on every `<int:pk>` route
+      - [ ] state machine holds: escalate-on-closed refused, resolve-twice refused, realize-on-closed
+            refused, member 403 on `iss_escalate`/`rsk_reopen` (**L27**)
+      - [ ] hand-computed spot check: one seeded risk's `score`/`severity_band`/`emv` matches
+            hand-computed values; the `?band=critical` lens returns exactly the critical-band rows; the
+            `?overdue=`/`?review_due=` lens returns exactly the review-overdue rows
+- [ ] Sidebar shows **7.5 Live** with all five bullets + the escalation-queue leaf
+
+## Close-out (Module Creation Sequence phases 4–7)
+
+- [ ] Review agents, one after another, each appending to
+      `.claude/tasks/review-projects-7.5.md`: `code-reviewer` → `explorer` → `frontend-reviewer` →
+      `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`
+- [ ] `code-fixer` burns the deduped, ID'd findings (Critical → Important → Minor), one commit per file
+- [ ] Tests: append `risk_*` fixtures to `conftest.py` (**owned by itself — only with a full unfiltered
+      re-run**), then `test_risk_models.py` → `test_risk_forms.py` → `test_risk_views.py` →
+      `test_risk_security.py`, one file per commit, tests named `test_risk_*`, helpers `_risk_*` (no
+      shadowing of the `test_initiation_*`/`test_planning_*`/`test_resource_*`/`cost_*` namespaces), then
+      **one full unfiltered run** (never `-k`, **L47**; iterate with `--nomigrations`)
+- [ ] `.claude/skills/projects/SKILL.md` — append the 7.5 section (the four models + prefixes, the
+      derived-property rulings, the verb table with gates/audit strings, the six routes, the two computed
+      pages + their context contracts, the seeder `_risk` block, gotchas incl. the computed-lens
+      pre-scoping and the seed-parse guard) and update the frontmatter "As-built" line
+- [ ] Mark 7.5 complete in `README.md`
+
+## Later passes / deferred (carried verbatim from the research so nothing is lost)
+
+- [ ] `RiskSimulationSnapshot` (stored Monte Carlo runs per period) — a report cache, not the model
+      (Ruling 2); add only when a tenant needs period-over-period simulation history
+- [ ] Quantified schedule-risk simulation (3-point durations → P80 finish, criticality index) — needs
+      7.2 activity uncertainty + a CPM engine (Ruling 5)
+- [ ] Latin Hypercube sampling, risk correlation / risk-driver modeling, convergence auto-stop — simple
+      random sampling is the documented simplification; correlation needs a correlation-matrix model
+- [ ] Decision-tree analysis — a different object (decisions, not risks); EMV per risk is this pass's scope
+- [ ] Bowtie cause-and-effect analysis (ARM) — needs a cause/control graph model; `cause`/`effect` text
+      is the honest stand-in
+- [ ] Automated contingency write into `CostControlAccount.contingency` — one writer per column
+      (Ruling 4); a cross-sub-module write verb waits on 7.4's contract
+- [ ] Reusable risk library + per-project-type risk checklists — master data / template library → 7.19;
+      the repository → 7.10 (Ruling 3/6)
+- [ ] Tenant-configurable escalation matrix + auto-escalation on SLA breach — 7.17; the generic engine
+      already exists at 6.3 (Ruling 1)
+- [ ] Risk appetite / tolerance as a per-tenant config table — a documented constant band map this pass;
+      per-tenant config is 7.19
+- [ ] KRI / KPI indicators (leading indicators) — KRI definitions are master data (7.19); KRI values
+      need a metrics engine; 7.5's exposure figures stand in
+- [ ] Cross-project / portfolio risk aggregation and enterprise heat maps — 7.12 (portfolio)
+- [ ] Risk dashboards and S-curve / tornado / burn-down charts — 7.16 (BI); 7.5 renders grids, tables
+      and badges
+- [ ] Escalation notifications, review reminders, missing-owner alerts — no scheduler/mail worker
+      (7.1/6.8/6.19); 7.17's; badges and audit rows only
+- [ ] Risk → scope change request FK (7.7) and risk → budget revision linkage (7.4) — those models'
+      contracts do not invite the bridge yet; one-line FKs when they land
+- [ ] External ticketing / GRC sync (Jira, ServiceNow) — integration → 7.18; a `source_number`-style
+      soft reference would be the pattern
