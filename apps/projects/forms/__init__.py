@@ -56,3 +56,22 @@ from .RiskManagement.ProjectIssues import (  # noqa: F401
 )
 from .RiskManagement.ProjectRisks import ProjectRiskForm, RiskClosureForm  # noqa: F401
 from .RiskManagement.RiskResponseActions import RiskResponseActionForm  # noqa: F401
+
+# --- 7.7 Scope & Requirements Management ------------------------------------------------------
+# Nine forms: the four register ModelForms plus the five plain ``forms.Form`` companions the
+# verb-driven gates need (a rejection always needs a written reason; a verification, an outcome, a
+# CCB decision and an acceptance note are captured by the verb that stamps the evidence columns).
+from .ScopeRequirements.Requirements import (  # noqa: F401
+    RequirementForm,
+    RequirementRejectionForm,
+    RequirementVerificationForm,
+)
+from .ScopeRequirements.ScopeChangeRequests import (  # noqa: F401
+    ChangeRejectionForm,
+    ScopeChangeForm,
+)
+from .ScopeRequirements.ScopeItems import ScopeItemForm, ScopeItemOutcomeForm  # noqa: F401
+from .ScopeRequirements.ScopeVerifications import (  # noqa: F401
+    ScopeVerificationForm,
+    VerificationDecisionForm,
+)
