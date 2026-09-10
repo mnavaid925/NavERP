@@ -127,3 +127,25 @@ All composites present as declared; `active_revision`'s project+status lookup us
 bvr_list / pbl_list / pex_list / pex_detail / bvr_detail / overview within sibling bar; pbl totals strip aggregates in ONE conditional-Sum query; pagination LIMIT-bounded with indexed counts; seeder _cost strictly linear; forms carry no chained-FK `__str__` hop; admin list_select_related everywhere.
 
 **Lane 4 count: 1 Critical / 1 Important / 3 Minor** (one root cause shared with lane 1's handoff; fix = cached_property floor, grouped-annotate at-bar)
+
+---
+
+## Lane 5 — qa-smoke-tester (2026-09-10, REPORT-ONLY override)
+
+**Harness re-run first: 297/297 green, no regression.** Then 138 gap-probe checks (POST create paths end-to-end, form validation paths, filter+pagination composition, activate audit trail, rejection evidence, redirect targets, cross-tenant form POSTs, message-frame sanity) — all green.
+
+### Findings
+
+**[Critical] cca_delete — 500 on a CA referenced by any expense (CONFIRMS lane 1's pending finding; fresh evidence, not a new discovery).** `apps/core/crud.py:230` (`obj.delete()` inside `crud_delete`, reached from `apps/projects/views/CostManagement/CostControlAccounts.py:81`). `ProjectExpense.control_account` is PROTECT and non-nullable, so POST `cca_delete` on any CA with expenses raises `ProtectedError` → 500: `POST /projects/controlaccounts/<pk>/delete/ → 500, django.db.models.deletion.ProtectedError … 'ProjectExpense.control_account'` (expected 302). Two aggravations: the CA survives with no message, and `crud_delete` writes the `"delete"` AuditLog row BEFORE `obj.delete()`, so every attempt also leaves an orphan delete-audit row for a CA that still exists. Suggested fix: in `cca_delete` (or centrally in `crud_delete`), wrap the delete in try/except `ProtectedError` → `messages.error` + redirect to detail, and write the audit row only after a successful `obj.delete()`.
+
+**[Minor] Cross-tenant FK refusal on the four create forms never uses the pinned `_reject_foreign` message.** Every FK target of the 7.4 forms (Project, BudgetRevision, CostControlAccount, ProjectTask, GLAccount, User, Party) carries a tenant column, so `TenantModelForm` scopes every ModelChoiceField queryset and Django refuses a forged foreign pk earlier with the generic `Select a valid choice. That choice is not one of the available choices.` (200 + field error, no row created, foreign row untouched — the security outcome is correct). Evidence: POST pbl_create with `budget_revision`=<Globex pk> → 200, error renders, no row; same for bvr/cca/pex project/control_account probes. `_reject_foreign` is therefore unreachable defense-in-depth on these forms (its `"That record belongs to another workspace."` message can never render). Suggested fix: none required for security; optionally record in the contract that the pinned message is second-layer only, or accept the Django default message as the user-visible one.
+
+**[Minor] `bvr_reject` validates the decision form BEFORE the status precondition.** `apps/projects/views/CostManagement/BudgetRevisions.py` (`bvr_reject`): POST reject on a non-pending revision with EMPTY decision_notes returns `A rejection needs a stated reason.` instead of the correct status refusal; with notes present the correct `Only a revision pending approval can be rejected` fires. Verified empirically on seeded draft BVR-00004 (non-destructive): empty-notes → form-order message; row untouched, still draft, `decision_notes` still `''`. Writes nothing in either case; the reject button only renders for pending rows, so this needs a crafted/stale POST. Suggested fix: move the `obj.status != "pending_approval"` check above `form.is_valid()`.
+
+### Probe-area summary
+PASS 1 POST create paths (PBL-00032/BVR-00005/CCA-00004/PEX-00013 minted, numbers in messages, create/delete audits, cascade delete of a draft revision with lines clean) · PASS 2 form validation (amount=-5, cross-project clean(), duplicate revision_no/CA code via TenantUniqueMixin, missing control_account, revision_no 65535 cap, percent_complete 150) · PASS 3 filter+pagination composition (scoped rows, page links preserve filters, filtered totals smaller and exact: 1,366,000.00 / 1,120,000.00 < 1,631,000.00) · PASS 4 activate audit trail (one activate + one supersede per row, already-superseded not re-superseded, activated_at kept as history) · PASS 5 rejection evidence (notes persisted + rendered, stamps + audit) · PASS 6 redirect targets (valid verbs → detail, refusals → detail, deletes → list) · PASS 7 cross-tenant POST re-check (all four forms refuse at 200, no rows) · PASS 8 message-frame sanity (no leak into the next request).
+
+### Row-count identity (start == end)
+BVR 8/8 · CCA 6/6 · PBL 62/62 · PEX 24/24 (Acme 4/3/31/12 intact) · Projects 6/6 · AuditLog 4694/4694 · all four tables byte-identical.
+
+**Lane 5 count: 1 Critical (confirms lane 1; not a new discovery) / 0 Important / 2 Minor — plus 138/138 gap-probe checks green**
