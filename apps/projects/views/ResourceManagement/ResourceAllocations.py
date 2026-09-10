@@ -76,8 +76,10 @@ def ral_create(request):
             messages.success(request, f"Allocation {obj.number} created.")
             return redirect("projects:ral_detail", pk=obj.pk)
     else:
-        form = ResourceAllocationForm(tenant=request.tenant,
-                                      initial={"project": request.GET.get("project", "")})
+        form = ResourceAllocationForm(
+            tenant=request.tenant,
+            initial={"project": request.GET.get("project", ""),
+                     "resource": request.GET.get("resource", "")})
     return render(request, "projects/resource/resourceallocation/form.html",
                   {"form": form, "is_edit": False})
 
