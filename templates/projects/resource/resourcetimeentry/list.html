@@ -64,7 +64,7 @@
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                   <span class="fw-600">{{ group.list.0.resource.name }} · Week {{ group.list.0.iso_week }}, {{ group.list.0.iso_year }}</span>
                   {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                    <form method="post" action="{% url 'projects:rte_approve_week' group.list.0.resource_id group.list.0.iso_year group.list.0.iso_week %}" onsubmit="return confirm('Approve every submitted entry for {{ group.list.0.resource.name }} in week {{ group.list.0.iso_week }}?');">
+                    <form method="post" action="{% url 'projects:rte_approve_week' group.list.0.resource_id group.list.0.iso_year group.list.0.iso_week %}" onsubmit="return confirm('Approve every submitted entry for {{ group.list.0.resource.number }} in week {{ group.list.0.iso_week }}?');">
                       {% csrf_token %}<button class="btn btn-outline" type="submit" style="padding:4px 10px;"><i data-lucide="check-check"></i> Approve Week</button>
                     </form>
                   {% endif %}
