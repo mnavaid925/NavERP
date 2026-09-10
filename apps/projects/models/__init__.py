@@ -51,3 +51,13 @@ from .RiskManagement.IssueEscalations import IssueEscalation  # noqa: F401
 from .RiskManagement.ProjectIssues import ProjectIssue  # noqa: F401
 from .RiskManagement.ProjectRisks import ProjectRisk  # noqa: F401
 from .RiskManagement.RiskResponseActions import RiskResponseAction  # noqa: F401
+
+# --- 7.7 Scope & Requirements Management ------------------------------------------------------
+# Four new tables: the requirement register (with its traceability links), the boundary /
+# assumption / constraint registry, the CCB change register and the deliverable acceptance log.
+# The traceability MATRIX and the creep figures are computed pages — neither is a table, because a
+# stored matrix goes stale the instant a link changes (the 7.4 EVM / 7.5 simulation ruling).
+from .ScopeRequirements.Requirements import Requirement  # noqa: F401
+from .ScopeRequirements.ScopeChangeRequests import ScopeChangeRequest  # noqa: F401
+from .ScopeRequirements.ScopeItems import ScopeItem  # noqa: F401
+from .ScopeRequirements.ScopeVerifications import ScopeVerification  # noqa: F401
