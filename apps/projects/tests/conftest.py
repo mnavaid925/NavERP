@@ -1161,3 +1161,610 @@ def planning_wbs_tree_a(db, planning_project_a):
     """The 2-deliverable × 2-work-package tree (see ``_planning_wbs_tree``) on project A — the
     tree-view, WBS-code, rollup and critical-chain tests all hang off this one dict."""
     return _planning_wbs_tree(planning_project_a.tenant, planning_project_a)
+
+
+# ==================================================================================================
+# 7.3 Resource Management (subslug ``resource``) — OWNED BY PHASE 6 STEP 1
+#
+# Same rules as the 7.1/7.2 blocks above, prefixed ``resource_`` / ``_resource_`` so no later
+# sub-module can shadow them (test files: test_resource_models/_forms/_views/_security.py). See
+# ``.claude/tasks/test-contract-projects-7.3.md`` for the test contract these fixtures serve.
+#
+# * Factories construct + ``.save()`` — ``TenantNumbered.save()`` is where ``RSP-/RAL-/RTE-``
+#   numbers are minted; ``bulk_create`` would ship empty numbers and is never used here.
+# * Determinism (L16): every date derives from ``_resource_today()`` (``timezone.localdate()``)
+#   and every datetime from ``timezone.now()`` — the same basis ``ResourceAllocation.is_live`` and
+#   the capacity/actuals windows use.
+# * Projects / requests reuse the 7.1 FACTORIES ``_projectinitiation_project`` /
+#   ``_projectinitiation_request`` (function imports, NOT the 7.1 fixtures — lanes never depend on
+#   each other's fixture rows). The host project is ACTIVE with an approved charter.
+# * The admin client for 7.3 is the ROOT conftest's ``client_a`` — exactly as 7.1/7.2, which define
+#   no admin-client fixture of their own either. No ``resource_client`` exists on purpose.
+# * Tests NEVER touch ``management/commands/seed_projects.py`` (the demo seed) — every test builds
+#   exactly the rows it asserts on from the factories below. The seeder's post-M4 figures (its
+#   RAL-00001 at 48h/wk so the over-allocation alert fires on the DEMO tenant) are demo data, not
+#   test data; board expectations are computed from these fixture rows via ``planned_hours``.
+# ==================================================================================================
+
+#: ``apps.core.crud.crud_list``'s default ``per_page`` — every 7.3 register uses the default, so a
+#: pagination test needs ``RESOURCE_PAGE_SIZE + 1`` rows for a second page (same rationale as
+#: ``PROJECTINITIATION_PAGE_SIZE`` / ``PLANNING_PAGE_SIZE`` above).
+RESOURCE_PAGE_SIZE = 15
+
+
+def _resource_today():
+    """Today on the SAME basis the 7.3 code uses (``is_live`` / the capacity horizon →
+    ``timezone.localdate()``)."""
+    return timezone.localdate()
+
+
+# ==================================================================================================
+# Factories — construct + ``.save()`` so TenantNumbered mints RSP-/RAL-/RTE-
+# ==================================================================================================
+
+def _resource_profile(tenant, employee=None, party=None, **overrides):
+    """A ``ResourceProfile`` pool row; auto-mints the identity when neither is given.
+
+    With neither ``employee`` nor ``party`` this mints a fresh person ``core.Party`` — a row that
+    identifies nobody is bad seed data even though ``save()`` never runs ``clean()`` (the
+    exactly-one-of rule is re-checked by tests via ``full_clean()``). ``resource_type`` defaults
+    to ``contractor`` for a party-keyed row and ``internal`` for an employee-keyed one (override
+    freely — the model pins the choices, not the pairing). ``weekly_capacity_hours`` stays the
+    model default 40.00 unless overridden; pass ``Decimal("24.00")`` for a part-timer denominator.
+    """
+    from apps.core.models import Party
+    from apps.projects.models import ResourceProfile
+    seq = ResourceProfile.objects.filter(tenant=tenant).count() + 1
+    if employee is None and party is None:
+        party = Party.objects.create(tenant=tenant, kind="person", name=f"Resource {seq:02d}")
+    fields = dict(
+        tenant=tenant,
+        employee=employee,
+        party=party,
+        resource_type="internal" if employee is not None else "contractor",
+        default_role=f"Role {seq:02d}",
+        skill_summary="Python, Django",
+        weekly_capacity_hours=Decimal("40.00"),
+        utilization_target_pct=80,
+        status="active",
+        notes="",
+    )
+    fields.update(overrides)
+    obj = ResourceProfile(**fields)
+    obj.save()
+    return obj
+
+
+def _resource_allocation(tenant, **overrides):
+    """A ``ResourceAllocation`` booking: by default a NAMED-shape ``soft`` one (nothing attached).
+
+    Defaults: ``role_name="Backend developer"``, ``allocation_unit="hours_per_week"`` with
+    ``hours_per_week=Decimal("16.00")`` (the ONLY magnitude set — the model clean's
+    one-magnitude rule), ``booking_status="soft"`` over the live window ``today-7..today+35``,
+    and ``project`` / ``project_request`` / ``project_task`` / ``resource`` all None — pass them
+    explicitly (``clean()`` refuses a both-null attach, but ``save()`` never runs ``clean()``).
+    Pass ``booking_status=...`` to park the row in any verb state, and never set a second
+    magnitude. ``requested_by`` is left to the caller — the create view stamps it, fixtures pass
+    it where provenance matters.
+    """
+    from apps.projects.models import ResourceAllocation
+    today = _resource_today()
+    fields = dict(
+        tenant=tenant,
+        project=None,
+        project_request=None,
+        project_task=None,
+        resource=None,
+        role_name="Backend developer",
+        skill_requirements="Python, Django",
+        allocation_unit="hours_per_week",
+        hours_per_week=Decimal("16.00"),
+        pct_capacity=None,
+        total_hours=None,
+        start_date=today - datetime.timedelta(days=7),
+        end_date=today + datetime.timedelta(days=35),
+        booking_status="soft",
+        notes="",
+    )
+    fields.update(overrides)
+    obj = ResourceAllocation(**fields)
+    obj.save()
+    return obj
+
+
+def _resource_entry(tenant, resource, **overrides):
+    """A ``ResourceTimeEntry`` draft day-row on ``resource``; ``tenant`` is passed explicitly.
+
+    Defaults: ``entry_date=today`` (the current ISO week — the default actuals window),
+    ``hours=Decimal("6.00")``, ``status="draft"``, ``project=None``. ``save()`` never runs
+    ``clean()`` and nothing else writes the audit fields, so an ``approved`` / ``rejected`` row is
+    only honest when the caller sets ``submitted_at`` + ``approved_by`` + ``approved_at``
+    (``decision_note`` for ``rejected``) explicitly — the fixtures below always do.
+    """
+    from apps.projects.models import ResourceTimeEntry
+    fields = dict(
+        tenant=tenant,
+        resource=resource,
+        project=None,
+        project_task=None,
+        entry_date=_resource_today(),
+        hours=Decimal("6.00"),
+        task_description="Project implementation work",
+        status="draft",
+        decision_note="",
+        notes="",
+    )
+    fields.update(overrides)
+    obj = ResourceTimeEntry(**fields)
+    obj.save()
+    return obj
+
+
+# -- bulk fills (pagination / N+1 / search) ---------------------------------------------------------
+#
+# Loops over the factories rather than bulk_create for the reason spelled out at the top of this
+# file: bulk_create skips save(), and save() is where `number` is minted.
+
+def _resource_fill_profiles(tenant, count, **overrides):
+    """``count`` party-keyed pool rows with distinct roles (``Backlog role 01`` …). Returns the list."""
+    return [
+        _resource_profile(tenant, default_role=f"Backlog role {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _resource_fill_allocations(tenant, count, **overrides):
+    """``count`` bookings with distinct roles (``Backlog booking 01`` …). Returns the list."""
+    return [
+        _resource_allocation(tenant, role_name=f"Backlog booking {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _resource_fill_entries(tenant, resource, count, **overrides):
+    """``count`` draft entries on ONE resource, dates walking back a day per row (distinct
+    descriptions ``Backlog entry 01`` …). Returns the list."""
+    return [
+        _resource_entry(
+            tenant, resource,
+            entry_date=_resource_today() - datetime.timedelta(days=i - 1),
+            task_description=f"Backlog entry {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+# ==================================================================================================
+# Tenants / actors — thin aliases over the ROOT conftest (reuse, never redefine)
+# ==================================================================================================
+
+@pytest.fixture
+def resource_tenant(db, tenant_a):
+    """Tenant A — the 7.3 lane's workspace. An alias of the root ``tenant_a``; tests must never
+    depend on the demo seeder's workspace."""
+    return tenant_a
+
+
+@pytest.fixture
+def resource_tenant_b(db, tenant_b):
+    """Tenant B — the cross-tenant target every IDOR / foreign-FK test needs."""
+    return tenant_b
+
+
+@pytest.fixture
+def resource_admin(db, admin_user):
+    """Tenant A's tenant admin — alias of the root ``admin_user``: the actor every admin-gated
+    verb (assign/substitute/approve/reject/approve_week) succeeds for."""
+    return admin_user
+
+
+@pytest.fixture
+def resource_member(db, member_user):
+    """Tenant A's plain member — alias of the root ``member_user``: 403 on the admin-gated verbs,
+    full run on the member-level ones (commit/complete/cancel/submit)."""
+    return member_user
+
+
+@pytest.fixture
+def resource_member_b(db, resource_tenant_b):
+    """A NON-admin member of tenant B (the admin_b-shaped member). Separates the two refusals on
+    the admin-gated verbs: a tenant-B member hitting a tenant-A pk must 404 on scope, never 403
+    on role — and a tenant-A member (root ``member_user``) must 403 before any lookup."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="resource-member@globex.com", username="member_globex_res",
+        password="TestPass123!", tenant=resource_tenant_b, is_tenant_admin=False)
+
+
+@pytest.fixture
+def resource_tenantless_user(db):
+    """A logged-in user with ``tenant=None`` — the superuser shape. The three 7.3 create views
+    guard this on their FIRST line and redirect to ``dashboard:home``; registers render empty."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="resource-drifter@example.com", username="resource_drifter",
+        password="TestPass123!", tenant=None)
+
+
+@pytest.fixture
+def resource_tenantless_client(db, resource_tenantless_user):
+    """Logged in, ``request.tenant is None``. Registers render empty; creates redirect away."""
+    client = Client()
+    client.force_login(resource_tenantless_user)
+    return client
+
+
+@pytest.fixture
+def resource_anon_client(db):
+    """Unauthenticated — every 7.3 view is ``@login_required``, so each must redirect to login."""
+    return Client()
+
+
+@pytest.fixture
+def resource_csrf_client(db, admin_user):
+    """Tenant A admin on a client that ENFORCES CSRF. A POST without a token must be 403."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    return client
+
+
+# ==================================================================================================
+# Core-spine records the 7.3 FKs point at
+# ==================================================================================================
+
+@pytest.fixture
+def resource_org_unit_a(db, resource_tenant):
+    """Tenant A OrgUnit — the pool register's ``org_unit`` lens and a resource's home team."""
+    from apps.core.models import OrgUnit
+    return OrgUnit.objects.create(tenant=resource_tenant, name="Resource Operations",
+                                  kind="department")
+
+
+@pytest.fixture
+def resource_org_unit_b(db, resource_tenant_b):
+    """Tenant B OrgUnit — the crafted-POST value for ``ResourceProfileForm.org_unit``."""
+    from apps.core.models import OrgUnit
+    return OrgUnit.objects.create(tenant=resource_tenant_b, name="Globex Resource Operations",
+                                  kind="department")
+
+
+@pytest.fixture
+def resource_party_a(db, resource_tenant):
+    """Tenant A person Party — the external identity behind ``resource_profile_contractor``."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=resource_tenant, kind="person", name="Priya Raman")
+
+
+@pytest.fixture
+def resource_party_b(db, resource_tenant_b):
+    """Tenant B organization Party — the crafted-POST value for ``ResourceProfileForm.party``."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=resource_tenant_b, kind="organization",
+                                name="Globex Contractors")
+
+
+@pytest.fixture
+def resource_employee_a(db, resource_tenant):
+    """An ``hrm.EmployeeProfile`` in tenant A, on its OWN person Party (the OneToOne forbids
+    sharing) — the internal-staff identity behind ``resource_profile_internal``. Built with
+    ``.save()`` so its ``EMP-`` number is minted too."""
+    from apps.core.models import Party
+    from apps.hrm.models import EmployeeProfile
+    party = Party.objects.create(tenant=resource_tenant, kind="person", name="Alex Rivera")
+    obj = EmployeeProfile(tenant=resource_tenant, party=party)
+    obj.save()
+    return obj
+
+
+@pytest.fixture
+def resource_project(db, resource_tenant, resource_admin):
+    """Tenant A's ACTIVE chartered host project — every allocation/entry hangs off this one or the
+    tenant-B twin. Built through the 7.1 FACTORY (function import, not a 7.1 fixture)."""
+    return _projectinitiation_project(
+        resource_tenant, name="Resource host Alpha", code="RSA-01", status="active",
+        charter_status="approved", charter_approved_by=resource_admin,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        created_by=resource_admin)
+
+
+@pytest.fixture
+def resource_project_b(db, resource_tenant_b, admin_b):
+    """Tenant B's active host — 404 as tenant A on detail/edit/delete, absent from A's registers,
+    refused as a crafted ``project`` FK on all three forms."""
+    return _projectinitiation_project(
+        resource_tenant_b, name="Resource host Beta", code="RSB-01", status="active",
+        charter_status="approved", charter_approved_by=admin_b,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        created_by=admin_b)
+
+
+@pytest.fixture
+def resource_request(db, resource_tenant, resource_admin):
+    """An APPROVED, UNCONVERTED ``ProjectRequest`` — the pipeline-demand anchor a placeholder
+    booking points at while there is no project yet (the ``project_request`` FK). Built through
+    the 7.1 factory; ``convert_to_project()`` is never called, so it stays demand."""
+    return _projectinitiation_request(
+        resource_tenant, title="Pipeline: customer data platform", status="approved",
+        decision="go", decided_by=resource_admin,
+        decided_at=timezone.now() - datetime.timedelta(days=1),
+        submitted_at=timezone.now() - datetime.timedelta(days=6),
+        requested_by=resource_admin, created_by=resource_admin)
+
+
+# ==================================================================================================
+# ResourceProfile — the pool rows the booking forms and the board point at
+# ==================================================================================================
+
+@pytest.fixture
+def resource_profile_internal(db, resource_tenant, resource_employee_a, resource_org_unit_a):
+    """The EMPLOYEE-keyed pool row (40h, active, org-unit'd, "Data engineer") — one half of the
+    exactly-one-of rule, the approval queue's person (``rte_approve_week``) and the resource side
+    of the actuals-to-plan pairing."""
+    return _resource_profile(
+        resource_tenant, employee=resource_employee_a, resource_type="internal",
+        default_role="Data engineer", skill_summary="Python, Django, Airflow",
+        org_unit=resource_org_unit_a)
+
+
+@pytest.fixture
+def resource_profile_contractor(db, resource_tenant, resource_party_a):
+    """The PARTY-keyed contractor row — the other half of the exactly-one-of rule, with the
+    engagement window (``available_from`` today−30 / ``available_to`` today+90) and 40h."""
+    today = _resource_today()
+    return _resource_profile(
+        resource_tenant, party=resource_party_a, resource_type="contractor",
+        default_role="QA contractor", skill_summary="Playwright, pytest",
+        available_from=today - datetime.timedelta(days=30),
+        available_to=today + datetime.timedelta(days=90))
+
+
+@pytest.fixture
+def resource_profile_minimal(db, resource_tenant):
+    """The minimal party-keyed row: a **24h/wk** part-timer denominator with no org unit, no
+    engagement window and an empty skill summary. ``resource_allocation_soft_pct``'s % of Capacity
+    booking divides by this row's 24.00, so pct math has a small, honest denominator."""
+    return _resource_profile(resource_tenant, weekly_capacity_hours=Decimal("24.00"),
+                             default_role="Support", skill_summary="")
+
+
+@pytest.fixture
+def resource_profile_b(db, resource_tenant_b):
+    """Tenant B's pool row — 404 as tenant A on detail/edit/delete, absent from A's register, and
+    refused as a crafted ``resource`` / ``employee`` / ``party`` FK."""
+    return _resource_profile(resource_tenant_b)
+
+
+# ==================================================================================================
+# ResourceAllocation — one row per verb-branching state (all requested_by resource_admin)
+# ==================================================================================================
+
+@pytest.fixture
+def resource_allocation_named_firm(db, resource_tenant, resource_admin, resource_project,
+                                   resource_profile_contractor):
+    """FIRM + named (contractor, 12h/wk) on the host project, window today−14..today+28 →
+    ``is_live`` True. ``ral_assign`` must refuse it ("already names a resource — use Substitute").
+    """
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_contractor,
+        role_name="QA contractor", skill_requirements="Playwright",
+        hours_per_week=Decimal("12.00"), booking_status="firm",
+        start_date=_resource_today() - datetime.timedelta(days=14),
+        end_date=_resource_today() + datetime.timedelta(days=28),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_named_soft(db, resource_tenant, resource_admin, resource_project,
+                                   resource_profile_internal):
+    """SOFT + named (internal, 16h/wk) on the host project over the factory's live window
+    (today−7..today+35). The happy-path row for ``ral_substitute`` and the soft→firm
+    ``ral_commit``; also the PLAN side of the actuals-to-plan row — the approved internal entry's
+    planned 16.00h over the current ISO week is THIS booking's ``planned_hours``, computed in the
+    test from the model."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_internal,
+        role_name="Data engineer", skill_requirements="Python, Airflow",
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_soft_pct(db, resource_tenant, resource_admin, resource_project,
+                                 resource_profile_minimal):
+    """SOFT + named on the 24h part-timer with ``allocation_unit="pct_capacity"`` /
+    ``pct_capacity=50`` — the unit-2 booking: a full week of it plans 50% × 24h = 12.00h (assert
+    via ``planned_hours``, never hardcode). ``hours_per_week`` stays None."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_minimal,
+        role_name="Support engineer", skill_requirements="",
+        allocation_unit="pct_capacity", hours_per_week=None, pct_capacity=50,
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_placeholder_requested(db, resource_tenant, resource_admin,
+                                              resource_project):
+    """PLACEHOLDER (``resource=None``) in ``requested`` on the host project (today+7..today+49) —
+    ``ral_assign``'s happy path (assign names it and walks it to soft) and the requested→soft
+    ``ral_commit`` path; a gap row (``is_gap``) on the demand board."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=None,
+        role_name="Data engineer", skill_requirements="Python, Airflow",
+        booking_status="requested",
+        start_date=_resource_today() + datetime.timedelta(days=7),
+        end_date=_resource_today() + datetime.timedelta(days=49),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_placeholder_soft(db, resource_tenant, resource_admin, resource_project):
+    """A SOFT placeholder (``resource=None``, window today−21..today+21) — the as-built
+    ``ral_commit`` refusal case: a soft placeholder cannot be firmed ("Assign a resource before
+    committing a placeholder to firm"), while ``ral_assign`` still accepts it as a source. Also
+    the proof a placeholder can be ``is_live`` (soft + current window)."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=None,
+        role_name="QA analyst", skill_requirements="",
+        booking_status="soft",
+        start_date=_resource_today() - datetime.timedelta(days=21),
+        end_date=_resource_today() + datetime.timedelta(days=21),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_request_placeholder(db, resource_tenant, resource_admin,
+                                            resource_request):
+    """A REQUEST-linked placeholder — ``project=None``, ``project_request=resource_request``,
+    ``requested`` (today+14..today+70). The demand lens' pipeline row
+    (``demand_url_name == "projects:prq_detail"``) and the proof a booking can hang off a request
+    alone (the model clean's attach guard accepts exactly one of the two)."""
+    return _resource_allocation(
+        resource_tenant, project=None, project_request=resource_request, resource=None,
+        role_name="Backend developer", skill_requirements="Django",
+        booking_status="requested",
+        start_date=_resource_today() + datetime.timedelta(days=14),
+        end_date=_resource_today() + datetime.timedelta(days=70),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_completed(db, resource_tenant, resource_admin, resource_project,
+                                  resource_profile_internal):
+    """COMPLETED past booking (today−90..today−30) — ``ral_complete``/``ral_cancel`` refuse it and
+    ``is_live`` is False. NOTE: ``planned_hours()`` itself still counts completed rows (only
+    cancelled/released short-circuit) — it is the board QUERIES that exclude completed, so a test
+    of the method must not conflate the two."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_internal,
+        role_name="Data engineer", skill_requirements="Airflow",
+        booking_status="completed",
+        start_date=_resource_today() - datetime.timedelta(days=90),
+        end_date=_resource_today() - datetime.timedelta(days=30),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_cancelled(db, resource_tenant, resource_admin, resource_project,
+                                  resource_profile_contractor):
+    """CANCELLED mid-flight booking (window today−21..today+21, still 'current') — the proof a
+    window match is not enough: ``planned_hours`` returns ZERO for it, and ``ral_cancel`` answers
+    "already cancelled" with info and no change."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_contractor,
+        role_name="QA contractor", skill_requirements="",
+        hours_per_week=Decimal("12.00"), booking_status="cancelled",
+        start_date=_resource_today() - datetime.timedelta(days=21),
+        end_date=_resource_today() + datetime.timedelta(days=21),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_released(db, resource_tenant, resource_admin, resource_project,
+                                 resource_profile_internal):
+    """The RELEASED half of the substitution chain (named internal, 10h/wk,
+    today−28..today+28). ``planned_hours`` returns ZERO for it — the successor already carries
+    the demand, and counting both would double it."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_internal,
+        role_name="Data engineer", skill_requirements="Python",
+        hours_per_week=Decimal("10.00"), booking_status="released",
+        start_date=_resource_today() - datetime.timedelta(days=28),
+        end_date=_resource_today() + datetime.timedelta(days=28),
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_successor(db, resource_tenant, resource_admin, resource_project,
+                                  resource_profile_contractor, resource_allocation_released):
+    """The FIRM successor ``ral_substitute`` would have produced: named contractor, the SAME
+    window and magnitude as the released row, ``substitute_of=resource_allocation_released``.
+    Hand-built (not driven through the verb) so model/detail tests get the chain without an HTTP
+    round-trip — the verb itself is proven by driving ``ral_substitute`` on
+    ``resource_allocation_named_soft``; ``ral_detail`` of the released row must surface this row
+    as its ``successor`` context key."""
+    return _resource_allocation(
+        resource_tenant, project=resource_project, resource=resource_profile_contractor,
+        role_name=resource_allocation_released.role_name,
+        skill_requirements=resource_allocation_released.skill_requirements,
+        hours_per_week=resource_allocation_released.hours_per_week,
+        booking_status="firm",
+        start_date=resource_allocation_released.start_date,
+        end_date=resource_allocation_released.end_date,
+        substitute_of=resource_allocation_released,
+        requested_by=resource_admin)
+
+
+@pytest.fixture
+def resource_allocation_b(db, resource_tenant_b, admin_b, resource_project_b,
+                          resource_profile_b):
+    """Tenant B's allocation — 404 as tenant A on detail/edit/delete and on all five verbs."""
+    return _resource_allocation(
+        resource_tenant_b, project=resource_project_b, resource=resource_profile_b,
+        role_name="Globex booking", booking_status="soft", requested_by=admin_b)
+
+
+# ==================================================================================================
+# ResourceTimeEntry — one row per status, stamps set honestly (nothing auto-stamps them)
+# ==================================================================================================
+
+@pytest.fixture
+def resource_entry_draft(db, resource_tenant, resource_profile_internal, resource_project):
+    """A ``draft`` day-entry (today, 6.00h, host project) — ``rte_submit``'s happy path; no stamps
+    at all."""
+    return _resource_entry(resource_tenant, resource_profile_internal, project=resource_project)
+
+
+@pytest.fixture
+def resource_entry_submitted(db, resource_tenant, resource_profile_internal, resource_project):
+    """A ``submitted`` entry (today, 6.00h) with ONLY ``submitted_at`` stamped (now − 2h) — the
+    approval queue: ``rte_approve`` / ``rte_reject`` happy path and the ``rte_approve_week`` bulk
+    target. Its ISO week is the CURRENT one — compute year/week from the row
+    (``fixture.iso_year`` / ``fixture.iso_week``), never hardcode."""
+    return _resource_entry(
+        resource_tenant, resource_profile_internal, project=resource_project, status="submitted",
+        submitted_at=timezone.now() - datetime.timedelta(hours=2))
+
+
+@pytest.fixture
+def resource_entry_approved(db, resource_tenant, resource_admin, resource_profile_internal,
+                            resource_project):
+    """An ``approved`` entry (today, 6.00h) with the stamps set honestly — ``submitted_at``
+    (now − 1d), then ``approved_by`` = the admin and ``approved_at`` (now − 2h). Pairs with
+    ``resource_allocation_named_soft`` (same internal resource + host project) so the actuals
+    section has one real row: actual 6.00 against planned = that booking's ``planned_hours`` over
+    the current ISO week."""
+    return _resource_entry(
+        resource_tenant, resource_profile_internal, project=resource_project, status="approved",
+        submitted_at=timezone.now() - datetime.timedelta(days=1),
+        approved_by=resource_admin, approved_at=timezone.now() - datetime.timedelta(hours=2))
+
+
+@pytest.fixture
+def resource_entry_rejected(db, resource_tenant, resource_admin, resource_profile_internal,
+                            resource_project):
+    """A ``rejected`` entry (today, 8.00h) with the full honest stamp set — ``submitted_at``, then
+    ``approved_by``/``approved_at`` (the reject verb stamps the decision too), plus the
+    ``decision_note`` reason. The edit/delete LOCK row: both verbs must refuse it."""
+    return _resource_entry(
+        resource_tenant, resource_profile_internal, project=resource_project, status="rejected",
+        hours=Decimal("8.00"),
+        submitted_at=timezone.now() - datetime.timedelta(days=2),
+        approved_by=resource_admin, approved_at=timezone.now() - datetime.timedelta(days=1),
+        decision_note="Client call overran — re-log the extra hour under support.")
+
+
+@pytest.fixture
+def resource_entry_approved_nonproject(db, resource_tenant, resource_admin,
+                                       resource_profile_contractor):
+    """An APPROVED entry with ``project=None`` ("Internal training", 4.00h) — the actuals
+    section's Non-project-time row: renders with ``project is None`` and planned 0.00 (no live
+    booking pairs a contractor with 'no project')."""
+    return _resource_entry(
+        resource_tenant, resource_profile_contractor, project=None, status="approved",
+        hours=Decimal("4.00"), task_description="Internal training",
+        submitted_at=timezone.now() - datetime.timedelta(days=1),
+        approved_by=resource_admin, approved_at=timezone.now() - datetime.timedelta(hours=3))
+
+
+@pytest.fixture
+def resource_entry_b(db, resource_tenant_b, resource_profile_b, resource_project_b):
+    """Tenant B's entry — 404 as tenant A on detail/edit/delete and on submit/approve/reject."""
+    return _resource_entry(resource_tenant_b, resource_profile_b, project=resource_project_b)
