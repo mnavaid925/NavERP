@@ -13,25 +13,6 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>Totals in the current filter</h2></div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>Category</th><th class="text-right">Amount</th></tr></thead>
-        <tbody>
-          {% for cat, total in category_totals.items %}
-            <tr><td>{{ cat|title }}</td><td class="text-right">{{ total }}</td></tr>
-          {% empty %}
-            <tr><td colspan="2" class="text-muted">No budget lines in the current filter.</td></tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr><td class="fw-600">Total</td><td class="text-right fw-600">{{ grand_total }}</td></tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
     <div class="card-body">
       <form method="get" class="filter-bar">
         <div class="form-group" style="flex:1; min-width:200px;">
@@ -103,5 +84,26 @@
       </table>
     </div>
     {% include "partials/pagination.html" %}
+  </div>
+
+  {# Totals sit BELOW the register: the user scopes the filter first, then reads the totals it
+     produced (every other 7.x list leads with its filter bar). #}
+  <div class="card">
+    <div class="card-header"><h2>Totals in the current filter</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th class="text-right">Amount</th></tr></thead>
+        <tbody>
+          {% for cat, total in category_totals.items %}
+            <tr><td>{{ cat|title }}</td><td class="text-right">{{ total }}</td></tr>
+          {% empty %}
+            <tr><td colspan="2" class="text-muted">No budget lines in the current filter.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td class="fw-600">Total</td><td class="text-right fw-600">{{ grand_total }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
   </div>
 {% endblock %}
