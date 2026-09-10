@@ -200,6 +200,13 @@ def ral_commit(request, pk):
             f"Only a requested or soft booking can be committed — this one is "
             f"{obj.get_booking_status_display().lower()}.")
         return redirect("projects:ral_detail", pk=obj.pk)
+    if obj.booking_status == "soft" and obj.resource_id is None:
+        # A firm placeholder appears in NEITHER capacity (resource_id__isnull=False) NOR
+        # demand (requested/soft), and assign/substitute both refuse it — refusing the commit
+        # keeps the hiring-trigger demand visible. requested → soft stays legal: that IS the
+        # pipeline signal.
+        messages.error(request, "Assign a resource before committing a placeholder to firm.")
+        return redirect("projects:ral_detail", pk=obj.pk)
     was = obj.booking_status
     obj.booking_status = "soft" if was == "requested" else "firm"
     obj.save(update_fields=["booking_status", "updated_at"])
