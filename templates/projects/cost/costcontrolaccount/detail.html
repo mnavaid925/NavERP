@@ -19,7 +19,7 @@
       <dl class="detail-grid">
         <dt>Number</dt><dd>{{ obj.number }}</dd>
         <dt>Code</dt><dd>{{ obj.code }}</dd>
-        <dt>Status</dt><dd>{% if obj.status == 'planning' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'planning' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'closed' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</dd>
         <dt>% complete</dt><dd>{{ obj.percent_complete }} <span class="text-muted">(attested; task-level execution supersedes it)</span></dd>
         <dt>Contingency</dt><dd>{{ obj.contingency }}</dd>
         <dt>GL account</dt><dd>{% if obj.gl_account %}{{ obj.gl_account }}{% else %}—{% endif %}</dd>
