@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Deliverable Acceptance Log{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Deliverable Acceptance Log</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Scope Verifications</span></div>
+      <p class="text-muted">Every deliverable inspection with the method used, the result found and the customer's formal acceptance decision — the gate that closes a scope item.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:svr_list' %}?pending=1" class="btn btn-outline"><i data-lucide="inbox"></i> Awaiting acceptance</a>
+      <a href="{% url 'projects:svr_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record Inspection</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, deliverable or findings…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="requirement" aria-label="Requirement" class="form-select">
+            <option value="">Any requirement</option>
+            {% for r in requirements %}
+              <option value="{{ r.pk }}" {% if request.GET.requirement == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="method" aria-label="Method" class="form-select">
+            <option value="">Any method</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="result" aria-label="Result" class="form-select">
+            <option value="">Any result</option>
+            {% for val, label in result_choices %}
+              <option value="{{ val }}" {% if request.GET.result == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="acceptance_status" aria-label="Acceptance" class="form-select">
+            <option value="">Any acceptance</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.acceptance_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:svr_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Inspection</th><th>Project</th><th>Deliverable</th><th>Requirement</th><th>Method</th><th>Result</th><th>Acceptance</th><th>Inspected by</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:svr_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.inspection_date|date:"M d, Y" }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.deliverable }}</td>
+              <td>{% if obj.requirement %}<a href="{% url 'projects:req_detail' obj.requirement_id %}">{{ obj.requirement.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.get_method_display }}</td>
+              <td>
+                {% if obj.result == 'pass' %}<span class="badge badge-green">{{ obj.get_result_display }}</span>
+                {% elif obj.result == 'conditional' %}<span class="badge badge-amber">{{ obj.get_result_display }}</span>
+                {% else %}<span class="badge badge-red">{{ obj.get_result_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.acceptance_status == 'accepted' or obj.acceptance_status == 'waived' %}<span class="badge badge-green">{{ obj.get_acceptance_status_display }}</span>
+                {% elif obj.acceptance_status == 'rejected' %}<span class="badge badge-red">{{ obj.get_acceptance_status_display }}</span>
+                {% else %}<span class="badge badge-amber">{{ obj.get_acceptance_status_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.inspected_by %}{{ obj.inspected_by.get_full_name|default:obj.inspected_by.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:svr_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.acceptance_status == 'pending' %}
+                    <form method="post" action="{% url 'projects:svr_accept' obj.pk %}" onsubmit="return confirm('Accept {{ obj.number }}?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Accept"><i data-lucide="badge-check"></i></button>
+                    </form>
+                    <a href="{% url 'projects:svr_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:svr_delete' obj.pk %}" onsubmit="return confirm('Delete inspection {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="badge-check"></i><h3>No inspections match</h3><p>Record what was inspected, how, and what the reviewer found — acceptance is a decision, not an assumption.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
