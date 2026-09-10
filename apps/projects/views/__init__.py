@@ -195,3 +195,53 @@ from .RiskManagement.RiskResponseActions import (  # noqa: F401
     rra_edit,
     rra_list,
 )
+
+# --- 7.7 Scope & Requirements Management ------------------------------------------------------
+# The four registers' CRUD sets, their sixteen lifecycle verbs (all POST-only, so a GET is a 405),
+# and the one computed page (the traceability matrix + creep board — no model, the 7.3
+# capacity_demand / 7.5 risk_analysis precedent).
+from .ScopeRequirements.Requirements import (  # noqa: F401
+    req_approve,
+    req_create,
+    req_delete,
+    req_detail,
+    req_edit,
+    req_implement,
+    req_list,
+    req_reject,
+    req_submit,
+    req_verify,
+)
+from .ScopeRequirements.ScopeChangeRequests import (  # noqa: F401
+    scr_approve,
+    scr_create,
+    scr_delete,
+    scr_detail,
+    scr_edit,
+    scr_implement,
+    scr_list,
+    scr_reject,
+    scr_review,
+    scr_submit,
+)
+from .ScopeRequirements.ScopeItems import (  # noqa: F401
+    sci_create,
+    sci_delete,
+    sci_detail,
+    sci_edit,
+    sci_list,
+    sci_realize,
+    sci_retire,
+    sci_validate,
+)
+from .ScopeRequirements.ScopeMatrix import scope_matrix  # noqa: F401
+from .ScopeRequirements.ScopeVerifications import (  # noqa: F401
+    svr_accept,
+    svr_create,
+    svr_delete,
+    svr_detail,
+    svr_edit,
+    svr_list,
+    svr_reject,
+    svr_waive,
+)
