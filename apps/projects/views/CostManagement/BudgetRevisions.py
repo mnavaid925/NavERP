@@ -78,8 +78,11 @@ def bvr_detail(request, pk):
             "project", "currency", "requested_by", "decided_by", "created_by"),
         pk=pk, tenant=request.tenant)
     lines = obj.lines.select_related("wbs_node", "control_account", "gl_account")
-    totals = {line["category"]: line["total"] for line in lines.values("category")
-              .annotate(total=Sum("amount"))}
+    # `.order_by()` clears Meta.ordering before the GROUP BY — an aggregate carrying
+    # "ORDER BY created_at DESC, id DESC" is Error-1055 on stock MySQL (ONLY_FULL_GROUP_BY);
+    # the scm Reports idiom.
+    totals = {line["category"]: line["total"] for line in lines.order_by()
+              .values("category").annotate(total=Sum("amount"))}
     return render(request, "projects/cost/budgetrevision/detail.html",
                   {"obj": obj, "lines": lines, "category_totals": totals})
 
