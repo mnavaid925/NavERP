@@ -10,6 +10,8 @@ Verbs (POST-only, GET → 405): ``realize`` (the risk happened — and mints the
 the risk→issue bridge), ``close`` (retire it, capturing the lesson) and ``reopen`` (admin-only; a
 closed register row is evidence, so reopening it is a privileged act).
 """
+from django.db.models import Q
+
 from apps.core.crud import as_db_int
 from apps.projects.forms import ProjectRiskForm, RiskClosureForm
 from apps.projects.models import ProjectRisk
