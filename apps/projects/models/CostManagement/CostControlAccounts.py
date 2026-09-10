@@ -20,6 +20,8 @@ ship execution fields that supersede it; until then this is the honest EV input.
 """
 from decimal import Decimal
 
+from django.utils.functional import cached_property
+
 from apps.projects.models._base import *  # noqa: F401,F403
 from apps.projects.models._base import models
 
@@ -83,9 +85,14 @@ class CostControlAccount(TenantNumbered):
 
     # -- the baseline the metrics measure against ---------------------------------------------------
 
-    @property
+    @cached_property
     def active_revision(self):
-        """The project's cost baseline: the approved BudgetRevision activated most recently."""
+        """The project's cost baseline: the approved BudgetRevision activated most recently.
+
+        ``cached_property`` — the EVM panel reads this (and the primitives below) a dozen times
+        per render; caching per instance collapses the N+1 without changing a single call site.
+        Per-instance cache is safe: pages are request-scoped and re-fetch their rows.
+        """
         return (self.project.budget_revisions
                 .filter(status="approved", activated_at__isnull=False)
                 .order_by("-activated_at")
@@ -93,7 +100,7 @@ class CostControlAccount(TenantNumbered):
 
     # -- EVM inputs (all q2-clamped Decimals, all derived, NEVER columns) ----------------------------
 
-    @property
+    @cached_property
     def bac(self):
         """Budget at completion: the active baseline's lines mapped to this CA. 0 with no
         baseline — a CA without an approved plan has no budget to earn against."""
@@ -151,12 +158,12 @@ class CostControlAccount(TenantNumbered):
         ).aggregate(total=Sum("amount"))
         return q2(row["total"])
 
-    @property
+    @cached_property
     def ac(self):
         """Actual cost: posted actual + accrual expenses."""
         return self._posted_amount(("actual", "accrual"))
 
-    @property
+    @cached_property
     def committed(self):
         """Committed cost: posted commitments (POs/contracts raised against this CA)."""
         return self._posted_amount(("commitment",))
