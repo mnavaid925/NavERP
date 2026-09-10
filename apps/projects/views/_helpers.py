@@ -48,11 +48,14 @@ def projects(tenant):
 def resource_profiles(tenant):
     """This workspace's resource pool, ordered for a dropdown (7.3's registers and board).
 
-    Meta.ordering (the people-list order) serves it; ``.none()`` for a tenant-less user.
+    ``name`` walks ``employee → party`` (or ``party``), so every label rendered from these
+    rows selects the walk up front. Meta.ordering (the people-list order) serves it;
+    ``.none()`` for a tenant-less user.
     """
     if tenant is None:
         return ResourceProfile.objects.none()
-    return ResourceProfile.objects.filter(tenant=tenant)
+    return ResourceProfile.objects.filter(tenant=tenant).select_related(
+        "employee__party", "party")
 
 
 def project_requests(tenant):
