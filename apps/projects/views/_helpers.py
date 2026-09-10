@@ -4,8 +4,10 @@ A helper used by a single entity stays in that entity's module. ``org_units``, `
 and ``projects`` are the filter-dropdown builders shared by more than one of 7.1's/7.2's
 registers; ``resource_profiles`` and ``project_requests`` are 7.3's demand-lens pair (the
 request builder has one consumer today but is kept beside the pool builder it mirrors);
-``critical_path_ids`` is 7.2's critical-chain pass over dependency edges. Same rule for all
-six: if only one consumer ever needs a helper, it moves to that consumer's module.
+``critical_path_ids`` is 7.2's critical-chain pass over dependency edges; ``owners`` is 7.5's
+owner/approver/escalation-target dropdown, shared by all four of that sub-module's registers.
+Same rule for all seven: if only one consumer ever needs a helper, it moves to that consumer's
+module.
 
 The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
 superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
@@ -13,6 +15,8 @@ is empty, not an error. (``critical_path_ids`` is project-scoped, and a tenant-l
 reaches it — their project dropdown is empty — and it returns an empty set for a plan with no
 work packages.)
 """
+from django.contrib.auth import get_user_model
+
 from apps.core.models import OrgUnit, Party
 from apps.projects.models import Project, ProjectRequest, ResourceProfile
 
@@ -70,6 +74,20 @@ def project_requests(tenant):
     if tenant is None:
         return ProjectRequest.objects.none()
     return ProjectRequest.objects.filter(tenant=tenant).order_by("title", "id")
+
+
+def owners(tenant):
+    """This workspace's users, ordered for an owner / approver / escalation-target dropdown.
+
+    Shared by all four of 7.5's registers (the risk owner, the response-action owner, the issue
+    owner and the escalation target are all the same population) — it was about to be copy-pasted
+    into four entity modules, which is where four copies drift. Ordered by email because a user's
+    display name is composed in the template (``get_full_name|default:email``), not a column.
+    ``.none()`` for a tenant-less user, the ``org_units`` ruling.
+    """
+    if tenant is None:
+        return get_user_model().objects.none()
+    return get_user_model().objects.filter(tenant=tenant).order_by("email")
 
 
 def critical_path_ids(project):
