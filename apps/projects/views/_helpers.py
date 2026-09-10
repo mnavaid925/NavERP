@@ -18,7 +18,7 @@ work packages.)
 from django.contrib.auth import get_user_model
 
 from apps.core.models import OrgUnit, Party
-from apps.projects.models import Project, ProjectRequest, ResourceProfile
+from apps.projects.models import Project, ProjectRequest, Requirement, ResourceProfile
 
 
 def org_units(tenant):
@@ -88,6 +88,20 @@ def owners(tenant):
     if tenant is None:
         return get_user_model().objects.none()
     return get_user_model().objects.filter(tenant=tenant).order_by("email")
+
+
+def requirements(tenant):
+    """This workspace's requirements, ordered for a filter dropdown (7.7's registers).
+
+    Shared by the change-request and verification registers — the requirement a change rewrites and
+    the requirement an inspection verifies are the same population, so it is one builder rather than
+    two copies that drift. Ordered by ``number`` (a human-readable per-tenant id, so the dropdown
+    reads in the order the register does). ``.none()`` for a tenant-less user, the ``org_units``
+    ruling.
+    """
+    if tenant is None:
+        return Requirement.objects.none()
+    return Requirement.objects.filter(tenant=tenant).order_by("number")
 
 
 def critical_path_ids(project):
