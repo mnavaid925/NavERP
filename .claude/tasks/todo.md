@@ -6952,3 +6952,257 @@ configurable policy engine** (Ruling 1).
       contracts do not invite the bridge yet; one-line FKs when they land
 - [ ] External ticketing / GRC sync (Jira, ServiceNow) — integration → 7.18; a `source_number`-style
       soft reference would be the pattern
+
+---
+
+### 7.6 Quality Management (Module 7: Project Management, `projects`) — plan from research-projects-7.6.md (2026-09-11)
+
+#### Scope, conventions, rulings, build order (research's 4 models + 2 computed pages — order for FK flow)
+
+- [ ] **Concurrency (read first):** 7.1–7.5 are built and live; **a peer session is concurrently building a sibling `7.M` in this same checkout — the 7.7 `ScopeRequirements` models/forms/views/urls folders and `templates/projects/scope/` are already on disk**, and its `# --- 7.7` blocks already sit in the three layer `__init__.py` files + the `urls/__init__.py` concat. So `todo.md`, the **migration leaf**, and every shared file (`models/forms/views/urls __init__.py`, `admin.py`, `seed_projects.py`, `navigation.py`, `overview.html`, `tests/conftest.py`) are **contended**. Every shared-file touch is an **Integrate-step item**, done once, as a **surgical `Edit` with a re-read anchor** immediately before the edit (**L43: never full-rewrite a shared ~6,950-line file; NEVER use `Write` on `todo.md`**). Insert the 7.6 block **between the existing `# --- 7.5` and `# --- 7.7` blocks** in each layer `__init__.py`. Commits are path-limited: `git add '<f>'; git commit -m '<msg>' -- '<f>'`.
+- [ ] **NavERP.md 7.6 bullets (verbatim — the `LIVE_LINKS["7.6"]` keys must match character-for-character, the sidebar maps bullet text → route):**
+      1. **Quality Planning & Standards** — Acceptance criteria, regulatory requirements, and industry standard mapping.
+      2. **Quality Assurance (QA)** — Process audits, compliance checklists, and methodology adherence reviews.
+      3. **Quality Control (QC) & Inspections** — Testing protocols, defect tracking, and inspection result recording.
+      4. **Continuous Improvement** — Kaizen events, retrospectives, and process maturity assessments.
+      5. **Deliverable Acceptance & Sign-off** — Formal review gates, customer validation, and acceptance documentation.
+- [ ] 4 models, **no fifth**: `QualityPlan` [QPL-], `QualityReview` [QRV-], `DeliverableInspection` [QCI-], `QualityDefect` [QDF-]. Prefixes `QPL`/`QRV`/`QCI`/`QDF` verified free repo-wide (`QA`/`QC`/`NCR`/`CAPA` are scm 4.9's; `DEF` is inventory's; `RDS`/`RTV` are procurement's — none of the four touches them). **Do not add a `QualityStandard`, `AcceptanceSignOff`, `QualityImprovement`, `QualityInspection`, `NonConformance`, `CapaAction`, `Checklist`, `TestStep` or `MaturityScore` table** — Rulings 1–7.
+- [ ] **Build order: QualityPlan → QualityReview → DeliverableInspection → QualityDefect** (QRV FKs QualityPlan; QCI FKs QualityPlan + ProjectMilestone; QDF FKs QualityPlan + DeliverableInspection + ProjectIssue — dependency order, not the research's catalog order).
+- [ ] **Rulings 1–7, each restated as one-line build constraint with its owner named:**
+      1. **`scm` 4.9 owns the enterprise QMS** — `NonConformance[NCR-]`/`CapaAction[CAPA-]`/`QualityAudit[QA-]`/`QualityInspection[QC-]` all ship in `apps/scm/models/QualityManagement/` (`LIVE_LINKS["4.9"]` live). 7.6 builds **no NCR, no CAPA, no audit programme, no goods/lot inspection**; its four tables are **project-deliverable-scoped**. The class name `QualityInspection` is deliberately avoided (`DeliverableInspection`); a genuine enterprise nonconformance → `scm.NonConformance` bridge is **deferred** (that table has no project FK) — **flag for 12.x** (**L36**).
+      2. **`inventory` owns `QcChecklist` (+ `DefectReport[DEF-]`)** — `apps/inventory/models/QualityControl/`; the warehouse-floor QC gate. 7.6 **re-declares neither** (**L36**).
+      3. **`procurement` 6.12 owns receipt inspection** — `ReceiptTolerancePolicy`/`ReceiptDiscrepancy[RDS-]`/`ReturnToVendor[RTV-]`. 7.6 builds none of it.
+      4. **7.5 owns `ProjectRisk`/`ProjectIssue`** — a `QualityDefect` **LINKS to** `ProjectIssue` by nullable FK + the POST-only `qdf_raise_issue` verb (the `rsk_realize` idiom); 7.6 **never duplicates** the issue register (**L36**).
+      5. **7.2 owns the schedule phase gate** — `ProjectMilestone.is_phase_gate`/`entry_criteria`/`exit_criteria`/`mst_achieve` are **not re-declared**; 7.6's gate is the **deliverable acceptance decision** (`DeliverableInspection.inspection_type="acceptance"` + `usage_decision`), anchored by an optional nullable `milestone` FK.
+      6. **7.7 scope change, 7.9 minutes, 7.10 document repository + lessons repository, 7.13 retrospective ceremony, 7.16 charts, 7.17 workflow/e-signature, 7.19 master data (standards/checklist/methodology libraries) are siblings'** — 7.6 links out, builds no store; `standard_reference`/`regulatory_requirement` are free text (**Ruling 3**); minutes are a `core.Activity`, the acceptance certificate a `core.Document`; the maturity assessment is a **computed page** (no stored score table).
+      7. **No money and no GL (L29)** — 7.6 declares **no `DecimalField` and no journal**; a quality cost is a 7.4 `ProjectExpense` (soft note, never a write); `q2()` is imported but unused on the model layer.
+- [ ] **Spine verified (L28), do not re-derive:** `projects.Project` (`Projects.py:27`), `projects.ProjectTask` (`ProjectTasks.py:22`, `node_type="deliverable"` is the inspected node), `projects.ProjectMilestone` (`ProjectMilestones.py:17`), `projects.ProjectRisk` (`ProjectRisks.py:34`), `projects.ProjectIssue` (`ProjectIssues.py:29`), `projects.ProjectStakeholder` (`ProjectStakeholders.py:24` — customer lens only, not FK'd), `core.Party`, `core.Document`, `core.Activity`, `core.AuditLog`. **No `QualityPlan`/`QualityReview`/`DeliverableInspection`/`QualityDefect` class exists anywhere.** 7.6 FKs only `Project`/`ProjectTask`/`ProjectMilestone`/`ProjectRisk`/`ProjectIssue`/`core.Party`/`AUTH_USER_MODEL` and re-declares none of 7.1–7.5 (**L36**).
+- [ ] All four: `TenantNumbered` subclasses, `NUMBER_PREFIX` as above, **no money column** (Ruling 7), **every pass rate, punch-list count and maturity figure is a derived property or a computed view, NEVER stored** (the 7.1 ROI / 7.4 EVM / 7.5 Monte-Carlo ruling), audit actions ≤ 10 chars (`create/update/delete/accept/reject/resolve/close/reopen` — `AuditLog.action` is `varchar(10)`), `unique_together ("tenant","number")`.
+- [ ] Layers: `apps/projects/{models,forms,views,urls}/QualityManagement/<Entity>.py` (same file name in all four; sub-package `__init__.py` files stay EMPTY; re-exports only in the four top-level `__init__.py`). Files: `QualityPlans.py`, `QualityReviews.py`, `DeliverableInspections.py`, `QualityDefects.py` (plural, the 7.1–7.5 idiom).
+- [ ] Templates: `templates/projects/quality/<entity>/{list,detail,form}.html`; entity folders lowercase-singular: `qualityplan/`, `qualityreview/`, `deliverableinspection/`, `qualitydefect/`; the two computed pages are standalone at the sub-module level (`templates/projects/quality/quality_improvement.html`, `quality_acceptance.html`). `templates/projects/` verified: `cost/ initiation/ planning/ resource/ risk/ scope/ overview.html` — **no `quality/` yet**.
+- [ ] Migration is `0007_…` (7.5 shipped `0006`) — **the number is the disk leaf read at generation time, never reserved**; the peer **7.7 `ScopeRequirements`** sits on the same leaf `0006`, so **verify the leaf immediately before generating** and take whatever is free (`0007` if still free, else the next). Tests `test_quality_*` / `quality_*` / `_quality_*` (no collision with `test_initiation_*`, `test_planning_*`, `test_resource_*`, `test_cost_*`, `test_risk_*`, or the peer's `test_scope_*`).
+- [ ] **L31 — one sub-module per run:** 7.6 builds its own new tables only; nothing here reaches into 7.7 (scope change/CCB — in the tree), 7.9 (minutes), 7.10 (document/knowledge repository), 7.13 (retro ceremony), 7.16 (charts/PDF), 7.17 (workflow/e-signature), 7.18 (integrations) or 7.19 (master data).
+- [ ] FKs declared **by string** (`"projects.Project"`, `"projects.ProjectTask"`, `"projects.ProjectMilestone"`, `"projects.ProjectRisk"`, `"projects.ProjectIssue"`, `"projects.QualityPlan"`, `"projects.DeliverableInspection"`, `"core.Party"`, `settings.AUTH_USER_MODEL`) — no cross-app model import at module level.
+- [ ] **L16 — every date comparison uses `timezone.localdate()`**, never `datetime.date.today()` (`review_date`/`identified_date` defaults; `planned_review_date`/`planned_date`/`due_date` overdue flags; `age_days`).
+
+---
+
+### Model 1 — `QualityPlan` [QPL-] (`models/QualityManagement/QualityPlans.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "QPL"`. Realizes bullet **1 (planning + standards)** and is the criteria anchor bullets 3/5 inspect against.
+
+#### Choices (exact machine values)
+- [ ] `VERIFICATION_METHOD_CHOICES` (`max_length=16`) — `inspection`/Inspection, `testing`/Testing, `demonstration`/Demonstration, `review`/Review, `analysis`/Analysis, `audit`/Audit
+- [ ] `STATUS_CHOICES` (`max_length=16`) — `draft`/Draft, `active`/Active, `superseded`/Superseded, `closed`/Closed
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="quality_plans")` — the container
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True, related_name="quality_plans")` — the deliverable; same-project `clean()` guard (the `ProjectMilestone.anchor_task` pattern)
+- [ ] `source_risk` `FK("projects.ProjectRisk", SET_NULL, null=True, blank=True, related_name="quality_plans")` — the 7.5 quality-category risk this plan mitigates; same-project guard
+- [ ] `title` `CharField(max_length=255)`; `description` `TextField(blank=True)`
+- [ ] `acceptance_criteria` `TextField()` — **required** (bullet 1's core)
+- [ ] `verification_method` `CharField(max_length=16, choices=VERIFICATION_METHOD_CHOICES, default="inspection")`
+- [ ] `standard_reference` `CharField(max_length=120, blank=True)` — free text (`"ISO 9001:2015"`, `"21 CFR Part 11"`); **a standards master is 7.19's** (Ruling 3)
+- [ ] `regulatory_requirement` `TextField(blank=True)` — the clause/requirement text
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="owned_quality_plans")`
+- [ ] `status` `CharField(max_length=16, choices=STATUS_CHOICES, default="draft")` — **verb-driven, NOT on the form**
+- [ ] `planned_review_date` `DateField(null=True, blank=True)` — drives `is_review_overdue`
+- [ ] `approved_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="approved_quality_plans")`; `approved_at` `DateTimeField(null=True, blank=True, editable=False)` — stamped by `qpl_approve`
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="qpl_created")`
+
+#### Derived / Meta / behaviour
+- [ ] `is_review_overdue` = `planned_review_date` set, `< timezone.localdate()`, and `status in ("draft","active")`
+- [ ] `is_locked` = `status in ("superseded","closed")` — edit/delete refuse these rows (the 7.4 `BudgetRevision` frozen-row idiom)
+- [ ] `clean()` same-project guards: `wbs_node.project_id == project_id`; `source_risk.project_id == project_id` — field-keyed `ValidationError`s
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes `("tenant","project")` `qpl_tnt_project_idx`, `("tenant","status")` `qpl_tnt_status_idx`, `("tenant","wbs_node")` `qpl_tnt_wbs_idx`, `("tenant","-created_at")` `qpl_tnt_created_idx`
+- [ ] `__str__` = `f"{self.number} — {self.title}"`
+- [ ] Verbs (POST-only, audited, `previous = obj.status` captured first, `changes={"verb","from","to"}`): `qpl_approve` (login; `draft` → `active`, stamps `approved_by`/`approved_at`; audit `update`); `qpl_supersede` (**`@tenant_admin_required`** — **L27**; `active` → `superseded`; audit `update`). Approved/superseded rows refuse edit/delete of the criteria.
+- [ ] Form `QualityPlanForm` excludes `tenant`, `number`, `status`, `approved_by`, `approved_at`, `created_by`; `project`/`wbs_node`/`source_risk`/`owner` tenant-scoped `ModelChoiceField`s (`_reject_foreign` re-checks); `TenantUniqueMixin` FIRST (its `clean()` compares FKs' project)
+
+---
+
+### Model 2 — `QualityReview` [QRV-] (`models/QualityManagement/QualityReviews.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "QRV"`. Realizes bullet **2 (QA)** and bullet **4 (Continuous Improvement)**, discriminated by `review_type` (deliberate consolidation — both are "a structured quality event with a checklist, findings, an owner and actions"; the cut-order fallback is a 5th `QualityImprovement` table, **not** built).
+
+#### Choices
+- [ ] `REVIEW_TYPE_CHOICES` (`max_length=24`) — `methodology_review`/Methodology Review, `compliance_check`/Compliance Check, `gate_review`/Gate Review, `kaizen_event`/Kaizen Event, `retrospective`/Retrospective, `maturity_assessment`/Maturity Assessment
+- [ ] `STATUS_CHOICES` (`max_length=12`) — `planned`/Planned, `in_progress`/In Progress, `reported`/Reported, `closed`/Closed, `cancelled`/Cancelled
+- [ ] `IMPROVEMENT_STATUS_CHOICES` (`max_length=12`) — `n_a`/N/A, `planned`/Planned, `in_progress`/In Progress, `done`/Done
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="quality_reviews")`
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True, related_name="quality_reviews")` (optional anchor; same-project guard)
+- [ ] `quality_plan` `FK("projects.QualityPlan", SET_NULL, null=True, blank=True, related_name="reviews")` (optional — the plan checked against; same-project guard)
+- [ ] `title` `CharField(max_length=255)`; `scope` `TextField(blank=True)`
+- [ ] `review_type` `CharField(max_length=24, choices=REVIEW_TYPE_CHOICES, default="methodology_review")`
+- [ ] `checklist` `TextField(blank=True)` — the per-review checklist items; **a reusable checklist library is 7.19's** (no checklist table)
+- [ ] `findings` `TextField(blank=True)`
+- [ ] `reviewer` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="conducted_quality_reviews")`
+- [ ] `review_date` `DateField(default=timezone.localdate)`
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="planned")` — **verb-driven, NOT on the form**
+- [ ] `maturity_score` `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])`
+- [ ] **Improvement (bullet 4):** `improvement_action` `TextField(blank=True)`; `improvement_owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="owned_quality_reviews")`; `improvement_due_date` `DateField(null=True, blank=True)`; `improvement_status` `CharField(max_length=12, choices=IMPROVEMENT_STATUS_CHOICES, default="n_a")`
+- [ ] `closed_at` `DateTimeField(null=True, blank=True, editable=False)`; `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="qrv_created")`
+
+#### Derived / Meta / behaviour
+- [ ] `is_improvement_overdue` = `improvement_due_date` set, `< today`, and `improvement_status in ("planned","in_progress")`
+- [ ] `is_locked` = `status in ("closed","cancelled")`; `is_improvement` = `review_type in ("kaizen_event","retrospective")`
+- [ ] `clean()` same-project guards: `wbs_node.project_id == project_id`; `quality_plan.project_id == project_id`
+- [ ] `ordering = ["-review_date", "-id"]`; `unique_together = ("tenant","number")`; indexes `("tenant","project")` `qrv_tnt_project_idx`, `("tenant","review_type")` `qrv_tnt_type_idx`, `("tenant","status")` `qrv_tnt_status_idx`, `("tenant","improvement_status")` `qrv_tnt_imp_idx`, `("tenant","-review_date")` `qrv_tnt_date_idx`
+- [ ] `__str__` = `f"{self.number} — {self.title}"`
+- [ ] Verbs: `qrv_report` (login; `in_progress` → `reported`; audit `update`); `qrv_close` (login; `reported` → `closed`, stamps `closed_at`; audit `close`). Closed rows refuse edit/delete.
+- [ ] Form `QualityReviewForm` excludes `tenant`, `number`, `status`, `closed_at`, `created_by`; `project`/`wbs_node`/`quality_plan`/`reviewer`/`improvement_owner` tenant-scoped; `TenantUniqueMixin` FIRST
+
+---
+
+### Model 3 — `DeliverableInspection` [QCI-] (`models/QualityManagement/DeliverableInspections.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "QCI"`. Realizes bullet **3 (QC execution + result recording)** and bullet **5 (acceptance decision + customer validation + document link)**. Named `DeliverableInspection` because `QualityInspection` is scm 4.9's (Ruling 1).
+
+#### Choices
+- [ ] `INSPECTION_TYPE_CHOICES` (`max_length=16`) — `review`/Review, `testing`/Testing, `demonstration`/Demonstration, `walkthrough`/Walkthrough, `acceptance`/Acceptance
+- [ ] `RESULT_CHOICES` (`max_length=12`) — `pending`/Pending, `pass`/Pass, `fail`/Fail, `conditional`/Conditional, `not_applicable`/Not Applicable
+- [ ] `USAGE_DECISION_CHOICES` (`max_length=24`) — `pending`/Pending, `accept`/Accept, `accept_with_deviation`/Accept with Deviation, `reject`/Reject, `rework`/Rework (the scm 4.9 `USAGE_DECISION_CHOICES` vocabulary; Ruling 4)
+- [ ] `STATUS_CHOICES` (`max_length=12`) — `planned`/Planned, `in_progress`/In Progress, `passed`/Passed, `failed`/Failed, `on_hold`/On Hold, `cancelled`/Cancelled
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="quality_inspections")`
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True, related_name="quality_inspections")` (the deliverable; same-project guard)
+- [ ] `quality_plan` `FK("projects.QualityPlan", SET_NULL, null=True, blank=True, related_name="inspections")` (criteria inspected against; same-project guard)
+- [ ] `milestone` `FK("projects.ProjectMilestone", SET_NULL, null=True, blank=True, related_name="quality_inspections")` — the 7.2 gate the acceptance is reviewed at, **not re-declared** (Ruling 5)
+- [ ] `title` `CharField(max_length=255)`; `description` `TextField(blank=True)` (the testing protocol / procedure)
+- [ ] `inspection_type` `CharField(max_length=16, choices=INSPECTION_TYPE_CHOICES, default="review")`
+- [ ] `planned_date` `DateField(null=True, blank=True)`; `inspected_date` `DateField(null=True, blank=True)` — drives `is_overdue`
+- [ ] `inspector` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="conducted_inspections")`
+- [ ] `result` `CharField(max_length=12, choices=RESULT_CHOICES, default="pending")`
+- [ ] `usage_decision` `CharField(max_length=24, choices=USAGE_DECISION_CHOICES, default="pending")`
+- [ ] `findings` `TextField(blank=True)`
+- [ ] **Acceptance (bullet 5 — verb-written, NEVER form fields, the 7.4 `decision_notes` rule):** `accepted_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="accepted_inspections")`; `accepted_by_party` `FK("core.Party", SET_NULL, null=True, blank=True, related_name="accepted_inspections")` (external/customer acceptor); `accepted_at` `DateTimeField(null=True, blank=True, editable=False)`; `acceptance_note` `TextField(blank=True)` (conditions/reservations)
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="planned")` — **verb-driven, NOT on the form**
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="qci_created")`
+
+#### Derived / Meta / behaviour
+- [ ] `is_overdue` = `planned_date` set, `< today`, `inspected_date` is None, and `status in ("planned","in_progress")`
+- [ ] `is_locked` = `status in ("passed","failed","cancelled")` or `usage_decision != "pending"`; `defect_count` = `self.defects.count()`; `is_acceptance` = `inspection_type == "acceptance"`
+- [ ] `clean()` same-project guards: `wbs_node.project_id == project_id`; `quality_plan.project_id == project_id`; `milestone.project_id == project_id`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes `("tenant","project")` `qci_tnt_project_idx`, `("tenant","status")` `qci_tnt_status_idx`, `("tenant","result")` `qci_tnt_result_idx`, `("tenant","usage_decision")` `qci_tnt_decision_idx`, `("tenant","wbs_node")` `qci_tnt_wbs_idx`
+- [ ] `__str__` = `f"{self.number} — {self.title}"`
+- [ ] Verbs (POST-only, audited, `previous` captured first): `qci_record` (login; sets `result` + `inspected_date` + `status`, audit `update`); **`qci_accept`** (login; binds the plain `InspectionAcceptanceForm`; sets `usage_decision` ∈ {`accept`,`accept_with_deviation`}, `accepted_by=request.user`, `accepted_by_party`, `accepted_at=timezone.now()`, `status="passed"`, `acceptance_note`; audit `accept`); `qci_reject` (login; `usage_decision="reject"`, `status="failed"`; audit `reject`). Accepted/failed rows refuse edit/delete.
+- [ ] Form `DeliverableInspectionForm` excludes `tenant`, `number`, `usage_decision`, `accepted_by`, `accepted_by_party`, `accepted_at`, `acceptance_note`, `status`, `created_by`; `project`/`wbs_node`/`quality_plan`/`milestone`/`inspector` tenant-scoped; `TenantUniqueMixin` FIRST
+
+---
+
+### Model 4 — `QualityDefect` [QDF-] (`models/QualityManagement/QualityDefects.py`)
+
+Base `TenantNumbered`, `NUMBER_PREFIX = "QDF"`. Realizes bullet **3's defect tracking** and bullet **5's punch list**. NOT a second NCR (scm 4.9's) and NOT a second issue log (7.5's) — it links to `ProjectIssue` by FK (Ruling 2).
+
+#### Choices
+- [ ] `DEFECT_CATEGORY_CHOICES` (`max_length=16`) — `functional`/Functional, `performance`/Performance, `documentation`/Documentation, `compliance`/Compliance, `dimensional`/Dimensional, `workmanship`/Workmanship, `usability`/Usability, `other`/Other (deliverable-quality categories, deliberately distinct from scm 4.9's goods categories)
+- [ ] `SEVERITY_CHOICES` (`max_length=8`) — `critical`/Critical, `major`/Major, `minor`/Minor, `observation`/Observation (the scm 4.9 `NonConformance.SEVERITY_CHOICES` vocabulary, reused verbatim)
+- [ ] `DISPOSITION_CHOICES` (`max_length=16`) — `open`/Open, `rework`/Rework, `repair`/Repair, `resubmit`/Resubmit, `accept_as_is`/Accept As Is, `reject`/Reject, `deferred`/Deferred
+- [ ] `STATUS_CHOICES` (`max_length=12`) — `open`/Open, `in_progress`/In Progress, `resolved`/Resolved, `closed`/Closed, `cancelled`/Cancelled
+
+#### Fields
+- [ ] `project` `FK("projects.Project", CASCADE, related_name="quality_defects")`
+- [ ] `wbs_node` `FK("projects.ProjectTask", SET_NULL, null=True, blank=True, related_name="quality_defects")`
+- [ ] `quality_plan` `FK("projects.QualityPlan", SET_NULL, null=True, blank=True, related_name="defects")` (the criterion violated; same-project guard)
+- [ ] `inspection` `FK("projects.DeliverableInspection", SET_NULL, null=True, blank=True, related_name="defects")` (the inspection that found it)
+- [ ] `project_issue` `FK("projects.ProjectIssue", SET_NULL, null=True, blank=True, related_name="quality_defects")` — **the bridge**, written by `qdf_raise_issue`
+- [ ] `title` `CharField(max_length=255)`; `description` `TextField()`
+- [ ] `defect_category` `CharField(max_length=16, choices=DEFECT_CATEGORY_CHOICES, default="other")`
+- [ ] `severity` `CharField(max_length=8, choices=SEVERITY_CHOICES, default="minor")`
+- [ ] `disposition` `CharField(max_length=16, choices=DISPOSITION_CHOICES, default="open")`
+- [ ] `status` `CharField(max_length=12, choices=STATUS_CHOICES, default="open")` — **verb-driven, NOT on the form**
+- [ ] `owner` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="owned_quality_defects")`
+- [ ] `identified_date` `DateField(default=timezone.localdate)`; `due_date` `DateField(null=True, blank=True)` — drives `is_overdue`/`age_days`
+- [ ] `root_cause` `TextField(blank=True)`; `resolution_note` `TextField(blank=True)`; `resolved_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="resolved_quality_defects")`; `resolved_at` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `lessons_learned` `TextField(blank=True)` (the 7.5 Ruling-3 idiom — **the repository is 7.10's**)
+- [ ] `created_by` `FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False, related_name="qdf_created")`
+
+#### Derived / Meta / behaviour
+- [ ] `is_overdue` = `due_date` set, `< today`, `status in ("open","in_progress")`; `age_days` = days since `identified_date`; `is_open` = `status in ("open","in_progress")`; `is_locked` = `status in ("resolved","closed")`
+- [ ] `clean()` same-project guards: `wbs_node.project_id == project_id`; `quality_plan.project_id == project_id`; `inspection.project_id == project_id`
+- [ ] `ordering = ["-created_at", "-id"]`; `unique_together = ("tenant","number")`; indexes `("tenant","project")` `qdf_tnt_project_idx`, `("tenant","status")` `qdf_tnt_status_idx`, `("tenant","severity")` `qdf_tnt_severity_idx`, `("tenant","disposition")` `qdf_tnt_disp_idx`, `("tenant","-created_at")` `qdf_tnt_created_idx`
+- [ ] `__str__` = `f"{self.number} — {self.title}"`
+- [ ] Verbs (POST-only, audited): `qdf_resolve` (login; binds the plain `DefectResolutionForm`; sets `root_cause`/`resolution_note`/`resolved_by=request.user`/`resolved_at=timezone.now()`, `status="resolved"`; audit `resolve`); `qdf_close` (login; `resolved` → `closed`; audit `close`); **`qdf_raise_issue`** (login; creates a `projects.ProjectIssue` — `project`, `wbs_node`, `title`, `description`, `severity` **mapped** `critical→critical`/`major→high`/`minor→medium`/`observation→low` (ProjectIssue's vocabulary), `owner`, `raised_by=request.user`, `identified_date=timezone.localdate()`, `created_by=request.user` — sets `project_issue`, audits `create` on the issue and `update` on the defect; message names both numbers). Resolved/closed rows refuse edit/delete.
+- [ ] Form `QualityDefectForm` excludes `tenant`, `number`, `project_issue`, `status`, `root_cause`, `resolution_note`, `resolved_by`, `resolved_at`, `created_by`; `project`/`wbs_node`/`quality_plan`/`inspection`/`owner` tenant-scoped; `TenantUniqueMixin` FIRST
+
+---
+
+### Computed pages (no model — the 7.3 `capacity_demand` / 7.5 `risk_analysis` precedent)
+
+- [ ] **`quality_improvement`** — `views/QualityManagement/QualityImprovement.py`, route `quality-improvement/`, name `quality_improvement`, template `projects/quality/quality_improvement.html`, **GET-only**. Context keys: `projects`, `project` (from `?project=`, `as_db_int`-guarded, tenant-filtered, else None), `improvement_rows` (the project's `QualityReview` with `review_type in ("kaizen_event","retrospective")` ordered `-review_date`, rendering `improvement_status`/`improvement_owner`/`improvement_due_date`), `maturity` (dict `{"score","band","badge","reviews_scored","defects_total","defects_closed","closure_pct"}` — computed over `maturity_score` + defect closure; **no stored maturity table**, Ruling 6), `defect_trend_rows` (period rows `{"period","label","opened","closed","bar_pct"}` aggregated by `identified_date`/`resolved_at` month; CSS bars, **not a chart**, 7.16), `defect_trend_max`, `lessons` (list of `{"obj","lesson"}` over closed defects with non-empty `lessons_learned`, newest first, cap 25; the lens links to 7.10), `lessons_count`, `open_defect_count`, `improvement_open_count`.
+- [ ] **`quality_acceptance`** — `views/QualityManagement/QualityAcceptance.py`, route `quality-acceptance/`, name `quality_acceptance`, template `projects/quality/quality_acceptance.html`, **GET-only**. Context keys: `projects`, `project` (from `?project=`, `as_db_int`-guarded), `deliverable_rows` (one row per WBS `deliverable` node of the selected project: `{"wbs_node","plan","plan_status","latest_inspection","result","usage_decision","open_defects","acceptance_state","badge"}` where `acceptance_state` ∈ `pending`/`conditional`/`accepted`/`rejected` and `badge` is the colour-named class — **L33**), `acceptance_queue` (inspections with `inspection_type="acceptance"` and `usage_decision="pending"`, ordered `planned_date`; hosts the `qci_accept` action), `acceptance_queue_count`, `accepted_count`, `conditional_count`, `rejected_count`, `pending_count`.
+
+---
+
+## Backend (`apps/projects/{models,forms,views,urls}/QualityManagement/`) — one file per entity per layer
+
+- [ ] `models/QualityManagement/<Entity>.py` ×4 as specified above; sub-package `__init__.py` files EMPTY; nothing added to the top-level `__init__.py` until Integrate
+- [ ] `forms/QualityManagement/<Entity>.py` — `QualityPlanForm`, `QualityReviewForm`, `DeliverableInspectionForm`, `QualityDefectForm` (exclusions pinned per model; `TenantUniqueMixin` BEFORE `TenantModelForm` on every form whose `clean()` compares an FK's project) plus the two **plain `forms.Form`** POST guards: `InspectionAcceptanceForm` (`usage_decision` `ChoiceField` ∈ {`accept`,`accept_with_deviation`}, `accepted_by_party` `ModelChoiceField(queryset=clients(tenant), required=False)`, `acceptance_note` `CharField(required=False, widget=Textarea)`) and `DefectResolutionForm` (`root_cause` `CharField(required=False, widget=Textarea)`, `resolution_note` `CharField(required=True, widget=Textarea)`)
+- [ ] `views/QualityManagement/<Entity>.py` — full CRUD via the `crud_*` helpers + the 10 verbs; every queryset `filter(tenant=request.tenant)`, never `.all()`; `_reject_foreign(form, cleaned, [<tenant-scoped FK names>])` per form (never `accounting.Currency` — none this pass); every verb refuses a disallowed transition with `messages.*` + redirect; every `?enum=` value allow-listed against CHOICES (**L11**); capture `previous = obj.status` BEFORE mutating
+- [ ] `urls/QualityManagement/<Entity>.py` — literal first segments `quality-plans/`, `quality-reviews/`, `inspections/`, `defects/` plus the two computed `quality-improvement/`, `quality-acceptance/`; literal routes before `<int:pk>/` (first-match-wins)
+- [ ] `views/QualityManagement/QualityImprovement.py` + `views/QualityManagement/QualityAcceptance.py` — the two computed pages (no model; the 7.3 `CapacityDemand.py` / 7.5 `RiskAnalysis.py` precedent); absolute imports only
+
+## Views, routes & CONTEXT KEYS — the contract (L7/L8: an unpinned name renders blank at 200)
+
+- [ ] **QualityPlan** — `qpl_list`, `qpl_create`, `qpl_detail`, `qpl_edit`, `qpl_delete`. Routes (prefix `quality-plans/`): `quality-plans/`, `quality-plans/add/`, `quality-plans/<int:pk>/`, `quality-plans/<int:pk>/edit/`, `quality-plans/<int:pk>/delete/`; verbs `quality-plans/<int:pk>/approve/` `qpl_approve`, `quality-plans/<int:pk>/supersede/` `qpl_supersede` (**tenant_admin**). `qpl_list`: qs `QualityPlan.objects.filter(tenant=request.tenant).select_related("project","wbs_node","source_risk","owner","approved_by")`; `search_fields=["number","title","description","acceptance_criteria","standard_reference"]`; `filters=[("project","project_id",True), ("status","status",False), ("verification_method","verification_method",False), ("owner","owner_id",True)]`; derived `?review_due=1`/`?overdue=1` **pre-scoped** (`Q(planned_review_date__lt=timezone.localdate(), status__in=("draft","active"))` — a Python property is not a field lookup, **L11**). `extra_context`: `projects`, `status_choices`, `verification_method_choices`, `owners`. Detail: `obj` + `linked_reviews` (`obj.reviews.select_related("reviewer")`) + `linked_inspections` (`obj.inspections.select_related("inspector","milestone")`) + `linked_defects` (`obj.defects.select_related("owner")`)
+- [ ] **QualityReview** — `qrv_list`, `qrv_create`, `qrv_detail`, `qrv_edit`, `qrv_delete`. Routes (prefix `quality-reviews/`): `quality-reviews/`, `quality-reviews/add/`, `quality-reviews/<int:pk>/`, `quality-reviews/<int:pk>/edit/`, `quality-reviews/<int:pk>/delete/`; verbs `quality-reviews/<int:pk>/report/` `qrv_report`, `quality-reviews/<int:pk>/close/` `qrv_close`. `qrv_list`: qs `.select_related("project","wbs_node","quality_plan","reviewer","improvement_owner")`; `search_fields=["number","title","scope","findings","improvement_action"]`; `filters=[("project","project_id",True), ("review_type","review_type",False), ("status","status",False), ("improvement_status","improvement_status",False), ("reviewer","reviewer_id",True)]`; derived lenses **pre-scoped**: `?kind=assurance` → `Q(review_type__in=("methodology_review","compliance_check","gate_review"))`; `?kind=improvement` → `Q(review_type__in=("kaizen_event","retrospective","maturity_assessment"))`; `?overdue=1` → `Q(improvement_due_date__lt=today, improvement_status__in=("planned","in_progress"))`. `extra_context`: `projects`, `review_type_choices`, `status_choices`, `improvement_status_choices`, `owners`. Detail: `obj` + the improvement panel read off `obj`
+- [ ] **DeliverableInspection** — `qci_list`, `qci_create`, `qci_detail`, `qci_edit`, `qci_delete`. Routes (prefix `inspections/`): `inspections/`, `inspections/add/`, `inspections/<int:pk>/`, `inspections/<int:pk>/edit/`, `inspections/<int:pk>/delete/`; verbs `inspections/<int:pk>/record/` `qci_record`, `inspections/<int:pk>/accept/` `qci_accept`, `inspections/<int:pk>/reject/` `qci_reject`. `qci_list`: qs `.select_related("project","wbs_node","quality_plan","milestone","inspector","accepted_by","accepted_by_party")`; `search_fields=["number","title","description","findings"]`; `filters=[("project","project_id",True), ("inspection_type","inspection_type",False), ("result","result",False), ("usage_decision","usage_decision",False), ("status","status",False), ("inspector","inspector_id",True)]`; derived `?overdue=1` → `Q(planned_date__lt=today, inspected_date__isnull=True, status__in=("planned","in_progress"))`. `extra_context`: `projects`, `inspection_type_choices`, `result_choices`, `usage_decision_choices`, `status_choices`, `owners`, `parties` (`clients(request.tenant)`). Detail: `obj` + `defects` (`obj.defects.select_related("owner")`) + `accept_form` (unbound `InspectionAcceptanceForm(tenant=request.tenant)`)
+- [ ] **QualityDefect** — `qdf_list`, `qdf_create`, `qdf_detail`, `qdf_edit`, `qdf_delete`. Routes (prefix `defects/`): `defects/`, `defects/add/`, `defects/<int:pk>/`, `defects/<int:pk>/edit/`, `defects/<int:pk>/delete/`; verbs `defects/<int:pk>/resolve/` `qdf_resolve`, `defects/<int:pk>/close/` `qdf_close`, `defects/<int:pk>/raise-issue/` `qdf_raise_issue`. `qdf_list`: qs `.select_related("project","wbs_node","quality_plan","inspection","project_issue","owner","resolved_by")`; `search_fields=["number","title","description","root_cause","resolution_note"]`; `filters=[("project","project_id",True), ("severity","severity",False), ("status","status",False), ("disposition","disposition",False), ("defect_category","defect_category",False), ("owner","owner_id",True), ("inspection","inspection_id",True)]`; derived `?overdue=1` → `Q(due_date__lt=today, status__in=("open","in_progress"))`. `extra_context`: `projects`, `severity_choices`, `status_choices`, `disposition_choices`, `defect_category_choices`, `owners`, `inspections` (`DeliverableInspection.objects.filter(tenant=…)`). Detail: `obj` + `resolution_form` (unbound `DefectResolutionForm()`)
+- [ ] **Six url first segments pinned — `quality-plans/`, `quality-reviews/`, `inspections/`, `defects/`, `quality-improvement/`, `quality-acceptance/`.** All six are **disjoint literals** from 7.1–7.5's existing first segments (`""`, `project-requests/`, `projects/`, `stakeholders/`, `kickoffs/`, `tasks/`, `dependencies/`, `milestones/`, `baselines/`, `resource-profiles/`, `allocations/`, `time-entries/`, `capacity-demand/`, `budgetlines/`, `revisions/`, `controlaccounts/`, `expenses/`, `risks/`, `responses/`, `issues/`, `escalations/`, `risk-analysis/`, `risk-monitoring/`) **and from the peer 7.7's** (`requirements/`, `scope-items/`, `scope-changes/`, `scope-verifications/`, `scope-matrix/`) — **re-check the concatenated `urls/__init__.py` at Integrate** in case the peer added a segment. No route uses a converter in its first component
+
+## Templates (`templates/projects/quality/`)
+
+- [ ] `qualityplan/{list,detail,form}.html`; `qualityreview/{list,detail,form}.html`; `deliverableinspection/{list,detail,form}.html`; `qualitydefect/{list,detail,form}.html` — list: `.page-header` + breadcrumb, filter bar reflecting `request.GET` (including the derived `?review_due=`/`?overdue=`/`?kind=` lenses), Actions column (eye → detail, pencil → edit, delete POST form + `confirm()` + `{% csrf_token %}`), `.pagination` with `has_previous`/`has_next` guards (**L9**), `.empty-state`
+- [ ] The two computed pages live at the sub-module level: `quality_improvement.html`, `quality_acceptance.html` (not inside an entity folder) — the maturity table + band, the defect-trend CSS bars, the lessons lens, the per-deliverable acceptance board
+- [ ] Colour-named badge classes only (`badge-green/-amber/-red/-info/-muted/-slate`, **L33**) — run `grep -n '\.badge-' static/css/theme.css` before writing them; every badge block ends `{% else %}{{ obj.get_<field>_display }}{% endif %}`; severity/result/acceptance ternaries copy a sibling verbatim
+- [ ] **No nullable FK inside a `|default:` filter argument** (the 7.1 four-500 idiom, **L10**) — use `{% if fk %}…{% else %}—{% endif %}` for `owner`/`approved_by`/`reviewer`/`improvement_owner`/`inspector`/`accepted_by`/`accepted_by_party`/`resolved_by` (all nullable FKs)
+- [ ] **Multi-line notes use `{% comment %} … {% endcomment %}`** — never a multi-line `{# … #}` (**L2**); the computed pages carry long caveats (maturity is a computed lens, planning-grade)
+- [ ] FK `<select>` comparisons use `|stringformat:"d"`; `{% extends "base.html" %}` unchanged
+
+## Integrate (single writer — the ONLY shared-file step; surgical `Edit`, re-read anchors)
+
+- [ ] Re-export blocks `# --- 7.6 Quality Management` **inserted between the existing `# --- 7.5` and `# --- 7.7` blocks** in all four top-level `__init__.py` (models: 4 models; forms: 6 forms; views: 4 CRUD sets + 2 computed views + 10 verbs; urls: 6 urlpatterns imports + concat — the `urls/__init__.py` imports + tuple concat also go **between the 7.5 and 7.7 groups**). A missing re-export is a runtime `ImportError`
+- [ ] `admin.py` — 4 registrations appended after the 7.5 block (`list_display` led by `number`, `list_select_related` for every rendered FK, `approved_at`/`closed_at`/`accepted_at`/`resolved_at` readonly)
+- [ ] `seed_projects.py` — `_quality` block with its OWN guard (`QualityPlan.objects.filter(tenant=tenant).exists()`), called per tenant: 3–5 `QualityPlan` rows anchored to existing WBS **deliverable** nodes spanning all `verification_method` values and both `standard_reference` populated/blank, one `approved` (stamped) and one `superseded`; 4–6 `QualityReview` rows spanning all `review_type` values (one `methodology_review` reported, one `kaizen_event` with `improvement_action`/owner/due date, one `maturity_assessment` with a `maturity_score`); 5–8 `DeliverableInspection` rows spanning all `result` and `usage_decision` values, including one **acceptance** inspection with `accepted_by`/`accepted_by_party`/`accepted_at` stamped and a `core.Document` certificate, and one `conditional` acceptance with open punch-list defects; 6–10 `QualityDefect` rows across all severities/categories/dispositions, one resolved (stamped) and linked to a `ProjectIssue` via `qdf_raise_issue`, one overdue, one with a non-empty `lessons_learned`. Enough rows for page 2. `--flush` deletes **children-first**: `QualityDefect, DeliverableInspection, QualityReview, QualityPlan`
+- [ ] `views/_helpers.py` — **reuse the existing `owners(tenant)`** (added by 7.5, line 79) and `clients(tenant)` (for `accepted_by_party`); **add nothing**
+- [ ] `apps/core/navigation.py` — one new `LIVE_LINKS["7.6"]` immediately after the `"7.5"` block (~`:1766`), verbatim from the research: `Quality Planning & Standards` → `projects:qpl_list`; `Quality Assurance (QA)` → `projects:qrv_list?kind=assurance`; `Quality Control (QC) & Inspections` → `projects:qci_list`; `Continuous Improvement` → `projects:quality_improvement`; `Deliverable Acceptance & Sign-off` → `projects:quality_acceptance`; extra live leaves `Quality Review Register` → `projects:qrv_list` and `Defect & Punch List` → `projects:qdf_list`; the justification comments record the deliberate computed-page mapping (bullets 4/5 are aggregations over the registers). `_safe_reverse` supports both `url#frag` and `?query=` (confirmed)
+- [ ] `templates/projects/overview.html` — 7.6 quick links + counts (open defects, overdue inspections, acceptance queue), mirroring the 7.5 block
+- [ ] **DB LAST**: `python manage.py makemigrations projects --dry-run` — **read every model the dry-run lists; if it names a model you did not write (or a peer's 7.7 model), STOP and report** (a missing re-export, or the concurrent session). Then generate (**number = disk leaf read now** — `0007_…` if still free, else the next free leaf; never reserve), `migrate`, `seed_projects` ×2 (second run a no-op), `manage.py check`
+
+## Verify
+
+- [ ] `temp/` smoke sweep as `admin_acme` / `password` (NOT the tenant-less `admin`):
+      - [ ] every new `projects:*` url 200 (405 for the POST-only verbs hit by GET — `qpl_approve`, `qpl_supersede`, `qrv_report`, `qrv_close`, `qci_record`, `qci_accept`, `qci_reject`, `qdf_resolve`, `qdf_close`, `qdf_raise_issue`); content asserts, not just status — page titles, a seeded `QPL-`/`QRV-`/`QCI-`/`QDF-` number, the maturity board renders, the acceptance board renders, no `{#` / `{% comment` leaks (**L8**)
+      - [ ] junk params `?status=nope`, `?project=0`, `?kind=nope`, `?page=9999`, `?inspection=abc` → default page, never a 500, never a silently emptied register (**L11** allow-list + `as_db_int`)
+      - [ ] page 2 of the quality-plan and defect registers; cross-tenant IDOR → 404 on every `<int:pk>` route
+      - [ ] state machine holds: approve-twice refused, supersede-on-draft refused, report-on-planned refused, accept-on-locked refused, resolve-twice refused, raise-issue-twice refused (already linked), member 403 on `qpl_supersede` (**L27**)
+      - [ ] hand-computed spot check: one seeded defect's `is_overdue`/`age_days` matches; the `?kind=improvement` lens returns exactly the kaizen/retro/maturity rows; `qdf_raise_issue` maps `major→high`
+- [ ] Sidebar shows **7.6 Live** with all five bullets + the review-register and defect-punch-list leaves
+
+## Close-out (Module Creation Sequence phases 4–7)
+
+- [ ] Review agents, one after another, each appending to `.claude/tasks/review-projects-7.6.md`: `code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` → `security-reviewer`
+- [ ] `code-fixer` burns the deduped, ID'd findings (Critical → Important → Minor), one commit per file
+- [ ] Tests: append `quality_*` fixtures to `conftest.py` (**owned by itself — only with a full unfiltered re-run**), then `test_quality_models.py` → `test_quality_forms.py` → `test_quality_views.py` → `test_quality_security.py`, one file per commit, tests named `test_quality_*`, helpers `_quality_*` (no shadowing of the `test_initiation_*`/`test_planning_*`/`test_resource_*`/`test_cost_*`/`test_risk_*` namespaces), then **one full unfiltered run** (never `-k`, **L47**; iterate with `--nomigrations`)
+- [ ] `.claude/skills/projects/SKILL.md` — append the 7.6 section (the four models + prefixes, the derived-property rulings, the verb table with gates/audit strings, the six routes, the two computed pages + their context contracts, the seeder `_quality` block, gotchas incl. the computed-lens pre-scoping and the `qdf_raise_issue` severity map) and update the frontmatter "As-built" line
+- [ ] Mark 7.6 complete in `README.md`
+
+## Later passes / deferred (carried verbatim from the research so nothing is lost)
+
+- [ ] **The enterprise NCR / CAPA / audit programme / calibration** — `scm` 4.9 owns them today; 7.6 is project-scoped (Ruling 1). A defect → `scm.NonConformance` bridge waits on a project FK on that table — **flag for the 12.x QMS session**
+- [ ] **Test-step child table** (steps + expected outcomes, shared steps/parameters) — Azure Test Plans' differentiator; the protocol `description` is the honest stand-in this pass
+- [ ] **Test configurations / parameterised test data** (OS/browser/data sets) — needs a configuration-matrix model; not table-stakes
+- [ ] **A reusable standards / regulatory-clause library** — master data → 7.19; `standard_reference` is free text (Ruling 3)
+- [ ] **A reusable checklist library + methodology templates** — master data → 7.19; the per-review checklist is a text field
+- [ ] **Automated test execution / CI integration** (qTest Launch, pipelines) — integration → 7.18
+- [ ] **Recurring audit schedules, auto-escalation, review reminders** — no scheduler/mail worker (7.1/6.8/6.19 recorded it); 7.17's; badges and audit rows only
+- [ ] **Configurable approval ladders + electronic signature (21 CFR Part 11)** — a workflow-engine feature → 7.17; scm 4.9 parked the identical item
+- [ ] **A stored process-maturity score / assessment table** — a computed page this pass (Ruling 6) — a stored score goes stale the instant an input changes
+- [ ] **Acceptance-certificate PDF generation / report builder / exports** — 7.16 (BI/reporting); 7.6 renders a printable acceptance page
+- [ ] **Defect escape rate / rework rate KPIs** — KPI definitions are master data (7.19) and values need a metrics engine; defect counts stand in
+- [ ] **Acceptance → milestone billing / handover workflow** — 7.15 (billing) / 7.14 (handover); 7.6 records the acceptance only (no GL — Ruling 7)
+- [ ] **External test-management / GRC sync** (Jira/Xray/Zephyr/TestRail, ServiceNow) — integration → 7.18; a `source_number`-style soft reference would be the pattern
+- [ ] **Cross-project / portfolio quality roll-up** — 7.12 (portfolio)
