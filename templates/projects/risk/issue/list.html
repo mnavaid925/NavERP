@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Issue Log{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Issue Log</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Issues</span></div>
+      <p class="text-muted">One row per logged issue, action item or decision. Age and overdue are computed from the dates — edit the due date and the flags follow. Escalating an issue records the escalation on its own register.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:iss_list' %}?escalated=1" class="btn btn-outline"><i data-lucide="arrow-up-circle"></i> Escalation Queue</a>
+      <a href="{% url 'projects:iss_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Issue</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title or description…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="issue_type" aria-label="Issue type" class="form-select">
+            <option value="">Any type</option>
+            {% for val, label in issue_type_choices %}
+              <option value="{{ val }}" {% if request.GET.issue_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">Any severity</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="risk" aria-label="Risk" class="form-select">
+            <option value="">Any risk</option>
+            {% for r in risks %}
+              <option value="{{ r.pk }}" {% if request.GET.risk == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="escalated"><input type="checkbox" id="escalated" name="escalated" value="1" {% if request.GET.escalated == '1' %}checked{% endif %}> Escalated</label>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="overdue"><input type="checkbox" id="overdue" name="overdue" value="1" {% if request.GET.overdue == '1' %}checked{% endif %}> Overdue</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:iss_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Issue</th><th>Project</th><th>Type</th><th>Severity</th><th>Owner</th><th>Raised by</th><th>Due</th><th class="text-right">Age</th><th>Escalation</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:iss_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.get_issue_type_display }}</td>
+              <td>
+                {% if obj.severity == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
+                {% elif obj.severity == 'high' %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
+                {% elif obj.severity == 'medium' %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+                {% else %}<span class="badge badge-green">{{ obj.get_severity_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.raised_by %}{{ obj.raised_by.get_full_name|default:obj.raised_by.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right">{{ obj.age_days }}d</td>
+              <td>{% if obj.escalation_level %}<span class="badge badge-amber">L{{ obj.escalation_level }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.status == 'closed' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'resolved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'blocked' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:iss_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_locked %}
+                    <a href="{% url 'projects:iss_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:iss_delete' obj.pk %}" onsubmit="return confirm('Delete issue {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No issues match</h3><p>Log an issue with its severity and owner — the age and overdue flags follow from the dates.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
