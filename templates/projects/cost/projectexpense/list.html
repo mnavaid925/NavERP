@@ -56,7 +56,7 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Expense</th><th>Project</th><th>Control account</th><th>Type</th><th>Source</th><th>Entry date</th><th class="ta-right">Amount</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Expense</th><th>Project</th><th>Control account</th><th>Type</th><th>Source</th><th>Entry date</th><th class="text-right">Amount</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -66,7 +66,7 @@
               <td>{% if obj.entry_type == 'commitment' %}<span class="badge badge-info">{{ obj.get_entry_type_display }}</span>{% elif obj.entry_type == 'accrual' %}<span class="badge badge-amber">{{ obj.get_entry_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_entry_type_display }}</span>{% endif %}</td>
               <td>{% if obj.source_number %}{{ obj.get_source_kind_display }} <span class="text-muted">{{ obj.source_number }}</span>{% else %}{{ obj.get_source_kind_display }}{% endif %}</td>
               <td>{{ obj.entry_date|date:"M d, Y" }}</td>
-              <td class="ta-right fw-600">{{ obj.amount }}</td>
+              <td class="text-right fw-600">{{ obj.amount }}</td>
               <td>{% if obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'posted' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
