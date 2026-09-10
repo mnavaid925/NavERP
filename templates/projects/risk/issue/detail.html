@@ -80,13 +80,20 @@
           <form method="post" action="{% url 'projects:iss_escalate' obj.pk %}">
             {% csrf_token %}
             <div class="form-grid">
+              {% comment %}
+                The ``issue`` field is skipped on purpose: this form is already scoped to the issue
+                by the URL, and the verb injects the pk into the bound data. Rendering an "Issue"
+                select on the issue's own page would invite the user to escalate the wrong row.
+              {% endcomment %}
               {% for field in escalation_form %}
-                <div class="form-group">
-                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
-                  {{ field }}
-                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
-                  {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
-                </div>
+                {% if field.name != 'issue' %}
+                  <div class="form-group">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                    {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                  </div>
+                {% endif %}
               {% endfor %}
             </div>
             <button class="btn btn-primary" type="submit"><i data-lucide="arrow-up-circle"></i> Escalate</button>
