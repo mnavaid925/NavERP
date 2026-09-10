@@ -23,13 +23,8 @@
           <form method="post" action="{% url 'projects:bvr_approve' obj.pk %}" onsubmit="return confirm('Approve revision {{ obj.number }}? Activation is a separate step.');">{% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
           </form>
-          <form method="post" action="{% url 'projects:bvr_reject' obj.pk %}" onsubmit="return confirm('Reject revision {{ obj.number }}? A stated reason is required.');">{% csrf_token %}
-            <div class="form-group">
-              <label class="form-label" for="id_reject_notes">Reason</label>
-              <textarea name="decision_notes" id="id_reject_notes" class="form-textarea" rows="3" required></textarea>
-            </div>
-            <button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Reject</button>
-          </form>
+          {# The reject form lives in the Revision card body (the prq precedent) — a textarea in
+             .page-actions (flex, no wrap) renders ~20ch wide beside Approve and overflows. #}
         {% elif obj.status == 'approved' and not obj.activated_at %}
           <form method="post" action="{% url 'projects:bvr_activate' obj.pk %}" onsubmit="return confirm('Activate revision {{ obj.number }} as the cost baseline? Every other approved revision of this project is superseded.');">{% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="flag"></i> Activate as Baseline</button>
@@ -58,6 +53,17 @@
       {% if obj.impact_note %}<p><strong>Cost impact.</strong> {{ obj.impact_note|linebreaksbr }}</p>{% endif %}
       {% if obj.schedule_impact_note %}<p><strong>Schedule impact.</strong> {{ obj.schedule_impact_note|linebreaksbr }}</p>{% endif %}
       {% if obj.decision_notes %}<p><strong>Decision notes.</strong> {{ obj.decision_notes|linebreaksbr }}</p>{% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}{% if obj.status == 'pending_approval' %}
+        {# Role- AND status-gated exactly like the page-actions verbs: the view refuses anything
+           else, and rendering a required-looking textarea that can only bounce is worse. #}
+        <form method="post" action="{% url 'projects:bvr_reject' obj.pk %}" onsubmit="return confirm('Reject revision {{ obj.number }}? A stated reason is required.');">{% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_reject_notes">Reason</label>
+            <textarea name="decision_notes" id="id_reject_notes" class="form-textarea" rows="3" required></textarea>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Reject</button>
+        </form>
+      {% endif %}{% endif %}
     </div>
   </div>
 
