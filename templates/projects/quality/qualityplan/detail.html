@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Quality Plan{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:qpl_list' %}">Quality Plans</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_verification_method_display }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:qpl_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="flag"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div><div class="stat-value">{{ obj.get_verification_method_display }}</div><div class="stat-label">Verification method</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{% if obj.planned_review_date %}{{ obj.planned_review_date|date:"M d, Y" }}{% else %}—{% endif %}</div><div class="stat-label">Planned review</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="user"></i></div><div class="stat-value">{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</div><div class="stat-label">Owner</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Plan statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Source risk</dt><dd>{% if obj.source_risk %}<a href="{% url 'projects:rsk_detail' obj.source_risk_id %}">{{ obj.source_risk.number }}</a> {{ obj.source_risk.title }}{% else %}—{% endif %}</dd>
+        <dt>Verification method</dt><dd><span class="badge badge-info">{{ obj.get_verification_method_display }}</span></dd>
+        <dt>Standard reference</dt><dd>{% if obj.standard_reference %}{{ obj.standard_reference }}{% else %}—{% endif %}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Planned review</dt><dd>{% if obj.planned_review_date %}{{ obj.planned_review_date|date:"M d, Y" }}{% if obj.is_review_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd>
+        <dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by.get_full_name|default:obj.approved_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Approved at</dt><dd>{% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+      {% if obj.description %}<p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Acceptance criteria &amp; standard</h2></div>
+    <div class="card-body">
+      <p><strong>Acceptance criteria.</strong> {{ obj.acceptance_criteria|linebreaksbr }}</p>
+      {% if obj.regulatory_requirement %}<p><strong>Regulatory requirement.</strong> {{ obj.regulatory_requirement|linebreaksbr }}</p>{% endif %}
+      {% comment %}
+        The standard and the regulation are free text: a standards master and a regulatory library
+        are 7.19's master data, and a second table here would give the workspace two places to look
+        for the same clause (Ruling 3).
+      {% endcomment %}
+      {% if not obj.regulatory_requirement %}<p class="text-muted">No regulatory requirement recorded — add the clause this plan answers to if the deliverable is regulated.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Linked reviews</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Review</th><th>Type</th><th>Reviewer</th><th>Date</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for r in linked_reviews %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qrv_detail' r.pk %}">{{ r.number }}</a><div class="text-muted">{{ r.title }}</div></td>
+              <td>{{ r.get_review_type_display }}</td>
+              <td>{% if r.reviewer %}{{ r.reviewer.get_full_name|default:r.reviewer.email }}{% else %}—{% endif %}</td>
+              <td>{{ r.review_date|date:"M d, Y" }}</td>
+              <td>{% if r.status == 'closed' %}<span class="badge badge-green">{{ r.get_status_display }}</span>{% elif r.status == 'reported' %}<span class="badge badge-amber">{{ r.get_status_display }}</span>{% elif r.status == 'in_progress' %}<span class="badge badge-info">{{ r.get_status_display }}</span>{% elif r.status == 'planned' %}<span class="badge badge-slate">{{ r.get_status_display }}</span>{% elif r.status == 'cancelled' %}<span class="badge badge-muted">{{ r.get_status_display }}</span>{% else %}{{ r.get_status_display }}{% endif %}</td>
+              <td><a href="{% url 'projects:qrv_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="search-check"></i><h3>No linked reviews</h3><p>A quality review that names this plan checks the criteria against it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Linked inspections</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Inspection</th><th>Type</th><th>Inspector</th><th>Result</th><th>Decision</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for i in linked_inspections %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qci_detail' i.pk %}">{{ i.number }}</a><div class="text-muted">{{ i.title }}</div></td>
+              <td>{{ i.get_inspection_type_display }}</td>
+              <td>{% if i.inspector %}{{ i.inspector.get_full_name|default:i.inspector.email }}{% else %}—{% endif %}</td>
+              <td>{% if i.result == 'pass' %}<span class="badge badge-green">{{ i.get_result_display }}</span>{% elif i.result == 'fail' %}<span class="badge badge-red">{{ i.get_result_display }}</span>{% elif i.result == 'conditional' %}<span class="badge badge-amber">{{ i.get_result_display }}</span>{% elif i.result == 'pending' %}<span class="badge badge-slate">{{ i.get_result_display }}</span>{% elif i.result == 'not_applicable' %}<span class="badge badge-muted">{{ i.get_result_display }}</span>{% else %}{{ i.get_result_display }}{% endif %}</td>
+              <td>{{ i.get_usage_decision_display }}</td>
+              <td>{{ i.get_status_display }}</td>
+              <td><a href="{% url 'projects:qci_detail' i.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No inspections yet</h3><p>An inspection tests these criteria and records the result and the usage decision.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Linked defects</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Defect</th><th>Category</th><th>Severity</th><th>Owner</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for d in linked_defects %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qdf_detail' d.pk %}">{{ d.number }}</a><div class="text-muted">{{ d.title }}</div></td>
+              <td>{{ d.get_defect_category_display }}</td>
+              <td>{% if d.severity == 'critical' %}<span class="badge badge-red">{{ d.get_severity_display }}</span>{% elif d.severity == 'major' %}<span class="badge badge-amber">{{ d.get_severity_display }}</span>{% elif d.severity == 'minor' %}<span class="badge badge-info">{{ d.get_severity_display }}</span>{% elif d.severity == 'observation' %}<span class="badge badge-green">{{ d.get_severity_display }}</span>{% else %}{{ d.get_severity_display }}{% endif %}</td>
+              <td>{% if d.owner %}{{ d.owner.get_full_name|default:d.owner.email }}{% else %}—{% endif %}</td>
+              <td>{% if d.due_date %}{{ d.due_date|date:"M d, Y" }}{% if d.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+              <td>{{ d.get_status_display }}</td>
+              <td><a href="{% url 'projects:qdf_detail' d.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No defects linked</h3><p>A defect names the criterion it violates — link one when an inspection finds a gap.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    The lifecycle panel. A superseded or closed plan is frozen evidence, so the buttons only render
+    while the row is live. Approving stamps the approver and the moment in the same request;
+    superseding an active plan is an admin act (L27).
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Lifecycle</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'projects:qpl_approve' obj.pk %}" onsubmit="return confirm('Approve plan {{ obj.number }}? It becomes active.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Approve plan</button>
+        </form>
+        <p class="text-muted">Approving activates the plan and stamps the approver and the moment. The criteria are then live for inspections to measure against.</p>
+      {% elif obj.status == 'active' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'projects:qpl_supersede' obj.pk %}" onsubmit="return confirm('Supersede plan {{ obj.number }}?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Supersede</button>
+          </form>
+          <p class="text-muted">This plan is active. Superseding it retires it in favour of a replacement — an admin act, because an active plan is evidence.</p>
+        {% else %}
+          <p class="text-muted">This plan is active. Superseding it is an admin act.</p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">{{ obj.get_status_display }} on {% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}. A superseded or closed plan is frozen — it cannot be edited or deleted.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:qpl_list' %}" class="btn btn-outline">Back to Register</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:qpl_delete' obj.pk %}" onsubmit="return confirm('Delete plan {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
