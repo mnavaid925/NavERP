@@ -51,7 +51,8 @@ def _actuals_rows(tenant, win_start, win_end):
                    .filter(tenant=tenant, resource_id__isnull=False,
                            booking_status__in=("soft", "firm"),
                            start_date__lte=win_end)
-                   .filter(Q(end_date__isnull=True) | Q(end_date__gte=win_start)))
+                   .filter(Q(end_date__isnull=True) | Q(end_date__gte=win_start))
+                   .select_related("resource"))
     for alloc in live_allocs:
         key = (alloc.resource_id, alloc.project_id)
         if key in actuals:
