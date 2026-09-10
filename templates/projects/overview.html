@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time) and the 7.4 cost layer (budgets, control accounts, expenses). Risk and the rest of Module 7 are separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses) and the 7.5 risk layer (register, response actions, issues, escalations). The rest of Module 7 is separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -117,6 +117,36 @@
               <td class="fw-600"><a href="{% url 'projects:pex_list' %}">Expenses</a></td>
               <td>Commitments, actuals and accruals; only posted rows count against the budget.</td>
               <td><a href="{% url 'projects:pex_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:rsk_list' %}">Risk Register</a></td>
+              <td>Threats and opportunities with probability × impact, EMV and the response strategy.</td>
+              <td><a href="{% url 'projects:rsk_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:risk_analysis' %}">Risk Analysis</a></td>
+              <td>The probability/impact matrix, the EMV table and a seeded Monte Carlo run.</td>
+              <td><a href="{% url 'projects:risk_analysis' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:rra_list' %}">Response Actions</a></td>
+              <td>Who owes which mitigation, by when, at what cost, and what activates it.</td>
+              <td><a href="{% url 'projects:rra_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:iss_list' %}">Issue Log</a></td>
+              <td>Capture, severity, resolution and the current escalation level.</td>
+              <td><a href="{% url 'projects:iss_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:esc_list' %}">Escalations</a></td>
+              <td>The recorded escalation path — level, target role, reason and outcome.</td>
+              <td><a href="{% url 'projects:esc_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:risk_monitoring' %}">Risk Monitoring</a></td>
+              <td>Top risks, the exposure burn-down, the review queue and the lessons lens.</td>
+              <td><a href="{% url 'projects:risk_monitoring' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>
