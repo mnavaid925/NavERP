@@ -622,6 +622,8 @@ class Command(BaseCommand):
                      note="Workspace, tooling and licences — not charged to a control account.")
                 line(base, "contingency", "25000.00",
                      note="Management-held reserve outside the control accounts.")
+                line(base, "other", "5000.00",
+                     note="Sundry costs — bank charges, printing and couriers.")
 
                 # The change request under approval: a full replacement budget (a revision
                 # carries the whole line set, so amount_delta reads total-vs-total) that adds
