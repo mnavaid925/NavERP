@@ -1777,6 +1777,27 @@ LIVE_LINKS = {
         # Extra live leaf: the escalation queue is the issue log's `?escalated=1` lens.
         "Issue Escalation Queue":                "projects:iss_list?escalated=1",
     },
+    # ----- 7.7 Scope & Requirements Management -----
+    # Two of the five bullets are LENSES rather than pages, and deliberately so. Elicitation has no
+    # register of its own: the technique and the party a requirement came from are columns ON the
+    # requirement, so that bullet deep-links the register (7.1's business-case precedent). And
+    # documentation/traceability is the COMPUTED matrix — a stored traceability table goes stale the
+    # instant somebody links a requirement, so the matrix is a view over the register's `wbs_node`
+    # links and the verification log (7.3's `capacity_demand` precedent). The three registers that
+    # do exist — the boundary/assumption/constraint registry, the CCB change register and the
+    # deliverable acceptance log — are bullets 3, 4 and 5.
+    "7.7": {
+        "Requirements Elicitation":              "projects:req_list",
+        # The requirement × work-package traceability matrix plus the coverage gaps and the scope
+        # creep board — all computed over the registers, nothing stored.
+        "Requirements Documentation & Traceability": "projects:scope_matrix",
+        "Scope Definition & Boundaries":         "projects:sci_list",
+        "Change Request Management":             "projects:scr_list",
+        "Scope Verification & Control":          "projects:svr_list",
+        # Extra live leaf: the requirements awaiting a decision are the register's
+        # `?status=submitted` lens (7.2's "Task Register" / 7.5's escalation-queue precedent).
+        "Requirement Approval Queue":            "projects:req_list?status=submitted",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
