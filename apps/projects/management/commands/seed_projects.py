@@ -69,11 +69,15 @@ from apps.projects.models import (
     ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
+    Requirement,
     ResourceAllocation,
     ResourceProfile,
     ResourceTimeEntry,
     RiskResponseAction,
     ScheduleBaseline,
+    ScopeChangeRequest,
+    ScopeItem,
+    ScopeVerification,
     TaskDependency,
 )
 
@@ -212,6 +216,10 @@ class Command(BaseCommand):
             ProjectBudgetLine.objects.all().delete()
             CostControlAccount.objects.all().delete()
             BudgetRevision.objects.all().delete()
+            ScopeVerification.objects.all().delete()
+            ScopeChangeRequest.objects.all().delete()
+            ScopeItem.objects.all().delete()
+            Requirement.objects.all().delete()
             IssueEscalation.objects.all().delete()
             ProjectIssue.objects.all().delete()
             RiskResponseAction.objects.all().delete()
@@ -286,6 +294,9 @@ class Command(BaseCommand):
         # 7.5 has its OWN guard too — the risk register, its response actions, the issue log and
         # the recorded escalation path.
         self._risk(tenant, now)
+        # 7.7 has its OWN guard too — the requirement register with its traceability links, the
+        # boundary/assumption/constraint registry, the CCB change register and the acceptance log.
+        self._scope(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -946,6 +957,325 @@ class Command(BaseCommand):
             f"{RiskResponseAction.objects.filter(tenant=tenant).count()} response actions, "
             f"{ProjectIssue.objects.filter(tenant=tenant).count()} issues, "
             f"{IssueEscalation.objects.filter(tenant=tenant).count()} escalations."))
+
+    def _scope(self, tenant, now):
+        """Requirements + boundary registry + CCB changes + acceptance log, guarded per tenant.
+
+        Sized so the traceability matrix and the creep board have something real to compute over:
+        15 requirements per tenant (12 on the active project, 3 on the chartered one) covering every
+        ``requirement_type``, every elicitation technique, all four MoSCoW priorities and all seven
+        statuses — with three rows deliberately left **untraced** (no work package) so the coverage
+        gap list is non-empty, and three approved/implemented rows so the "never verified" gap is too.
+
+        The change register covers all six statuses, with approved rows carrying a cost impact, a
+        schedule impact and a quality impact each (so all three creep dimensions are non-zero) and
+        one material change whose cost crosses ``HIGH_COST``. ``decided_at`` is stamped on every
+        approved/rejected/implemented row because the creep board aggregates by the decision month.
+
+        The acceptance log covers all three results and all four acceptance statuses, including a
+        waived gate and a rejected deliverable with its mandatory written reason.
+        """
+        if Requirement.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: requirement rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        projects = list(Project.objects.filter(tenant=tenant))
+        active = next((p for p in projects if p.status == "active"), None)
+        chartered = next((p for p in projects if p.status == "chartered"), None)
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        if not users:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no users - run seed_accounts first. Skipping scope."))
+            return
+        manager = next((p.project_manager for p in projects if p.project_manager_id), None)
+        owner = users[1] if len(users) > 1 else manager
+        requester = users[0]
+        parties = list(Party.objects.filter(tenant=tenant).order_by("id"))
+        party = parties[0] if parties else None
+        today = timezone.localdate()
+
+        def req(project, title, rtype, method, priority, status, wbs=None, **kw):
+            obj = Requirement(
+                tenant=tenant, project=project, wbs_node=wbs, title=title,
+                description=kw.get("description") or f"{title}. Captured during the project's "
+                                                     f"requirements workstream.",
+                requirement_type=rtype, elicitation_method=method, priority=priority,
+                status=status, source_party=party, owner=owner, requested_by=requester,
+                acceptance_criteria=kw.get("acceptance_criteria", ""),
+                elicitation_note=kw.get("elicitation_note", ""),
+                version=kw.get("version", "1.0"),
+                verification_method=kw.get("verification_method", "test"),
+                rejection_reason=kw.get("rejection_reason", ""),
+                approved_by=owner if status in ("approved", "implemented", "verified") else None,
+                approved_at=now if status in ("approved", "implemented", "verified") else None,
+                verified_by=owner if status == "verified" else None,
+                verified_at=now if status == "verified" else None,
+                verification_note=kw.get("verification_note", ""),
+                created_by=requester)
+            obj.save()
+            return obj
+
+        def item(project, statement, item_type, impact, status, requirement=None, **kw):
+            obj = ScopeItem(
+                tenant=tenant, project=project, requirement=requirement, statement=statement,
+                description=kw.get("description", ""), item_type=item_type, impact_area=impact,
+                status=status, owner=owner,
+                identified_date=today - timedelta(days=kw.get("age", 40)),
+                review_date=(today + timedelta(days=kw["review_offset"])
+                             if kw.get("review_offset") is not None else None),
+                outcome=kw.get("outcome", ""),
+                closed_at=now if status in ("realized", "retired") else None,
+                created_by=requester)
+            obj.save()
+            return obj
+
+        def change(project, title, source, priority, cost, days, quality, status, **kw):
+            decided = status in ("approved", "rejected", "implemented")
+            obj = ScopeChangeRequest(
+                tenant=tenant, project=project, requirement=kw.get("requirement"),
+                risk=kw.get("risk"), title=title,
+                description=kw.get("description") or f"{title}. Raised through the project's "
+                                                    f"change control process.",
+                justification=kw.get("justification", ""), source=source, priority=priority,
+                schedule_impact_days=days, cost_impact=Decimal(cost), quality_impact=quality,
+                quality_note=kw.get("quality_note", ""), status=status,
+                decision_note=kw.get("decision_note", ""), requested_by=requester,
+                decided_by=owner if decided else None,
+                decided_at=now - timedelta(days=kw.get("decided_age", 10)) if decided else None,
+                implemented_at=now - timedelta(days=kw["impl_age"])
+                if status == "implemented" else None,
+                created_by=requester)
+            obj.save()
+            return obj
+
+        def verification(project, deliverable, method, result, acceptance, **kw):
+            decided = acceptance != "pending"
+            obj = ScopeVerification(
+                tenant=tenant, project=project, wbs_node=kw.get("wbs"),
+                requirement=kw.get("requirement"), deliverable=deliverable, method=method,
+                result=result, acceptance_status=acceptance, inspected_by=owner,
+                inspection_date=today - timedelta(days=kw.get("age", 12)),
+                findings=kw.get("findings", ""), decision_note=kw.get("decision_note", ""),
+                accepted_by=owner if decided else None,
+                accepted_at=now if decided else None, created_by=requester)
+            obj.save()
+            return obj
+
+        with transaction.atomic():
+            if active is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=active)}
+                risks = {r.title: r for r in ProjectRisk.objects.filter(tenant=tenant,
+                                                                        project=active)}
+
+                r_sso = req(active, "Single sign-on for the customer portal", "functional",
+                            "interview", "must", "verified", tasks.get("Technical spike: SSO"),
+                            acceptance_criteria="A user can sign in through the corporate identity "
+                                                "provider and is returned to the page they asked for.",
+                            elicitation_note="Walked through the sign-in journey with the platform "
+                                             "team; the redirect contract was the sticking point.",
+                            verification_method="demonstration", version="1.1",
+                            verification_note="Demonstrated in the sandbox on the agreed redirect "
+                                              "contract.")
+                r_perf = req(active, "Order API responds within 300 ms at p95", "non_functional",
+                             "workshop", "must", "implemented", tasks.get("Order API"),
+                             acceptance_criteria="The agreed load profile shows p95 latency at or "
+                                                 "below 300 ms.",
+                             verification_method="test")
+                r_saved = req(active, "Checkout supports saved payment methods", "functional",
+                              "user_story", "should", "approved",
+                              tasks.get("Checkout integration"),
+                              acceptance_criteria="A returning customer can pay with a stored "
+                                                  "method in one step.")
+                r_returns = req(active, "Returns can be raised without contacting support",
+                                "business", "survey", "must", "submitted",
+                                tasks.get("Returns portal UI"),
+                                acceptance_criteria="A customer completes a standard return "
+                                                    "unaided in under three minutes.")
+                r_refund = req(active, "Refund service complies with the payment scheme rules",
+                               "regulatory", "document_analysis", "must", "verified",
+                               tasks.get("Refund service hooks"),
+                               acceptance_criteria="The scheme's refund timing and evidence rules "
+                                                   "are satisfied for every refund path.",
+                               verification_method="analysis",
+                               verification_note="Evidence pack reviewed against the scheme's "
+                                                 "published rules.")
+                r_wcag = req(active, "Cart screens meet WCAG 2.2 AA", "non_functional",
+                             "prototype", "should", "approved", tasks.get("Cart UI"),
+                             acceptance_criteria="An automated audit plus a manual keyboard pass "
+                                                 "find no level-AA failures.",
+                             verification_method="inspection")
+                req(active, "Order confirmation email is localised", "functional", "brainstorm",
+                    "could", "draft",
+                    acceptance_criteria="The confirmation renders in the customer's locale.")
+                req(active, "Supplier catalogue CSV dialect is accepted on import", "interface",
+                    "document_analysis", "could", "deferred",
+                    acceptance_criteria="A supplier file in the documented dialect imports without "
+                                        "manual edits.")
+                req(active, "Guest checkout in the first release", "business", "workshop", "wont",
+                    "rejected", rejection_reason="Rejected by the sponsor: guest checkout is "
+                                                 "deferred until the identity work lands.")
+                r_history = req(active, "Order history is searchable by order number", "functional",
+                                "observation", "should", "implemented", tasks.get("Order API"),
+                                acceptance_criteria="A search on an exact order number returns that "
+                                                    "order in under two seconds.")
+                r_session = req(active, "Session timeout follows the security policy", "technical",
+                                "interview", "must", "verified", tasks.get("Order API"),
+                                acceptance_criteria="Idle sessions expire on the policy's schedule "
+                                                    "and warn before they do.",
+                                verification_method="analysis",
+                                verification_note="Configuration reviewed against the security "
+                                                  "policy's session section.")
+                req(active, "Payment provider sandbox mirrors production behaviour", "technical",
+                    "workshop", "should", "draft",
+                    acceptance_criteria="The sandbox returns the same error shapes as production.")
+
+                item(active, "Release 3 covers the self-service ordering journey end to end",
+                     "in_scope", "scope", "validated",
+                     description="From catalogue browse to order confirmation, without a support "
+                                 "intervention.")
+                item(active, "Marketplace seller onboarding is not in release 3", "out_of_scope",
+                     "scope", "validated",
+                     description="Deferred to the marketplace programme; no release-3 work.")
+                item(active, "Multi-currency pricing is deferred to release 4", "out_of_scope",
+                     "cost", "open", review_offset=21)
+                item(active, "The identity provider sandbox is available throughout the build",
+                     "assumption", "schedule", "realized",
+                     outcome="The sandbox slipped by two weeks, which pushed the SSO spike and "
+                             "consumed the schedule float on the critical path.")
+                item(active, "Load-test infrastructure is provisioned by the platform team",
+                     "assumption", "resource", "open", review_offset=-6)
+                item(active, "Go-live is fixed by the retail peak freeze", "constraint",
+                     "schedule", "validated",
+                     description="No production change after the peak freeze window opens.")
+                item(active, "PCI DSS scope excludes card data at rest", "constraint",
+                     "compliance", "validated",
+                     description="The provider tokenises; no card number reaches our storage.")
+                item(active, "The checkout interface is delivered by the partner's sandbox",
+                     "dependency", "schedule", "realized",
+                     outcome="Certification completed three weeks late; the interface landed with "
+                             "the fallback plan already agreed.")
+                item(active, "Returns self-service is in release 3 for standard orders", "in_scope",
+                     "scope", "open", review_offset=14)
+                item(active, "The design-system version is pinned in the build", "assumption",
+                     "quality", "retired",
+                     outcome="Superseded — the design system is now pinned in the build pipeline "
+                             "itself, so the assumption no longer needs tracking.")
+
+                change(active, "Add saved payment methods to checkout", "client", "high", "48000.00",
+                       15, "medium", "approved", requirement=r_saved,
+                       justification="Repeat customers abandon at the payment step; the client's "
+                                     "usability study puts the recovery at 4% of orders.",
+                       quality_note="The stored-method selector needs a full design review.",
+                       decided_age=34)
+                change(active, "Extend the returns window from 14 to 30 days", "client", "medium",
+                       "12000.00", 5, "low", "implemented", requirement=r_returns,
+                       justification="Competitor parity — the client's policy is now 30 days.",
+                       decided_age=52, impl_age=30)
+                change(active, "Add multi-currency pricing to release 3", "internal", "critical",
+                       "180000.00", 40, "high", "rejected",
+                       justification="Would open three additional markets this year.",
+                       decision_note="Rejected: the cost and the forty-day schedule impact cannot "
+                                     "be absorbed before the peak freeze. Revisit for release 4.",
+                       quality_note="Pricing rules would need a second approval path.",
+                       decided_age=26)
+                change(active, "Reduce the accessibility target on the checkout screens",
+                       "regulatory", "medium", "0.00", -10, "high", "rejected",
+                       justification="Buy ten days by shipping checkout at a lower conformance "
+                                     "level.",
+                       decision_note="Rejected: the accessibility target is a regulatory "
+                                     "commitment, not a schedule lever.",
+                       decided_age=45)
+                change(active, "Add a loyalty points display to the cart", "internal", "low",
+                       "22000.00", 8, "none", "submitted",
+                       justification="Small, visible win for the loyalty programme.")
+                change(active, "Move the returns module to release 4", "internal", "high", "0.00",
+                       -30, "none", "under_review",
+                       justification="Frees the QA team for the checkout work.",
+                       description="De-scope the returns module to protect the checkout date.")
+                change(active, "Replace the legacy order export with the API", "technical",
+                       "medium", "9000.00", 3, "none", "draft",
+                       justification="Retires the last consumer of the legacy export job.")
+                change(active, "Add audit logging to the refund service", "regulatory", "high",
+                       "15000.00", 6, "medium", "approved",
+                       requirement=r_refund, decided_age=18,
+                       justification="The scheme's evidence rules require a retained audit trail "
+                                     "for every refund decision.",
+                       quality_note="Log retention length must match the scheme's minimum.",
+                       risk=risks.get("Refund service compliance review findings"))
+
+                verification(active, "Order API load-test report", "test", "pass", "accepted",
+                             wbs=tasks.get("Order API"), requirement=r_perf, age=20,
+                             findings="p95 held at 240 ms across the agreed profile; no error-rate "
+                                      "regression.")
+                verification(active, "Single sign-on integration demonstration", "demonstration",
+                             "pass", "accepted", wbs=tasks.get("Technical spike: SSO"),
+                             requirement=r_sso, age=16,
+                             findings="Redirect contract honoured on all three entry points.")
+                verification(active, "Refund service compliance evidence pack", "analysis", "pass",
+                             "accepted", wbs=tasks.get("Refund service hooks"),
+                             requirement=r_refund, age=14,
+                             findings="Every refund path evidenced against the scheme's timing and "
+                                      "retention rules.")
+                verification(active, "Order history search walkthrough", "demonstration",
+                             "conditional", "accepted", wbs=tasks.get("Order API"),
+                             requirement=r_history, age=9,
+                             findings="Exact-number search meets the target; partial matches are "
+                                      "slower than the stated target.",
+                             decision_note="Accepted on the condition that partial-match latency "
+                                           "is tracked as a follow-up.")
+                verification(active, "Session timeout configuration review", "review", "pass",
+                             "accepted", wbs=tasks.get("Order API"), requirement=r_session,
+                             age=7, findings="Idle expiry and the pre-expiry warning both match the "
+                                             "policy.")
+                verification(active, "Cart accessibility audit", "inspection", "conditional",
+                             "pending", wbs=tasks.get("Cart UI"), requirement=r_wcag, age=4,
+                             findings="Two level-AA contrast failures remain in the cart summary.")
+                verification(active, "Saved payment method demonstration", "demonstration", "pass",
+                             "pending", wbs=tasks.get("Checkout integration"), requirement=r_saved,
+                             age=2, findings="One-step stored-method payment works end to end.")
+                verification(active, "Returns portal design review", "review", "fail", "rejected",
+                             wbs=tasks.get("Returns portal UI"), requirement=r_returns, age=5,
+                             findings="The unaided-completion path needs a support contact.",
+                             decision_note="Rejected: the requirement is specifically that a "
+                                           "customer can complete a return unaided.")
+                verification(active, "Supplier catalogue import dry run", "test", "conditional",
+                             "waived", age=11,
+                             findings="The supplier's dialect differs in two columns; a mapping "
+                                      "sheet resolves it.",
+                             decision_note="Waived by the sponsor: the supplier will be asked to "
+                                           "use the documented dialect instead.")
+
+            if chartered is not None:
+                tasks = {t.name: t for t in ProjectTask.objects.filter(tenant=tenant,
+                                                                       project=chartered)}
+                req(chartered, "Scorecard publishes on the agreed quarterly cadence", "business",
+                    "interview", "must", "approved", tasks.get("Quarterly publication"),
+                    acceptance_criteria="Four published cycles with no missed quarter.",
+                    version="1.2")
+                req(chartered, "Data collection pipeline ingests partner files", "interface",
+                    "document_analysis", "should", "submitted",
+                    tasks.get("Data collection pipeline"),
+                    acceptance_criteria="A partner file in the agreed schema lands in the "
+                                        "warehouse within one hour.")
+                req(chartered, "Metric definitions are signed off by the finance owner", "business",
+                    "workshop", "must", "draft",
+                    acceptance_criteria="Every published metric names its owner and its formula.")
+
+                item(chartered, "Partner data files arrive in the agreed schema", "assumption",
+                     "quality", "open", review_offset=10)
+                item(chartered, "The scorecard uses the group's published metric definitions",
+                     "constraint", "compliance", "validated")
+
+                change(chartered, "Bring the scorecard forward by one quarter", "internal", "high",
+                       "65000.00", 22, "medium", "under_review",
+                       justification="The board wants the scorecard in the next reporting cycle.")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {Requirement.objects.filter(tenant=tenant).count()} requirements, "
+            f"{ScopeItem.objects.filter(tenant=tenant).count()} scope items, "
+            f"{ScopeChangeRequest.objects.filter(tenant=tenant).count()} change requests, "
+            f"{ScopeVerification.objects.filter(tenant=tenant).count()} inspections."))
 
     def _wbs(self, tenant, project, manager, today, spec):
         """Build the WBS from a spec; return a name -> task map for the dependency specs.
