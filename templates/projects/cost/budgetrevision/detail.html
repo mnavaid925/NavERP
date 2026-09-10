@@ -64,8 +64,13 @@
   <div class="card">
     <div class="card-header"><h2>Impact vs active baseline</h2></div>
     <div class="card-body">
-      <p class="stat-value">{{ obj.amount_delta }}</p>
-      <p class="text-muted">This revision's line total against the project's active baseline (zero when this row IS the baseline or no baseline exists yet).</p>
+      {# theme.css only styles `.stat-card .stat-value` — the approver's headline number rides the
+         overview's stat-card markup so it actually renders as one. #}
+      <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+        <p class="stat-value">{{ obj.amount_delta }}</p>
+        <div class="stat-label">This revision's line total against the project's active baseline (zero when this row IS the baseline or no baseline exists yet).</div>
+      </div>
     </div>
   </div>
 
