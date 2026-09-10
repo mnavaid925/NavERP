@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Risk Response Actions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Risk Response Actions</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Response Actions</span></div>
+      <p class="text-muted">One row per committed action that executes a risk's response — who owns it, by when, at what cost and behind which trigger. A strategy with no action is a plan with no owner.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:rra_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Action</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, description or trigger…">
+        </div>
+        <div class="form-group">
+          <select name="risk" aria-label="Risk" class="form-select">
+            <option value="">Any risk</option>
+            {% for r in risks %}
+              <option value="{{ r.pk }}" {% if request.GET.risk == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.number }} — {{ r.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="strategy" aria-label="Strategy" class="form-select">
+            <option value="">Any strategy</option>
+            {% for val, label in strategy_choices %}
+              <option value="{{ val }}" {% if request.GET.strategy == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="overdue"><input type="checkbox" id="overdue" name="overdue" value="1" {% if request.GET.overdue == '1' %}checked{% endif %}> Overdue</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:rra_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Action</th><th>Risk</th><th>Strategy</th><th>Owner</th><th>Due</th><th class="text-right">Cost</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:rra_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:rsk_detail' obj.risk_id %}">{{ obj.risk.number }}</a></td>
+              <td>{{ obj.get_strategy_display }}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right fw-600">{{ obj.cost }}</td>
+              <td>
+                {% if obj.status == 'completed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:rra_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_locked %}
+                    <form method="post" action="{% url 'projects:rra_complete' obj.pk %}" onsubmit="return confirm('Complete action {{ obj.number }}?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Complete"><i data-lucide="check-circle-2"></i></button>
+                    </form>
+                    <a href="{% url 'projects:rra_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:rra_delete' obj.pk %}" onsubmit="return confirm('Delete action {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No response actions match</h3><p>An action carries its own owner, due date and trigger — that is what turns a strategy into a plan.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
