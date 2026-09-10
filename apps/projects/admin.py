@@ -153,10 +153,11 @@ class BudgetRevisionAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     list_select_related = ("tenant", "project")
     search_fields = ("number", "title", "reason")
-    # status and every stamp are verb-driven (submit/approve/reject/activate) — an admin-form
-    # edit would mint evidence-less governance state.
-    readonly_fields = ("status", "created_at", "updated_at", "created_by", "requested_at",
-                       "decided_by", "decided_at", "activated_at")
+    # status, decision_notes and every stamp are verb-driven (submit/approve/reject/activate) —
+    # an admin-form edit would mint evidence-less governance state (the 7.2 ResourceTimeEntry
+    # readonly decision_note precedent).
+    readonly_fields = ("status", "decision_notes", "created_at", "updated_at", "created_by",
+                       "requested_at", "decided_by", "decided_at", "activated_at")
 
 
 @admin.register(CostControlAccount)
