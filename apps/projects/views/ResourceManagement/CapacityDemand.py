@@ -55,7 +55,8 @@ def capacity_demand(request):
                        .filter(tenant=tenant, resource_id__isnull=False,
                                booking_status__in=("soft", "firm"),
                                start_date__lte=horizon_end)
-                       .filter(Q(end_date__isnull=True) | Q(end_date__gte=horizon_start)))
+                       .filter(Q(end_date__isnull=True) | Q(end_date__gte=horizon_start))
+                       .select_related("resource"))
     allocs_by_resource = defaultdict(list)
     for alloc in capacity_allocs:
         allocs_by_resource[alloc.resource_id].append(alloc)
