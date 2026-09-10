@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Quality Review Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Quality Review Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Quality Reviews</span></div>
+      <p class="text-muted">One row per quality review — assurance checks (methodology, compliance, gate) and continuous-improvement events (kaizen, retrospective, maturity). The improvement due flag is computed from the date and the improvement status.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:qrv_list' %}?kind=assurance" class="btn btn-outline"><i data-lucide="shield-check"></i> Assurance (QA)</a>
+      <a href="{% url 'projects:qrv_list' %}?kind=improvement" class="btn btn-outline"><i data-lucide="trending-up"></i> Continuous Improvement</a>
+      <a href="{% url 'projects:qrv_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Quality Review</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, scope, findings or improvement…">
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Lens" class="form-select">
+            <option value="">All reviews</option>
+            <option value="assurance" {% if request.GET.kind == 'assurance' %}selected{% endif %}>Assurance (QA)</option>
+            <option value="improvement" {% if request.GET.kind == 'improvement' %}selected{% endif %}>Continuous improvement</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="review_type" aria-label="Review type" class="form-select">
+            <option value="">Any type</option>
+            {% for val, label in review_type_choices %}
+              <option value="{{ val }}" {% if request.GET.review_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="improvement_status" aria-label="Improvement status" class="form-select">
+            <option value="">Any improvement</option>
+            {% for val, label in improvement_status_choices %}
+              <option value="{{ val }}" {% if request.GET.improvement_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reviewer" aria-label="Reviewer" class="form-select">
+            <option value="">Any reviewer</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.reviewer == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="overdue"><input type="checkbox" id="overdue" name="overdue" value="1" {% if request.GET.overdue == '1' %}checked{% endif %}> Improvement overdue</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:qrv_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Review</th><th>Project</th><th>Type</th><th>Reviewer</th><th>Date</th><th>Improvement</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qrv_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>
+                {% if obj.review_type == 'methodology_review' %}<span class="badge badge-slate">{{ obj.get_review_type_display }}</span>
+                {% elif obj.review_type == 'compliance_check' %}<span class="badge badge-info">{{ obj.get_review_type_display }}</span>
+                {% elif obj.review_type == 'gate_review' %}<span class="badge badge-info">{{ obj.get_review_type_display }}</span>
+                {% elif obj.review_type == 'kaizen_event' %}<span class="badge badge-green">{{ obj.get_review_type_display }}</span>
+                {% elif obj.review_type == 'retrospective' %}<span class="badge badge-green">{{ obj.get_review_type_display }}</span>
+                {% elif obj.review_type == 'maturity_assessment' %}<span class="badge badge-amber">{{ obj.get_review_type_display }}</span>
+                {% else %}{{ obj.get_review_type_display }}{% endif %}
+              </td>
+              <td>{% if obj.reviewer %}{{ obj.reviewer.get_full_name|default:obj.reviewer.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.review_date|date:"M d, Y" }}</td>
+              <td>
+                {% if obj.improvement_status == 'done' %}<span class="badge badge-green">{{ obj.get_improvement_status_display }}</span>
+                {% elif obj.improvement_status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_improvement_status_display }}</span>
+                {% elif obj.improvement_status == 'planned' %}<span class="badge badge-amber">{{ obj.get_improvement_status_display }}</span>
+                {% elif obj.improvement_status == 'n_a' %}<span class="badge badge-muted">{{ obj.get_improvement_status_display }}</span>
+                {% else %}{{ obj.get_improvement_status_display }}{% endif %}
+                {% if obj.improvement_due_date %}<div class="text-muted">{{ obj.improvement_due_date|date:"M d, Y" }}{% if obj.is_improvement_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'closed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'reported' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'planned' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}{{ obj.get_status_display }}{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:qrv_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_locked %}
+                    <a href="{% url 'projects:qrv_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:qrv_delete' obj.pk %}" onsubmit="return confirm('Delete review {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="search-check"></i><h3>No quality reviews match</h3><p>Plan an assurance review or a continuous-improvement event — the checklist, findings and improvement action are recorded on the row.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
