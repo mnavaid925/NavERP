@@ -159,6 +159,41 @@ Runtime verification against dev DB (migrated + seeded), in-process test client,
 
 ---
 
+---
+
+## 6. security-reviewer
+
+**No Critical findings.** Every list/detail/verb query is tenant-scoped, all state-change verbs are POST-only and admin-gated at the view, and there is no cross-tenant read or write path. The three Important findings are gate-integrity issues (the tenant-admin gate bypassable through ungated paths) plus one unescaped-JS-context interpolation. (Re-appended verbatim: a later rewrite of this file dropped the lane; the consolidated triage below always carried its findings.)
+
+### Critical
+
+None.
+
+### Important
+
+- **I-1. `BaselineForm` exposes `baseline_type` on edit — a member can "freeze" a row without `bsl_promote`, bypassing `@tenant_admin_required` and voiding the snapshot promise.** `forms/ProjectPlanningScheduling/ScheduleBaselines.py:14` + login-only `bsl_edit`. A crafted POST with `baseline_type=baseline` freezes the row directly: no `frozen_on`/snapshot, audit says `update` not `promote`, the row becomes permanently un-editable/un-deletable, and `bsl_activate` (which only checks `baseline_type != "baseline"`) can later activate this evidence-less row as the baseline 7.1's kickoff attestation points to. Fix: type immutable once created (field error on change). [Fixed as I1.]
+- **I-2. `MilestoneForm` exposes `status` — a member can achieve a milestone (even a cancelled one) through the ungated `mst_edit`, bypassing `mst_achieve`'s admin gate and its state guards.** Fix: drop `status` from the form (7.1 excludes verb-driven status). [Fixed as I2.]
+- **I-3. Stored XSS in the Activate confirm dialog — `obj.project.name` interpolated into an `onsubmit` JS string (`schedulebaseline/detail.html:16`).** HTML attribute-escaping does not protect the JS string context (entities decode before the JS engine compiles the handler); `project.name` is member-writable and even an innocent apostrophe kills the button. Fix: interpolate only `obj.number`. [Fixed as I3.]
+
+### Minor
+
+- **M-1. Gated verbs offered to non-admins — 403 buttons** (deviation from 7.1's explicit `{% if request.user.is_superuser or request.user.is_tenant_admin %}` template gating). [Fixed as I4.]
+- **M-2. Unbounded recursion in `critical_path_ids` and the WBS decoration — member-triggerable tenant-wide self-DoS** (~1000 chained nodes → RecursionError on every tree visit until rows are removed). Fix: explicit-stack iteration with hard caps. [Fixed as M1/M2.]
+- **M-3. `TaskForm` cycle walk costs up to 250 lazy FK queries per edit POST** — bounded but member-repeatable amplification. Fix: one prefetched pk→parent_id map. [Fixed as M3.]
+- **M-4. `ScheduleBaselineAdmin` leaves `is_active` and `baseline_type` directly editable** — flips without the atomic deactivate-siblings routine. Fix: `readonly_fields`. [Fixed as M9.]
+
+### Verified correct
+
+- **Tenant isolation (IDOR):** all four lists filter `tenant=request.tenant`; all details/verbs use `get_object_or_404(..., tenant=request.tenant)` (incl. the pre-fetches in the baseline views and `mst_achieve`); `tsk_tree` resolves `?project=` through `projects(request.tenant)` — a foreign pk falls back to the tenant's own project, no leak, no enumeration signal; `critical_path_ids`/`freeze_snapshot` transitively scoped; `as_db_int` guards the GET pk.
+- **FK surfaces:** `TenantModelForm` scopes every tenant-stamped ModelChoiceField; `_reject_foreign` re-checks `project`/`parent`/`predecessor`/`successor`/`anchor_task`; `owner` deliberately relies on queryset scoping (tenant-less superuser is a legitimate pick) — matches 7.1's `project_manager` treatment.
+- **Verb/CSRF safety:** no state mutation reachable via GET (creates/edits mutate only in the POST branch; deletes and all three verbs are `@require_POST`, `crud_delete` self-defending); `{% csrf_token %}` on every inline POST form.
+- **Auth split:** achieve/activate/promote `@tenant_admin_required`, plain CRUD login-only — coherent per the contract, except the two form-level bypasses above.
+- **Mass assignment:** `tenant`/`number`/`created_by` never in a form; `actual_date`, snapshot columns and `is_active` excluded; `number` stamped by `TenantNumbered.save()` with collision retry.
+- **Audit:** actions ≤10 chars with verb detail in `changes`; no 7.2 field name intersects `_SENSITIVE_AUDIT_FIELDS`; refusal messages leak no data.
+- **XSS surface:** no `|safe`/`mark_safe`/`autoescape off`/user-data inline styles; all other `confirm()` interpolations are system-generated numbers only.
+- **Admin surface:** all four ModelAdmins show the `tenant` column, `list_select_related`, no `raw_id_fields`.
+- **LIVE_LINKS/seed:** `?node_type=work_package` is an enum-validated filter over the tenant's own rows; `--flush` is management-command-only with documented scope; per-tenant seed guard; children-first delete order.
+
 # Consolidated triage (authoritative fix list)
 
 Deduped across the six lanes; Critical → Important → Minor; IDs are the fix order. Cross-lane
