@@ -1,9 +1,11 @@
 """Private helpers used by MORE THAN ONE sub-module's views.
 
-A helper used by a single entity stays in that entity's module. The first three here are the
-filter-dropdown builders shared by more than one of 7.1's/7.2's registers; the fourth,
-``critical_path_ids``, is 7.2's critical-chain pass over dependency edges. Same rule for all
-four: if only one consumer ever needs a helper, it moves to that consumer's module.
+A helper used by a single entity stays in that entity's module. ``org_units``, ``clients``
+and ``projects`` are the filter-dropdown builders shared by more than one of 7.1's/7.2's
+registers; ``resource_profiles`` and ``project_requests`` are 7.3's demand-lens pair (the
+request builder has one consumer today but is kept beside the pool builder it mirrors);
+``critical_path_ids`` is 7.2's critical-chain pass over dependency edges. Same rule for all
+six: if only one consumer ever needs a helper, it moves to that consumer's module.
 
 The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
 superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
