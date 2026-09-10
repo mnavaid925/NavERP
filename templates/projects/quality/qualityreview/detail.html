@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Quality Review{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:qrv_list' %}">Quality Reviews</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_review_type_display }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:qrv_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="flag"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="search-check"></i></div><div class="stat-value">{{ obj.get_review_type_display }}</div><div class="stat-label">Review type</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="calendar"></i></div><div class="stat-value">{{ obj.review_date|date:"M d, Y" }}</div><div class="stat-label">Review date</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="gauge"></i></div><div class="stat-value">{% if obj.maturity_score %}{{ obj.maturity_score }}/5{% else %}—{% endif %}</div><div class="stat-label">Maturity score</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Review statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Quality plan</dt><dd>{% if obj.quality_plan %}<a href="{% url 'projects:qpl_detail' obj.quality_plan_id %}">{{ obj.quality_plan.number }}</a> {{ obj.quality_plan.title }}{% else %}—{% endif %}</dd>
+        <dt>Review type</dt><dd>{{ obj.get_review_type_display }}</dd>
+        <dt>Reviewer</dt><dd>{% if obj.reviewer %}{{ obj.reviewer.get_full_name|default:obj.reviewer.email }}{% else %}—{% endif %}</dd>
+        <dt>Review date</dt><dd>{{ obj.review_date|date:"M d, Y" }}</dd>
+        <dt>Maturity score</dt><dd>{% if obj.maturity_score %}{{ obj.maturity_score }}/5{% else %}—{% endif %}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'closed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'reported' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'planned' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}{{ obj.get_status_display }}{% endif %}</dd>
+        <dt>Closed at</dt><dd>{% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+      {% if obj.scope %}<p><strong>Scope.</strong> {{ obj.scope|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Checklist &amp; findings</h2></div>
+    <div class="card-body">
+      {% if obj.checklist %}<p><strong>Checklist.</strong> {{ obj.checklist|linebreaksbr }}</p>{% endif %}
+      {% if obj.findings %}<p><strong>Findings.</strong> {{ obj.findings|linebreaksbr }}</p>{% endif %}
+      {% comment %}
+        The checklist is free text on the row: a reusable checklist library is 7.19's master data,
+        and a second table here would give the workspace two places to look for the same items
+        (Ruling 3).
+      {% endcomment %}
+      {% if not obj.checklist and not obj.findings %}<p class="text-muted">No checklist or findings recorded yet — capture them as the review is conducted.</p>{% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    The improvement panel. Bullet 4's output is planning data on the form, so it reads straight off
+    the row. The overdue flag is computed from the due date and the improvement status.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Improvement action</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Improvement status</dt><dd>{% if obj.improvement_status == 'done' %}<span class="badge badge-green">{{ obj.get_improvement_status_display }}</span>{% elif obj.improvement_status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_improvement_status_display }}</span>{% elif obj.improvement_status == 'planned' %}<span class="badge badge-amber">{{ obj.get_improvement_status_display }}</span>{% elif obj.improvement_status == 'n_a' %}<span class="badge badge-muted">{{ obj.get_improvement_status_display }}</span>{% else %}{{ obj.get_improvement_status_display }}{% endif %}</dd>
+        <dt>Improvement owner</dt><dd>{% if obj.improvement_owner %}{{ obj.improvement_owner.get_full_name|default:obj.improvement_owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Improvement due date</dt><dd>{% if obj.improvement_due_date %}{{ obj.improvement_due_date|date:"M d, Y" }}{% if obj.is_improvement_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd>
+      </dl>
+      {% if obj.improvement_action %}<p><strong>Action.</strong> {{ obj.improvement_action|linebreaksbr }}</p>{% endif %}
+      {% if not obj.improvement_action %}<p class="text-muted">No improvement action recorded — a kaizen or retrospective event normally leaves one with an owner and a due date.</p>{% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    The lifecycle panel. A closed or cancelled review is frozen evidence, so the buttons only render
+    while the row is live. Reporting captures the findings; closing stamps the moment the review was
+    retired.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Lifecycle</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'in_progress' %}
+        <form method="post" action="{% url 'projects:qrv_report' obj.pk %}" onsubmit="return confirm('Report review {{ obj.number }}?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="file-check-2"></i> Report review</button>
+        </form>
+        <p class="text-muted">Reporting records the findings as evidence. A reported review can then be closed.</p>
+      {% elif obj.status == 'reported' %}
+        <form method="post" action="{% url 'projects:qrv_close' obj.pk %}" onsubmit="return confirm('Close review {{ obj.number }}? It becomes frozen evidence.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle-2"></i> Close review</button>
+        </form>
+        <p class="text-muted">Closing stamps the moment and freezes the row — it can no longer be edited or deleted.</p>
+      {% else %}
+        <p class="text-muted">{{ obj.get_status_display }} on {% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}. A closed or cancelled review is frozen — it cannot be edited or deleted.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:qrv_list' %}" class="btn btn-outline">Back to Register</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:qrv_delete' obj.pk %}" onsubmit="return confirm('Delete review {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
