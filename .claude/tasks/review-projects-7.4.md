@@ -149,3 +149,67 @@ PASS 1 POST create paths (PBL-00032/BVR-00005/CCA-00004/PEX-00013 minted, number
 BVR 8/8 · CCA 6/6 · PBL 62/62 · PEX 24/24 (Acme 4/3/31/12 intact) · Projects 6/6 · AuditLog 4694/4694 · all four tables byte-identical.
 
 **Lane 5 count: 1 Critical (confirms lane 1; not a new discovery) / 0 Important / 2 Minor — plus 138/138 gap-probe checks green**
+
+---
+
+## Lane 6 — security-reviewer (2026-09-10, FINAL lane)
+
+60/60 runtime checks passed inside one force-rolled-back transaction; temp scripts deleted.
+
+### Findings
+
+**[Important] apps/projects/views/CostManagement/ProjectBudgetLines.py:112-123 — the ACTIVE cost baseline can be rewritten through its lines, bypassing change control.** `pbl_edit`/`pbl_delete` are login-only with no locked-revision guard, so any member can POST `/budgetlines/<pk>/edit/` and change (or delete) a `ProjectBudgetLine` belonging to the approved+activated revision — silently moving BAC, EV, PV, available, and the health badge for every control account that revision feeds, with no governance verb and only a field-level "update" audit row. The BVR row itself is frozen (`bvr_edit`/`bvr_delete` refuse `is_locked`), but the baseline's content is not; the same argument that froze posted expenses (deviation #3: "the evidence the EVM math reads") applies verbatim to baseline lines, and contradicts the module's own docstring ("a baseline that could be quietly rewritten would not be a baseline"). This matches the letter of the frozen contract (§5 "No verbs. Ordinary frozen-free CRUD.") so it needs a contract ruling, not a silent fix. Suggested fix: refuse PBL edit/delete when `obj.budget_revision.is_locked` (mirror `_LOCKED_MSG`), or route the decision through the contract first.
+
+**[Minor] apps/projects/admin.py:156-157 — `decision_notes` is editable in `BudgetRevisionAdmin`.** A Django-admin edit can rewrite the rejection rationale — verb-written evidence (`bvr_reject` is its only legitimate writer) — outside the gate. As-built matches the contract's pinned readonly list (§11.2), but the 7.2 precedent makes the equivalent field readonly (`ResourceTimeEntryAdmin.readonly_fields` includes `decision_note`, admin.py:143-144). Suggested fix: add `"decision_notes"` to `BudgetRevisionAdmin.readonly_fields`.
+
+**[Minor] apps/projects/views/CostManagement/BudgetRevisions.py:215-216 — `bvr_activate` hard-codes the audit `{"from": "approved"}` and writes its own audit row outside the atomic block.** The per-row `supersede` audits are inside `transaction.atomic()` while the main `activate` audit is after it — a failure between commit and audit leaves an activation with no audit row. Suggested fix: capture `previous` and move the `write_audit_log` call inside the atomic block. (Merged with lane 1's shape finding into I3.)
+
+**[Minor — hardening note, not a defect] models' `active_revision` filters by `self.project` with no tenant predicate; tenant isolation of the property layer rests on the form layer.** Every view fetch site is tenant-scoped (all 26 verified); DB invariants hold (11/11 mismatch SELECTs returned 0); consistent with the app-wide `anchor_task` same-project pattern; a model-`clean()` tenant pin would make it structural. Note only — N1.
+
+### Authorization matrix
+All 26 views verified from the URL side (table above in the lane transcript): the four contract-reserved admin verbs carry the full `@login_required + @tenant_admin_required + @require_POST` stack; `bvr_submit`/`pex_post` login-only by design; member escalation attempts 403 having written nothing; audit rows carry `changes.from/to`, tenant, action ≤ 10 chars.
+
+### Clean bills
+XSS (no `|safe`, no attribute interpolation of user strings, autoescape verified in value positions) · `_initial_currency` deep link tenant-scoped · seeder `_cost` tenant-clean per tenant · migration 0005 matches models · integrate hunks complete and additive · admin verb-driven state readonly (only gap: M10) · numbering/enumeration app-wide convention.
+
+**Lane 6 count: 0 Critical / 1 Important / 3 Minor**
+
+---
+
+# CLOSE-OUT — deduped, sorted, assigned (2026-09-10)
+
+Six lanes: 2C/6I/19M raw → deduped below. Status legend: `[ ] open` → `[x] fixed` / `[~] skipped — reason` / `[n] no-action — reason` (Phase 5 fills these in).
+
+## Critical
+- [ ] **C1** `cca_delete` ProtectedError → 500 on any CA referenced by an expense (lanes 1+5; every seeded CA qualifies) + `crud_delete` writes the `delete` audit BEFORE `obj.delete()`, so each failed attempt leaves an orphan audit row. Fix in `cca_delete`: try/except `ProtectedError` → `messages.error` naming the blockers → redirect to detail; ensure the audit row lands only on success (mirror apps/core/views/Party.py:64-75).
+- [ ] **C2** CCA EVM property chain re-queries per access — `cca_list` 75 queries at 3 rows (~297 at a full page vs sibling bar 10-13), `cca_detail` 119 for one object (lane 4, measured). Fix minimal: `cached_property` on `active_revision`, `bac`, `ac`, `committed` (per-instance, request-safe; all 16 public properties keep reading the cached primitives); at-bar alternative: grouped annotations on `cca_list`.
+
+## Important
+- [ ] **I1** Baseline lines stay editable after activation — PBL edit/delete refuse nothing when `budget_revision.is_locked` (lane 6): the approved baseline can be rewritten through its lines, bypassing change control. RULING: adopt the lock — refuse PBL edit/delete when the parent revision `is_locked` (mirrors `_LOCKED_MSG`; the correction path is a new revision, exactly like BVR rows). Update contract §5 wording with the fixer.
+- [ ] **I2** `bvr_detail` category-totals aggregate GROUP BY vs `Meta.ordering` — insert `.order_by()` before `.values("category")` (lane 1; Error-1055 on stock MySQL).
+- [ ] **I3** `bvr_activate` audit: capture `previous = obj.status` before mutating, write `{"verb": "activate", "from": previous, "to": previous}` (status does not change on activation — not "active_baseline", not a CHOICES value), and move the `write_audit_log` INSIDE the atomic block (lanes 1+6 merged).
+- [ ] **I4** `ta-right` is not a theme.css class — replace with `text-right` across the five templates (lane 3).
+- [ ] **I5** `stat-value` only styles inside `.stat-card` — restructure the `amount_delta` headline in `budgetrevision/detail.html` to use the defined markup (lane 3).
+
+## Minor
+- [ ] **M1** Add the four empty `CostManagement/__init__.py` files (lanes 1+2; one commit each).
+- [ ] **M2** Colour the remaining status fallbacks: `superseded` → `badge-info` (contract §10) on BVR list+detail; `closed` → `badge-muted` on CCA list+detail (lanes 1+3 merged).
+- [ ] **M3** "Baseline" badge must key off `activated_at AND status == 'approved'` (superseded rows keep their stamp as history) — BVR list + detail (lane 3).
+- [ ] **M4** Move the reject form (textarea) out of `.page-actions` into the card body (the 7.1 prq precedent) — BVR detail (lane 3).
+- [ ] **M5** Add the `source_kind` filter select to `pex_list` (the view already passes `source_kind_choices`) or drop the context key — add the filter (one `filters` tuple + one select) (lane 3).
+- [ ] **M6** Move the PBL totals card after the filter bar (lane 3).
+- [ ] **M7** Drop the dead `{% empty %}` in the totals strip (per-category dict is always full) (lane 3).
+- [ ] **M8** Delete the unreachable `end == start` branch in `_pv_fraction` (lane 1).
+- [ ] **M9** admin.py ProjectBudgetLineAdmin: fix the comment/contract mismatch on `wbs_node` (as-built wins — correct the comment) + add a `# --- 7.4` section header (lanes 1+2 merged).
+- [ ] **M10** Add `"decision_notes"` to `BudgetRevisionAdmin.readonly_fields` (lane 6).
+- [ ] **M11** `bvr_reject`: move the status precondition above `form.is_valid()` so a stale POST gets the correct refusal (lane 5).
+- [ ] **M12** Seeder: add one `other`-category budget line (active revision 0) so all seven categories render (lanes 1+2 merged; optional per plan, cheap to do).
+- [ ] **M13** Contract errata (fixer updates the contract doc, not code): §6 `source_kind` max_length 15 → 16 (as-built 5027e436 correct); §7 `_initial_currency` fallback wording = "the first Currency on file (global table)"; note `_reject_foreign`'s pinned message is unreachable second-layer defens
+e because every FK target is tenant-scoped (lane 5 M-finding merged here).
+- [ ] **M14** Index notes (no migration this pass unless a register goes wide): `(tenant, category)` on PBL, `tenant+status` on PEX/BVR, `(tenant, created_at)` ordering composites — recorded for a future pass (lane 4).
+
+## No-action notes
+- **N1** `active_revision` tenant predicate — form-layer enforcement + verified DB invariants; model-`clean()` pin deferred as hardening (lane 6).
+- **N2** Seeder chartered/draft line counts below "7-10" — page-2, band and delta goals all met; documented in the seeder docstring (lane 2).
+
+**Deduped totals: 2 Critical / 5 Important / 14 Minor + 2 no-action notes.**
