@@ -73,7 +73,7 @@
     <div class="card-header"><h2>Budget lines</h2></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Line</th><th>Category</th><th>WBS node</th><th>Control account</th><th>GL account</th><th class="ta-right">Amount</th></tr></thead>
+        <thead><tr><th>Line</th><th>Category</th><th>WBS node</th><th>Control account</th><th>GL account</th><th class="text-right">Amount</th></tr></thead>
         <tbody>
           {% for line in lines %}
             <tr>
@@ -82,7 +82,7 @@
               <td>{% if line.wbs_node %}<a href="{% url 'projects:tsk_detail' line.wbs_node_id %}">{{ line.wbs_node.name }}</a>{% else %}—{% endif %}</td>
               <td>{% if line.control_account %}<a href="{% url 'projects:cca_detail' line.control_account_id %}">{{ line.control_account.code }}</a>{% else %}—{% endif %}</td>
               <td>{% if line.gl_account %}{{ line.gl_account }}{% else %}—{% endif %}</td>
-              <td class="ta-right fw-600">{{ line.amount }}</td>
+              <td class="text-right fw-600">{{ line.amount }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="6"><div class="empty-state"><i data-lucide="list"></i><h3>No budget lines yet</h3><p>Add lines to this revision — its totals are what the approver weighs.</p></div></td></tr>
@@ -91,7 +91,7 @@
         {% if category_totals %}
           <tfoot>
             {% for cat, total in category_totals.items %}
-              <tr><td colspan="5">{{ cat|title }}</td><td class="ta-right fw-600">{{ total }}</td></tr>
+              <tr><td colspan="5">{{ cat|title }}</td><td class="text-right fw-600">{{ total }}</td></tr>
             {% endfor %}
           </tfoot>
         {% endif %}
