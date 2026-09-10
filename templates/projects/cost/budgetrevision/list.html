@@ -50,7 +50,7 @@
               <td>{% if obj.status == 'draft' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'pending_approval' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'approved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'rejected' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == 'superseded' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td>{% if obj.requested_at %}{{ obj.requested_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
-              <td>{% if obj.activated_at %}<span class="badge badge-green">Baseline</span>{% else %}—{% endif %}</td>
+              <td>{% if obj.activated_at and obj.status == 'approved' %}<span class="badge badge-green">Baseline</span>{% elif obj.activated_at %}<span class="text-muted">{{ obj.activated_at|date:"M d, Y" }}</span>{% else %}—{% endif %}</td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'projects:bvr_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
