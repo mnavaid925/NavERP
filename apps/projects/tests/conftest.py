@@ -1768,3 +1768,583 @@ def resource_entry_approved_nonproject(db, resource_tenant, resource_admin,
 def resource_entry_b(db, resource_tenant_b, resource_profile_b, resource_project_b):
     """Tenant B's entry — 404 as tenant A on detail/edit/delete and on submit/approve/reject."""
     return _resource_entry(resource_tenant_b, resource_profile_b, project=resource_project_b)
+
+
+# ==================================================================================================
+# 7.4 Cost & Budget Management (subslug ``cost``) — OWNED BY PHASE 6 STEP 1
+#
+# Same rules as the 7.1/7.2/7.3 blocks above, prefixed ``cost_`` / ``_cost_`` so no lane can shadow
+# another (test files: test_cost_models/_forms/_views/_security.py). See
+# ``.claude/tasks/test-contract-projects-7.4.md`` for the test contract these fixtures serve —
+# it pins the EXACT EVM figures the default amounts below produce (bac 300 / PV fraction 0.5 /
+# ev 150 / ac 100 → cpi 1.50, tcpi 0.75): the amounts are chosen so every ratio is exact, and the
+# four test writers assert those numbers instead of re-deriving them.
+#
+# * Factories construct + ``.save()`` — ``TenantNumbered.save()`` is where ``BVR-/CCA-/PBL-/PEX-``
+#   numbers are minted; ``bulk_create`` would ship empty numbers and is never used here.
+# * Determinism (L16): every date derives from ``_cost_today()`` (``timezone.localdate()``) — the
+#   SAME basis ``CostControlAccount._pv_fraction`` reads, so the anchored window
+#   today−4 .. today+4 yields the exact fraction 4/8 = 0.5 for as long as the test runs on one
+#   local day, which is the whole suite's existing assumption.
+# * Spine reuse: projects come from the 7.1 FACTORY ``_projectinitiation_project`` and WBS work
+#   packages from the 7.2 FACTORY ``_planning_task`` (function imports, NOT those lanes' fixtures —
+#   lanes never depend on each other's fixture rows).
+# * ``cost_*`` rows ARE LANDED MONEY: every revision/CA/line/expense fixture on project_a feeds the
+#   shared EVM panel of ``cost_control_account_a``. A verb that mutates one of them
+#   (``bvr_activate`` re-baselines; ``pex_post``/``pex_void`` move ac) changes the pinned figures —
+#   the contract note's mutation matrix lists the post-verb values, and ``bac``/``ac``/
+#   ``committed``/``active_revision`` are ``cached_property``: RE-FETCH the CA before re-reading
+#   metrics after any mutation.
+# * The admin client for 7.4 is the ROOT conftest's ``client_a`` (aliased ``cost_admin_client``)
+#   and the member client the root ``member_client`` (aliased ``cost_member_client``) — exactly as
+#   7.1/7.2/7.3, which define no clients of their own either; the aliases exist only so the 7.4
+#   contract can pin the names its four test modules import.
+# * Tests NEVER touch ``management/commands/seed_projects.py`` (the demo seed) — every test builds
+#   exactly the rows it asserts on from the factories below.
+# ==================================================================================================
+
+#: ``apps.core.crud.crud_list``'s default ``per_page`` — every 7.4 register uses the default, so a
+#: pagination test needs ``COST_PAGE_SIZE + 1`` rows for a second page (same rationale as
+#: ``PROJECTINITIATION_PAGE_SIZE`` / ``PLANNING_PAGE_SIZE`` / ``RESOURCE_PAGE_SIZE`` above).
+COST_PAGE_SIZE = 15
+
+
+def _cost_today():
+    """Today on the SAME basis the 7.4 code uses (``CostControlAccount._pv_fraction`` →
+    ``timezone.localdate()``)."""
+    return timezone.localdate()
+
+
+# ==================================================================================================
+# Factories — construct + ``.save()`` so TenantNumbered mints BVR-/CCA-/PBL-/PEX-
+# ==================================================================================================
+
+def _cost_revision(tenant, project, no=0, status="draft", activate=False, **overrides):
+    """A ``BudgetRevision`` on ``project`` — ``no`` is ``revision_no`` (UNIQUE per
+    ``(tenant, project)``; the lifecycle fixtures occupy 0–5 on project A, so fills start at 10).
+
+    Defaults: ``status="draft"``, a distinct per-tenant ``title`` ("Budget revision NN"), a filled
+    ``reason``, currency None (pass ``cost_currency`` — the form's single unscoped FK, L29).
+    ``activate=True`` stamps the re-baseline the way ``bvr_activate`` would: it sets
+    ``activated_at=now()`` and defaults ``status`` to ``"approved"`` (an explicit ``status=`` /
+    ``activated_at=`` kwarg still wins) — a hand-stamped baseline is exactly what the EVM fixtures
+    need, because driving the verb inside a fixture would route around the thing under test.
+    """
+    from apps.projects.models import BudgetRevision
+    seq = BudgetRevision.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        revision_no=no,
+        title=f"Budget revision {seq:02d}",
+        currency=None,
+        status=status,
+        reason="Reprice the labor line after the rate review.",
+        impact_note="",
+        schedule_impact_note="",
+        requested_by=None,
+        requested_at=None,
+        decided_by=None,
+        decided_at=None,
+        decision_notes="",
+        activated_at=None,
+        created_by=None,
+    )
+    if activate:
+        fields["status"] = "approved"
+        fields["activated_at"] = timezone.now()
+    fields.update(overrides)
+    obj = BudgetRevision(**fields)
+    obj.save()
+    return obj
+
+
+def _cost_control_account(tenant, project, code, **overrides):
+    """A ``CostControlAccount`` on ``project`` with the caller's ``code`` (UNIQUE per
+    ``(tenant, project)`` — the tenant's own CA id, e.g. "CA-1.2").
+
+    Defaults: ``status="active"``, ``percent_complete=0``, ``contingency=0``, NO wbs anchor and NO
+    gl account — an unanchored CA derives PV from the PROJECT window, which is the fallback branch
+    the no-anchor fixture exists to exercise. ``clean()`` runs before ``save()`` (the
+    ``_planning_dependency`` precedent) so a mis-anchored call raises at build time.
+    """
+    from apps.projects.models import CostControlAccount
+    seq = CostControlAccount.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        name=f"Control account {seq:02d}",
+        code=code,
+        wbs_node=None,
+        gl_account=None,
+        contingency=Decimal("0.00"),
+        percent_complete=Decimal("0.00"),
+        status="active",
+        note="",
+    )
+    fields.update(overrides)
+    obj = CostControlAccount(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _cost_budget_line(tenant, revision, project, category="labor", amount="100.00", **overrides):
+    """A ``ProjectBudgetLine`` inside ``revision`` (``project`` denormalised — ``clean()`` pins it
+    to the revision's project, and the optional wbs/control_account to it too, so a mismatched
+    call raises at build time instead of seeding bad data).
+
+    Defaults: ``category="labor"``, ``amount=100.00`` (str or Decimal), no wbs_node, no
+    control_account, no gl_account. Lines on the ACTIVE revision move ``bac`` — fill lines onto
+    throwaway revisions, or expect the pinned EVM figures to move with you.
+    """
+    from apps.projects.models import ProjectBudgetLine
+    fields = dict(
+        tenant=tenant,
+        budget_revision=revision,
+        project=project,
+        category=category,
+        wbs_node=None,
+        control_account=None,
+        gl_account=None,
+        amount=Decimal(amount),
+        note="",
+    )
+    fields.update(overrides)
+    obj = ProjectBudgetLine(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _cost_expense(tenant, project, control_account, entry_type="actual", amount="50.00",
+                  status="draft", **overrides):
+    """A ``ProjectExpense`` against ``control_account`` (REQUIRED, non-nullable) on ``project``.
+
+    Defaults: ``entry_type="actual"``, ``amount=50.00`` (str or Decimal), ``status="draft"``
+    (drafts burn nothing — the EVM-safe shape), ``entry_date=today`` (REQUIRED column — the
+    burn-trend dimension), ``source_kind="manual"``. Only POSTED ``actual``/``accrual`` rows count
+    into ``ac`` and only POSTED ``commitment`` rows into ``committed`` — pass
+    ``status="posted"`` deliberately. ``clean()`` runs before ``save()`` (same-project guard).
+    """
+    from apps.projects.models import ProjectExpense
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        control_account=control_account,
+        wbs_node=None,
+        entry_type=entry_type,
+        source_kind="manual",
+        source_number="",
+        vendor=None,
+        gl_account=None,
+        currency=None,
+        amount=Decimal(amount),
+        entry_date=_cost_today(),
+        status=status,
+        description="",
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = ProjectExpense(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+# -- bulk fills (pagination / search / burn-trend) ---------------------------------------------------
+#
+# Loops over the factories rather than bulk_create for the reason spelled out at the top of this
+# file: bulk_create skips save(), and save() is where `number` is minted.
+
+def _cost_fill_revisions(tenant, project, count, start_no=10, **overrides):
+    """``count`` revisions with DISTINCT ``revision_no`` (``start_no`` upward — 10 clears the
+    lifecycle fixtures' 0–5) and distinct titles (``Backlog revision 01`` …). Returns the list."""
+    return [
+        _cost_revision(tenant, project, no=start_no + i - 1,
+                       title=f"Backlog revision {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _cost_fill_lines(tenant, revision, project, count, **overrides):
+    """``count`` lines on ONE revision, 100.00 each, cycling ``CATEGORY_CHOICES`` in order — so
+    ``category_totals`` is deterministic (2 labor lines ⇒ 200.00). Returns the list."""
+    from apps.projects.models import ProjectBudgetLine
+    categories = [value for value, _label in ProjectBudgetLine.CATEGORY_CHOICES]
+    return [
+        _cost_budget_line(
+            tenant, revision, project, category=categories[(i - 1) % len(categories)],
+            note=f"Backlog line {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _cost_fill_expenses(tenant, project, control_account, count, **overrides):
+    """``count`` DRAFT expenses (drafts burn nothing — the pinned EVM figures survive a fill),
+    dates walking back a day per row, distinct descriptions (``Backlog expense 01`` …). Returns
+    the list; pass ``status="posted"`` explicitly when a burn-trend test needs real money."""
+    return [
+        _cost_expense(
+            tenant, project, control_account,
+            entry_date=_cost_today() - datetime.timedelta(days=i - 1),
+            description=f"Backlog expense {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+# ==================================================================================================
+# Core-spine records the 7.4 FKs point at
+# ==================================================================================================
+
+@pytest.fixture
+def cost_currency(db):
+    """USD. ``accounting.Currency`` is GLOBAL — it has NO ``tenant`` column (L29), so it is the one
+    FK on the 7.4 forms that ``_reject_foreign`` must never be handed and the one ``TenantModelForm``
+    leaves unscoped. ``get_or_create`` because ``code`` is globally unique across the whole suite
+    (the 7.1 fixture returns the SAME row — that is the point of a global table)."""
+    from apps.accounting.models import Currency
+    obj, _ = Currency.objects.get_or_create(
+        code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    return obj
+
+
+@pytest.fixture
+def cost_gl_account_a(db, tenant_a):
+    """Tenant A expense ``GLAccount`` — the ledger LENS on CAs/lines/expenses (PROTECT; never a
+    posting target, Ruling 6). ``normal_balance`` is derived in ``save()`` — never set it."""
+    from apps.accounting.models import GLAccount
+    return GLAccount.objects.create(
+        tenant=tenant_a, code="5100", name="Project delivery expense", account_type="expense")
+
+
+@pytest.fixture
+def cost_gl_account_b(db, tenant_b):
+    """Tenant B GL account — the crafted-POST value for ``gl_account`` on all three forms that
+    carry one (the target model has a ``tenant`` column, so the narrowed queryset refuses it
+    first; assert the FIELD error, never its wording)."""
+    from apps.accounting.models import GLAccount
+    return GLAccount.objects.create(
+        tenant=tenant_b, code="5100", name="Globex project expense", account_type="expense")
+
+
+@pytest.fixture
+def cost_party_a(db, tenant_a):
+    """Tenant A organization Party — the ``vendor`` on ``cost_expense_posted``."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="organization", name="Raven Supply Co")
+
+
+@pytest.fixture
+def cost_party_b(db, tenant_b):
+    """Tenant B organization Party — the crafted-POST value for ``ProjectExpenseForm.vendor``."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="organization", name="Globex Vendors")
+
+
+@pytest.fixture
+def cost_project_a(db, tenant_a, admin_user):
+    """Tenant A's ACTIVE host — every 7.4 row hangs off this one or the tenant-B twin. Window
+    today−30 .. today+150: an UNANCHORED CA on it derives PV from these dates (fraction 30/180 —
+    never assert that ratio; anchor CAs to ``cost_wbs_node_a`` for the exact 0.5)."""
+    return _projectinitiation_project(
+        tenant_a, name="Cost host Alpha", code="CST-01", status="active",
+        charter_status="approved", charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        start_date=_cost_today() - datetime.timedelta(days=30),
+        end_date=_cost_today() + datetime.timedelta(days=150),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def cost_project_b(db, tenant_b, admin_b):
+    """Tenant B's host, status ``draft`` (the contract's pinned shape). Its factory window starts
+    today+30, so an UNANCHORED CA here sits BEFORE its window: PV fraction 0 → ``pv`` 0.00 and
+    ``spi`` None — the pre-window edge case. 404 as tenant A everywhere, absent from A's
+    registers, refused as a crafted ``project`` FK."""
+    return _projectinitiation_project(
+        tenant_b, name="Cost host Beta", code="CSB-01", status="draft", created_by=admin_b)
+
+
+@pytest.fixture
+def cost_wbs_node_a(db, cost_project_a):
+    """Work package spanning TODAY: planned today−4 .. today+4 (8-day window, 4 elapsed) so the
+    linear PV fraction is EXACTLY 0.5 — any CA anchored here reads ``pv == bac / 2`` and
+    ``spi == 1.00``. Built through the 7.2 FACTORY (function import, not a 7.2 fixture)."""
+    return _planning_task(
+        cost_project_a.tenant, cost_project_a, name="Cost anchor work package",
+        planned_start=_cost_today() - datetime.timedelta(days=4),
+        planned_end=_cost_today() + datetime.timedelta(days=4),
+        effort_hours=Decimal("80.00"))
+
+
+@pytest.fixture
+def cost_wbs_node_b(db, cost_project_b):
+    """Tenant B's work package — the crafted-POST value for ``wbs_node`` on all four forms. Default
+    7.2-factory window (today .. today+4 → PV fraction 0, today <= start)."""
+    return _planning_task(cost_project_b.tenant, cost_project_b,
+                          name="Globex cost work package")
+
+
+# ==================================================================================================
+# Extra actors + clients (aliases over the ROOT conftest — reuse, never redefine)
+# ==================================================================================================
+
+@pytest.fixture
+def cost_member(db, member_user):
+    """Tenant A's plain member — alias of the root ``member_user``: 403 on the admin-gated verbs
+    (``bvr_approve``/``bvr_reject``/``bvr_activate``/``pex_void``), full run on the member-level
+    ones (``bvr_submit``, ``pex_post``, all CRUD pages)."""
+    return member_user
+
+
+@pytest.fixture
+def cost_member_b(db, tenant_b):
+    """A NON-admin member of tenant B (the admin_b-shaped member). Separates the two refusals on
+    the admin-gated verbs: a tenant-B member hitting a tenant-A pk must 404 on scope, never 403 on
+    role — and a tenant-A member (root ``member_user``) must 403 before any lookup."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="cost-member@globex.com", username="member_globex_cost",
+        password="TestPass123!", tenant=tenant_b, is_tenant_admin=False)
+
+
+@pytest.fixture
+def cost_tenantless_user(db):
+    """A logged-in user with ``tenant=None`` — the superuser shape. The four 7.4 create views guard
+    this on their FIRST line and redirect to ``dashboard:home``; the registers render empty."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="cost-drifter@example.com", username="cost_drifter",
+        password="TestPass123!", tenant=None)
+
+
+@pytest.fixture
+def cost_tenantless_client(db, cost_tenantless_user):
+    """Logged in, ``request.tenant is None``. Registers render empty; creates redirect away."""
+    client = Client()
+    client.force_login(cost_tenantless_user)
+    return client
+
+
+@pytest.fixture
+def cost_anon_client(db):
+    """Unauthenticated — every 7.4 view is ``@login_required``, so each must redirect to login."""
+    return Client()
+
+
+@pytest.fixture
+def cost_admin_client(db, client_a):
+    """Tenant A admin logged in — alias of the root ``client_a`` (7.1/7.2/7.3 define no admin
+    client of their own either; this alias exists so the 7.4 contract can pin the name)."""
+    return client_a
+
+
+@pytest.fixture
+def cost_member_client(db, member_client):
+    """Tenant A member logged in — alias of the root ``member_client``. For tenant-B ADMIN
+    requests use the root ``client_b`` (no alias needed)."""
+    return member_client
+
+
+@pytest.fixture
+def cost_csrf_client(db, admin_user):
+    """Tenant A admin on a client that ENFORCES CSRF. A POST without a token must be 403."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    return client
+
+
+# ==================================================================================================
+# BudgetRevision — one fixture per lifecycle state the four verbs branch on
+# (all on cost_project_a except ``_b``; distinct revision_no 0–5 — UNIQUE per (tenant, project))
+# ==================================================================================================
+
+@pytest.fixture
+def cost_revision_activated(db, tenant_a, admin_user, cost_project_a, cost_currency):
+    """THE BASELINE: revision_no 0, ``status="approved"`` AND ``activated_at`` stamped (now−1d,
+    decided stamps honest) — the one approved+activated row on project_a, so it IS
+    ``cost_control_account_a.active_revision``. ``is_locked`` → ``bvr_edit``/``bvr_delete`` (and
+    its lines' ``pbl_edit``/``pbl_delete``) refuse it. ``amount_delta`` reads 0.00 (it compares
+    against itself)."""
+    return _cost_revision(
+        tenant_a, cost_project_a, no=0, status="approved", activate=True,
+        title="Original baseline plan", currency=cost_currency,
+        requested_by=admin_user, requested_at=timezone.now() - datetime.timedelta(days=3),
+        decided_by=admin_user, decided_at=timezone.now() - datetime.timedelta(days=2),
+        activated_at=timezone.now() - datetime.timedelta(days=1),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def cost_revision_pending(db, tenant_a, admin_user, cost_project_a, cost_currency):
+    """``pending_approval``, revision_no 1, ``requested_at`` stamped (now−1d), NO decision stamps —
+    the happy path for BOTH ``bvr_approve`` and ``bvr_reject``; ``bvr_submit`` must answer
+    "already …" and write nothing."""
+    return _cost_revision(
+        tenant_a, cost_project_a, no=1, status="pending_approval",
+        title="Add a contingency reserve", currency=cost_currency,
+        requested_by=admin_user, requested_at=timezone.now() - datetime.timedelta(days=1),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def cost_revision_approved(db, tenant_a, admin_user, cost_project_a, cost_currency):
+    """``approved`` WITHOUT ``activated_at`` (approve does NOT activate), revision_no 3 — the only
+    ``bvr_activate`` happy path. Excluded from ``active_revision`` until activated, so it never
+    moves bac/amount_delta on its own; ``is_locked`` → edit/delete refuse it."""
+    return _cost_revision(
+        tenant_a, cost_project_a, no=3, status="approved",
+        title="Vendor price escalation", currency=cost_currency,
+        requested_by=admin_user, requested_at=timezone.now() - datetime.timedelta(days=4),
+        decided_by=admin_user, decided_at=timezone.now() - datetime.timedelta(days=3),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def cost_revision_draft(db, tenant_a, admin_user, cost_project_a, cost_currency):
+    """``draft``, revision_no 2 — the ONLY state ``bvr_submit`` accepts, and the one revision
+    shape (with ``rejected``) where ``bvr_edit``/``bvr_delete`` stay OPEN (not ``is_locked``).
+    Carries ``cost_budget_line_draft`` (100.00 material)."""
+    return _cost_revision(
+        tenant_a, cost_project_a, no=2, status="draft",
+        title="Scope addition: mobile app", currency=cost_currency,
+        requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def cost_revision_rejected(db, tenant_a, admin_user, cost_project_a, cost_currency):
+    """``rejected`` + ``decision_notes`` (written only by ``bvr_reject``) + decided stamps,
+    revision_no 4. NOT ``is_locked`` (only approved/superseded lock) → ``bvr_edit`` is still OPEN
+    on it; ``bvr_reject`` must answer "already rejected" without re-stamping."""
+    return _cost_revision(
+        tenant_a, cost_project_a, no=4, status="rejected",
+        title="In-house telemetry build", currency=cost_currency,
+        requested_by=admin_user, requested_at=timezone.now() - datetime.timedelta(days=6),
+        decided_by=admin_user, decided_at=timezone.now() - datetime.timedelta(days=5),
+        decision_notes="Negative ROI; the vendor route is cheaper.",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def cost_revision_superseded(db, tenant_a, admin_user, cost_project_a, cost_currency):
+    """``superseded`` with ``activated_at`` KEPT as history (now−9d — exactly what
+    ``bvr_activate`` leaves behind when it supersedes), revision_no 5. ``is_locked`` → edit/delete
+    refuse; ``status`` excludes it from ``active_revision``, so it never moves bac/amount_delta."""
+    return _cost_revision(
+        tenant_a, cost_project_a, no=5, status="superseded",
+        title="Superseded first draft of the baseline", currency=cost_currency,
+        requested_by=admin_user, requested_at=timezone.now() - datetime.timedelta(days=10),
+        decided_by=admin_user, decided_at=timezone.now() - datetime.timedelta(days=9),
+        activated_at=timezone.now() - datetime.timedelta(days=9),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def cost_revision_b(db, tenant_b, admin_b, cost_project_b, cost_currency):
+    """Tenant B's revision (``draft``, revision_no 0 on ITS project) — 404 as tenant A on
+    detail/edit/delete and on all four verbs; absent from tenant A's register."""
+    return _cost_revision(
+        tenant_b, cost_project_b, no=0, currency=cost_currency,
+        requested_by=admin_b, created_by=admin_b)
+
+
+# ==================================================================================================
+# CostControlAccount — the EVM lens rows (expectations pinned in the contract note)
+# ==================================================================================================
+
+@pytest.fixture
+def cost_control_account_a(db, tenant_a, cost_project_a, cost_wbs_node_a):
+    """THE EVM fixture: on project_a, anchored to ``cost_wbs_node_a``, ``status="active"``,
+    ``percent_complete=50.00``, ``contingency=25.00``. With ``cost_budget_line_a`` (300.00 on the
+    ACTIVATED revision) mapped here and ``cost_expense_posted`` (100.00 posted actual): bac 300 /
+    ev 150 / pv 150 / ac 100 / cpi 1.50 / tcpi 0.75 / health "under" — the FULL table lives in
+    ``.claude/tasks/test-contract-projects-7.4.md`` §3. Assert those numbers, never re-derive."""
+    return _cost_control_account(
+        tenant_a, cost_project_a, "CA-1.0", name="Delivery control account",
+        wbs_node=cost_wbs_node_a, percent_complete=Decimal("50.00"),
+        contingency=Decimal("25.00"), status="active",
+        note="Anchored to the cost work package.")
+
+
+@pytest.fixture
+def cost_control_account_b(db, tenant_b, cost_project_b):
+    """Tenant B's CA — 404 as tenant A. Deliberately UNANCHORED with NO lines and only a DRAFT
+    expense: every EVM figure is 0/None (bac 0, pv 0, cpi None, spi None, tcpi None — both
+    denominators are 0) yet health still reads "under"/badge-green — the zero-rows edge."""
+    return _cost_control_account(
+        tenant_b, cost_project_b, "CA-B.1", name="Globex control account", status="planning")
+
+
+# ==================================================================================================
+# ProjectBudgetLine — the rows the sub-module rolls up from
+# ==================================================================================================
+
+@pytest.fixture
+def cost_budget_line_a(db, tenant_a, cost_revision_activated, cost_project_a,
+                       cost_control_account_a, cost_wbs_node_a):
+    """The 300.00 LABOR line on the ACTIVATED revision, mapped to control_account_a +
+    wbs_node_a — the row that MAKES bac 300.00. Its parent revision ``is_locked`` →
+    ``pbl_edit``/``pbl_delete`` must REFUSE it (the I1 close-out ruling): frozen-refusal row AND
+    EVM anchor in one."""
+    return _cost_budget_line(
+        tenant_a, cost_revision_activated, cost_project_a, category="labor",
+        amount="300.00", wbs_node=cost_wbs_node_a, control_account=cost_control_account_a,
+        note="Baseline delivery labor.")
+
+
+@pytest.fixture
+def cost_budget_line_draft(db, tenant_a, cost_revision_draft, cost_project_a):
+    """100.00 MATERIAL line on the DRAFT revision — parent not locked → the ``pbl_edit``/
+    ``pbl_delete`` happy-path row. Never moves bac (bac sums only the ACTIVE revision's lines);
+    it IS the +100.00 in ``cost_revision_draft.amount_delta`` when the baseline is in play."""
+    return _cost_budget_line(
+        tenant_a, cost_revision_draft, cost_project_a, category="material",
+        amount="100.00", note="Draft line — freely editable.")
+
+
+# ==================================================================================================
+# ProjectExpense — the cost evidence (only POSTED actual/accrual rows burn budget)
+# ==================================================================================================
+
+@pytest.fixture
+def cost_expense_posted(db, tenant_a, admin_user, cost_project_a, cost_control_account_a,
+                        cost_wbs_node_a, cost_party_a, cost_gl_account_a, cost_currency):
+    """100.00 POSTED actual on control_account_a (entry_date today, vendor + GL + currency set,
+    ``source_number="PO-00042"`` soft reference) — the ONLY default row that burns money: it makes
+    ac 100.00. ``pex_void``'s happy path; ``pex_edit``/``pex_delete`` refuse it (posted evidence)."""
+    return _cost_expense(
+        tenant_a, cost_project_a, cost_control_account_a, entry_type="actual",
+        amount="100.00", status="posted", wbs_node=cost_wbs_node_a, vendor=cost_party_a,
+        gl_account=cost_gl_account_a, currency=cost_currency, created_by=admin_user,
+        source_number="PO-00042", description="Sprint hardware order")
+
+
+@pytest.fixture
+def cost_expense_draft(db, tenant_a, admin_user, cost_project_a, cost_control_account_a):
+    """50.00 DRAFT actual on control_account_a — burns nothing (drafts never burn). The happy path
+    for ``pex_post`` AND for ``pex_edit``/``pex_delete`` (drafts are not locked)."""
+    return _cost_expense(
+        tenant_a, cost_project_a, cost_control_account_a, entry_type="actual",
+        amount="50.00", status="draft", created_by=admin_user,
+        description="Pending tools order")
+
+
+@pytest.fixture
+def cost_expense_void(db, tenant_a, admin_user, cost_project_a, cost_control_account_a):
+    """75.00 VOID actual (entry_date today−2) on control_account_a — stays visible, counts
+    nothing: ``pex_edit``/``pex_delete`` refuse it, ``pex_void`` answers "already void"."""
+    return _cost_expense(
+        tenant_a, cost_project_a, cost_control_account_a, entry_type="actual",
+        amount="75.00", status="void", created_by=admin_user,
+        entry_date=_cost_today() - datetime.timedelta(days=2),
+        description="Cancelled rig rental (voided)")
+
+
+@pytest.fixture
+def cost_expense_b(db, tenant_b, admin_b, cost_project_b, cost_control_account_b):
+    """Tenant B's expense (60.00 draft) — 404 as tenant A on detail/edit/delete and on both
+    verbs; absent from tenant A's register."""
+    return _cost_expense(
+        tenant_b, cost_project_b, cost_control_account_b, entry_type="actual",
+        amount="60.00", status="draft", created_by=admin_b, description="Globex expense")
