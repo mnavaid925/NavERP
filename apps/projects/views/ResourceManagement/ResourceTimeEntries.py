@@ -16,6 +16,7 @@ from django.db.models import Q
 from apps.core.crud import as_db_int
 from apps.projects.forms import ResourceTimeEntryForm
 from apps.projects.models import ResourceAllocation, ResourceProfile, ResourceTimeEntry
+from apps.projects.models._base import q2
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (
     get_object_or_404, login_required, messages, redirect, render, require_POST, timezone)
@@ -66,7 +67,8 @@ def _actuals_rows(tenant, win_start, win_end):
             "resource": row["resource"],
             "project": row["project"],
             "actual_hours": row["actual_hours"].quantize(Decimal("0.01")),
-            "planned_hours": planned,
+            # q2 even on the zero sentinel — "0h" must never render next to "2.00h".
+            "planned_hours": q2(planned),
             "variance": (row["actual_hours"] - planned).quantize(Decimal("0.01")),
         })
     rows.sort(key=lambda r: r["variance"], reverse=True)
