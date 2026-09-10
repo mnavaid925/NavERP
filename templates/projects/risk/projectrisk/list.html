@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Risk Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Risk Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Risks</span></div>
+      <p class="text-muted">One row per identified threat or opportunity. Score, band and expected monetary value are computed from the probability × impact pair — edit the pair and every figure follows.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:risk_analysis' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Analysis</a>
+      <a href="{% url 'projects:rsk_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Risk</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, cause or effect…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">Any category</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="risk_type" aria-label="Risk type" class="form-select">
+            <option value="">Threats &amp; opportunities</option>
+            {% for val, label in risk_type_choices %}
+              <option value="{{ val }}" {% if request.GET.risk_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="band" aria-label="Severity band" class="form-select">
+            <option value="">Any band</option>
+            {% for val, label in band_choices %}
+              <option value="{{ val }}" {% if request.GET.band == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="review_due"><input type="checkbox" id="review_due" name="review_due" value="1" {% if request.GET.review_due == '1' %}checked{% endif %}> Review overdue</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:rsk_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Risk</th><th>Project</th><th>Category</th><th>Type</th><th class="text-center">P × I</th><th>Band</th><th class="text-right">EMV</th><th>Review</th><th>Owner</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:rsk_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.get_category_display }}</td>
+              <td>{% if obj.risk_type == 'opportunity' %}<span class="badge badge-green">{{ obj.get_risk_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_risk_type_display }}</span>{% endif %}</td>
+              <td>{{ obj.probability }} × {{ obj.impact }} = <span class="fw-600">{{ obj.score }}</span></td>
+              <td>
+                {% if obj.severity_band == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_band_display }}</span>
+                {% elif obj.severity_band == 'high' %}<span class="badge badge-amber">{{ obj.get_severity_band_display }}</span>
+                {% elif obj.severity_band == 'medium' %}<span class="badge badge-info">{{ obj.get_severity_band_display }}</span>
+                {% else %}<span class="badge badge-green">{{ obj.get_severity_band_display }}</span>{% endif %}
+              </td>
+              <td class="text-right fw-600">{{ obj.emv }}</td>
+              <td>{% if obj.review_date %}{{ obj.review_date|date:"M d, Y" }}{% if obj.is_review_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.status == 'closed' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'realized' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'monitoring' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'response_planned' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'assessing' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:rsk_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_locked %}
+                    <form method="post" action="{% url 'projects:rsk_realize' obj.pk %}" onsubmit="return confirm('Realize risk {{ obj.number }}? It will raise a linked issue.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Realize"><i data-lucide="alert-triangle"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'projects:rsk_close' obj.pk %}" onsubmit="return confirm('Close risk {{ obj.number }}?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Close"><i data-lucide="check-circle-2"></i></button>
+                    </form>
+                    <a href="{% url 'projects:rsk_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:rsk_delete' obj.pk %}" onsubmit="return confirm('Delete risk {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% elif obj.status == 'closed' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'projects:rsk_reopen' obj.pk %}" onsubmit="return confirm('Reopen risk {{ obj.number }}?');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Reopen"><i data-lucide="rotate-ccw"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No risks match</h3><p>Log a risk with its probability and impact — the score, band and EMV follow automatically.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
