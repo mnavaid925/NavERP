@@ -138,8 +138,7 @@ class CostControlAccount(TenantNumbered):
             return ZERO
         if today >= end:
             return Decimal("1")
-        if end == start:
-            return Decimal("1")
+        # end > start is guaranteed here (end == start took the branch above), so no ZeroDivision.
         return Decimal((today - start).days) / Decimal((end - start).days)
 
     @property
