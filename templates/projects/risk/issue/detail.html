@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Issue{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:iss_list' %}">Issues</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_issue_type_display }} · {{ obj.get_severity_display }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:iss_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alert-octagon"></i></div><div class="stat-value">{{ obj.get_severity_display }}</div><div class="stat-label">Severity</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="activity"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ obj.age_days }}d</div><div class="stat-label">Age</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="arrow-up-circle"></i></div><div class="stat-value">{% if obj.escalation_level %}L{{ obj.escalation_level }}{% else %}—{% endif %}</div><div class="stat-label">Escalation level</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Issue statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Linked risk</dt><dd>{% if obj.risk %}<a href="{% url 'projects:rsk_detail' obj.risk_id %}">{{ obj.risk.number }} — {{ obj.risk.title }}</a>{% else %}—{% endif %}</dd>
+        <dt>Type</dt><dd>{{ obj.get_issue_type_display }}</dd>
+        <dt>Severity</dt><dd>{% if obj.severity == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>{% elif obj.severity == 'high' %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>{% elif obj.severity == 'medium' %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>{% else %}<span class="badge badge-green">{{ obj.get_severity_display }}</span>{% endif %}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'closed' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% elif obj.status == 'resolved' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'blocked' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Raised by</dt><dd>{% if obj.raised_by %}{{ obj.raised_by.get_full_name|default:obj.raised_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Identified on</dt><dd>{{ obj.identified_date|date:"M d, Y" }}</dd>
+        <dt>Due date</dt><dd>{% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd>
+        <dt>Escalated to</dt><dd>{% if obj.escalated_to %}{{ obj.escalated_to.get_full_name|default:obj.escalated_to.email }}{% else %}—{% endif %}</dd>
+        <dt>Escalated at</dt><dd>{% if obj.escalated_at %}{{ obj.escalated_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Resolved by</dt><dd>{% if obj.resolved_by %}{{ obj.resolved_by.get_full_name|default:obj.resolved_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Resolved at</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Created at</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+      <p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>
+      {% if obj.root_cause %}<p><strong>Root cause.</strong> {{ obj.root_cause|linebreaksbr }}</p>{% endif %}
+      {% if obj.resolution_note %}<p><strong>Resolution.</strong> {{ obj.resolution_note|linebreaksbr }}</p>{% endif %}
+      {% if obj.lessons_learned %}<p><strong>Lessons learned.</strong> {{ obj.lessons_learned|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Escalation path</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Level</th><th>Target role</th><th>Target user</th><th>Reason</th><th>Outcome</th><th>Escalated by</th><th>Escalated at</th></tr></thead>
+        <tbody>
+          {% for esc in escalations %}
+            <tr>
+              <td><span class="badge badge-amber">L{{ esc.level }}</span></td>
+              <td>{{ esc.target_role|default:"—" }}</td>
+              <td>{% if esc.target_user %}{{ esc.target_user.get_full_name|default:esc.target_user.email }}{% else %}—{% endif %}</td>
+              <td>{{ esc.reason|linebreaksbr }}</td>
+              <td>{% if esc.outcome %}{{ esc.outcome|linebreaksbr }}{% else %}—{% endif %}</td>
+              <td>{% if esc.escalated_by %}{{ esc.escalated_by.get_full_name|default:esc.escalated_by.email }}{% else %}—{% endif %}</td>
+              <td>{{ esc.escalated_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="arrow-up-circle"></i><h3>Never escalated</h3><p>This issue has not been pushed up the chain of command — an escalation records who was told, why and the outcome.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The inline escalate form. The view is admin-only, so the form only renders for an admin, and
+      only while the issue is live and below the top level — the same gate the view enforces
+      (defence in depth, not the boundary). The view ignores any posted issue and binds the row to
+      this issue.
+    {% endcomment %}
+    {% if not obj.is_locked and obj.escalation_level < 4 %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="card-body">
+          <form method="post" action="{% url 'projects:iss_escalate' obj.pk %}">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in escalation_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                  {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                </div>
+              {% endfor %}
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="arrow-up-circle"></i> Escalate</button>
+          </form>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% comment %}
+    The resolution panel. Shown only while the issue is live; the view stamps resolved_by and
+    resolved_at in the same request the notes are written, which is why the notes are off the form.
+  {% endcomment %}
+  {% if obj.is_open %}
+    <div class="card">
+      <div class="card-header"><h2>Resolve</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'projects:iss_resolve' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in resolution_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Resolve issue</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    The close panel. Only a resolved issue can be closed — closing an open issue would skip the
+    resolution capture the log exists to keep.
+  {% endcomment %}
+  {% if obj.status == 'resolved' %}
+    <div class="card">
+      <div class="card-header"><h2>Lifecycle</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Resolved on {{ obj.resolved_at|date:"M d, Y H:i" }}. Closing it freezes the row — it can no longer be edited or deleted.</p>
+        <form method="post" action="{% url 'projects:iss_close' obj.pk %}" onsubmit="return confirm('Close issue {{ obj.number }}?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle-2"></i> Close issue</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'projects:iss_list' %}" class="btn btn-outline">Back to Issue Log</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:iss_delete' obj.pk %}" onsubmit="return confirm('Delete issue {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
