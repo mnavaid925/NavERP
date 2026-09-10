@@ -204,18 +204,22 @@ def bvr_activate(request, pk):
     if obj.activated_at:
         messages.info(request, "That revision is already the active baseline.")
         return redirect("projects:bvr_detail", pk=obj.pk)
+    previous = obj.status
     with transaction.atomic():
         for other in (BudgetRevision.objects.select_for_update()
                       .filter(tenant=obj.tenant_id, project=obj.project_id, status="approved")
                       .exclude(pk=obj.pk)):
-            previous = other.status
+            other_previous = other.status
             other.status = "superseded"
             other.save(update_fields=["status", "updated_at"])
             write_audit_log(request.user, other, "supersede",
-                            changes={"verb": "supersede", "from": previous, "to": other.status})
+                            changes={"verb": "supersede", "from": other_previous, "to": other.status})
         obj.activated_at = timezone.now()
         obj.save(update_fields=["activated_at", "updated_at"])
-    write_audit_log(request.user, obj, "activate",
-                    changes={"verb": "activate", "from": "approved", "to": "active_baseline"})
+        # Activation does NOT change status — the audit records the gate it passed (approved ->
+        # approved, the prq idiom with "to" = the post-mutation status). Inside the atomic block:
+        # a crash between commit and audit would leave an activation with no audit row.
+        write_audit_log(request.user, obj, "activate",
+                        changes={"verb": "activate", "from": previous, "to": previous})
     messages.success(request, f"Revision {obj.number} is now the project's cost baseline.")
     return redirect("projects:bvr_detail", pk=obj.pk)
