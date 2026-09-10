@@ -40,7 +40,7 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Control account</th><th>Project</th><th>Code</th><th>Status</th><th class="ta-right">% complete</th><th class="ta-right">BAC</th><th class="ta-right">CPI</th><th>Health</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Control account</th><th>Project</th><th>Code</th><th>Status</th><th class="text-right">% complete</th><th class="text-right">BAC</th><th class="text-right">CPI</th><th>Health</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -48,9 +48,9 @@
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>{{ obj.code }}</td>
               <td>{% if obj.status == 'planning' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
-              <td class="ta-right">{{ obj.percent_complete }}</td>
-              <td class="ta-right fw-600">{{ obj.bac }}</td>
-              <td class="ta-right">{% if obj.cpi is not None %}{{ obj.cpi }}{% else %}—{% endif %}</td>
+              <td class="text-right">{{ obj.percent_complete }}</td>
+              <td class="text-right fw-600">{{ obj.bac }}</td>
+              <td class="text-right">{% if obj.cpi is not None %}{{ obj.cpi }}{% else %}—{% endif %}</td>
               <td><span class="badge {{ obj.health.badge }}">{{ obj.health.state }}</span></td>
               <td>
                 <div class="table-actions">
