@@ -35,6 +35,14 @@
           </select>
         </div>
         <div class="form-group">
+          <select name="source_kind" aria-label="Source kind" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_kind_choices %}
+              <option value="{{ val }}" {% if request.GET.source_kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="status" aria-label="Status" class="form-select">
             <option value="">Any status</option>
             {% for val, label in status_choices %}
