@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Deliverable Inspection{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.deliverable }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:svr_list' %}">Verifications</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_method_display }} · {{ obj.inspection_date|date:"M d, Y" }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:svr_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="search"></i></div><div class="stat-value">{{ obj.get_method_display }}</div><div class="stat-label">Method</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clipboard-check"></i></div><div class="stat-value">{{ obj.get_result_display }}</div><div class="stat-label">Result</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ obj.get_acceptance_status_display }}</div><div class="stat-label">Acceptance</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar"></i></div><div class="stat-value">{{ obj.inspection_date|date:"M d, Y" }}</div><div class="stat-label">Inspected on</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Inspection record</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>Deliverable</dt><dd>{{ obj.deliverable }}</dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Requirement</dt><dd>{% if obj.requirement %}<a href="{% url 'projects:req_detail' obj.requirement_id %}">{{ obj.requirement.number }} — {{ obj.requirement.title }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Inspected by</dt><dd>{% if obj.inspected_by %}{{ obj.inspected_by.get_full_name|default:obj.inspected_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Result</dt><dd>{{ obj.get_result_display }}</dd>
+      </dl>
+      {% if obj.findings %}<p><strong>Findings.</strong> {{ obj.findings|linebreaksbr }}</p>{% else %}<p class="text-muted">No findings recorded.</p>{% endif %}
+      {% if obj.decision_note %}<p><strong>Decision note.</strong> {{ obj.decision_note|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Acceptance decision</h2>
+      <span class="badge badge-slate">{{ obj.get_acceptance_status_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if obj.is_decided %}
+        <p class="text-muted">Decided by {% if obj.accepted_by %}{{ obj.accepted_by.get_full_name|default:obj.accepted_by.email }}{% else %}—{% endif %} on {{ obj.accepted_at|date:"M d, Y H:i" }}.</p>
+        <p class="text-muted">A decided inspection is frozen evidence — it cannot be edited or deleted.</p>
+      {% else %}
+        <div class="form-grid">
+          <form method="post" action="{% url 'projects:svr_accept' obj.pk %}" onsubmit="return confirm('Accept {{ obj.number }}?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="accept_note">Note (optional)</label>
+              <textarea class="form-textarea" id="accept_note" name="note" rows="2" placeholder="Any caveat attached to the acceptance."></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Accept</button>
+          </form>
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'projects:svr_reject' obj.pk %}" onsubmit="return confirm('Reject {{ obj.number }}?');">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="reject_note">Reason (required to reject)</label>
+                <textarea class="form-textarea" id="reject_note" name="note" rows="2" placeholder="What must change before this deliverable can be accepted."></textarea>
+              </div>
+              <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+            </form>
+            <form method="post" action="{% url 'projects:svr_waive' obj.pk %}" onsubmit="return confirm('Waive the acceptance gate on {{ obj.number }}?');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Waive the gate</button>
+            </form>
+          {% endif %}
+        </div>
+        <p class="text-muted">Accepting clears the gate; rejecting sends it back with a reason; waiving records that the gate was deliberately skipped rather than quietly ignored.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:svr_list' %}" class="btn btn-outline">Back to Log</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:svr_delete' obj.pk %}" onsubmit="return confirm('Delete inspection {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
