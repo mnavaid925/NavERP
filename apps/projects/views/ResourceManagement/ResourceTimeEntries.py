@@ -37,7 +37,7 @@ def _actuals_rows(tenant, win_start, win_end):
     approved = (ResourceTimeEntry.objects
                 .filter(tenant=tenant, status="approved",
                         entry_date__gte=win_start, entry_date__lte=win_end)
-                .select_related("resource", "project"))
+                .select_related("resource__employee__party", "resource__party", "project"))
     for entry in approved:
         key = (entry.resource_id, entry.project_id)
         row = actuals.get(key)
@@ -150,7 +150,8 @@ def rte_create(request):
 def rte_detail(request, pk):
     obj = get_object_or_404(
         ResourceTimeEntry.objects.select_related(
-            "resource", "project", "project_task", "approved_by"),
+            "resource__employee__party", "resource__party", "project", "project_task",
+            "approved_by"),
         pk=pk, tenant=request.tenant)
     return render(request, "projects/resource/resourcetimeentry/detail.html", {"obj": obj})
 
