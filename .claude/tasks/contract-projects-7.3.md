@@ -384,8 +384,10 @@ def project_requests(tenant):    # Party-style dropdown queryset, order_by("titl
 | `rte_list` | `number`, `task_description`, `resource__employee__party__name`, `resource__party__name`, `project__name` | `("status","status",False)`, `("resource","resource_id",True)`, `("project","project_id",True)`, `("year","entry_date__iso_year",True)`, `("week","entry_date__week",True)` | — | `status_choices`, `resources` (helper), `projects` (helper), `actuals_rows` (below) |
 
 Notes: `?resource=0` is skipped by `crud_list`'s zero-guard (`_id` pk lookup) → default page;
-`?status=nope` is skipped by the enum guard → default page. `?year=0`/`?week=0` are **non-pk**
-int filters and legitimately match no rows (documented so smoke does not mis-assert).
+`?status=nope` is skipped by the enum guard → default page. `?week=0` is a **non-pk**
+int filter and legitimately matches no rows; `?year=0` (and any year outside 1..9998) is
+emptied up front via `qs.none()` + the actuals-window fallback — see divergence note 5
+(as-built, so smoke does not mis-assert).
 `entry_date__week` is Django's ISO-8601 week lookup; it is paired with `__iso_year` (NOT
 `__year`) so the year/week lens stays consistent across ISO-year boundaries. `per_page` stays
 the `crud_list` default 15 on all three lists.
@@ -643,7 +645,9 @@ The five NavERP.md bullet names are verbatim; "Time Approvals" is the extra live
        list_filter = ("booking_status", "allocation_unit")
        list_select_related = ("tenant", "project", "project_request", "resource")
        search_fields = ("number", "role_name", "skill_requirements")
-       readonly_fields = ("created_at", "updated_at")
+       # verb-driven state frozen readonly so Django admin cannot bypass the audited verbs
+       readonly_fields = ("booking_status", "substitute_of", "requested_by",
+                          "created_at", "updated_at")
 
    @admin.register(ResourceTimeEntry)
    class ResourceTimeEntryAdmin(admin.ModelAdmin):
@@ -651,7 +655,10 @@ The five NavERP.md bullet names are verbatim; "Time Approvals" is the extra live
        list_filter = ("status",)
        list_select_related = ("tenant", "resource", "project", "approved_by")
        search_fields = ("number", "task_description")
-       readonly_fields = ("created_at", "updated_at", "submitted_at", "approved_at", "approved_by")
+       # status + decision_note are verb-driven — frozen readonly alongside the stamps so
+       # Django admin cannot bypass the audited submit/approve/reject verbs
+       readonly_fields = ("status", "submitted_at", "approved_at", "approved_by",
+                          "decision_note", "created_at", "updated_at")
    ```
 8. **Overview** — `views/ProjectInitiation/Overview.py` adds three flat counts (one COUNT each,
    same style as the 7.2 block): `resource_count`, `allocation_count`, `time_entry_count`.
@@ -688,9 +695,12 @@ The five NavERP.md bullet names are verbatim; "Time Approvals" is the extra live
    `_reject_foreign`. (Verified in `apps/core/forms/_common.py`.)
 4. **`?year=` maps to `entry_date__iso_year`, not `__year`.** Django's `week` lookup is already
    ISO-8601; pairing it with the calendar-year lookup would mis-bucket the ISO year boundary.
-5. **`?year=0`/`?week=0` empty the register instead of falling back** — they are non-pk int
-   filters, so `crud_list`'s zero-guard does not apply. Smoke's junk-param asserts use
-   `?status=nope` / `?resource=0` / `?page=9999` exactly as listed above.
+5. **`?year=0`/`?year=9999` empty the register via `qs.none()` + the actuals-window falls
+   back to the current ISO week** — Django's year-lookup bounds would otherwise RAISE inside
+   `.count()` on the junk year (as-built commit `bf67c47d`), not "legitimately match no rows"
+   as first pinned here. `?week=0`/`?week=99` still simply match no rows (SQL `WEEK()`).
+   Smoke's junk-param asserts use `?status=nope` / `?resource=0` / `?page=9999` exactly as
+   listed above.
 6. **`Meta.ordering` choices the research left open, pinned here:** RSP name-ordered via joins
    (pool register = people list); RAL `["-start_date","-id"]` (window-ordered; the pinned
    `("tenant","start_date")` index serves it — no `created_at` index exists in this pass);
