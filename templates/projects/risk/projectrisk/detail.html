@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Risk{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:rsk_list' %}">Risks</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_category_display }} · {{ obj.get_risk_type_display }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:rsk_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="target"></i></div><div class="stat-value">{{ obj.score }}</div><div class="stat-label">Score (P × I)</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="gauge"></i></div><div class="stat-value">{{ obj.get_severity_band_display }}</div><div class="stat-label">Severity band</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="banknote"></i></div><div class="stat-value">{{ obj.emv }}</div><div class="stat-label">Expected monetary value</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="activity"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Risk statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>WBS node</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Category</dt><dd>{{ obj.get_category_display }}</dd>
+        <dt>Risk type</dt><dd>{% if obj.risk_type == 'opportunity' %}<span class="badge badge-green">{{ obj.get_risk_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_risk_type_display }}</span>{% endif %}</dd>
+        <dt>Probability</dt><dd>{{ obj.probability }} / 5</dd>
+        <dt>Impact</dt><dd>{{ obj.impact }} / 5</dd>
+        <dt>Cost impact</dt><dd>{{ obj.cost_impact }}</dd>
+        <dt>Schedule impact</dt><dd>{% if obj.schedule_impact_days %}{{ obj.schedule_impact_days }} days{% else %}—{% endif %}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Identified by</dt><dd>{% if obj.identified_by %}{{ obj.identified_by.get_full_name|default:obj.identified_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Identified on</dt><dd>{{ obj.identified_date|date:"M d, Y" }}</dd>
+        <dt>Next review</dt><dd>{% if obj.review_date %}{{ obj.review_date|date:"M d, Y" }}{% if obj.is_review_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd>
+        <dt>Contingency account</dt><dd>{% if obj.contingency_account %}<a href="{% url 'projects:cca_detail' obj.contingency_account_id %}">{{ obj.contingency_account.code }}</a>{% else %}—{% endif %}</dd>
+      </dl>
+      <p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>
+      {% if obj.cause %}<p><strong>Cause.</strong> {{ obj.cause|linebreaksbr }}</p>{% endif %}
+      {% if obj.effect %}<p><strong>Effect.</strong> {{ obj.effect|linebreaksbr }}</p>{% endif %}
+      {% comment %}
+        The contingency account names the 7.4 reserve this risk justifies. 7.5 SIZES that reserve
+        (the EMV and the simulated P80 delta are shown on the analysis page); the amount written to
+        the control account stays 7.4's to set — one writer per column.
+      {% endcomment %}
+      {% if obj.contingency_account %}<p class="text-muted">The contingency amount on that control account stays 7.4's to set — this page sizes it, it does not write it.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Response plan</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Strategy</dt><dd><span class="badge badge-info">{{ obj.get_response_strategy_display }}</span></dd>
+        <dt>Residual P × I</dt><dd>{% if obj.residual_score is not None %}{{ obj.residual_probability }} × {{ obj.residual_impact }} = <span class="fw-600">{{ obj.residual_score }}</span> ({{ obj.residual_band|title }}){% else %}—{% endif %}</dd>
+        <dt>Residual EMV</dt><dd>{{ obj.residual_emv }}</dd>
+      </dl>
+      {% if obj.response_note %}<p><strong>Response note.</strong> {{ obj.response_note|linebreaksbr }}</p>{% endif %}
+      {% if obj.trigger %}<p><strong>Trigger.</strong> {{ obj.trigger|linebreaksbr }}</p>{% endif %}
+      {% if obj.contingency_plan %}<p><strong>Contingency plan.</strong> {{ obj.contingency_plan|linebreaksbr }}</p>{% endif %}
+      {% if not obj.response_note and not obj.trigger and not obj.contingency_plan %}<p class="text-muted">No response detail recorded yet — add a note, a trigger and a contingency plan so the strategy is actionable.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Response actions</h2>
+      <a href="{% url 'projects:rra_create' %}?risk={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Add action</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Action</th><th>Strategy</th><th>Owner</th><th>Due</th><th class="text-right">Cost</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for a in response_actions %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:rra_detail' a.pk %}">{{ a.number }}</a><div class="text-muted">{{ a.title }}</div></td>
+              <td>{{ a.get_strategy_display }}</td>
+              <td>{% if a.owner %}{{ a.owner.get_full_name|default:a.owner.email }}{% else %}—{% endif %}</td>
+              <td>{% if a.due_date %}{{ a.due_date|date:"M d, Y" }}{% if a.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+              <td class="text-right">{{ a.cost }}</td>
+              <td>{% if a.status == 'completed' %}<span class="badge badge-green">{{ a.get_status_display }}</span>{% elif a.status == 'in_progress' %}<span class="badge badge-info">{{ a.get_status_display }}</span>{% elif a.status == 'cancelled' %}<span class="badge badge-muted">{{ a.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ a.get_status_display }}</span>{% endif %}</td>
+              <td><a href="{% url 'projects:rra_detail' a.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No response actions yet</h3><p>An action carries its own owner, due date and trigger — that is what turns a strategy into a plan.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Linked issues</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Issue</th><th>Severity</th><th>Owner</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for i in linked_issues %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:iss_detail' i.pk %}">{{ i.number }}</a><div class="text-muted">{{ i.title }}</div></td>
+              <td>{% if i.severity == 'critical' %}<span class="badge badge-red">{{ i.get_severity_display }}</span>{% elif i.severity == 'high' %}<span class="badge badge-amber">{{ i.get_severity_display }}</span>{% elif i.severity == 'medium' %}<span class="badge badge-info">{{ i.get_severity_display }}</span>{% else %}<span class="badge badge-green">{{ i.get_severity_display }}</span>{% endif %}</td>
+              <td>{% if i.owner %}{{ i.owner.get_full_name|default:i.owner.email }}{% else %}—{% endif %}</td>
+              <td>{{ i.get_status_display }}</td>
+              <td><a href="{% url 'projects:iss_detail' i.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="circle-check"></i><h3>Not realized</h3><p>This risk has not become an issue — realizing it raises one automatically.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    The lifecycle panel. A realized or closed risk is frozen evidence, so the buttons only render
+    while the row is live. Reopening a closed row is an admin act. The closure note is captured
+    here because the close verb stamps closed_at in the same request.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Lifecycle</h2></div>
+    <div class="card-body">
+      {% if obj.status == 'closed' %}
+        <p class="text-muted">Closed on {{ obj.closed_at|date:"M d, Y H:i" }}. A closed register row is frozen — it cannot be edited or deleted.</p>
+        {% if obj.lessons_learned %}<p><strong>Lessons learned.</strong> {{ obj.lessons_learned|linebreaksbr }}</p>{% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'projects:rsk_reopen' obj.pk %}" onsubmit="return confirm('Reopen risk {{ obj.number }}?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Reopen</button>
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="form-grid">
+          <form method="post" action="{% url 'projects:rsk_realize' obj.pk %}" onsubmit="return confirm('Realize risk {{ obj.number }}? It will raise a linked issue.');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="alert-triangle"></i> Realize (raise an issue)</button>
+          </form>
+          <form method="post" action="{% url 'projects:rsk_close' obj.pk %}" onsubmit="return confirm('Close risk {{ obj.number }}?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="lessons_learned">Lessons learned (optional)</label>
+              <textarea class="form-textarea" id="lessons_learned" name="lessons_learned" rows="3" placeholder="What did this risk teach the project?"></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="check-circle-2"></i> Close risk</button>
+          </form>
+        </div>
+        <p class="text-muted">Realizing a risk raises the linked issue automatically; closing it freezes the row and records the lesson.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:rsk_list' %}" class="btn btn-outline">Back to Register</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:rsk_delete' obj.pk %}" onsubmit="return confirm('Delete risk {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
