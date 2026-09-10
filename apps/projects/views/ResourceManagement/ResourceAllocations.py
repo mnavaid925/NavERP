@@ -168,6 +168,22 @@ def ral_substitute(request, pk):
         messages.info(request, "That is already the assigned resource.")
         return redirect("projects:ral_detail", pk=obj.pk)
     with transaction.atomic():
+        # Second in-flow guard (the prq_convert precedent): the checks above ran on the
+        # pre-lock read, so two concurrent admins could both pass them and release one
+        # booking into TWO successors. Re-fetch under the row lock and re-run the state
+        # checks; a released row (any successor exists) refuses here too.
+        obj = (ResourceAllocation.objects.select_for_update()
+               .get(pk=obj.pk, tenant=request.tenant))
+        if obj.resource_id is None:
+            messages.error(request,
+                           "That allocation is a placeholder — assign a resource to it instead.")
+            return redirect("projects:ral_detail", pk=obj.pk)
+        if obj.booking_status not in ("soft", "firm") or obj.substituted_by.exists():
+            messages.error(
+                request,
+                f"Only a soft or firm booking can be substituted — this one is "
+                f"{obj.get_booking_status_display().lower()}.")
+            return redirect("projects:ral_detail", pk=obj.pk)
         original_status = obj.booking_status
         obj.booking_status = "released"
         obj.save(update_fields=["booking_status", "updated_at"])
