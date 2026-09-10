@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Requirements Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Requirements Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Requirements</span></div>
+      <p class="text-muted">Every elicited requirement with the technique that captured it, its MoSCoW priority, the work package that delivers it and its acceptance state.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:scope_matrix' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Traceability Matrix</a>
+      <a href="{% url 'projects:req_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Requirement</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, description or acceptance criteria…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="requirement_type" aria-label="Type" class="form-select">
+            <option value="">Any type</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.requirement_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Priority" class="form-select">
+            <option value="">Any priority</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="untraced"><input type="checkbox" id="untraced" name="untraced" value="1" {% if request.GET.untraced == '1' %}checked{% endif %}> Untraced</label>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="pending"><input type="checkbox" id="pending" name="pending" value="1" {% if request.GET.pending == '1' %}checked{% endif %}> Awaiting decision</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:req_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requirement</th><th>Project</th><th>Type</th><th>Elicited by</th><th>Priority</th><th>Delivered by</th><th>Owner</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:req_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{{ obj.get_requirement_type_display }}</td>
+              <td>{{ obj.get_elicitation_method_display }}</td>
+              <td>
+                {% if obj.priority == 'must' %}<span class="badge badge-red">{{ obj.get_priority_display }}</span>
+                {% elif obj.priority == 'should' %}<span class="badge badge-amber">{{ obj.get_priority_display }}</span>
+                {% elif obj.priority == 'could' %}<span class="badge badge-info">{{ obj.get_priority_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_priority_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}<span class="badge badge-amber">Untraced</span>{% endif %}</td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge badge-{{ obj.badge_class }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:req_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'rejected' %}
+                    <form method="post" action="{% url 'projects:req_submit' obj.pk %}" onsubmit="return confirm('Submit {{ obj.number }} for approval?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Submit"><i data-lucide="send"></i></button>
+                    </form>
+                  {% elif obj.status == 'submitted' %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <form method="post" action="{% url 'projects:req_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}?');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check"></i></button>
+                      </form>
+                    {% endif %}
+                  {% elif obj.status == 'approved' %}
+                    <form method="post" action="{% url 'projects:req_implement' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} implemented?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Mark implemented"><i data-lucide="package-check"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if not obj.is_locked %}
+                    <a href="{% url 'projects:req_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:req_delete' obj.pk %}" onsubmit="return confirm('Delete requirement {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No requirements match</h3><p>Log the first requirement with the technique that captured it — traceability starts with one row.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
