@@ -194,7 +194,10 @@ minimum `f"{self.number} — {self.project}"`.
 - `Meta`: `ordering = ["-created_at","-id"]`; `unique_together = ("tenant","number")`; indexes
   `("tenant","project")` → `pbl_tnt_project_idx`, `("tenant","budget_revision")` →
   `pbl_tnt_rev_idx`, `("tenant","control_account")` → `pbl_tnt_ca_idx`.
-- No verbs. Ordinary frozen-free CRUD.
+- No verbs. Ordinary frozen-free CRUD on unlocked rows — **close-out ruling (I1, 2026-09-10):**
+  `pbl_edit`/`pbl_delete` refuse when the parent `budget_revision.is_locked` (approved/superseded),
+  the same frozen-history guard BVR rows carry ("its lines cannot be edited or deleted; submit a
+  new revision to change the baseline"); the correction path is a new revision.
 
 ## 6. Model 4 — `ProjectExpense` [PEX-] (`models/CostManagement/ProjectExpenses.py`)
 
