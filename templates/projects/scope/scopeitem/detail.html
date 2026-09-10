@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Scope Item{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.statement }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:sci_list' %}">Scope Items</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_item_type_display }} · {{ obj.get_impact_area_display }} impact</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:sci_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="scan-line"></i></div><div class="stat-value">{{ obj.get_item_type_display }}</div><div class="stat-label">Item type</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="target"></i></div><div class="stat-value">{{ obj.get_impact_area_display }}</div><div class="stat-label">Impact area</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="activity"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{% if obj.review_date %}{{ obj.review_date|date:"M d, Y" }}{% else %}—{% endif %}</div><div class="stat-label">Next review</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Registry statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>Item type</dt><dd>{{ obj.get_item_type_display }}</dd>
+        <dt>Impact area</dt><dd>{{ obj.get_impact_area_display }}</dd>
+        <dt>Requirement</dt><dd>{% if obj.requirement %}<a href="{% url 'projects:req_detail' obj.requirement_id %}">{{ obj.requirement.number }} — {{ obj.requirement.title }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Identified on</dt><dd>{{ obj.identified_date|date:"M d, Y" }}</dd>
+        <dt>Next review</dt><dd>{% if obj.review_date %}{{ obj.review_date|date:"M d, Y" }}{% if obj.is_review_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd>
+        {% if obj.closed_at %}<dt>Closed</dt><dd>{{ obj.closed_at|date:"M d, Y H:i" }}</dd>{% endif %}
+      </dl>
+      <p><strong>Statement.</strong> {{ obj.statement }}</p>
+      {% if obj.description %}<p><strong>Detail.</strong> {{ obj.description|linebreaksbr }}</p>{% endif %}
+      {% if obj.outcome %}<p><strong>Outcome.</strong> {{ obj.outcome|linebreaksbr }}</p>{% endif %}
+      {% if obj.is_boundary %}<p class="text-muted">This row is a scope <strong>boundary</strong> — it states what the project does or does not cover. Boundaries are the ones a change request rewrites.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Lifecycle</h2>
+      <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if obj.is_locked %}
+        <p class="text-muted">This row was closed on {{ obj.closed_at|date:"M d, Y H:i" }} and is frozen evidence — it cannot be edited or deleted.</p>
+      {% else %}
+        <div class="form-grid">
+          {% if obj.status == 'open' %}
+            <form method="post" action="{% url 'projects:sci_validate' obj.pk %}" onsubmit="return confirm('Validate {{ obj.number }}?');">
+              {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Validate</button>
+            </form>
+          {% endif %}
+          <form method="post" action="{% url 'projects:sci_realize' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} realized?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="realize_outcome">Outcome (required)</label>
+              <textarea class="form-textarea" id="realize_outcome" name="outcome" rows="3" placeholder="The assumption held, or the constraint bit — what actually happened."></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="circle-dot"></i> Mark realized</button>
+          </form>
+          <form method="post" action="{% url 'projects:sci_retire' obj.pk %}" onsubmit="return confirm('Retire {{ obj.number }}?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="retire_outcome">Outcome (required)</label>
+              <textarea class="form-textarea" id="retire_outcome" name="outcome" rows="3" placeholder="Why the boundary moved or the item stopped mattering."></textarea>
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Retire</button>
+          </form>
+        </div>
+        <p class="text-muted">Validating confirms the item still holds. Realizing records that it came to pass; retiring records that it no longer applies. Both close the row and keep the narrative.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:sci_list' %}" class="btn btn-outline">Back to Registry</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:sci_delete' obj.pk %}" onsubmit="return confirm('Delete scope item {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
