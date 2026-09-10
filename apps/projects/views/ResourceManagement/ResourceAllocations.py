@@ -32,7 +32,8 @@ def _live_q(today):
 @login_required
 def ral_list(request):
     qs = (ResourceAllocation.objects.filter(tenant=request.tenant)
-          .select_related("project", "project_request", "project_task", "resource"))
+          .select_related("project", "project_request", "project_task",
+                          "resource__employee__party", "resource__party"))
     # Hand-parsed lenses BEFORE crud_list's filters/pagination — they have no single ORM lookup.
     placeholder = request.GET.get("placeholder", "")
     if placeholder == "True":
