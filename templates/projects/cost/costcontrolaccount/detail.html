@@ -33,21 +33,21 @@
     <div class="table-wrap">
       <table class="table">
         <tbody>
-          <tr><th>BAC — budget at completion</th><td class="ta-right fw-600">{{ obj.bac }}</td><td class="text-muted">Active baseline's lines on this account</td></tr>
-          <tr><th>BAC + contingency</th><td class="ta-right fw-600">{{ obj.bac_with_contingency }}</td><td class="text-muted">Reserve kept separable per PMBOK</td></tr>
-          <tr><th>EV — earned value</th><td class="ta-right fw-600">{{ obj.ev }}</td><td class="text-muted">BAC × attested % complete</td></tr>
-          <tr><th>PV — planned value</th><td class="ta-right fw-600">{{ obj.pv }}</td><td class="text-muted">Planning-grade linear PV — not a time-phased BCWS curve</td></tr>
-          <tr><th>AC — actual cost</th><td class="ta-right fw-600">{{ obj.ac }}</td><td class="text-muted">Posted actuals + accruals</td></tr>
-          <tr><th>Committed</th><td class="ta-right fw-600">{{ obj.committed }}</td><td class="text-muted">Posted commitments (POs, contracts)</td></tr>
-          <tr><th>Available</th><td class="ta-right fw-600">{{ obj.available }}</td><td class="text-muted">BAC − committed − AC</td></tr>
-          <tr><th>CV — cost variance</th><td class="ta-right">{{ obj.cv }}</td><td class="text-muted">EV − AC</td></tr>
-          <tr><th>SV — schedule variance</th><td class="ta-right">{{ obj.sv }}</td><td class="text-muted">EV − PV</td></tr>
-          <tr><th>CPI — cost performance index</th><td class="ta-right">{% if obj.cpi is not None %}{{ obj.cpi }}{% else %}—{% endif %}</td><td class="text-muted">EV / AC</td></tr>
-          <tr><th>SPI — schedule performance index</th><td class="ta-right">{% if obj.spi is not None %}{{ obj.spi }}{% else %}—{% endif %}</td><td class="text-muted">EV / PV</td></tr>
-          <tr><th>EAC — estimate at completion</th><td class="ta-right fw-600">{{ obj.eac }}</td><td class="text-muted">BAC / CPI (plan unchanged with no actuals)</td></tr>
-          <tr><th>ETC — estimate to complete</th><td class="ta-right">{{ obj.etc }}</td><td class="text-muted">EAC − AC</td></tr>
-          <tr><th>TCPI — to-complete performance index</th><td class="ta-right">{% if obj.tcpi is not None %}{{ obj.tcpi }}{% else %}—{% endif %}</td><td class="text-muted">Efficiency the remaining work must hit</td></tr>
-          <tr><th>VAC — variance at completion</th><td class="ta-right">{{ obj.vac }}</td><td class="text-muted">BAC − EAC</td></tr>
+          <tr><th>BAC — budget at completion</th><td class="text-right fw-600">{{ obj.bac }}</td><td class="text-muted">Active baseline's lines on this account</td></tr>
+          <tr><th>BAC + contingency</th><td class="text-right fw-600">{{ obj.bac_with_contingency }}</td><td class="text-muted">Reserve kept separable per PMBOK</td></tr>
+          <tr><th>EV — earned value</th><td class="text-right fw-600">{{ obj.ev }}</td><td class="text-muted">BAC × attested % complete</td></tr>
+          <tr><th>PV — planned value</th><td class="text-right fw-600">{{ obj.pv }}</td><td class="text-muted">Planning-grade linear PV — not a time-phased BCWS curve</td></tr>
+          <tr><th>AC — actual cost</th><td class="text-right fw-600">{{ obj.ac }}</td><td class="text-muted">Posted actuals + accruals</td></tr>
+          <tr><th>Committed</th><td class="text-right fw-600">{{ obj.committed }}</td><td class="text-muted">Posted commitments (POs, contracts)</td></tr>
+          <tr><th>Available</th><td class="text-right fw-600">{{ obj.available }}</td><td class="text-muted">BAC − committed − AC</td></tr>
+          <tr><th>CV — cost variance</th><td class="text-right">{{ obj.cv }}</td><td class="text-muted">EV − AC</td></tr>
+          <tr><th>SV — schedule variance</th><td class="text-right">{{ obj.sv }}</td><td class="text-muted">EV − PV</td></tr>
+          <tr><th>CPI — cost performance index</th><td class="text-right">{% if obj.cpi is not None %}{{ obj.cpi }}{% else %}—{% endif %}</td><td class="text-muted">EV / AC</td></tr>
+          <tr><th>SPI — schedule performance index</th><td class="text-right">{% if obj.spi is not None %}{{ obj.spi }}{% else %}—{% endif %}</td><td class="text-muted">EV / PV</td></tr>
+          <tr><th>EAC — estimate at completion</th><td class="text-right fw-600">{{ obj.eac }}</td><td class="text-muted">BAC / CPI (plan unchanged with no actuals)</td></tr>
+          <tr><th>ETC — estimate to complete</th><td class="text-right">{{ obj.etc }}</td><td class="text-muted">EAC − AC</td></tr>
+          <tr><th>TCPI — to-complete performance index</th><td class="text-right">{% if obj.tcpi is not None %}{{ obj.tcpi }}{% else %}—{% endif %}</td><td class="text-muted">Efficiency the remaining work must hit</td></tr>
+          <tr><th>VAC — variance at completion</th><td class="text-right">{{ obj.vac }}</td><td class="text-muted">BAC − EAC</td></tr>
         </tbody>
       </table>
     </div>
@@ -57,14 +57,14 @@
     <div class="card-header"><h2>Baseline budget lines</h2></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Line</th><th>Category</th><th>WBS node</th><th class="ta-right">Amount</th></tr></thead>
+        <thead><tr><th>Line</th><th>Category</th><th>WBS node</th><th class="text-right">Amount</th></tr></thead>
         <tbody>
           {% for line in budget_lines %}
             <tr>
               <td class="fw-600"><a href="{% url 'projects:pbl_detail' line.pk %}">{{ line.number }}</a></td>
               <td>{{ line.get_category_display }}</td>
               <td>{% if line.wbs_node %}<a href="{% url 'projects:tsk_detail' line.wbs_node_id %}">{{ line.wbs_node.name }}</a>{% else %}—{% endif %}</td>
-              <td class="ta-right fw-600">{{ line.amount }}</td>
+              <td class="text-right fw-600">{{ line.amount }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="4"><div class="empty-state"><i data-lucide="list"></i><h3>No baseline lines on this account</h3><p>Map budget lines of the active revision to this control account to give it a BAC.</p></div></td></tr>
@@ -78,14 +78,14 @@
     <div class="card-header"><h2>Recent posted expenses</h2><span class="text-muted">Latest 25 — the register carries the rest</span></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Expense</th><th>Type</th><th>Entry date</th><th class="ta-right">Amount</th></tr></thead>
+        <thead><tr><th>Expense</th><th>Type</th><th>Entry date</th><th class="text-right">Amount</th></tr></thead>
         <tbody>
           {% for exp in expenses %}
             <tr>
               <td class="fw-600"><a href="{% url 'projects:pex_detail' exp.pk %}">{{ exp.number }}</a>{% if exp.description %}<div class="text-muted">{{ exp.description }}</div>{% endif %}</td>
               <td>{{ exp.get_entry_type_display }}</td>
               <td>{{ exp.entry_date|date:"M d, Y" }}</td>
-              <td class="ta-right fw-600">{{ exp.amount }}</td>
+              <td class="text-right fw-600">{{ exp.amount }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="4"><div class="empty-state"><i data-lucide="receipt"></i><h3>No posted expenses yet</h3><p>Actuals and accruals posted against this account feed AC and the CPI forecast.</p></div></td></tr>
