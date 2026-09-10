@@ -5,6 +5,9 @@ evidence on ProjectExpense. The detail page reads the EVM metrics straight off t
 properties (no computed context keys), and the "budget_lines" / "expenses" tables ride the
 related names, so a cross-tenant id can never leak: every fetch is tenant-scoped first.
 """
+from django.db import transaction
+from django.db.models import ProtectedError
+
 from apps.projects.forms import CostControlAccountForm
 from apps.projects.models import CostControlAccount
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -78,5 +81,25 @@ def cca_edit(request, pk):
 @login_required
 @require_POST
 def cca_delete(request, pk):
-    return crud_delete(request, model=CostControlAccount, pk=pk,
-                       success_url="projects:cca_list")
+    """Delete a control account — with the house ``except ProtectedError`` guard
+    (``party_delete``/``currency_delete``).
+
+    ``ProjectExpense.control_account`` is PROTECT and non-nullable (a CA-less cost row would
+    silently drop out of every EVM index), so any CA with cost history is referenced and a bare
+    delete is an uncaught ``ProtectedError`` — a 500. Worse: ``crud_delete`` writes its ``delete``
+    audit row BEFORE ``obj.delete()``, so each failed attempt also left an orphan audit row for a
+    CA that still exists. One ``atomic()`` block around the whole ``crud_delete`` call rolls the
+    audit row back with the failed delete — the audit row only ever lands on success.
+    """
+    obj = get_object_or_404(CostControlAccount.objects.only("pk"), pk=pk, tenant=request.tenant)
+    try:
+        with transaction.atomic():
+            return crud_delete(request, model=CostControlAccount, pk=pk,
+                               success_url="projects:cca_list")
+    except ProtectedError as exc:
+        blockers = sorted({protected._meta.verbose_name for protected in exc.protected_objects})
+        messages.error(
+            request,
+            f"Control account {obj.number} is still referenced by {', '.join(blockers)} and "
+            "cannot be deleted — it carries cost history the EVM math reads.")
+        return redirect("projects:cca_detail", pk=pk)
