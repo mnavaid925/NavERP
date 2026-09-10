@@ -47,7 +47,7 @@
               <td class="fw-600"><a href="{% url 'projects:cca_detail' obj.pk %}">{{ obj.name }}</a><div class="text-muted">{{ obj.number }}</div></td>
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>{{ obj.code }}</td>
-              <td>{% if obj.status == 'planning' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
+              <td>{% if obj.status == 'planning' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'active' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'closed' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}<span class="badge">{{ obj.get_status_display }}</span>{% endif %}</td>
               <td class="text-right">{{ obj.percent_complete }}</td>
               <td class="text-right fw-600">{{ obj.bac }}</td>
               <td class="text-right">{% if obj.cpi is not None %}{{ obj.cpi }}{% else %}—{% endif %}</td>
