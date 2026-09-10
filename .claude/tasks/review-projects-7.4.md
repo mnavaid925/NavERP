@@ -58,3 +58,29 @@ All 4 model files otherwise field-by-field per §3–§6; EVM properties correct
 5. **Docs coherence — no contradiction, but stale.** `.claude/skills/projects/SKILL.md` still says "**As-built: 7.1 only**" with migrations `0001–0002`, "32 route names", "1243 tests" — pre-existing staleness (7.2/7.3 also undocumented); its Phase-7 update must correct these along with adding the 7.4 section. Nothing 7.4 built contradicts a stated skill rule: colour-named badges only, `accounting.Currency` global/unscoped, audit action ≤10 with `{"verb","from","to"}`, no nullable FK inside `|default:`, no annotate-over-property name collisions on CCA registers.
 
 **Lane 2 count: 0 Critical / 0 Important / 4 Minor**
+
+> Erratum: the lane-2 commit (11954871) is mislabeled "docs(projects): 7.2 explorer lane" — its
+> content is the 7.4 explorer lane. Left unamended with live peers (L51); `git log --follow` on
+> this file tells the truth.
+
+---
+
+## Lane 3 — frontend-reviewer (2026-09-10)
+
+**Method.** Read all 12 templates + the overview 7.4 blocks against the 7.1/7.2 reference anatomy, theme.css, the shared paginator, the 4 views/urls (ground-truth context), the 4 models and forms, and the CLAUDE.md house rules. Render-verified every page with the Django test client (throwaway script under temp/, now deleted) as both admin_acme (tenant admin) and ops_acme (member). Zero unrendered template variables, zero 500s, zero missing url names on any of the 22 URLs exercised.
+
+### Findings
+
+- **[Important]** `templates/projects/cost/{budgetrevision/detail.html:76,85,94 · costcontrolaccount/list.html:43,51-53 · costcontrolaccount/detail.html:36-50,60,67,81,88 · projectbudgetline/list.html:19,22,28,78,88 · projectexpense/list.html:59,69}` — the alignment class `ta-right` used on every amount/numeric column is **not defined in theme.css** (the only stylesheet; `.text-right` at line 408 is the class the rest of the app uses). All BAC/CPI/amount columns in the 7.4 registers render left-aligned, failing the "amounts aligned right" house convention. Suggested fix: replace `ta-right` with the defined `text-right` (or add `.ta-right` to theme.css).
+- **[Important]** `templates/projects/cost/budgetrevision/detail.html:67` — `<p class="stat-value">{{ obj.amount_delta }}</p>` sits in a plain `.card-body`, but theme.css only defines `.stat-card .stat-value` (line 266), so the approver's headline number (verified rendering `50000.00` on BVR-00002) renders as ordinary body text with no emphasis. Suggested fix: add a standalone `.stat-value` rule, or wrap the delta in the stat-card markup.
+- **[Minor]** `templates/projects/cost/budgetrevision/list.html:53` and `detail.html:54` — the green "Baseline" badge keys off `activated_at` alone, but `bvr_activate` deliberately keeps superseded rows' `activated_at` as history (BudgetRevisions.py view docstring), so a superseded revision still shows the current-baseline badge. Suggested fix: gate on `{% if obj.activated_at and obj.status == 'approved' %}`, else a muted date.
+- **[Minor]** `templates/projects/cost/budgetrevision/detail.html:26-32` — the reject form (label + textarea + button) lives inside `.page-actions` (flex, no wrap, theme.css line 248); the textarea renders ~20ch wide beside the Approve button and the header row can overflow on narrow screens. The 7.1 precedent (`projectrequest/detail.html:138-146`) places the textarea inside the card body. Suggested fix: move the reject form into the Revision card like prq.
+- **[Minor]** `templates/projects/cost/projectexpense/list.html` — the view passes `source_kind_choices` (views/CostManagement/ProjectExpenses.py:55) but the template has no Source-kind filter select; the passed context is dead. Suggested fix: add the `source_kind` dropdown (one `filters` tuple + one select) or drop the context key.
+- **[Minor]** `templates/projects/cost/projectbudgetline/list.html:15-32` — the "Totals in the current filter" card precedes the filter bar in DOM order, so the totals the user is meant to re-scope sit above controls they haven't seen; every other 7.x list leads with its filter bar. Suggested fix: move the totals card after the filter (or below the register table).
+- **[Minor]** `templates/projects/cost/budgetrevision/list.html:50`, `detail.html:49` and `costcontrolaccount/list.html:50`, `detail.html:22` — `superseded` (BVR) and `closed` (CCA) fall into the bare `{% else %}` `.badge` with no colour; `badge-muted` exists in theme.css and would read better. House rule (else + `get_<field>_display`) is satisfied, so cosmetic only.
+- **[Minor]** `templates/projects/cost/projectbudgetline/list.html:23-25` — the totals table's `{% empty %}` row is dead code: `_pbl_totals` always returns a dict keyed by every `CATEGORY_CHOICES` entry (zeros included — rendered "Other 0.00"), so "No budget lines in the current filter" can never show. Harmless; drop the branch or skip zero rows.
+
+### Per-page clean bills
+budgetrevision/list.html PASS; budgetrevision/detail.html PASS with findings 2-4 (state machine verified live); budgetrevision/form.html PASS (status/decision_notes verifiably absent); costcontrolaccount/list.html PASS with findings 1,7; costcontrolaccount/detail.html PASS with finding 1 (all 15 EVM rows match the model math); costcontrolaccount/form.html PASS; projectbudgetline/list.html PASS with findings 1,6,8 (totals track the filter); projectbudgetline/detail.html PASS; projectbudgetline/form.html PASS; projectexpense/list.html PASS with findings 1,5 (actions match status rules exactly; member sees 0 void buttons); projectexpense/detail.html PASS; projectexpense/form.html PASS; overview.html 7.4 blocks PASS.
+
+**Lane 3 count: 0 Critical / 2 Important / 6 Minor**
