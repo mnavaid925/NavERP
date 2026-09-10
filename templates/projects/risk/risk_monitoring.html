@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Risk Monitoring{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Risk Monitoring &amp; Reporting</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:rsk_list' %}">Risk &amp; Issue Management</a><span class="sep">›</span><span>Monitoring</span></div>
+      <p class="text-muted">The live register, its monthly burn-down, the review queue, the tolerance flag and the lessons lens — all recomputed on read, never a stored snapshot.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:risk_analysis' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Analysis</a>
+      <a href="{% url 'projects:rsk_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Risk Register</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">All risks in this workspace</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project and project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Report</button>
+        <a href="{% url 'projects:risk_monitoring' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="activity"></i></div>
+      <div class="stat-value">{{ open_count }}</div>
+      <div class="stat-label">Open risks</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ closed_count }}</div>
+      <div class="stat-label">Closed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ realized_count }}</div>
+      <div class="stat-label">Realized</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ review_due_count }}</div>
+      <div class="stat-label">Reviews due</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ above_tolerance_count }}</div>
+      <div class="stat-label">Above tolerance</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="book-open"></i></div>
+      <div class="stat-value">{{ lessons_count }}</div>
+      <div class="stat-label">Lessons</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The burn-down aggregates the register by the month of identified_date in Python — score is a
+    property, not a column, so a values(...).annotate(Sum(...)) cannot compute it. bar_pct scales
+    each period's score_total against the largest period's; burndown_max is 0-safe, so an empty
+    register renders no rows rather than a division by zero.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Burn-down by identification month</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Score exposure identified each month — the largest month sets the bar scale.</p>
+      {% if burndown_rows %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Period</th><th class="text-right">Risks</th><th class="text-right">Score</th><th class="text-right">EMV</th><th style="min-width:160px;">Share</th></tr></thead>
+            <tbody>
+              {% for row in burndown_rows %}
+                <tr>
+                  <td class="fw-600">{{ row.label }}</td>
+                  <td class="text-right">{{ row.count }}</td>
+                  <td class="text-right">{{ row.score_total }}</td>
+                  <td class="text-right">{{ row.emv_total }}</td>
+                  <td>
+                    <div class="progress" title="{{ row.bar_pct }}% of the largest month"><div class="progress-bar" style="width: {{ row.bar_pct }}%"></div></div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="calendar-range"></i><h3>No risks identified yet</h3><p>The burn-down builds itself as register rows are logged.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Top risks</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Risk</th><th>Project</th><th>P × I</th><th>Band</th><th class="text-right">EMV</th><th>Status</th><th>Owner</th></tr></thead>
+          <tbody>
+            {% for obj in top_risks %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:rsk_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+                <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+                <td>{{ obj.probability }} × {{ obj.impact }} = <span class="fw-600">{{ obj.score }}</span></td>
+                <td>
+                  {% if obj.severity_band == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_band_display }}</span>
+                  {% elif obj.severity_band == 'high' %}<span class="badge badge-amber">{{ obj.get_severity_band_display }}</span>
+                  {% elif obj.severity_band == 'medium' %}<span class="badge badge-info">{{ obj.get_severity_band_display }}</span>
+                  {% else %}<span class="badge badge-green">{{ obj.get_severity_band_display }}</span>{% endif %}
+                </td>
+                <td class="text-right fw-600">{{ obj.emv }}</td>
+                <td>
+                  {% if obj.status == 'closed' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == 'realized' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == 'monitoring' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == 'response_planned' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                  {% elif obj.status == 'assessing' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                  {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+                </td>
+                <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No risks to rank</h3><p>Log risks with their probability and impact to see them ordered here.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Review queue</h2></div>
+    <div class="card-body">
+      {% if review_due_count %}
+        <p><span class="badge badge-red">{{ review_due_count }} review{{ review_due_count|pluralize }} overdue</span></p>
+      {% else %}
+        <p><span class="badge badge-green">No reviews overdue</span></p>
+      {% endif %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Risk</th><th>Project</th><th>Review date</th><th>Band</th><th>Owner</th></tr></thead>
+          <tbody>
+            {% for obj in review_queue %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:rsk_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+                <td>{{ obj.project.name }}</td>
+                <td>{{ obj.review_date|date:"M d, Y" }}</td>
+                <td>
+                  {% if obj.severity_band == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_band_display }}</span>
+                  {% elif obj.severity_band == 'high' %}<span class="badge badge-amber">{{ obj.get_severity_band_display }}</span>
+                  {% elif obj.severity_band == 'medium' %}<span class="badge badge-info">{{ obj.get_severity_band_display }}</span>
+                  {% else %}<span class="badge badge-green">{{ obj.get_severity_band_display }}</span>{% endif %}
+                </td>
+                <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>Nothing due</h3><p>Risks whose review date has passed while still live appear here.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    Tolerance is the documented default appetite — ProjectRisk.TOLERANCE_BANDS (High and Critical).
+    A per-tenant appetite is 7.19's master data. The flag counts OPEN risks only; a closed or
+    realized risk is no longer a live exposure to flag.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Risk tolerance</h2></div>
+    <div class="card-body">
+      {% if above_tolerance_count %}
+        <p><span class="badge badge-red">{{ above_tolerance_count }} open risk{{ above_tolerance_count|pluralize }} above tolerance</span> — band {{ tolerance.threshold }} ({{ tolerance.band|join:", " }}).</p>
+      {% else %}
+        <p><span class="badge badge-green">No open risk above tolerance</span> — band {{ tolerance.threshold }} ({{ tolerance.band|join:", " }}).</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Lessons lens</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Takeaways captured on closed risks and resolved or closed issues — a read-back lens, not a knowledge store (that is 7.10's).</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Source</th><th>Record</th><th>Lesson</th></tr></thead>
+          <tbody>
+            {% for item in lessons %}
+              <tr>
+                <td><span class="badge {% if item.kind == 'Risk' %}badge-amber{% else %}badge-info{% endif %}">{{ item.kind }}</span></td>
+                <td class="fw-600">
+                  {% if item.kind == 'Risk' %}<a href="{% url 'projects:rsk_detail' item.obj.pk %}">{{ item.obj.number }}</a>{% else %}<a href="{% url 'projects:iss_detail' item.obj.pk %}">{{ item.obj.number }}</a>{% endif %}
+                  <div class="text-muted">{{ item.obj.title }}</div>
+                </td>
+                <td>{{ item.lesson }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3"><div class="empty-state"><i data-lucide="book-open"></i><h3>No lessons captured</h3><p>Close a risk or resolve an issue with a lesson to build this lens.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Register summary</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div><dt>By category</dt><dd>{% for label, count in by_category.items %}{{ label }}: {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}</dd></div>
+        <div><dt>By band</dt><dd>{% for label, count in by_band.items %}{{ label }}: {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}</dd></div>
+      </dl>
+      <p><a href="{% url 'projects:rsk_list' %}" class="btn btn-outline"><i data-lucide="arrow-right"></i> Open the risk register</a></p>
+    </div>
+  </div>
+{% endblock %}
