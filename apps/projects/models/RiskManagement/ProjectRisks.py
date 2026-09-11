@@ -149,6 +149,10 @@ class ProjectRisk(TenantNumbered):
             models.Index(fields=["tenant", "category"], name="rsk_tnt_category_idx"),
             models.Index(fields=["tenant", "risk_type"], name="rsk_tnt_rtype_idx"),
             models.Index(fields=["tenant", "-created_at"], name="rsk_tnt_created_idx"),
+            # The register's pinned derived lenses: ``?review_due=1``/``?overdue=1`` filter on
+            # review_date, and ``?owner=`` deserves more than the bare FK index.
+            models.Index(fields=["tenant", "review_date"], name="rsk_tnt_review_idx"),
+            models.Index(fields=["tenant", "owner"], name="rsk_tnt_owner_idx"),
         ]
 
     def __str__(self):
