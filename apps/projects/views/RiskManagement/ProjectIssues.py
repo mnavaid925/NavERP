@@ -11,6 +11,7 @@ a privileged act, and it writes the ``IssueEscalation`` row the escalation regis
 ``resolve`` (capture the root cause and the resolution) and ``close`` (retire a resolved row). A
 resolved or closed row is frozen evidence, so ``iss_edit``/``iss_delete`` refuse it.
 """
+from django.db import transaction
 from django.db.models import Q
 
 from apps.core.crud import as_db_int
@@ -151,18 +152,22 @@ def iss_escalate(request, pk):
         return redirect("projects:iss_detail", pk=obj.pk)
     previous = obj.status
     level = form.cleaned_data.get("level") or min(obj.escalation_level + 1, _MAX_LEVEL)
-    row = form.save(commit=False)
-    row.issue = obj
-    row.escalated_by = request.user
-    row.created_by = request.user
-    row.tenant = request.tenant
-    row.save()
-    obj.escalation_level = level
-    obj.escalated_to = row.target_user
-    obj.escalated_at = timezone.now()
-    obj.save(update_fields=["escalation_level", "escalated_to", "escalated_at", "updated_at"])
-    write_audit_log(request.user, obj, "escalate",
-                    changes={"verb": "escalate", "from": previous, "to": obj.status, "level": level})
+    # The escalation row and the issue's current level describe the same event, so the pair is
+    # written atomically — never leave the row behind without the level it records.
+    with transaction.atomic():
+        row = form.save(commit=False)
+        row.issue = obj
+        row.escalated_by = request.user
+        row.created_by = request.user
+        row.tenant = request.tenant
+        row.save()
+        obj.escalation_level = level
+        obj.escalated_to = row.target_user
+        obj.escalated_at = timezone.now()
+        obj.save(update_fields=["escalation_level", "escalated_to", "escalated_at", "updated_at"])
+        write_audit_log(request.user, obj, "escalate",
+                        changes={"verb": "escalate", "from": previous, "to": obj.status,
+                                 "level": level})
     messages.success(request, f"Escalated {obj.number} to level {level}.")
     return redirect("projects:iss_detail", pk=obj.pk)
 
