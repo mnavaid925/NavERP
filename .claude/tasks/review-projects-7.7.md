@@ -178,3 +178,108 @@ store touched, no 7.4 write, no reinvention of the `crud_*` toolkit. Re-export c
 imports, template folders, seeder guard + children-first flush order, and the six nav targets were all
 verified against live code, not the ERD. The only substantive items are stale `--flush`/command help
 that under-reports a destructive flag (I4) and the `sci_retire` gate already filed by Lane 1 (I5).
+
+---
+
+## Lane 3 — `frontend-reviewer` (templates, design system)
+
+Status: **done**. Then verified the lane's own findings against live code before filing (see the
+per-finding "Verified" notes).
+
+### Critical
+
+**C3 — `scopechange/detail.html:42` renders `{{ obj.HIGH_COST }}`, which resolves to nothing — the
+materiality threshold prints blank into visible prose.**
+Line 42: `<dd>{{ obj.cost_impact }} <span class="text-muted">(material at {{ obj.HIGH_COST }} or
+above)</span></dd>`. `HIGH_COST` is a **class-level constant** on `ScopeChangeRequest`
+(`ScopeChangeRequests.py:63`), not an instance field — Django's variable resolution fails on it and
+substitutes the empty string, so the CCB's evidence panel reads *"(material at  or above)"*. The very
+line that exists to state the threshold states nothing.
+*Verified:* `grep -n HIGH_COST templates/.../scopechange/detail.html` → only line 42; no `high_cost`
+key is passed by `scr_detail`. *Fix:* pass `{"high_cost": ScopeChangeRequest.HIGH_COST}` from
+`scr_detail` and render `{{ high_cost }}`, or hard-code `50,000`. (Passing it from the view is the
+cleaner fix — a new context key must also be pinned in the contract.)
+
+### Important
+
+**I6 — `requirement/list.html` never offers an elicitation-method filter, though the view passes
+`method_choices` and the column is displayed.**
+`req_list` puts `method_choices` in `extra_context` (contract §4.1 pins it) and `list.html:81` shows
+the technique column, but `grep -c method_choices` on the template returns **0** and the view's
+`filters` list (`Requirements.py:51-55`) has no `elicitation_method` entry. So the register's stated
+premise ("what captured it") is unfilterable.
+*Verified:* grep 0; the view's filters are `project, requirement_type, priority, status, owner`.
+*Fix:* either drop `method_choices` from the view's `extra_context`, or add
+`("elicitation_method", "elicitation_method", False)` to `filters` and a matching `<select>` to the
+template. (L11: the value is an allow-list choice, so the ORM lookup is safe as a plain field filter.)
+
+**I7 — `scope_matrix.html` never consumes the pinned `creep_max` key.**
+`grep -c creep_max` on the template returns **0**; `ScopeMatrix.py:173` passes it and contract §4.5
+pins it. Nothing renders wrong — the bars use `row.bar_pct`, which the view already computed against
+`creep_max` — so this is a dead pinned key, not a visual defect.
+*Verified:* grep 0. *Fix:* render it (e.g. "largest month: {{ creep_max }}") or drop it from the
+context and the contract.
+
+### Minor
+
+**M6 — `scope_matrix.html:47` "showing N of M" note does not state the 12-column cap.**
+The note appears only under `{% if project %}` and reports rows, not the truncated work-package
+columns. The column header falls back to `title="{{ wp.name }}"` (a native tooltip) for the identity
+of a capped-out column. *Fix:* widen the note to include the column truncation. (Overlaps Lane 1's M2,
+which is about the row cap — deduped to one item at §6.)
+
+**M7 — the same badge colour carries three meanings across the four registers.**
+`badge-amber` encodes MoSCoW "Should Have" (`requirement/list.html:84`), priority "High"
+(`scopechange/list.html:80`) and the computed "Untraced" state (`requirement/list.html:88`). Not a
+contract breach (the computed-state badges are exempt from the `get_*_display` fallback rule) and every
+class used is in the theme.css allow-list — purely cosmetic. No fix required.
+
+### Categories checked and EMPTY (recorded so the coverage isn't inferred as "not looked at")
+
+* **Badge-class validity (L33)** — **clean.** Every class emitted by the 13 templates is in the
+  theme.css allow-list: only `badge-green/amber/red/info/muted/slate` plus
+  `badge-{{ obj.badge_class }}` (whose source is each model's `STATUS_BANDS`, all valid values). No
+  `-success`/`-warning`/`-danger`. Stat-icon colours used are all six that exist.
+* **L10 nullable-FK-in-`|default:`** — **clean.** Zero occurrences; every nullable FK
+  (`owner`, `requested_by`, `inspected_by`, `source_party`, `accepted_by`, `parent`, `requirement`,
+  `risk`, `wbs_node`) renders via `{% if fk %}…{% else %}—{% endif %}`.
+* **L2 multi-line comments** — **clean.** `grep '{#'` across all 13 templates returns zero matches;
+  every note uses `{% comment %}…{% endcomment %}`.
+* **List-page CRUD completeness + filter-param drift** — **clean.** All four lists have the full
+  `.page-header`/breadcrumb, GET filter form with `q` bound, `.table-wrap`/`.table` + Actions column
+  (eye/pencil/delete POST + csrf + `confirm()`), pagination include and `.empty-state`. Every filter
+  `name=` matches the view's `filters` tuples and the derived lenses; no drift found.
+* **`scope_matrix` GET-only + no chart library + no snapshot** — **clean** apart from I7.
+* **Empty/zero states** — **clean.** `{% empty %}` on every loop; `bar_pct`/`coverage_pct` are
+  view-computed and 0-safe, so no template-side division.
+* **`overview.html` 7.7 additions** — **clean.** The five quick links resolve to live `projects:` names
+  and all five count cards (`requirement_count`, `untraced_count`, `scope_change_count`,
+  `pending_change_count`, `pending_verification_count`) are keys `Overview.py:104-111` actually passes.
+
+### Lane 3 rulings on items the lane itself raised, and the orchestrator's correction
+
+* **The lane's "C2" (ScopeItem detail offers Realize/Retire from `open`) is NOT a defect — downgraded
+  to no-action.** Verified against `scopeitem/detail.html:52-73` and `ScopeItems.py:110-172`: the
+  template gates Validate on `status == 'open'` and offers Realize/Retire whenever the row is not
+  locked, which is exactly the model's `is_open` contract (`open` **or** `validated`), and the page
+  carries copy that says so in as many words ("Realizing records that it came to pass; retiring
+  records that it no longer applies. Both close the row"). `sci_realize` accepts `open` by design.
+  The lane's own text contradicted its heading; the template is correct. The **one** real
+  ScopeItem defect remains Lane 1's I3 (`sci_retire` accepts `realized`, which `is_open` excludes).
+* **Corroboration on the filed L7/L8 finding (Lane 1 I1) — the severity is confirmed *dead key*, not
+  silent no-op.** The lane checked every hand-rolled verb form's POST field name against its form
+  class and all five match (`reason`, `note`, `outcome`, `decision_note`, `note`), so the verbs bind
+  and store correctly. The pinned unbound `*_form` objects are a wasted object and a missing CSS
+  hook, not a broken transition. No new ID; Lane 1's I1 stands as written.
+* **The lane's "I1" (widget classes not asserted by templates) is not a finding** — `{{ field }}` with
+  `_common.py` widget attrs is the house pattern across 7.1–7.5. No action.
+
+### Lane 3 summary
+
+Mechanically the 13 templates are in good shape: badge classes are all in the allow-list, no nullable
+FK sits in a `|default:`, no multi-line comment leaks, the four lists carry the full CRUD action set
+with working filters, and `overview.html`'s new cards consume keys the view really passes. The one
+genuine visual bug is **C3** — `{{ obj.HIGH_COST }}` printing blank into the CCB's materiality line.
+The remaining items are dead pinned context keys (`method_choices`, `creep_max`) and two cosmetic
+notes. The lane's headline "Critical" about the ScopeItem lifecycle buttons was checked against the
+code and **withdrawn** — the template matches the model's contract and documents it in copy.
