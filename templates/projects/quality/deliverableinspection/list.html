@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Inspection Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Inspection Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Inspections</span></div>
+      <p class="text-muted">One row per inspection or test of a deliverable against a quality plan — the execution record, the result and the acceptance decision. The overdue flag is computed from the planned date while the inspection has not been executed.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:quality_acceptance' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Acceptance Board</a>
+      <a href="{% url 'projects:qci_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inspection</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, protocol or findings…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="inspection_type" aria-label="Inspection type" class="form-select">
+            <option value="">Any type</option>
+            {% for val, label in inspection_type_choices %}
+              <option value="{{ val }}" {% if request.GET.inspection_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="result" aria-label="Result" class="form-select">
+            <option value="">Any result</option>
+            {% for val, label in result_choices %}
+              <option value="{{ val }}" {% if request.GET.result == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="usage_decision" aria-label="Usage decision" class="form-select">
+            <option value="">Any decision</option>
+            {% for val, label in usage_decision_choices %}
+              <option value="{{ val }}" {% if request.GET.usage_decision == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="inspector" aria-label="Inspector" class="form-select">
+            <option value="">Any inspector</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.inspector == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="overdue"><input type="checkbox" id="overdue" name="overdue" value="1" {% if request.GET.overdue == '1' %}checked{% endif %}> Overdue</label>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:qci_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Inspection</th><th>Project</th><th>Deliverable</th><th>Type</th><th>Planned</th><th>Result</th><th>Decision</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qci_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.get_inspection_type_display }}</td>
+              <td>{% if obj.planned_date %}{{ obj.planned_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.result == 'pass' %}<span class="badge badge-green">{{ obj.get_result_display }}</span>
+                {% elif obj.result == 'fail' %}<span class="badge badge-red">{{ obj.get_result_display }}</span>
+                {% elif obj.result == 'conditional' %}<span class="badge badge-amber">{{ obj.get_result_display }}</span>
+                {% elif obj.result == 'not_applicable' %}<span class="badge badge-muted">{{ obj.get_result_display }}</span>
+                {% else %}{{ obj.get_result_display }}{% endif %}
+              </td>
+              <td>
+                {% if obj.usage_decision == 'accept' %}<span class="badge badge-green">{{ obj.get_usage_decision_display }}</span>
+                {% elif obj.usage_decision == 'accept_with_deviation' %}<span class="badge badge-amber">{{ obj.get_usage_decision_display }}</span>
+                {% elif obj.usage_decision == 'reject' %}<span class="badge badge-red">{{ obj.get_usage_decision_display }}</span>
+                {% elif obj.usage_decision == 'rework' %}<span class="badge badge-info">{{ obj.get_usage_decision_display }}</span>
+                {% else %}{{ obj.get_usage_decision_display }}{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'passed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'planned' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}{{ obj.get_status_display }}{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:qci_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_locked %}
+                    <a href="{% url 'projects:qci_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'projects:qci_delete' obj.pk %}" onsubmit="return confirm('Delete inspection {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="search-check"></i><h3>No inspections match</h3><p>Plan an inspection or test against a quality plan — the result and the acceptance decision are recorded on the row.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
