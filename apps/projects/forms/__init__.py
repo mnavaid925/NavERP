@@ -57,6 +57,22 @@ from .RiskManagement.ProjectIssues import (  # noqa: F401
 from .RiskManagement.ProjectRisks import ProjectRiskForm, RiskClosureForm  # noqa: F401
 from .RiskManagement.RiskResponseActions import RiskResponseActionForm  # noqa: F401
 
+# --- 7.6 Quality Management -------------------------------------------------------------------
+# Six forms: the four register ModelForms plus the two plain ``forms.Form`` companions the
+# verb-driven gates need (``InspectionAcceptanceForm`` for ``qci_accept``'s usage decision,
+# ``DefectResolutionForm`` for ``qdf_resolve``) — the acceptance stamps and the resolution
+# evidence are written by the verb that stamps them, never by a generic edit.
+from .QualityManagement.DeliverableInspections import (  # noqa: F401
+    DeliverableInspectionForm,
+    InspectionAcceptanceForm,
+)
+from .QualityManagement.QualityDefects import (  # noqa: F401
+    DefectResolutionForm,
+    QualityDefectForm,
+)
+from .QualityManagement.QualityPlans import QualityPlanForm  # noqa: F401
+from .QualityManagement.QualityReviews import QualityReviewForm  # noqa: F401
+
 # --- 7.7 Scope & Requirements Management ------------------------------------------------------
 # Nine forms: the four register ModelForms plus the five plain ``forms.Form`` companions the
 # verb-driven gates need (a rejection always needs a written reason; a verification, an outcome, a
