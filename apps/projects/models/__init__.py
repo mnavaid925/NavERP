@@ -52,6 +52,17 @@ from .RiskManagement.ProjectIssues import ProjectIssue  # noqa: F401
 from .RiskManagement.ProjectRisks import ProjectRisk  # noqa: F401
 from .RiskManagement.RiskResponseActions import RiskResponseAction  # noqa: F401
 
+# --- 7.6 Quality Management -------------------------------------------------------------------
+# Four new tables, no fifth: the acceptance-criteria plan, the structured quality event (QA and
+# continuous improvement discriminated by review_type), the deliverable inspection (QC execution
+# AND the acceptance decision on one row) and the punch-list defect. Every pass rate, punch-list
+# count and maturity figure is a derived property or a computed view — none is a column — and the
+# enterprise NCR/CAPA/audit/inspection tables are scm 4.9's (Ruling 1).
+from .QualityManagement.DeliverableInspections import DeliverableInspection  # noqa: F401
+from .QualityManagement.QualityDefects import QualityDefect  # noqa: F401
+from .QualityManagement.QualityPlans import QualityPlan  # noqa: F401
+from .QualityManagement.QualityReviews import QualityReview  # noqa: F401
+
 # --- 7.7 Scope & Requirements Management ------------------------------------------------------
 # Four new tables: the requirement register (with its traceability links), the boundary /
 # assumption / constraint registry, the CCB change register and the deliverable acceptance log.
