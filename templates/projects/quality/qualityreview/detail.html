@@ -77,11 +77,11 @@
   <div class="card">
     <div class="card-header"><h2>Lifecycle</h2></div>
     <div class="card-body">
-      {% if obj.status == 'in_progress' %}
+      {% if obj.status == 'planned' or obj.status == 'in_progress' %}
         <form method="post" action="{% url 'projects:qrv_report' obj.pk %}" onsubmit="return confirm('Report review {{ obj.number }}?');">
           {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="file-check-2"></i> Report review</button>
         </form>
-        <p class="text-muted">Reporting records the findings as evidence. A reported review can then be closed.</p>
+        <p class="text-muted">Reporting records the findings as evidence — a planned review can be reported directly, without a separate start step. A reported review can then be closed.</p>
       {% elif obj.status == 'reported' %}
         <form method="post" action="{% url 'projects:qrv_close' obj.pk %}" onsubmit="return confirm('Close review {{ obj.number }}? It becomes frozen evidence.');">
           {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle-2"></i> Close review</button>
