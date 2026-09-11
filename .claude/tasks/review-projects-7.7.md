@@ -377,3 +377,80 @@ contract promised are genuinely applied before rendering, and no template loop d
 FK. Two non-blocking budget items remain, both in `ScopeMatrix.py` — I8 (16 separate counts that two
 grouped aggregates would replace) and I9 (the unbounded creep loop) — neither of which grows with row
 count, so neither threatens the 7.4 bar. The temp measurement script was deleted.
+
+---
+
+## Lane 5 — `qa-smoke-tester` (live route sweep; report-only override)
+
+Status: **done**. Ran against the real seeded `nav_erp` MySQL DB via the Django test client
+(acme/globex: 15/15 REQ, 12/12 SCI, 9/9 SCR, 9/9 SVR). **38 routes probed.** Harness deleted; live DB
+returned to exact seed counts; nothing under `apps/`/`templates/` touched.
+
+### PASS/FAIL — GET pages (content asserted, not just status)
+
+| Route | Result | Route | Result |
+|---|---|---|---|
+| `req_list`/`create`/`detail`/`edit` | **PASS** | `sci_list`/`create`/`detail`/`edit` | **PASS** |
+| `scr_list`/`create`/`detail`/`edit` | **PASS** | `svr_list`/`create`/`detail`/`edit` | **PASS** |
+| `scope_matrix` (tenant-wide) | **PASS** (coverage figure renders) | `scope_matrix?project=` | **PASS** (WP column renders) |
+
+Every page 200 with a record-specific token (`REQ-`/`SCI-`/`SCR-`/`SVR-` number, title, statement,
+deliverable). **No blank `<h2>` anywhere** — the L8 failure mode is absent.
+
+### PASS/FAIL — verb matrix (all 16)
+
+| Verb | Happy | 2nd POST | Verb | Happy | 2nd POST |
+|---|---|---|---|---|---|
+| `req_submit/approve/reject/implement/verify` | PASS | refused | `sci_validate/realize/retire` | PASS | refused |
+| `scr_submit/review/approve/reject/implement` | PASS | refused | `svr_accept/reject/waive` | PASS | refused |
+
+All 16 moved `status`, stamped the correct `*_by`/`*_at` pair, and redirected 302→detail. Nine
+wrong-source-state refusals never 500'd, never moved the row, and queued a `messages.error` (spot-checked:
+`req_approve` on a draft → *"Only a submitted requirement can be approved."*).
+
+### PASS/FAIL — cross-cutting
+
+| Check | Result |
+|---|---|
+| Junk params (55 = 11 × 5 lists) | **55/55 → 200**, no 500 |
+| Page 2 (seeded +20 rows) | **PASS** — p1=15, p2=15, **0 overlap** |
+| Cross-tenant IDOR (28 routes) | **28/28 → 404** |
+| Anonymous access (11 routes) | **11/11 → 302 to login** |
+| Leak scan (23 pages) | **0** hits for `{#` / `{% comment` / `<QuerySet` / `object at 0x` / `<django` |
+| Create round-trip (4 models) | PASS — minted `REQ-00022`, `SCI-00016`, `SCR-00015`, `SVR-00014`; `created_by` stamped; re-POST did not 500 |
+| `scope_matrix` edges | PASS — no project / globex pk (ignored, no leak) / `?project=abc` / empty project (no division-by-zero) |
+
+### Findings
+
+**I10 — admin-gated verbs answer 403 for a member on GET (INDEPENDENT CONFIRMATION).**
+`GET` on `/projects/requirements/<pk>/{approve,reject,verify}/`,
+`/projects/scope-changes/<pk>/{review,approve,reject}/`,
+`/projects/scope-verifications/<pk>/{reject,waive}/` → **403** as a member, **405** as an admin.
+Expected 405 (the method is wrong for everyone). Cause as filed by Lane 1: the decorator order puts the
+permission check ahead of `@require_POST`. **Not a new finding — a third independent confirmation of
+Lane 1's C2** (the lane that built the probe, the QA lane, and the code read all agree). Deduped at §6.
+
+**M10 — the 405/403 split makes the method-guard matrix inconsistent.**
+The eight admin-gated routes above are 403-for-member while the other twelve POST-only routes
+(`req_delete`, `req_submit`, `sci_*`, `scr_delete/submit/implement`, `svr_delete/accept`) are
+405-for-member. Purely cosmetic, no security impact (the 403 is only for a route the member is
+legitimately denied) — resolved automatically by fixing I10/C2. No separate action.
+
+### What could NOT be tested (missing coverage, not a pass)
+
+* The superuser `admin` (`tenant=None`) actor was not probed — out of the specified actor set.
+  Tenant-less GETs fall back to empty registers by design; unverified here.
+* POST verbs with **real form-field errors** (e.g. `sci_realize` with a blank `outcome`) were exercised
+  for refusal only; the rendered form-error output was not asserted.
+* Page 2 needed 20 temporary rows (seed data was exactly one page); verified, then removed.
+
+### Lane 5 summary
+
+**38 routes probed; 0 Critical, 1 Important (a third confirmation of Lane 1's C2), 1 Minor.** All 16
+lifecycle verbs move correctly on the happy path, stamp the right evidence, redirect to detail, and
+refuse on the second POST without re-stamping or 500ing. All 28 cross-tenant probes return 404 (no IDOR,
+no existence leak on tenant scope). All 55 junk-param combinations and every create-form duplicate POST
+return 200. Content assertions confirm real context resolution — numbers, titles, statements,
+deliverables, coverage figures, work-package names — not blank-but-200 pages. The single defect is the
+decorator-ordering 403-vs-405 on the eight admin-gated verb routes, already known and now
+triple-confirmed.
