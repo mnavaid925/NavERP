@@ -32,6 +32,11 @@ from apps.projects.views._helpers import projects as project_choices
 #: The tolerance label shown on the flag line. The bands themselves live on the model.
 TOLERANCE_LABEL = "High / Critical"
 
+#: Working-set cap for the board. A register large enough to hit it makes every lens a
+#: partial view — but an unparameterised whole-table materialisation in the request thread is
+#: the worse failure. Both computed pages cap identically.
+_REGISTER_CAP = 2000
+
 
 def _burndown(register):
     """Aggregate the register by ``identified_date`` month, ascending, with a 0-safe bar scale."""
@@ -60,10 +65,12 @@ def _burndown(register):
 
 
 def _lessons(tenant, register, project=None):
-    """Newest-first ``lessons_learned`` from closed risks and resolved/closed issues, cap 25.
+    """Newest-first ``lessons_learned`` from closed risks and closed/resolved issues, cap 25.
 
     The issue half is anchored to the selected ``project`` exactly like the register the other
-    lenses read — with ``?project=`` set, another project's lessons must not leak into the board.
+    lenses read — with ``?project=`` set, another project's lessons must not leak into the board —
+    and is capped **in the database** (the 25 newest by ``resolved_at``; any issue outside those
+    25 cannot reach the merged top 25, so the cap costs nothing but the query's LIMIT).
     """
     entries = []
     for risk in register:
@@ -79,7 +86,8 @@ def _lessons(tenant, register, project=None):
               .exclude(lessons_learned=""))
     if project is not None:
         issues = issues.filter(project=project)
-    issues = issues.select_related("project")
+    issues = (issues.select_related("project")
+              .order_by("-resolved_at", "-id")[:25])
     for issue in issues:
         if (issue.lessons_learned or "").strip():
             entries.append({
@@ -106,7 +114,7 @@ def risk_monitoring(request):
                    .select_related("project", "owner"))
     if project is not None:
         register_qs = register_qs.filter(project=project)
-    register = list(register_qs)
+    register = list(register_qs[:_REGISTER_CAP])
 
     # One pass over the register for the summary figures: the three status counts, the tolerance
     # count, the review-queue candidates and both summary counters. ``severity_band`` loops the
