@@ -903,12 +903,12 @@ class Command(BaseCommand):
                 action(r3, "Cache the product catalogue read path", "mitigate", 40, "15000.00",
                        "planned")
 
-                i1 = issue(active, "Vendor invoice for the SSO spike is unmatched", "medium",
-                           "in_progress", None, r12, 4, due_offset=6,
-                           description="The realized vendor-invoice risk materialized: the "
-                                       "invoice has no matching purchase order.")
-                i2 = issue(active, "Load test fails the p95 latency target", "critical", "open",
-                           tasks.get("Order API"), r3, 12, due_offset=3)
+                issue(active, "Vendor invoice for the SSO spike is unmatched", "medium",
+                      "in_progress", None, r12, 4, due_offset=6,
+                      description="The realized vendor-invoice risk materialized: the "
+                                  "invoice has no matching purchase order.")
+                issue(active, "Load test fails the p95 latency target", "critical", "open",
+                      tasks.get("Order API"), r3, 12, due_offset=3)
                 esc_issue = issue(active, "Partner sandbox certification blocked on credentials",
                                   "high", "blocked", tasks.get("Checkout integration"), r2, 20,
                                   due_offset=-2, escalated_to=owner, level=2)
@@ -924,12 +924,11 @@ class Command(BaseCommand):
                 issue(active, "Refund service review notes outstanding", "low", "closed", None,
                       r6, 40)
 
-                escalated = esc_issue
-                escalation(escalated, 1, "Project Manager",
+                escalation(esc_issue, 1, "Project Manager",
                            "The partner's certification owner is unresponsive and the "
                            "interface date is at risk.", "Project manager took the "
                            "escalation and chased the partner directly.", resolved=True)
-                escalation(escalated, 2, "Program Manager",
+                escalation(esc_issue, 2, "Program Manager",
                            "Certification is still blocked after a week and the interface "
                            "date cannot absorb further delay.")
 
