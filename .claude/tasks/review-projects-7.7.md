@@ -283,3 +283,97 @@ genuine visual bug is **C3** — `{{ obj.HIGH_COST }}` printing blank into the C
 The remaining items are dead pinned context keys (`method_choices`, `creep_max`) and two cosmetic
 notes. The lane's headline "Critical" about the ScopeItem lifecycle buttons was checked against the
 code and **withdrawn** — the template matches the model's contract and documents it in copy.
+
+---
+
+## Lane 4 — `performance-reviewer` (measured query counts)
+
+Status: **done**. Measured, not guessed: `CaptureQueriesContext` under `--nomigrations` (L49), 16 seeded
+rows per register (per_page+1 so a second page exists), then re-run at 40/100/300 rows to test for growth.
+
+### Measured table
+
+| Route | Queries | Grows with rows? |
+|---|---:|---|
+| `req_list` | 11 | **flat** (11 at 16/40/100/300 rows) |
+| `sci_list` | 11 | flat |
+| `scr_list` | 11 | flat |
+| `svr_list` | 11 | flat |
+| `req_list?untraced=1` | 11 | flat |
+| `req_list?pending=1` | 11 | flat |
+| `req_list?verified=1` | 10 | flat |
+| `sci_list?boundaries=1` | 10 | flat |
+| `sci_list?open=1` | 11 | flat |
+| `scr_list?pending=1` | 11 | flat |
+| `scr_list?high_impact=1` | 10 | flat |
+| `svr_list?pending=1` | 11 | flat |
+| `req_detail` (children+CRs+SVRs+SCIs) | 12 | flat |
+| `sci_detail` | 8 | flat |
+| `scr_detail` | 8 | flat |
+| `svr_detail` | 8 | flat |
+| `scope_matrix?project=` | 34 | flat (34 at 30 wp / +200 SCR / +100 req) |
+| `scope_matrix` (no `?project=`, tenant-wide) | 31 | flat |
+| `scope_matrix` (30 work packages) | 34 | flat |
+
+Every register holds at exactly **11 queries from 16 → 300 rows** — at or better than the 7.4 bar
+(75→22 / 119→14). The pinned `select_related` lists are complete.
+
+### Critical
+
+None in this lane. No route — register, detail, derived lens, matrix, or tenant-wide matrix —
+re-queries per row, and no cap is missing before the template.
+
+### Important
+
+**I8 — `scope_matrix` issues 16 unconditional `COUNT(*)` round-trips for the summary strip.**
+`views/ScopeRequirements/ScopeMatrix.py:148-161`. The 34-query budget decomposes as ~5 setup
+(session/user/tenant/branding/projects), 1 project, 2 work-package, 1 coverage aggregate, 2 grouped
+verification counts, 3 matrix/gap SELECTs, 1 creep SELECT, **6 `scope_summary` counts (`:153-161`)**
+and **10 `_rows()` counts (`:149`)** where `_rows` iterates 6 type + 4 priority choices doing one
+`.count()` each. It is *flat* — safe against volume — but ten scalar tallies are ~47% of the page's
+budget. *Fix:* collapse each family into one `values(field).annotate(Count("id"))` (2 queries replace
+16), or drop the zero-count choices from `_rows()`.
+
+**I9 — the `scope_matrix` creep loop materializes every approved/implemented change row unbounded.**
+`ScopeMatrix.py:124-139`: `changes_qs.filter(status__in=("approved","implemented"))` has **no slice**,
+unlike the two gap lists (`GAP_LIMIT=25`, `:116-119`) and the matrix rows (`MAX_MATRIX_ROWS=40`, `:107`).
+Measured: 500 approved changes ⇒ 500 rows loaded in Python. The query count stays flat (one SELECT), so
+this is **not** an N+1 — it is an unbounded result set (memory/CPU). Mitigating: `is_high_impact` and the
+two impact columns are already-loaded scalars, so no per-row FK query. *Fix:* aggregate in the DB
+(`annotate(TruncMonth(...))`) or slice a bound the way the sibling panels are capped.
+
+### Minor
+
+**M8 — `req_detail`'s `change_requests` slice is a superset of the contract and partly dead.**
+`Requirements.py:102` pins `select_related("requested_by", "risk")` while `requirement/detail.html:135-152`
+renders neither `c.risk` nor `c.requested_by`. Measured 12 queries — no cost today; the `risk` join is
+dead weight (the admin's own "joined but renders in no column" rule). *Fix:* drop `risk`, or render the
+risk column the join was added for.
+
+**M9 — the creep SELECT fetches full row objects where `.values()` would do** (`ScopeMatrix.py:124`).
+Folds into I9; noted only to close the category. No separate action.
+
+### Categories checked and EMPTY
+
+* **Unbounded queryset reaching a template** — none. All caps are applied **in the view, before render**:
+  `MAX_MATRIX_COLUMNS=12` (`:77`), `MAX_MATRIX_ROWS=40` (`:107`), `GAP_LIMIT=25` (`:116-119`).
+* **Per-row FK query inside a loop** — none. The `matrix_rows` loop (`:105-114`) reads
+  `requirement.wbs_node_id` (free) and two pre-grouped dicts; the creep loop reads local columns only.
+* **A `prefetch_related` that should have removed a query** — none. Each `req_detail` child loop
+  (`child_requirements`/`change_requests`/`verifications`/`linked_scope_items`) is `select_related`ed in
+  the view (`:101-107`) and costs exactly one query each.
+* **Missing `select_related` on a rendered FK** — none. Every `<td>` deref in the four list templates was
+  cross-checked against §4's pinned lists and matches (including `svr_list`'s `obj.requirement.number`
+  and `req_list`'s `obj.wbs_node.name`).
+* **A derived property dereferencing an unjoined FK** — none. `is_high_impact`, `is_traced`, `is_open`,
+  `is_locked`, `is_review_overdue`, `badge_class` all read scalar columns only.
+
+### Lane 4 summary
+
+7.7 is performance-clean and flat: all four registers and every derived lens sit at 10–11 queries
+whether the page holds 16 or 300 rows, the four detail pages at 8–12, and `scope_matrix` at 34 (31
+tenant-wide) with no growth as work packages, changes or requirements increase. The view-level caps the
+contract promised are genuinely applied before rendering, and no template loop dereferences an unjoined
+FK. Two non-blocking budget items remain, both in `ScopeMatrix.py` — I8 (16 separate counts that two
+grouped aggregates would replace) and I9 (the unbounded creep loop) — neither of which grows with row
+count, so neither threatens the 7.4 bar. The temp measurement script was deleted.
