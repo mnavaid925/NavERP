@@ -149,9 +149,10 @@ def risk_monitoring(request):
     by_category = {label: category_counter.get(value, 0)
                    for value, label in ProjectRisk.CATEGORY_CHOICES}
     band_counter = Counter(risk.severity_band for risk in register)
+    # The band vocabulary is the model's own — a second inline copy here could drift from
+    # ``SEVERITY_BANDS`` without any error (a fifth band would silently drop off this strip).
     by_band = {label: band_counter.get(band, 0)
-               for band, label in (("low", "Low"), ("medium", "Medium"),
-                                   ("high", "High"), ("critical", "Critical"))}
+               for band, label in ProjectRisk._BAND_LABELS.items()}
 
     return render(request, "projects/risk/risk_monitoring.html", {
         "projects": project_qs,
