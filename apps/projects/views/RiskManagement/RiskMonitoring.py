@@ -66,8 +66,12 @@ def _burndown(register):
     return rows, burndown_max
 
 
-def _lessons(tenant, register):
-    """Newest-first ``lessons_learned`` from closed risks and resolved/closed issues, cap 25."""
+def _lessons(tenant, register, project=None):
+    """Newest-first ``lessons_learned`` from closed risks and resolved/closed issues, cap 25.
+
+    The issue half is anchored to the selected ``project`` exactly like the register the other
+    lenses read — with ``?project=`` set, another project's lessons must not leak into the board.
+    """
     entries = []
     for risk in register:
         if risk.status == "closed" and (risk.lessons_learned or "").strip():
@@ -79,8 +83,10 @@ def _lessons(tenant, register):
             })
     issues = (ProjectIssue.objects
               .filter(tenant=tenant, status__in=("resolved", "closed"))
-              .exclude(lessons_learned="")
-              .select_related("project"))
+              .exclude(lessons_learned=""))
+    if project is not None:
+        issues = issues.filter(project=project)
+    issues = issues.select_related("project")
     for issue in issues:
         if (issue.lessons_learned or "").strip():
             entries.append({
@@ -136,7 +142,7 @@ def risk_monitoring(request):
         "above": above_tolerance_count,
     }
 
-    lessons = _lessons(tenant, register)
+    lessons = _lessons(tenant, register, project)
     lessons_count = len(lessons)
 
     category_counter = Counter(risk.category for risk in register)
