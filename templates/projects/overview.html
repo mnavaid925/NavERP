@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations) and the 7.7 scope layer (requirements, boundaries, change control, acceptance). The rest of Module 7 is separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list) and the 7.7 scope layer (requirements, boundaries, change control, acceptance). The rest of Module 7 is separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -33,6 +33,9 @@
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ above_tolerance }}</div><div class="stat-label">Above tolerance</div></div>
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ review_due_count }}</div><div class="stat-label">Reviews due</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ issue_count }}</div><div class="stat-label">Issues</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="clipboard-check"></i></div><div class="stat-value">{{ quality_plan_count }}</div><div class="stat-label">Quality plans</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="clock"></i></div><div class="stat-value">{{ acceptance_queue_count }}</div><div class="stat-label">Awaiting sign-off</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="bug"></i></div><div class="stat-value">{{ open_defect_count }}</div><div class="stat-label">Open defects</div></div>
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div><div class="stat-value">{{ requirement_count }}</div><div class="stat-label">Requirements</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ untraced_count }}</div><div class="stat-label">Untraced requirements</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-diff"></i></div><div class="stat-value">{{ scope_change_count }}</div><div class="stat-label">Change requests</div></div>
@@ -156,6 +159,36 @@
               <td class="fw-600"><a href="{% url 'projects:risk_monitoring' %}">Risk Monitoring</a></td>
               <td>Top risks, the exposure burn-down, the review queue and the lessons lens.</td>
               <td><a href="{% url 'projects:risk_monitoring' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qpl_list' %}">Quality Plans</a></td>
+              <td>Acceptance criteria, verification methods and standard mapping per deliverable.</td>
+              <td><a href="{% url 'projects:qpl_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qrv_list' %}">Quality Review Register</a></td>
+              <td>Methodology, compliance and gate reviews plus the kaizen/retrospective register.</td>
+              <td><a href="{% url 'projects:qrv_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qci_list' %}">Inspection Register</a></td>
+              <td>Testing and acceptance inspections with the result and the usage decision.</td>
+              <td><a href="{% url 'projects:qci_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:qdf_list' %}">Defect &amp; Punch List</a></td>
+              <td>Deliverable defects with severity, disposition, owner and the issue bridge.</td>
+              <td><a href="{% url 'projects:qdf_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:quality_improvement' %}">Continuous Improvement</a></td>
+              <td>The kaizen/retro register, a computed maturity score, the defect trend and lessons.</td>
+              <td><a href="{% url 'projects:quality_improvement' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:quality_acceptance' %}">Acceptance Board</a></td>
+              <td>One row per deliverable — plan, latest inspection, punch list and acceptance state.</td>
+              <td><a href="{% url 'projects:quality_acceptance' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
             <tr>
               <td class="fw-600"><a href="{% url 'projects:req_list' %}">Requirements</a></td>
