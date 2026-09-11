@@ -20,6 +20,80 @@ is the only one that touches the DB and is overridden to *report, not fix*.
 
 ---
 
+# CONSOLIDATED FINDINGS (the fixer's list)
+
+Six lanes ran serial. Raw count **32 items**; after dedupe **3 Critical / 10 Important / 7 Minor**, plus
+**6 no-action notes**. The final IDs below are canonical — §Lane 1–6 below keep the lanes' *own* IDs in
+parentheses so every report stays traceable.
+
+## Critical
+
+* **C1** — `ScopeItem.STATUS_CHOICES` is missing `violated`, and `is_locked` therefore omits it, so the
+  state cannot exist and (if it could) its rows would be editable. *(Lane 1, as C1)*
+* **C2** — the nine admin-gated verbs decorate `@tenant_admin_required` **before** `@require_POST`, so a
+  member's `GET` gets **403** where every other POST-only route gives **405** (a privilege oracle).
+  Independently reproduced by three lanes. *(Lane 1 C2 + Lane 5 I10 + Lane 6 M11 + Lane 5 M10)*
+* **C3** — the 7.7 `_scope` seeder block aborts on `IntegrityError: CHECK constraint failed:
+  schedule_impact_days` and, inside `transaction.atomic()`, writes **nothing**; the guard then re-enters
+  and fails identically forever. *(Lane 6, as C1)*
+
+## Important
+
+* **I1** — the four detail templates never consume the pinned unbound `*_form` context keys
+  (`rejection_form`, `verification_form`, `outcome_form`, `decision_form`) — dead context, class L7/L8.
+  *(Lane 1, as I1)*
+* **I2** — `Requirement.elicitation_method` is `max_length=20`; the contract pins 16 (the code is the
+  safer value — fix the contract). *(Lane 1, as I2)*
+* **I3** — `sci_retire` accepts a **realized** row, which `is_open` excludes. *(Lane 1 I3 + Lane 2 I5)*
+* **I4** — the seeder's command help and `--flush` help under-report the 7.5 and 7.7 tables the flag
+  actually drops. *(Lane 2, as I4; + Lane 6 M12 — same defect)*
+* **I5** — `requirement/list.html` offers no elicitation-method filter though the view passes
+  `method_choices` and the column is shown. *(Lane 3, as I6)*
+* **I6** — `scope_matrix.html` never consumes the pinned `creep_max` key. *(Lane 3, as I7)*
+* **I7** — `scope_matrix` issues 16 separate `COUNT(*)` round-trips for the summary strip. *(Lane 4, as I8)*
+* **I8** — the `scope_matrix` creep loop materializes every approved/implemented change row unbounded (no
+  slice, unlike its two sibling panels). *(Lane 4, as I9)*
+* **I9** — `sci_realize` / `sci_retire` are login-only, so a plain member writes a registry row's
+  `outcome` and freezes it. **Adjudicate against the contract** — may be by design.
+  *(Lane 6, as I11)*
+* **I10** — `svr_accept` is login-only, so a plain member accepts a deliverable. **Adjudicate against the
+  contract** — the accept/reject asymmetry looks deliberate. *(Lane 6, as I12)*
+
+## Minor
+
+* **M1** — `RequirementAdmin.list_select_related` joins `parent` that no `list_display` column renders.
+  *(Lane 1, as M1)*
+* **M2** — `MAX_MATRIX_ROWS = 40` is undocumented and truncates the matrix with no "showing N of M" line.
+  *(Lane 1 M2 + Lane 3 M6 — same area)*
+* **M3** — the four `ScopeRequirements/__init__.py` docstrings describe the transient pre-Integrate state.
+  *(Lane 2, as M4)*
+* **M4** — `req_detail`'s `change_requests` `select_related` includes `risk`, which the template never
+  renders. *(Lane 4, as M8)*
+* **M5** — the creep SELECT (`ScopeMatrix.py:124`) fetches full rows where `.values()` would do.
+  *(Lane 4, as M9)*
+* **M6** — the same badge colour carries three different meanings across the four registers (cosmetic).
+  *(Lane 3, as M7)*
+* **M7** — the `timezone`/`Decimal`/`MinValueValidator` names reach the entity modules only via the
+  star-import (accepted convention — no change; recorded so it is not re-raised). *(Lane 2, as M5)*
+
+## Recorded no-actions (deliberately NOT for the fixer)
+
+* **N1** — `navigation.py:1789-1799` carries all five verbatim sidebar keys plus the extra approval-queue
+  leaf; all six targets reverse-resolve. Clean. *(Lane 1 M3)*
+* **N2** — the ScopeItem detail page's Realize/Retire-from-`open` gating is **correct** — it mirrors the
+  model's `is_open` and the copy documents it. Lane 3 raised it as a Critical and the orchestrator
+  **withdrew it** after reading the code. Only the `sci_retire`-from-`realized` hole (I3) is real.
+* **N3** — "widget classes not asserted by templates" — `{{ field }}` with `_common.py` attrs is the house
+  pattern across 7.1–7.5. No action. *(Lane 3, as its I1)*
+* **N4** — no nullable FK sits inside a `|default:`, no multi-line `{# #}` leaks, no filter-param drift,
+  no `|safe`/`mark_safe`. Verified clean by Lane 3 — listed so the coverage is explicit.
+* **N5** — Lane 3's claim that the hand-rolled verb forms might be silent no-ops: **refuted** — every
+  POST field name matches its form class, so the verbs bind correctly. The pinned keys are merely dead.
+* **N6** — Lane 5's "registers are populated, so the seeder works" reading was based on **stale live
+  rows**; C3 supersedes it. Lane 5's render/verb/IDOR results still stand (they exercise the views).
+
+---
+
 ## Lane 1 — `code-reviewer`
 
 Status: **done**. Findings below in the lane's own ID space; deduped IDs assigned at the end of §6.
