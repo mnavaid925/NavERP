@@ -454,3 +454,125 @@ return 200. Content assertions confirm real context resolution — numbers, titl
 deliverables, coverage figures, work-package names — not blank-but-200 pages. The single defect is the
 decorator-ordering 403-vs-405 on the eight admin-gated verb routes, already known and now
 triple-confirmed.
+
+---
+
+## Lane 6 — `security-reviewer`
+
+Status: **done**. Ran a live harness under `config.settings_test` (`--nomigrations`); harness deleted,
+nothing under `apps/`/`templates/` touched.
+
+### Critical
+
+**C4 — the 7.7 seeder block aborts on a CHECK violation, so the block writes nothing and is not
+re-runnable.**
+`apps/projects/management/commands/seed_projects.py:1407-1408`:
+
+```python
+change(active, "Reduce the accessibility target on the checkout screens",
+       "regulatory", "medium", "0.00", -10, "high", "rejected",
+       justification="Buy ten days by shipping conforming at a lower conformance level.",
+```
+
+`-10` lands in `ScopeChangeRequest.schedule_impact_days`, declared `PositiveIntegerField`
+(`models/ScopeRequirements/ScopeChangeRequests.py:83`, migration `0007:68`). The `change()` helper
+(line 1257) calls `obj.save()` directly with no `full_clean()`, so the field validator never runs and
+the failure surfaces as a DB CHECK violation.
+
+**Reproduced decisively** (scratch SQLite, full chain `seed_core → seed_accounts → seed_projects`):
+
+```
+E  django.db.utils.IntegrityError: CHECK constraint failed: schedule_impact_days
+```
+
+Because the whole `_scope` block sits inside `transaction.atomic()` (`:1289`), the exception rolls back
+**all four models' rows**. The per-tenant guard at `:1203` tests `Requirement…exists()`, so every
+subsequent run re-enters and fails identically — **the block is not self-healing.**
+
+**Why the live DB looked fine (the trap this lane fell into).** The live `nav_erp` has 15/15/12/9
+REQ/SCI/SCR/SVR per tenant and **no negative rows** — but the offending row (`SCR-00004`, "Reduce the
+accessibility target…", `project.status == "active"`) carries `schedule_impact_days = 0`, not `-10`.
+`git blame` puts the `-10` on `8ba9b7d0` (2026-09-11 03:55), the very commit that added the block, so
+the live rows must predate the file's current state — i.e. the workspace was seeded from an earlier
+variant and the seeder has been broken since. The orchestrator cross-checked this directly:
+`git show 8ba9b7d0:...seed_projects.py` has `-10`, the live row has `0`, and the scratch-DB run raises.
+**Both readings are consistent; the lane's Critical stands and the live data is stale, not evidence of
+health.**
+
+*Fix:* `schedule_impact_days=10` (the justification literally says "buy ten days" — it is a magnitude),
+and add `full_clean()` to the `_scope` factories so this class of defect fails loudly at seed time
+instead of at the DB constraint. Then re-run `seed_projects` **twice** on a clean workspace and confirm
+the second run is the guard's no-op.
+
+> **Impact on Lane 5.** The QA lane reported the registers populated because it read the **stale live
+> rows**. Its 38-route sweep remains valid as a *render* test, but its claim that the seeder works is
+> wrong — the block has not completed since the `-10` edit. Lane 5's "seeded +20 rows then removed"
+> page-2 check and its create round-trip (which minted `REQ-00022` etc.) both went through the **view**,
+> not the seeder, so those results stand.
+
+### Important
+
+**I11 — `sci_realize` / `sci_retire` are login-only, so a plain member can write a registry row's
+outcome and freeze it.**
+`ScopeItems.py:132,155`. Both verbs set `status` and stamp `outcome` + `closed_at`, after which the
+model's `is_locked` freezes the row against edit/delete. Probed: a member POST succeeds (302), no 403.
+*Security dimension:* this is a unilateral, member-driven promotion of a boundary/assumption row to
+frozen evidence with no admin review step — the only 7.7 mutation path where a non-admin writes evidence
+the register then treats as authoritative. **Adjudication call for the contract:** if 7.7 intends
+members to close registry rows (the detail-page copy reads that way), this is by design and needs no
+change; if it intends admin-only escalation, hoist `@tenant_admin_required` above both. Flagged, not
+asserted as a defect.
+
+**I12 — `svr_accept` is login-only, so a plain member can accept a deliverable.**
+`ScopeVerifications.py:114`. Sets `acceptance_status="accepted"`, which `is_decided` then freezes. Same
+shape and same adjudication call as I11 — deliverable acceptance is normally a customer/PM gate, but the
+contract explicitly pins `svr_accept` as login-only while `svr_reject`/`svr_waive` are admin-gated, so
+the asymmetry looks deliberate (accept is the routine path; rejecting or waiving needs authority).
+Recorded for the contract owner; **no action unless the contract is revised.**
+
+### Minor
+
+**M11 — the 403/405 split is a privilege oracle (security framing of Lane 1's C2).**
+Same URL and method: `member → 403`, `admin → 405`, `anon → 302`. Beyond the inconsistency, the split
+lets an unauthenticated prober distinguish "exists and you're not allowed" from "exists and someone
+else is" where a uniform 405 would disclose nothing. Confirmed independently for all eight gated verbs.
+Resolved by the C2 fix; recorded here as the security rationale.
+
+**M12 — seeder `--flush` help under-reports the 7.5/7.7 tables it drops.** Prior-lane finding (I4).
+Security angle only: an operator trusting the help text to clean a half-seeded workspace will not clear
+7.7's rows, so a partial re-seed can leave orphaned 7.7 data. No disclosure. No separate action.
+
+### Guarantees verified CLEAN (explicit coverage — these are not "not checked")
+
+* **Tenant isolation** — all 28 pk-views + 4 lists return **404** for a tenant-B pk as tenant-A admin;
+  a tenant-B admin on a tenant-A pk gets **404 before 403** (the load-bearing ordering).
+  `?project=<foreign pk>` on `scope_matrix` → 200 with **no** foreign data; `?project=abc` → 200, no 500.
+* **Cross-tenant FK injection** — crafted POSTs carrying tenant-B `project` / `requirement` / `wbs_node`
+  / `risk` / self-`parent` pks are **field errors** on all four forms; row count unchanged.
+  `TenantUniqueMixin` + `_reject_foreign` hold.
+* **Privilege gates** — a plain member on all eight admin gates → **403 with the object untouched**
+  (`status` still `draft`, no `AuditLog` row). Admin passes the same gate. Login-only verbs accept a
+  member (by contract).
+* **Method + CSRF** — deletes and all non-gated verbs are **405 on GET**; a POST without a token is
+  **403** under `Client(enforce_csrf_checks=True)`, deletes included.
+* **Mass assignment** — injecting `status`, `approved_by`, `verified_by`, `acceptance_status`,
+  `decision_note`, `rejection_reason`, `verification_note`, `outcome`, `number`, `tenant`, `created_by`
+  leaves every field at its prior value on all four `*_edit` routes.
+* **Evidence immutability** — locked/decided rows refuse both edit and delete.
+* **Audit trail** — every action literal fits `varchar(10)`; `previous` captured pre-mutation.
+* **XSS** — `<script>alert(1)</script>` renders escaped (`&lt;script&gt;`) in list and detail; no
+  `|safe`/`mark_safe`/`{% autoescape off %}` anywhere under `templates/projects/scope/**`.
+* **Information disclosure** — DEBUG is off under test settings; IDOR returns 404, never a 500 or a
+  403 existence leak.
+* **Seed data hygiene** — the block is tenant-scoped by construction and would be idempotent by guard,
+  but **cannot be verified end-to-end while C4 holds**; that gap *is* C4.
+
+### Lane 6 verdict
+
+The access-control core is strong: tenant isolation, cross-tenant FK rejection, CSRF, method guards,
+mass-assignment lockdown and evidence immutability all survived adversarial probing with zero failures.
+But **C4 makes the seeder non-functional** — the `_scope` block aborts on a CHECK violation and writes
+nothing, so the block cannot be re-run on a clean workspace and every claim about the seeded register,
+matrix and creep board is currently unverifiable end-to-end. Fix C4 (one character plus a `full_clean()`),
+re-seed twice, and adjudicate I11/I12 (the admin-gate contract for `sci_realize`/`sci_retire`/
+`svr_accept`) with the contract owner. After that, 7.7 is shippable.
