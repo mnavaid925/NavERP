@@ -12,24 +12,31 @@ description: >-
   Management: the resource pool (internal via hrm.EmployeeProfile / external via core.Party), the
   allocation register with placeholders, soft/firm booking verbs and substitution, the capacity &
   demand board with over-allocation alerts, and project-facing time entries with an approval
-  queue, weekly bulk-approve and an actuals-to-plan comparison). Use when the user
+  queue, weekly bulk-approve and an actuals-to-plan comparison; and 7.4 Cost & Budget Management:
+  budget revisions whose approved-and-activated row IS the cost baseline, the EVM control-account
+  register and detail panel (BAC/EV/PV/AC/CPI/SPI/EAC/ETC/TCPI/VAC as guarded derived properties),
+  the budget register with category totals, and the expense register (commitments, actuals,
+  accruals) with post/void verbs). Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1/7.2/7.3), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1/7.2/7.3/7.4), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
-  ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry,
+  ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
+  BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3.** 7.4–7.19 are roadmap (a parallel build may be landing them — always
-check `apps/projects/models/` first — 7.4 Cost & Budget Management was landing while 7.3 was). Do
+**As-built: 7.1 + 7.2 + 7.3 + 7.4.** 7.5–7.19 are roadmap (a parallel build may be landing them — always
+check `apps/projects/models/` first). Do
 not assume a model exists because NavERP.md lists the feature — check first.
 
 App path `apps/projects/`, templates `templates/projects/`, `app_name = "projects"`, mounted at
 `/projects/`. Migrations `0001_initial`, `0002_ordering_indexes_and_nonnegative_estimates`,
 `0003_projecttask_projectmilestone_schedulebaseline_and_more`,
-`0004_resourceprofile_resourceallocation_resourcetimeentry_and_more` (12 named indexes).
+`0004_resourceprofile_resourceallocation_resourcetimeentry_and_more` (12 named indexes),
+`0005_budgetrevision_costcontrolaccount_projectbudgetline_and_more` (10 named indexes — the 7.4
+tables).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -190,7 +197,76 @@ standalone page): per active resource-week, soft/firm `planned_hours` vs `weekly
 requested/soft demand with `is_gap` placeholders as the hiring trigger. The seeded data keeps
 one booking over capacity (RAL-00001 at 48h/wk vs a 40h resource) so the red branch is alive.
 
-## Routes (`app_name = "projects"`, 81 names)
+## 7.4 Cost & Budget Management — `CostManagement/`, template slug `cost`
+
+Contract: `.claude/tasks/contract-projects-7.4.md`. Scope: the MONEY layer — budget versions,
+the EVM structure, cost evidence. NO rates/hours anywhere (7.3 owns people-hours and ships no
+money columns; a future rate card may *generate* an `amount`, never add rate fields), NO
+`CostBaseline`/`BSL` model, NO `ChangeRequest` model (7.7's), NO GL posting (2.x owns the
+ledger — `gl_account` is a PROTECT lens only), NO PO/invoice engines (4.x/6.x own them —
+`source_number` is a soft string, never an FK).
+
+**The cost baseline IS the approved-and-activated `BudgetRevision`** — no `is_active` boolean,
+no second table. `bvr_activate` supersedes every other approved revision of the project inside
+one `transaction.atomic()` (approve deliberately does NOT activate, so two `approved` rows may
+coexist; superseded rows KEEP `activated_at` as history, which is why every badge/status check
+pairs `activated_at` WITH `status == "approved"`).
+
+### `BudgetRevision` [BVR-] — the budget document and its change control
+`STATUS_CHOICES` draft/pending_approval/approved/rejected/superseded. `decision_notes` is
+verb-written evidence (`bvr_reject`), off every form. `unique_together ("tenant","number")` AND
+`("tenant","project","revision_no")`. `amount_delta` = this revision's lines vs the active
+baseline's — the approver's headline. `is_locked` = approved|superseded → edit/delete refuse.
+`active_revision` orders by `-activated_at` (None-guards everywhere).
+
+### `CostControlAccount` [CCA-] — the EVM structure
+`wbs_node` anchor (same-project `clean()`), `gl_account` lens, separable `contingency`
+(`bac_with_contingency`), manually-attested `percent_complete` (7.8's execution fields supersede
+it). ALL 16 metrics are DERIVED properties, never columns: `bac/ev/pv/ac/committed/available/cv/
+sv/cpi/spi/eac/etc/tcpi/vac/health`. **`active_revision`/`bac`/`ac`/`committed` are
+`cached_property`** (review C2: cca_list was 75 queries/page before) — a mutation through the
+same in-memory instance reads STALE until a re-fetch; the model tests pin this. None-guards:
+`cpi` None when `ac == 0` (absence of spend is not health), `spi` None when `pv == 0`, `tcpi`
+None when the denominator is 0; `eac = bac/cpi` (one documented technique, falls back to BAC).
+`health` → `{"state", "badge"}` with colour-named classes only; over = `available < 0` OR
+`cpi < 0.95`, watch = `cpi < 1.00` (strict — exactly 1.00 or 0.95 is NOT over). `pv` is a
+PLANNING-GRADE linear fraction of the anchored window (labelled on the page; not a BCWS curve).
+
+### `ProjectBudgetLine` [PBL-] — the row everything rolls up from
+`budget_revision` (a line is only real inside a revision) + denormalised `project` +
+required `category` (7 values, no default) + optional `wbs_node`/`control_account`/`gl_account`.
+`clean()` pins project/`wbs_node`/`control_account` to the revision's project. **Frozen-revision
+lines refuse edit/delete** (review I1 ruling): the approved baseline cannot be rewritten through
+its lines — the correction path is a new revision, exactly like the revision itself.
+
+### `ProjectExpense` [PEX-] — the cost evidence that burns the budget
+`entry_type` commitment/actual/accrual · `source_kind` (max_length **16** — `supplier_invoice`)
+· `source_number` soft string. `control_account` is REQUIRED non-nullable (a CA-less row would
+silently drop out of every EVM figure). Only POSTED actual+accrual rows count into `ac`; posted
+commitments into `committed`; drafts burn nothing; void rows stay visible and stop counting.
+amounts are non-negative — reversals are paired void+adjustment rows. `entry_date` non-nullable
+(the burn-trend dimension). Posted/void refuse edit/delete; `pex_void` is the correction path.
+
+### 7.4 verbs — all `@require_POST`; GET answers 405
+
+| Verb | Gate | Requires |
+|---|---|---|
+| `bvr_submit` | login | draft → pending_approval (stamps `requested_at`) |
+| `bvr_approve` | **tenant_admin** | pending_approval → approved — does NOT activate |
+| `bvr_reject` | **tenant_admin** | pending_approval; the `decision_notes` textarea is REQUIRED (status precondition runs BEFORE the form check — review M11) |
+| `bvr_activate` | **tenant_admin** | approved, not yet stamped → THE baseline; supersedes every other approved row (one `supersede` audit per row) inside the atomic block |
+| `pex_post` | login | draft → posted (replay says "already posted") |
+| `pex_void` | **tenant_admin** | posted → void (rows stay visible, stop counting) |
+
+Audit: every verb captures `previous = obj.status` BEFORE mutating and logs
+`{"verb", "from", "to"}` INSIDE the atomic block where one runs (review I3); actions ≤ 10 chars.
+
+Register notes: `pbl_list` aggregates its totals strip over a queryset pre-scoped with the SAME
+filter params + guards as `crud_list` re-applies (one conditional-Sum query), and the totals
+card renders BELOW the filter bar. `cca_detail` pins its `budget_lines` to the EXACT active
+revision (a superseded-but-stamped revision must not leak in) and caps `expenses` at 25.
+
+## Routes (`app_name = "projects"`, 107 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
 7.2: `tsk_{list,create,detail,edit,delete}` + `tsk_tree` (literal route `tasks/tree/`) ·
@@ -199,6 +275,9 @@ segments disjoint from 7.1's, so the url concatenation cannot shadow).
 7.3: `rsp_{list,create,detail,edit,delete}` - `ral_...` + `ral_{assign,substitute,commit,complete,cancel}` -
 `rte_{list,create,detail,edit,delete,submit,approve,reject}` + `rte_approve_week` - `capacity_demand`
 (path prefixes `resource-profiles/ allocations/ time-entries/ capacity-demand/` - disjoint literals).
+7.4: `pbl_{list,create,detail,edit,delete}` · `bvr_…` + `bvr_{submit,approve,reject,activate}` ·
+`cca_{list,create,detail,edit,delete}` · `pex_…` + `pex_{post,void}` (path prefixes
+`budgetlines/ revisions/ controlaccounts/ expenses/` — disjoint literals).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -235,13 +314,15 @@ charter-approved / ceremony-attested, the row is not editable. This is the modul
 ## Templates — `templates/projects/<submodule>/<entity>/{list,detail,form}.html`
 
 Entity folders `initiation/{projectrequest, project, projectstakeholder, projectkickoff}/`,
-`planning/{task, taskdependency, milestone, schedulebaseline}/` and
-`resource/{resourceprofile, resourceallocation, resourcetimeentry}/`, plus
+`planning/{task, taskdependency, milestone, schedulebaseline}/`,
+`resource/{resourceprofile, resourceallocation, resourcetimeentry}/` and
+`cost/{budgetrevision, costcontrolaccount, projectbudgetline, projectexpense}/`, plus
 `templates/projects/overview.html` at the app root, the recursive
 `planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
 standalone `resource/capacity_demand.html` board (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
--danger` variants **do not exist** and render unstyled).
+-danger` variants **do not exist** and render unstyled; the alignment class is `text-right` —
+`ta-right` is NOT defined, review I4).
 
 ## Seeder — `seed_projects`
 
@@ -257,7 +338,13 @@ rows from the workspace's EmployeeProfiles (capacities 40/40/32/24) + a windowed
 six booking statuses, all three magnitude units, both placeholder kinds (project- and
 request-linked), a released->successor chain, and entries in all four statuses across three ISO
 weeks (the submitted trio is the approval queue; RAL-00001's 48h/wk keeps the over-allocation
-alert alive). Log in as
+alert alive). 7.4 (own guard): **4 BudgetRevisions / 31 ProjectBudgetLines / 3 CostControlAccounts /
+12 ProjectExpenses per tenant** — an approved-and-activated revision 0 per planned project (it IS
+the baseline), a draft sketch revision on the draft project, a pending-approval scope change
+(`amount_delta` +50,000.00), lines across all seven categories anchored to the WBS work
+packages, one CA per active-project deliverable tuned so CA-1 renders **over** (AC 160,000 vs EV
+147,250), CA-2 **watch** (CPI 0.97) and CA-3 **under** (no actuals — CPI None), and expenses in
+every entry type and status (PO/invoice STRINGS as soft references, one void, one draft). Log in as
 `admin_acme` / `admin_globex`, password `password`. Run it twice to prove idempotency.
 
 Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocates `number`, and
@@ -265,11 +352,13 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
-`conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` fixture blocks —
-**owned by itself; edit it only with a full unfiltered re-run**) plus
-`test_initiation_{models,forms,views,security}.py`, `test_planning_{models,forms,views,security}.py`
-and `test_resource_{models,forms,views,security}.py` (models 79 / forms 63 / views 119 items /
-security 106 items). Naming: every test `test_<subslug>_*`, every helper
+`conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*`
+fixture blocks — **owned by itself; edit it only with a full unfiltered re-run**) plus
+`test_initiation_{models,forms,views,security}.py`, `test_planning_{models,forms,views,security}.py`,
+`test_resource_{models,forms,views,security}.py` and `test_cost_{models,forms,views,security}.py`
+(cost: models 67 / forms 42 / views 41 / security — names pinned in
+`.claude/tasks/test-contract-projects-7.4.md` with the computed EVM table the model tests
+assert). Naming: every test `test_<subslug>_*`, every helper
 `_<subslug>_*`, so the next sub-module cannot shadow them.
 
 ```bash
@@ -313,6 +402,13 @@ venv\Scripts\python.exe -m pytest apps/projects/ --nomigrations
    `status` on `MilestoneForm` and `baseline_type` on `BaselineForm` — both let a member bypass the
    tenant-admin verbs (achieve without the stamp gate; "freeze" without a snapshot). Verbs write
    state; forms must not.
+11. **`cached_property` is per-INSTANCE cache (7.4's C2).** `CostControlAccount.bac/ac/committed/
+   active_revision` cache on the instance — after a mutation, the SAME instance reads stale;
+   re-fetch before re-reading (the model tests pin this). They exist because per-row property
+   re-queries made `cca_list` 75 queries/page and `cca_detail` 119 for one object.
+12. **An activated baseline is frozen through BOTH surfaces (7.4's I1).** The revision refuses
+   edit/delete AND its budget lines refuse edit/delete — a baseline that could be rewritten
+   through its lines would not be a baseline. The correction path is a new revision.
 
 ## Sidebar wiring — `apps/core/navigation.py`
 
@@ -357,6 +453,20 @@ The leveling bullet maps to the computed board (not the allocation register) and
 its `#demand` fragment - the URL fragment syntax is supported by `_safe_reverse` (6.13 precedent).
 The skills-matrix promise of bullet 1 is HRM 3.40's lens (`hrm:employeeskill_list?employee=<pk>`
 from `rsp_detail`, employee-keyed rows only).
+
+```python
+"7.4": {
+    "Budget Planning & Estimation":         "projects:pbl_list",
+    "Cost Baseline & Control Accounts":     "projects:cca_list",
+    "Expense Tracking & Commitments":       "projects:pex_list",
+    "Forecasting & EAC":                    "projects:cca_list",  # EVM columns are CA columns
+    "Change Control & Budget Revisions":    "projects:bvr_list",
+    "Budget Register":                      "projects:pbl_list",  # extra live leaf
+}
+```
+Forecasting & EAC maps to the same register as bullet 2 on purpose — the EVM columns are
+control-account columns, so a bullet may be a lens on a register rather than a new page
+(7.2's Task-Register precedent).
 
 ## Common tasks
 
