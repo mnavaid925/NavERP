@@ -7206,3 +7206,28 @@ Base `TenantNumbered`, `NUMBER_PREFIX = "QDF"`. Realizes bullet **3's defect tra
 - [ ] **Acceptance → milestone billing / handover workflow** — 7.15 (billing) / 7.14 (handover); 7.6 records the acceptance only (no GL — Ruling 7)
 - [ ] **External test-management / GRC sync** (Jira/Xray/Zephyr/TestRail, ServiceNow) — integration → 7.18; a `source_number`-style soft reference would be the pattern
 - [ ] **Cross-project / portfolio quality roll-up** — 7.12 (portfolio)
+
+### 7.2 — review, fixer and tests (closing record)
+
+**Review pass:** six read-only lanes (code-reviewer → explorer → frontend-reviewer →
+performance-reviewer → qa-smoke-tester → security-reviewer) appended to
+`.claude/tasks/review-projects-7.2.md`, consolidated into a triage of C1 / I1–I7 / M1–M11.
+Headliners: cross-project parent left a task invisible in every WBS tree (C1); verb-gated fields
+(`status` on MilestoneForm, `baseline_type` on BaselineForm) were member-settable through the
+ungated edit forms (I1/I2); `project.name` interpolated into an onsubmit JS string (I3, stored-XSS
+shape); 403 buttons for members (I4); dead `?project=` deep-link (I5); unused select_related hops
+(I6). **code-fixer** closed every finding in ID order (21 commits, one file each; I7/tests and
+M11/recorded deliberately out of its scope) and re-verified: `manage.py check` clean,
+`makemigrations --check` clean, both smoke scripts pass.
+
+**Tests (Phase 6):** test contract pinned in `.claude/tasks/test-contract-projects-7.2.md`;
+conftest extended with the `planning_*` fixture block (owned by that step alone);
+`test_planning_{models,forms,views,security}.py` = 16/15/21/12 tests (the security file expands to
+35 cases via route parametrization) — every finding from the triage is pinned by a test. One
+test-side fix during bring-up: the hygiene test under-fixture'd `dep_list` (no dependency row →
+empty state → its own vacuous-guard fired); it now creates the row and walks dep_detail too.
+**Full unfiltered projects suite: green (exit 0)** — including the parallel session's 7.3/7.4
+tests running in the same tree.
+
+**Skill:** `.claude/skills/projects/SKILL.md` updated to as-built 7.2 (models, routes, verbs,
+templates, seeder shape, four new gotchas, sidebar wiring).
