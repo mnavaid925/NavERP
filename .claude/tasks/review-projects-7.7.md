@@ -112,3 +112,69 @@ bookend it — C1 (a missing lifecycle state that silently unlocks its rows) and
 turning a 405 into a role-leaking 403 on eight routes) — plus I1 (five pinned form keys no template
 reads), I3 (a re-retire path the contract forbids) and I2 (a benign contract/code width disagreement).
 No re-export missing, no dead import, no stale `7.6` residue; admin satisfies §9.
+
+---
+
+## Lane 2 — `explorer` (architectural placement, boundaries, dead weight)
+
+Status: **done**. Verdict: **architecturally clean** — boundary discipline, package layout, template
+structure, seeder shape and navigation wiring all conform. No Critical in this lane.
+
+Boundary discipline verified: `models/ScopeRequirements/` declares **exactly four** classes
+(`Requirement`, `ScopeItem`, `ScopeChangeRequest`, `ScopeVerification`) and migration `0007` has exactly
+four `CreateModel` ops. No neighbour model was edited for 7.7 (the only neighbour file a 7.7 commit
+touched — `ProjectInitiation/Overview.py` — got a purely **additive** read-only count-card diff). Every
+cross-module link is a one-line string FK into its owner (`projects.ProjectRisk`, `projects.ProjectTask`,
+`core.Party`); 7.7 re-declares none of them. `ScopeChangeRequest.cost_impact` is sizing-only — **no 7.4
+model is imported, mutated or seeded** by any 7.7 view/form/`_scope` block. No 7.6/7.9/7.10/7.16/7.17
+store was built (the `quality`/`document`/`workflow` greps are docstring prose only).
+
+Reuse verified: views import `crud_*`/`tenant_admin_required`/`write_audit_log` from `views/_common`;
+forms pull `_reject_foreign`/`TenantModelForm`/`TenantUniqueMixin` from `forms/_common` — nothing
+re-implemented. `_helpers.py` gained **exactly one** builder, `requirements(tenant)`.
+`ScopeMatrix.py` is computed-only (no snapshot table, no chart library, no `<canvas>`/`<script>`).
+Package layout lines up one-to-one (`ScopeItems.py` in all four layers; `ScopeMatrix.py` correctly in
+views+urls only); imports are absolute; no `*_advanced.py` sidecar. Templates follow
+`scope/<entity>/<page>.html` with no flat duplicates and no stray sub-module-root copy.
+`LIVE_LINKS["7.7"]` sits immediately after `"7.5"`, leaves `"7.6"` untouched, and **all six targets
+reverse-resolve** with the `?status=submitted` leaf well-formed. All 37 routes are concatenated; all 13
+templates are rendered.
+
+### Important
+
+**I4 — `seed_projects.py` command help and `--flush` help under-report what gets wiped**
+`seed_projects.py:195` — the command `help` lists only "7.1 Initiation, 7.2 Planning, 7.3 Resourcing,
+7.4 Cost & Budget" (stops before 7.5 and 7.7). `:200-204` — the `--flush` help enumerates the deleted
+tables but ends at "budget revisions … requests", omitting **all of 7.5's** tables *and* 7.7's four.
+The code below it does delete them (`ScopeVerification → ScopeChangeRequest → ScopeItem → Requirement`
+at lines 210-213, then the 7.5 trio). *Why it matters:* the help text is the operator's only contract
+for a destructive flag that drops **every tenant's** rows; under-reporting it is a real trap. *Fix:*
+extend both strings to name the 7.5 and 7.7 models in the children-first order the code already uses.
+
+**I5 — `sci_retire` gate (second-angle confirmation of Lane 1's I3)**
+`views/ScopeRequirements/ScopeItems.py:159` guards only `if obj.status == "retired"`, so a **realized**
+item can be retired — rewriting its `outcome` and `closed_at` — while `sci_realize:136` correctly refuses
+a non-`is_open` row. The model's own `is_locked` treats realized as closed evidence, so the verb
+contradicts its model. Same defect as Lane 1's I3; **deduped at §6**, kept here as corroboration.
+
+### Minor
+
+**M4 — the four `ScopeRequirements/__init__.py` docstrings describe a transient build state that no
+longer holds.** All four (models/forms/views/urls) read *"Intentionally EMPTY: the package's public
+surface is the top-level `__init__.py` re-export block, **added in the Integrate step**"* — but Integrate
+is long done and the top-level `__init__.py`s are populated. *Why it matters:* a future reader or agent
+treats it as live guidance and may "helpfully" move re-exports back down, inverting the convention.
+*Fix:* reword to a static statement of the convention, without the stale tense.
+
+**M5 — `timezone`/`Decimal`/`MinValueValidator` reach the entity modules only via the star-import.**
+e.g. `ScopeItems.py:69,113` (`timezone.localdate()`), `ScopeChangeRequests.py:63,88`. This is the
+project's pinned idiom (contract §1) and every sibling module does it, so **no action** — recorded as
+an accepted convention, noted only because star-imports hide the dependency from linters.
+
+### Lane 2 summary
+
+The 7.7 layer sits exactly where it should: four own tables, one-line string FKs outward, no neighbour
+store touched, no 7.4 write, no reinvention of the `crud_*` toolkit. Re-export completeness, absolute
+imports, template folders, seeder guard + children-first flush order, and the six nav targets were all
+verified against live code, not the ERD. The only substantive items are stale `--flush`/command help
+that under-reports a destructive flag (I4) and the `sci_retire` gate already filed by Lane 1 (I5).
