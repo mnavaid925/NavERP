@@ -7231,3 +7231,44 @@ tests running in the same tree.
 
 **Skill:** `.claude/skills/projects/SKILL.md` updated to as-built 7.2 (models, routes, verbs,
 templates, seeder shape, four new gotchas, sidebar wiring).
+
+---
+
+## Projects 7.3 — Resource Management (build record)
+
+**Delivered (one sub-module, per the /next-module rule):** 3 models — `ResourceProfile` [RSP-]
+(the pool register: an internal person via `hrm.EmployeeProfile` OR an external via `core.Party`,
+exactly one of the two, `weekly_capacity_hours` as the denominator of every capacity computation;
+skills/certs stay HRM 3.40's lens), `ResourceAllocation` [RAL-] (the booking: NULL `resource` =
+placeholder, project OR request OR refused, one magnitude matching one of three units,
+`booking_status` verb-driven, `substitute_of` chains; `planned_hours()` = the crm proration
+extended to all three units, cancelled AND released count zero), `ResourceTimeEntry` [RTE-] (the
+thinnest project-facing time log — NOT a fourth timesheet; draft→submitted→approved/rejected via
+verbs only, stamps written exactly once, `week_key` for the regroup). Plus the computed
+**capacity_demand** board (no model): over-allocation cells per resource-week + the `id="demand"`
+hiring-trigger section.
+
+**Surfaces:** 3 forms, 25 routes (rsp 5, ral 10 incl. 5 verbs, rte 9 incl. `rte_approve_week`'s
+literal-first week route, + capacity_demand), 21 views (9 verbs: assign/substitute/approve/reject/
+approve_week tenant-admin gated; commit/complete/cancel/submit member-level), 11 templates,
+migration 0004 (3 tables + 12 named indexes), seeder `_resourcing` block (own guard; 5 RSP / 10
+RAL / 16 RTE per tenant exercising every status/unit/placeholder kind + a released→successor
+chain; RAL-00001 at 48h/wk keeps the over-allocation alert alive), admin registrations (verb-state
+columns frozen readonly), `LIVE_LINKS["7.3"]` (5 verbatim bullets + "Time Approvals" leaf),
+overview counts + stat cards + quick links, 2 new `_helpers` dropdown builders.
+
+**Key design decisions:** a NULL resource is a placeholder STATE, never a fake person row
+(Float/Resource Guru norm); the request folds into the allocation (`booking_status="requested"` +
+`project_request` FK — no separate booking-request table); leveling = alert + manual rebalance
+via the verbs (no smoothing engine — the market norm the research found); `hrm.TimesheetEntry`
+cannot join `projects.Project` (its FK points at the 2.9 `accounting.Project` stand-in), hence
+the thin RTE table; the regroup weekly lens is template-side over the flat paginated register.
+
+**Verification:** migrate OK; seed x2 idempotent + `--flush` children-first path exercised;
+`manage.py check` + `makemigrations --check` clean; build smoke (`temp/smoke_73.py` + reset):
+all 25 routes 200 with content, junk params, page 2, verbs POST-only, member 403s, cross-tenant
+IDOR 404s, leak scan — ALL PASSED. Review: 6 serial lanes → ~32 raw findings → 0C/7I/11M + 5
+no-actions; code-fixer fixed **18/18, 0 skipped** (incl. the confirm() name interpolation, the
+Assign/Substitute `{% if %}` precedence bug, the firm-placeholder dead end, the substitute race
+guard, and the register N+1s). Tests: `test_resource_{models,forms,views,security}.py` = 79/63/
+119/106 items green (`--nomigrations` per-file); full unfiltered app gate run at close-out.
