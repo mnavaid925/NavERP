@@ -47,6 +47,8 @@ class QualityDefect(TenantNumbered):
     ]
     #: The scm 4.9 ``NonConformance.SEVERITY_CHOICES`` vocabulary, reused verbatim — one severity
     #: language across the two quality registers a workspace actually reads side by side.
+    #: ``max_length=12`` fits ``observation`` — the same width scm 4.9's ``NonConformance
+    #: .severity`` uses for the same vocabulary.
     SEVERITY_CHOICES = [
         ("critical", "Critical"),
         ("major", "Major"),
@@ -98,7 +100,7 @@ class QualityDefect(TenantNumbered):
     description = models.TextField()
     defect_category = models.CharField(
         max_length=16, choices=DEFECT_CATEGORY_CHOICES, default="other")
-    severity = models.CharField(max_length=8, choices=SEVERITY_CHOICES, default="minor")
+    severity = models.CharField(max_length=12, choices=SEVERITY_CHOICES, default="minor")
     disposition = models.CharField(max_length=16, choices=DISPOSITION_CHOICES, default="open")
     #: Verb-driven (resolve / close) — OFF the form, so the evidence trail keeps its stamps.
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="open")
