@@ -9,6 +9,15 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:risk_analysis' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Analysis</a>
+      {% comment %}
+        `?top=1` is a documented derived lens (contract §4.1) with no filter-bar field of its own,
+        so it needs an explicit entry point — and the toggle reads back off the query string.
+      {% endcomment %}
+      {% if request.GET.top == '1' %}
+        <a href="{% url 'projects:rsk_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Whole register</a>
+      {% else %}
+        <a href="{% url 'projects:rsk_list' %}?top=1" class="btn btn-outline"><i data-lucide="trending-up"></i> Top risks</a>
+      {% endif %}
       <a href="{% url 'projects:rsk_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Risk</a>
     </div>
   </div>
@@ -67,9 +76,15 @@
             {% endfor %}
           </select>
         </div>
+        {% comment %}
+          `?overdue=1` is the alias `rra_list`/`iss_list` use for the same concept, so the box
+          reads as active under either name — a hand-typed `?overdue=1` must not look unset.
+          `top` has no control, so it is carried across a Filter submit as a hidden field.
+        {% endcomment %}
         <div class="form-group">
-          <label class="form-label" for="review_due"><input type="checkbox" id="review_due" name="review_due" value="1" {% if request.GET.review_due == '1' %}checked{% endif %}> Review overdue</label>
+          <label class="form-label" for="review_due"><input type="checkbox" id="review_due" name="review_due" value="1" {% if request.GET.review_due == '1' or request.GET.overdue == '1' %}checked{% endif %}> Review overdue</label>
         </div>
+        {% if request.GET.top == '1' %}<input type="hidden" name="top" value="1">{% endif %}
         <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
         <a href="{% url 'projects:rsk_list' %}" class="btn btn-outline">Reset</a>
       </form>
