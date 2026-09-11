@@ -37,6 +37,12 @@ from .RiskManagement.ProjectRisks import urlpatterns as _rm_risks
 from .RiskManagement.RiskAnalysis import urlpatterns as _rm_riskanalysis
 from .RiskManagement.RiskMonitoring import urlpatterns as _rm_riskmonitoring
 from .RiskManagement.RiskResponseActions import urlpatterns as _rm_responses
+from .QualityManagement.DeliverableInspections import urlpatterns as _qm_inspections
+from .QualityManagement.QualityAcceptance import urlpatterns as _qm_acceptance
+from .QualityManagement.QualityDefects import urlpatterns as _qm_defects
+from .QualityManagement.QualityImprovement import urlpatterns as _qm_improvement
+from .QualityManagement.QualityPlans import urlpatterns as _qm_plans
+from .QualityManagement.QualityReviews import urlpatterns as _qm_reviews
 from .ScopeRequirements.Requirements import urlpatterns as _sr_requirements
 from .ScopeRequirements.ScopeChangeRequests import urlpatterns as _sr_changes
 from .ScopeRequirements.ScopeItems import urlpatterns as _sr_items
@@ -78,6 +84,16 @@ urlpatterns = (
     + _rm_escalations
     + _rm_riskanalysis
     + _rm_riskmonitoring
+    # 7.6 Quality Management — first segments (quality-plans/, quality-reviews/, inspections/,
+    # defects/, quality-improvement/, quality-acceptance/) are disjoint literals from 7.1's–7.5's
+    # and 7.7's. The two computed routes are literal too, so nothing here can shadow another
+    # module's namespace.
+    + _qm_plans
+    + _qm_reviews
+    + _qm_inspections
+    + _qm_defects
+    + _qm_improvement
+    + _qm_acceptance
     # 7.7 Scope & Requirements Management — first segments (requirements/, scope-items/,
     # scope-changes/, scope-verifications/, scope-matrix/) are disjoint literals from 7.1's–7.5's.
     + _sr_requirements
