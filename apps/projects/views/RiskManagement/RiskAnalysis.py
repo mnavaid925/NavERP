@@ -188,9 +188,12 @@ def risk_analysis(request):
                           .exclude(status__in=_UNCERTAIN_EXCLUDED)
                           .order_by("id"))
         rng = random.Random(seed)
+        # ``PROBABILITY_PCT[...] / 100`` is a pure function of the row, so it is hoisted out of
+        # the iterations x n inner loop. The draw order is unchanged, so a seed stays reproducible.
+        draws = [(risk.cost_impact, PROBABILITY_PCT.get(risk.probability, 0) / 100)
+                 for risk in population]
         samples = [
-            sum(risk.cost_impact for risk in population
-                if rng.random() < PROBABILITY_PCT.get(risk.probability, 0) / 100)
+            sum(cost for cost, p in draws if rng.random() < p)
             for _ in range(iterations)
         ]
         ordered = sorted(samples)
