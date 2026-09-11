@@ -8,22 +8,28 @@ description: >-
   acknowledgement; and 7.2 Project Planning & Scheduling: the WBS tree with computed WBS codes and
   deliverable rollups, the task register with duration/effort estimation, the dependency network
   with a computed critical chain, milestones and phase gates with a one-shot achieved stamp, and
-  frozen schedule baselines with what-if scenarios and promote/activate verbs). Use when the user
+  frozen schedule baselines with what-if scenarios and promote/activate verbs; and 7.3 Resource
+  Management: the resource pool (internal via hrm.EmployeeProfile / external via core.Party), the
+  allocation register with placeholders, soft/firm booking verbs and substitution, the capacity &
+  demand board with over-allocation alerts, and project-facing time entries with an approval
+  queue, weekly bulk-approve and an actuals-to-plan comparison). Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1/7.2), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1/7.2/7.3), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
-  ProjectMilestone/ScheduleBaseline, or invokes /projects.
+  ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry,
+  or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2.** 7.3–7.19 are roadmap (a parallel build may be landing them — always
-check `apps/projects/models/` first). Do not assume a model exists because NavERP.md lists the
-feature — check first.
+**As-built: 7.1 + 7.2 + 7.3.** 7.4–7.19 are roadmap (a parallel build may be landing them — always
+check `apps/projects/models/` first — 7.4 Cost & Budget Management was landing while 7.3 was). Do
+not assume a model exists because NavERP.md lists the feature — check first.
 
 App path `apps/projects/`, templates `templates/projects/`, `app_name = "projects"`, mounted at
 `/projects/`. Migrations `0001_initial`, `0002_ordering_indexes_and_nonnegative_estimates`,
-`0003_projecttask_projectmilestone_schedulebaseline_and_more`.
+`0003_projecttask_projectmilestone_schedulebaseline_and_more`,
+`0004_resourceprofile_resourceallocation_resourcetimeentry_and_more` (12 named indexes).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -129,12 +135,70 @@ instances) and the `rollup_*` attrs. The template walks `node.kids` — NEVER `n
 (see gotcha 8). `views/_helpers.py::critical_path_ids` = the longest dependency chain, computed on
 read (iterative Kahn pass, hop-capped, `(sequence, id)` tie-breaks; full CPM float is 7.16's).
 
-## Routes (`app_name = "projects"`, 56 names)
+## 7.3 Resource Management - `ResourceManagement/`, template slug `resource`
+
+Contract: `.claude/tasks/contract-projects-7.3.md`. Scope: the PEOPLE layer - pool, bookings,
+project-facing time actuals. NO money columns (7.4/7.15), no skill table (the matrix/certs are
+the `hrm:employeeskill_list` lens, deep-linked from `rsp_detail` for employee-keyed rows), no
+timesheet header model (flat entries + weekly verbs), no smoothing engine (alert + manual
+rebalance from the allocation verbs), no leave deduction (uniform weekly hours - stated on the
+board). WARNING: **two `ResourceAllocation` models exist** - `crm.ResourceAllocation` [RA-] is
+the 1.8 pre-spine stand-in; this module's [RAL-] keyed on `ResourceProfile` is the Module 7
+master. Same ruling as the three PRJ- models: never rename either.
+
+### `ResourceProfile` [RSP-] - one bookable person
+`employee` FK `hrm.EmployeeProfile` OR `party` FK `core.Party` - **exactly one of the two**
+(clean() guards it; one pool row per employee per tenant, deliberately no conditional unique -
+MariaDB can't). `weekly_capacity_hours` is the denominator of every capacity computation;
+`resource_type` internal/contractor/freelancer/consultant; contractor rows carry an
+`available_from/to` engagement window; `status` is a lens toggle ON the form. `name` property
+walks employee->party->number - every queryset that renders it must
+`select_related("employee__party", "party")`.
+
+### `ResourceAllocation` [RAL-] - the booking
+NULL `resource` = **placeholder** (a state of the booking, never a fake person row). Hangs off
+`project` OR `project_request` (pipeline demand) OR both-none-refused; optional `project_task`.
+One magnitude matching `allocation_unit` (hours_per_week / pct_capacity / total_hours - clean()
+refuses the mismatch). `booking_status` moves ONLY through the verbs; `end_date` null = ongoing.
+`planned_hours(win_start, win_end)` = the crm `overlap_hours()` proration extended to the three
+units - cancelled AND released count ZERO (the successor already carries the demand), % of a
+placeholder counts ZERO.
+
+### `ResourceTimeEntry` [RTE-] - one day's project time
+The thinnest projects-side time log (NOT a fourth timesheet: `hrm.TimesheetEntry.project` points
+at the accounting.Project stand-in and cannot join `projects.Project`). Status moves draft ->
+submitted -> approved/rejected ONLY through the verbs; the stamps (`submitted_at`, `approved_by`,
+`approved_at`) are written exactly once and never rewound (forms exclude them; approved/rejected
+rows refuse edit/delete at the view). `week_key` (`resource_id:YYYY-Www`) is the regroup key -
+`Meta.ordering ["resource_id", "-entry_date", "-id"]` keeps person-weeks contiguous.
+
+### 7.3 verbs - all `@require_POST`; GET answers 405
+
+| Verb | Gate | Requires |
+|---|---|---|
+| `ral_assign` | **tenant_admin** | placeholder in requested/soft -> names it (requested becomes soft) |
+| `ral_substitute` | **tenant_admin** | named soft/firm -> releases the row inside `select_for_update`, mints the successor (status preserved, `substitute_of` set) |
+| `ral_commit` | login | requested->soft, or soft->firm - **refused on a placeholder going firm** ("Assign a resource before committing a placeholder to firm.") |
+| `ral_complete` / `ral_cancel` | login | soft/firm -> completed / requested|soft|firm -> cancelled |
+| `rte_submit` | login | draft -> submitted (stamps `submitted_at`) |
+| `rte_approve` / `rte_reject` | **tenant_admin** | submitted -> approved / rejected (reject carries the `reason` textarea -> `decision_note`) |
+| `rte_approve_week` | **tenant_admin** | bulk-approves one person-week (`time-entries/week/<int:resource>/<int:year>/w<int:week>/approve/`, literal BEFORE the `<int:pk>/` routes); week clamped 1..53 + a real-ISO-week guard; ONE audit row on the resource |
+
+**Capacity & Demand board** (`capacity_demand`, template at the sub-module root - rule 6
+standalone page): per active resource-week, soft/firm `planned_hours` vs `weekly_capacity_hours`
+(`?weeks=` clamped 4..13, default 8) with the over-allocation alert line; `id="demand"` section =
+requested/soft demand with `is_gap` placeholders as the hiring trigger. The seeded data keeps
+one booking over capacity (RAL-00001 at 48h/wk vs a 40h resource) so the red branch is alive.
+
+## Routes (`app_name = "projects"`, 81 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
 7.2: `tsk_{list,create,detail,edit,delete}` + `tsk_tree` (literal route `tasks/tree/`) ·
 `dep_…` · `mst_…` · `bsl_…` (path prefixes `tasks/ dependencies/ milestones/ baselines/` — first
 segments disjoint from 7.1's, so the url concatenation cannot shadow).
+7.3: `rsp_{list,create,detail,edit,delete}` - `ral_...` + `ral_{assign,substitute,commit,complete,cancel}` -
+`rte_{list,create,detail,edit,delete,submit,approve,reject}` + `rte_approve_week` - `capacity_demand`
+(path prefixes `resource-profiles/ allocations/ time-entries/ capacity-demand/` - disjoint literals).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -170,10 +234,12 @@ charter-approved / ceremony-attested, the row is not editable. This is the modul
 
 ## Templates — `templates/projects/<submodule>/<entity>/{list,detail,form}.html`
 
-Entity folders `initiation/{projectrequest, project, projectstakeholder, projectkickoff}/` and
-`planning/{task, taskdependency, milestone, schedulebaseline}/`, plus
-`templates/projects/overview.html` at the app root and the recursive
-`planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`). Extend `base.html`; colour-named theme.css
+Entity folders `initiation/{projectrequest, project, projectstakeholder, projectkickoff}/`,
+`planning/{task, taskdependency, milestone, schedulebaseline}/` and
+`resource/{resourceprofile, resourceallocation, resourcetimeentry}/`, plus
+`templates/projects/overview.html` at the app root, the recursive
+`planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
+standalone `resource/capacity_demand.html` board (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
 -danger` variants **do not exist** and render unstyled).
 
@@ -185,7 +251,13 @@ workspace still gets its planning rows). Creates **9 ProjectRequests / 3 Project
 and — 7.2 — a stage-sized plan per project: the ACTIVE project gets an 11-node WBS, a 9-link
 dependency network whose longest chain is the critical path, 3 milestones (one achieved gate) and a
 frozen baseline + what-if; the chartered project a 5-node WBS, 2 links, an in-review gate and a
-what-if; the draft 3 sketch nodes and 3 planned milestones (no commitments). Log in as
+what-if; the draft 3 sketch nodes and 3 planned milestones (no commitments). 7.3 (own guard):
+**5 ResourceProfiles / 10 ResourceAllocations / 16 ResourceTimeEntries per tenant** - internal
+rows from the workspace's EmployeeProfiles (capacities 40/40/32/24) + a windowed contractor, all
+six booking statuses, all three magnitude units, both placeholder kinds (project- and
+request-linked), a released->successor chain, and entries in all four statuses across three ISO
+weeks (the submitted trio is the approval queue; RAL-00001's 48h/wk keeps the over-allocation
+alert alive). Log in as
 `admin_acme` / `admin_globex`, password `password`. Run it twice to prove idempotency.
 
 Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocates `number`, and
@@ -193,10 +265,11 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
-`conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` fixture blocks — **owned by itself;
-edit it only with a full unfiltered re-run**) plus `test_initiation_{models,forms,views,security}.py`
-and `test_planning_{models,forms,views,security}.py` (16/15/21/12 — the security file expands to 35
-cases via route parametrization). Naming: every test `test_<subslug>_*`, every helper
+`conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` fixture blocks —
+**owned by itself; edit it only with a full unfiltered re-run**) plus
+`test_initiation_{models,forms,views,security}.py`, `test_planning_{models,forms,views,security}.py`
+and `test_resource_{models,forms,views,security}.py` (models 79 / forms 63 / views 119 items /
+security 106 items). Naming: every test `test_<subslug>_*`, every helper
 `_<subslug>_*`, so the next sub-module cannot shadow them.
 
 ```bash
@@ -270,6 +343,21 @@ Estimation deep-links the task register filtered to work packages (the rows that
 estimate); "Task Register" is an extra leaf — the parser appends labels that don't match a
 NavERP.md bullet.
 
+```python
+"7.3": {
+    "Resource Pool & Skills Inventory":      "projects:rsp_list",
+    "Resource Allocation & Leveling":        "projects:capacity_demand",
+    "Team Assembly & Role Assignment":       "projects:ral_list",
+    "Resource Forecasting & Demand Planning": "projects:capacity_demand#demand",
+    "Time Tracking & Timesheets":            "projects:rte_list",
+    "Time Approvals":                        "projects:rte_list?status=submitted",  # extra leaf
+}
+```
+The leveling bullet maps to the computed board (not the allocation register) and forecasting to
+its `#demand` fragment - the URL fragment syntax is supported by `_safe_reverse` (6.13 precedent).
+The skills-matrix promise of bullet 1 is HRM 3.40's lens (`hrm:employeeskill_list?employee=<pk>`
+from `rsp_detail`, employee-keyed rows only).
+
 ## Common tasks
 
 - **Add a field** — edit the entity file under `models/ProjectInitiation/`, add it to the form's
@@ -280,5 +368,5 @@ NavERP.md bullet.
   `ImportError`), templates at `templates/projects/initiation/<entity>/`, then the seeder and tests.
 - **Add a filter** — parse it in the view *before* pagination, pass the choices/queryset into the
   context, and in the template compare pk filters with `|stringformat:"d"` (never `|slugify`).
-- **Build 7.3+** — use `/next-module`. New sub-module = a new `<SubModule>/` folder in each of
+- **Build 7.4+** — use `/next-module`. New sub-module = a new `<SubModule>/` folder in each of
   the four layers, a new `templates/projects/<submodule>/` tree, and one new `LIVE_LINKS` entry.
