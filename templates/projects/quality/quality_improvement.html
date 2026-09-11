@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Continuous Improvement{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Continuous Improvement</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Continuous Improvement</span></div>
+      <p class="text-muted">The kaizen and retrospective register, a computed process-maturity score, the defect trend and the lessons the closed defects left behind. The score is computed on read — a stored maturity figure would go stale the moment a review is scored or a defect closes.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:qrv_list' %}?kind=improvement" class="btn btn-outline"><i data-lucide="list"></i> Improvement Register</a>
+      <a href="{% url 'projects:qrv_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Review</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The project lens. Without a selection every figure below is tenant-wide; with one, the
+    register, the maturity score, the trend and the lessons all narrow to that project.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">All projects in this workspace</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project and request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+        <a href="{% url 'projects:quality_improvement' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon {% if maturity.score and maturity.score >= 4 %}green{% elif maturity.score and maturity.score < 2 %}red{% else %}purple{% endif %}"><i data-lucide="gauge"></i></div><div class="stat-value">{% if maturity.score %}{{ maturity.score }}/5{% else %}—{% endif %}</div><div class="stat-label">{% if maturity.band %}Maturity — {{ maturity.band }}{% else %}Maturity (no data yet){% endif %}</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ improvement_open_count }}</div><div class="stat-label">Open improvement actions</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="bug"></i></div><div class="stat-value">{{ open_defect_count }}</div><div class="stat-label">Open defects</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="book-open"></i></div><div class="stat-value">{{ lessons_count }}</div><div class="stat-label">Recorded lessons</div></div>
+  </div>
+
+  {% comment %}
+    The maturity assessment. 60% the reviews' own maturity scores, 40% the defect closure rate
+    (resolved or closed counts as dispositioned). With no scored reviews and no defects the score
+    is absent — the no-data state, not a band computed from nothing.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Process maturity assessment</h2></div>
+    <div class="card-body">
+      {% if maturity.score %}
+        <dl class="detail-grid">
+          <dt>Score</dt><dd>{{ maturity.score }} / 5</dd>
+          <dt>Band</dt><dd><span class="badge {{ maturity.badge }}">{{ maturity.band }}</span></dd>
+          <dt>Reviews scored</dt><dd>{{ maturity.reviews_scored }}</dd>
+          <dt>Defect closure</dt><dd>{{ maturity.defects_closed }} of {{ maturity.defects_total }} dispositioned ({{ maturity.closure_pct }}%)</dd>
+        </dl>
+      {% else %}
+        <p class="text-muted">Not enough data yet — score a methodology review or maturity assessment, and let the punch list run, and the score computes itself.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Improvement actions</h2></div>
+    <div class="card-body">
+      {% if improvement_rows %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Review</th><th>Project</th><th>Reviewer</th><th>Date</th><th>Improvement status</th><th>Owner</th><th>Due</th></tr></thead>
+            <tbody>
+              {% for obj in improvement_rows %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:qrv_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+                  <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+                  <td>{% if obj.reviewer %}{{ obj.reviewer.get_full_name|default:obj.reviewer.email }}{% else %}—{% endif %}</td>
+                  <td>{{ obj.review_date|date:"M d, Y" }}</td>
+                  <td>
+                    {% if obj.improvement_status == 'done' %}<span class="badge badge-green">{{ obj.get_improvement_status_display }}</span>
+                    {% elif obj.improvement_status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_improvement_status_display }}</span>
+                    {% elif obj.improvement_status == 'planned' %}<span class="badge badge-amber">{{ obj.get_improvement_status_display }}</span>
+                    {% else %}{{ obj.get_improvement_status_display }}{% endif %}
+                  </td>
+                  <td>{% if obj.improvement_owner %}{{ obj.improvement_owner.get_full_name|default:obj.improvement_owner.email }}{% else %}—{% endif %}</td>
+                  <td>{% if obj.improvement_due_date %}{{ obj.improvement_due_date|date:"M d, Y" }}{% if obj.is_improvement_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="trending-up"></i><h3>No kaizen or retrospective events</h3><p>Record a kaizen event or a retrospective in the review register — the improvement action, its owner and its due date live on the row.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Defect trend</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Defects opened and dispositioned per month — the largest figure sets the bar scale.</p>
+      {% if defect_trend_rows %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Period</th><th class="text-right">Opened</th><th class="text-right">Dispositioned</th><th style="min-width:160px;">Volume</th></tr></thead>
+            <tbody>
+              {% for row in defect_trend_rows %}
+                <tr>
+                  <td class="fw-600">{{ row.label }}</td>
+                  <td class="text-right">{{ row.opened }}</td>
+                  <td class="text-right">{{ row.closed }}</td>
+                  <td>
+                    <div class="progress" title="{{ row.bar_pct }}% of the largest month"><div class="progress-bar" style="width: {{ row.bar_pct }}%"></div></div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted">No defects recorded yet — the trend builds itself as the punch list runs.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Lessons learned ({{ lessons_count }})</h2></div>
+    <div class="card-body">
+      {% if lessons %}
+        <dl>
+          {% for item in lessons %}
+            <dt><a href="{% url 'projects:qdf_detail' item.obj.pk %}">{{ item.obj.number }}</a> — {{ item.obj.title }}</dt>
+            <dd>{{ item.lesson|linebreaksbr }}</dd>
+          {% endfor %}
+        </dl>
+        {% comment %}
+          The lessons are a lens over the defect rows (the field is on the model); the searchable
+          knowledge repository is 7.10's — this page links out, it does not replace it (Ruling 6).
+        {% endcomment %}
+      {% else %}
+        <p class="text-muted">No closed defects with a recorded lesson yet — the lens fills as defects close with their takeaways.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
