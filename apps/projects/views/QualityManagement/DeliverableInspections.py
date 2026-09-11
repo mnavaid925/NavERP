@@ -98,6 +98,9 @@ def qci_detail(request, pk):
         "obj": obj,
         "defects": obj.defects.select_related("owner"),
         "accept_form": InspectionAcceptanceForm(tenant=request.tenant),
+        # The record panel's select reads the model's own vocabulary — the contract's three
+        # context keys plus this one, without which the panel would hardcode the choices.
+        "result_choices": DeliverableInspection.RESULT_CHOICES,
     })
 
 
