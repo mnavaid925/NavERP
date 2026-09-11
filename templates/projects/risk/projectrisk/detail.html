@@ -131,9 +131,15 @@
         {% endif %}
       {% else %}
         <div class="form-grid">
-          <form method="post" action="{% url 'projects:rsk_realize' obj.pk %}" onsubmit="return confirm('Realize risk {{ obj.number }}? It will raise a linked issue.');">
-            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="alert-triangle"></i> Realize (raise an issue)</button>
-          </form>
+          {% comment %}
+            A realized risk is already frozen — its issue exists, so the verb would no-op. The
+            close form stays available from `realized` (closing is the one legitimate next step).
+          {% endcomment %}
+          {% if not obj.is_locked %}
+            <form method="post" action="{% url 'projects:rsk_realize' obj.pk %}" onsubmit="return confirm('Realize risk {{ obj.number }}? It will raise a linked issue.');">
+              {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="alert-triangle"></i> Realize (raise an issue)</button>
+            </form>
+          {% endif %}
           <form method="post" action="{% url 'projects:rsk_close' obj.pk %}" onsubmit="return confirm('Close risk {{ obj.number }}?');">
             {% csrf_token %}
             <div class="form-group">
