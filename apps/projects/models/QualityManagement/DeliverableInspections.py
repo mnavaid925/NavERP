@@ -101,7 +101,9 @@ class DeliverableInspection(TenantNumbered):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="conducted_inspections")
     #: Bullet 3's outcome. Recorded by ``qci_record``, never chosen on the generic edit form.
-    result = models.CharField(max_length=12, choices=RESULT_CHOICES, default="pending")
+    #: ``max_length=14`` fits ``not_applicable`` — the same width scm 4.9's ``QualityInspection
+    #: .result`` uses for the same vocabulary.
+    result = models.CharField(max_length=14, choices=RESULT_CHOICES, default="pending")
     #: Bullet 5's decision. Moved by ``qci_accept`` / ``qci_reject`` — OFF the model form.
     usage_decision = models.CharField(
         max_length=24, choices=USAGE_DECISION_CHOICES, default="pending")
