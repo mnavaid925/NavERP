@@ -207,8 +207,10 @@ class ProjectRiskAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "category", "risk_type", "probability",
                     "impact", "status", "owner", "tenant")
     list_filter = ("status", "category", "risk_type")
-    list_select_related = ("tenant", "project", "wbs_node", "owner", "identified_by",
-                           "contingency_account")
+    # Only the FKs a changelist column (or __str__) renders are joined — the same rule
+    # ProjectBudgetLineAdmin documents: wbs_node / identified_by / contingency_account render
+    # in no column, so their joins would be dead weight.
+    list_select_related = ("tenant", "project", "owner")
     search_fields = ("number", "title", "description", "cause", "effect")
     # status is verb-driven (realize/close/reopen) and closed_at is stamped by the close verb —
     # neither is an editable field.
@@ -230,8 +232,8 @@ class ProjectIssueAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "severity", "status", "owner",
                     "escalation_level", "escalated_to", "tenant")
     list_filter = ("status", "severity", "issue_type")
-    list_select_related = ("tenant", "project", "wbs_node", "risk", "owner", "raised_by",
-                           "escalated_to", "resolved_by")
+    # Same rule: wbs_node / risk / raised_by / resolved_by render in no changelist column.
+    list_select_related = ("tenant", "project", "owner", "escalated_to")
     search_fields = ("number", "title", "description")
     # status, the escalation state and the resolution evidence are all verb-written — the log
     # keeps its stamps.
@@ -245,7 +247,8 @@ class IssueEscalationAdmin(admin.ModelAdmin):
     list_display = ("number", "issue", "level", "target_role", "target_user", "escalated_at",
                     "tenant")
     list_filter = ("level",)
-    list_select_related = ("tenant", "issue", "target_user", "escalated_by")
+    # Same rule: escalated_by renders in no changelist column (issue is walked by __str__).
+    list_select_related = ("tenant", "issue", "target_user")
     search_fields = ("number", "target_role", "reason", "outcome")
     readonly_fields = ("escalated_at", "created_by", "created_at", "updated_at")
 
