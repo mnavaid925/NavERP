@@ -113,6 +113,7 @@
     <div class="card-header"><h2>Monte Carlo exposure</h2></div>
     <div class="card-body">
       <p class="text-muted">Each iteration draws one Bernoulli per open risk with a cost impact, using the register's probability map; the sampled totals are summarised by nearest-rank percentiles.</p>
+      <p class="text-muted">Planning-grade: simple random sampling — Latin Hypercube and risk correlation are deferred.</p>
       <form method="post" action="{% url 'projects:risk_analysis' %}{% if project %}?project={{ project.pk }}{% endif %}" class="filter-bar">
         {% csrf_token %}
         <div class="form-group">
