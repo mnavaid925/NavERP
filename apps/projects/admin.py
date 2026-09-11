@@ -253,6 +253,65 @@ class IssueEscalationAdmin(admin.ModelAdmin):
     readonly_fields = ("escalated_at", "created_by", "created_at", "updated_at")
 
 
+# --- 7.6 Quality Management -------------------------------------------------------------------
+
+@admin.register(QualityPlan)
+class QualityPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "wbs_node", "verification_method",
+                    "standard_reference", "status", "owner", "approved_by", "tenant")
+    list_filter = ("status", "verification_method")
+    # Only the FKs a changelist column (or __str__) renders are joined — the same rule
+    # ProjectBudgetLineAdmin documents: source_risk renders in no column, so its join would be
+    # dead weight.
+    list_select_related = ("tenant", "project", "wbs_node", "owner", "approved_by")
+    search_fields = ("number", "title", "description", "acceptance_criteria",
+                     "standard_reference")
+    # status is verb-driven (approve/supersede) and the approval stamps are written by the verb
+    # that owns the transition — an admin-form edit must not be able to forge a sign-off.
+    readonly_fields = ("status", "approved_by", "approved_at", "created_by", "created_at",
+                       "updated_at")
+
+
+@admin.register(QualityReview)
+class QualityReviewAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "review_type", "reviewer", "review_date",
+                    "status", "improvement_status", "improvement_owner", "tenant")
+    list_filter = ("status", "review_type", "improvement_status")
+    list_select_related = ("tenant", "project", "wbs_node", "quality_plan", "reviewer",
+                           "improvement_owner")
+    search_fields = ("number", "title", "scope", "findings", "improvement_action")
+    # status is verb-driven (report/close) and closed_at is stamped by the close verb.
+    readonly_fields = ("status", "closed_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(DeliverableInspection)
+class DeliverableInspectionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "wbs_node", "inspection_type", "result",
+                    "usage_decision", "status", "inspector", "tenant")
+    list_filter = ("status", "inspection_type", "result", "usage_decision")
+    list_select_related = ("tenant", "project", "wbs_node", "quality_plan", "milestone",
+                           "inspector", "accepted_by", "accepted_by_party")
+    search_fields = ("number", "title", "description", "findings")
+    # The usage decision, the acceptor stamps and the status are all verb-written (record /
+    # accept / reject) — the acceptance evidence keeps its stamps.
+    readonly_fields = ("result", "usage_decision", "accepted_by", "accepted_by_party",
+                       "accepted_at", "status", "created_by", "created_at", "updated_at")
+
+
+@admin.register(QualityDefect)
+class QualityDefectAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "wbs_node", "defect_category", "severity",
+                    "disposition", "status", "owner", "tenant")
+    list_filter = ("status", "severity", "defect_category", "disposition")
+    list_select_related = ("tenant", "project", "wbs_node", "quality_plan", "inspection",
+                           "owner", "resolved_by")
+    search_fields = ("number", "title", "description", "root_cause", "resolution_note")
+    # status is verb-driven (resolve/close), the bridge is verb-written (raise_issue) and the
+    # resolution evidence is stamped by the resolve verb.
+    readonly_fields = ("project_issue", "root_cause", "resolution_note", "resolved_by",
+                       "resolved_at", "status", "created_by", "created_at", "updated_at")
+
+
 # --- 7.7 Scope & Requirements Management ------------------------------------------------------
 
 @admin.register(Requirement)
