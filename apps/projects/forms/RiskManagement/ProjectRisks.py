@@ -33,6 +33,8 @@ class ProjectRiskForm(TenantUniqueMixin, TenantModelForm):
 class RiskClosureForm(forms.Form):
     """The ``rsk_close`` verb's body: the lesson the closed risk leaves behind (optional)."""
 
+    # Same as IssueResolutionForm: a plain ``forms.Form`` gets no widget-class loop, so the
+    # theme class is set explicitly (``theme.css`` styles ``.form-textarea``, not bare textareas).
     lessons_learned = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={"rows": 3}),
+        required=False, widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         help_text="What this risk taught the project. Feeds the monitoring page's lessons lens.")
