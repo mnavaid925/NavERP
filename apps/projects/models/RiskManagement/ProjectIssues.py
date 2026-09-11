@@ -107,6 +107,10 @@ class ProjectIssue(TenantNumbered):
             models.Index(fields=["tenant", "severity"], name="iss_tnt_severity_idx"),
             models.Index(fields=["tenant", "escalation_level"], name="iss_tnt_esc_idx"),
             models.Index(fields=["tenant", "-created_at"], name="iss_tnt_created_idx"),
+            # The ``?issue_type=`` filter and the pinned ``?overdue=1`` due-date lens — the RRA
+            # register already carries the due_date twin (``rra_tnt_due_idx``).
+            models.Index(fields=["tenant", "issue_type"], name="iss_tnt_type_idx"),
+            models.Index(fields=["tenant", "due_date"], name="iss_tnt_due_idx"),
         ]
 
     def __str__(self):
