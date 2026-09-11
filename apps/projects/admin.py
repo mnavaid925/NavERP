@@ -8,6 +8,7 @@ from django.contrib import admin
 from .models import (
     BudgetRevision,
     CostControlAccount,
+    DeliverableInspection,
     IssueEscalation,
     Project,
     ProjectBudgetLine,
@@ -19,6 +20,9 @@ from .models import (
     ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
+    QualityDefect,
+    QualityPlan,
+    QualityReview,
     Requirement,
     ResourceAllocation,
     ResourceProfile,
