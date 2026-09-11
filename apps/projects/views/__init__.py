@@ -196,6 +196,50 @@ from .RiskManagement.RiskResponseActions import (  # noqa: F401
     rra_list,
 )
 
+# --- 7.6 Quality Management -------------------------------------------------------------------
+# The four registers' CRUD sets, their ten lifecycle verbs (all POST-only, so a GET is a 405),
+# and the two computed pages (no model — the 7.3 capacity_demand / 7.5 risk_analysis precedent).
+from .QualityManagement.DeliverableInspections import (  # noqa: F401
+    qci_accept,
+    qci_create,
+    qci_delete,
+    qci_detail,
+    qci_edit,
+    qci_list,
+    qci_record,
+    qci_reject,
+)
+from .QualityManagement.QualityAcceptance import quality_acceptance  # noqa: F401
+from .QualityManagement.QualityDefects import (  # noqa: F401
+    qdf_close,
+    qdf_create,
+    qdf_delete,
+    qdf_detail,
+    qdf_edit,
+    qdf_list,
+    qdf_raise_issue,
+    qdf_resolve,
+)
+from .QualityManagement.QualityImprovement import quality_improvement  # noqa: F401
+from .QualityManagement.QualityPlans import (  # noqa: F401
+    qpl_approve,
+    qpl_create,
+    qpl_delete,
+    qpl_detail,
+    qpl_edit,
+    qpl_list,
+    qpl_supersede,
+)
+from .QualityManagement.QualityReviews import (  # noqa: F401
+    qrv_close,
+    qrv_create,
+    qrv_delete,
+    qrv_detail,
+    qrv_edit,
+    qrv_list,
+    qrv_report,
+)
+
 # --- 7.7 Scope & Requirements Management ------------------------------------------------------
 # The four registers' CRUD sets, their sixteen lifecycle verbs (all POST-only, so a GET is a 405),
 # and the one computed page (the traceability matrix + creep board — no model, the 7.3
