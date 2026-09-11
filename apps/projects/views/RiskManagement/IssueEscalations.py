@@ -70,7 +70,8 @@ def esc_create(request):
 def esc_detail(request, pk):
     obj = get_object_or_404(
         IssueEscalation.objects.select_related(
-            "issue", "issue__project", "target_user", "escalated_by", "created_by"),
+            "issue", "issue__project", "issue__owner", "target_user", "escalated_by",
+            "created_by"),
         pk=pk, tenant=request.tenant)
     return render(request, "projects/risk/escalation/detail.html", {"obj": obj})
 
