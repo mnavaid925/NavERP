@@ -197,10 +197,13 @@ def risk_analysis(request):
     run = request.method == "POST"
     simulation = None
     if run:
-        population = list(register_qs
-                          .filter(cost_impact__gt=0)
-                          .exclude(status__in=_UNCERTAIN_EXCLUDED)
-                          .order_by("id"))
+        # Derived from the already-materialised register instead of a second table scan — the
+        # population is strictly the register's rows with a cost and an uncertain status. The
+        # RNG draws in ``population`` order, so the pinned id-ascending order must survive.
+        population = sorted(
+            (risk for risk in register
+             if risk.cost_impact > 0 and risk.status not in _UNCERTAIN_EXCLUDED),
+            key=lambda risk: risk.id)
         rng = random.Random(seed)
         # ``PROBABILITY_PCT[...] / 100`` is a pure function of the row, so it is hoisted out of
         # the iterations x n inner loop. The draw order is unchanged, so a seed stays reproducible.
