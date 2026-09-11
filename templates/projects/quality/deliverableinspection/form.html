@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Inspection{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Inspection</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:qci_list' %}">Inspections</a><span class="sep">›</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        The usage decision, the acceptor stamps and the status are not editable here on purpose:
+        the lifecycle is verb-driven (record / accept / reject), so the acceptance evidence keeps
+        its stamps. ``result`` and ``inspected_date`` ARE entry data — the formal execution record
+        is the qci_record verb on the detail page, which also moves the status.
+      {% endcomment %}
+      <p class="text-muted">Status is not set here — a new inspection starts as <strong>Planned</strong>. Record the execution and take the acceptance decision from the detail page; the decision stamps the acceptor and the moment.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'projects:qci_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
