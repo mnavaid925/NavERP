@@ -80,6 +80,8 @@ class RiskResponseAction(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="rra_tnt_status_idx"),
             models.Index(fields=["tenant", "owner"], name="rra_tnt_owner_idx"),
             models.Index(fields=["tenant", "due_date"], name="rra_tnt_due_idx"),
+            # The ``?strategy=`` choice filter.
+            models.Index(fields=["tenant", "strategy"], name="rra_tnt_strategy_idx"),
             # ``Meta.ordering`` is ``-created_at`` — every rra_list render sorts the tenant's whole
             # action set to hand back the first page, so the ordering needs a matching index.
             models.Index(fields=["tenant", "-created_at"], name="rra_tnt_created_idx"),
