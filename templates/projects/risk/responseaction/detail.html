@@ -52,7 +52,7 @@
         <form method="post" action="{% url 'projects:rra_complete' obj.pk %}" onsubmit="return confirm('Complete action {{ obj.number }}?');">
           {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Mark complete</button>
         </form>
-        <p class="text-muted">Completing the action stamps its completion time and freezes the row. Cancelling is done from the edit form.</p>
+        <p class="text-muted">Completing the action stamps its completion time and freezes the row. There is no cancel verb — a live action is edited or deleted, and a completed one is final.</p>
       {% endif %}
     </div>
   </div>
