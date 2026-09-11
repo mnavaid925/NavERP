@@ -58,6 +58,7 @@ from apps.core.utils import write_audit_log
 from apps.projects.models import (
     BudgetRevision,
     CostControlAccount,
+    DeliverableInspection,
     IssueEscalation,
     Project,
     ProjectBudgetLine,
@@ -69,6 +70,9 @@ from apps.projects.models import (
     ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
+    QualityDefect,
+    QualityPlan,
+    QualityReview,
     Requirement,
     ResourceAllocation,
     ResourceProfile,
@@ -211,7 +215,13 @@ class Command(BaseCommand):
             # projects/tasks/revisions/accounts: expenses first, then lines, then the accounts
             # and revisions they point at. 7.5's hang off projects/tasks/risks/issues: the
             # escalation is the deepest child, then the issues (which point at risks), then the
-            # response actions, then the risks.
+            # response actions, then the risks. 7.6's hang off projects/tasks/plans/inspections/
+            # issues: the defect is the deepest child, then the inspections and the reviews (both
+            # of which point at plans), then the plans.
+            QualityDefect.objects.all().delete()
+            DeliverableInspection.objects.all().delete()
+            QualityReview.objects.all().delete()
+            QualityPlan.objects.all().delete()
             ProjectExpense.objects.all().delete()
             ProjectBudgetLine.objects.all().delete()
             CostControlAccount.objects.all().delete()
@@ -294,6 +304,10 @@ class Command(BaseCommand):
         # 7.5 has its OWN guard too — the risk register, its response actions, the issue log and
         # the recorded escalation path.
         self._risk(tenant, now)
+        # 7.6 has its OWN guard as well — the quality plans, the review register, the inspections
+        # and the punch list. The plans/reviews/inspections are seeded BEFORE the defects: the
+        # defect rows FK the other three, so they are the children here.
+        self._quality(tenant, now)
         # 7.7 has its OWN guard too — the requirement register with its traceability links, the
         # boundary/assumption/constraint registry, the CCB change register and the acceptance log.
         self._scope(tenant, now)
@@ -956,6 +970,218 @@ class Command(BaseCommand):
             f"{RiskResponseAction.objects.filter(tenant=tenant).count()} response actions, "
             f"{ProjectIssue.objects.filter(tenant=tenant).count()} issues, "
             f"{IssueEscalation.objects.filter(tenant=tenant).count()} escalations."))
+
+    def _quality(self, tenant, now):
+        """Quality plans + reviews + inspections + defects, guarded per tenant.
+
+        Sized so the computed pages have something real to compute over: 4 plans (two
+        deliverable-anchored and active, a superseded one and a draft so the frozen-row guards
+        and the board's plan statuses render), 6 reviews covering every ``review_type`` with one
+        improvement action overdue (the ``?overdue=1`` lens) and maturity scores on the assessed
+        rows (the improvement page's computed score), 6 inspections covering all five types with
+        one accepted (stamps written), one failed-and-pending, one still in the acceptance queue
+        and planned rows ahead, and 6 defects across the severities and punch-list dispositions —
+        two resolved/closed with stamps, one carrying the issue the ``qdf_raise_issue`` bridge
+        would have minted, and the rest open so the acceptance board's punch-list counts are
+        non-zero.
+
+        ``identified_date`` values are spread over ~2 months so the improvement page's defect
+        trend renders more than one period. ``inspected_date``/``resolved_at`` stamps follow the
+        same spread.
+        """
+        if QualityPlan.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: quality rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        projects = list(Project.objects.filter(tenant=tenant))
+        active = next((p for p in projects if p.status == "active"), None)
+        chartered = next((p for p in projects if p.status == "chartered"), None)
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        if not active or not users:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no active project or users - skipping quality."))
+            return
+        manager = next((p.project_manager for p in projects if p.project_manager_id), None)
+        owner = users[1] if len(users) > 1 else manager
+        inspector = users[-1] if len(users) > 2 else owner
+        party = self._client(tenant)
+        today = timezone.localdate()
+        deliverables = {t.name: t for t in ProjectTask.objects.filter(
+            tenant=tenant, project=active, node_type="deliverable")}
+        gates = {m.name: m for m in ProjectMilestone.objects.filter(tenant=tenant,
+                                                                    project=active)}
+        discovery = deliverables.get("Discovery & design")
+        ordering = deliverables.get("Self-service ordering")
+        gate_milestone = gates.get("Discovery gate passed")
+        chartered_deliverable = ProjectTask.objects.filter(
+            tenant=tenant, project=chartered, node_type="deliverable").first()
+
+        def plan(project, title, wbs=None, status="active", method="inspection",
+                 standard="", review_offset=None, approved=False):
+            obj = QualityPlan(
+                tenant=tenant, project=project, wbs_node=wbs, title=title,
+                description=f"{title}. The acceptance criteria this deliverable must satisfy.",
+                acceptance_criteria=("- Functional criteria exercised end to end.\n"
+                                     "- Documentation complete and reviewed.\n"
+                                     "- Compliance mapping signed off."),
+                verification_method=method, standard_reference=standard,
+                regulatory_requirement="", owner=owner, status=status,
+                planned_review_date=(today + timedelta(days=review_offset)
+                                     if review_offset is not None else None),
+                approved_by=owner if approved else None,
+                approved_at=now if approved else None)
+            obj.save()
+            return obj
+
+        def review(project, title, rtype, status="reported", wbs=None, plan_row=None,
+                   offset=0, score=None, imp_status="n_a", imp_due=None, imp_action="",
+                   checklist="", findings=""):
+            obj = QualityReview(
+                tenant=tenant, project=project, wbs_node=wbs, quality_plan=plan_row,
+                title=title, scope=f"{title} — what was reviewed and against which baseline.",
+                review_type=rtype,
+                checklist=checklist or "- Process followed.\n- Artifacts produced.\n"
+                                       "- Actions closed.",
+                findings=findings or f"{title} concluded with observations recorded below.",
+                reviewer=owner, review_date=today - timedelta(days=offset), status=status,
+                maturity_score=score,
+                improvement_action=imp_action,
+                improvement_owner=owner if imp_status in ("planned", "in_progress") else None,
+                improvement_due_date=(today + timedelta(days=imp_due)
+                                      if imp_due is not None else None),
+                improvement_status=imp_status,
+                closed_at=now if status == "closed" else None)
+            obj.save()
+            return obj
+
+        def inspection(project, title, itype, wbs=None, plan_row=None, milestone_row=None,
+                       result="pending", decision="pending", status="planned",
+                       planned_offset=0, inspected_offset=None, findings="",
+                       accepted=False, acceptance_note="", party_row=None):
+            obj = DeliverableInspection(
+                tenant=tenant, project=project, wbs_node=wbs, quality_plan=plan_row,
+                milestone=milestone_row, title=title,
+                description=f"{title}. The protocol this inspection follows.",
+                inspection_type=itype,
+                planned_date=today + timedelta(days=planned_offset),
+                inspected_date=(today - timedelta(days=inspected_offset)
+                                if inspected_offset is not None else None),
+                inspector=inspector, result=result, usage_decision=decision,
+                findings=findings or f"{title} execution notes.",
+                accepted_by=owner if accepted else None,
+                accepted_by_party=party_row if accepted else None,
+                accepted_at=now if accepted else None,
+                acceptance_note=acceptance_note, status=status)
+            obj.save()
+            return obj
+
+        def defect(project, title, severity, category, disposition, status, wbs=None,
+                   plan_row=None, insp_row=None, issue_row=None, offset=0, due_offset=None,
+                   resolved=False, lessons=""):
+            obj = QualityDefect(
+                tenant=tenant, project=project, wbs_node=wbs, quality_plan=plan_row,
+                inspection=insp_row, project_issue=issue_row, title=title,
+                description=f"{title}. Found while inspecting the deliverable.",
+                defect_category=category, severity=severity, disposition=disposition,
+                status=status, owner=owner,
+                identified_date=today - timedelta(days=offset),
+                due_date=(today + timedelta(days=due_offset)
+                          if due_offset is not None else None),
+                root_cause=("Root cause established during the punch-list review."
+                            if resolved else ""),
+                resolution_note=("Dispositioned — the fix was verified at re-inspection."
+                                 if resolved else ""),
+                resolved_by=owner if resolved else None,
+                resolved_at=now if resolved else None,
+                lessons_learned=lessons)
+            obj.save()
+            return obj
+
+        with transaction.atomic():
+            # One seeded defect carries the issue the ``qdf_raise_issue`` bridge would have
+            # minted — the register's ``→ ISS-`` link and the bridge panel render it.
+            bridged_issue = (ProjectIssue.objects.filter(tenant=tenant, project=active)
+                             .order_by("id").first())
+
+            # -- bullet 1: the plans -------------------------------------------------------------
+            plan_discovery = plan(active, "Discovery & design acceptance plan", discovery,
+                                  "active", "review", "ISO 9001:2015", review_offset=-3,
+                                  approved=True)
+            plan_ordering = plan(active, "Self-service ordering acceptance plan", ordering,
+                                 "active", "testing", "WCAG 2.2 AA", review_offset=9)
+            plan(active, "Superseded discovery criteria draft", discovery, "superseded",
+                 "inspection", "", approved=True)
+            plan(chartered, "Scorecard framework acceptance plan", chartered_deliverable,
+                 "draft", "analysis", "", review_offset=21)
+
+            # -- bullets 2 + 4: the reviews ------------------------------------------------------
+            review(active, "Methodology adherence review — release 3 kickoff",
+                   "methodology_review", "closed", discovery, plan_discovery, offset=30,
+                   score=3, checklist="- Charters signed.\n- WBS baselined.",
+                   findings="Process followed for the kickoff; the baseline change log lags.")
+            review(active, "Compliance check — data protection requirements",
+                   "compliance_check", "reported", discovery, plan_discovery, offset=18,
+                   score=4)
+            review(active, "Gate review — discovery gate", "gate_review", "closed", discovery,
+                   plan_discovery, offset=22, score=4,
+                   findings="Exit criteria met; the client product owner accepted the scope.")
+            review(active, "Kaizen event — defect intake", "kaizen_event", "reported", None,
+                   None, offset=12, imp_status="in_progress", imp_due=-4,
+                   imp_action="Move defect intake onto the punch list with a named owner.")
+            review(active, "Retrospective — ordering increment", "retrospective", "reported",
+                   ordering, plan_ordering, offset=7, imp_status="planned", imp_due=10,
+                   imp_action="Adopt pairwise review for integration branches.")
+            review(chartered, "Maturity assessment — scorecard programme", "maturity_assessment",
+                   "in_progress", None, None, offset=2, score=2)
+
+            # -- bullets 3 + 5: the inspections ---------------------------------------------------
+            insp_discovery = inspection(active, "Discovery deliverable acceptance",
+                                        "acceptance", discovery, plan_discovery,
+                                        gate_milestone, "conditional", "accept_with_deviation",
+                                        "passed", planned_offset=-21, inspected_offset=-20,
+                                        accepted=True, party_row=party,
+                                        acceptance_note="Accepted with deviations: the UX "
+                                                        "annotation pack ships late.")
+            insp_api = inspection(active, "Order API integration testing", "testing", ordering,
+                                  plan_ordering, None, "fail", "pending", "in_progress",
+                                  planned_offset=-9, inspected_offset=-8)
+            inspection(active, "Checkout walkthrough", "walkthrough", ordering, plan_ordering,
+                       None, "pending", "pending", "planned", planned_offset=4)
+            inspection(active, "Ordering demo for the client", "demonstration", ordering,
+                       plan_ordering, None, "pass", "pending", "in_progress",
+                       planned_offset=-2, inspected_offset=-1)
+            inspection(active, "Returns portal design review", "review", None, None, None,
+                       "pending", "pending", "planned", planned_offset=14)
+            inspection(chartered, "Metric definitions acceptance", "acceptance",
+                       chartered_deliverable, None, None, "pending", "pending", "planned",
+                       planned_offset=-1)
+
+            # -- bullets 3 + 5: the punch list ----------------------------------------------------
+            defect(active, "Checkout total rounds to whole currency units", "critical",
+                   "functional", "rework", "in_progress", ordering, plan_ordering, insp_api,
+                   offset=3, due_offset=6)
+            defect(active, "Order API omits the idempotency key", "major", "functional",
+                   "resubmit", "open", ordering, plan_ordering, insp_api,
+                   issue_row=bridged_issue, offset=8, due_offset=2)
+            defect(active, "Annotation pack illustrations unfinished", "minor", "workmanship",
+                   "accept_as_is", "closed", discovery, plan_discovery, insp_discovery,
+                   offset=26, resolved=True,
+                   lessons="Accept the annotated deliverable late rather than hold the gate — "
+                           "record the dependency in the plan.")
+            defect(active, "Compliance mapping misses clause 7.1.6", "major", "compliance",
+                   "repair", "resolved", discovery, plan_discovery, insp_discovery, offset=24,
+                   resolved=True)
+            defect(active, "UX spec references the retired design system", "minor",
+                   "documentation", "rework", "open", discovery, plan_discovery,
+                   insp_discovery, offset=40)
+            defect(chartered, "Metric pack lacks the source-data glossary", "observation",
+                   "documentation", "deferred", "open", None, None, None, offset=55)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {QualityPlan.objects.filter(tenant=tenant).count()} plans, "
+            f"{QualityReview.objects.filter(tenant=tenant).count()} reviews, "
+            f"{DeliverableInspection.objects.filter(tenant=tenant).count()} inspections, "
+            f"{QualityDefect.objects.filter(tenant=tenant).count()} defects."))
 
     def _scope(self, tenant, now):
         """Requirements + boundary registry + CCB changes + acceptance log, guarded per tenant.
