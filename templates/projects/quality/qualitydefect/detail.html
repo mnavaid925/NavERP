@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Defect{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:qdf_list' %}">Defects</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_severity_display }} {{ obj.get_defect_category_display|lower }} defect</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:qdf_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="flag"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon {% if obj.severity == 'critical' %}red{% elif obj.severity == 'major' %}orange{% else %}blue{% endif %}"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ obj.get_severity_display }}</div><div class="stat-label">Severity</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="wrench"></i></div><div class="stat-value">{{ obj.get_disposition_display }}</div><div class="stat-label">Disposition</div></div>
+    <div class="stat-card"><div class="stat-icon {% if obj.is_overdue %}red{% else %}slate{% endif %}"><i data-lucide="clock"></i></div><div class="stat-value">{{ obj.age_days }}d</div><div class="stat-label">Age{% if obj.is_overdue %} — overdue{% endif %}</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Defect statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>Deliverable (WBS node)</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Quality plan</dt><dd>{% if obj.quality_plan %}<a href="{% url 'projects:qpl_detail' obj.quality_plan_id %}">{{ obj.quality_plan.number }}</a> {{ obj.quality_plan.title }}{% else %}—{% endif %}</dd>
+        <dt>Found by inspection</dt><dd>{% if obj.inspection %}<a href="{% url 'projects:qci_detail' obj.inspection_id %}">{{ obj.inspection.number }}</a> {{ obj.inspection.title }}{% else %}—{% endif %}</dd>
+        <dt>Category</dt><dd>{{ obj.get_defect_category_display }}</dd>
+        <dt>Severity</dt><dd>{% if obj.severity == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>{% elif obj.severity == 'major' %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>{% elif obj.severity == 'minor' %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>{% else %}{{ obj.get_severity_display }}{% endif %}</dd>
+        <dt>Disposition</dt><dd>{{ obj.get_disposition_display }}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}—{% endif %}</dd>
+        <dt>Identified</dt><dd>{{ obj.identified_date|date:"M d, Y" }}{% if obj.due_date %} · due {{ obj.due_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% endif %}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'resolved' or obj.status == 'closed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+      <p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>
+      {% if obj.lessons_learned %}<p><strong>Lessons learned.</strong> {{ obj.lessons_learned|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    The issue-bridge panel. A defect that needs RAID treatment becomes ONE 7.5 ProjectIssue —
+    the bridge is a verb, not a second issue log (Ruling 2). Once bridged, the issue link is
+    read-only evidence; the defect's own disposition stays here.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Issue register</h2></div>
+    <div class="card-body">
+      {% if obj.project_issue %}
+        <p>Tracked on the issue register as <a href="{% url 'projects:iss_detail' obj.project_issue_id %}">{{ obj.project_issue.number }}</a> — {{ obj.project_issue.title }} <span class="badge badge-info">{{ obj.project_issue.get_status_display }}</span></p>
+      {% elif obj.is_locked %}
+        <p class="text-muted">This defect is resolved without RAID treatment — it is frozen evidence and can no longer raise an issue.</p>
+      {% else %}
+        <p class="text-muted">Needs an owner, escalation or RAID treatment beyond the punch list? Raise a project issue — it inherits this defect's severity and owner.</p>
+        <form method="post" action="{% url 'projects:qdf_raise_issue' obj.pk %}" onsubmit="return confirm('Raise a project issue from defect {{ obj.number }}? The two registers stay linked.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="external-link"></i> Raise project issue</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Resolution</h2></div>
+    <div class="card-body">
+      {% if obj.resolved_by %}
+        <dl class="detail-grid">
+          <dt>Root cause</dt><dd>{% if obj.root_cause %}{{ obj.root_cause|linebreaksbr }}{% else %}—{% endif %}</dd>
+          <dt>Resolution</dt><dd>{{ obj.resolution_note|linebreaksbr }}</dd>
+          <dt>Resolved by</dt><dd>{{ obj.resolved_by.get_full_name|default:obj.resolved_by.email }}{% if obj.resolved_at %} on {{ obj.resolved_at|date:"M d, Y H:i" }}{% endif %}</dd>
+        </dl>
+        {% if obj.status == 'resolved' %}
+          <form method="post" action="{% url 'projects:qdf_close' obj.pk %}" onsubmit="return confirm('Close defect {{ obj.number }}? It becomes frozen evidence.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle-2"></i> Close defect</button>
+          </form>
+        {% else %}
+          <p class="text-muted">This defect is closed — frozen evidence, no longer editable or deletable.</p>
+        {% endif %}
+      {% elif obj.is_locked %}
+        <p class="text-muted">This defect is closed — frozen evidence, no longer editable or deletable.</p>
+      {% else %}
+        <form method="post" action="{% url 'projects:qdf_resolve' obj.pk %}" novalidate>
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in resolution_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Mark defect {{ obj.number }} resolved? It freezes the row.');"><i data-lucide="check"></i> Resolve defect</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:qdf_list' %}" class="btn btn-outline">Back to Punch List</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:qdf_delete' obj.pk %}" onsubmit="return confirm('Delete defect {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
