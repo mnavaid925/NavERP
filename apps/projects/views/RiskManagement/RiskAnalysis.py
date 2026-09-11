@@ -64,11 +64,12 @@ _BAND_BADGES = {
 class SimulationParamsForm(forms.Form):
     """The Monte Carlo parameters, parsed as a form (L35) so a junk ``?seed=abc`` is a validation
     error that falls back to the default — never a hand-rolled ``int()`` that 500s on a URL anyone
-    can type. ``iterations`` is range-checked here as well as clamped in the view."""
+    can type. The 100–10000 range is the view's clamp, not a form rule: an out-of-range
+    ``iterations`` is clamped, not discarded, and it must not take a valid ``seed`` down with it
+    (the view resolves each field independently)."""
 
     seed = forms.IntegerField(required=False)
-    iterations = forms.IntegerField(required=False, min_value=MIN_ITERATIONS,
-                                    max_value=MAX_ITERATIONS)
+    iterations = forms.IntegerField(required=False)
 
 
 def _band_for_score(score):
@@ -169,12 +170,25 @@ def risk_analysis(request):
     residual_emv_total = q2(sum((risk.residual_emv for risk in register), 0))
 
     # -- parameters: through the form, never raw parsing (L35) -----------------------------------
+    # The form binds the POST body on POST and the query string otherwise, but each field
+    # resolves independently and falls back to the query string when the bound data did not
+    # supply it: a bookmarked ``?seed=123&iterations=500`` must survive the on-page form's POST
+    # (whose action carries only ``?project=``), and one field's junk must not discard the
+    # other's valid value.
     params = SimulationParamsForm(request.POST if request.method == "POST" else request.GET)
-    if params.is_valid():
-        seed = params.cleaned_data.get("seed")
-        iterations = params.cleaned_data.get("iterations")
-    else:
-        seed, iterations = None, None
+    query_params = SimulationParamsForm(request.GET)
+
+    def _param(name):
+        """One parameter's cleaned value — bound data first, the query string as fallback."""
+        for bound in (params, query_params):
+            if name in bound.data:
+                # Junk in the bound data is junk (default); only an *absent* field falls
+                # through to the query string.
+                return None if name in bound.errors else bound.cleaned_data.get(name)
+        return None
+
+    seed = _param("seed")
+    iterations = _param("iterations")
     seed = DEFAULT_SEED if seed is None else seed
     iterations = DEFAULT_ITERATIONS if iterations is None else iterations
     iterations = max(MIN_ITERATIONS, min(MAX_ITERATIONS, iterations))
