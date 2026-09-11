@@ -1777,6 +1777,25 @@ LIVE_LINKS = {
         # Extra live leaf: the escalation queue is the issue log's `?escalated=1` lens.
         "Issue Escalation Queue":                "projects:iss_list?escalated=1",
     },
+    # ----- 7.6 Quality Management -----
+    # Bullet 2 (QA) deep-links the review register's `?kind=assurance` lens and bullet 4 (continuous
+    # improvement) is the COMPUTED improvement board — the kaizen/retro rows, the computed maturity
+    # score, the defect trend and the lessons lens, no stored maturity table (the 7.5 monitoring
+    # precedent). Bullet 5 is the COMPUTED acceptance board over the WBS deliverable tree; the
+    # acceptance DECISION itself lives on the inspection row (qci_accept), so the board's queue
+    # hosts the action. The two extra live leaves are the full review register and the punch list.
+    "7.6": {
+        "Quality Planning & Standards":          "projects:qpl_list",
+        # The methodology/compliance/gate half of the review register — the assurance lens.
+        "Quality Assurance (QA)":                "projects:qrv_list?kind=assurance",
+        "Quality Control (QC) & Inspections":    "projects:qci_list",
+        # Kaizen/retrospective rows + computed maturity + defect trend + lessons lens.
+        "Continuous Improvement":                "projects:quality_improvement",
+        "Deliverable Acceptance & Sign-off":     "projects:quality_acceptance",
+        # Extra live leaves: the full register (both review kinds) and the defect punch list.
+        "Quality Review Register":               "projects:qrv_list",
+        "Defect & Punch List":                   "projects:qdf_list",
+    },
     # ----- 7.7 Scope & Requirements Management -----
     # Two of the five bullets are LENSES rather than pages, and deliberately so. Elicitation has no
     # register of its own: the technique and the party a requirement came from are columns ON the
