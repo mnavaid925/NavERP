@@ -21,6 +21,7 @@ snapshot — a snapshot is stale the instant a register row changes:
 (``style="width: {{ row.bar_pct }}%"``) and every figure is recomputed on each request.
 """
 from collections import Counter
+import heapq
 
 from apps.core.crud import as_db_int
 from apps.projects.models import Project, ProjectIssue, ProjectRisk, q2
@@ -28,16 +29,8 @@ from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, render, timezone
 from apps.projects.views._helpers import projects as project_choices
 
-#: The register statuses a risk is still live from — everything but the two terminals.
-_LIVE_EXCLUDED = ("realized", "closed")
-
 #: The tolerance label shown on the flag line. The bands themselves live on the model.
 TOLERANCE_LABEL = "High / Critical"
-
-
-def _open_risks(register):
-    """The still-live subset of an already-materialised register."""
-    return [risk for risk in register if risk.status not in _LIVE_EXCLUDED]
 
 
 def _burndown(register):
@@ -115,27 +108,37 @@ def risk_monitoring(request):
         register_qs = register_qs.filter(project=project)
     register = list(register_qs)
 
-    open_risks = _open_risks(register)
-    open_count = len(open_risks)
-    closed_count = sum(1 for risk in register if risk.status == "closed")
-    realized_count = sum(1 for risk in register if risk.status == "realized")
+    # One pass over the register for the summary figures: the three status counts, the tolerance
+    # count, the review-queue candidates and both summary counters. ``severity_band`` loops the
+    # four SEVERITY_BANDS per call, so it is read once per row into a local, not twice.
+    today = timezone.localdate()
+    open_count = closed_count = realized_count = above_tolerance_count = 0
+    category_counter, band_counter = Counter(), Counter()
+    review_candidates = []
+    for risk in register:
+        band = risk.severity_band
+        if risk.status == "closed":
+            closed_count += 1
+        elif risk.status == "realized":
+            realized_count += 1
+        else:
+            open_count += 1
+            if band in ProjectRisk.TOLERANCE_BANDS:
+                above_tolerance_count += 1
+            if risk.review_date and risk.review_date < today:
+                review_candidates.append(risk)
+        category_counter[risk.category] += 1
+        band_counter[band] += 1
 
-    top_risks = sorted(
-        register,
-        key=lambda risk: (-risk.probability, -risk.impact, -risk.cost_impact, -risk.id))[:25]
+    top_risks = heapq.nlargest(
+        25, register,
+        key=lambda risk: (risk.probability, risk.impact, risk.cost_impact, risk.id))
 
     burndown_rows, burndown_max = _burndown(register)
 
-    today = timezone.localdate()
-    review_queue = sorted(
-        (risk for risk in register
-         if risk.review_date and risk.review_date < today
-         and risk.status not in _LIVE_EXCLUDED),
-        key=lambda risk: risk.review_date)
+    review_queue = sorted(review_candidates, key=lambda risk: risk.review_date)
     review_due_count = len(review_queue)
 
-    above_tolerance_count = sum(
-        1 for risk in open_risks if risk.severity_band in ProjectRisk.TOLERANCE_BANDS)
     tolerance = {
         "threshold": TOLERANCE_LABEL,
         "band": sorted(ProjectRisk.TOLERANCE_BANDS),
@@ -145,12 +148,10 @@ def risk_monitoring(request):
     lessons = _lessons(tenant, register, project)
     lessons_count = len(lessons)
 
-    category_counter = Counter(risk.category for risk in register)
-    by_category = {label: category_counter.get(value, 0)
-                   for value, label in ProjectRisk.CATEGORY_CHOICES}
-    band_counter = Counter(risk.severity_band for risk in register)
     # The band vocabulary is the model's own — a second inline copy here could drift from
     # ``SEVERITY_BANDS`` without any error (a fifth band would silently drop off this strip).
+    by_category = {label: category_counter.get(value, 0)
+                   for value, label in ProjectRisk.CATEGORY_CHOICES}
     by_band = {label: band_counter.get(band, 0)
                for band, label in ProjectRisk._BAND_LABELS.items()}
 
