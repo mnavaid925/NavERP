@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Inspection{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:qci_list' %}">Inspections</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">For <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.get_inspection_type_display }}</p>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_locked %}<a href="{% url 'projects:qci_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="flag"></i></div><div class="stat-value">{{ obj.get_status_display }}</div><div class="stat-label">Status</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="search-check"></i></div><div class="stat-value">{{ obj.get_inspection_type_display }}</div><div class="stat-label">Inspection type</div></div>
+    <div class="stat-card"><div class="stat-icon {% if obj.result == 'pass' %}green{% elif obj.result == 'fail' %}red{% elif obj.result == 'conditional' %}orange{% else %}purple{% endif %}"><i data-lucide="check-circle-2"></i></div><div class="stat-value">{{ obj.get_result_display }}</div><div class="stat-label">Result</div></div>
+    <div class="stat-card"><div class="stat-icon {% if obj.usage_decision == 'accept' or obj.usage_decision == 'accept_with_deviation' %}green{% elif obj.usage_decision == 'reject' %}red{% else %}slate{% endif %}"><i data-lucide="clipboard-check"></i></div><div class="stat-value">{{ obj.get_usage_decision_display }}</div><div class="stat-label">Usage decision</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Inspection statement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></dd>
+        <dt>Deliverable (WBS node)</dt><dd>{% if obj.wbs_node %}<a href="{% url 'projects:tsk_detail' obj.wbs_node_id %}">{{ obj.wbs_node.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Quality plan</dt><dd>{% if obj.quality_plan %}<a href="{% url 'projects:qpl_detail' obj.quality_plan_id %}">{{ obj.quality_plan.number }}</a> {{ obj.quality_plan.title }}{% else %}—{% endif %}</dd>
+        <dt>Milestone (gate)</dt><dd>{% if obj.milestone %}<a href="{% url 'projects:mst_detail' obj.milestone_id %}">{{ obj.milestone.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Inspection type</dt><dd>{{ obj.get_inspection_type_display }}</dd>
+        <dt>Inspector</dt><dd>{% if obj.inspector %}{{ obj.inspector.get_full_name|default:obj.inspector.email }}{% else %}—{% endif %}</dd>
+        <dt>Planned date</dt><dd>{% if obj.planned_date %}{{ obj.planned_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</dd>
+        <dt>Inspected date</dt><dd>{% if obj.inspected_date %}{{ obj.inspected_date|date:"M d, Y" }}{% else %}—{% endif %}</dd>
+        <dt>Status</dt><dd>{% if obj.status == 'passed' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>{% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>{% elif obj.status == 'in_progress' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% elif obj.status == 'planned' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% elif obj.status == 'on_hold' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% elif obj.status == 'cancelled' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% else %}{{ obj.get_status_display }}{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+      {% if obj.description %}<p><strong>Protocol.</strong> {{ obj.description|linebreaksbr }}</p>{% endif %}
+      {% if obj.findings %}<p><strong>Findings.</strong> {{ obj.findings|linebreaksbr }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Acceptance &amp; sign-off</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Usage decision</dt><dd>{% if obj.usage_decision == 'accept' %}<span class="badge badge-green">{{ obj.get_usage_decision_display }}</span>{% elif obj.usage_decision == 'accept_with_deviation' %}<span class="badge badge-amber">{{ obj.get_usage_decision_display }}</span>{% elif obj.usage_decision == 'reject' %}<span class="badge badge-red">{{ obj.get_usage_decision_display }}</span>{% elif obj.usage_decision == 'rework' %}<span class="badge badge-info">{{ obj.get_usage_decision_display }}</span>{% else %}{{ obj.get_usage_decision_display }}{% endif %}</dd>
+        <dt>Accepted by (user)</dt><dd>{% if obj.accepted_by %}{{ obj.accepted_by.get_full_name|default:obj.accepted_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Accepted by (party)</dt><dd>{% if obj.accepted_by_party %}{{ obj.accepted_by_party.name }}{% else %}—{% endif %}</dd>
+        <dt>Accepted at</dt><dd>{% if obj.accepted_at %}{{ obj.accepted_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Conditions</dt><dd>{% if obj.acceptance_note %}{{ obj.acceptance_note|linebreaksbr }}{% else %}—{% endif %}</dd>
+      </dl>
+
+      {% comment %}
+        The lifecycle panel. Evidence order: the inspection is RECORDED first (result + date,
+        row stays live), then DECIDED (accept / reject — the decision and the terminal status
+        move together, which is what freezes the row). The buttons are gated here the same way
+        the view gates them — defence in depth, not the boundary.
+      {% endcomment %}
+      {% if obj.is_locked %}
+        <p class="text-muted">The decision has been taken — this inspection is frozen evidence and can no longer be edited or deleted.</p>
+      {% elif obj.result == 'pending' %}
+        <form method="post" action="{% url 'projects:qci_record' obj.pk %}" class="filter-bar">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="record-result">Record execution — result</label>
+            <select name="result" id="record-result" class="form-select" required>
+              {% for val, label in result_choices %}{% if val != 'pending' %}
+                <option value="{{ val }}">{{ label }}</option>
+              {% endif %}{% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="record-date">Inspected on</label>
+            <input type="date" name="inspected_date" id="record-date" class="form-input">
+          </div>
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Record this result on {{ obj.number }}?');"><i data-lucide="file-check-2"></i> Record result</button>
+        </form>
+        <p class="text-muted">Recording the result keeps the row live; the acceptance decision is taken once the result is on the record.</p>
+      {% else %}
+        <form method="post" action="{% url 'projects:qci_accept' obj.pk %}" novalidate>
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in accept_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-actions" style="padding:0;">
+            <button class="btn btn-primary" type="submit" onclick="return confirm('Sign off {{ obj.number }} with this decision? It freezes the inspection.');"><i data-lucide="clipboard-check"></i> Accept deliverable</button>
+          </div>
+        </form>
+        <form method="post" action="{% url 'projects:qci_reject' obj.pk %}" onsubmit="return confirm('Reject {{ obj.number }}? The deliverable fails this inspection and the punch list carries what must be fixed.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject deliverable</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Punch list ({{ defects|length }})</h2></div>
+    <div class="card-body">
+      {% if defects %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Defect</th><th>Severity</th><th>Category</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for d in defects %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:qdf_detail' d.pk %}">{{ d.number }}</a><div class="text-muted">{{ d.title }}</div></td>
+                  <td>{% if d.severity == 'critical' %}<span class="badge badge-red">{{ d.get_severity_display }}</span>{% elif d.severity == 'major' %}<span class="badge badge-amber">{{ d.get_severity_display }}</span>{% elif d.severity == 'minor' %}<span class="badge badge-info">{{ d.get_severity_display }}</span>{% else %}{{ d.get_severity_display }}{% endif %}</td>
+                  <td>{{ d.get_defect_category_display }}</td>
+                  <td>{% if d.owner %}{{ d.owner.get_full_name|default:d.owner.email }}{% else %}—{% endif %}</td>
+                  <td>{% if d.due_date %}{{ d.due_date|date:"M d, Y" }}{% if d.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+                  <td>{% if d.status == 'resolved' or d.status == 'closed' %}<span class="badge badge-green">{{ d.get_status_display }}</span>{% elif d.status == 'in_progress' %}<span class="badge badge-info">{{ d.get_status_display }}</span>{% elif d.status == 'cancelled' %}<span class="badge badge-muted">{{ d.get_status_display }}</span>{% else %}<span class="badge badge-amber">{{ d.get_status_display }}</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted">No defects recorded against this inspection — a conditional acceptance or a rejection normally leaves punch-list items here.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:qci_list' %}" class="btn btn-outline">Back to Register</a>
+    {% if not obj.is_locked %}
+      <form method="post" action="{% url 'projects:qci_delete' obj.pk %}" onsubmit="return confirm('Delete inspection {{ obj.number }}? This cannot be undone.');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
