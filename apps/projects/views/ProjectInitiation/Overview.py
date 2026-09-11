@@ -13,6 +13,7 @@ from django.db.models.functions import Coalesce
 
 from apps.projects.models import (
     BudgetRevision,
+    DeliverableInspection,
     Project,
     ProjectExpense,
     ProjectIssue,
@@ -22,6 +23,8 @@ from apps.projects.models import (
     ProjectRisk,
     ProjectStakeholder,
     ProjectTask,
+    QualityDefect,
+    QualityPlan,
     Requirement,
     ResourceAllocation,
     ResourceProfile,
@@ -97,6 +100,14 @@ def overview(request):
         "above_tolerance": above_tolerance,
         "review_due_count": review_due_count,
         "issue_count": ProjectIssue.objects.filter(tenant=tenant).count(),
+        # 7.6 quality — the plan register's size plus the two figures that need a decision: the
+        # acceptance inspections still awaiting a usage decision (the acceptance board's queue)
+        # and the open punch list (what stands between a conditional acceptance and sign-off).
+        "quality_plan_count": QualityPlan.objects.filter(tenant=tenant).count(),
+        "acceptance_queue_count": DeliverableInspection.objects.filter(
+            tenant=tenant, inspection_type="acceptance", usage_decision="pending").count(),
+        "open_defect_count": QualityDefect.objects.filter(
+            tenant=tenant, status__in=("open", "in_progress")).count(),
         # 7.7 scope & requirements — flat counts again, plus the two figures that need a decision:
         # the requirements nobody has linked to a delivering work package (the traceability gap) and
         # the change requests still in front of the board. Both are plain column filters, so no
