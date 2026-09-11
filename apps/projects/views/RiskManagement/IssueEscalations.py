@@ -9,6 +9,11 @@ page and by ``esc_create`` here; neither ``esc_edit`` nor ``esc_delete`` has a l
 column (``is_int``) and the issue/user filters hop to their ``_id`` columns. The register's level
 vocabulary is the model's own ``LEVEL_CHOICES`` constant — one definition shared by the filter, the
 form and ``iss_escalate``.
+
+**Writing this register is an admin act**, exactly like ``iss_escalate``: the row records who was
+told about an issue and why, so forging, rewriting or deleting it defeats the gate on the verb.
+``esc_create``/``esc_edit``/``esc_delete`` therefore carry ``@tenant_admin_required``; the list and
+detail pages stay readable by every member.
 """
 from apps.core.crud import as_db_int
 from apps.projects.forms import IssueEscalationForm
@@ -37,6 +42,7 @@ def esc_list(request):
 
 
 @login_required
+@tenant_admin_required
 def esc_create(request):
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before creating records.")
@@ -70,6 +76,7 @@ def esc_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def esc_edit(request, pk):
     return crud_edit(
         request, model=IssueEscalation, pk=pk, form_class=IssueEscalationForm,
@@ -77,6 +84,7 @@ def esc_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def esc_delete(request, pk):
     return crud_delete(request, model=IssueEscalation, pk=pk, success_url="projects:esc_list")
