@@ -54,6 +54,16 @@ def overview(request):
         total=Count("pk"),
         active=Count("pk", filter=Q(status="active")),
     )
+    # 7.5 risk & issue — the three risk figures come off ONE materialised register rather than
+    # three querysets, because `severity_band` and `is_review_overdue` are properties, not
+    # columns. The register is small and the landing page is the most-hit page in the module.
+    register = list(ProjectRisk.objects.filter(tenant=tenant))
+    risk_count = len(register)
+    above_tolerance = sum(
+        1 for risk in register
+        if risk.status not in ("realized", "closed")
+        and risk.severity_band in ProjectRisk.TOLERANCE_BANDS)
+    review_due_count = sum(1 for risk in register if risk.is_review_overdue)
     return render(request, "projects/overview.html", {
         "request_count": requests["total"],
         "awaiting_decision": requests["awaiting"],
@@ -80,18 +90,12 @@ def overview(request):
                 Sum("amount", filter=Q(status="posted",
                                        entry_type__in=("actual", "accrual"))),
                 Value(Decimal("0")), output_field=_MONEY))["total"],
-        # 7.5 risk & issue — flat counts again. "Above tolerance" and "review due" are the two
-        # figures that need a decision (they are what the monitoring page opens with), so they
-        # are counted here rather than the raw register size. Both are Python-side because
-        # `severity_band` and `is_review_overdue` are properties, not columns — the register is
-        # small, and the alternative would be a duplicated band table.
-        "risk_count": ProjectRisk.objects.filter(tenant=tenant).count(),
-        "above_tolerance": sum(
-            1 for risk in ProjectRisk.objects.filter(tenant=tenant)
-            if risk.status not in ("realized", "closed")
-            and risk.severity_band in ProjectRisk.TOLERANCE_BANDS),
-        "review_due_count": sum(
-            1 for risk in ProjectRisk.objects.filter(tenant=tenant) if risk.is_review_overdue),
+        # 7.5 risk & issue — the register size plus the two figures that need a decision
+        # ("above tolerance" and "review due" are what the monitoring page opens with), all
+        # derived from the one materialised register above.
+        "risk_count": risk_count,
+        "above_tolerance": above_tolerance,
+        "review_due_count": review_due_count,
         "issue_count": ProjectIssue.objects.filter(tenant=tenant).count(),
         # 7.7 scope & requirements — flat counts again, plus the two figures that need a decision:
         # the requirements nobody has linked to a delivering work package (the traceability gap) and
