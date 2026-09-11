@@ -122,10 +122,14 @@ def qrv_delete(request, pk):
 @login_required
 @require_POST
 def qrv_report(request, pk):
-    """Report an in-progress review — the findings are captured, so the row becomes evidence."""
+    """Report a live review — the findings are captured, so the row becomes evidence.
+
+    A review is reported from ``planned`` or ``in_progress``: ``status`` is OFF the model form and
+    there is no separate start verb, so accepting only ``in_progress`` here would strand every
+    review on ``planned`` (nothing else writes that transition)."""
     obj = get_object_or_404(QualityReview, pk=pk, tenant=request.tenant)
-    if obj.status != "in_progress":
-        messages.error(request, "Only an in-progress review can be reported.")
+    if obj.status not in ("planned", "in_progress"):
+        messages.error(request, "Only a planned or in-progress review can be reported.")
         return redirect("projects:qrv_detail", pk=obj.pk)
     previous = obj.status
     obj.status = "reported"
