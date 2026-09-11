@@ -31,9 +31,11 @@ class ProjectIssueForm(TenantUniqueMixin, TenantModelForm):
 class IssueResolutionForm(forms.Form):
     """The ``iss_resolve`` verb's body: the root cause (optional) and the resolution (required)."""
 
+    # A plain ``forms.Form`` never runs ``TenantModelForm``'s widget-class loop, so the theme
+    # class is set here — ``theme.css`` styles ``.form-textarea``, not a bare ``<textarea>``.
     root_cause = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={"rows": 3}),
+        required=False, widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         help_text="Why this issue happened — the input the monitoring page's lessons lens reads.")
     resolution_note = forms.CharField(
-        required=True, widget=forms.Textarea(attrs={"rows": 3}),
+        required=True, widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         help_text="What was done to resolve it. Required — a resolved issue must say how.")
