@@ -49,6 +49,11 @@ DEFAULT_SEED = 42
 DEFAULT_ITERATIONS = 1000
 MIN_ITERATIONS, MAX_ITERATIONS = 100, 10000
 
+#: Working-set cap for the board (the monitoring page caps identically). A register large
+#: enough to hit it makes the matrix and the simulation a partial view — but an unparameterised
+#: whole-table materialisation in the request thread is the worse failure.
+_REGISTER_CAP = 2000
+
 #: The register statuses whose cost is still uncertain. A realized risk's cost is actual spend.
 _UNCERTAIN_EXCLUDED = ("closed", "realized")
 
@@ -141,7 +146,7 @@ def risk_analysis(request):
     register_qs = ProjectRisk.objects.filter(tenant=tenant).select_related("project")
     if project is not None:
         register_qs = register_qs.filter(project=project)
-    register = list(register_qs)
+    register = list(register_qs[:_REGISTER_CAP])
 
     # -- baseline: the 7.4 cost baseline (approved + activated), read-only -----------------------
     baseline, baseline_total = None, None
