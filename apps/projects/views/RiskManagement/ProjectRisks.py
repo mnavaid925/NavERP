@@ -10,6 +10,7 @@ Verbs (POST-only, GET → 405): ``realize`` (the risk happened — and mints the
 the risk→issue bridge), ``close`` (retire it, capturing the lesson) and ``reopen`` (admin-only; a
 closed register row is evidence, so reopening it is a privileged act).
 """
+from django.db import transaction
 from django.db.models import Q
 
 from apps.core.crud import as_db_int
@@ -156,18 +157,21 @@ def rsk_realize(request, pk):
         messages.info(request, "That risk is already realized.")
         return redirect("projects:rsk_detail", pk=obj.pk)
     previous = obj.status
-    obj.status = "realized"
-    obj.save(update_fields=["status", "updated_at"])
-    issue = ProjectIssue.objects.create(
-        tenant=request.tenant, project=obj.project, wbs_node=obj.wbs_node, risk=obj,
-        title=obj.title[:255], description=obj.effect or obj.description,
-        # ``severity_band``'s four values are exactly SEVERITY_CHOICES' four values.
-        severity=obj.severity_band, owner=obj.owner, raised_by=request.user,
-        identified_date=timezone.localdate(), created_by=request.user)
-    write_audit_log(request.user, obj, "realize",
-                    changes={"verb": "realize", "from": previous, "to": obj.status,
-                             "issue": issue.number})
-    write_audit_log(request.user, issue, "create")
+    # The risk and the issue are one fact seen from two registers, so the pair is written
+    # atomically — a failed issue create must roll the parent's ``realized`` status back.
+    with transaction.atomic():
+        obj.status = "realized"
+        obj.save(update_fields=["status", "updated_at"])
+        issue = ProjectIssue.objects.create(
+            tenant=request.tenant, project=obj.project, wbs_node=obj.wbs_node, risk=obj,
+            title=obj.title[:255], description=obj.effect or obj.description,
+            # ``severity_band``'s four values are exactly SEVERITY_CHOICES' four values.
+            severity=obj.severity_band, owner=obj.owner, raised_by=request.user,
+            identified_date=timezone.localdate(), created_by=request.user)
+        write_audit_log(request.user, obj, "realize",
+                        changes={"verb": "realize", "from": previous, "to": obj.status,
+                                 "issue": issue.number})
+        write_audit_log(request.user, issue, "create")
     messages.success(request, f"Risk {obj.number} realized — issue {issue.number} raised.")
     return redirect("projects:rsk_detail", pk=obj.pk)
 
