@@ -510,7 +510,7 @@ Rows per tenant (all `obj.save()`, never bulk_create):
   party-keyed rows (the one-of clean allows party-keyed internals). `skill_summary` filled
   (e.g. "Python, Django, Airflow") so the skills filter facet has data.
 - **~10 ResourceAllocation** (start offsets relative to `timezone.localdate()`):
-  1. firm named — resource#1, 16h/wk, −14..+28, on the active project;
+  1. firm named — resource#1, 16h/wk, −14..+28, on the active project; **as-built amendment (Phase 5 M4): 48h/wk** so one capacity cell sits over a 40h resource and the board's red alert branch is reachable from seed data;
   2. firm named — resource#2, 12h/wk, −7..+35, `project_task` = the active project's first work
      package (if 7.2 seeded) else None;
   3. soft named — resource#4 (24h part-timer), **`allocation_unit="pct_capacity"`,
