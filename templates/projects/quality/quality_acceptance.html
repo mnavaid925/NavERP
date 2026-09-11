@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Deliverable Acceptance & Sign-off{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Deliverable Acceptance &amp; Sign-off</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Acceptance</span></div>
+      <p class="text-muted">One row per deliverable: its quality plan, its latest inspection, its open punch-list count and its derived acceptance state. The decision itself is taken on the inspection's page — the record is the inspection row, the sign-off is the verb.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:qci_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Inspection Register</a>
+      <a href="{% url 'projects:qci_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inspection</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">Choose a project…</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project and request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle-2"></i></div><div class="stat-value">{{ accepted_count }}</div><div class="stat-label">Accepted</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-circle"></i></div><div class="stat-value">{{ conditional_count }}</div><div class="stat-label">Accepted with deviation</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="x-circle"></i></div><div class="stat-value">{{ rejected_count }}</div><div class="stat-label">Rejected</div></div>
+    <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock"></i></div><div class="stat-value">{{ pending_count }}</div><div class="stat-label">Pending decision</div></div>
+  </div>
+
+  {% comment %}
+    The acceptance queue — the acceptance-type inspections still awaiting a usage decision,
+    planned-date ordered. The qci_accept decision is taken on each row's detail page; the queue
+    is the sign-off to-do list, not a second decision surface.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Acceptance queue ({{ acceptance_queue_count }})</h2></div>
+    <div class="card-body">
+      {% if acceptance_queue %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Inspection</th><th>Project</th><th>Deliverable</th><th>Result</th><th>Planned</th><th class="table-actions">Actions</th></tr></thead>
+            <tbody>
+              {% for obj in acceptance_queue %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:qci_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+                  <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+                  <td>{% if obj.wbs_node %}{{ obj.wbs_node.name }}{% else %}—{% endif %}</td>
+                  <td>{% if obj.result == 'pass' %}<span class="badge badge-green">{{ obj.get_result_display }}</span>{% elif obj.result == 'fail' %}<span class="badge badge-red">{{ obj.get_result_display }}</span>{% elif obj.result == 'conditional' %}<span class="badge badge-amber">{{ obj.get_result_display }}</span>{% else %}{{ obj.get_result_display }}{% endif %}</td>
+                  <td>{% if obj.planned_date %}{{ obj.planned_date|date:"M d, Y" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
+                  <td><div class="table-actions"><a href="{% url 'projects:qci_detail' obj.pk %}" class="btn-icon" title="Take the decision"><i data-lucide="clipboard-check"></i></a></div></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted">No acceptance inspections are awaiting a decision.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Deliverables{% if project %} — {{ project.name }}{% endif %}</h2></div>
+    <div class="card-body">
+      {% if project %}
+        {% if deliverable_rows %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Deliverable</th><th>Quality plan</th><th>Latest inspection</th><th>Result</th><th>Decision</th><th class="text-right">Open defects</th><th>Acceptance state</th></tr></thead>
+              <tbody>
+                {% for row in deliverable_rows %}
+                  <tr>
+                    <td class="fw-600"><a href="{% url 'projects:tsk_detail' row.wbs_node.pk %}">{{ row.wbs_node.name }}</a></td>
+                    <td>{% if row.plan %}<a href="{% url 'projects:qpl_detail' row.plan.pk %}">{{ row.plan.number }}</a> <span class="text-muted">{{ row.plan.get_status_display }}</span>{% else %}<span class="text-muted">No plan</span>{% endif %}</td>
+                    <td>{% if row.latest_inspection %}<a href="{% url 'projects:qci_detail' row.latest_inspection.pk %}">{{ row.latest_inspection.number }}</a>{% else %}<span class="text-muted">None</span>{% endif %}</td>
+                    <td>{% if row.result == 'pass' %}<span class="badge badge-green">{{ row.latest_inspection.get_result_display }}</span>{% elif row.result == 'fail' %}<span class="badge badge-red">{{ row.latest_inspection.get_result_display }}</span>{% elif row.result == 'conditional' %}<span class="badge badge-amber">{{ row.latest_inspection.get_result_display }}</span>{% elif row.result %}{{ row.latest_inspection.get_result_display }}{% else %}—{% endif %}</td>
+                    <td>{% if row.usage_decision == 'accept' %}<span class="badge badge-green">{{ row.latest_inspection.get_usage_decision_display }}</span>{% elif row.usage_decision == 'accept_with_deviation' %}<span class="badge badge-amber">{{ row.latest_inspection.get_usage_decision_display }}</span>{% elif row.usage_decision == 'reject' %}<span class="badge badge-red">{{ row.latest_inspection.get_usage_decision_display }}</span>{% elif row.usage_decision %}{{ row.latest_inspection.get_usage_decision_display }}{% else %}—{% endif %}</td>
+                    <td class="text-right">{% if row.open_defects %}<span class="badge badge-amber">{{ row.open_defects }}</span>{% else %}0{% endif %}</td>
+                    <td><span class="badge {{ row.badge }}">{{ row.acceptance_state|capfirst }}</span></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state"><i data-lucide="package-check"></i><h3>No deliverable nodes in this project</h3><p>Mark WBS summary nodes as <strong>Deliverable</strong> in the planning module and they appear here with their plan, inspections and punch list.</p></div>
+        {% endif %}
+      {% else %}
+        <div class="empty-state"><i data-lucide="package-check"></i><h3>Pick a project</h3><p>The acceptance board reads one project's deliverable tree — choose a project above.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
