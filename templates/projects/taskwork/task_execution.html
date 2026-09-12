@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Execute — {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Execute task {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><a href="{% url 'projects:tsk_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Execute</span></div>
+      <p class="text-muted">{{ obj.name }} · on <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>
+        {% if obj.status == 'done' %}· <span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'in_progress' %}· <span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}· <span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% else %}· <span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.is_blocked %}· <span class="badge badge-red">Blocked</span>{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:tsk_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="eye"></i> View task</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The execution write surface — deliberately NOT the plan. Project, parent, dates, effort,
+    status and sequence stay on 7.2's planning Edit page; actual_start/actual_end carry
+    editable=False at the model layer and are written by the Start/Complete verbs only.
+  {% endcomment %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2>Execution</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted">The plan — window, effort, estimation, status — lives on the task's <strong>Edit</strong> page. The start and finish stamps are written by the <strong>Start</strong> and <strong>Complete</strong> verbs only; completing a task attests 100% here, blocking state is derived, never entered.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> Save execution</button>
+      <a href="{% url 'projects:tsk_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
