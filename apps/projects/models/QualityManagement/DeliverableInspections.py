@@ -31,9 +31,9 @@ what makes edit/delete refuse a finished row.
 
 **Boundaries (L36):** ``project``, ``wbs_node``, ``quality_plan`` and ``milestone`` are all FK'd
 **by string** into 7.1/7.2 and this sub-module's own entity 1 — none is re-declared here. The
-milestone is 7.2's phase gate (Ruling 5), not a second one. The usage-decision vocabulary mirrors
-scm 4.9's (Ruling 4). There is no money column (Ruling 7 — a cost of quality is a 7.4
-``ProjectExpense``), so this module declares no ``DecimalField``.
+milestone is 7.2's phase gate (Ruling 5), not a second one. The usage-decision vocabulary is a
+deliberate superset of scm 4.9's (Ruling 4). There is no money column (Ruling 7 — a cost of
+quality is a 7.4 ``ProjectExpense``), so this module declares no ``DecimalField``.
 """
 from apps.projects.models._base import *  # noqa: F401,F403
 from apps.projects.models._base import models, settings
@@ -56,7 +56,10 @@ class DeliverableInspection(TenantNumbered):
         ("conditional", "Conditional"),
         ("not_applicable", "Not Applicable"),
     ]
-    #: The scm 4.9 usage-decision vocabulary (Ruling 4) — the decision taken about the deliverable.
+    #: A deliberate superset of scm 4.9's QualityInspection usage-decision vocabulary (Ruling 4):
+    #: scm carries the four values below minus ``rework`` (it is a NonConformance disposition
+    #: there). ``rework`` is kept here as vocabulary for the manual rework loop — no 7.6 verb
+    #: writes it today, and every consumer reads it safely.
     USAGE_DECISION_CHOICES = [
         ("pending", "Pending"),
         ("accept", "Accept"),
