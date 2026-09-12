@@ -50,6 +50,7 @@ def req_list(request):
         search_fields=["number", "title", "description", "acceptance_criteria"],
         filters=[("project", "project_id", True),
                  ("requirement_type", "requirement_type", False),
+                 ("elicitation_method", "elicitation_method", False),
                  ("priority", "priority", False),
                  ("status", "status", False),
                  ("owner", "owner_id", True)],
