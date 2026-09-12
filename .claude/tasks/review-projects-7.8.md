@@ -162,3 +162,40 @@ states, pagination GET-preservation, reversed URL names all check out.
   file: `templates/projects/planning/task/detail.html`  lines: 41-46, 95
   finding: task detail gains the blocks panel and checklist panel, but not the Start/Complete verbs — the lifecycle entry points live solely on `task_board.html`; the priority lens work queue has no action column either. Contract-conformant (§6 pins the verbs on the board only), but the verb surface is asymmetric: one computed page can start/finish work, the object's own page cannot.
   fix (next pass): add Start/Complete forms (same gating as I2) to the task detail page header or the work queue's rows.
+
+### Lane 4 — performance-reviewer (serial pass 4)
+
+Index coverage: none missing — every hot seeded query is served (tsk status/assignee/priority,
+tbk unblocked_at/task, tcl task/is_done, dep both sides). Seeder: linear, one transaction,
+no per-row re-query. Clean bands: `task_board`/`task_priority` are the strongest pages in the
+file set (one capped materialization + 3 prefetch queries, free-half tests at every call
+site, ~6-9 queries per render at any scale); the gantt template triggers no lazy loads.
+
+- [C1] Checklist panel on tsk_detail: double materialization + 2 COUNTs + per-done-item `done_by` N+1
+  file: `templates/projects/taskwork/_task_checklist_panel.html`  lines: 13, 14, 19, 27 (view: `apps/projects/views/ProjectPlanningScheduling/ProjectTasks.py` 168-185)
+  finding: `{% if obj.checklist_items.all %}` fully materializes the manager into a discarded queryset, `{{ obj.checklist_progress }}` then runs the property's TWO `count()` queries (bypass any prefetch by construction), and `{% for item in obj.checklist_items.all %}` re-resolves `.all` → a second full fetch. Each done item's `item.done_by.get_full_name` is one more query — the fetch has no `select_related("done_by")`. At seed scale (~16 items, ~12 done): ~16 queries for one panel; cost scales linearly with per-task checklist length (unbounded).
+  fix: in `tsk_detail` add `Prefetch("checklist_items", queryset=TaskChecklistItem.objects.select_related("done_by"))` on the obj fetch and pass a view-computed progress figure (one annotate, or len over the prefetched list) so the panel never calls `checklist_progress`.
+- [C2] Blocks/dependencies panels re-evaluate the derived blockers 3x each and walk links with no select_related
+  file: `templates/projects/taskwork/_task_blocks_panel.html`  lines: 15-19, 44; `templates/projects/taskwork/_task_dependencies_panel.html`  lines: 13-17, 22-48
+  finding: every `obj.is_dependency_blocked` evaluation = 1 link fetch + 1 `link.predecessor` FK load per link; it is evaluated 3x (blocks panel 15, `obj.is_blocked` 17, deps panel 13). `obj.is_manually_blocked` = 1 `blocks.filter(...).exists()` per call, 3x (16, 17, 44) — a plain `blocks` prefetch would NOT fix it (`.filter()` chains a fresh clone). `obj.blocks.all` (19) is a raw fetch + 1-2 user-FK loads per block row. The deps panel re-fetches `predecessor_links.all`/`successor_links.all` twice each and loads `dep.predecessor`/`dep.successor` per row even though `tsk_detail` already passes select_related link lists in context that the panels ignore. Expected ~20-25 panel queries at seed scale (~30-40 for the whole page vs ~7 needed); same shape on `tsk_execute` (`task_execution.html:13` `obj.is_blocked`).
+  fix: in `tsk_detail` (and `tsk_execute`'s object fetch) prefetch `blocks` (+ user FKs), `predecessor_links`/`successor_links` with select_related of the counterpart task, plus a `Prefetch("blocks", ..., to_attr="active_blocks")`; switch badge call sites to the board's free-half idiom; have the panels consume the existing context lists instead of `obj.…links.all`.
+- [I1] `tsk_bulk_update`: per-row eager assignee FK load, uncapped id list, double blocker-source queries on refusals
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py`  lines: 243-262 (250 specifically)
+  finding: `previous_assignee = obj.assignee` dereferences the FK for EVERY row even when assignee is untouched and even for rows later refused — 500 task_ids → up to 500 wasted SELECTs on top of the pinned per-row cost (~3000 round trips in one POST). `task_ids` has no length cap (a forged multi-id POST loops unbounded in-request). A gated refusal re-queries the blocker source: `obj.is_blocked` then `_blocker_source` recomputes ≈ 5-6 queries/row.
+  fix: compare `obj.assignee_id` (free) and load the old User only inside the assignee audit branch; cap the id list (the `_BOARD_CAP` precedent, e.g. 500) or refuse oversized batches; reuse one active-block fetch for both the gate and the message.
+- [I2] Register pages materialize the whole tenant task table for a filter dropdown, uncapped
+  file: `apps/projects/views/TaskWorkManagement/TaskChecklistItems.py`  lines: 34-37; `apps/projects/views/TaskWorkManagement/TaskBlocks.py`  lines: 41-44
+  finding: `ProjectTask.objects.filter(tenant=…).select_related("project").order_by("number")` in `extra_context` is unbounded — at the pinned 2000-task register every tcl_list/tbk_list render joins and ships 2000 rows + 2000 `<option>` elements per request. Same shape on tcl_create/tcl_edit via the form's task dropdown.
+  fix: cap the dropdown queryset (the `GAP_LIMIT`/`[:25]` precedent in ScopeMatrix.py:122) or swap the `<select>` for a search input.
+- [I3] Gantt: task table and dependency table each fetched twice per request
+  file: `apps/projects/views/TaskWorkManagement/GanttTimeline.py`  lines: 226, 246, 248
+  finding: `nodes = list(project.tasks…)` (226), then `critical_path_ids(project)` (246) re-fetches the work packages plus the same dep set, then `_dependency_rows` (248) re-queries the identical TaskDependency filter. Bounded (per-project, 4 queries total) — waste, not breakage.
+  fix: compute `conflicts` from the `dep_rows` result so deps are fetched once; once `_helpers` unfreezes, let `critical_path_ids` accept prefetched nodes/edges. Acceptable if documented as-is.
+- [M1] Overview 7.8 block: `task_execution_count` repeats the identical COUNT already run for `task_count`
+  file: `apps/projects/views/ProjectInitiation/Overview.py`  lines: 79, 127
+  finding: both keys run `ProjectTask.objects.filter(tenant=tenant).count()` — one redundant COUNT per render of the module landing page.
+  fix: reuse the `task_count` value (alias in the view).
+- [M2] Board/priority link prefetch costs 2 queries where 1 suffices
+  file: `apps/projects/views/TaskWorkManagement/TaskBoard.py`  lines: 171-176; `apps/projects/views/TaskWorkManagement/TaskPriority.py`  lines: 148-153
+  finding: `prefetch_related("predecessor_links__predecessor")` issues one query for links plus one for predecessors; a chained `Prefetch` with `select_related("predecessor")` does it in one (verdicts unchanged either way).
+  fix: swap to the chained `Prefetch` in both modules.
