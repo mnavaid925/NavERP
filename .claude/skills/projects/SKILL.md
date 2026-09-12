@@ -16,18 +16,24 @@ description: >-
   budget revisions whose approved-and-activated row IS the cost baseline, the EVM control-account
   register and detail panel (BAC/EV/PV/AC/CPI/SPI/EAC/ETC/TCPI/VAC as guarded derived properties),
   the budget register with category totals, and the expense register (commitments, actuals,
-  accruals) with post/void verbs). Use when the user
+  accruals) with post/void verbs; and 7.6 Quality Management: per-deliverable acceptance-criteria
+  plans with an approve/supersede lifecycle, the combined QA + continuous-improvement review
+  register (methodology/compliance/gate + kaizen/retrospective/maturity), deliverable inspections
+  whose record→accept/reject verbs carry the acceptance decision and customer-party sign-off, the
+  defect punch list with an issue bridge, and the two computed boards (CMMI-banded maturity +
+  defect trend + lessons lens; per-deliverable acceptance state + acceptance queue). Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1/7.2/7.3/7.4), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.6), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
-  BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense,
+  BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
+  QualityPlan/QualityReview/DeliverableInspection/QualityDefect,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4.** 7.5–7.19 are roadmap (a parallel build may be landing them — always
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6.** 7.7–7.19 are roadmap (a parallel build may be landing them — always
 check `apps/projects/models/` first). Do
 not assume a model exists because NavERP.md lists the feature — check first.
 
@@ -36,7 +42,10 @@ App path `apps/projects/`, templates `templates/projects/`, `app_name = "project
 `0003_projecttask_projectmilestone_schedulebaseline_and_more`,
 `0004_resourceprofile_resourceallocation_resourcetimeentry_and_more` (12 named indexes),
 `0005_budgetrevision_costcontrolaccount_projectbudgetline_and_more` (10 named indexes — the 7.4
-tables).
+tables), `0006_projectrisk_projectissue_riskresponseaction_and_more` (7.5),
+`0008_projectissue_iss_tnt_type_idx_and_more` (7.5 review indexes) and
+`0009_deliverableinspection_qualityplan_qualitydefect_and_more` (the 7.6 tables — the 0007 leaf
+went to the parallel 7.7 build).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -341,6 +350,87 @@ lessons lens follows `?project=` (review I10). All seven register indexes are na
 `rra_tnt_strategy_idx`, `iss_tnt_type_idx`, `iss_tnt_due_idx` — migration 0008 added the last
 five reviews I7/M11/M12 asked for; `rsk_tnt_created_idx` came with the build in 0006).
 
+## 7.6 Quality Management — `QualityManagement/`, template slug `quality`
+
+Contract: `.claude/tasks/contract-projects-7.6.md`. Scope: the CONFORMANCE layer — what a
+deliverable must satisfy (plans), whether it does (reviews + inspections + defects) and who
+formally accepted it (the acceptance decision). Boundaries ruled at build time: the enterprise
+QMS (NCR/CAPA/audits/`QualityInspection`) is **scm 4.9's** — 7.6's inspection class is
+deliberately named `DeliverableInspection` because that name is taken; a defect is **not** a
+second issue log (it LINKS to `ProjectIssue` via the `qdf_raise_issue` verb, the `rsk_realize`
+idiom, and the quality-native fields — criterion, category, disposition — stay here); the
+schedule phase gate is **7.2's** `ProjectMilestone` (7.6's gate is the deliverable acceptance
+decision, optionally anchored by a nullable `milestone` FK); standards/regulatory references are
+free text (**7.19's** master data); minutes/ceremony/repository are **7.9/7.13/7.10's**; and
+there is **no money column and no stored score** (a quality cost is a 7.4 `ProjectExpense`;
+maturity is computed on read).
+
+**Everything derived is a property, never a column** — same ruling again: `is_review_overdue`,
+`is_locked`, `is_overdue`, `age_days`, `defect_count`, `is_acceptance` are Python properties;
+every pass rate, punch-list count and maturity figure is computed in a view.
+
+### `QualityPlan` [QPL-] — what one deliverable must satisfy
+`acceptance_criteria` REQUIRED (the bullet-1 core); `verification_method` inspection/testing/
+demonstration/review/analysis/audit; `standard_reference`/`regulatory_requirement` free text.
+Lifecycle `draft → active → superseded/closed` is verb-driven (`status`/`approved_by`/`approved_at`
+off the form); `is_locked` = superseded|closed. Same-project `clean()` guards on `wbs_node` and
+`source_risk` (the 7.5 quality-category risk the plan mitigates).
+
+### `QualityReview` [QRV-] — one structured quality event (QA + continuous improvement)
+`review_type` discriminates: methodology_review/compliance_check/gate_review (bullet 2) vs
+kaizen_event/retrospective/maturity_assessment (bullet 4) — ONE register, the market's "one
+object with a kind" ruling. Carries the improvement block (`improvement_action/owner/due_date/
+status`) as FORM data (planning, not verb-written); `maturity_score` 1–5 optional.
+`qrv_report` accepts **planned AND in_progress** (status is off the form and there is no start
+verb — the planned-only gate would strand every review); `qrv_close` stamps `closed_at`.
+
+### `DeliverableInspection` [QCI-] — QC execution AND the acceptance decision on one row
+`inspection_type` review/testing/demonstration/walkthrough/acceptance; `result` (pass/fail/
+conditional/not_applicable, max_length 14 — fields.E009, scm-width) is split from
+`usage_decision` (pending/accept/accept_with_deviation/reject/rework — the scm 4.9 vocabulary,
+a deliberate superset: nothing writes `rework`). **Evidence order:** `qci_record` sets result +
+inspected_date and moves status to `in_progress` — NEVER a terminal status, or `is_locked`
+(terminal OR decision-taken) would lock the row out of the decision it is still owed;
+`qci_accept` (binds `InspectionAcceptanceForm`, party queryset + verb re-check) and `qci_reject`
+move decision AND status together — that save is the moment the row freezes. External/customer
+acceptance is `accepted_by_party` → `core.Party` (queryset-scoped, never `_reject_foreign`).
+
+### `QualityDefect` [QDF-] — the punch list
+`defect_category` (deliverable-quality vocabulary, distinct from scm's goods categories),
+`severity` (scm 4.9's four, max_length 12 for `observation`), `disposition` (open/rework/repair/
+resubmit/accept_as_is/reject/deferred). `project_issue` is verb-written only; `qdf_raise_issue`
+maps severity critical→critical/major→high/minor→medium/observation→low, re-fetches under
+`select_for_update` and re-tests the bridge inside the atomic block. `is_locked` =
+resolved|closed|**cancelled** (M1 — a cancelled defect is frozen evidence like its siblings).
+
+### 7.6 verbs — all `@require_POST`; GET answers 405
+
+| Verb | Gate | Requires |
+|---|---|---|
+| `qpl_approve` | login (D1: deliberately not admin-gated — recorded for the product owner) | draft → active, stamps `approved_by/_at` |
+| `qpl_supersede` | **tenant_admin** (`@require_POST` ABOVE the admin gate, M2) | active → superseded |
+| `qrv_report` | login | planned OR in_progress → reported |
+| `qrv_close` | login | reported → closed, stamps `closed_at` |
+| `qci_record` | login | live row; result ∈ non-pending RESULT_CHOICES; optional ISO `inspected_date` |
+| `qci_accept` | login | result recorded; `InspectionAcceptanceForm`; decision+stamps+`passed` in one save |
+| `qci_reject` | login | result recorded; `usage_decision=reject` + `failed` in one save |
+| `qdf_resolve` | login | live row; `DefectResolutionForm` (`resolution_note` REQUIRED); stamps resolver |
+| `qdf_close` | login | resolved ONLY |
+| `qdf_raise_issue` | login | live, unbridged row; mints the `ProjectIssue` atomically, audits both sides |
+
+Register notes: the derived lenses are **pre-scoped from real columns** (`?overdue=1` on
+qci/qdf, `?review_due=1` on qpl, `?kind=assurance|improvement` on qrv); an unrecognised `kind`
+narrows nothing (never an empty page for a stale URL). The two computed boards follow the
+capped single-pass idiom (`_REGISTER_CAP`-capped Python bucketing for the trend — the 7.5
+review-M13 ruling; `aggregate(Avg/Count)` for maturity; the acceptance queue renders ≤100 rows
+with a DB `.count()` header): `quality_improvement` computes the maturity score (60% scored
+reviews' average + 40% defect closure, CMMI-banded, `has_score` gates the card so a 0.0 score
+renders "Initial" instead of the no-data state) and `quality_acceptance` derives one row per
+WBS deliverable node from its LATEST inspection until it carries a decision. All 19 register
+indexes are named (`qpl_/qrv_/qci_/qdf_tnt_*` — migration 0009; the peer's 7.7 took 0007 and
+7.5's index migration 0008, so the leaf was conceded per L43). Audit actions ≤ 10 chars with
+the verb in `changes`.
+
 ## Routes (`app_name = "projects"`, 137 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
@@ -357,6 +447,11 @@ segments disjoint from 7.1's, so the url concatenation cannot shadow).
 `rra_…` + `rra_complete` · `iss_…` + `iss_{escalate,resolve,close}` · `esc_…` (full CRUD trio,
 no verbs) · `risk_analysis` + `risk_monitoring` (path prefixes `risks/ responses/ issues/
 escalations/ risk-analysis/ risk-monitoring/` — disjoint literals).
+7.6: `qpl_{list,create,detail,edit,delete}` + `qpl_{approve,supersede}` ·
+`qrv_…` + `qrv_{report,close}` · `qci_…` + `qci_{record,accept,reject}` · `qdf_…` +
+`qdf_{resolve,close,raise-issue}` · `quality_improvement` + `quality_acceptance` (path prefixes
+`quality-plans/ quality-reviews/ inspections/ defects/ quality-improvement/
+quality-acceptance/` — disjoint literals).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -395,12 +490,14 @@ charter-approved / ceremony-attested, the row is not editable. This is the modul
 Entity folders `initiation/{projectrequest, project, projectstakeholder, projectkickoff}/`,
 `planning/{task, taskdependency, milestone, schedulebaseline}/`,
 `resource/{resourceprofile, resourceallocation, resourcetimeentry}/`,
-`cost/{budgetrevision, costcontrolaccount, projectbudgetline, projectexpense}/` and
-`risk/{projectrisk, responseaction, issue, escalation}/`, plus
+`cost/{budgetrevision, costcontrolaccount, projectbudgetline, projectexpense}/`,
+`risk/{projectrisk, responseaction, issue, escalation}/` and
+`quality/{qualityplan, qualityreview, deliverableinspection, qualitydefect}/`, plus
 `templates/projects/overview.html` at the app root, the recursive
 `planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
-standalone boards `resource/capacity_demand.html`, `risk/risk_analysis.html` and
-`risk/risk_monitoring.html` (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
+standalone boards `resource/capacity_demand.html`, `risk/risk_analysis.html`,
+`risk/risk_monitoring.html`, `quality/quality_improvement.html` and
+`quality/quality_acceptance.html` (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
 -danger` variants **do not exist** and render unstyled; the alignment class is `text-right` —
 `ta-right` is NOT defined, review I4).
@@ -432,7 +529,14 @@ both threat/opportunity values, all four severity bands and all six statuses —
 carrying the issue the realize verb would have minted, one closed with a lesson, three with a
 past review date — plus response actions on the top risks (one completed, one overdue), seven
 issues across all four severities and six statuses (one two-step escalation path: level 1 → 2,
-one resolved with lessons), and issues seeded so the `?escalated=1` queue is alive. Log in as
+one resolved with lessons), and issues seeded so the `?escalated=1` queue is alive. 7.6 (own
+guard): **4 QualityPlans / 6 QualityReviews / 6 DeliverableInspections / 6 QualityDefects per
+tenant** — deliverable-anchored active plans (one superseded, one draft), reviews across all six
+types with one overdue improvement action and maturity scores on the assessed rows, inspections
+across all five types with one signed off (party acceptor + conditions note) and one
+failed-and-pending, and defects across the severities/dispositions (two resolved/closed with
+stamps and lessons, one bridged to a seeded issue, the rest open so the acceptance board's
+punch-list counts are non-zero); identified dates spread over ~2 months for the trend. Log in as
 `admin_acme` / `admin_globex`, password `password`. Run it twice to prove idempotency.
 
 Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocates `number`, and
@@ -441,15 +545,22 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
-7.5 `risk_*` fixture blocks — **owned by itself; edit it only with a full unfiltered re-run**)
-plus `test_initiation_{models,forms,views,security}.py`,
+7.5 `risk_*` + 7.6 `quality_*` fixture blocks — **owned by itself; edit it only with a full
+unfiltered re-run**) plus `test_initiation_{models,forms,views,security}.py`,
 `test_planning_{models,forms,views,security}.py`,
 `test_resource_{models,forms,views,security}.py`, `test_cost_{models,forms,views,security}.py`
 (cost: models 67 / forms 42 / views 41 / security — names pinned in
 `.claude/tasks/test-contract-projects-7.4.md` with the computed EVM table the model tests
-assert) and `test_risk_{models,forms,views,security}.py` (risk: models 35 / forms 23 —
+assert), `test_risk_{models,forms,views,security}.py` (risk: models 35 / forms 23 —
 band-boundary arithmetic, the seeded-Monte-Carlo draw replicated in-test, I9's esc-trio gating;
-names pinned in `.claude/tasks/test-contract-projects-7.5.md`). Naming: every test
+names pinned in `.claude/tasks/test-contract-projects-7.5.md`) and
+`test_quality_{models,forms,views,security}.py` (quality: models 53 / forms 29 / views 76 /
+security 44 — numbering, choices, derived figures, same-project guards; the crafted-POST
+boundary (TenantModelForm's queryset narrowing refuses a foreign pk as "Select a valid choice"
+before `_reject_foreign` can fire — assert the FIELD error, never the message); the verb state
+machines incl. record-keeps-row-live and the QPL/QRV/QCI/QDF frozen-row gates; both computed
+boards' pinned figures recomputed from the conftest fills; names pinned in
+`.claude/tasks/test-contract-projects-7.6.md`). Naming: every test
 `test_<subslug>_*`, every helper `_<subslug>_*`, so the next sub-module cannot shadow them.
 
 ```bash
@@ -572,6 +683,22 @@ control-account columns, so a bullet may be a lens on a register rather than a n
 Bullets 2 and 5 map to the computed boards (the matrix+EMV+Monte Carlo and the
 top-risks/burn-down/review/lessons strip — computed over the register on every load, no snapshot
 tables); the escalation-queue leaf deep-links the issue log's `?escalated=1` lens.
+
+```python
+"7.6": {
+    "Quality Planning & Standards":          "projects:qpl_list",
+    "Quality Assurance (QA)":                "projects:qrv_list?kind=assurance",
+    "Quality Control (QC) & Inspections":    "projects:qci_list",
+    "Continuous Improvement":                "projects:quality_improvement",
+    "Deliverable Acceptance & Sign-off":     "projects:quality_acceptance",
+    "Quality Review Register":               "projects:qrv_list",  # extra live leaf
+    "Defect & Punch List":                   "projects:qdf_list",  # extra live leaf
+}
+```
+Bullet 2 deep-links the review register's assurance lens and bullet 4 is the computed
+improvement board (kaizen/retro rows, computed maturity, defect trend, lessons lens — no stored
+maturity table); bullet 5 is the computed acceptance board whose queue links to the inspection
+detail page where the `qci_accept` action lives.
 
 ## Common tasks
 
