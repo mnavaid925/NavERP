@@ -1114,8 +1114,9 @@ class Command(BaseCommand):
                                  "active", "testing", "WCAG 2.2 AA", review_offset=9)
             plan(active, "Superseded discovery criteria draft", discovery, "superseded",
                  "inspection", "", approved=True)
-            plan(chartered, "Scorecard framework acceptance plan", chartered_deliverable,
-                 "draft", "analysis", "", review_offset=21)
+            if chartered is not None:
+                plan(chartered, "Scorecard framework acceptance plan", chartered_deliverable,
+                     "draft", "analysis", "", review_offset=21)
 
             # -- bullets 2 + 4: the reviews ------------------------------------------------------
             review(active, "Methodology adherence review — release 3 kickoff",
@@ -1134,8 +1135,9 @@ class Command(BaseCommand):
             review(active, "Retrospective — ordering increment", "retrospective", "reported",
                    ordering, plan_ordering, offset=7, imp_status="planned", imp_due=10,
                    imp_action="Adopt pairwise review for integration branches.")
-            review(chartered, "Maturity assessment — scorecard programme", "maturity_assessment",
-                   "in_progress", None, None, offset=2, score=2)
+            if chartered is not None:
+                review(chartered, "Maturity assessment — scorecard programme",
+                       "maturity_assessment", "in_progress", None, None, offset=2, score=2)
 
             # -- bullets 3 + 5: the inspections ---------------------------------------------------
             insp_discovery = inspection(active, "Discovery deliverable acceptance",
@@ -1155,9 +1157,10 @@ class Command(BaseCommand):
                        planned_offset=-2, inspected_offset=-1)
             inspection(active, "Returns portal design review", "review", None, None, None,
                        "pending", "pending", "planned", planned_offset=14)
-            inspection(chartered, "Metric definitions acceptance", "acceptance",
-                       chartered_deliverable, None, None, "pending", "pending", "planned",
-                       planned_offset=-1)
+            if chartered is not None:
+                inspection(chartered, "Metric definitions acceptance", "acceptance",
+                           chartered_deliverable, None, None, "pending", "pending", "planned",
+                           planned_offset=-1)
 
             # -- bullets 3 + 5: the punch list ----------------------------------------------------
             defect(active, "Checkout total rounds to whole currency units", "critical",
@@ -1177,8 +1180,9 @@ class Command(BaseCommand):
             defect(active, "UX spec references the retired design system", "minor",
                    "documentation", "rework", "open", discovery, plan_discovery,
                    insp_discovery, offset=40)
-            defect(chartered, "Metric pack lacks the source-data glossary", "observation",
-                   "documentation", "deferred", "open", None, None, None, offset=55)
+            if chartered is not None:
+                defect(chartered, "Metric pack lacks the source-data glossary", "observation",
+                       "documentation", "deferred", "open", None, None, None, offset=55)
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {QualityPlan.objects.filter(tenant=tenant).count()} plans, "
