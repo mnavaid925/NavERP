@@ -104,14 +104,15 @@ build sequence**, not a code-fixer finding — tracked in Phase 6, not here.
 
 ### Important
 
-- **[ ] I1 — Seeder `_quality` crashes when the tenant has no chartered project.**
+- **[x] fixed — I1 — Seeder `_quality` crashes when the tenant has no chartered project.**
   `apps/projects/management/commands/seed_projects.py` — `plan(chartered,…)`/`review`/
   `inspection`/`defect` rows pass `chartered` unconditionally; the guard checks only
   `active`/`users`, and `_convert()` can yield no chartered project (or a user deletes it).
   `QualityPlan(project=None).save()` → IntegrityError aborts the whole seed command.
   Fix: wrap the four chartered rows in the `if chartered is not None:` guard the `_risk`
-  block already uses. (code #2)
-- **[ ] I2 — Computed pages ignore the app's capped single-pass idiom (unbounded lists, 12-query
+  block already uses. (code #2) **Fixed:** the four `chartered` rows are wrapped in
+  `if chartered is not None:` (53d75a08).
+- **[x] fixed — I2 — Computed pages ignore the app's capped single-pass idiom (unbounded lists, 12-query
   trend, O(n) latest-inspection derivation).** `QualityImprovement.py:149` materialises the
   whole review register for one average; `_defect_trend` runs 12 COUNTs (the `resolved_at__date`
   half unindexable); `QualityAcceptance.py:103` materialises the acceptance queue unbounded and
@@ -120,66 +121,97 @@ build sequence**, not a code-fixer finding — tracked in Phase 6, not here.
   Fix: `aggregate(Avg/Count)` for maturity; capped list or TruncMonth group-by for the trend;
   cap the rendered queue + DB `.count()` for the header; narrow values()/Subquery for
   latest-per-node. (code #5, explorer #2, perf #1–#4)
+  **Fixed:** maturity via one `aggregate(Count/Avg)` over `maturity_score`; the trend bucketed
+  in one capped `_REGISTER_CAP` pass (matches RiskAnalysis, verified equal to the old counts);
+  queue capped at 100 with a DB `.count()` header figure; latest-per-node from a narrow
+  `values()` pass (5e48e133, 82377670).
 
 ### Minor
 
-- **[ ] M1 — Cancelled defects stay fully writable.** `QualityDefect.is_locked` = resolved/closed
+- **[x] fixed — M1 — Cancelled defects stay fully writable.** `QualityDefect.is_locked` = resolved/closed
   only, unlike QRV/QCI which lock `cancelled`; a cancelled defect can be edited, deleted,
   resolved (stamping resolver evidence) or bridged to an issue. Fix: add `"cancelled"` to
   `is_locked`, widen `_LOCKED_MSG`, and confirm the verb/template gates follow.
-  (code #3, explorer #9, security #2)
-- **[ ] M2 — `qpl_supersede` decorator order: member GET returns 403 not 405.**
+  (code #3, explorer #9, security #2) **Fixed:** `is_locked` = resolved/closed/cancelled;
+  `_LOCKED_MSG` and the bridge refusal widened; the detail panels read frozen-evidence for a
+  cancelled row (4170da9c, 4f5751d5, 4078d218).
+- **[x] fixed — M2 — `qpl_supersede` decorator order: member GET returns 403 not 405.**
   `@tenant_admin_required` runs before `@require_POST`; move `@require_POST` above it (matches
-  the 7.7 C2 reorder convention). (security #1)
-- **[ ] M3 — `qdf_raise_issue` double-bridge guard is check-then-act without a lock (TOCTOU).**
+  the 7.7 C2 reorder convention). (security #1) **Fixed:** `@require_POST` moved above
+  `@tenant_admin_required` (0f7f287c).
+- **[x] fixed — M3 — `qdf_raise_issue` double-bridge guard is check-then-act without a lock (TOCTOU).**
   Re-fetch with `select_for_update` inside the atomic block and re-test `project_issue_id`
   before minting. Mirrors 7.5's shipped idiom — low practical risk, cheap to harden.
-  (security #3)
-- **[ ] M4 — Confirm dialogs on button `onclick` instead of form `onsubmit`.**
+  (security #3) **Fixed:** row re-fetched under `select_for_update()` inside the atomic block
+  and `project_issue_id` re-tested there (c6d5ed2b).
+- **[x] fixed — M4 — Confirm dialogs on button `onclick` instead of form `onsubmit`.**
   `deliverableinspection/detail.html:76` (record) and `qualitydefect/detail.html:95`
   (resolve): Enter-in-input submits the form and bypasses the confirmation. Fix: move
-  `confirm(...)` to the form. (frontend #1)
-- **[ ] M5 — Badge chains incomplete across pages.** `observation` severity unbadged on
+  `confirm(...)` to the form. (frontend #1) **Fixed:** both confirms moved to
+  `<form onsubmit=...>` (aea4a616, efacfb02).
+- **[x] fixed — M5 — Badge chains incomplete across pages.** `observation` severity unbadged on
   qualitydefect list/detail and deliverableinspection detail (but badge-green on
   qualityplan/detail); `not_applicable`/`rework` missing from quality_acceptance chains.
-  Fix: replicate the full choice mappings. (frontend #2)
-- **[ ] M6 — Acceptance board filter bar lacks a Reset control** (the only one in the module).
-  `quality_acceptance.html:18-29`. (frontend #3)
-- **[ ] M7 — Lessons lens renders a bare `<dl>`** instead of the `.table-wrap`/`.table` idiom
+  Fix: replicate the full choice mappings. (frontend #2) **Fixed:** `observation` badged
+  badge-green on all four pages (qualityplan/detail's existing class); `not_applicable`→muted and
+  `rework`→info added to the acceptance board, matching the inspection register
+  (e995f085, d7fef21b, b0f24ad9, cb6135d7).
+- **[x] fixed — M6 — Acceptance board filter bar lacks a Reset control** (the only one in the module).
+  `quality_acceptance.html:18-29`. (frontend #3) **Fixed:** Reset link added, matching the
+  other five bars (abfa499f).
+- **[x] fixed — M7 — Lessons lens renders a bare `<dl>`** instead of the `.table-wrap`/`.table` idiom
   every other list-like block uses (`quality_improvement.html:130-136`). (frontend #4)
-- **[ ] M8 — Unbounded row-dropdowns.** `qdf_list`'s inspection filter (`QualityDefects.py:62-63`)
+  **Fixed:** `.table-wrap`/`.table` with Defect/Lesson columns; `lessons`/`lessons_count`
+  unchanged (96be1f8f).
+- **[x] fixed — M8 — Unbounded row-dropdowns.** `qdf_list`'s inspection filter (`QualityDefects.py:62-63`)
   and `qci_list`'s dead `parties` key (`DeliverableInspections.py:63`) — cap the inspection
   dropdown (e.g. latest 200); drop the `parties` key (no template reads it) and note the
-  contract deviation. (frontend #5, perf #5, code #7, explorer #4)
-- **[ ] M9 — Falsy-zero hides a computed maturity band.** A 0.0 score (defects exist, 0% closure)
+  contract deviation. (frontend #5, perf #5, code #7, explorer #4) **Fixed:** inspections
+  dropdown capped at the latest 200; `parties` key (and its now-unused import) dropped; contract
+  §4.3 amended (99e5dd19, dd15bf68, 1cae2d32).
+- **[x] fixed — M9 — Falsy-zero hides a computed maturity band.** A 0.0 score (defects exist, 0% closure)
   passes the view but `{% if maturity.score %}` renders the no-data state, dropping the
   "Initial" band. Fix: add `has_score` to the maturity dict and gate on it.
-  (explorer #6)
-- **[ ] M10 — Dead admin joins contradict the rule their own comment states.** QualityReview/
+  (explorer #6) **Fixed:** `has_score` added to the maturity dict; the template's maturity card
+  and stat card gate on it, so 0.0 renders its numeric score and band (b92caf5c, 195f7850).
+- **[x] fixed — M10 — Dead admin joins contradict the rule their own comment states.** QualityReview/
   DeliverableInspection/QualityDefect admins `list_select_related` join FKs no changelist
   column renders. Fix: trim to rendered FKs (QualityPlanAdmin is already correct).
-  (explorer #3)
-- **[ ] M11 — Dead property + double-booked constant name.** `QualityReview.is_improvement` has no
+  (explorer #3) **Fixed:** the three admins trimmed to the FKs their `list_display` renders
+  (e647de87).
+- **[x] fixed — M11 — Dead property + double-booked constant name.** `QualityReview.is_improvement` has no
   consumers; `_IMPROVEMENT_TYPES` means 3 types in `views/QualityManagement/QualityReviews.py`
   and 2 in `views/QualityManagement/QualityImprovement.py`. Fix: delete the property, rename
   the board constant `_BOARD_IMPROVEMENT_TYPES`, cross-reference the contract clauses.
-  (code #8, explorer #8)
-- **[ ] M12 — Docstring/code drift.** `QualityAcceptance.py:16-19` claims "latest inspection that
+  (code #8, explorer #8) **Fixed:** property deleted; board constant renamed
+  `_BOARD_IMPROVEMENT_TYPES` with a §4.5 comment; the register constant keeps its name with a
+  §4.2 comment; the stale `is_improvement` docstring/comment references cleaned up
+  (aa7fef0e, 3bd7479d, 8942f9a1).
+- **[x] fixed — M12 — Docstring/code drift.** `QualityAcceptance.py:16-19` claims "latest inspection that
   carries a decision" (implemented: latest until decided — behaviour correct, docstring wrong);
   `_acceptor_parties` docstring claims views/_helpers imports from forms (it does not; the real
   cycle is via views/__init__); `DeliverableInspections.py` USAGE_DECISION docstring claims to
   mirror scm 4.9 but `rework` is a deliberate superset. Fix: reword all three. (code #10,
-  explorer #5/#7/#10)
-- **[ ] M13 — Stale seeder `--flush` help text** — omits the 7.6 quality (and 7.7 scope) tables
-  from the deleted-tables enumeration. (code #9)
-- **[ ] M14 — Contract file not amended for shipped deviations.** §2.3 `result` 12→14 and §2.4
+  explorer #5/#7/#10) **Fixed:** all three reworded — latest-until-decided derivation, the real
+  views/__init__ cycle, and the deliberate scm superset with `rework` kept unwritten
+  (a0fd841e, ec9e5b5a, 17b00e35).
+- **[x] fixed — M13 — Stale seeder `--flush` help text** — omits the 7.6 quality (and 7.7 scope) tables
+  from the deleted-tables enumeration. (code #9) **Fixed:** already complete at HEAD — 237543b7
+  (inside the reviewed range) extended the enumeration to all 27 deleted tables including the
+  7.6 quality and 7.7 scope sets; verified against the delete list, no further change needed.
+- **[x] fixed — M14 — Contract file not amended for shipped deviations.** §2.3 `result` 12→14 and §2.4
   `severity` 8→12 (fields.E009); §4.3 `parties` key dropped (M8); §4.6 "hosts the qci_accept
   action" → queue links to the detail page (deliberate). Fix: patch
-  `.claude/tasks/contract-projects-7.6.md` with the rationales. (explorer #11)
-- **[ ] M15 — Second-class filter columns lack (tenant, column) indexes** (verification_method/
+  `.claude/tasks/contract-projects-7.6.md` with the rationales. (explorer #11) **Fixed:** §2.3
+  result 14 and §2.4 severity 12 with the fields.E009 rationale; §4.3 `parties` dropped; §4.6
+  reworded to links-to-detail. The M1/M9/M11 consequences were reconciled in the same pass
+  (`is_locked` += cancelled, `has_score` in the pinned `maturity` dict, `is_improvement`
+  removed) (1cae2d32).
+- **[~] skipped — accepted for now (registers small; revisit on growth) — M15 — Second-class filter columns lack (tenant, column) indexes** (verification_method/
   owner/reviewer/inspection_type/inspector/defect_category/inspection_id; overdue-lens date
   columns) — narrowed via the indexed status side; **accepted for now** while registers are
-  small, revisit if a tenant's registers grow. (perf #6)
+  small, revisit if a tenant's registers grow. (perf #6) **No code change** — per the accepted
+  disposition above.
 
 ### Design observations (no code change this pass)
 
