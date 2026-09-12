@@ -431,7 +431,129 @@ indexes are named (`qpl_/qrv_/qci_/qdf_tnt_*` — migration 0009; the peer's 7.7
 7.5's index migration 0008, so the leaf was conceded per L43). Audit actions ≤ 10 chars with
 the verb in `changes`.
 
-## Routes (`app_name = "projects"`, 137 names)
+## 7.7 Scope & Requirements Management — `ScopeRequirements/`, template slug `scope`
+
+Contract: `.claude/tasks/contract-projects-7.7.md`. Review: `.claude/tasks/review-projects-7.7.md`.
+Tests pinned in `.claude/tasks/test-contract-projects-7.7.md`. Scope: the REQUIREMENTS BASELINE —
+what was asked for (requirements), what was agreed to be in and out (the scope statement's
+boundaries, constraints and assumptions), what changed the agreement (change requests + the CCB
+decision), and whether it was actually delivered as agreed (verification + acceptance). Boundaries
+ruled at build time: the WBS is **7.2's** (`wbs_node` is a traceability FK, never a second
+task table); the budget the creep board costs against is **7.4's** (`cost_impact` is an *estimate
+input* on the change row — 7.7 posts nothing to the GL); risks are **7.5's** (`source_change` and
+`related_requirement` are read-only lenses); the deliverable acceptance of 7.6's `qci_accept` is
+the QC event, while 7.7's `ScopeVerification` is the **requirement-level** acceptance that closes
+the traceability loop — they are two different questions and both are needed.
+
+**Everything computed is derived, never stored** — the 7.1 ROI / 7.4 EVM / 7.5 EMV ruling again:
+`is_open`, `is_locked`, `is_overdue`, `is_high_impact`, `coverage_pct`, `bar_pct`, every creep
+rollup and the whole coverage matrix are Python properties or view-side computation. There is
+**no stored score column anywhere in 7.7**.
+
+Model constants kept MODULE-level only when the view needs them too (the 7.5 `PROBABILITY_PCT`
+idiom): `HIGH_COST` on the change model (`is_high_impact` compares against it, the creep board
+counts `high_impact_count` off it) and `CREEP_LIMIT = 500` in the view (the board's scan cap).
+
+### `Requirement` [REQ-] — what the stakeholder actually asked for
+`requirement_type` functional/non_functional/business/technical/regulatory/interface;
+`elicitation_method` the eight documented capture techniques (interview/workshop/survey/
+user_story/observation/document_analysis/prototype/brainstorm, `max_length=20` — the field is
+20 chars because `document_analysis` is 17, review I2 corrected the CONTRACT's 16, not the model);
+`priority` is **MoSCoW** (must/should/could/wont — the only priority vocabulary in the module);
+`verification_method` is IEEE 1012's four (inspection/analysis/demonstration/test). Lifecycle
+`draft → submitted → approved/rejected → implemented → verified` (+`deferred`) is verb-driven
+(`status` OFF the form); `STATUS_BANDS` maps each status to a theme badge. `parent` is a self-FK
+(the epic/story tree); `wbs_node` is the traceability link to 7.2's work package; `source_party` →
+`core.Party` (never a second stakeholder table — 7.1 owns that register); `version` is a
+documentation marker only (the real trail is `ScopeChangeRequest`). `is_locked` = implemented|
+verified. `clean()` guards `wbs_node` and `parent` onto the same project.
+
+### `ScopeItem` [SCI-] — the scope statement's boundary registry
+`item_type` in_scope/out_of_scope/assumption/constraint/dependency — ONE register for all five
+because they are all "a claim about the boundary" and the type is a lens (the 7.6
+one-object-with-a-kind ruling). `status` **open/validated/realized/retired/violated**;
+`is_open` = open|validated (the state where transitions are still legal), `is_locked` =
+realized|retired|**violated** — review **C1**: `violated` was missing from `STATUS_CHOICES`
+entirely, so the one status that *means the boundary was breached* was unwritable; migration
+`0010_alter_scopeitem_status` adds it (and `is_locked` now freezes it like its terminal
+siblings — a violated boundary is evidence). `sci_retire` gates on `obj.is_open` (review **I3** —
+retiring an already-`realized` item was accepted). `impact_area` is the six-way tag
+(schedule/cost/quality/scope/resource/compliance) that lets the register be sliced by what the
+boundary protects.
+
+### `ScopeChangeRequest` [SCR-] — what changed the agreement, and the CCB decision
+`source` internal/client/regulatory/vendor/technical; `priority` low/medium/high/critical (a
+SEPARATE vocabulary from the requirement's MoSCoW — a change is triaged, a requirement is
+prioritised, and conflating them was ruled out at contract time); the three impact dimensions
+`cost_impact` (Decimal), `schedule_impact_days` (**PositiveIntegerField** — see the seeder gotcha
+below), `quality_impact` none/low/medium/high. Lifecycle `draft → submitted → under_review →
+approved/rejected → implemented` is verb-driven. `is_high_impact` compares `cost_impact` against
+the module-level `HIGH_COST`; the creep board counts `high_impact_count` off it. `decided_at` is
+stamped by the approval/rejection verbs and is what the creep board groups by month — an approved
+row with no `decided_at` would be invisible to the trend.
+
+### `ScopeVerification` [SVR-] — requirement-level acceptance, the loop-closer
+`method` inspection/test/demonstration/analysis/review; `result` pass/conditional/fail;
+**`acceptance_status` pending/accepted/rejected/waived** is the decision field and is
+verb-written only (`svr_accept` / `svr_reject` / `svr_waive`) — it is deliberately NOT a second
+`result`. `svr_reject` requires a written reason (a rejected deliverable without a stated cause
+is not a gate, it is a shrug) and `svr_waive` requires an authority note. This model is what makes
+the matrix's `verified` count meaningful: a requirement is verified when its domain is verified.
+
+### 7.7 verbs — all `@require_POST`; GET answers 405
+
+| Verb | Gate | Requires |
+|---|---|---|
+| `req_submit` | login | draft/deferred → submitted |
+| `req_approve` | **tenant_admin** | submitted → approved (stamps the decision) |
+| `req_reject` | **tenant_admin** | submitted → rejected; `RequirementRejectionForm` reason |
+| `req_implement` | login | approved → implemented |
+| `req_verify` | **tenant_admin** | implemented → verified; `RequirementVerificationForm` |
+| `req_amendment_create` | login | mints a new version row from an approved baseline (the version-bump path) |
+| `sci_validate` | login | `is_open` → validated |
+| `sci_realize` | login (I9 — recorded for the product owner, see below) | `is_open` → realized |
+| `sci_retire` | login (I9) | **`obj.is_open` ONLY** (review I3 — realized was wrongly accepted) |
+| `scr_submit` | login | draft → submitted |
+| `scr_review` | **tenant_admin** | submitted → under_review (the CCB opens the file) |
+| `scr_approve` | **tenant_admin** | under_review → approved, stamps `decided_at` |
+| `scr_reject` | **tenant_admin** | under_review → rejected; `ChangeRejectionForm` reason |
+| `scr_implement` | login | approved → implemented |
+| `svr_accept` | login (I9) | pending → accepted; `VerificationDecisionForm` |
+| `svr_reject` | **tenant_admin** | pending → rejected; mandatory written reason |
+| `svr_waive` | **tenant_admin** | pending → waived; mandatory authority note |
+
+**Decorator order is load-bearing (review C2).** `@tenant_admin_required` internally applies
+`@login_required`, and decorators apply bottom-up — so on an admin-gated verb the stack must read
+**`@login_required` → `@require_POST` → `@tenant_admin_required`** (top to bottom). If
+`@tenant_admin_required` sits ABOVE `@require_POST`, a *member's* GET is answered **403 instead of
+405** — the role check fires before the method check. The 7.7 fix moved all 8 gated verbs to the
+correct order, and `test_scope_security.py` asserts **both actors** get 405 (the regression net).
+This is the opposite of a bug: 405 is house policy, and only the *order* was wrong.
+
+Audit: every verb captures `previous = obj.status` BEFORE mutating and logs
+`{"verb", "from", "to"}` inside the atomic block where one runs; actions ≤ 10 chars
+(`core.AuditLog.action` is `varchar(10)`).
+
+Register notes: derived lenses are **pre-scoped in the views from real columns** (a Python
+property cannot be filtered) — `?status=`, `?priority=`, `?requirement_type=`,
+`?elicitation_method=` (review I5 — the filter existed but was never wired into the view's
+`filters` list, so the choice list rendered a dead dropdown) on `req_list`; `?item_type=`,
+`?status=` on `sci_list`; `?status=`, `?source=` on `scr_list`. The `scope_matrix` board is the
+only computed page and it is **grouped aggregates, not row fan-out** (review I7/I8): the coverage
+strip and the matrix rows use `.values(...).annotate(Count("id"))` (one query per relation, not
+one per row), and the creep scan is a `.values(...)`-sliced query capped at
+`CREEP_LIMIT = 500` rows in id-descending order; `creep_max` is the max `cost_total` over that
+slice and `bar_pct` is `round(cost_total / creep_max * 100, 1)` as a `Decimal` (the 0-safe branch
+returns float `0.0` — the tests pin both types). The board's context keys (`coverage`,
+`matrix_rows`, `creep_rows`, `creep_max`, `creep`, `scope_summary`) are all computed in one pass
+over the tenant's registers; nothing is snapshotted.
+
+Register indexes: `req_tnt_status_idx`, `req_tnt_project_idx`, `sci_tnt_project_idx`,
+`sci_tnt_type_idx`, `scr_tnt_status_idx`, `svr_tnt_status_idx`-class named indexes came with the
+build in migration `0007`; `violated` was added by `0010_alter_scopeitem_status` (chained onto the
+7.6 leaf `0009_...`, the L53 discipline — read the disk leaf, never assume the number).
+
+## Routes (`app_name = "projects"`, 205 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
 7.2: `tsk_{list,create,detail,edit,delete}` + `tsk_tree` (literal route `tasks/tree/`) ·
@@ -452,6 +574,11 @@ escalations/ risk-analysis/ risk-monitoring/` — disjoint literals).
 `qdf_{resolve,close,raise-issue}` · `quality_improvement` + `quality_acceptance` (path prefixes
 `quality-plans/ quality-reviews/ inspections/ defects/ quality-improvement/
 quality-acceptance/` — disjoint literals).
+7.7: `req_{list,create,detail,edit,delete}` + `req_{submit,approve,reject,implement,verify,
+amendment-create}` · `sci_…` + `sci_{validate,realize,retire}` · `scr_…` +
+`scr_{submit,review,approve,reject,implement}` · `svr_…` + `svr_{accept,reject,waive}` ·
+`scope_matrix` (path prefixes `requirements/ scope-items/ scope-changes/ scope-verifications/
+scope-matrix/` — disjoint literals).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -493,11 +620,15 @@ Entity folders `initiation/{projectrequest, project, projectstakeholder, project
 `cost/{budgetrevision, costcontrolaccount, projectbudgetline, projectexpense}/`,
 `risk/{projectrisk, responseaction, issue, escalation}/` and
 `quality/{qualityplan, qualityreview, deliverableinspection, qualitydefect}/`, plus
+`scope/{requirement, scopeitem, scopechange, scopeverification}/` and the sub-module-root board
+`scope/scope_matrix.html` (the folder names are `scopechange`/`scopeverification` — NOT
+`scopechangerequest`/`scopeverification`; match the on-disk names), plus
 `templates/projects/overview.html` at the app root, the recursive
 `planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
 standalone boards `resource/capacity_demand.html`, `risk/risk_analysis.html`,
-`risk/risk_monitoring.html`, `quality/quality_improvement.html` and
-`quality/quality_acceptance.html` (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
+`risk/risk_monitoring.html`, `quality/quality_improvement.html`,
+`quality/quality_acceptance.html` and `scope/scope_matrix.html` (sub-module root, rule 6).
+Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
 -danger` variants **do not exist** and render unstyled; the alignment class is `text-right` —
 `ta-right` is NOT defined, review I4).
@@ -536,8 +667,29 @@ types with one overdue improvement action and maturity scores on the assessed ro
 across all five types with one signed off (party acceptor + conditions note) and one
 failed-and-pending, and defects across the severities/dispositions (two resolved/closed with
 stamps and lessons, one bridged to a seeded issue, the rest open so the acceptance board's
-punch-list counts are non-zero); identified dates spread over ~2 months for the trend. Log in as
-`admin_acme` / `admin_globex`, password `password`. Run it twice to prove idempotency.
+punch-list counts are non-zero); identified dates spread over ~2 months for the trend. 7.7 (own
+guard): **15 Requirements / 12 ScopeItems / 9 ScopeChangeRequests / 9 ScopeVerifications per
+tenant** (12 requirements on the active project, 3 on the chartered one) — covering every
+`requirement_type`, every elicitation technique, all four MoSCoW priorities and all seven
+statuses, with **three rows deliberately left untraced** (no `wbs_node`) so the coverage gap list
+is non-empty and three approved/implemented rows so the "never verified" gap is too; scope items
+across all five `item_type`s (boundaries, out-of-scope, assumptions, constraints, dependencies)
+and all five statuses including a `violated` one; change requests across all six statuses with
+the approved rows carrying cost + schedule + quality impacts so all three creep dimensions are
+non-zero (one crosses `HIGH_COST`), `decided_at` stamped on every decided row because the creep
+board groups by decision month; and verifications across all three `result`s and all four
+`acceptance_status`es including a waived gate and a rejected deliverable with its mandatory
+written reason. Log in as `admin_acme` / `admin_globex`, password `password`. Run it twice to
+prove idempotency.
+
+**The seeder's own history is a gotcha (review C3).** The 7.7 block originally seeded
+`schedule_impact_days=-10` (and a second `-30`) into a `PositiveIntegerField`. MySQL's
+`CHECK constraint failed: schedule_impact_days` fired **inside `transaction.atomic()`**, so the
+command committed NOTHING, printed no error a human would notice, and was silently un-rerunnable
+forever after. The live rows that "proved" the seeder worked predated the bad edit. The fix
+flipped both signs AND added `obj.full_clean(exclude=["number"])` to all four factories so the
+next out-of-range literal fails loudly at seed time instead of poisoning the transaction. If you
+touch a numeric seed literal, run the command twice and confirm the row counts.
 
 Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocates `number`, and
 `bulk_create` bypasses `save()`, shipping rows with empty numbers.
@@ -545,8 +697,8 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
-7.5 `risk_*` + 7.6 `quality_*` fixture blocks — **owned by itself; edit it only with a full
-unfiltered re-run**) plus `test_initiation_{models,forms,views,security}.py`,
+7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` fixture blocks — **owned by itself; edit it only
+with a full unfiltered re-run**) plus `test_initiation_{models,forms,views,security}.py`,
 `test_planning_{models,forms,views,security}.py`,
 `test_resource_{models,forms,views,security}.py`, `test_cost_{models,forms,views,security}.py`
 (cost: models 67 / forms 42 / views 41 / security — names pinned in
@@ -560,7 +712,19 @@ boundary (TenantModelForm's queryset narrowing refuses a foreign pk as "Select a
 before `_reject_foreign` can fire — assert the FIELD error, never the message); the verb state
 machines incl. record-keeps-row-live and the QPL/QRV/QCI/QDF frozen-row gates; both computed
 boards' pinned figures recomputed from the conftest fills; names pinned in
-`.claude/tasks/test-contract-projects-7.6.md`). Naming: every test
+`.claude/tasks/test-contract-projects-7.6.md`) and
+`test_scope_{models,forms,views,security}.py` (scope: models 205 / forms 103 / views 162 /
+security 73 = **543** — numbering prefixes, every `*_CHOICES` set pinned against the model,
+`STATUS_BANDS` checked against the theme.css badge allow-list, derived-property truth tables
+(`is_open`/`is_locked`/`is_high_impact`), the same-project `clean()` guards, all 38 route names,
+the pinned `scope_matrix` figures (coverage total 4 / traced 2 / untraced 2 / verified 1 /
+`coverage_pct` `50.0`; `bar_pct` `[66.7, 100.0, 16.7]` asserted as the STRING form because it is
+a `Decimal` while the 0-safe branch is float `0.0`; `creep_max` `60000.00`; `creep`
+`{count 3, cost_total 110000.00, schedule_days 12, high_impact_count 2}`; `scope_summary`
+`{items 5, boundaries 2, constraints 1, assumptions 1, open_items 4, overdue_items 1}`), all 16
+verbs happy-path + refusal, and — the C2 regression net — **both actors** get 405 on every
+`@require_POST` verb; names pinned in `.claude/tasks/test-contract-projects-7.7.md`). Naming:
+every test
 `test_<subslug>_*`, every helper `_<subslug>_*`, so the next sub-module cannot shadow them.
 
 ```bash
@@ -611,6 +775,19 @@ venv\Scripts\python.exe -m pytest apps/projects/ --nomigrations
 12. **An activated baseline is frozen through BOTH surfaces (7.4's I1).** The revision refuses
    edit/delete AND its budget lines refuse edit/delete — a baseline that could be rewritten
    through its lines would not be a baseline. The correction path is a new revision.
+13. **`@require_POST` must sit ABOVE `@tenant_admin_required` in the decorator stack (7.7's C2).**
+   Decorators apply bottom-up and `tenant_admin_required` wraps `login_required` internally, so
+   `@login_required → @require_POST → @tenant_admin_required` is the correct top-to-bottom order.
+   Swap the last two and a *member's* GET on an admin-gated verb returns **403 instead of the
+   house 405** — the role check fires first. The bug hides from an admin-actor test (which gets
+   the right answer either way); always assert the method guard with the MEMBER client too. This
+   same ordering bug exists in 7.1–7.5 and is a recorded, deliberately-unswept follow-up.
+14. **A wrongly-signed numeric seed literal inside `transaction.atomic()` fails SILENTLY and
+   permanently (7.7's C3).** `schedule_impact_days=-10` into a `PositiveIntegerField` raised a
+   MySQL CHECK violation that rolled the WHOLE `_scope` block back — no rows, no loud error, and
+   `--flush` then `seed` could never recover because the guard saw "already seeded" from the
+   *previous* good run. Always add `obj.full_clean(exclude=["number"])` to new seed factories and
+   prove a fresh seed by row count, not by "the command exited 0".
 
 ## Sidebar wiring — `apps/core/navigation.py`
 
@@ -699,6 +876,21 @@ Bullet 2 deep-links the review register's assurance lens and bullet 4 is the com
 improvement board (kaizen/retro rows, computed maturity, defect trend, lessons lens — no stored
 maturity table); bullet 5 is the computed acceptance board whose queue links to the inspection
 detail page where the `qci_accept` action lives.
+
+```python
+"7.7": {
+    "Requirements Elicitation":               "projects:req_list",
+    "Requirements Documentation & Traceability": "projects:scope_matrix",
+    "Scope Definition & Boundaries":          "projects:sci_list",
+    "Change Request Management":              "projects:scr_list",
+    "Scope Verification & Control":           "projects:svr_list",
+    "Requirement Approval Queue":             "projects:req_list?status=submitted",  # extra live leaf
+}
+```
+Bullet 2 is the computed traceability matrix (requirement × work-package coverage plus the gaps
+and the creep board — computed over the registers on every load, no snapshot table); the
+approval-queue leaf deep-links the register's `?status=submitted` lens (7.2's Task-Register /
+7.5's escalation-queue precedent).
 
 ## Common tasks
 
