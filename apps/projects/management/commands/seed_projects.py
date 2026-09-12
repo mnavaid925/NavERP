@@ -39,6 +39,12 @@ Per tenant it builds one honest end-to-end chain:
   realize verb would have minted, one closed with a lesson, three with a past review date — plus
   response actions on the top risks (one completed, one overdue), seven issues across all four
   severities with two resolved and one escalated to level 2 with a two-step escalation path.
+* **7.8 Task & Work Management** (``_taskwork``, its own guard): the execution layer ON 7.2's
+  tasks — no new task table — spreading assignees, every priority, all four MoSCoW values, all
+  four Eisenhower quadrants and honest percent_complete over the work packages, with
+  actual_start/actual_end stamped on the started/finished rows the way the verbs would; plus a
+  checklist per lead task (mixed ticks so the progress rollup is non-trivial) and the block
+  evidence trail (one active blocker, one closed with its full unblock trail).
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -82,6 +88,8 @@ from apps.projects.models import (
     ScopeChangeRequest,
     ScopeItem,
     ScopeVerification,
+    TaskBlock,
+    TaskChecklistItem,
     TaskDependency,
 )
 
@@ -220,7 +228,10 @@ class Command(BaseCommand):
             # escalation is the deepest child, then the issues (which point at risks), then the
             # response actions, then the risks. 7.6's hang off projects/tasks/plans/inspections/
             # issues: the defect is the deepest child, then the inspections and the reviews (both
-            # of which point at plans), then the plans.
+            # of which point at plans), then the plans. 7.8's checklist items and blocks hang off
+            # tasks, so they go before ProjectTask as well.
+            TaskChecklistItem.objects.all().delete()
+            TaskBlock.objects.all().delete()
             QualityDefect.objects.all().delete()
             DeliverableInspection.objects.all().delete()
             QualityReview.objects.all().delete()
@@ -314,6 +325,10 @@ class Command(BaseCommand):
         # 7.7 has its OWN guard too — the requirement register with its traceability links, the
         # boundary/assumption/constraint registry, the CCB change register and the acceptance log.
         self._scope(tenant, now)
+        # 7.8 has its OWN guard as well — the execution layer extends 7.2's tasks IN PLACE
+        # (assignee/priority/MoSCoW/Eisenhower/percent_complete + the actual stamps) plus the
+        # checklist and block registers. Nothing here creates a task.
+        self._taskwork(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -1788,6 +1803,116 @@ class Command(BaseCommand):
                 content_type=ct, object_id=project.pk, status=status, due_at=due)
 
     # -- shared lookups ---------------------------------------------------------------------------
+
+    # -- 7.8 task & work management --------------------------------------------------------------
+
+    def _taskwork(self, tenant, now):
+        """Execution layer on the 7.2 tasks + the checklist and block registers, guarded.
+
+        Nothing here creates a task: the WBS rows are 7.2's and this block only extends them
+        IN PLACE (the documented 7.2 hand-off) with the execution fields the board / gantt /
+        priority pages compute over, and seeds the two 7.8 registers against them.
+
+        Execution coverage per tenant: every priority, all four MoSCoW values, all four
+        Eisenhower quadrants, percent_complete honest to the row's status (done rows at 100,
+        in_progress mid-flight, planned at 0), actual_start/actual_end written the way
+        tsk_start/tsk_complete would (the seeder stamps evidence directly, 7.5 precedent), one
+        overdue row (planned_end in the past, still in_progress) and every unassigned shape.
+        Checklists land on the first task of each project with mixed ticks so the progress
+        rollup is non-trivial; the block trail is one active blocker and one closed with its
+        full evidence (blocked_by/at, unblocked_by/at, resolution note).
+        """
+        if TaskChecklistItem.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: task execution rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        tasks = list(ProjectTask.objects.filter(tenant=tenant, node_type="work_package")
+                     .select_related("project").order_by("project_id", "id"))
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        if not tasks or not users:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no work packages or users - skipping task execution."))
+            return
+        today = timezone.localdate()
+        priorities = ["low", "medium", "high", "critical"]
+        moscow = ["must_have", "should_have", "could_have", "wont_have"]
+        quadrants = [(False, False), (True, False), (True, True), (False, True)]
+
+        with transaction.atomic():
+            for i, task in enumerate(tasks):
+                task.assignee = users[i % len(users)]
+                task.priority = priorities[i % 4]
+                task.moscow = moscow[i % 4]
+                task.is_urgent, task.is_important = quadrants[i % 4]
+                if task.status == "done":
+                    task.percent_complete = Decimal("100.00")
+                    task.actual_start = task.planned_start or (today - timedelta(days=10))
+                    task.actual_end = today - timedelta(days=2)
+                elif task.status == "in_progress":
+                    task.percent_complete = Decimal("50.00") if i % 2 == 0 \
+                        else Decimal("25.00")
+                    task.actual_start = task.planned_start or (today - timedelta(days=5))
+                else:
+                    # planned/cancelled rows carry no actuals — the verbs have not touched them.
+                    task.percent_complete = Decimal("0.00")
+                task.full_clean(exclude=["number"])
+                task.save(update_fields=[
+                    "assignee", "priority", "moscow", "is_urgent", "is_important",
+                    "percent_complete", "actual_start", "actual_end", "updated_at"])
+
+                if i % 4 == 0:
+                    # A checklist on the first work package of each project, one item short of
+                    # complete — the rollup must never read as trivially 0 or trivially 100.
+                    total = 4
+                    for seq, label in enumerate([
+                            "Confirm the work package's inputs with the owner",
+                            "Draft the deliverable outline",
+                            "Internal review pass",
+                            "Hand-off sign-off"]):
+                        done = seq < total - 1
+                        item = TaskChecklistItem(
+                            tenant=tenant, task=task, label=label, sequence=seq,
+                            is_done=done,
+                            done_by=users[0] if done else None,
+                            done_at=now - timedelta(days=total - seq) if done else None,
+                            created_by=users[0])
+                        item.full_clean(exclude=["number"])
+                        item.save()
+
+            # The block evidence trail: one ACTIVE blocker (the board/priority blocked lenses
+            # and the over-WIP badges read it) and one CLOSED with its full unblock evidence.
+            active_task = next((t for t in tasks if t.status == "in_progress"), tasks[0])
+            active = TaskBlock(tenant=tenant, task=active_task,
+                               reason="Waiting on the vendor sandbox credentials before the "
+                                      "integration work can continue.",
+                               unblock_criteria="Sandbox tenant provisioned and the credentials "
+                                                "received from the vendor contact.",
+                               blocked_by=users[-1], blocked_at=now - timedelta(days=3),
+                               created_by=users[0])
+            active.full_clean(exclude=["number"])
+            active.save()
+            closed_task = next((t for t in tasks
+                                if t.id != active_task.id and t.status != "done"), None) \
+                or tasks[-1]
+            closed = TaskBlock(tenant=tenant, task=closed_task,
+                               reason="Design decision pending — two competing approaches "
+                                      "for the sync window.",
+                               unblock_criteria="Architecture review minutes published "
+                                                "with the chosen approach.",
+                               resolution_note="Architecture review chose the nightly batch "
+                                               "window; decision recorded in the minutes.",
+                               blocked_by=users[-1], blocked_at=now - timedelta(days=9),
+                               unblocked_by=users[0], unblocked_at=now - timedelta(days=6),
+                               created_by=users[0])
+            closed.full_clean(exclude=["number"])
+            closed.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {ProjectTask.objects.filter(tenant=tenant).count()} tasks "
+            f"extended for execution, "
+            f"{TaskChecklistItem.objects.filter(tenant=tenant).count()} checklist items, "
+            f"{TaskBlock.objects.filter(tenant=tenant).count()} block rows "
+            f"(1 active, 1 closed)."))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
