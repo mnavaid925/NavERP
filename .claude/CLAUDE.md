@@ -201,7 +201,7 @@ Every time you finish a **new module** (a Django app under `apps/<slug>`), you M
 
 5. **Commit it** as its own file (one file per commit, PowerShell-safe). **Never `git push`.**
 
-> Module 0 is the foundation; its reference skills already exist (`next-module`, `dump-module`, `sqa-review`, `manual-test`). Modules **1–13** each get their own skill via this rule.
+> Module 0 is the foundation; its reference skills already exist (`next-module`, `dump-module`, `sqa-review`, `manual-test`). Modules **1–23** each get their own skill via this rule.
 
 ---
 
