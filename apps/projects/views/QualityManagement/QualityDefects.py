@@ -194,17 +194,25 @@ def qdf_raise_issue(request, pk):
     if obj.project_issue_id:
         messages.info(request, f"That defect already raised issue {obj.project_issue.number}.")
         return redirect("projects:qdf_detail", pk=obj.pk)
-    previous = obj.status
     with transaction.atomic():
+        # The guards above are check-then-act, so the row is re-fetched under a lock and the
+        # bridge re-tested before minting — two concurrent POSTs could otherwise both pass and
+        # mint two issues from one defect.
+        locked = QualityDefect.objects.select_for_update().get(pk=obj.pk)
+        if locked.project_issue_id:
+            messages.info(request, f"That defect already raised issue "
+                                   f"{locked.project_issue.number}.")
+            return redirect("projects:qdf_detail", pk=locked.pk)
         issue = ProjectIssue.objects.create(
-            tenant=request.tenant, project=obj.project, wbs_node=obj.wbs_node,
-            title=obj.title[:255], description=obj.description,
-            severity=_ISSUE_SEVERITY[obj.severity], owner=obj.owner, raised_by=request.user,
-            identified_date=timezone.localdate(), created_by=request.user)
-        obj.project_issue = issue
-        obj.save(update_fields=["project_issue", "updated_at"])
-        write_audit_log(request.user, obj, "update",
+            tenant=request.tenant, project=locked.project, wbs_node=locked.wbs_node,
+            title=locked.title[:255], description=locked.description,
+            severity=_ISSUE_SEVERITY[locked.severity], owner=locked.owner,
+            raised_by=request.user, identified_date=timezone.localdate(),
+            created_by=request.user)
+        locked.project_issue = issue
+        locked.save(update_fields=["project_issue", "updated_at"])
+        write_audit_log(request.user, locked, "update",
                         changes={"verb": "raise_issue", "issue": issue.number})
         write_audit_log(request.user, issue, "create")
-    messages.success(request, f"Defect {obj.number} raised as issue {issue.number}.")
-    return redirect("projects:qdf_detail", pk=obj.pk)
+    messages.success(request, f"Defect {locked.number} raised as issue {issue.number}.")
+    return redirect("projects:qdf_detail", pk=locked.pk)
