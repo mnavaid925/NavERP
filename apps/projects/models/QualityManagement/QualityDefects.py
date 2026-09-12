@@ -21,7 +21,7 @@ EVM ruling). ``age_days`` reads ``timezone.localdate()`` — the same clock the 
 **Verb-driven lifecycle.** ``status``, ``root_cause``, ``resolution_note``, ``resolved_by``,
 ``resolved_at`` and ``created_by`` are all OFF the model form: ``qdf_resolve`` and ``qdf_close``
 are the only writers of those stamps, so the evidence trail keeps its timestamps. ``is_locked``
-(``resolved``/``closed``) is what makes edit/delete refuse a finished row.
+(``resolved``/``closed``/``cancelled``) is what makes edit/delete refuse a finished row.
 
 **No money column (Ruling 7).** The cost of a rework is a 7.4 ``ProjectExpense`` — a soft
 cross-reference in the notes, never a column here, so this module declares no ``DecimalField``.
@@ -161,8 +161,10 @@ class QualityDefect(TenantNumbered):
 
     @property
     def is_locked(self):
-        """Resolved and closed rows are frozen evidence — edit/delete refuse them."""
-        return self.status in ("resolved", "closed")
+        """Resolved, closed and cancelled rows are frozen evidence — edit/delete refuse them
+        (the QRV/QCI siblings lock ``cancelled`` too, so a cancelled defect is equally
+        un-writable: no edit, no hard delete, no resolve stamps, no issue bridge)."""
+        return self.status in ("resolved", "closed", "cancelled")
 
     def clean(self):
         super().clean()
