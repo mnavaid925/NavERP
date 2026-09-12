@@ -76,7 +76,7 @@ Choices:
 * `REQUIREMENT_TYPE_CHOICES` (max_length=16): `functional`/Functional,
   `non_functional`/Non-Functional, `business`/Business, `technical`/Technical,
   `regulatory`/Regulatory, `interface`/Interface
-* `ELICITATION_METHOD_CHOICES` (max_length=16): `interview`/Interview, `workshop`/Workshop,
+* `ELICITATION_METHOD_CHOICES` (max_length=20): `interview`/Interview, `workshop`/Workshop,
   `survey`/Survey, `user_story`/User Story Mapping, `observation`/Observation,
   `document_analysis`/Document Analysis, `prototype`/Prototype, `brainstorm`/Brainstorming
 * `PRIORITY_CHOICES` (max_length=12, MoSCoW): `must`/Must Have, `should`/Should Have,
@@ -95,7 +95,7 @@ Fields (declared):
 `wbs_node` FK `"projects.ProjectTask"` SET_NULL null+blank `related_name="requirements"`
 (the traceability link: the WBS node that delivers it) · `title` CharField(255) ·
 `description` TextField() · `requirement_type` CharField(16, default `functional`) ·
-`elicitation_method` CharField(16, default `interview`) · `elicitation_note` TextField(blank) ·
+`elicitation_method` CharField(20, default `interview`) · `elicitation_note` TextField(blank) ·
 `source_party` FK `"core.Party"` SET_NULL null+blank `related_name="requirements"` ·
 `priority` CharField(12, default `must`) · `acceptance_criteria` TextField(blank) ·
 `version` CharField(16, default `"1.0"`) ·
