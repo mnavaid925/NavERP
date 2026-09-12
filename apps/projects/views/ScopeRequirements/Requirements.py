@@ -99,7 +99,7 @@ def req_detail(request, pk):
     return render(request, "projects/scope/requirement/detail.html", {
         "obj": obj,
         "child_requirements": obj.children.select_related("owner").order_by("number"),
-        "change_requests": (obj.change_requests.select_related("requested_by", "risk")
+        "change_requests": (obj.change_requests.select_related("requested_by")
                             .order_by("-created_at", "-id")),
         "verifications": (obj.scope_verifications.select_related("inspected_by")
                           .order_by("-inspection_date", "-id")),
