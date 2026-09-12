@@ -289,3 +289,30 @@ from .ScopeRequirements.ScopeVerifications import (  # noqa: F401
     svr_reject,
     svr_waive,
 )
+
+# --- 7.8 Task & Work Management ---------------------------------------------------------------
+# The execution verb layer on ProjectTask (execute/start/complete/block/unblock + the bulk
+# updater), the checklist register with its one-time tick toggle, the block evidence register
+# (list/detail only — rows are minted and closed by verbs, never created from a page) and the
+# three computed pages: the kanban board, the gantt timeline and the priority lens, all derived
+# on read over the registers (the 7.5 boards ruling).
+from .TaskWorkManagement.GanttTimeline import gantt_timeline  # noqa: F401
+from .TaskWorkManagement.ProjectTasks import (  # noqa: F401
+    tsk_block,
+    tsk_bulk_update,
+    tsk_complete,
+    tsk_execute,
+    tsk_start,
+    tsk_unblock,
+)
+from .TaskWorkManagement.TaskBlocks import tbk_detail, tbk_list  # noqa: F401
+from .TaskWorkManagement.TaskBoard import task_board  # noqa: F401
+from .TaskWorkManagement.TaskChecklistItems import (  # noqa: F401
+    tcl_check,
+    tcl_create,
+    tcl_delete,
+    tcl_detail,
+    tcl_edit,
+    tcl_list,
+)
+from .TaskWorkManagement.TaskPriority import task_priority  # noqa: F401
