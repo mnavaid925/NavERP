@@ -27,6 +27,8 @@ MODULE_ICONS = {
     0: "shield-check", 1: "contact", 2: "landmark", 3: "users-round", 4: "truck",
     5: "package", 6: "shopping-cart", 7: "folder-kanban", 8: "trending-up", 9: "store",
     10: "bar-chart-3", 11: "boxes", 12: "badge-check", 13: "files",
+    14: "factory", 15: "pencil-ruler", 16: "wrench", 17: "route", 18: "server-cog",
+    19: "shopping-basket", 20: "building-2", 21: "banknote", 22: "leaf", 23: "brain-circuit",
 }
 
 # Built pages, keyed by sub-module number ("N.M") → {feature label: route name}.
