@@ -1,12 +1,13 @@
 """Projects 7.6 — QualityReview views: the review register, its CRUD and its two lifecycle verbs.
 
 The register carries three **pre-scoped lenses** — ``?kind=assurance``, ``?kind=improvement`` and
-``?overdue=1``. ``crud_list``'s ``filters`` are **field lookups only** — ``is_improvement`` and
-``is_improvement_overdue`` are Python properties, so a ``?kind=`` or ``?overdue=`` lens cannot be a
-filter spec. Each is therefore **pre-scoped here**, before ``crud_list`` paginates, and built out of
-real columns so the database does the work (the 7.5 ``rsk_list`` idiom). An **unrecognised** ``kind``
-narrows nothing: a stale bookmark or a hand-edited URL is not a narrowing request, so the full
-register renders rather than an empty page.
+``?overdue=1``. ``crud_list``'s ``filters`` are **field lookups only** — ``is_improvement_overdue``
+is a Python property, and the ``kind`` vocabularies are tuple constants, so a ``?kind=`` or
+``?overdue=`` lens cannot be a filter spec. Each is therefore **pre-scoped here**, before
+``crud_list`` paginates, and built out of real columns so the database does the work (the 7.5
+``rsk_list`` idiom). An **unrecognised** ``kind`` narrows nothing: a stale bookmark or a
+hand-edited URL is not a narrowing request, so the full register renders rather than an empty
+page.
 
 Verbs (POST-only, GET → 405): ``report`` (an in-progress review is reported) and ``close`` (a
 reported review is retired, stamping ``closed_at``). A closed or cancelled row is frozen evidence,
@@ -22,6 +23,10 @@ from apps.projects.views._common import get_object_or_404, login_required, redir
 from apps.projects.views._helpers import owners, projects
 
 #: The bullet-2 assurance half and the bullet-4 improvement half of the shared review vocabulary.
+#: ``_IMPROVEMENT_TYPES`` is the register's ``?kind=improvement`` lens — contract §4.2 pins it to
+#: three types (``maturity_assessment`` included); the improvement board's narrower two-type
+#: ``_BOARD_IMPROVEMENT_TYPES`` is contract §4.5's (see ``views/QualityManagement/QualityImprovement
+#: .py``).
 _ASSURANCE_TYPES = ("methodology_review", "compliance_check", "gate_review")
 _IMPROVEMENT_TYPES = ("kaizen_event", "retrospective", "maturity_assessment")
 
@@ -35,8 +40,8 @@ _LOCKED_MSG = ("A closed or cancelled review is frozen evidence and cannot be ed
 def qrv_list(request):
     qs = (QualityReview.objects.filter(tenant=request.tenant)
           .select_related("project", "wbs_node", "quality_plan", "reviewer", "improvement_owner"))
-    # ``is_improvement`` is a property, so the lens is reconstructed from the real ``review_type``
-    # column here. An unrecognised ``kind`` narrows nothing — never an empty page for a stale URL.
+    # The ``kind`` lens narrows on the real ``review_type`` column (the vocabulary tuples above);
+    # an unrecognised ``kind`` narrows nothing — never an empty page for a stale URL.
     kind = request.GET.get("kind")
     if kind == "assurance":
         qs = qs.filter(Q(review_type__in=_ASSURANCE_TYPES))
