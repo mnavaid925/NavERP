@@ -27,7 +27,7 @@ The deliverable is a **runnable click-through script**, not an automation strate
 
 ## Project at a glance — NavERP
 
-NavERP is a multi-tenant Django 5.1 **Enterprise Resource Planning (ERP)** platform (Tailwind CSS via Play CDN + HTMX + Chart.js + Lucide icons; MySQL/MariaDB via PyMySQL, DB `nav_erp`). The product catalog is **modules 0–13** ([NavERP.md](NavERP.md)) on a unified core data model ([NavERP-ERD.md](NavERP-ERD.md) — `Party`/`PartyRole` + two ledgers). **Module 0 (System Admin & Security)** is realized by the foundation apps under [apps/](apps/):
+NavERP is a multi-tenant Django 5.1 **Enterprise Resource Planning (ERP)** platform (Tailwind CSS via Play CDN + HTMX + Chart.js + Lucide icons; MySQL/MariaDB via PyMySQL, DB `nav_erp`). The product catalog is **modules 0–23** ([NavERP.md](NavERP.md)) on a unified core data model ([NavERP-ERD.md](NavERP-ERD.md) — `Party`/`PartyRole` + two ledgers). **Module 0 (System Admin & Security)** is realized by the foundation apps under [apps/](apps/):
 
 | App | URL prefix | What it does | Main testable surface |
 |---|---|---|---|
@@ -40,7 +40,7 @@ One surface is worth testing first:
 
 - **tenants** ([apps/tenants/urls.py](apps/tenants/urls.py)) is the **Module 0 / Tenant & Subscription slice — the flagship complete CRUD module** and the **default target** when the user just says "manually test the module". It is the richest plain-CRUD surface in the app: six entities (OnboardingStep, Subscription, Invoice, EncryptionKey, BrandingSetting, HealthMetric) each with full list/detail/create/edit/delete. Its richest plain-CRUD entity is **Invoice** (auto-numbered `INV-#####`).
 
-Modules 1–13 from [NavERP.md](NavERP.md) (CRM, Accounting & Finance, HRM, SCM, Inventory, Procurement, Project Management, Sales, eCommerce, BI, Asset Management, Quality, Document Management) are sidebar "roadmap" placeholders (`core:roadmap`) built on demand by the `/next-module` skill (one Django app per module); only the foundation (Module 0) ships at the start.
+Modules 1–23 from [NavERP.md](NavERP.md) (CRM, Accounting & Finance, HRM, SCM, Inventory, Procurement, Project Management, Sales, eCommerce, BI, Asset Management, Quality, Document Management, Manufacturing Execution (MES), Product Lifecycle (PLM), Maintenance & Reliability (CMMS/EAM), Field Service (FSM), IT Service Management (ITSM), Retail & POS, Facilities & Workplace, Treasury & Financial Operations, Sustainability/EHS/ESG, AI & Intelligent Automation) are sidebar "roadmap" placeholders (`core:roadmap`) built on demand by the `/next-module` skill (one Django app per module); only the foundation (Module 0) ships at the start.
 
 ---
 
