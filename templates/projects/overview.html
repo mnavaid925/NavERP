@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list) and the 7.7 scope layer (requirements, boundaries, change control, acceptance). The rest of Module 7 is separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list), the 7.7 scope layer (requirements, boundaries, change control, acceptance) and the 7.8 execution layer (assignments, priorities, the board, the gantt, blocking). The rest of Module 7 is separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -41,6 +41,9 @@
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-diff"></i></div><div class="stat-value">{{ scope_change_count }}</div><div class="stat-label">Change requests</div></div>
     <div class="stat-card"><div class="stat-icon red"><i data-lucide="inbox"></i></div><div class="stat-value">{{ pending_change_count }}</div><div class="stat-label">Before the board</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ pending_verification_count }}</div><div class="stat-label">Awaiting acceptance</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="kanban"></i></div><div class="stat-value">{{ task_execution_count }}</div><div class="stat-label">Tasks</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="octagon-alert"></i></div><div class="stat-value">{{ open_block_count }}</div><div class="stat-label">Open blockers</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ overdue_task_count }}</div><div class="stat-label">Overdue tasks</div></div>
   </div>
 
   <div class="card">
@@ -214,6 +217,31 @@
               <td class="fw-600"><a href="{% url 'projects:svr_list' %}">Deliverable Acceptance</a></td>
               <td>Deliverable inspections with the formal accept / reject / waive gate.</td>
               <td><a href="{% url 'projects:svr_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:task_board' %}">Task Board</a></td>
+              <td>The kanban view of the extended task register — status columns, WIP badges, blockers.</td>
+              <td><a href="{% url 'projects:task_board' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:gantt_timeline' %}">Gantt Timeline</a></td>
+              <td>The plan's bars with progress shading, the critical chain and dependency conflicts.</td>
+              <td><a href="{% url 'projects:gantt_timeline' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:task_priority' %}">Priority Lens</a></td>
+              <td>MoSCoW groups, the Eisenhower 2×2 and the capped work queue, bucketed on read.</td>
+              <td><a href="{% url 'projects:task_priority' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:tbk_list' %}">Block Register</a></td>
+              <td>Block evidence rows — reason, unblock criteria and the one-time unblock trail.</td>
+              <td><a href="{% url 'projects:tbk_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:tcl_list' %}">Checklist Items</a></td>
+              <td>Tick items inside a task, each stamped once by the check toggle.</td>
+              <td><a href="{% url 'projects:tcl_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>
