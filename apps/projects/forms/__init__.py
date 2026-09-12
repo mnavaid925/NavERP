@@ -91,3 +91,14 @@ from .ScopeRequirements.ScopeVerifications import (  # noqa: F401
     ScopeVerificationForm,
     VerificationDecisionForm,
 )
+
+# --- 7.8 Task & Work Management ---------------------------------------------------------------
+# Three forms, no fourth: the checklist-item ModelForm, the execution ModelForm that carries the
+# form-writable half of ProjectTask's 7.8 fields (assignee, priority, MoSCoW, the Eisenhower pair,
+# percent_complete — actual_start/actual_end are verb-written and are on NO form), and the two
+# plain ``forms.Form`` verb bodies of the block evidence row (a block needs a written reason AND
+# unblock criteria; an unblock, a resolution note). TaskBlock itself has no ModelForm by ruling:
+# the row is minted by ``tsk_block`` and closed by ``tsk_unblock``, never form-created or edited.
+from .TaskWorkManagement.ProjectTasks import TaskExecutionForm  # noqa: F401
+from .TaskWorkManagement.TaskBlocks import TaskBlockForm, TaskUnblockForm  # noqa: F401
+from .TaskWorkManagement.TaskChecklistItems import TaskChecklistItemForm  # noqa: F401
