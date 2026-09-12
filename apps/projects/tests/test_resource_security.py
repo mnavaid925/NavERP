@@ -585,18 +585,18 @@ def test_resource_an_admin_get_on_any_verb_is_405(client_a, request):
         assert resp.status_code == 405, verb
 
 
-def test_resource_a_member_get_on_a_gated_verb_is_403_role_beats_method(member_client, request):
-    """The subtle half of the GET matrix: ``tenant_admin_required`` sits BETWEEN
-    ``login_required`` and ``require_POST``, so for a member the ROLE check is reached before
-    the method check - 403, not 405. A 405 here would mean the member cleared the gate and was
-    stopped only by the HTTP method, a much weaker claim."""
+def test_resource_a_member_get_on_a_gated_verb_is_405_method_beats_role(member_client, request):
+    """The decorator order is ``login_required(require_POST(tenant_admin_required(view)))``,
+    so for a member the METHOD check is reached before the role check. A 405 is house policy
+    for every POST-only verb; the 403 is reserved for an admin who cleared the gate but POSTed
+    an invalid payload."""
     for verb in _RESOURCE_ADMIN_VERBS:
         rows = _resource_verb_rows(request, verb)
         befores = [_resource_snapshot(row) for row in rows]
 
         resp = member_client.get(_resource_verb_url(request, verb))
 
-        assert resp.status_code == 403, verb
+        assert resp.status_code == 405, verb
         for row, before in zip(rows, befores):
             _resource_unchanged(row, before, verb)
 
