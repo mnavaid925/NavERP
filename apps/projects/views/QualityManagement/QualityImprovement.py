@@ -29,8 +29,11 @@ from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, render
 from apps.projects.views._helpers import projects as project_choices
 
-#: The bullet-4 improvement half of the review-type vocabulary.
-_IMPROVEMENT_TYPES = ("kaizen_event", "retrospective")
+#: The board's improvement half of the review-type vocabulary — contract §4.5 pins
+#: ``improvement_rows`` to ``kaizen_event``/``retrospective`` (two types, narrower than the
+#: review register's three-type ``_IMPROVEMENT_TYPES`` lens, contract §4.2, which also counts
+#: ``maturity_assessment``).
+_BOARD_IMPROVEMENT_TYPES = ("kaizen_event", "retrospective")
 
 #: Improvement statuses that still owe work — the open-action count reads them.
 _OPEN_IMPROVEMENT_STATUSES = ("planned", "in_progress")
@@ -164,7 +167,7 @@ def quality_improvement(request):
         reviews_qs = reviews_qs.filter(project=project)
         defects_qs = defects_qs.filter(project=project)
 
-    improvement_rows = list(reviews_qs.filter(review_type__in=_IMPROVEMENT_TYPES)
+    improvement_rows = list(reviews_qs.filter(review_type__in=_BOARD_IMPROVEMENT_TYPES)
                             .order_by("-review_date", "-id")[:_ROW_CAP])
     # The maturity figure needs one aggregate over the scored reviews — the register itself is
     # never materialised for an average.
@@ -188,6 +191,6 @@ def quality_improvement(request):
         "lessons_count": lessons_count,
         "open_defect_count": defects_qs.filter(status__in=_OPEN_DEFECT_STATUSES).count(),
         "improvement_open_count": reviews_qs.filter(
-            review_type__in=_IMPROVEMENT_TYPES,
+            review_type__in=_BOARD_IMPROVEMENT_TYPES,
             improvement_status__in=_OPEN_IMPROVEMENT_STATUSES).count(),
     })
