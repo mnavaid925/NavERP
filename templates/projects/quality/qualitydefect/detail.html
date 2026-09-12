@@ -80,7 +80,7 @@
       {% elif obj.is_locked %}
         <p class="text-muted">This defect is resolved, closed or cancelled — frozen evidence, no longer editable or deletable.</p>
       {% else %}
-        <form method="post" action="{% url 'projects:qdf_resolve' obj.pk %}" novalidate>
+        <form method="post" action="{% url 'projects:qdf_resolve' obj.pk %}" novalidate onsubmit="return confirm('Mark defect {{ obj.number }} resolved? It freezes the row.');">
           {% csrf_token %}
           <div class="form-grid">
             {% for field in resolution_form %}
@@ -92,7 +92,7 @@
               </div>
             {% endfor %}
           </div>
-          <button class="btn btn-primary" type="submit" onclick="return confirm('Mark defect {{ obj.number }} resolved? It freezes the row.');"><i data-lucide="check"></i> Resolve defect</button>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Resolve defect</button>
         </form>
       {% endif %}
     </div>
