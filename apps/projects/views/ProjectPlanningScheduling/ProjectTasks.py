@@ -7,6 +7,10 @@ the register (``tsk_list``) is the flat lens on the same rows.
 """
 from apps.core.crud import as_db_int
 from apps.projects.forms import TaskForm
+# 7.8 surgical edit (context additions only — no behavior change): the task-detail page embeds
+# the blocks panel, whose two verb bodies POST to the POST-only task verbs. Direct sub-module
+# import — the forms package re-exports land in the Integrate step.
+from apps.projects.forms.TaskWorkManagement.TaskBlocks import TaskBlockForm, TaskUnblockForm
 from apps.projects.models import ProjectTask
 from apps.projects.models._base import ZERO, q2
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -174,6 +178,10 @@ def tsk_detail(request, pk):
             "predecessor", "predecessor__project")[:50],
         "successor_links": obj.successor_links.select_related(
             "successor", "successor__project")[:50],
+        # 7.8: the blocks panel embeds the two verb bodies — raising a blocker and clearing the
+        # active one POST to projects:tsk_block / projects:tsk_unblock on this task.
+        "block_form": TaskBlockForm(),
+        "unblock_form": TaskUnblockForm(),
     })
 
 
