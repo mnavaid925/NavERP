@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Task Block{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — Task Block</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tbk_list' %}">Task Blocks</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Evidence for task <a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task }}</a> · on <a href="{% url 'projects:prj_detail' obj.task.project_id %}">{{ obj.task.project.name }}</a></p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:tsk_detail' obj.task_id %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open task</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Block evidence</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Task</dt><dd><a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task }}</a></dd>
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.task.project_id %}">{{ obj.task.project.name }}</a></dd>
+        <dt>State</dt><dd>{% if obj.is_active %}<span class="badge badge-red">Active</span>{% else %}<span class="badge badge-green">Resolved</span>{% endif %}</dd>
+        <dt>Reason</dt><dd>{{ obj.reason|linebreaksbr }}</dd>
+        <dt>Unblock criteria</dt><dd>{{ obj.unblock_criteria|linebreaksbr }}</dd>
+      </dl>
+      <p class="text-muted">The reason and the unblock criteria are captured once, when the block is raised — they are never edited afterwards. While this block stands the row is frozen; once unblocked it is evidence entirely. There are no edit or delete actions on this page, by design.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Block stamps</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Blocked by</dt><dd>{% if obj.blocked_by %}{{ obj.blocked_by.get_full_name|default:obj.blocked_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Blocked at</dt><dd>{% if obj.blocked_at %}{{ obj.blocked_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  {% comment %}
+    The unblock trail, and the exit while the block still stands. The unblock panel POSTs to the
+    TASK route (projects:tsk_unblock on obj.task_id) — the block's stamps are written by that
+    verb exactly once, so the resolution note belongs to the evidence, not to an edit form. It
+    renders only while obj.is_active; a resolved row shows its trail read-only (unblock-twice is
+    refused by the verb).
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Resolution</h2></div>
+    <div class="card-body">
+      {% if obj.is_active %}
+        <p class="text-muted">This block still stands. Clearing it requires meeting the unblock criteria above and recording how — the verb stamps the row's unblock trail exactly once.</p>
+        <form method="post" action="{% url 'projects:tsk_unblock' obj.task_id %}" novalidate onsubmit="return confirm('Unblock task {{ obj.task.number }} via block {{ obj.number }}? Its unblock trail is written once and cannot be changed.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in unblock_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Unblock task</button>
+        </form>
+      {% else %}
+        <dl class="detail-grid">
+          <dt>Unblocked by</dt><dd>{% if obj.unblocked_by %}{{ obj.unblocked_by.get_full_name|default:obj.unblocked_by.email }}{% else %}—{% endif %}</dd>
+          <dt>Unblocked at</dt><dd>{% if obj.unblocked_at %}{{ obj.unblocked_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+          <dt>Resolution note</dt><dd>{% if obj.resolution_note %}{{ obj.resolution_note|linebreaksbr }}{% else %}—{% endif %}</dd>
+        </dl>
+        <p class="text-muted">Written once by the Unblock verb — this trail is closed evidence.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    Raise the task's next blocker from this row's evidence trail. Shown only once THIS row is
+    resolved: while an active block stands the task already has its one open blocker and the
+    tsk_block verb refuses a second.
+  {% endcomment %}
+  {% if not obj.is_active %}
+    <div class="card">
+      <div class="card-header"><h2>Raise another block</h2></div>
+      <div class="card-body">
+        <p class="text-muted">The task is unblocked — if work is standing in the way again, raise the next blocker for task <a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task.number }}</a> from here.</p>
+        <form method="post" action="{% url 'projects:tsk_block' obj.task_id %}" novalidate onsubmit="return confirm('Block task {{ obj.task.number }}? A new evidence row is minted and frozen while it stands.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in block_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Block task</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'projects:tbk_list' %}" class="btn btn-outline">Back to Task Block Register</a>
+  </div>
+{% endblock %}
