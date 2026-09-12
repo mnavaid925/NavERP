@@ -172,8 +172,8 @@ def req_approve(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def req_reject(request, pk):
     """Admin-only: turn the requirement down, recording why. Voids any approval evidence."""
     obj = get_object_or_404(Requirement, pk=pk, tenant=request.tenant)
