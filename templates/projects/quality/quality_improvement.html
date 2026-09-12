@@ -128,12 +128,19 @@
     <div class="card-header"><h2>Lessons learned ({{ lessons_count }})</h2></div>
     <div class="card-body">
       {% if lessons %}
-        <dl>
-          {% for item in lessons %}
-            <dt><a href="{% url 'projects:qdf_detail' item.obj.pk %}">{{ item.obj.number }}</a> — {{ item.obj.title }}</dt>
-            <dd>{{ item.lesson|linebreaksbr }}</dd>
-          {% endfor %}
-        </dl>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Defect</th><th>Lesson</th></tr></thead>
+            <tbody>
+              {% for item in lessons %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:qdf_detail' item.obj.pk %}">{{ item.obj.number }}</a><div class="text-muted">{{ item.obj.title }}</div></td>
+                  <td>{{ item.lesson|linebreaksbr }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         {% comment %}
           The lessons are a lens over the defect rows (the field is on the model); the searchable
           knowledge repository is 7.10's — this page links out, it does not replace it (Ruling 6).
