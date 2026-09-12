@@ -44,7 +44,7 @@
   <div class="card">
     <div class="card-header">
       <h2>Traceability matrix</h2>
-      {% if project %}<span class="text-muted">{{ project.name }} — showing {{ work_packages|length }} of {{ wp_total }} work packages</span>{% endif %}
+      {% if project %}<span class="text-muted">{{ project.name }} — showing {{ work_packages|length }} of {{ wp_total }} work packages, {{ matrix_rows|length }} of {{ coverage.total }} requirements</span>{% endif %}
     </div>
     {% if not project %}
       <div class="card-body">
@@ -129,7 +129,7 @@
         <div class="empty-state"><i data-lucide="shield-check"></i><h3>No approved change</h3><p>Nothing has been approved by the change control board yet — there is no scope creep to report.</p></div>
       {% endfor %}
       {% if creep_rows %}
-        <p class="text-muted">Bars are each month's approved cost impact as a share of the largest month. The accumulation is the creep signal: a change approved in isolation is cheap; twelve of them are a re-baseline.</p>
+        <p class="text-muted">Bars are each month's approved cost impact as a share of the largest month — the largest month totals {{ creep_max }}. The accumulation is the creep signal: a change approved in isolation is cheap; twelve of them are a re-baseline.</p>
       {% endif %}
     </div>
   </div>
