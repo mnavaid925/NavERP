@@ -51,7 +51,7 @@
       {% if obj.project_issue %}
         <p>Tracked on the issue register as <a href="{% url 'projects:iss_detail' obj.project_issue_id %}">{{ obj.project_issue.number }}</a> — {{ obj.project_issue.title }} <span class="badge badge-info">{{ obj.project_issue.get_status_display }}</span></p>
       {% elif obj.is_locked %}
-        <p class="text-muted">This defect is resolved without RAID treatment — it is frozen evidence and can no longer raise an issue.</p>
+        <p class="text-muted">This defect is resolved, closed or cancelled without RAID treatment — it is frozen evidence and can no longer raise an issue.</p>
       {% else %}
         <p class="text-muted">Needs an owner, escalation or RAID treatment beyond the punch list? Raise a project issue — it inherits this defect's severity and owner.</p>
         <form method="post" action="{% url 'projects:qdf_raise_issue' obj.pk %}" onsubmit="return confirm('Raise a project issue from defect {{ obj.number }}? The two registers stay linked.');">
@@ -78,7 +78,7 @@
           <p class="text-muted">This defect is closed — frozen evidence, no longer editable or deletable.</p>
         {% endif %}
       {% elif obj.is_locked %}
-        <p class="text-muted">This defect is closed — frozen evidence, no longer editable or deletable.</p>
+        <p class="text-muted">This defect is resolved, closed or cancelled — frozen evidence, no longer editable or deletable.</p>
       {% else %}
         <form method="post" action="{% url 'projects:qdf_resolve' obj.pk %}" novalidate>
           {% csrf_token %}
