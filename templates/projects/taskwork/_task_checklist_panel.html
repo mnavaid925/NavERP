@@ -1,0 +1,47 @@
+{% comment %}
+  7.8 task-detail panel — the task's checklist and its computed done/total progress.
+
+  Reads obj.checklist_items.all and obj.checklist_progress directly (no panel context keys).
+  The tick is the POST-only tcl_check verb on the ITEM — one writer per direction — and lands
+  on the item's detail page (no ?next= plumbing this pass, the documented trade-off). The
+  progress figure is computed on read from these rows, never stored; it is hidden when the
+  checklist is empty (the property is None then), never faked to 0%.
+{% endcomment %}
+<div class="card">
+  <div class="card-header"><h2>Checklist</h2></div>
+  <div class="card-body">
+    {% if obj.checklist_items.all %}
+      <p class="text-muted">{{ obj.checklist_progress }}% of the checklist is done.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Seq</th><th>State</th><th>Checked by</th><th>Checked at</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for item in obj.checklist_items.all %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:tcl_detail' item.pk %}">{{ item.number }}</a><div class="text-muted">{{ item.label }}</div></td>
+                <td>{{ item.sequence }}</td>
+                <td>
+                  {% if item.is_done %}<span class="badge badge-green">Done</span>
+                  {% else %}<span class="badge badge-muted">Open</span>{% endif %}
+                </td>
+                <td>{% if item.done_by %}{{ item.done_by.get_full_name|default:item.done_by.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if item.done_at %}{{ item.done_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'projects:tcl_detail' item.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                    <form method="post" action="{% url 'projects:tcl_check' item.pk %}" onsubmit="return confirm('{% if item.is_done %}Un-tick{% else %}Tick{% endif %} item {{ item.number }}?{% if item.is_done %} Its done stamps are cleared.{% endif %}');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="{% if item.is_done %}Un-tick{% else %}Tick{% endif %}"><i data-lucide="{% if item.is_done %}rotate-ccw{% else %}check{% endif %}"></i></button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><i data-lucide="list-checks"></i><h3>No checklist items</h3><p>Break this task's work into tick items — the progress here is computed from the ticks, never stored.</p></div>
+    {% endif %}
+    <p class="text-muted"><a href="{% url 'projects:tcl_create' %}?task={{ obj.pk }}">Add a checklist item</a> · <a href="{% url 'projects:tcl_list' %}?task={{ obj.pk }}">See all of this task's items in the register</a></p>
+  </div>
+</div>
