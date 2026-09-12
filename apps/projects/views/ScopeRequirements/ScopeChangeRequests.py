@@ -138,8 +138,8 @@ def scr_submit(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def scr_review(request, pk):
     """Admin-only: the board has taken the change under review."""
     obj = get_object_or_404(ScopeChangeRequest, pk=pk, tenant=request.tenant)
@@ -156,8 +156,8 @@ def scr_review(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def scr_approve(request, pk):
     """Admin-only: the board approves the change, stamping the decision evidence."""
     obj = get_object_or_404(ScopeChangeRequest, pk=pk, tenant=request.tenant)
@@ -176,8 +176,8 @@ def scr_approve(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def scr_reject(request, pk):
     """Admin-only: the board turns the change down, recording why."""
     obj = get_object_or_404(ScopeChangeRequest, pk=pk, tenant=request.tenant)
