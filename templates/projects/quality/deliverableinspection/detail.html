@@ -59,7 +59,7 @@
       {% if obj.is_locked %}
         <p class="text-muted">The decision has been taken — this inspection is frozen evidence and can no longer be edited or deleted.</p>
       {% elif obj.result == 'pending' %}
-        <form method="post" action="{% url 'projects:qci_record' obj.pk %}" class="filter-bar">
+        <form method="post" action="{% url 'projects:qci_record' obj.pk %}" class="filter-bar" onsubmit="return confirm('Record this result on {{ obj.number }}?');">
           {% csrf_token %}
           <div class="form-group">
             <label class="form-label" for="record-result">Record execution — result</label>
@@ -73,7 +73,7 @@
             <label class="form-label" for="record-date">Inspected on</label>
             <input type="date" name="inspected_date" id="record-date" class="form-input">
           </div>
-          <button class="btn btn-primary" type="submit" onclick="return confirm('Record this result on {{ obj.number }}?');"><i data-lucide="file-check-2"></i> Record result</button>
+          <button class="btn btn-primary" type="submit"><i data-lucide="file-check-2"></i> Record result</button>
         </form>
         <p class="text-muted">Recording the result keeps the row live; the acceptance decision is taken once the result is on the record.</p>
       {% else %}
