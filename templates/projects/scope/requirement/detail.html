@@ -71,8 +71,9 @@
             <form method="post" action="{% url 'projects:req_reject' obj.pk %}" onsubmit="return confirm('Reject {{ obj.number }}?');">
               {% csrf_token %}
               <div class="form-group">
-                <label class="form-label" for="reject_reason">Reason (required)</label>
-                <textarea class="form-textarea" id="reject_reason" name="reason" rows="3" placeholder="Why the requirement is turned down."></textarea>
+                <label class="form-label" for="{{ rejection_form.reason.id_for_label }}">Reason (required)</label>
+                {{ rejection_form.reason }}
+                {{ rejection_form.reason.errors }}
               </div>
               <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
             </form>
@@ -84,8 +85,9 @@
             <form method="post" action="{% url 'projects:req_verify' obj.pk %}" onsubmit="return confirm('Verify {{ obj.number }}? The row freezes.');">
               {% csrf_token %}
               <div class="form-group">
-                <label class="form-label" for="verify_note">Verification note (optional)</label>
-                <textarea class="form-textarea" id="verify_note" name="note" rows="3" placeholder="How the acceptance criteria were confirmed."></textarea>
+                <label class="form-label" for="{{ verification_form.note.id_for_label }}">Verification note (optional)</label>
+                {{ verification_form.note }}
+                {{ verification_form.note.errors }}
               </div>
               <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Verify</button>
             </form>
