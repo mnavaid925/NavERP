@@ -3873,3 +3873,975 @@ def quality_defect_b(db, tenant_b, quality_project_b, admin_b):
     from tenant A's register."""
     return _quality_defect(tenant_b, quality_project_b, title="Globex cosmetic defect",
                            created_by=admin_b)
+
+
+# ==================================================================================================
+# 7.7 Scope & Requirements Management (subslug ``scope``) — OWNED BY PHASE 6 STEP 1
+#
+# Same rules as the 7.1–7.6 blocks above, prefixed ``scope_`` / ``_scope_`` so no lane can shadow
+# another (test files: test_scope_models/_forms/_views/_security.py). See
+# ``.claude/tasks/test-contract-projects-7.7.md`` for the test contract these fixtures serve — it
+# pins the EXACT ``scope_matrix`` figures the matrix fixtures below produce (coverage 2/4 traced →
+# 50.0% / creep 40000-60000-10000 over three month buckets → creep_max 60000.00, bars 66.7-100.0-
+# 16.7): the rows are chosen so every figure is exact, and the four test writers assert those
+# numbers instead of re-deriving them.
+#
+# * POST-FIX truth. This block pins the code AFTER the 7.7 fix pass: C1 added ScopeItem's
+#   ``violated`` state (``is_locked`` = realized|retired|violated), C2 reordered the eight
+#   admin-gated verbs to ``@login_required`` / ``@require_POST`` / ``@tenant_admin_required``
+#   (member GET → 405, member POST → 403), I3 tightened ``sci_retire`` to ``is_open`` only and I2
+#   settled ``elicitation_method`` at max_length 20.
+# * Factories construct + ``.save()`` — ``TenantNumbered.save()`` is where ``REQ-/SCI-/SCR-/SVR-``
+#   numbers are minted; ``bulk_create`` would ship empty numbers and is never used here.
+# * Determinism (L16): every date derives from ``_scope_today()`` (``timezone.localdate()``) and
+#   every datetime from ``timezone.now()`` — the SAME basis ``ScopeItem.is_review_overdue`` and the
+#   matrix's overdue counter read. The creep fixtures stamp ``decided_at`` on the FIRST OF A MONTH
+#   (see ``_scope_month_start``) so their three buckets stay three buckets whatever day the suite
+#   runs on.
+# * Spine reuse: projects come from the 7.1 FACTORY ``_projectinitiation_project`` and WBS work
+#   packages from the 7.2 FACTORY ``_planning_task`` (function imports, NOT those lanes' fixtures —
+#   lanes never depend on each other's fixture rows).
+# * The matrix fixtures live on their OWN project (``scope_matrix_project_a``) so ``?project=``
+#   isolates them: the lifecycle rows on ``scope_project_a`` cannot move the pinned figures, and a
+#   pagination fill cannot either (the fills are inert — untraced, review-date-less, impact-free).
+# * The admin client for 7.7 is the ROOT conftest's ``client_a`` (aliased ``scope_admin_client``)
+#   and the member client the root ``member_client`` (aliased ``scope_member_client``) — exactly as
+#   7.1–7.6, which define no clients of their own either; the aliases exist only so the 7.7 contract
+#   can pin the names its four test modules import.
+# * Tests NEVER touch ``management/commands/seed_projects.py`` (the demo seed) — every test builds
+#   exactly the rows it asserts on from the factories below.
+# ==================================================================================================
+
+#: ``apps.core.crud.crud_list``'s default ``per_page`` — every 7.7 register uses the default, so a
+#: pagination test needs ``SCOPE_PAGE_SIZE + 1`` (16) rows for a second page (same rationale as
+#: ``COST_PAGE_SIZE`` / ``QUALITY_PAGE_SIZE`` above).
+SCOPE_PAGE_SIZE = 15
+
+
+def _scope_today():
+    """Today on the SAME basis the 7.7 code uses (``ScopeItem.is_review_overdue`` and the matrix's
+    ``overdue_items`` counter both read ``timezone.localdate()``)."""
+    return timezone.localdate()
+
+
+def _scope_month_start(months_back=0):
+    """The FIRST day of the month ``months_back`` months before this one — the creep fixtures'
+    bucket anchor.
+
+    ``scope_matrix`` buckets approved/implemented changes by the month of ``decided_at``. Stamping
+    ``decided_at=today - 70d`` would put two fixtures in the same bucket whenever the suite runs
+    near a month boundary, collapsing the three-month board the pinned figures describe. Anchoring
+    each fixture to a month START (this month, last month, the month before) makes the three periods
+    deterministic on any run date while staying inside the L16 ``timezone`` basis.
+    """
+    year, month = _scope_today().year, _scope_today().month - months_back
+    while month <= 0:
+        month += 12
+        year -= 1
+    return datetime.date(year, month, 1)
+
+
+# ==================================================================================================
+# Factories — construct + ``.save()`` so TenantNumbered mints REQ-/SCI-/SCR-/SVR-
+# ==================================================================================================
+
+def _scope_requirement(tenant, project, status="draft", **overrides):
+    """A ``Requirement`` [REQ-] on ``project``.
+
+    Defaults: ``status="draft"``, distinct title ("Requirement NN") + filled description,
+    ``requirement_type="functional"``, ``priority="must"``, ``verification_method="test"``,
+    ``elicitation_method="interview"``, ``version="1.0"`` — and **``wbs_node=None``** (UNTRACED by
+    default: the coverage gap the matrix's ``untraced`` panel and ``?untraced=1`` lens exist to
+    find). ``parent``/``owner``/``source_party`` are None and ``acceptance_criteria`` is blank.
+
+    ``clean()`` runs before ``save()`` (the ``_quality_plan`` precedent) so a ``wbs_node`` or
+    ``parent`` belonging to another project raises at build time instead of seeding bad data. The
+    lifecycle/stamp columns (``rejection_reason``, ``approved_by``/``approved_at``,
+    ``verified_by``/``verified_at``, ``verification_note``) are left untouched so a fixture in a
+    given state can assert the verb's evidence columns are exactly what the verb wrote.
+    """
+    from apps.projects.models import Requirement
+    seq = Requirement.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        parent=None,
+        wbs_node=None,
+        title=f"Requirement {seq:02d}",
+        description="The capability the solution must provide.",
+        requirement_type="functional",
+        elicitation_method="interview",
+        elicitation_note="",
+        source_party=None,
+        priority="must",
+        acceptance_criteria="",
+        version="1.0",
+        verification_method="test",
+        status=status,
+        owner=None,
+        requested_by=None,
+        rejection_reason="",
+        approved_by=None,
+        approved_at=None,
+        verified_by=None,
+        verified_at=None,
+        verification_note="",
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = Requirement(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _scope_item(tenant, project, item_type="assumption", status="open", **overrides):
+    """A ``ScopeItem`` [SCI-] on ``project`` — an assumption/open row unless overridden.
+
+    Defaults: ``item_type="assumption"``, ``status="open"``, distinct statement ("Scope item NN"),
+    ``impact_area="scope"``, ``identified_date=today``, ``review_date=None`` (never in the overdue
+    lens), no ``requirement``, no ``owner`` and no verb-written ``outcome``/``closed_at``.
+
+    ``clean()`` runs before ``save()`` — a cross-project ``requirement`` raises at build time. Pass
+    ``item_type="in_scope"`` / ``"out_of_scope"`` for a boundary row, or a closed status
+    (``realized``/``retired``/``violated``) for a locked row.
+    """
+    from apps.projects.models import ScopeItem
+    seq = ScopeItem.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        requirement=None,
+        item_type=item_type,
+        statement=f"Scope item {seq:02d}",
+        description="",
+        impact_area="scope",
+        status=status,
+        owner=None,
+        identified_date=_scope_today(),
+        review_date=None,
+        outcome="",
+        closed_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = ScopeItem(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _scope_change(tenant, project, status="draft", **overrides):
+    """A ``ScopeChangeRequest`` [SCR-] on ``project`` — a zero-impact DRAFT by default.
+
+    Defaults: ``status="draft"``, distinct title ("Scope change NN") + filled description,
+    ``source="internal"``, ``priority="medium"``, ``schedule_impact_days=None``,
+    ``cost_impact=Decimal("0")``, ``quality_impact="none"``, no ``requirement``/``risk``, no
+    ``requested_by`` and no decision stamps. A zero-impact draft is deliberately NOT high-impact
+    (``is_high_impact`` False) and NOT in the creep population.
+
+    ``clean()`` runs before ``save()`` — a cross-project ``requirement``/``risk`` raises at build
+    time. Pass ``decided_at=``/``implemented_at=`` when a fixture must land in a creep bucket (the
+    view buckets on ``decided_at or created_at``).
+    """
+    from apps.projects.models import ScopeChangeRequest
+    seq = ScopeChangeRequest.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        requirement=None,
+        risk=None,
+        title=f"Scope change {seq:02d}",
+        description="The scope change the board is asked to weigh.",
+        justification="",
+        source="internal",
+        priority="medium",
+        schedule_impact_days=None,
+        cost_impact=Decimal("0"),
+        quality_impact="none",
+        quality_note="",
+        status=status,
+        decision_note="",
+        requested_by=None,
+        decided_by=None,
+        decided_at=None,
+        implemented_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = ScopeChangeRequest(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _scope_verification(tenant, project, acceptance_status="pending", **overrides):
+    """A ``ScopeVerification`` [SVR-] on ``project`` — a pending, passing inspection by default.
+
+    Defaults: ``acceptance_status="pending"`` (unlocked), ``method="inspection"``, ``result="pass"``,
+    distinct deliverable ("Deliverable NN"), ``inspection_date=today``, no ``wbs_node``/
+    ``requirement``/``inspected_by``, blank findings and no acceptance stamps.
+
+    ``clean()`` runs before ``save()`` — a cross-project ``wbs_node``/``requirement`` raises at
+    build time. ``is_locked`` is True for any non-pending status, so an accepted/rejected/waived
+    fixture is frozen evidence.
+    """
+    from apps.projects.models import ScopeVerification
+    seq = ScopeVerification.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        requirement=None,
+        deliverable=f"Deliverable {seq:02d}",
+        method="inspection",
+        result="pass",
+        acceptance_status=acceptance_status,
+        inspected_by=None,
+        inspection_date=_scope_today(),
+        findings="",
+        decision_note="",
+        accepted_by=None,
+        accepted_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = ScopeVerification(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+# -- bulk fills (pagination / search / the registers) -----------------------------------------------
+#
+# Loops over the factories rather than bulk_create for the reason spelled out at the top of this
+# file: bulk_create skips save(), and save() is where `number` is minted. Every fill row is INERT
+# (untraced requirement, review-date-less open item, impact-free draft change) so a pagination test
+# that pulls 16 rows does not move the pinned matrix figures.
+
+def _scope_fill_requirements(tenant, project, count, **overrides):
+    """``count`` UNTRACED draft requirements on ONE project — ``wbs_node=None`` (never in the
+    coverage numerator), ``status="draft"``, distinct titles ("Backlog requirement 01" …).
+    Returns the list; overrides land on EVERY row."""
+    return [
+        _scope_requirement(tenant, project, title=f"Backlog requirement {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _scope_fill_items(tenant, project, count, **overrides):
+    """``count`` open assumption rows on ONE project — ``review_date=None`` (never in the overdue
+    lens), distinct statements ("Backlog item 01" …). Returns the list; overrides land on every
+    row (pass ``item_type=`` to fill a different slice)."""
+    return [
+        _scope_item(tenant, project, statement=f"Backlog item {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _scope_fill_changes(tenant, project, count, **overrides):
+    """``count`` zero-impact DRAFT changes on ONE project — never high-impact and never in the creep
+    population, distinct titles ("Backlog change 01" …). Returns the list; overrides land on every
+    row."""
+    return [
+        _scope_change(tenant, project, title=f"Backlog change {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+# ==================================================================================================
+# Core-spine records the 7.7 FKs point at
+# ==================================================================================================
+
+@pytest.fixture
+def scope_party_a(db, tenant_a):
+    """Tenant A organisation Party — the ``Requirement.source_party`` ("who asked for it") and the
+    party the change/verification filter dropdowns offer. ``core.Party`` is the shared spine row 7.7
+    reuses (7.1's ``ProjectStakeholder`` owns the RACI register; 7.7 declares no party table)."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="organization", name="Field Ops Directorate")
+
+
+@pytest.fixture
+def scope_party_b(db, tenant_b):
+    """Tenant B organisation Party — the crafted-POST value for ``source_party`` on
+    ``RequirementForm`` (the narrowed queryset refuses it first; assert the FIELD error)."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="organization", name="Globex Customers")
+
+
+@pytest.fixture
+def scope_project_a(db, tenant_a, admin_user):
+    """Tenant A's ACTIVE host — every default 7.7 lifecycle row hangs off this one or the tenant-B
+    twin. Window today−30 .. today+150, so a work package can span today and ``is_overdue`` is
+    False."""
+    return _projectinitiation_project(
+        tenant_a, name="Scope host Alpha", code="SCP-01", status="active",
+        charter_status="approved", charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        start_date=_scope_today() - datetime.timedelta(days=30),
+        end_date=_scope_today() + datetime.timedelta(days=150),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_project_b(db, tenant_b, admin_b):
+    """Tenant B's host — 404 as tenant A everywhere; absent from tenant A's registers; the
+    crafted-POST value for ``project`` on all four ModelForms."""
+    return _projectinitiation_project(
+        tenant_b, name="Scope host Beta", code="SCB-01", status="active",
+        charter_status="approved", created_by=admin_b)
+
+
+@pytest.fixture
+def scope_wbs_a(db, scope_project_a):
+    """A tenant A work package on ``scope_project_a`` — the VALID ``wbs_node`` anchor (the
+    same-project ``clean()`` branch) and a matrix column. Built through the 7.2 FACTORY (function
+    import, not a 7.2 fixture)."""
+    return _planning_task(scope_project_a.tenant, scope_project_a,
+                          name="Scope traceability work package")
+
+
+@pytest.fixture
+def scope_wbs_a2(db, scope_project_a):
+    """A SECOND tenant A work package on ``scope_project_a`` — so the matrix has ≥2 columns and the
+    ``cells`` list shape is provable. ``sequence=1`` keeps its column order after ``scope_wbs_a``."""
+    return _planning_task(scope_project_a.tenant, scope_project_a,
+                          name="Scope second work package", sequence=1)
+
+
+@pytest.fixture
+def scope_wbs_b(db, scope_project_b):
+    """Tenant B's work package — the crafted-POST value for ``wbs_node`` on the requirement and
+    verification forms, and the cross-project node for the same-project ``clean()`` refusal
+    tests."""
+    return _planning_task(scope_project_b.tenant, scope_project_b,
+                          name="Globex scope work package")
+
+
+# ==================================================================================================
+# Extra actors + clients (aliases over the ROOT conftest — reuse, never redefine)
+# ==================================================================================================
+
+@pytest.fixture
+def scope_tenantless_user(db):
+    """A logged-in user with ``tenant=None`` — the superuser shape. The four 7.7 create views guard
+    this on their first branch and redirect to ``dashboard:home``; the registers and the matrix
+    render EMPTY BY DESIGN (the matrix is 0-safe)."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="scope-drifter@example.com", username="scope_drifter",
+        password="TestPass123!", tenant=None)
+
+
+@pytest.fixture
+def scope_tenantless_client(db, scope_tenantless_user):
+    """Logged in, ``request.tenant is None``. Registers and the matrix render empty; creates
+    redirect away."""
+    client = Client()
+    client.force_login(scope_tenantless_user)
+    return client
+
+
+@pytest.fixture
+def scope_anon_client(db):
+    """Unauthenticated — every 7.7 view is ``@login_required``, so each must redirect to login."""
+    return Client()
+
+
+@pytest.fixture
+def scope_admin_client(db, client_a):
+    """Tenant A admin logged in — alias of the root ``client_a`` (7.1–7.6 define no admin client of
+    their own either; the alias exists so the 7.7 contract can pin the name). Runs the admin happy
+    paths AND every IDOR-404 probe."""
+    return client_a
+
+
+@pytest.fixture
+def scope_member_client(db, member_client):
+    """Tenant A member logged in — alias of the root ``member_client``. On the eight admin-gated
+    verbs a GET is 405 and a POST is 403. For tenant-B ADMIN requests use the root ``client_b``
+    (no alias needed)."""
+    return member_client
+
+
+@pytest.fixture
+def scope_csrf_client(db, admin_user):
+    """Tenant A admin on a client that ENFORCES CSRF. A POST without a token must be 403."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    return client
+
+
+# ==================================================================================================
+# Requirement — one fixture per lifecycle state the five verbs branch on
+# (all on scope_project_a except ``_b``; the verb/gate table is the test contract §3)
+# ==================================================================================================
+
+@pytest.fixture
+def scope_requirement_draft(db, tenant_a, scope_project_a, admin_user):
+    """``draft`` — nothing approved, nothing traced. The ``req_submit`` happy path (draft →
+    submitted) and an unlocked row: ``req_edit``/``req_delete`` stay OPEN. Being untraced, it is
+    also a ``?untraced=1``/``?pending=1`` lens row. ``req_approve``/``req_reject``/``req_verify``
+    must REFUSE it (wrong source state); ``req_implement`` must REFUSE it (not approved)."""
+    return _scope_requirement(tenant_a, scope_project_a,
+                              title="Capture the delivery evidence pack",
+                              created_by=admin_user)
+
+
+@pytest.fixture
+def scope_requirement_submitted(db, tenant_a, scope_project_a, admin_user):
+    """``submitted`` — the requirement gate's queue row. The ONLY happy path for
+    ``req_approve`` (→ approved) and ``req_reject`` (→ rejected, ``rejection_reason`` required).
+    ``req_submit`` must REFUSE it (already submitted); ``req_verify`` must REFUSE it (not
+    implemented)."""
+    return _scope_requirement(tenant_a, scope_project_a, status="submitted",
+                              title="Expose the delivery API to partners",
+                              created_by=admin_user)
+
+
+@pytest.fixture
+def scope_requirement_approved(db, tenant_a, scope_project_a, scope_wbs_a, admin_user):
+    """``approved`` + the approval evidence pair (``approved_by``=admin, ``approved_at`` now−1d) —
+    the shape ``req_approve`` leaves. The ONLY ``req_implement`` happy path (approved →
+    implemented) and a ``?unverified`` row in the matrix's ``unverified`` panel. Traced (anchored to
+    ``scope_wbs_a``) so it is NOT in ``?untraced=1``. ``req_approve`` must refuse it (not
+    submitted)."""
+    return _scope_requirement(
+        tenant_a, scope_project_a, status="approved", wbs_node=scope_wbs_a,
+        title="Automate the nightly reconciliation",
+        approved_by=admin_user,
+        approved_at=timezone.now() - datetime.timedelta(days=1),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_requirement_implemented(db, tenant_a, scope_project_a, admin_user):
+    """``implemented`` — the shape ``req_implement`` leaves. The ONLY ``req_verify`` happy path
+    (implemented → verified, admin-gated). ``req_implement`` must REFUSE it (already implemented)."""
+    return _scope_requirement(
+        tenant_a, scope_project_a, status="implemented",
+        title="Publish the partner onboarding runbook",
+        approved_by=admin_user,
+        approved_at=timezone.now() - datetime.timedelta(days=3),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_requirement_verified(db, tenant_a, scope_project_a, scope_wbs_a, admin_user):
+    """``verified`` + the FULL evidence (approval pair AND ``verified_by``/``verified_at`` now−1d,
+    ``verification_note`` set). ``is_locked`` → ``req_edit``/``req_delete`` REFUSE it; every verb
+    refuses it. A ``?verified=1`` lens row and a coverage-``verified`` row."""
+    return _scope_requirement(
+        tenant_a, scope_project_a, status="verified", wbs_node=scope_wbs_a,
+        title="Zero-touch invoice matching",
+        approved_by=admin_user,
+        approved_at=timezone.now() - datetime.timedelta(days=6),
+        verified_by=admin_user,
+        verified_at=timezone.now() - datetime.timedelta(days=1),
+        verification_note="Confirmed against the accepted acceptance test pack.",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_requirement_rejected(db, tenant_a, scope_project_a, admin_user):
+    """``rejected`` with ``rejection_reason`` set and NO approval evidence — the shape ``req_reject``
+    leaves. The SECOND legal ``req_submit`` source (a rejected row can be re-submitted, which clears
+    the reason). NOT locked (``is_locked`` is only ``verified``), so edit/delete stay OPEN.
+    ``req_approve`` must refuse it."""
+    return _scope_requirement(
+        tenant_a, scope_project_a, status="rejected",
+        title="Retire the legacy scheduling UI",
+        rejection_reason="The migration cost was not justified this quarter.",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_requirement_b(db, tenant_b, scope_project_b, admin_b):
+    """Tenant B's requirement — 404 as tenant A on detail/edit/delete and on all five verbs; absent
+    from tenant A's registers and from the ``?project=`` matrix; the crafted-POST value for
+    ``requirement`` on the change and verification forms."""
+    return _scope_requirement(tenant_b, scope_project_b,
+                              title="Globex requirement", created_by=admin_b)
+
+
+# ==================================================================================================
+# ScopeItem — one fixture per status the three verbs branch on
+# (post-C1 the set includes ``violated``; ``is_locked`` = realized|retired|violated)
+# ==================================================================================================
+
+@pytest.fixture
+def scope_item_open(db, tenant_a, scope_project_a, admin_user):
+    """``open`` assumption — the ONLY ``sci_validate`` happy path (open → validated) and a legal
+    ``sci_realize``/``sci_retire`` source. An ``?open=1`` lens row; edit/delete OPEN.
+    ``review_date=None`` → never overdue."""
+    return _scope_item(tenant_a, scope_project_a, item_type="assumption", status="open",
+                       statement="The depot Wi-Fi refresh completes before go-live.",
+                       identified_date=_scope_today() - datetime.timedelta(days=5),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def scope_item_validated(db, tenant_a, scope_project_a, admin_user):
+    """``validated`` assumption — the shape ``sci_validate`` leaves. A legal
+    ``sci_realize``/``sci_retire`` source (``is_open`` True) and the SECOND ``?open=1`` row.
+    ``sci_validate`` must REFUSE it (already validated, not ``open``)."""
+    return _scope_item(tenant_a, scope_project_a, item_type="assumption", status="validated",
+                       statement="The vendor supports the target API version.",
+                       identified_date=_scope_today() - datetime.timedelta(days=8),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def scope_item_realized(db, tenant_a, scope_project_a, admin_user):
+    """``realized`` with ``outcome`` + ``closed_at`` (now−1d) — the shape ``sci_realize`` leaves.
+    ``is_locked`` → edit/delete REFUSE it; ``sci_realize`` answers "only an open or validated row";
+    **``sci_retire`` REFUSES it (the I3 fix — a realized row is NOT ``is_open``)**."""
+    return _scope_item(tenant_a, scope_project_a, item_type="constraint", status="realized",
+                       statement="No downtime during the peak trading window.",
+                       outcome="The cutover ran inside the maintenance window.",
+                       closed_at=timezone.now() - datetime.timedelta(days=1),
+                       identified_date=_scope_today() - datetime.timedelta(days=20),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def scope_item_violated(db, tenant_a, scope_project_a, admin_user):
+    """``violated`` — the C1 state: an assumption that failed / a constraint that broke. Now that
+    the choice exists the row is creatable, **IS locked** (edit/delete refuse it) and **is NOT
+    ``is_open``** (so no lifecycle verb takes it). No verb writes this status — it is vocabulary a
+    test hand-builds, like 7.5's ``on_hold``."""
+    return _scope_item(tenant_a, scope_project_a, item_type="assumption", status="violated",
+                       statement="The legacy data imports cleanly on the first attempt.",
+                       outcome="Three months of records needed manual repair.",
+                       closed_at=timezone.now() - datetime.timedelta(days=4),
+                       identified_date=_scope_today() - datetime.timedelta(days=30),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def scope_item_b(db, tenant_b, scope_project_b, admin_b):
+    """Tenant B's scope item — 404 as tenant A on detail/edit/delete and on all three verbs; absent
+    from tenant A's registers; the crafted-POST value for the ``requirement`` FK on
+    ``ScopeItemForm``."""
+    return _scope_item(tenant_b, scope_project_b, statement="Globex scope item",
+                       created_by=admin_b)
+
+
+# ==================================================================================================
+# ScopeChangeRequest — one fixture per status the five verbs branch on, plus both sides of the
+# high-impact threshold (HIGH_COST 50000 / HIGH_SCHEDULE_DAYS 10 / quality_impact "high")
+# ==================================================================================================
+
+@pytest.fixture
+def scope_change_draft(db, tenant_a, scope_project_a, admin_user):
+    """``draft``, zero impact — the ONLY ``scr_submit`` happy path (draft → submitted) and an
+    unlocked row: ``scr_edit``/``scr_delete`` stay OPEN. The default ``_scope_change`` shape, so it
+    is NOT high-impact and NOT in the creep population."""
+    return _scope_change(tenant_a, scope_project_a, status="draft",
+                         title="Add a second approval step to onboarding",
+                         created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_submitted(db, tenant_a, scope_project_a, admin_user):
+    """``submitted`` — the board's queue row. A happy path for ``scr_review`` (→ under_review) AND
+    for ``scr_approve`` (→ approved) / ``scr_reject`` (→ rejected). ``scr_submit`` must REFUSE it."""
+    return _scope_change(tenant_a, scope_project_a, status="submitted",
+                         title="Extend the pilot to the northern depot",
+                         justification="Operations wants the same tooling across sites.",
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_under_review(db, tenant_a, scope_project_a, admin_user):
+    """``under_review`` — the shape ``scr_review`` leaves. A happy path for ``scr_approve`` /
+    ``scr_reject`` but NOT for ``scr_review`` (already under review)."""
+    return _scope_change(tenant_a, scope_project_a, status="under_review",
+                         title="Re-sequence the integration milestone",
+                         justification="The vendor's release slipped a fortnight.",
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_approved(db, tenant_a, scope_project_a, admin_user):
+    """``approved`` + the decision pair (``decided_by``=admin, ``decided_at`` now−1d) — the shape
+    ``scr_approve`` leaves. The ONLY ``scr_implement`` happy path (approved → implemented);
+    ``scr_review``/``scr_approve``/``scr_reject`` must all REFUSE it."""
+    return _scope_change(tenant_a, scope_project_a, status="approved",
+                         title="Buy the additional integration licences",
+                         cost_impact=Decimal("12000.00"), priority="high",
+                         decided_by=admin_user,
+                         decided_at=timezone.now() - datetime.timedelta(days=1),
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_rejected(db, tenant_a, scope_project_a, admin_user):
+    """``rejected`` with ``decision_note`` stored + the decision pair — the shape ``scr_reject``
+    leaves. NOT locked (``is_locked`` is only ``implemented``), so edit/delete stay OPEN. All five
+    verbs refuse it."""
+    return _scope_change(tenant_a, scope_project_a, status="rejected",
+                         title="Replace the reporting engine mid-flight",
+                         decision_note="Too late in the delivery cycle to absorb the risk.",
+                         decided_by=admin_user,
+                         decided_at=timezone.now() - datetime.timedelta(days=2),
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_implemented(db, tenant_a, scope_project_a, admin_user):
+    """``implemented`` with the decision pair AND ``implemented_at`` (now−1d) — the shape
+    ``scr_implement`` leaves. ``is_locked`` → edit/delete REFUSE it; every verb refuses it."""
+    return _scope_change(tenant_a, scope_project_a, status="implemented",
+                         title="Move the batch window to 02:00",
+                         cost_impact=Decimal("5000.00"),
+                         decided_by=admin_user,
+                         decided_at=timezone.now() - datetime.timedelta(days=5),
+                         implemented_at=timezone.now() - datetime.timedelta(days=1),
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_high_impact(db, tenant_a, scope_project_a, admin_user):
+    """HIGH-IMPACT row: ``cost_impact=60000.00`` — **crosses ``HIGH_COST`` (50000)** so
+    ``is_high_impact`` is True and the ``?high_impact=1`` lens includes it. The mid-band cost row
+    the pinned creep figure's largest bucket (60000.00 → ``bar_pct`` 100.0) is built from on the
+    matrix project; this fixture is the lifecycle-side copy for the register/lens tests."""
+    return _scope_change(tenant_a, scope_project_a, status="submitted",
+                         title="Rebuild the checkout integration",
+                         cost_impact=Decimal("60000.00"), priority="critical",
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_sub_threshold(db, tenant_a, scope_project_a, admin_user):
+    """THE BOUNDARY row: ``cost_impact=49999.99`` (one cent under ``HIGH_COST``),
+    ``schedule_impact_days=9`` (one day under ``HIGH_SCHEDULE_DAYS``) and
+    ``quality_impact="medium"`` — so ``is_high_impact`` is **False** and the ``?high_impact=1`` lens
+    EXCLUDES it. The companion to ``scope_change_high_impact``: together they pin all three
+    thresholds."""
+    return _scope_change(tenant_a, scope_project_a, status="submitted",
+                         title="Trim the reporting backlog",
+                         cost_impact=Decimal("49999.99"), schedule_impact_days=9,
+                         quality_impact="medium",
+                         requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_change_b(db, tenant_b, scope_project_b, admin_b):
+    """Tenant B's change — 404 as tenant A on detail/edit/delete and on all five verbs; absent from
+    tenant A's registers and the ``?project=`` matrix; the crafted-POST value for the ``requirement``
+    FK on ``ScopeChangeForm``."""
+    return _scope_change(tenant_b, scope_project_b, title="Globex scope change",
+                         created_by=admin_b)
+
+
+# ==================================================================================================
+# ScopeVerification — one fixture per acceptance decision the three verbs branch on
+# ==================================================================================================
+
+@pytest.fixture
+def scope_verification_pending(db, tenant_a, scope_project_a, admin_user):
+    """``pending`` with the result already recorded — the ONLY happy path for ``svr_accept``,
+    ``svr_reject`` AND ``svr_waive`` (all three take a pending row). A ``?pending=1`` queue row and
+    an unlocked row: edit/delete stay OPEN."""
+    return _scope_verification(tenant_a, scope_project_a, acceptance_status="pending",
+                               deliverable="Partner onboarding runbook",
+                               method="review", result="conditional",
+                               inspected_by=admin_user,
+                               inspection_date=_scope_today() - datetime.timedelta(days=1),
+                               findings="Two screenshots need re-capturing.",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def scope_verification_accepted(db, tenant_a, scope_project_a, admin_user):
+    """``accepted`` with ``accepted_by``/``accepted_at`` (now−1d) and a ``decision_note`` — the
+    shape ``svr_accept`` leaves. ``is_locked`` → edit/delete REFUSE it; ``svr_accept`` answers the
+    already-decided no-op; ``svr_reject``/``svr_waive`` refuse it too."""
+    return _scope_verification(tenant_a, scope_project_a, acceptance_status="accepted",
+                               deliverable="Reconciliation report pack",
+                               result="pass",
+                               accepted_by=admin_user,
+                               accepted_at=timezone.now() - datetime.timedelta(days=1),
+                               decision_note="Signed off against the acceptance criteria.",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def scope_verification_rejected(db, tenant_a, scope_project_a, admin_user):
+    """``rejected`` with the mandatory ``decision_note`` and the stamps — the shape ``svr_reject``
+    leaves. Locked. ``svr_accept``/``svr_waive`` REFUSE it."""
+    return _scope_verification(tenant_a, scope_project_a, acceptance_status="rejected",
+                               deliverable="Legacy migration dry run",
+                               result="fail",
+                               accepted_by=admin_user,
+                               accepted_at=timezone.now() - datetime.timedelta(days=2),
+                               decision_note="Rejected: the exception report was incomplete.",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def scope_verification_waived(db, tenant_a, scope_project_a, admin_user):
+    """``waived`` with the stamps but NO decision note — the shape ``svr_waive`` leaves (waiving
+    writes the decision and the evidence, not a narrative). Locked; ``is_accepted`` is True (waived
+    counts as cleared) while the pending row is not."""
+    return _scope_verification(tenant_a, scope_project_a, acceptance_status="waived",
+                               deliverable="Interim data export tool",
+                               result="conditional",
+                               accepted_by=admin_user,
+                               accepted_at=timezone.now() - datetime.timedelta(days=3),
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def scope_verification_b(db, tenant_b, scope_project_b, admin_b):
+    """Tenant B's verification — 404 as tenant A on detail/edit/delete and on all three verbs;
+    absent from tenant A's registers and the ``?project=`` matrix; the crafted-POST value for the
+    ``requirement`` FK on ``ScopeVerificationForm``."""
+    return _scope_verification(tenant_b, scope_project_b,
+                               deliverable="Globex inspection", created_by=admin_b)
+
+
+# ==================================================================================================
+# THE MATRIX SET — a dedicated project so ``?project=`` isolates the pinned figures
+# (test contract §4: coverage 2/4 tracked, creep 40000→60000→10000 across three month buckets)
+#
+# Every row here lives on ``scope_matrix_project_a`` and NOTHING else does, so the figures the test
+# contract pins are auditable: the numbers move only if a test deliberately pulls one of these
+# fixtures. The creep fixtures anchor ``decided_at`` to a month START (``_scope_month_start``) so
+# the three buckets stay three buckets on any run date.
+# ==================================================================================================
+
+@pytest.fixture
+def scope_matrix_project_a(db, tenant_a, admin_user):
+    """The matrix board's dedicated tenant A project — matrix tests select ``?project=<this pk>``,
+    so none of the lifecycle rows on ``scope_project_a`` can enter the figures."""
+    return _projectinitiation_project(
+        tenant_a, name="Scope matrix host", code="SMX-01", status="active",
+        charter_status="approved", charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        start_date=_scope_today() - datetime.timedelta(days=30),
+        end_date=_scope_today() + datetime.timedelta(days=150),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_wbs_m1(db, scope_matrix_project_a):
+    """Matrix COLUMN 1 (``sequence=0``) — the work package ``scope_matrix_req_traced_approved``
+    names as its deliverer."""
+    return _planning_task(scope_matrix_project_a.tenant, scope_matrix_project_a,
+                          name="Matrix work package one", sequence=0)
+
+
+@pytest.fixture
+def scope_wbs_m2(db, scope_matrix_project_a):
+    """Matrix COLUMN 2 (``sequence=1``) — the work package the verified requirement names."""
+    return _planning_task(scope_matrix_project_a.tenant, scope_matrix_project_a,
+                          name="Matrix work package two", sequence=1)
+
+
+@pytest.fixture
+def scope_matrix_req_traced_approved(db, tenant_a, scope_matrix_project_a, scope_wbs_m1,
+                                     admin_user):
+    """Matrix row A: ``functional``/``must``, TRACED to ``scope_wbs_m1``, ``approved``. Cell
+    ``[True, False]``; counts into ``traced`` and into ``unverified`` (an approved row that was
+    never verified — coverage ``verified`` does NOT count it)."""
+    return _scope_requirement(
+        tenant_a, scope_matrix_project_a, status="approved", wbs_node=scope_wbs_m1,
+        title="Matrix traced approved", requirement_type="functional", priority="must",
+        approved_by=admin_user,
+        approved_at=timezone.now() - datetime.timedelta(days=4),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_req_untraced_draft(db, tenant_a, scope_matrix_project_a, admin_user):
+    """Matrix row B: ``functional``/``should``, UNTRACED (no ``wbs_node``), ``draft``. Cell
+    ``[False, False]``; counts into ``untraced`` and NOT into ``unverified`` (draft is not
+    approved/implemented)."""
+    return _scope_requirement(
+        tenant_a, scope_matrix_project_a, status="draft",
+        title="Matrix untraced draft", requirement_type="functional", priority="should",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_req_traced_implemented_verified(db, tenant_a, scope_matrix_project_a, scope_wbs_m2,
+                                                 admin_user):
+    """Matrix row C: ``technical``/``must``, TRACED to ``scope_wbs_m2``, ``verified``. Cell
+    ``[False, True]``; the ONLY row in coverage ``verified`` and the only row with a non-zero
+    ``verification_count`` (2 — see the two verification fixtures) / ``verified_count`` (1)."""
+    return _scope_requirement(
+        tenant_a, scope_matrix_project_a, status="verified", wbs_node=scope_wbs_m2,
+        title="Matrix traced verified", requirement_type="technical", priority="must",
+        approved_by=admin_user,
+        approved_at=timezone.now() - datetime.timedelta(days=9),
+        verified_by=admin_user,
+        verified_at=timezone.now() - datetime.timedelta(days=1),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_req_untraced_approved(db, tenant_a, scope_matrix_project_a, admin_user):
+    """Matrix row D: ``business``/``could``, UNTRACED, ``approved``. Cell ``[False, False]``;
+    counts into ``untraced`` AND into ``unverified`` (the second approved row)."""
+    return _scope_requirement(
+        tenant_a, scope_matrix_project_a, status="approved",
+        title="Matrix untraced approved", requirement_type="business", priority="could",
+        approved_by=admin_user,
+        approved_at=timezone.now() - datetime.timedelta(days=2),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_ver_accepted(db, tenant_a, scope_matrix_project_a,
+                              scope_matrix_req_traced_implemented_verified, admin_user):
+    """The verified row's ACCEPTED inspection — contributes 1 to its ``verification_count`` and 1 to
+    its ``verified_count`` (accepted is in the ``(accepted, waived)`` filter)."""
+    return _scope_verification(
+        tenant_a, scope_matrix_project_a, acceptance_status="accepted",
+        requirement=scope_matrix_req_traced_implemented_verified,
+        deliverable="Matrix accepted deliverable", result="pass",
+        accepted_by=admin_user,
+        accepted_at=timezone.now() - datetime.timedelta(days=1),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_ver_pending(db, tenant_a, scope_matrix_project_a,
+                             scope_matrix_req_traced_implemented_verified, admin_user):
+    """The verified row's PENDING inspection — contributes 1 to its ``verification_count`` but 0 to
+    ``verified_count`` ('pending' is not accepted/waived). The pair proves the two counters
+    disagree."""
+    return _scope_verification(
+        tenant_a, scope_matrix_project_a, acceptance_status="pending",
+        requirement=scope_matrix_req_traced_implemented_verified,
+        deliverable="Matrix pending deliverable", result="pass",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_ver_orphan(db, tenant_a, scope_matrix_project_a, admin_user):
+    """An ACCEPTED inspection with NO requirement — the row that proves the per-requirement counts
+    are keyed on ``requirement_id``: it adds nothing to any ``matrix_rows`` entry even though it is
+    accepted."""
+    return _scope_verification(
+        tenant_a, scope_matrix_project_a, acceptance_status="accepted",
+        deliverable="Matrix orphan deliverable", result="pass",
+        accepted_by=admin_user,
+        accepted_at=timezone.now() - datetime.timedelta(days=1),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_change_m1(db, tenant_a, scope_matrix_project_a, admin_user):
+    """Creep bucket P0 (two months back): ``approved``, ``cost_impact=40000.00``, 0 days, no
+    quality impact — NOT high-impact. Contributes ``count`` 1 / ``cost_total`` 40000.00 to its
+    month; its bar is ``40000 / 60000 × 100`` = 66.7."""
+    return _scope_change(
+        tenant_a, scope_matrix_project_a, status="approved",
+        title="Matrix change M1", cost_impact=Decimal("40000.00"),
+        decided_by=admin_user,
+        decided_at=timezone.now().replace(
+            year=_scope_month_start(2).year, month=_scope_month_start(2).month, day=1,
+            hour=12, minute=0, second=0, microsecond=0),
+        requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_change_m2(db, tenant_a, scope_matrix_project_a, admin_user):
+    """Creep bucket P1 (last month): ``implemented``, ``cost_impact=60000.00``, 0 days —
+    HIGH-IMPACT (crosses ``HIGH_COST``). Contributes ``count`` 1 / ``cost_total`` 60000.00; it is
+    the LARGEST bucket, so ``creep_max`` is 60000.00 and its bar is 100.0."""
+    return _scope_change(
+        tenant_a, scope_matrix_project_a, status="implemented",
+        title="Matrix change M2", cost_impact=Decimal("60000.00"), priority="critical",
+        decided_by=admin_user,
+        decided_at=timezone.now().replace(
+            year=_scope_month_start(1).year, month=_scope_month_start(1).month, day=1,
+            hour=12, minute=0, second=0, microsecond=0),
+        implemented_at=timezone.now() - datetime.timedelta(days=2),
+        requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_change_m3(db, tenant_a, scope_matrix_project_a, admin_user):
+    """Creep bucket P2 (this month): ``approved``, ``cost_impact=10000.00``,
+    ``schedule_impact_days=12`` — HIGH-IMPACT (crosses ``HIGH_SCHEDULE_DAYS``). Contributes
+    ``count`` 1 / ``cost_total`` 10000.00 / ``schedule_days`` 12; its bar is
+    ``10000 / 60000 × 100`` = 16.7."""
+    return _scope_change(
+        tenant_a, scope_matrix_project_a, status="approved",
+        title="Matrix change M3", cost_impact=Decimal("10000.00"), schedule_impact_days=12,
+        quality_impact="low",
+        decided_by=admin_user,
+        decided_at=timezone.now().replace(
+            year=_scope_month_start(0).year, month=_scope_month_start(0).month, day=1,
+            hour=12, minute=0, second=0, microsecond=0),
+        requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_change_low(db, tenant_a, scope_matrix_project_a, admin_user):
+    """The creep-panel CONTROL: a ``draft`` with ``cost_impact=999999.00`` and
+    ``quality_impact="high"``. It is materially huge yet **NOT in the creep population** (the panel
+    reads ``status``, not impact) and never moves ``creep_max`` — while the ``?high_impact=1`` lens
+    on ``scr_list`` DOES include it (that lens reads the columns)."""
+    return _scope_change(
+        tenant_a, scope_matrix_project_a, status="draft",
+        title="Matrix change low", cost_impact=Decimal("999999.00"),
+        schedule_impact_days=99, quality_impact="high",
+        requested_by=admin_user, created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_item_in_scope(db, tenant_a, scope_matrix_project_a, admin_user):
+    """A boundary row: ``in_scope``/``open``. Counts into ``items``, ``boundaries`` and
+    ``open_items``; NOT into ``overdue_items`` (no review date)."""
+    return _scope_item(tenant_a, scope_matrix_project_a, item_type="in_scope", status="open",
+                       statement="Matrix in-scope statement", created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_item_out_of_scope(db, tenant_a, scope_matrix_project_a, admin_user):
+    """The second boundary row: ``out_of_scope``/``open``. Counts into ``items``, ``boundaries``
+    and ``open_items``."""
+    return _scope_item(tenant_a, scope_matrix_project_a, item_type="out_of_scope", status="open",
+                       statement="Matrix out-of-scope statement", created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_item_constraint_validated_overdue(db, tenant_a, scope_matrix_project_a, admin_user):
+    """The ONLY overdue row: ``constraint``/``validated`` with ``review_date=today−3`` →
+    ``is_review_overdue`` True, so it is the 1 in ``overdue_items``; being ``validated`` it is
+    ``is_open`` and counts in ``open_items``, and as a constraint it counts in ``constraints`` but
+    NOT in ``boundaries``."""
+    return _scope_item(tenant_a, scope_matrix_project_a, item_type="constraint",
+                       status="validated",
+                       statement="Matrix constraint statement",
+                       review_date=_scope_today() - datetime.timedelta(days=3),
+                       identified_date=_scope_today() - datetime.timedelta(days=10),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_item_assumption(db, tenant_a, scope_matrix_project_a, admin_user):
+    """``assumption``/``open`` — counts into ``items``, ``assumptions`` and ``open_items``, the one
+    row the ``assumptions`` counter reads."""
+    return _scope_item(tenant_a, scope_matrix_project_a, item_type="assumption", status="open",
+                       statement="Matrix assumption statement", created_by=admin_user)
+
+
+@pytest.fixture
+def scope_matrix_item_dependency_realized(db, tenant_a, scope_matrix_project_a, admin_user):
+    """``dependency``/``realized`` — counts into ``items`` ONLY. Being non-``is_open`` it is excluded
+    from ``open_items`` (this is the row that proves ``open_items`` is not a bare ``count()``), and
+    a dependency is not a boundary, constraint or assumption."""
+    return _scope_item(tenant_a, scope_matrix_project_a, item_type="dependency", status="realized",
+                       statement="Matrix dependency statement",
+                       outcome="The dependency was satisfied.",
+                       closed_at=timezone.now() - datetime.timedelta(days=2),
+                       identified_date=_scope_today() - datetime.timedelta(days=15),
+                       created_by=admin_user)
