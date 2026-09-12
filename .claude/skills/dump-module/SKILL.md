@@ -1,13 +1,13 @@
 ---
 name: dump-module
-description: Regenerate the consolidated <NN>_<slug>.txt code dump for one (or all) NavERP modules into the temp/ folder. The .txt file contains every backend file from apps/<name>/ followed by every frontend template from templates/<name>/, with per-file separators. Use when the user says "dump module X", "regenerate the temp file for X", "extract code for module X", "give me a code dump of X", or invokes /dump-module. The user can pass a module number (0-13), an app folder name (tenants/accounts/core/dashboard plus the domain slugs like crm/accounting/inventory), a friendly name (e.g. "subscription", "ledger", "purchase order", "asset"), or "all" to regenerate every module.
+description: Regenerate the consolidated <NN>_<slug>.txt code dump for one (or all) NavERP modules into the temp/ folder. The .txt file contains every backend file from apps/<name>/ followed by every frontend template from templates/<name>/, with per-file separators. Use when the user says "dump module X", "regenerate the temp file for X", "extract code for module X", "give me a code dump of X", or invokes /dump-module. The user can pass a module number (0-23), an app folder name (tenants/accounts/core/dashboard plus the domain slugs like crm/accounting/inventory), a friendly name (e.g. "subscription", "ledger", "purchase order", "asset"), or "all" to regenerate every module.
 ---
 
 # dump-module — NavERP module code-dump generator
 
 This skill regenerates one (or all) of the consolidated `temp\<NN>_<slug>.txt` files that contain a single module's complete backend + frontend source code, for use in code review, hand-off, AI prompts, or archival.
 
-NavERP is a multi-tenant **Enterprise Resource Planning (ERP)** platform (Django 5.1 + Tailwind/HTMX/Chart.js/Lucide, MySQL/MariaDB via PyMySQL, DB `nav_erp`). **Module 0 (System Admin & Security)** is realized by the foundation apps **`core` / `accounts` / `tenants` / `dashboard`** (tenancy, IAM/RBAC, auth, audit, settings, subscription/billing, KPI aggregation). Modules **1–13** from `NavERP.md` are domain modules (one Django app each) built on demand by the **`/next-module`** skill — until each is built, dumping it produces only a header and a "(no backend folder found ...)" note, which is expected.
+NavERP is a multi-tenant **Enterprise Resource Planning (ERP)** platform (Django 5.1 + Tailwind/HTMX/Chart.js/Lucide, MySQL/MariaDB via PyMySQL, DB `nav_erp`). **Module 0 (System Admin & Security)** is realized by the foundation apps **`core` / `accounts` / `tenants` / `dashboard`** (tenancy, IAM/RBAC, auth, audit, settings, subscription/billing, KPI aggregation). Modules **1–23** from `NavERP.md` are domain modules (one Django app each) built on demand by the **`/next-module`** skill — until each is built, dumping it produces only a header and a "(no backend folder found ...)" note, which is expected.
 
 ## When to use
 
@@ -20,7 +20,7 @@ NavERP is a multi-tenant **Enterprise Resource Planning (ERP)** platform (Django
 - User wants documentation written for a module → use the README maintenance rule and edit `README.md`
 - User wants automated tests / SQA review for a module → use `/sqa-review`
 - User wants a manual click-through test → use `/manual-test`
-- User wants to scaffold a brand-new module 1–13 → use `/next-module`
+- User wants to scaffold a brand-new module 1–23 → use `/next-module`
 - User wants a code review → use `/review` or `/sqa-review`
 
 ## Inputs
@@ -30,7 +30,7 @@ The skill takes ONE positional argument — the module identifier. Accepted form
 | Form                | Examples                                     |
 |---------------------|----------------------------------------------|
 | Module number       | `0`, `5`, `13`, `00`, `05`                   |
-| App folder name     | `tenants`, `accounts`, `core`, `dashboard` (foundation); `crm`, `accounting`, `hrm`, `scm`, `inventory`, `procurement`, `projects`, `sales`, `ecommerce`, `bi`, `assets`, `quality`, `documents` (domain modules 1–13) |
+| App folder name     | `tenants`, `accounts`, `core`, `dashboard` (foundation); `crm`, `accounting`, `hrm`, `scm`, `inventory`, `procurement`, `projects`, `sales`, `ecommerce`, `bi`, `assets`, `quality`, `documents` (domain modules 1–13); `manufacturing`, `plm`, `maintenance`, `fieldservice`, `itsm`, `retail`, `facilities`, `treasury`, `esg`, `ai` (modules 14–23) |
 | Friendly keyword    | `subscription`, `users`, `ledger`, `payroll`, `purchase order`, `pipeline`, `asset`, `capa`, `document` |
 | Bulk                | `all` (or `*`) — regenerates every registry entry |
 
@@ -119,11 +119,11 @@ FILE: templates\<name>\<submodule>\<entity>\list.html
 ... (one block per .html / .htm / .js / .css / .txt file, sorted by full path)
 ```
 
-If a module's `apps\<name>\` or `templates\<name>\` folder does not exist yet (any unbuilt module 1–13), that section is replaced by `(no backend folder found at apps\<name>\)` / `(no frontend folder found at templates\<name>\)`.
+If a module's `apps\<name>\` or `templates\<name>\` folder does not exist yet (any unbuilt module 1–23), that section is replaced by `(no backend folder found at apps\<name>\)` / `(no frontend folder found at templates\<name>\)`.
 
 ## Module registry (kept in `dump_module.ps1`)
 
-Module numbers follow `NavERP.md` (modules 0–13). **Module 0** (System Admin & Security) is realized by the foundation apps `core` / `accounts` / `tenants` / `dashboard`. **Modules 1–13** are forward-compatible registry rows that map to the `/next-module` domain app slugs; their folders are created only when `/next-module` builds them.
+Module numbers follow `NavERP.md` (modules 0–23). **Module 0** (System Admin & Security) is realized by the foundation apps `core` / `accounts` / `tenants` / `dashboard`. **Modules 1–23** are forward-compatible registry rows that map to the `/next-module` domain app slugs; their folders are created only when `/next-module` builds them.
 
 | # | Slug             | apps\         | templates\    | Status |
 |---|------------------|---------------|---------------|--------|
@@ -144,6 +144,16 @@ Module numbers follow `NavERP.md` (modules 0–13). **Module 0** (System Admin &
 | 11 | `11_assets`     | `assets`      | `assets`      | Roadmap |
 | 12 | `12_quality`    | `quality`     | `quality`     | Roadmap |
 | 13 | `13_documents`  | `documents`   | `documents`   | Roadmap |
+| 14 | `14_manufacturing` | `manufacturing` | `manufacturing` | Roadmap |
+| 15 | `15_plm` | `plm` | `plm` | Roadmap |
+| 16 | `16_maintenance` | `maintenance` | `maintenance` | Roadmap |
+| 17 | `17_fieldservice` | `fieldservice` | `fieldservice` | Roadmap |
+| 18 | `18_itsm` | `itsm` | `itsm` | Roadmap |
+| 19 | `19_retail` | `retail` | `retail` | Roadmap |
+| 20 | `20_facilities` | `facilities` | `facilities` | Roadmap |
+| 21 | `21_treasury` | `treasury` | `treasury` | Roadmap |
+| 22 | `22_esg` | `esg` | `esg` | Roadmap |
+| 23 | `23_ai` | `ai` | `ai` | Roadmap |
 
 When `/next-module` builds one of the roadmap modules, the registry already covers it — no edit needed. If a NEW app/slug is added that is not in this table, append a row to the `$registry` and `$aliases` blocks in `dump_module.ps1`. The domain slugs above must stay in sync with the `Module → app-slug` table in `.claude/skills/next-module/SKILL.md`.
 
@@ -152,7 +162,7 @@ When `/next-module` builds one of the roadmap modules, the registry already cove
 1. Show the user the printed `OK ... bytes` line(s).
 2. Confirm the path: `temp\<slug>.txt`.
 3. Do NOT propose a git commit for the .txt file — `temp/` is gitignored.
-4. If the script reports "no backend folder found" or "no frontend folder found" for a module, surface that warning to the user. For a roadmap module (1–13) this simply means it hasn't been built yet — suggest `/next-module` to scaffold it. For a built module it would mean the folder name in the registry is stale.
+4. If the script reports "no backend folder found" or "no frontend folder found" for a module, surface that warning to the user. For a roadmap module (1–23) this simply means it hasn't been built yet — suggest `/next-module` to scaffold it. For a built module it would mean the folder name in the registry is stale.
 
 ## Workflow checklist
 
