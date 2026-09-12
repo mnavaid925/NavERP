@@ -35,6 +35,7 @@ class ScopeItem(TenantNumbered):
         ("validated", "Validated"),
         ("realized", "Realized"),
         ("retired", "Retired"),
+        ("violated", "Violated"),
     ]
     IMPACT_AREA_CHOICES = [
         ("schedule", "Schedule"),
@@ -102,8 +103,12 @@ class ScopeItem(TenantNumbered):
 
     @property
     def is_locked(self):
-        """Realized / retired rows are closed evidence — edit/delete refuse them."""
-        return self.status in ("realized", "retired")
+        """Realized / retired / violated rows are closed evidence — edit/delete refuse them.
+
+        ``violated`` is a closed state too: an assumption that failed or a constraint that broke
+        is the record of that failure, so it must be as immutable as a realized row.
+        """
+        return self.status in ("realized", "retired", "violated")
 
     @property
     def is_review_overdue(self):
