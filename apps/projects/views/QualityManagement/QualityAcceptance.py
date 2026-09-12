@@ -30,6 +30,11 @@ from apps.projects.views._helpers import projects as project_choices
 #: The live punch-list statuses — a conditional acceptance's open items.
 _OPEN_DEFECT_STATUSES = ("open", "in_progress")
 
+#: Cap on the rendered acceptance-queue rows — the header figure is a DB count, the table is a
+#: to-do lens; a queue long enough to hit the cap makes the table a partial view, but rendering
+#: a tenant-wide register wholesale in one response is the worse failure.
+_QUEUE_CAP = 100
+
 #: usage_decision -> (acceptance state, badge class) — the state vocabulary the board renders.
 _DECISION_STATES = {
     "accept": ("accepted", "badge-green"),
@@ -76,37 +81,43 @@ def quality_acceptance(request):
                                          status__in=_OPEN_DEFECT_STATUSES)
             .values_list("wbs_node_id")
             .annotate(n=Count("id")))
+        # Latest inspection per deliverable from a narrow values pass — the whole inspection
+        # register is never materialised to keep one row per node (first hit wins on the
+        # ``wbs_node_id, -created_at`` order). The dict carries exactly the fields the board's
+        # row template reads.
         latest_by_node = {}
-        for insp in inspections_qs.filter(wbs_node__isnull=False).order_by(
-                "wbs_node_id", "-created_at", "-id"):
-            latest_by_node.setdefault(insp.wbs_node_id, insp)
+        for insp in (inspections_qs.filter(wbs_node__isnull=False)
+                     .order_by("wbs_node_id", "-created_at", "-id")
+                     .values("wbs_node_id", "pk", "number", "result", "usage_decision")):
+            latest_by_node.setdefault(insp["wbs_node_id"], insp)
         for node in nodes:
             plan = plans_by_node.get(node.pk)
             latest = latest_by_node.get(node.pk)
-            state, badge = _acceptance_state(latest.usage_decision if latest else "pending")
+            state, badge = _acceptance_state(
+                latest["usage_decision"] if latest else "pending")
             deliverable_rows.append({
                 "wbs_node": node,
                 "plan": plan,
                 "plan_status": plan.status if plan else None,
                 "latest_inspection": latest,
-                "result": latest.result if latest else None,
-                "usage_decision": latest.usage_decision if latest else None,
+                "result": latest["result"] if latest else None,
+                "usage_decision": latest["usage_decision"] if latest else None,
                 "open_defects": open_defects_by_node.get(node.pk, 0),
                 "acceptance_state": state,
                 "badge": badge,
             })
 
     # The queue and the counts — tenant-wide unless a project is selected, so the header answers
-    # the same question at both scopes.
+    # the same question at both scopes. The header figure is a DB count; the rendered table is
+    # capped (a to-do lens, not the register wholesale).
     queue_qs = (inspections_qs.filter(inspection_type="acceptance", usage_decision="pending")
                 .order_by("planned_date", "id"))
-    acceptance_queue = list(queue_qs)
     return render(request, "projects/quality/quality_acceptance.html", {
         "projects": project_choices(tenant),
         "project": project,
         "deliverable_rows": deliverable_rows,
-        "acceptance_queue": acceptance_queue,
-        "acceptance_queue_count": len(acceptance_queue),
+        "acceptance_queue": list(queue_qs[:_QUEUE_CAP]),
+        "acceptance_queue_count": queue_qs.count(),
         "accepted_count": inspections_qs.filter(usage_decision="accept").count(),
         "conditional_count": inspections_qs.filter(
             usage_decision="accept_with_deviation").count(),
