@@ -1817,6 +1817,23 @@ LIVE_LINKS = {
         # `?status=submitted` lens (7.2's "Task Register" / 7.5's escalation-queue precedent).
         "Requirement Approval Queue":            "projects:req_list?status=submitted",
     },
+    # 7.8 Task & Work Management. The five bullets map: creation/assignment is 7.2's task register
+    # EXTENDED in place with the execution fields (the documented hand-off — there is no second
+    # task table); priority/urgency is the COMPUTED MoSCoW + Eisenhower lens; the board is the
+    # COMPUTED kanban page; the gantt is the COMPUTED timeline — all three derived on read, none
+    # is a table (7.5's boards ruling). Dependencies/blocking: the dependency GRAPH is 7.2's
+    # TaskDependency register; what 7.8 adds is the BLOCK evidence row, so that bullet maps to the
+    # block register.
+    "7.8": {
+        "Task Creation & Assignment":            "projects:tsk_list",
+        "Priority & Urgency Scoring":            "projects:task_priority",
+        "Kanban & Scrum Boards":                 "projects:task_board",
+        "Gantt Charts & Timeline Views":         "projects:gantt_timeline",
+        "Task Dependencies & Blocking":          "projects:tbk_list",
+        # Extra live leaf: the open blockers are the register's `?active=1` lens (7.7's
+        # approval-queue precedent) — the list the standup actually works from.
+        "Active Blockers":                       "projects:tbk_list?active=1",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
