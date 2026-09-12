@@ -32,6 +32,8 @@ from .models import (
     ScopeChangeRequest,
     ScopeItem,
     ScopeVerification,
+    TaskBlock,
+    TaskChecklistItem,
     TaskDependency,
 )
 
