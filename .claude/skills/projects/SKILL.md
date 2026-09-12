@@ -33,7 +33,8 @@ description: >-
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6.** 7.7–7.19 are roadmap (a parallel build may be landing them — always
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7.** 7.8–7.19 are roadmap (a parallel build is
+landing them — always
 check `apps/projects/models/` first). Do
 not assume a model exists because NavERP.md lists the feature — check first.
 
