@@ -281,8 +281,9 @@ class QualityReviewAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "review_type", "reviewer", "review_date",
                     "status", "improvement_status", "improvement_owner", "tenant")
     list_filter = ("status", "review_type", "improvement_status")
-    list_select_related = ("tenant", "project", "wbs_node", "quality_plan", "reviewer",
-                           "improvement_owner")
+    # Only the FKs a changelist column (or __str__) renders are joined — wbs_node/quality_plan
+    # render in no column, so their joins would be dead weight.
+    list_select_related = ("tenant", "project", "reviewer", "improvement_owner")
     search_fields = ("number", "title", "scope", "findings", "improvement_action")
     # status is verb-driven (report/close) and closed_at is stamped by the close verb.
     readonly_fields = ("status", "closed_at", "created_by", "created_at", "updated_at")
@@ -293,8 +294,9 @@ class DeliverableInspectionAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "wbs_node", "inspection_type", "result",
                     "usage_decision", "status", "inspector", "tenant")
     list_filter = ("status", "inspection_type", "result", "usage_decision")
-    list_select_related = ("tenant", "project", "wbs_node", "quality_plan", "milestone",
-                           "inspector", "accepted_by", "accepted_by_party")
+    # Only the FKs a changelist column (or __str__) renders are joined — quality_plan, milestone
+    # and the acceptor stamps render in no column, so their joins would be dead weight.
+    list_select_related = ("tenant", "project", "wbs_node", "inspector")
     search_fields = ("number", "title", "description", "findings")
     # The usage decision, the acceptor stamps and the status are all verb-written (record /
     # accept / reject) — the acceptance evidence keeps its stamps.
@@ -307,8 +309,9 @@ class QualityDefectAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "wbs_node", "defect_category", "severity",
                     "disposition", "status", "owner", "tenant")
     list_filter = ("status", "severity", "defect_category", "disposition")
-    list_select_related = ("tenant", "project", "wbs_node", "quality_plan", "inspection",
-                           "owner", "resolved_by")
+    # Only the FKs a changelist column (or __str__) renders are joined — quality_plan, inspection
+    # and the resolver stamp render in no column, so their joins would be dead weight.
+    list_select_related = ("tenant", "project", "wbs_node", "owner")
     search_fields = ("number", "title", "description", "root_cause", "resolution_note")
     # status is verb-driven (resolve/close), the bridge is verb-written (raise_issue) and the
     # resolution evidence is stamped by the resolve verb.
