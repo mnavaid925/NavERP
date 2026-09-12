@@ -15,7 +15,7 @@ Clean, fully responsive, blue-and-white dashboard with light/dark modes and conf
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Why NavERP is one ERP, not fourteen apps](#why-naverp-is-one-erp-not-fourteen-apps)
+2. [Why NavERP is one ERP, not twenty-four apps](#why-naverp-is-one-erp-not-twenty-four-apps)
 3. [What's implemented today](#whats-implemented-today)
 4. [Technology stack](#technology-stack)
 5. [Architecture](#architecture)
@@ -32,7 +32,7 @@ Clean, fully responsive, blue-and-white dashboard with light/dark modes and conf
 16. [Data model](#data-model)
 17. [Security posture](#security-posture)
 18. [Production hardening checklist](#production-hardening-checklist)
-19. [Module roadmap (0â€“13)](#module-roadmap-0-13)
+19. [Module roadmap (0â€“23)](#module-roadmap-0-23)
 20. [Development conventions](#development-conventions)
 21. [Troubleshooting](#troubleshooting)
 22. [License](#license)
@@ -119,14 +119,14 @@ so the button is safe to press twice. Alongside it sits an effective-dated custo
 country of origin, **snapshotted onto the charge** so a re-rate next quarter cannot rewrite what a shipment cleared
 customs at. `draft_bill()` drafts an `accounting.Bill` and stops â€” SCM posts no journal entry).
 4.19 Integration & API Gateway: the last of Module 4, and the sub-module whose discipline is knowing what it must *not* build. Its five bullets compress into four models because ERP, e-commerce, IoT and EDI are one object under four labels â€” a configured connection to somebody else's system â€” so they share one `IntegrationEndpoint` discriminated by category, each still reachable through its own category-pinned route so the EDI person lands on the trading-partner register rather than a mixed list of RFID readers and Shopify stores. **Nothing here makes a network call**: there is no HTTP client anywhere in the sub-module, and a test asserts that absence, so the endpoints, credentials, retry backoff and delivery attempts are configuration and state a human reads and acts on. Credentials are stored as prefix + SHA-256 hash â€” correct *here* precisely because no transport exists to need the plaintext back, and documented as such, since hashing is emphatically not how one stores a key that must later sign or authenticate; a rotated secret is revealed exactly once from a pop-once session key rather than flashed through the messages framework into the session store. The partner's EDI interchange identity stays on 4.17's client master and is read through the link, and a value typed where it does not belong is **refused rather than silently dropped**, because a field the system quietly ignores is worse than an error â€” the user leaves believing it applied.
-The remaining functional modules (5â€“13) are planned and scaffolded against the same core. The suite stands at **17,809 passing tests**.
+The remaining functional modules (8â€“13) plus the extension modules (14â€“23) are planned and scaffolded against the same core. The suite stands at **17,809 passing tests**.
 
-- [`NavERP.md`](NavERP.md) â€” the master catalog of all modules (0â€“13) and their sub-modules.
+- [`NavERP.md`](NavERP.md) â€” the master catalog of all modules (0â€“23) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) â€” the unified core data model (the `Party` + two-ledger spine every module reuses).
 
 ---
 
-## Why NavERP is one ERP, not fourteen apps
+## Why NavERP is one ERP, not twenty-four apps
 
 Three design ideas hold the whole platform together:
 
@@ -158,7 +158,7 @@ Three design ideas hold the whole platform together:
   attachment), `AuditLog` (append-only who/what/when/beforeâ†’after).
 - Reusable, tenant-safe **CRUD helpers** (search, filter guards, windowed pagination, audit), a
   `tenant_admin_required` decorator, an audit-log writer, a per-tenant numbering helper, and the
-  **`MODULE_CATALOG`** that drives the sidebar (modules 0â€“13 with live vs. "roadmap" links).
+  **`MODULE_CATALOG`** that drives the sidebar (modules 0â€“23 with live vs. "roadmap" links).
 
 ### `accounts` â€” identity, authentication & RBAC
 - **Custom `User`** (login by **email or username**), nullable `tenant` (the superuser has none by design),
@@ -1186,7 +1186,7 @@ Before deploying:
 
 ---
 
-## Module roadmap (0â€“13)
+## Module roadmap (0â€“23)
 
 | # | Module | App slug | Status |
 |---|--------|----------|--------|
@@ -1204,6 +1204,16 @@ Before deploying:
 | 11 | Asset Management System | `assets` | Roadmap |
 | 12 | Quality Management System (QMS) | `quality` | Roadmap |
 | 13 | Document Management System (DMS) | `documents` | Roadmap |
+| 14 | Manufacturing Execution & Production Management (MES) | `manufacturing` | Roadmap |
+| 15 | Product Lifecycle & Engineering Management (PLM) | `plm` | Roadmap |
+| 16 | Maintenance & Reliability Management (CMMS/EAM) | `maintenance` | Roadmap |
+| 17 | Field Service Management (FSM) | `fieldservice` | Roadmap |
+| 18 | IT Service Management (ITSM) | `itsm` | Roadmap |
+| 19 | Retail & Point of Sale (POS) Management | `retail` | Roadmap |
+| 20 | Facilities & Workplace Management | `facilities` | Roadmap |
+| 21 | Treasury & Financial Operations Management | `treasury` | Roadmap |
+| 22 | Sustainability, EHS & ESG Management | `esg` | Roadmap |
+| 23 | AI & Intelligent Automation | `ai` | Roadmap |
 
 Each new module is a Django app under `apps/<slug>` that **reuses** the unified core (Party, Item, ledgers,
 anchors) and **adds** only its own domain tables â€” see the coverage map in [`NavERP-ERD.md`](NavERP-ERD.md).
