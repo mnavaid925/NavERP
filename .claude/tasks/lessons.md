@@ -5,7 +5,7 @@
 > NavERP uses — so they apply directly. Project/DB references have been updated (`NavERP`, DB `nav_erp`,
 > test DB `test_nav_erp`). A few anecdotes name Sales-era apps/models (`apps/tenants` Subscription/Invoice, the
 > `compensation` reference module, "Modules 11–20") — read those as illustrative of the *pattern*, not as the
-> NavERP module map (NavERP modules are 0–13; see `NavERP.md` / `NavERP-ERD.md`).
+> NavERP module map (NavERP modules are 0–23; see `NavERP.md` / `NavERP-ERD.md`).
 
 ## L1 — Verify a database is actually ours (and empty) before migrating
 `CREATE DATABASE IF NOT EXISTS x` is a **silent no-op** when `x` already exists. This XAMPP instance hosts many other
