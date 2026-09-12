@@ -57,8 +57,9 @@
           <form method="post" action="{% url 'projects:sci_realize' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} realized?');">
             {% csrf_token %}
             <div class="form-group">
-              <label class="form-label" for="realize_outcome">Outcome (required)</label>
-              <textarea class="form-textarea" id="realize_outcome" name="outcome" rows="3" placeholder="The assumption held, or the constraint bit — what actually happened."></textarea>
+              <label class="form-label" for="{{ outcome_form.outcome.id_for_label }}">Outcome (required)</label>
+              {{ outcome_form.outcome }}
+              {{ outcome_form.outcome.errors }}
             </div>
             <button class="btn btn-outline" type="submit"><i data-lucide="circle-dot"></i> Mark realized</button>
           </form>
@@ -66,7 +67,7 @@
             {% csrf_token %}
             <div class="form-group">
               <label class="form-label" for="retire_outcome">Outcome (required)</label>
-              <textarea class="form-textarea" id="retire_outcome" name="outcome" rows="3" placeholder="Why the boundary moved or the item stopped mattering."></textarea>
+              <textarea class="form-textarea" id="retire_outcome" name="outcome" rows="3" placeholder="Why the boundary moved or the item stopped mattering." required></textarea>
             </div>
             <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Retire</button>
           </form>
