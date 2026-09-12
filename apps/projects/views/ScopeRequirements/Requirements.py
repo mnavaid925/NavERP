@@ -152,8 +152,8 @@ def req_submit(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def req_approve(request, pk):
     """Admin-only: the requirement gate. Approval stamps the approver and the instant."""
     obj = get_object_or_404(Requirement, pk=pk, tenant=request.tenant)
@@ -215,8 +215,8 @@ def req_implement(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def req_verify(request, pk):
     """Admin-only: the acceptance gate. Verification freezes the row."""
     obj = get_object_or_404(Requirement, pk=pk, tenant=request.tenant)
