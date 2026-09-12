@@ -87,8 +87,9 @@
               <form method="post" action="{% url 'projects:scr_reject' obj.pk %}" onsubmit="return confirm('Reject {{ obj.number }}?');">
                 {% csrf_token %}
                 <div class="form-group">
-                  <label class="form-label" for="decision_note">Board reason (required to reject)</label>
-                  <textarea class="form-textarea" id="decision_note" name="decision_note" rows="3" placeholder="Why the board turned the change down."></textarea>
+                  <label class="form-label" for="{{ decision_form.decision_note.id_for_label }}">Board reason (required to reject)</label>
+                  {{ decision_form.decision_note }}
+                  {{ decision_form.decision_note.errors }}
                 </div>
                 <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
               </form>
