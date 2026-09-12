@@ -119,3 +119,46 @@ verified true. Route table: all 17 routes match the contract exactly.
 
 **Architectural verdict.** 7.8 sits coherently in the projects spine: extend `ProjectTask` in place, derive every board/quadrant/blocked/rollup figure on read, store nothing but two small verb-stamped tables, keep CCA advisory — executed faithfully, boundary greps clean (no money column, no second dependency graph/time log/assignment register/task table, no reach into 7.3/7.4/7.5), migration additive-only, re-exports and urls concatenation correct. What is not fully coherent lives at the integration seams: the bulk-verb tenant-scoping hole (C1), sidebar/overview drift (I1/I2), the UI-less bulk verb (I3), the doubled dependency render (I4) — all seam-level, plus the one contract-amendment call (I5) on the priority lens's scope.
 
+
+### Lane 3 — frontend-reviewer (serial pass 3)
+
+Scope note: context-var integrity verified template-by-template against every view's context
+dict — no L7/L8 blanks anywhere; filter bars, CRUD completeness, badge fallbacks, empty
+states, pagination GET-preservation, reversed URL names all check out.
+
+- [I1] Bulk-update verb is unreachable — no template anywhere POSTs `task_ids`
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py`  lines: 207-317 (route `urls/TaskWorkManagement/ProjectTasks.py:26`)
+  finding: `tsk_bulk_update` is fully built (gating, per-row audit, redirect to `tsk_list`) and pinned by the contract as bullet 1's "bulk operations", but a repo-wide grep of `templates/` finds zero occurrences of `name="task_ids"` and zero forms/clicks targeting `projects:tsk_bulk_update` — the feature has no UI entry point.
+  fix: add a bulk bar to the task register list (`planning/task/list.html`): per-row checkboxes posting `task_ids`, one status/assignee/priority picker, a single POST form with `{% csrf_token %}` and a confirm — or defer the route out of this pass with a note.
+- [I2] Board offers Start/Complete on blocked cards — a guaranteed-refusal click
+  file: `templates/projects/taskwork/task_board.html`  lines: 140-152
+  finding: the verb block fires for every `planned`/`in_progress` card, including dependency- or manually-blocked ones; `tsk_start`/`tsk_complete` hard-refuse while `is_blocked`, so the button invites an error the page already predicts via its own Blocked badge. The ready queue correctly excludes blocked tasks, making the inconsistency visible on the same page.
+  fix: wrap the actions div in `{% if not t.is_dependency_blocked and not t.active_blocks %}` (or render a disabled button with a "clear the block first" title).
+- [I3] Gantt deliverable tooltips render raw `None` for dates/progress
+  file: `templates/projects/taskwork/gantt_timeline.html`  lines: 102-104
+  finding: the bar `title` reads `bar.task.planned_start`/`bar.task.planned_end` and `bar.progress_pct`, but for a deliverable the bar window is the descendant min/max computed in the view — the deliverable's own dates are typically unset, so hovering shows "None → None · None% complete" (raw `None` twice; house law forbids it). Work-package bars are unaffected.
+  fix: have `_gantt_bars` put the resolved window (`start`/`end`) on each bar dict and build the tooltip from those, guarding `progress_pct` with `{% if bar.progress_pct is not None %}…{% else %}no rollup{% endif %}`.
+- [I4] Today marker is a header badge only — the pinned today line is not drawn on the chart
+  file: `templates/projects/taskwork/gantt_timeline.html`  lines: 83-87, 90-116
+  finding: the contract (§6) and the view docstring pin "today line from `today`"; the template renders only a conditional `badge-info` in the card header. On the chart itself there is no vertical marker, so "where are we in the window" is unreadable against the bars.
+  fix: add one absolutely-positioned `.tw-today` line per track (or a single overlay across `.tw-chart`): `left: {{ today_offset_pct }}%` computed in the view when `window.start <= today <= window.end`.
+- [I5] Eisenhower badges flatten Critical to amber, contradicting the suite's own scale
+  file: `templates/projects/taskwork/task_priority.html`  lines: 136
+  finding: `{% if t.priority == 'critical' or t.priority == 'high' %}` renders Critical and High identically, while every other badge ternary in the same 7.8 suite and the seeded scale use `critical → badge-red`. Same-value-different-colour across one feature is a consistency defect.
+  fix: split the branch: critical → `badge-red`, high → `badge-amber`.
+- [M1] Overview 7.8 stat cards diverge from the pinned context keys and undercount "blocked"
+  file: `templates/projects/overview.html`  lines: 44-46 (view `apps/projects/views/ProjectInitiation/Overview.py:127-132`)
+  finding: the contract pins `in_progress_task_count`/`blocked_task_count`/`overdue_task_count`; the page ships `task_execution_count` (all tasks), `open_block_count` (open `TaskBlock` rows) and `overdue_task_count`. Every used key exists (no blank render), but a dependency-blocked task with no manual block — counted as Blocked on the board and priority lens — is invisible in the overview stats, so the landing page and the execution pages disagree on the same word.
+  fix: align the cards with the pinned keys/semantics (compute `blocked` over a materialized live list like the board does) or relabel to "Open blocks" to make the narrower meaning explicit.
+- [M2] Page-local `<style>` blocks are a new pattern for screen pages (UI consequence: contained)
+  file: `templates/projects/taskwork/task_board.html:4-21`, `gantt_timeline.html:4-21`, `task_priority.html:4-14`
+  finding: the only prior `<style>` users in the repo are print/certificate templates; every screen page styles through `theme.css`. Judged on UI consequence: the `tw-` prefix prevents collisions, the rules reuse theme variables, and the responsive breakpoints work — a styling-system fork, not a defect.
+  fix: promote the `tw-` rules into `theme.css` (same names) in a follow-up so future boards inherit them.
+- [M3] Ready-queue table header says "Action", everywhere else says "Actions"
+  file: `templates/projects/taskwork/task_board.html`  lines: 177
+  finding: sibling tables all use `<th class="table-actions">Actions</th>`; the board's ready queue is the lone singular.
+  fix: change the label to "Actions".
+- [M4] Start/Complete exist only on the board; the task's own detail page cannot move lifecycle
+  file: `templates/projects/planning/task/detail.html`  lines: 41-46, 95
+  finding: task detail gains the blocks panel and checklist panel, but not the Start/Complete verbs — the lifecycle entry points live solely on `task_board.html`; the priority lens work queue has no action column either. Contract-conformant (§6 pins the verbs on the board only), but the verb surface is asymmetric: one computed page can start/finish work, the object's own page cannot.
+  fix (next pass): add Start/Complete forms (same gating as I2) to the task detail page header or the work queue's rows.
