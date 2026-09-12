@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Task Board{% endblock %}
+{% block content %}
+  <style>
+    /* Board-local layout (7.8) — prefixed tw- classes; theme.css stays the shared system.
+       The four columns are flex/grid columns, one per STATUS_CHOICES value in declared
+       order; cards stack inside each column. CSS-only: progression happens through the
+       per-card POST verbs, not drag-and-drop. */
+    .tw-board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); gap: 1rem; align-items: start; }
+    @media (max-width: 1150px) { .tw-board { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 700px) { .tw-board { grid-template-columns: 1fr; } }
+    .tw-column { background: var(--page-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; }
+    .tw-column-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; }
+    .tw-column-head h2 { margin: 0; font-size: .95rem; }
+    .tw-cards { display: flex; flex-direction: column; gap: .6rem; }
+    .tw-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .6rem .7rem; box-shadow: var(--shadow); }
+    .tw-card-title { font-weight: 600; font-size: .92rem; }
+    .tw-badge-row { display: flex; flex-wrap: wrap; gap: .3rem; margin: .35rem 0; }
+    .tw-card-meta { font-size: .82rem; color: var(--text-muted); }
+    .tw-card-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
+  </style>
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Task Board</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><span>Board</span></div>
+      <p class="text-muted">The workflow columns are the task statuses in declared order — every blocked, overdue and ready figure is computed from the rows on read, never stored. Progression runs through the card verbs, not drag-and-drop.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:gantt_timeline' %}" class="btn btn-outline"><i data-lucide="calendar-range"></i> Gantt timeline</a>
+      <a href="{% url 'projects:task_priority' %}" class="btn btn-outline"><i data-lucide="flag"></i> Priority lens</a>
+      <a href="{% url 'projects:tsk_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Task register</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">All tasks in this workspace</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:200px;">
+          <label class="form-label" for="assignee-select">Assignee</label>
+          <select name="assignee" id="assignee-select" class="form-select">
+            <option value="">Anyone (whole team)</option>
+            {% for u in assignees %}
+              <option value="{{ u.pk }}" {% if request.GET.assignee == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+        <a href="{% url 'projects:task_board' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-tree"></i></div>
+      <div class="stat-value">{{ total_count }}</div>
+      <div class="stat-label">Tasks on the board</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ban"></i></div>
+      <div class="stat-value">{{ blocked_count }}</div>
+      <div class="stat-label">Blocked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ overdue_count }}</div>
+      <div class="stat-label">Overdue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="play"></i></div>
+      <div class="stat-value">{{ ready_queue|length }}</div>
+      <div class="stat-label">Ready to start</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The columns are ProjectTask.STATUS_CHOICES in declared order (Ruling 4 — no column
+    config). WIP limits render as counts today: WIP_LIMITS is deliberately empty until 7.19
+    ships the limit values, so column.over_limit is always False and the Over-limit badge
+    below never fires yet — filling the dict is the whole 7.19 change. Deliverable nodes are
+    summary cards: they carry no verb buttons, only the rollup computed over their descendant
+    work packages on read.
+  {% endcomment %}
+  {% if total_count %}
+    <div class="tw-board">
+      {% for column in columns %}
+        <div class="tw-column">
+          <div class="tw-column-head">
+            <h2>{{ column.label }}</h2>
+            <span class="badge {% if column.over_limit %}badge-red{% else %}badge-slate{% endif %}">{{ column.count }}</span>
+            {% if column.over_limit %}<span class="badge badge-red">Over WIP limit</span>{% endif %}
+          </div>
+          <div class="tw-cards">
+            {% for t in column.tasks %}
+              {% if t.node_type == 'deliverable' %}
+                <div class="tw-card">
+                  <div class="tw-card-title"><a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a> {{ t.name }}</div>
+                  <div class="tw-badge-row">
+                    <span class="badge badge-info">Deliverable</span>
+                    {% if t.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+                  </div>
+                  <div class="tw-card-meta">Summary node — {{ t.board_rollup.wp_count }} work package{{ t.board_rollup.wp_count|pluralize }}
+                    {% if t.board_rollup.progress_pct is not None %} · {{ t.board_rollup.progress_pct }}% rolled up{% else %} · no work packages yet{% endif %}</div>
+                </div>
+              {% else %}
+                <div class="tw-card">
+                  <div class="tw-card-title"><a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a> {{ t.name }}</div>
+                  <div class="tw-badge-row">
+                    {% if t.priority == 'critical' %}<span class="badge badge-red">{{ t.get_priority_display }}</span>
+                    {% elif t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>
+                    {% elif t.priority == 'medium' %}<span class="badge badge-info">{{ t.get_priority_display }}</span>
+                    {% else %}<span class="badge badge-slate">{{ t.get_priority_display }}</span>{% endif %}
+                    {% if t.moscow == 'must_have' %}<span class="badge badge-red">{{ t.get_moscow_display }}</span>
+                    {% elif t.moscow == 'should_have' %}<span class="badge badge-amber">{{ t.get_moscow_display }}</span>
+                    {% elif t.moscow == 'could_have' %}<span class="badge badge-info">{{ t.get_moscow_display }}</span>
+                    {% elif t.moscow == 'wont_have' %}<span class="badge badge-muted">{{ t.get_moscow_display }}</span>
+                    {% else %}<span class="badge badge-slate">Unclassified</span>{% endif %}
+                    {% if t.is_blocked %}<span class="badge badge-red">Blocked</span>{% endif %}
+                    {% if t.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+                  </div>
+                  <div class="tw-card-meta">
+                    <a href="{% url 'projects:prj_detail' t.project_id %}">{{ t.project.name }}</a>
+                    {% if t.assignee %} · {{ t.assignee.get_full_name|default:t.assignee.email }}{% else %} · <span class="text-muted">Unassigned</span>{% endif %}
+                    {% if t.planned_start %} · {{ t.planned_start|date:"M d, Y" }}{% endif %}
+                  </div>
+                  {% if t.status == 'planned' or t.status == 'in_progress' %}
+                    <div class="tw-card-actions">
+                      {% if t.status == 'planned' %}
+                        <form method="post" action="{% url 'projects:tsk_start' t.pk %}" onsubmit="return confirm('Start task {{ t.number }}? This stamps its actual start.');">
+                          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="play"></i> Start</button>
+                        </form>
+                      {% else %}
+                        <form method="post" action="{% url 'projects:tsk_complete' t.pk %}" onsubmit="return confirm('Complete task {{ t.number }}? This attests 100% and stamps its actual finish.');">
+                          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Complete</button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing here</h3><p>No task sits in {{ column.label }} for this scope.</p></div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state"><i data-lucide="list-checks"></i><h3>No tasks on the board</h3><p>Create tasks on the WBS tree or the task register — the columns, the ready queue and every count build themselves from the rows.</p></div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2>Ready queue</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Planned tasks whose predecessors are all settled and that carry no open block — the ones the Start verb can actually take right now, ordered by planned start.</p>
+      {% if ready_queue %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Task</th><th>Project</th><th>Priority</th><th>Assignee</th><th>Planned start</th><th class="table-actions">Action</th></tr></thead>
+            <tbody>
+              {% for t in ready_queue %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a><div class="text-muted">{{ t.name }}</div></td>
+                  <td><a href="{% url 'projects:prj_detail' t.project_id %}">{{ t.project.name }}</a></td>
+                  <td>
+                    {% if t.priority == 'critical' %}<span class="badge badge-red">{{ t.get_priority_display }}</span>
+                    {% elif t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>
+                    {% elif t.priority == 'medium' %}<span class="badge badge-info">{{ t.get_priority_display }}</span>
+                    {% else %}<span class="badge badge-slate">{{ t.get_priority_display }}</span>{% endif %}
+                  </td>
+                  <td>{% if t.assignee %}{{ t.assignee.get_full_name|default:t.assignee.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>{% if t.planned_start %}{{ t.planned_start|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>
+                    <form method="post" action="{% url 'projects:tsk_start' t.pk %}" onsubmit="return confirm('Start task {{ t.number }}? This stamps its actual start.');">
+                      {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="play"></i> Start</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="play"></i><h3>Nothing is ready</h3><p>A planned task lands here once every predecessor finishes and no block stands — clear the blockers or start upstream work first.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
