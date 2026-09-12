@@ -1,7 +1,7 @@
 # NavERP — Enterprise Resource Planning
 
 > **Master module catalog.** This is the authoritative, hierarchical map of *what* NavERP does — every module
-> (0–13), its sub-modules, and the capabilities within each. It is the planning companion to:
+> (0–23), its sub-modules, and the capabilities within each. It is the planning companion to:
 > - [`NavERP-ERD.md`](NavERP-ERD.md) — *how* the data is modeled (the shared `Party` + two-ledger spine every module reuses), including the **as-built** foundation schema.
 > - [`README.md`](README.md) — *how* to install, run, and operate what has been built so far.
 
@@ -11,7 +11,7 @@ items, money, and stock are modeled **once** and reused everywhere — never dup
 
 Cross-cutting platform capabilities — multi-tenancy, identity, RBAC, authentication, data security, audit,
 integration/API, backup/DR, monitoring, and related concerns — are defined ONCE in **Module 0 — System Admin &
-Security** and are therefore not repeated inside the functional modules. Each functional module (1–13) lists only
+Security** and are therefore not repeated inside the functional modules. Each functional module (1–23) lists only
 its own domain-specific capabilities and inherits Module 0 for everything cross-cutting.
 
 ### How to read this catalog
@@ -25,7 +25,7 @@ Modules are delivered incrementally, sub-module by sub-module. Each **reuses** t
 `StockMove`, `JournalEntry`, `OrgUnit`, `Activity`, `Document`, …) and **adds** only its own domain tables, FK'ing
 into the core by string. Every record is tenant-scoped; every transaction posts to the two universal ledgers so
 balances and on-hand quantities are always **derived**, never hand-edited. See the
-[Module coverage map](NavERP-ERD.md#module-coverage-map-0-13) (reuse vs. add per module).
+[Module coverage map](NavERP-ERD.md#module-coverage-map-0-23) (reuse vs. add per module).
 
 ## Module Index
 
@@ -43,6 +43,16 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 11. Asset Management System
 12. Quality Management System (QMS)
 13. Document Management System (DMS)
+14. Manufacturing Execution & Production Management (MES)
+15. Product Lifecycle & Engineering Management (PLM)
+16. Maintenance & Reliability Management (CMMS/EAM)
+17. Field Service Management (FSM)
+18. IT Service Management (ITSM)
+19. Retail & Point of Sale (POS) Management
+20. Facilities & Workplace Management
+21. Treasury & Financial Operations Management
+22. Sustainability, EHS & ESG Management
+23. AI & Intelligent Automation
 
 ### Module status & app mapping
 
@@ -62,6 +72,16 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 | 11 | Asset Management System | `assets` | ⬜ Roadmap |
 | 12 | Quality Management System (QMS) | `quality` | ⬜ Roadmap |
 | 13 | Document Management System (DMS) | `documents` | ⬜ Roadmap |
+| 14 | Manufacturing Execution & Production Management (MES) | `manufacturing` | ⬜ Roadmap |
+| 15 | Product Lifecycle & Engineering Management (PLM) | `plm` | ⬜ Roadmap |
+| 16 | Maintenance & Reliability Management (CMMS/EAM) | `maintenance` | ⬜ Roadmap |
+| 17 | Field Service Management (FSM) | `fieldservice` | ⬜ Roadmap |
+| 18 | IT Service Management (ITSM) | `itsm` | ⬜ Roadmap |
+| 19 | Retail & Point of Sale (POS) Management | `retail` | ⬜ Roadmap |
+| 20 | Facilities & Workplace Management | `facilities` | ⬜ Roadmap |
+| 21 | Treasury & Financial Operations Management | `treasury` | ⬜ Roadmap |
+| 22 | Sustainability, EHS & ESG Management | `esg` | ⬜ Roadmap |
+| 23 | AI & Intelligent Automation | `ai` | ⬜ Roadmap |
 
 ---
 
@@ -2092,3 +2112,1152 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 - **Brand Guidelines & Asset Governance** — Approved asset libraries, brand compliance checks, and usage analytics.
 
 ---
+
+## 14. Manufacturing Execution & Production Management (MES)
+
+### 14.1 Manufacturing Master Data
+- **Work Centers** — Define and manage work centers.
+- **Machines** — Define and manage machines.
+- **Calendars** — Define and manage calendars.
+- **BOMs** — Define and manage bOMs.
+- **Routings** — Define and manage routings.
+- **Production Resources** — Define and manage production resources.
+
+### 14.2 Bill of Materials (BOM)
+- **Multi-level BOMs** — Define and manage multi-level BOMs.
+- **Alternates** — Define and manage alternates.
+- **Revisions** — Define and manage revisions.
+- **Effectivity** — Define and manage effectivity.
+- **Co-products And By-products** — Define and manage co-products and by-products.
+
+### 14.3 Routing & Operations
+- **Operation Sequences** — Define and manage operation sequences.
+- **Labor Standards** — Define and manage labor standards.
+- **Machine Standards** — Define and manage machine standards.
+- **Setup And Teardown Times** — Define and manage setup and teardown times.
+
+### 14.4 Production Planning
+- **Master Production Schedules** — Plan and manage master production schedules.
+- **Make-to-stock** — Define and manage make-to-stock.
+- **Make-to-order And Demand-driven Plans** — Define and manage make-to-order and demand-driven plans.
+
+### 14.5 Material Requirements Planning (MRP)
+- **Net Requirements** — Define and manage net requirements.
+- **Planned Orders** — Define and manage planned orders.
+- **Lead Times** — Define and manage lead times.
+- **Safety Stock And Rescheduling** — Define and manage safety stock and rescheduling.
+
+### 14.6 Capacity Planning
+- **Work-center Capacity** — Define and manage work-center capacity.
+- **overload/underload Analysis** — Analyze and report on overload/underload analysis.
+- **Finite And Rough-cut Planning** — Plan and manage finite and rough-cut planning.
+
+### 14.7 Production Scheduling
+- **Dispatch Lists** — Define and manage dispatch lists.
+- **Sequence Optimization** — Define and manage sequence optimization.
+- **Constraints** — Define and manage constraints.
+- **Changeovers And Schedule Adherence** — Plan and manage changeovers and schedule adherence.
+
+### 14.8 Work Order Management
+- **Release** — Define and manage release.
+- **Start** — Define and manage start.
+- **Pause** — Define and manage pause.
+- **Complete** — Define and manage complete.
+- **Scrap** — Define and manage scrap.
+- **Rework And Close Production Orders** — Define and manage rework and close production orders.
+
+### 14.9 Shop Floor Control
+- **Operator Dispatching** — Define and manage operator dispatching.
+- **Workstation Queues** — Define and manage workstation queues.
+- **Labor Capture And Real-time Progress** — Define and manage labor capture and real-time progress.
+
+### 14.10 Labor & Machine Tracking
+- **Actual Labor** — Define and manage actual labor.
+- **Machine Runtime** — Define and manage machine runtime.
+- **Downtime** — Define and manage downtime.
+- **Setup Time And Production Counters** — Define and manage setup time and production counters.
+
+### 14.11 WIP & Production Costing
+- **WIP Valuation** — Define and manage wIP valuation.
+- **Actual Vs. Standard Cost** — Define and manage actual vs. standard cost.
+- **Variance And Burden Allocation** — Define and manage variance and burden allocation.
+
+### 14.12 Material Issue & Backflush
+- **Manual Issue** — Define and manage manual issue.
+- **Backflush** — Define and manage backflush.
+- **Substitutions** — Define and manage substitutions.
+- **Shortages And Material Consumption** — Define and manage shortages and material consumption.
+
+### 14.13 Subcontract / External Processing
+- **Outside Processing Operations** — Define and manage outside processing operations.
+- **Supplier Work Orders** — Define and manage supplier work orders.
+- **Receipts And Costs** — Define and manage receipts and costs.
+
+### 14.14 Traceability & Genealogy
+- **Lot/serial Genealogy** — Define and manage lot/serial genealogy.
+- **Component-to-finished-good Tracing And Recall Support** — Define and manage component-to-finished-good tracing and recall support.
+
+### 14.15 Production Quality Integration
+- **In-process Inspections** — Define and manage in-process inspections.
+- **hold/release Decisions** — Define and manage hold/release decisions.
+- **Defects** — Define and manage defects.
+- **NCR And CAPA Handoff** — Define and manage nCR and CAPA handoff.
+
+### 14.16 Downtime & OEE
+- **Availability** — Define and manage availability.
+- **Performance** — Define and manage performance.
+- **Quality** — Define and manage quality.
+- **Downtime Reasons And OEE Dashboards** — Analyze and report on downtime reasons and OEE dashboards.
+
+### 14.17 Scrap, Rework & Yield
+- **Scrap Capture** — Define and manage scrap capture.
+- **Rework Orders** — Define and manage rework orders.
+- **Yield Analysis** — Analyze and report on yield analysis.
+- **Root-cause Categories** — Define and manage root-cause categories.
+
+### 14.18 Production Maintenance Integration
+- **Machine Service Requests** — Define and manage machine service requests.
+- **Planned Maintenance Windows And Maintenance Coordination** — Define and manage planned maintenance windows and maintenance coordination.
+
+### 14.19 Manufacturing Analytics
+- **Throughput** — Define and manage throughput.
+- **Schedule Adherence** — Plan and manage schedule adherence.
+- **Utilization** — Define and manage utilization.
+- **Yield** — Define and manage yield.
+- **Variance And Bottleneck Analysis** — Analyze and report on variance and bottleneck analysis.
+
+### 14.20 MES Integration & IoT
+- **Machine Connectivity** — Integrate and exchange data for machine connectivity.
+- **PLC/IoT Events** — Define and manage pLC/IoT events.
+- **Edge Gateways** — Integrate and exchange data for edge gateways.
+- **APIs And Real-time Shop-floor Data** — Integrate and exchange data for aPIs and real-time shop-floor data.
+
+## 15. Product Lifecycle & Engineering Management (PLM)
+
+### 15.1 Product Portfolio Management
+- **Product Families** — Define and manage product families.
+- **Lifecycle Stages** — Define and manage lifecycle stages.
+- **Market Segments And Portfolio Health** — Define and manage market segments and portfolio health.
+
+### 15.2 Engineering Item Master
+- **Engineering Parts** — Define and manage engineering parts.
+- **Specifications** — Define and manage specifications.
+- **Classifications And Controlled Attributes** — Control and govern classifications and controlled attributes.
+
+### 15.3 Engineering BOM (EBOM)
+- **Design Structures** — Define and manage design structures.
+- **Assemblies** — Define and manage assemblies.
+- **Components** — Define and manage components.
+- **Reference Designators And Effectivity** — Define and manage reference designators and effectivity.
+
+### 15.4 Manufacturing BOM Transformation
+- **EBOM-to-MBOM Mapping** — Define and manage eBOM-to-MBOM mapping.
+- **Plant-specific Structures And Production Readiness** — Define and manage plant-specific structures and production readiness.
+
+### 15.5 CAD & File Management
+- **CAD References** — Define and manage cAD references.
+- **Engineering Files** — Define and manage engineering files.
+- **Previews** — Define and manage previews.
+- **Relationships And Controlled Storage** — Control and govern relationships and controlled storage.
+
+### 15.6 Engineering Change Management
+- **ECR/ECO/ECN Initiation** — Define and manage eCR/ECO/ECN initiation.
+- **Impact Analysis** — Analyze and report on impact analysis.
+- **Approvals And Effective Dates** — Control and govern approvals and effective dates.
+
+### 15.7 Revision & Effectivity Control
+- **Revision Sequences** — Define and manage revision sequences.
+- **Date/serial/lot Effectivity And Supersession** — Define and manage date/serial/lot effectivity and supersession.
+
+### 15.8 Requirements Management
+- **Product Requirements** — Define and manage product requirements.
+- **Traceability** — Track and monitor traceability.
+- **Acceptance Criteria And Verification Links** — Define and manage acceptance criteria and verification links.
+
+### 15.9 Design Reviews
+- **Review Boards** — Define and manage review boards.
+- **Comments** — Define and manage comments.
+- **Decisions** — Define and manage decisions.
+- **Action Items And Approval Records** — Control and govern action items and approval records.
+
+### 15.10 Prototype & Pilot Management
+- **Prototype Builds** — Define and manage prototype builds.
+- **Pilot Runs** — Define and manage pilot runs.
+- **Lessons Learned And Readiness Gates** — Define and manage lessons learned and readiness gates.
+
+### 15.11 Variant & Configuration Management
+- **Options** — Define and manage options.
+- **Variants** — Define and manage variants.
+- **Configurable Products And Rules-based Structures** — Define and manage configurable products and rules-based structures.
+
+### 15.12 Product Compliance
+- **Material Declarations** — Define and manage material declarations.
+- **Standards** — Define and manage standards.
+- **Certifications And Regulatory Requirements** — Define and manage certifications and regulatory requirements.
+
+### 15.13 Supplier Engineering
+- **Supplier Part Mapping** — Define and manage supplier part mapping.
+- **Qualification** — Define and manage qualification.
+- **Co-design And Engineering Collaboration** — Define and manage co-design and engineering collaboration.
+
+### 15.14 Cost & Should-Cost Analysis
+- **Target Cost** — Define and manage target cost.
+- **Engineering Cost Rollups** — Define and manage engineering cost rollups.
+- **make/buy Analysis And Cost Impact** — Analyze and report on make/buy analysis and cost impact.
+
+### 15.15 Product Quality Planning
+- **CTQs** — Define and manage cTQs.
+- **Control Plans** — Control and govern control plans.
+- **FMEA Linkage** — Define and manage fMEA linkage.
+- **Validation And Launch Quality Gates** — Define and manage validation and launch quality gates.
+
+### 15.16 Product Testing & Validation
+- **Test Plans** — Define and manage test plans.
+- **Test Results** — Define and manage test results.
+- **Failures** — Define and manage failures.
+- **Verification And Validation Evidence** — Define and manage verification and validation evidence.
+
+### 15.17 Lifecycle & Obsolescence Management
+- **Introduction** — Define and manage introduction.
+- **Maturity** — Define and manage maturity.
+- **Phase-out** — Define and manage phase-out.
+- **End-of-life And Replacement Planning** — Plan and manage end-of-life and replacement planning.
+
+### 15.18 Engineering Collaboration
+- **Tasks** — Define and manage tasks.
+- **Comments** — Define and manage comments.
+- **Reviews** — Define and manage reviews.
+- **Shared Workspaces And External Collaboration** — Define and manage shared workspaces and external collaboration.
+
+### 15.19 PLM Analytics
+- **Change Cycle Time** — Define and manage change cycle time.
+- **Reuse** — Define and manage reuse.
+- **Engineering Workload** — Define and manage engineering workload.
+- **Cost And Product Health KPIs** — Analyze and report on cost and product health KPIs.
+
+### 15.20 PLM Integration Hub
+- **CAD/CAE** — Define and manage cAD/CAE.
+- **MES** — Define and manage mES.
+- **ERP** — Define and manage eRP.
+- **QMS** — Define and manage qMS.
+- **Supplier Systems** — Integrate and exchange data for supplier systems.
+- **APIs And Controlled Data Exchange** — Integrate and exchange data for aPIs and controlled data exchange.
+
+## 16. Maintenance & Reliability Management (CMMS/EAM)
+
+### 16.1 Maintenance Master Data
+- **Asset Classes** — Define and manage asset classes.
+- **Maintenance Locations** — Define and manage maintenance locations.
+- **Equipment Hierarchies And Technical Objects** — Define and manage equipment hierarchies and technical objects.
+
+### 16.2 Preventive Maintenance
+- **Time-** — Define and manage time-.
+- **Usage- And Condition-based Maintenance Plans And Recurring Schedules** — Plan and manage usage- and condition-based maintenance plans and recurring schedules.
+
+### 16.3 Corrective Maintenance
+- **Breakdown Reporting** — Analyze and report on breakdown reporting.
+- **Work Orders** — Define and manage work orders.
+- **Diagnosis** — Define and manage diagnosis.
+- **Repair And Restoration** — Define and manage repair and restoration.
+
+### 16.4 Predictive Maintenance
+- **Condition Indicators** — Define and manage condition indicators.
+- **Anomaly Scores** — Define and manage anomaly scores.
+- **Failure Prediction And Maintenance Recommendations** — Define and manage failure prediction and maintenance recommendations.
+
+### 16.5 Maintenance Work Orders
+- **Create** — Define and manage create.
+- **Plan** — Define and manage plan.
+- **Assign** — Define and manage assign.
+- **Execute** — Define and manage execute.
+- **Verify And Close Maintenance Jobs** — Define and manage verify and close maintenance jobs.
+
+### 16.6 Maintenance Planning & Scheduling
+- **Backlog Prioritization** — Define and manage backlog prioritization.
+- **Technician Capacity** — Define and manage technician capacity.
+- **Shutdown Plans And Weekly Schedules** — Plan and manage shutdown plans and weekly schedules.
+
+### 16.7 Spare Parts Management
+- **Maintenance Spares** — Define and manage maintenance spares.
+- **Reservations** — Define and manage reservations.
+- **Kits** — Define and manage kits.
+- **Reorder Levels And issue/return Tracking** — Track and monitor reorder levels and issue/return tracking.
+
+### 16.8 Maintenance BOM
+- **Parts** — Define and manage parts.
+- **Tools And Consumables Linked To Maintainable Assets** — Define and manage tools and consumables linked to maintainable assets.
+
+### 16.9 Failure & Root Cause Analysis
+- **Failure Codes** — Define and manage failure codes.
+- **Symptoms** — Define and manage symptoms.
+- **Causes** — Define and manage causes.
+- **Corrective Actions And Reliability Analysis** — Analyze and report on corrective actions and reliability analysis.
+
+### 16.10 Reliability Engineering
+- **MTBF** — Define and manage mTBF.
+- **MTTR** — Define and manage mTTR.
+- **Failure Rates** — Define and manage failure rates.
+- **Reliability Growth And Bad-actor Analysis** — Analyze and report on reliability growth and bad-actor analysis.
+
+### 16.11 Calibration Management
+- **Calibration Plans** — Define and manage calibration plans.
+- **Standards** — Define and manage standards.
+- **Certificates** — Define and manage certificates.
+- **Due Dates And Out-of-tolerance Workflows** — Define and manage due dates and out-of-tolerance workflows.
+
+### 16.12 Warranty Management
+- **Warranty Terms** — Define and manage warranty terms.
+- **Covered Repairs** — Define and manage covered repairs.
+- **Vendor Claims And Reimbursement Tracking** — Track and monitor vendor claims and reimbursement tracking.
+
+### 16.13 Service Contracts & SLAs
+- **Maintenance Contracts** — Define and manage maintenance contracts.
+- **Response Commitments** — Define and manage response commitments.
+- **Coverage And Renewals** — Define and manage coverage and renewals.
+
+### 16.14 Shutdown & Turnaround Management
+- **Major Shutdown Planning** — Plan and manage major shutdown planning.
+- **Work Packs** — Define and manage work packs.
+- **Milestones** — Define and manage milestones.
+- **Contractors And Readiness** — Define and manage contractors and readiness.
+
+### 16.15 Mobile Maintenance
+- **Technician Mobile Work** — Define and manage technician mobile work.
+- **Checklists** — Define and manage checklists.
+- **Photos** — Define and manage photos.
+- **Signatures And Offline Execution** — Define and manage signatures and offline execution.
+
+### 16.16 Safety & Permit Integration
+- **Permit Requirements** — Define and manage permit requirements.
+- **lockout/tagout References** — Define and manage lockout/tagout references.
+- **Safety Checks And Job Prerequisites** — Define and manage safety checks and job prerequisites.
+
+### 16.17 IoT & Condition Monitoring
+- **Sensor Ingestion** — Define and manage sensor ingestion.
+- **Thresholds** — Define and manage thresholds.
+- **Alerts** — Define and manage alerts.
+- **Telemetry And Condition History** — Track and monitor telemetry and condition history.
+
+### 16.18 Maintenance Costing
+- **Labor** — Define and manage labor.
+- **Parts** — Define and manage parts.
+- **Contractor** — Define and manage contractor.
+- **Downtime And Total Maintenance Cost Analysis** — Analyze and report on downtime and total maintenance cost analysis.
+
+### 16.19 Maintenance Analytics
+- **PM Compliance** — Control and govern pM compliance.
+- **Backlog** — Define and manage backlog.
+- **Downtime** — Define and manage downtime.
+- **Reliability And Maintenance KPI Dashboards** — Analyze and report on reliability and maintenance KPI dashboards.
+
+### 16.20 CMMS/EAM Integration
+- **Assets** — Define and manage assets.
+- **Inventory** — Define and manage inventory.
+- **Procurement** — Define and manage procurement.
+- **Finance** — Define and manage finance.
+- **MES** — Define and manage mES.
+- **IoT And External Service Integrations** — Integrate and exchange data for ioT and external service integrations.
+
+## 17. Field Service Management (FSM)
+
+### 17.1 Service Customer & Site Management
+- **Customer Sites** — Define and manage customer sites.
+- **Locations** — Define and manage locations.
+- **Contacts** — Define and manage contacts.
+- **Installed Base And Service Territories** — Define and manage installed base and service territories.
+
+### 17.2 Installed Base
+- **Assets/equipment Installed At Customers With Configuration** — Define and manage assets/equipment installed at customers with configuration.
+- **Serials And Service History** — Track and monitor serials and service history.
+
+### 17.3 Service Contracts
+- **Contract Terms** — Define and manage contract terms.
+- **Coverage** — Define and manage coverage.
+- **Entitlements** — Define and manage entitlements.
+- **Billing Rules And Renewals** — Define and manage billing rules and renewals.
+
+### 17.4 Service Level Agreements (SLA)
+- **Response/resolution Targets** — Plan and manage response/resolution targets.
+- **Business Calendars** — Define and manage business calendars.
+- **Escalation And Breach Tracking** — Track and monitor escalation and breach tracking.
+
+### 17.5 Case & Service Request Management
+- **Requests** — Define and manage requests.
+- **Incidents** — Define and manage incidents.
+- **Priorities** — Define and manage priorities.
+- **Categorization And Resolution Workflows** — Define and manage categorization and resolution workflows.
+
+### 17.6 Work Order Management
+- **Service Work Orders** — Define and manage service work orders.
+- **Tasks** — Define and manage tasks.
+- **Materials** — Define and manage materials.
+- **Labor And Completion Status** — Define and manage labor and completion status.
+
+### 17.7 Dispatch & Scheduling
+- **Technician Calendars** — Define and manage technician calendars.
+- **Skills** — Define and manage skills.
+- **Territories** — Define and manage territories.
+- **Travel Time And Optimized Dispatch** — Define and manage travel time and optimized dispatch.
+
+### 17.8 Technician Workforce Management
+- **Skills** — Define and manage skills.
+- **Certifications** — Define and manage certifications.
+- **Availability** — Define and manage availability.
+- **Utilization And Capacity Planning** — Plan and manage utilization and capacity planning.
+
+### 17.9 Mobile Field Operations
+- **Offline Mobile Execution** — Define and manage offline mobile execution.
+- **Checklists** — Define and manage checklists.
+- **Photos** — Define and manage photos.
+- **Signatures And Customer Approvals** — Control and govern signatures and customer approvals.
+
+### 17.10 Parts & Inventory for Service
+- **Van Stock** — Define and manage van stock.
+- **Service Depots** — Define and manage service depots.
+- **Reservations** — Define and manage reservations.
+- **Transfers** — Define and manage transfers.
+- **Consumption And Returns** — Define and manage consumption and returns.
+
+### 17.11 Warranty & Claims
+- **Warranty Validation** — Define and manage warranty validation.
+- **Claim Submission** — Define and manage claim submission.
+- **Approval** — Control and govern approval.
+- **Cost Recovery And Settlement** — Define and manage cost recovery and settlement.
+
+### 17.12 Preventive Service Plans
+- **Recurring Visits** — Define and manage recurring visits.
+- **Maintenance Schedules And Customer Reminders** — Plan and manage maintenance schedules and customer reminders.
+
+### 17.13 Remote Diagnostics
+- **Telemetry** — Define and manage telemetry.
+- **Remote Support** — Define and manage remote support.
+- **Diagnostic Sessions And Guided Troubleshooting** — Define and manage diagnostic sessions and guided troubleshooting.
+
+### 17.14 Time, Travel & Expense
+- **Labor Time** — Define and manage labor time.
+- **Mileage** — Define and manage mileage.
+- **Travel Expenses And Billable/non-billable Capture** — Define and manage travel expenses and billable/non-billable capture.
+
+### 17.15 Field Service Billing
+- **Fixed Price** — Define and manage fixed price.
+- **Time & Materials** — Define and manage time & materials.
+- **Milestone And Contract Billing** — Define and manage milestone and contract billing.
+
+### 17.16 Customer Communication
+- **Appointments** — Define and manage appointments.
+- **Reminders** — Define and manage reminders.
+- **ETA Updates** — Define and manage eTA updates.
+- **Service Reports And Notifications** — Define and manage service reports and notifications.
+
+### 17.17 Knowledge & Technician Assist
+- **Troubleshooting Guides** — Define and manage troubleshooting guides.
+- **Service Procedures** — Define and manage service procedures.
+- **Manuals And AI Assistance** — Define and manage manuals and AI assistance.
+
+### 17.18 Service Quality & Feedback
+- **First-time-fix** — Define and manage first-time-fix.
+- **Repeat Visits** — Define and manage repeat visits.
+- **CSAT** — Define and manage cSAT.
+- **Complaints And Service Quality Analysis** — Analyze and report on complaints and service quality analysis.
+
+### 17.19 Field Service Analytics
+- **Utilization** — Define and manage utilization.
+- **SLA Compliance** — Control and govern sLA compliance.
+- **Travel Time** — Define and manage travel time.
+- **Profitability And Workforce KPIs** — Analyze and report on profitability and workforce KPIs.
+
+### 17.20 FSM Integration Hub
+- **CRM** — Define and manage cRM.
+- **Inventory** — Define and manage inventory.
+- **Assets** — Define and manage assets.
+- **Finance** — Define and manage finance.
+- **IoT** — Define and manage ioT.
+- **Mapping** — Define and manage mapping.
+- **Telephony And Customer Portals** — Define and manage telephony and customer portals.
+
+## 18. IT Service Management (ITSM)
+
+### 18.1 IT Service Catalog
+- **Business And Technical Services** — Define and manage business and technical services.
+- **Request Offerings** — Define and manage request offerings.
+- **Owners And Service Descriptions** — Define and manage owners and service descriptions.
+
+### 18.2 Incident Management
+- **Incident Intake** — Define and manage incident intake.
+- **Prioritization** — Define and manage prioritization.
+- **Categorization** — Define and manage categorization.
+- **Assignment** — Define and manage assignment.
+- **Resolution And Closure** — Define and manage resolution and closure.
+
+### 18.3 Service Request Management
+- **Standard Requests** — Define and manage standard requests.
+- **Fulfillment Workflows** — Define and manage fulfillment workflows.
+- **Approvals And Status Tracking** — Track and monitor approvals and status tracking.
+
+### 18.4 Problem Management
+- **Root-cause Analysis** — Analyze and report on root-cause analysis.
+- **Known Errors** — Define and manage known errors.
+- **Workarounds And Permanent Fixes** — Define and manage workarounds and permanent fixes.
+
+### 18.5 Change Management
+- **Standard** — Define and manage standard.
+- **Normal And Emergency Changes With Risk** — Define and manage normal and emergency changes with risk.
+- **Approval And Implementation Controls** — Control and govern approval and implementation controls.
+
+### 18.6 Release & Deployment Management
+- **Release Planning** — Plan and manage release planning.
+- **Deployment Tasks** — Define and manage deployment tasks.
+- **Environments** — Define and manage environments.
+- **Rollback And Validation** — Define and manage rollback and validation.
+
+### 18.7 Configuration Management Database (CMDB)
+- **Configuration Items** — Define and manage configuration items.
+- **Relationships** — Define and manage relationships.
+- **Ownership And Service Dependencies** — Define and manage ownership and service dependencies.
+
+### 18.8 IT Asset Integration
+- **Hardware** — Define and manage hardware.
+- **Software** — Define and manage software.
+- **Licenses** — Define and manage licenses.
+- **Assignments** — Define and manage assignments.
+- **Lifecycle And Financial Links** — Define and manage lifecycle and financial links.
+
+### 18.9 Knowledge Management
+- **IT Knowledge Articles** — Define and manage iT knowledge articles.
+- **Runbooks** — Define and manage runbooks.
+- **FAQs** — Define and manage fAQs.
+- **Known Errors And Self-service Content** — Define and manage known errors and self-service content.
+
+### 18.10 Service Level Management
+- **SLAs** — Define and manage sLAs.
+- **OLAs** — Define and manage oLAs.
+- **Service Targets** — Plan and manage service targets.
+- **Breaches And Service Reviews** — Define and manage breaches and service reviews.
+
+### 18.11 Event & Monitoring Management
+- **Monitoring Events** — Track and monitor monitoring events.
+- **Correlation** — Define and manage correlation.
+- **Alerts And Automatic Incident Creation** — Define and manage alerts and automatic incident creation.
+
+### 18.12 Identity & Access Requests
+- **Access Requests** — Define and manage access requests.
+- **Approvals** — Control and govern approvals.
+- **provisioning/deprovisioning And Audit Linkage** — Define and manage provisioning/deprovisioning and audit linkage.
+
+### 18.13 Endpoint & Device Support
+- **Device Inventory** — Define and manage device inventory.
+- **Health** — Define and manage health.
+- **Compliance And Support Workflows** — Control and govern compliance and support workflows.
+
+### 18.14 Software & License Management
+- **Applications** — Define and manage applications.
+- **License Entitlements** — Define and manage license entitlements.
+- **Usage** — Define and manage usage.
+- **Renewals And Compliance** — Control and govern renewals and compliance.
+
+### 18.15 Vendor & IT Contract Management
+- **IT Suppliers** — Define and manage iT suppliers.
+- **Contracts** — Define and manage contracts.
+- **Warranties** — Define and manage warranties.
+- **SLAs And Vendor Performance** — Define and manage sLAs and vendor performance.
+
+### 18.16 Self-Service Portal
+- **Employee Portal** — Define and manage employee portal.
+- **Request Catalog** — Define and manage request catalog.
+- **Status Tracking And Knowledge Search** — Track and monitor status tracking and knowledge search.
+
+### 18.17 IT Automation
+- **Runbook Automation** — Define and manage runbook automation.
+- **Approvals** — Control and govern approvals.
+- **Scheduled Tasks And Event-driven Actions** — Plan and manage scheduled tasks and event-driven actions.
+
+### 18.18 IT Continuity & DR
+- **Service Continuity Plans** — Define and manage service continuity plans.
+- **Recovery Procedures** — Define and manage recovery procedures.
+- **Exercises And Evidence** — Define and manage exercises and evidence.
+
+### 18.19 ITSM Analytics
+- **Incident Trends** — Define and manage incident trends.
+- **MTTR** — Define and manage mTTR.
+- **Change Success** — Define and manage change success.
+- **SLA Performance And Service Health** — Define and manage sLA performance and service health.
+
+### 18.20 ITSM Integration Hub
+- **Monitoring** — Track and monitor monitoring.
+- **Email** — Define and manage email.
+- **Chat** — Define and manage chat.
+- **Identity** — Define and manage identity.
+- **Endpoint Tools** — Define and manage endpoint tools.
+- **DevOps And APIs** — Integrate and exchange data for devOps and APIs.
+
+## 19. Retail & Point of Sale (POS) Management
+
+### 19.1 Store & Branch Management
+- **Stores** — Define and manage stores.
+- **Branches** — Define and manage branches.
+- **Tills** — Define and manage tills.
+- **Operating Hours** — Define and manage operating hours.
+- **Territories And Organizational Hierarchy** — Define and manage territories and organizational hierarchy.
+
+### 19.2 POS Terminal Management
+- **Registers** — Define and manage registers.
+- **Cashier Sessions** — Define and manage cashier sessions.
+- **Till opening/closing And Device Configuration** — Define and manage till opening/closing and device configuration.
+
+### 19.3 Product & Price Management
+- **Retail Assortments** — Define and manage retail assortments.
+- **Price Lists** — Define and manage price lists.
+- **Markdowns And Location-specific Pricing** — Define and manage markdowns and location-specific pricing.
+
+### 19.4 Promotions & Campaigns
+- **Coupons** — Define and manage coupons.
+- **Discounts** — Define and manage discounts.
+- **Bundles** — Define and manage bundles.
+- **Loyalty Offers And Promotion Rules** — Define and manage loyalty offers and promotion rules.
+
+### 19.5 Omnichannel Order Capture
+- **Store** — Define and manage store.
+- **Web** — Define and manage web.
+- **Mobile** — Define and manage mobile.
+- **Call-center Orders And Unified Customer Order History** — Track and monitor call-center orders and unified customer order history.
+
+### 19.6 Checkout & Payments
+- **Cash** — Define and manage cash.
+- **Cards** — Define and manage cards.
+- **Wallets** — Define and manage wallets.
+- **Split Payments** — Define and manage split payments.
+- **Refunds And Payment Reconciliation** — Define and manage refunds and payment reconciliation.
+
+### 19.7 Returns & Exchanges
+- **Receipt Lookup** — Define and manage receipt lookup.
+- **Return Authorization** — Define and manage return authorization.
+- **Exchanges** — Integrate and exchange data for exchanges.
+- **Credits And Fraud Controls** — Control and govern credits and fraud controls.
+
+### 19.8 Cash & Till Management
+- **Float Setup** — Define and manage float setup.
+- **Cash Movements** — Define and manage cash movements.
+- **Counting** — Define and manage counting.
+- **over/short And Daily Settlement** — Define and manage over/short and daily settlement.
+
+### 19.9 Customer Loyalty
+- **Programs** — Define and manage programs.
+- **Points** — Define and manage points.
+- **Tiers** — Define and manage tiers.
+- **Rewards** — Define and manage rewards.
+- **Vouchers And Customer Engagement** — Define and manage vouchers and customer engagement.
+
+### 19.10 Gift Cards & Store Credit
+- **Issuance** — Define and manage issuance.
+- **Redemption** — Define and manage redemption.
+- **Balances** — Define and manage balances.
+- **Expiration And Reconciliation** — Define and manage expiration and reconciliation.
+
+### 19.11 Retail Inventory Integration
+- **Store Stock** — Define and manage store stock.
+- **Reservations** — Define and manage reservations.
+- **Replenishment** — Define and manage replenishment.
+- **Transfers And Cycle Counts** — Define and manage transfers and cycle counts.
+
+### 19.12 Click & Collect
+- **Buy-online-pick-up-in-store Workflows** — Define and manage buy-online-pick-up-in-store workflows.
+- **Staging** — Define and manage staging.
+- **Pickup Verification And Notifications** — Define and manage pickup verification and notifications.
+
+### 19.13 Ship-from-Store
+- **Order Routing** — Define and manage order routing.
+- **Store Picking** — Define and manage store picking.
+- **Packing** — Define and manage packing.
+- **Carrier Handoff And Shipment Tracking** — Track and monitor carrier handoff and shipment tracking.
+
+### 19.14 Retail Workforce
+- **Cashier Scheduling** — Define and manage cashier scheduling.
+- **Shifts** — Define and manage shifts.
+- **Attendance** — Define and manage attendance.
+- **Roles And Productivity** — Define and manage roles and productivity.
+
+### 19.15 Store Operations
+- **Opening/closing Checklists** — Define and manage opening/closing checklists.
+- **Task Execution** — Define and manage task execution.
+- **Announcements And Compliance Checks** — Control and govern announcements and compliance checks.
+
+### 19.16 Merchandising
+- **Assortments** — Define and manage assortments.
+- **Planograms** — Define and manage planograms.
+- **Displays** — Define and manage displays.
+- **Category Performance And Store Execution** — Define and manage category performance and store execution.
+
+### 19.17 Retail Loss Prevention
+- **Shrink Tracking** — Track and monitor shrink tracking.
+- **Exception Monitoring** — Track and monitor exception monitoring.
+- **Refund Controls And Incident Workflows** — Control and govern refund controls and incident workflows.
+
+### 19.18 Retail Analytics
+- **Sales By store/SKU** — Define and manage sales by store/SKU.
+- **Basket Analysis** — Analyze and report on basket analysis.
+- **Conversion** — Define and manage conversion.
+- **Margin And Promotion Performance** — Define and manage margin and promotion performance.
+
+### 19.19 Device & Payment Integration
+- **Scanners** — Define and manage scanners.
+- **Receipt Printers** — Define and manage receipt printers.
+- **Cash Drawers** — Define and manage cash drawers.
+- **Payment Terminals And Peripherals** — Define and manage payment terminals and peripherals.
+
+### 19.20 POS & Retail Integration Hub
+- **eCommerce** — Define and manage eCommerce.
+- **CRM** — Define and manage cRM.
+- **Inventory** — Define and manage inventory.
+- **Finance** — Define and manage finance.
+- **Loyalty** — Define and manage loyalty.
+- **Tax Engines And Payment Gateways** — Integrate and exchange data for tax engines and payment gateways.
+
+## 20. Facilities & Workplace Management
+
+### 20.1 Facility Master Data
+- **Sites** — Define and manage sites.
+- **Buildings** — Define and manage buildings.
+- **Floors** — Define and manage floors.
+- **Rooms** — Define and manage rooms.
+- **Zones** — Define and manage zones.
+- **Occupancy And Facility Hierarchies** — Define and manage occupancy and facility hierarchies.
+
+### 20.2 Space & Workplace Planning
+- **Space Allocation** — Define and manage space allocation.
+- **Seating Plans** — Define and manage seating plans.
+- **Occupancy** — Define and manage occupancy.
+- **Utilization And Neighborhood Planning** — Plan and manage utilization and neighborhood planning.
+
+### 20.3 Lease & Property Management
+- **Leases** — Define and manage leases.
+- **Landlords** — Define and manage landlords.
+- **Tenants** — Define and manage tenants.
+- **Rent Schedules** — Plan and manage rent schedules.
+- **Deposits And Renewals** — Define and manage deposits and renewals.
+
+### 20.4 Facility Work Orders
+- **Maintenance Requests** — Define and manage maintenance requests.
+- **Assignments** — Define and manage assignments.
+- **Priorities** — Define and manage priorities.
+- **Completion And Closure** — Define and manage completion and closure.
+
+### 20.5 Preventive Facility Maintenance
+- **Planned Inspections** — Define and manage planned inspections.
+- **Recurring Work** — Define and manage recurring work.
+- **Service Calendars And Compliance Checks** — Control and govern service calendars and compliance checks.
+
+### 20.6 Cleaning & Housekeeping
+- **Cleaning Schedules** — Plan and manage cleaning schedules.
+- **Task Routes** — Define and manage task routes.
+- **Quality Checks And Consumables** — Define and manage quality checks and consumables.
+
+### 20.7 Security & Access Management
+- **Visitor Access** — Define and manage visitor access.
+- **Badges** — Define and manage badges.
+- **Access Zones** — Define and manage access zones.
+- **Incidents And Security Workflows** — Control and govern incidents and security workflows.
+
+### 20.8 Visitor Management
+- **Pre-registration** — Define and manage pre-registration.
+- **Check-in/out** — Define and manage check-in/out.
+- **Host Notification** — Define and manage host notification.
+- **Badges And Visit History** — Track and monitor badges and visit history.
+
+### 20.9 Move Management
+- **Employee Moves** — Define and manage employee moves.
+- **Seating Changes** — Define and manage seating changes.
+- **Equipment Transfers And Move Checklists** — Define and manage equipment transfers and move checklists.
+
+### 20.10 Meeting Room & Resource Booking
+- **Rooms** — Define and manage rooms.
+- **Desks** — Define and manage desks.
+- **Shared Resources** — Define and manage shared resources.
+- **Availability And Booking Rules** — Define and manage availability and booking rules.
+
+### 20.11 Utilities Management
+- **Electricity** — Define and manage electricity.
+- **Water** — Define and manage water.
+- **Gas And Utility Consumption By Facility** — Define and manage gas and utility consumption by facility.
+
+### 20.12 Energy Monitoring
+- **Meter Readings** — Define and manage meter readings.
+- **Energy KPIs** — Analyze and report on energy KPIs.
+- **Thresholds And Efficiency Opportunities** — Define and manage thresholds and efficiency opportunities.
+
+### 20.13 Safety Inspections
+- **Facility Inspections** — Define and manage facility inspections.
+- **Findings** — Define and manage findings.
+- **Corrective Actions And Recurring Checks** — Define and manage corrective actions and recurring checks.
+
+### 20.14 Emergency & Business Continuity
+- **Evacuation Plans** — Define and manage evacuation plans.
+- **Emergency Contacts** — Define and manage emergency contacts.
+- **Drills And Facility Readiness** — Define and manage drills and facility readiness.
+
+### 20.15 Vendor & Facility Contracts
+- **Cleaning** — Define and manage cleaning.
+- **Security** — Control and govern security.
+- **Maintenance And Service Contracts With SLAs** — Define and manage maintenance and service contracts with SLAs.
+
+### 20.16 Facility Inventory
+- **Furniture** — Define and manage furniture.
+- **Consumables** — Define and manage consumables.
+- **Room Equipment And Facility Stock** — Define and manage room equipment and facility stock.
+
+### 20.17 Capital Projects & Improvements
+- **Facility Projects** — Define and manage facility projects.
+- **Budgets** — Define and manage budgets.
+- **Milestones** — Define and manage milestones.
+- **Approvals And Handover** — Control and govern approvals and handover.
+
+### 20.18 Occupancy & Facility Analytics
+- **Utilization** — Define and manage utilization.
+- **Cost Per Seat** — Define and manage cost per seat.
+- **Energy Intensity** — Define and manage energy intensity.
+- **Space Efficiency And Trends** — Define and manage space efficiency and trends.
+
+### 20.19 Employee Experience Services
+- **Workplace Requests** — Define and manage workplace requests.
+- **Amenities** — Define and manage amenities.
+- **Announcements And Service Feedback** — Define and manage announcements and service feedback.
+
+### 20.20 Facilities Integration Hub
+- **HR** — Define and manage hR.
+- **Assets** — Define and manage assets.
+- **Procurement** — Define and manage procurement.
+- **Finance** — Define and manage finance.
+- **Access Control** — Control and govern access control.
+- **IoT And Building Systems** — Integrate and exchange data for ioT and building systems.
+
+## 21. Treasury & Financial Operations Management
+
+### 21.1 Treasury Dashboard
+- **Cash Position** — Define and manage cash position.
+- **Liquidity** — Define and manage liquidity.
+- **Investments** — Define and manage investments.
+- **Debt** — Define and manage debt.
+- **Exposures And Treasury Alerts** — Define and manage exposures and treasury alerts.
+
+### 21.2 Cash Positioning
+- **Daily Cash Balances** — Define and manage daily cash balances.
+- **Expected inflows/outflows And Available Liquidity** — Define and manage expected inflows/outflows and available liquidity.
+
+### 21.3 Cash Forecasting
+- **Short-** — Define and manage short-.
+- **Medium- And Long-term Cash Forecasts With Scenario Analysis** — Analyze and report on medium- and long-term cash forecasts with scenario analysis.
+
+### 21.4 Bank Account & Signatory Management
+- **Accounts** — Define and manage accounts.
+- **Authorized Signers** — Define and manage authorized signers.
+- **Mandates** — Define and manage mandates.
+- **Limits And Bank Relationships** — Define and manage limits and bank relationships.
+
+### 21.5 Bank Connectivity
+- **Statements** — Define and manage statements.
+- **Transaction Feeds** — Define and manage transaction feeds.
+- **Payment Files And Secure Bank Communications** — Define and manage payment files and secure bank communications.
+
+### 21.6 Payment Factory
+- **Centralized Payment Proposals** — Define and manage centralized payment proposals.
+- **Approvals** — Control and govern approvals.
+- **Batching And Bank Submission** — Define and manage batching and bank submission.
+
+### 21.7 Payment Controls
+- **Dual Approval** — Control and govern dual approval.
+- **Payment Limits** — Define and manage payment limits.
+- **Segregation Of Duties And Fraud Checks** — Define and manage segregation of duties and fraud checks.
+
+### 21.8 Bank Reconciliation
+- **Automated Matching** — Define and manage automated matching.
+- **Exceptions** — Define and manage exceptions.
+- **Clearing And Unresolved-item Management** — Define and manage clearing and unresolved-item management.
+
+### 21.9 Liquidity Management
+- **Minimum Cash Targets** — Plan and manage minimum cash targets.
+- **Pooling** — Define and manage pooling.
+- **surplus/deficit Actions And Liquidity Planning** — Plan and manage surplus/deficit actions and liquidity planning.
+
+### 21.10 Cash Pooling & Intercompany Funding
+- **Notional/physical Pooling** — Define and manage notional/physical pooling.
+- **Funding Requests And Intercompany Settlements** — Define and manage funding requests and intercompany settlements.
+
+### 21.11 Debt Management
+- **Loans** — Define and manage loans.
+- **Facilities** — Define and manage facilities.
+- **Interest Schedules** — Plan and manage interest schedules.
+- **Covenants And Repayments** — Define and manage covenants and repayments.
+
+### 21.12 Investment Management
+- **Short-term Investments** — Define and manage short-term investments.
+- **Maturities** — Define and manage maturities.
+- **Yields** — Define and manage yields.
+- **Transactions And Valuations** — Define and manage transactions and valuations.
+
+### 21.13 Foreign Exchange Management
+- **FX Exposures** — Define and manage fX exposures.
+- **Rates** — Define and manage rates.
+- **Remeasurement** — Define and manage remeasurement.
+- **Hedging And realized/unrealized Effects** — Define and manage hedging and realized/unrealized effects.
+
+### 21.14 Hedging Management
+- **Hedge Instruments** — Define and manage hedge instruments.
+- **Relationships** — Define and manage relationships.
+- **Effectiveness And Accounting References** — Define and manage effectiveness and accounting references.
+
+### 21.15 Financial Risk Management
+- **Counterparty** — Define and manage counterparty.
+- **Liquidity** — Define and manage liquidity.
+- **Market And Concentration Risk Monitoring** — Track and monitor market and concentration risk monitoring.
+
+### 21.16 Treasury Controls & Compliance
+- **Policies** — Define and manage policies.
+- **Approvals** — Control and govern approvals.
+- **Attestations** — Define and manage attestations.
+- **Evidence And Audit Trails** — Define and manage evidence and audit trails.
+
+### 21.17 Fees & Bank Relationship Management
+- **Bank Fees** — Define and manage bank fees.
+- **Service Analysis** — Analyze and report on service analysis.
+- **Pricing And Relationship Performance** — Define and manage pricing and relationship performance.
+
+### 21.18 Treasury Accounting Integration
+- **GL Postings** — Define and manage gL postings.
+- **Valuation** — Define and manage valuation.
+- **Interest** — Define and manage interest.
+- **Fees And Reconciliation With Finance** — Define and manage fees and reconciliation with finance.
+
+### 21.19 Treasury Analytics
+- **Forecast Accuracy** — Plan and manage forecast accuracy.
+- **Liquidity Ratios** — Define and manage liquidity ratios.
+- **Bank Costs** — Define and manage bank costs.
+- **Exposures And Investment Performance** — Define and manage exposures and investment performance.
+
+### 21.20 Treasury Integration Hub
+- **Banks** — Define and manage banks.
+- **Payment Processors** — Define and manage payment processors.
+- **ERP Finance** — Define and manage eRP finance.
+- **FX Providers And Treasury APIs** — Integrate and exchange data for fX providers and treasury APIs.
+
+## 22. Sustainability, EHS & ESG Management
+
+### 22.1 ESG Strategy & Objectives
+- **ESG Policies** — Define and manage eSG policies.
+- **Material Topics** — Define and manage material topics.
+- **Objectives** — Plan and manage objectives.
+- **Owners And Reporting Periods** — Analyze and report on owners and reporting periods.
+
+### 22.2 ESG Data Management
+- **Environmental** — Define and manage environmental.
+- **Social And Governance Data Collection** — Control and govern social and governance data collection.
+- **Validation And Lineage** — Define and manage validation and lineage.
+
+### 22.3 Carbon Accounting
+- **Scope 1** — Define and manage scope 1.
+- **2 And 3 Emissions** — Define and manage 2 and 3 emissions.
+- **Factors** — Define and manage factors.
+- **Activity Data And Calculation Workflows** — Define and manage activity data and calculation workflows.
+
+### 22.4 Energy & Emissions Monitoring
+- **Energy Consumption** — Define and manage energy consumption.
+- **Emissions Intensity** — Define and manage emissions intensity.
+- **Targets And Trend Analysis** — Analyze and report on targets and trend analysis.
+
+### 22.5 Water Management
+- **Water Withdrawal** — Define and manage water withdrawal.
+- **Consumption** — Define and manage consumption.
+- **Discharge And Site-level Monitoring** — Track and monitor discharge and site-level monitoring.
+
+### 22.6 Waste & Circularity
+- **Waste Streams** — Define and manage waste streams.
+- **Recycling** — Define and manage recycling.
+- **Disposal** — Define and manage disposal.
+- **Recovery And Circularity Metrics** — Analyze and report on recovery and circularity metrics.
+
+### 22.7 Sustainable Procurement
+- **Supplier ESG Criteria** — Define and manage supplier ESG criteria.
+- **Questionnaires** — Define and manage questionnaires.
+- **Scorecards And Sourcing Requirements** — Define and manage scorecards and sourcing requirements.
+
+### 22.8 Supplier ESG Risk
+- **Risk Screening** — Define and manage risk screening.
+- **Assessments** — Define and manage assessments.
+- **Corrective Actions And Improvement Plans** — Define and manage corrective actions and improvement plans.
+
+### 22.9 Environmental Compliance
+- **Permits** — Define and manage permits.
+- **Obligations** — Define and manage obligations.
+- **Inspections** — Define and manage inspections.
+- **Reporting And Regulatory Evidence** — Analyze and report on reporting and regulatory evidence.
+
+### 22.10 Health & Safety (EHS)
+- **Safety Policies** — Define and manage safety policies.
+- **Incidents** — Define and manage incidents.
+- **Hazards** — Define and manage hazards.
+- **Controls** — Control and govern controls.
+- **Training And Corrective Actions** — Define and manage training and corrective actions.
+
+### 22.11 Incident & Near-Miss Management
+- **Incident Reporting** — Analyze and report on incident reporting.
+- **Investigations** — Define and manage investigations.
+- **Root Causes And Prevention Actions** — Define and manage root causes and prevention actions.
+
+### 22.12 Risk Assessments & Job Safety
+- **Hazard Identification** — Define and manage hazard identification.
+- **Risk Scoring** — Define and manage risk scoring.
+- **Controls And Residual Risk** — Control and govern controls and residual risk.
+
+### 22.13 Permit to Work
+- **Permit Types** — Define and manage permit types.
+- **Approvals** — Control and govern approvals.
+- **Prerequisites** — Define and manage prerequisites.
+- **Isolation References And Closure** — Define and manage isolation references and closure.
+
+### 22.14 Training & Competency
+- **EHS Training Plans** — Define and manage eHS training plans.
+- **Certifications** — Define and manage certifications.
+- **Expirations And Competency Records** — Define and manage expirations and competency records.
+
+### 22.15 Audits & Inspections
+- **Environmental And Safety Audits** — Define and manage environmental and safety audits.
+- **Findings** — Define and manage findings.
+- **Actions And Evidence** — Define and manage actions and evidence.
+
+### 22.16 ESG Reporting
+- **KPI Dashboards** — Analyze and report on kPI dashboards.
+- **Disclosures** — Define and manage disclosures.
+- **Reporting Packs And Submission Workflows** — Analyze and report on reporting packs and submission workflows.
+
+### 22.17 Sustainability Targets & Initiatives
+- **Targets** — Plan and manage targets.
+- **Programs** — Define and manage programs.
+- **Budgets** — Define and manage budgets.
+- **Milestones And Benefits Tracking** — Track and monitor milestones and benefits tracking.
+
+### 22.18 Social & Workforce Metrics
+- **Workforce Indicators** — Define and manage workforce indicators.
+- **Wellbeing** — Define and manage wellbeing.
+- **Community Programs And Responsible Practices** — Define and manage community programs and responsible practices.
+
+### 22.19 ESG Analytics & Scenario Planning
+- **Trend Analysis** — Analyze and report on trend analysis.
+- **Target Variance** — Define and manage target variance.
+- **Decarbonization Scenarios And Opportunities** — Define and manage decarbonization scenarios and opportunities.
+
+### 22.20 ESG Integration Hub
+- **Finance** — Define and manage finance.
+- **Procurement** — Define and manage procurement.
+- **HR** — Define and manage hR.
+- **Assets** — Define and manage assets.
+- **QMS** — Define and manage qMS.
+- **IoT** — Define and manage ioT.
+- **External Factors And Reporting Systems** — Analyze and report on external factors and reporting systems.
+
+## 23. AI & Intelligent Automation
+
+### 23.1 AI Governance & Policy
+- **AI Inventory** — Define and manage aI inventory.
+- **Approved Use Cases** — Define and manage approved use cases.
+- **Policies** — Define and manage policies.
+- **Owners And Governance Controls** — Control and govern owners and governance controls.
+
+### 23.2 AI Assistant
+- **Context-aware ERP Assistant For Search** — Define and manage context-aware ERP assistant for search.
+- **Explanation** — Define and manage explanation.
+- **Navigation And Task Guidance** — Define and manage navigation and task guidance.
+
+### 23.3 AI Agents
+- **Goal-driven Agents That Can Plan Actions** — Define and manage goal-driven agents that can plan actions.
+- **Invoke Tools And Operate Within Permissions** — Define and manage invoke tools and operate within permissions.
+
+### 23.4 Agent Orchestration
+- **Agent Routing** — Define and manage agent routing.
+- **Task Decomposition** — Define and manage task decomposition.
+- **Retries** — Define and manage retries.
+- **Approvals And Human Handoff** — Control and govern approvals and human handoff.
+
+### 23.5 AI Workflow Automation
+- **AI-assisted Triggers** — Define and manage aI-assisted triggers.
+- **Classification** — Define and manage classification.
+- **Extraction** — Define and manage extraction.
+- **Routing And Decision Support** — Define and manage routing and decision support.
+
+### 23.6 Document AI
+- **OCR** — Define and manage oCR.
+- **Classification** — Define and manage classification.
+- **Extraction** — Define and manage extraction.
+- **Summarization And Document Comparison** — Define and manage summarization and document comparison.
+
+### 23.7 Natural Language ERP Search
+- **Ask Questions Across Customers** — Define and manage ask questions across customers.
+- **Orders** — Define and manage orders.
+- **Finance** — Define and manage finance.
+- **HR** — Define and manage hR.
+- **Inventory And Operations** — Define and manage inventory and operations.
+
+### 23.8 Conversational BI
+- **Natural-language KPI Exploration** — Analyze and report on natural-language KPI exploration.
+- **Report Generation And Analytical Follow-ups** — Define and manage report generation and analytical follow-ups.
+
+### 23.9 Forecasting & Prediction
+- **Demand** — Define and manage demand.
+- **Cash Flow** — Define and manage cash flow.
+- **Sales** — Define and manage sales.
+- **Inventory** — Define and manage inventory.
+- **Workforce And Operational Forecasting** — Plan and manage workforce and operational forecasting.
+
+### 23.10 Anomaly & Fraud Detection
+- **Outlier Detection** — Define and manage outlier detection.
+- **Unusual Transactions** — Define and manage unusual transactions.
+- **Behavior Signals And Investigation Queues** — Define and manage behavior signals and investigation queues.
+
+### 23.11 Recommendations & Optimization
+- **Purchasing** — Define and manage purchasing.
+- **Replenishment** — Define and manage replenishment.
+- **Pricing** — Define and manage pricing.
+- **Scheduling** — Define and manage scheduling.
+- **Staffing And Resource Recommendations** — Define and manage staffing and resource recommendations.
+
+### 23.12 AI Customer Service
+- **Ticket Summarization** — Define and manage ticket summarization.
+- **Suggested Responses** — Define and manage suggested responses.
+- **Intent Classification And Knowledge Retrieval** — Define and manage intent classification and knowledge retrieval.
+
+### 23.13 AI Sales & CRM
+- **Lead Scoring** — Define and manage lead scoring.
+- **Opportunity Insights** — Define and manage opportunity insights.
+- **Next-best Actions And Account Summaries** — Define and manage next-best actions and account summaries.
+
+### 23.14 AI Finance
+- **Invoice Capture** — Define and manage invoice capture.
+- **Reconciliation Suggestions** — Define and manage reconciliation suggestions.
+- **Variance Explanations And Close Assistance** — Define and manage variance explanations and close assistance.
+
+### 23.15 AI Supply Chain
+- **Demand Sensing** — Define and manage demand sensing.
+- **Supplier Risk Signals** — Define and manage supplier risk signals.
+- **Disruption Prediction And Inventory Optimization** — Define and manage disruption prediction and inventory optimization.
+
+### 23.16 AI HR
+- **Job Matching** — Define and manage job matching.
+- **Candidate Assistance** — Define and manage candidate assistance.
+- **Workforce Insights And Policy Q&A With Access Controls** — Control and govern workforce insights and policy Q&A with access controls.
+
+### 23.17 AI Quality & Maintenance
+- **Defect Detection** — Define and manage defect detection.
+- **Root-cause Assistance** — Define and manage root-cause assistance.
+- **Predictive Maintenance And Inspection Support** — Define and manage predictive maintenance and inspection support.
+
+### 23.18 Prompt & Knowledge Management
+- **Prompt Templates** — Define and manage prompt templates.
+- **Enterprise Knowledge Sources** — Define and manage enterprise knowledge sources.
+- **Grounding And Version Control** — Control and govern grounding and version control.
+
+### 23.19 AI Evaluation & Observability
+- **Quality Metrics** — Analyze and report on quality metrics.
+- **Hallucination Checks** — Define and manage hallucination checks.
+- **latency/cost Tracking And Model Monitoring** — Track and monitor latency/cost tracking and model monitoring.
+
+### 23.20 AI Security, Audit & Integration
+- **Permission-aware Tool Use** — Define and manage permission-aware tool use.
+- **Auditability** — Define and manage auditability.
+- **model/provider Integrations And API Governance** — Integrate and exchange data for model/provider integrations and API governance.
