@@ -48,6 +48,12 @@ from .ScopeRequirements.ScopeChangeRequests import urlpatterns as _sr_changes
 from .ScopeRequirements.ScopeItems import urlpatterns as _sr_items
 from .ScopeRequirements.ScopeMatrix import urlpatterns as _sr_matrix
 from .ScopeRequirements.ScopeVerifications import urlpatterns as _sr_verifications
+from .TaskWorkManagement.GanttTimeline import urlpatterns as _tw_gantt
+from .TaskWorkManagement.ProjectTasks import urlpatterns as _tw_tasks
+from .TaskWorkManagement.TaskBlocks import urlpatterns as _tw_blocks
+from .TaskWorkManagement.TaskBoard import urlpatterns as _tw_board
+from .TaskWorkManagement.TaskChecklistItems import urlpatterns as _tw_checklistitems
+from .TaskWorkManagement.TaskPriority import urlpatterns as _tw_priority
 
 app_name = "projects"
 
@@ -101,4 +107,15 @@ urlpatterns = (
     + _sr_changes
     + _sr_verifications
     + _sr_matrix
+    # 7.8 Task & Work Management — first segments (checklist-items/, blocks/, task-board/,
+    # gantt-timeline/, task-priority/) are disjoint literals from 7.1's–7.7's. The execution
+    # verbs deliberately SHARE 7.2's tasks/ segment (execute/start/complete/block/unblock are
+    # leaf literals below an <int:pk>, and bulk-update/ is a literal the int converter cannot
+    # capture), so no pattern here can shadow a 7.2 route or vice versa.
+    + _tw_tasks
+    + _tw_checklistitems
+    + _tw_blocks
+    + _tw_board
+    + _tw_gantt
+    + _tw_priority
 )
