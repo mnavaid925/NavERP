@@ -2348,3 +2348,863 @@ def cost_expense_b(db, tenant_b, admin_b, cost_project_b, cost_control_account_b
     return _cost_expense(
         tenant_b, cost_project_b, cost_control_account_b, entry_type="actual",
         amount="60.00", status="draft", created_by=admin_b, description="Globex expense")
+
+
+
+# ==================================================================================================
+# 7.6 Quality Management (subslug ``quality``)
+# --------------------------------------------------------------------------------------------------
+# Fixtures for ``test_quality_models.py`` / ``test_quality_forms.py`` / ``test_quality_views.py`` /
+# ``test_quality_security.py``. The frozen test contract is
+# ``.claude/tasks/test-contract-projects-7.6.md``; the build contract
+# (``.claude/tasks/contract-projects-7.6.md``) §2–§6 pins every name the code answers to.
+#
+# * Everything board-worthy is DERIVED, never stored (``is_review_overdue``/``is_locked``/
+#   ``is_improvement_overdue``/``is_overdue``/``age_days``/``is_open``/``defect_count``, plus both
+#   computed pages' maturity/acceptance figures). The fixtures pin the INPUT columns (status,
+#   dates, review_type, result, usage_decision, severity — the per-row field table in the test
+#   contract); the test modules assert the derived figures from them.
+# * Factories construct + ``.save()`` so ``TenantNumbered.save()`` mints QPL-/QRV-/QCI-/QDF-
+#   numbers. ``bulk_create`` would ship every row numberless — never use it here.
+# * Every lifecycle status owns exactly one default tenant-A row, and the discriminating choice
+#   values the registers and boards lens on (review_type, inspection result, acceptance decision,
+#   defect severity, the improvement statuses that owe work and the one that does not) each own
+#   one — so every ``?filter=``/``?kind=``/``?overdue=`` lens, the ten verbs and both computed
+#   pages have a deterministic row to read. Pulling MORE fixtures moves the composed figures —
+#   recompute expectations from the pulled rows (the test contract's §3 tables), never from memory.
+# * Determinism (L16): every date basis is ``_quality_today()`` (``timezone.localdate()``) and
+#   every datetime ``timezone.now()`` — the same clock the ``is_*`` properties, ``age_days`` and
+#   the lenses read. ``datetime.date.today()`` would flake either side of local midnight.
+# * Spine reuse: host projects come from the 7.1 FACTORY ``_projectinitiation_project`` and WBS
+#   deliverable nodes from the 7.2 FACTORY ``_planning_task`` (function imports, NOT those lanes'
+#   fixtures — lanes never depend on each other's fixture rows); the defect→issue bridge row is
+#   built with the 7.5 FACTORY ``_risk_issue`` (same-module call, the ``risk_baseline`` precedent).
+# * Tests NEVER touch ``management/commands/seed_projects.py`` (the demo seed) — every test builds
+#   exactly the rows it asserts on from the factories below.
+# ==================================================================================================
+
+#: ``apps.core.crud.crud_list``'s default ``per_page`` — every 7.6 register uses the default, so a
+#: pagination test needs ``QUALITY_PAGE_SIZE + 1`` rows for a second page (same rationale as
+#: ``RISK_PAGE_SIZE`` above).
+QUALITY_PAGE_SIZE = 15
+
+
+def _quality_today():
+    """Today on the SAME basis the 7.6 code uses (``is_review_overdue`` /
+    ``is_improvement_overdue`` / ``is_overdue`` / ``age_days`` and the ``?overdue=`` lenses all
+    read ``timezone.localdate()``)."""
+    return timezone.localdate()
+
+
+# ==================================================================================================
+# Factories — construct + ``.save()`` so TenantNumbered mints QPL-/QRV-/QCI-/QDF-
+# ==================================================================================================
+
+def _quality_project(tenant, **overrides):
+    """An ACTIVE host ``Project`` for 7.6 rows (built through the 7.1 FACTORY — function import,
+    not a 7.1 fixture; the ``risk_project`` precedent).
+
+    Defaults: ``status="active"``, ``charter_status="approved"``, window today−30 .. today+150, a
+    distinct per-tenant name/code ("Quality host NN" / "QHP-NN"). Both computed boards lens per
+    project, so a test that wants an isolated register (or a no-rows maturity edge) builds a
+    throwaway project here instead of sharing the lifecycle rows' host.
+    """
+    from apps.projects.models import Project
+    seq = Project.objects.filter(tenant=tenant).count() + 1
+    return _projectinitiation_project(
+        tenant,
+        name=f"Quality host {seq:02d}",
+        code=f"QHP-{seq:02d}",
+        status="active",
+        charter_status="approved",
+        start_date=_quality_today() - datetime.timedelta(days=30),
+        end_date=_quality_today() + datetime.timedelta(days=150),
+        **overrides,
+    )
+
+
+def _quality_wbs_node(tenant, project, **overrides):
+    """A ``ProjectTask`` DELIVERABLE node under ``project`` — the node kind 7.6 inspects and the
+    acceptance board keys its rows on (``node_type="deliverable"``; built through the 7.2 FACTORY,
+    the ``cost_wbs_node_a`` precedent).
+
+    Undated and effort-less by default (a bare deliverable's rollups come from its children — the
+    ``_planning_wbs_tree`` shape); pass ``planned_start=``/``planned_end=``/``effort_hours=``
+    when a test needs a scheduled node. A distinct per-tenant name ("Quality deliverable NN").
+    """
+    from apps.projects.models import ProjectTask
+    seq = ProjectTask.objects.filter(tenant=tenant).count() + 1
+    return _planning_task(
+        tenant, project,
+        node_type="deliverable",
+        name=f"Quality deliverable {seq:02d}",
+        planned_start=None,
+        planned_end=None,
+        effort_hours=None,
+        **overrides,
+    )
+
+
+def _quality_plan(tenant, project, **overrides):
+    """A ``QualityPlan`` on ``project`` — ``draft`` unless overridden.
+
+    Defaults: ``verification_method="inspection"``, ``acceptance_criteria`` filled (REQUIRED — a
+    plan with no criteria cannot be inspected against), ``planned_review_date=None`` (never in
+    the ``?review_due=1`` lens), no wbs/risk/owner and NO approval stamps (the verb's evidence).
+    ``clean()`` runs before ``save()`` (the ``_risk`` precedent) so a cross-project
+    ``wbs_node``/``source_risk`` raises at build time instead of seeding bad data.
+    """
+    from apps.projects.models import QualityPlan
+    seq = QualityPlan.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        source_risk=None,
+        title=f"Quality plan {seq:02d}",
+        description="The acceptance criteria the deliverable is measured against.",
+        acceptance_criteria="Zero critical defects on the acceptance inspection.",
+        verification_method="inspection",
+        standard_reference="ISO 9001:2015 cl. 8.5",
+        regulatory_requirement="",
+        owner=None,
+        status="draft",
+        planned_review_date=None,
+        approved_by=None,
+        approved_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = QualityPlan(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _quality_review(tenant, project, **overrides):
+    """A ``QualityReview`` on ``project`` — a planned ``methodology_review`` unless overridden.
+
+    Defaults: ``review_date=today``, ``maturity_score=None`` (never in the maturity aggregate),
+    ``improvement_status="n_a"`` with no action/owner/due date (never overdue, never in
+    ``improvement_open_count``), no ``closed_at`` stamp. Pass ``review_type=``/
+    ``improvement_*=`` to place the row in either family (assurance: methodology_review /
+    compliance_check / gate_review; improvement: kaizen_event / retrospective /
+    maturity_assessment). ``clean()`` runs before ``save()`` — a cross-project
+    ``wbs_node``/``quality_plan`` raises at build time.
+    """
+    from apps.projects.models import QualityReview
+    seq = QualityReview.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        quality_plan=None,
+        title=f"Quality review {seq:02d}",
+        scope="The delivery process for the current stage.",
+        review_type="methodology_review",
+        checklist="Process followed; evidence recorded; sign-offs present.",
+        findings="",
+        reviewer=None,
+        review_date=_quality_today(),
+        status="planned",
+        maturity_score=None,
+        improvement_action="",
+        improvement_owner=None,
+        improvement_due_date=None,
+        improvement_status="n_a",
+        closed_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = QualityReview(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _quality_inspection(tenant, project, **overrides):
+    """A ``DeliverableInspection`` on ``project`` — planned/pending and undecided unless
+    overridden.
+
+    Defaults: ``inspection_type="review"`` (NOT acceptance — never in the queue),
+    ``result="pending"``, ``usage_decision="pending"``, no dates (never overdue), no acceptor
+    stamps (``qci_accept``'s evidence) and no milestone. ``clean()`` runs before ``save()`` — a
+    cross-project ``wbs_node``/``quality_plan``/``milestone`` raises at build time.
+    """
+    from apps.projects.models import DeliverableInspection
+    seq = DeliverableInspection.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        quality_plan=None,
+        milestone=None,
+        title=f"Quality inspection {seq:02d}",
+        description="The protocol the inspection follows.",
+        inspection_type="review",
+        planned_date=None,
+        inspected_date=None,
+        inspector=None,
+        result="pending",
+        usage_decision="pending",
+        findings="",
+        accepted_by=None,
+        accepted_by_party=None,
+        accepted_at=None,
+        acceptance_note="",
+        status="planned",
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = DeliverableInspection(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _quality_defect(tenant, project, **overrides):
+    """A ``QualityDefect`` on ``project`` — an open minor punch item unless overridden.
+
+    Defaults: ``description`` filled (REQUIRED), ``defect_category="other"``,
+    ``severity="minor"``, ``disposition="open"``, ``status="open"``, ``identified_date=today``,
+    ``due_date=None`` (never overdue), no resolution stamps and NO issue bridge
+    (``project_issue`` is written only by ``qdf_raise_issue`` / the 7.5 factory). ``clean()``
+    runs before ``save()`` — a cross-project ``wbs_node``/``quality_plan``/``inspection`` raises
+    at build time.
+    """
+    from apps.projects.models import QualityDefect
+    seq = QualityDefect.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        quality_plan=None,
+        inspection=None,
+        project_issue=None,
+        title=f"Quality defect {seq:02d}",
+        description="The output does not meet the acceptance criterion.",
+        defect_category="other",
+        severity="minor",
+        disposition="open",
+        status="open",
+        owner=None,
+        identified_date=_quality_today(),
+        due_date=None,
+        root_cause="",
+        resolution_note="",
+        resolved_by=None,
+        resolved_at=None,
+        lessons_learned="",
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = QualityDefect(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+# -- bulk fills (pagination / search / the registers) ------------------------------------------------
+#
+# Loops over the factories rather than bulk_create for the reason spelled out at the top of this
+# file: bulk_create skips save(), and save() is where `number` is minted.
+
+def _quality_fill_plans(tenant, project, count, **overrides):
+    """``count`` DRAFT backlog plans on ONE project — ``planned_review_date=None`` (never in the
+    ``?review_due=1``/``?overdue=1`` lens), distinct titles ("Backlog plan 01" …). Returns the
+    list; overrides land on EVERY row."""
+    return [
+        _quality_plan(tenant, project, title=f"Backlog plan {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _quality_fill_reviews(tenant, project, count, **overrides):
+    """``count`` planned methodology reviews on ONE project — ``maturity_score=None`` (never in
+    the maturity aggregate), ``improvement_status="n_a"`` with no due date (never overdue, never
+    in ``improvement_open_count``), distinct titles ("Backlog review 01" …). Returns the list."""
+    return [
+        _quality_review(tenant, project, title=f"Backlog review {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _quality_fill_inspections(tenant, project, count, **overrides):
+    """``count`` planned/pending ``review``-typed inspections on ONE project — ``planned_date=
+    None`` (never overdue) and ``inspection_type="review"`` (never in the acceptance queue),
+    distinct titles ("Backlog inspection 01" …). Returns the list."""
+    return [
+        _quality_inspection(tenant, project, title=f"Backlog inspection {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _quality_fill_defects(tenant, project, count, **overrides):
+    """``count`` OPEN backlog defects on ONE project — ``due_date=None`` (never overdue),
+    ``identified_date=today`` (deliberate: fills DO land in the improvement trend's current-month
+    bucket), ``severity="minor"``, distinct titles ("Backlog defect 01" …). Returns the list."""
+    return [
+        _quality_defect(tenant, project, title=f"Backlog defect {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+# ==================================================================================================
+# Core-spine records the 7.6 FKs point at
+# ==================================================================================================
+
+@pytest.fixture
+def quality_project_a(db, tenant_a, admin_user):
+    """Tenant A's ACTIVE host — every default 7.6 row hangs off this one or the tenant-B twin
+    (window today−30 .. today+150; both computed boards scope to it via ``?project=``)."""
+    return _quality_project(
+        tenant_a, name="Quality host Alpha", code="QHA-01",
+        charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def quality_project_b(db, tenant_b, admin_b):
+    """Tenant B's host — 404 as tenant A everywhere; absent from tenant A's registers; the
+    crafted-POST value for ``project`` on all four ModelForms."""
+    return _quality_project(tenant_b, name="Quality host Beta", code="QHB-01",
+                            created_by=admin_b)
+
+
+@pytest.fixture
+def quality_wbs_node_a(db, quality_project_a):
+    """Tenant A's deliverable node — the VALID ``wbs_node`` anchor (the same-project ``clean()``
+    branch) and the acceptance board's ONE default row: exactly one deliverable node, one
+    anchored plan, one anchored inspection and one anchored open defect hang off it (the §3.2
+    table in the test contract)."""
+    return _quality_wbs_node(quality_project_a.tenant, quality_project_a)
+
+
+@pytest.fixture
+def quality_wbs_node_b(db, quality_project_b):
+    """Tenant B's deliverable node — the crafted-POST value for ``wbs_node`` on all four forms,
+    and the cross-project node for the same-project ``clean()`` refusal tests."""
+    return _quality_wbs_node(quality_project_b.tenant, quality_project_b)
+
+
+@pytest.fixture
+def quality_milestone_a(db, quality_project_a):
+    """A tenant A ``ProjectMilestone`` (7.2 FACTORY) — the inspection form's same-project
+    ``milestone`` FK value (7.2's gate, not re-declared)."""
+    return _planning_milestone(quality_project_a.tenant, quality_project_a,
+                               name="Quality gate milestone")
+
+
+@pytest.fixture
+def quality_milestone_b(db, quality_project_b):
+    """Tenant B's milestone — the crafted-POST value for ``milestone`` on
+    ``DeliverableInspectionForm`` (the narrowed queryset refuses it first; assert the FIELD
+    error)."""
+    return _planning_milestone(quality_project_b.tenant, quality_project_b,
+                               name="Globex quality gate milestone")
+
+
+@pytest.fixture
+def quality_client_party_a(db, tenant_a):
+    """Tenant A organization Party — the ``accepted_by_party`` on ``quality_inspection_accepted``
+    and the ``qci_accept`` happy path's acceptor. ``clients(tenant)`` is ALL tenant parties (a
+    Party has no project scope), so any kind passes the dropdown."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="organization",
+                                name="Meridian Retail Co")
+
+
+@pytest.fixture
+def quality_client_party_b(db, tenant_b):
+    """Tenant B organization Party — the crafted-POST value for ``accepted_by_party``. The
+    ``InspectionAcceptanceForm`` queryset refuses it first (assert the FIELD error); the view's
+    ``party.tenant_id`` re-check behind it stays the defence-in-depth layer."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="organization",
+                                name="Globex Customers")
+
+
+# ==================================================================================================
+# Extra actors + clients (aliases over the ROOT conftest — reuse, never redefine)
+# ==================================================================================================
+
+@pytest.fixture
+def quality_member(db, member_user):
+    """Tenant A's plain member — alias of the root ``member_user``: 405 (GET) then 403 (POST) on
+    the ONE admin-gated verb ``qpl_supersede`` (the M2 decorator order), full run on every
+    login-gated verb and all CRUD pages."""
+    return member_user
+
+
+@pytest.fixture
+def quality_member_b(db, tenant_b):
+    """A NON-admin member of tenant B. Separates the two refusals on the admin-gated verb: a
+    tenant-B member hitting a tenant-A pk must 404 on scope, never 403 on role — and a tenant-A
+    member (root ``member_user``) must 403 before any lookup."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="quality-member@globex.com", username="member_globex_quality",
+        password="TestPass123!", tenant=tenant_b, is_tenant_admin=False)
+
+
+@pytest.fixture
+def quality_tenantless_user(db):
+    """A logged-in user with ``tenant=None`` — the superuser shape. The four 7.6 create views
+    guard this on their first branch and redirect to ``dashboard:home``; the registers and both
+    computed pages render EMPTY BY DESIGN (the boards are 0-safe)."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="quality-drifter@example.com", username="quality_drifter",
+        password="TestPass123!", tenant=None)
+
+
+@pytest.fixture
+def quality_tenantless_client(db, quality_tenantless_user):
+    """Logged in, ``request.tenant is None``. Registers render empty; creates redirect away."""
+    client = Client()
+    client.force_login(quality_tenantless_user)
+    return client
+
+
+@pytest.fixture
+def quality_anon_client(db):
+    """Unauthenticated — every 7.6 view is ``@login_required``, so each must redirect to login."""
+    return Client()
+
+
+@pytest.fixture
+def quality_admin_client(db, client_a):
+    """Tenant A admin logged in — alias of the root ``client_a`` (7.1–7.5 define no admin client
+    of their own either; the alias exists so the 7.6 contract can pin the name). Runs the admin
+    happy paths AND every IDOR-404 probe."""
+    return client_a
+
+
+@pytest.fixture
+def quality_member_client(db, member_client):
+    """Tenant A member logged in — alias of the root ``member_client``. For tenant-B ADMIN
+    requests use the root ``client_b`` (no alias needed)."""
+    return member_client
+
+
+@pytest.fixture
+def quality_csrf_client(db, admin_user):
+    """Tenant A admin on a client that ENFORCES CSRF. A POST without a token must be 403."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    return client
+
+
+# ==================================================================================================
+# QualityPlan — one fixture per status the two verbs branch on (all on quality_project_a except _b)
+# ==================================================================================================
+
+@pytest.fixture
+def quality_plan_draft(db, tenant_a, quality_project_a, admin_user):
+    """``draft`` — nothing approved. The ``qpl_approve`` happy path and an ``is_locked`` False
+    row: ``qpl_edit``/``qpl_delete`` stay OPEN. ``planned_review_date=None`` → never in the
+    ``?review_due=1`` lens."""
+    return _quality_plan(tenant_a, quality_project_a,
+                         title="Depot sensor acceptance criteria", created_by=admin_user)
+
+
+@pytest.fixture
+def quality_plan_active(db, tenant_a, quality_project_a, quality_wbs_node_a, admin_user):
+    """``active`` + approval stamps (``approved_by``=admin, ``approved_at`` now−1d) — the shape
+    ``qpl_approve`` leaves. Anchored to ``quality_wbs_node_a`` so the acceptance board's
+    deliverable row carries a plan (``plan_status`` "active"); the ``qpl_supersede`` happy path
+    (NOT locked — an active plan is still editable)."""
+    return _quality_plan(tenant_a, quality_project_a,
+                         title="Integration testing standard",
+                         wbs_node=quality_wbs_node_a, status="active",
+                         approved_by=admin_user,
+                         approved_at=timezone.now() - datetime.timedelta(days=1),
+                         created_by=admin_user)
+
+
+@pytest.fixture
+def quality_plan_superseded(db, tenant_a, quality_project_a, admin_user):
+    """``superseded`` + approval stamps — ``is_locked`` → ``qpl_edit``/``qpl_delete`` REFUSE it;
+    ``qpl_supersede`` answers "Only an active plan can be superseded"."""
+    return _quality_plan(tenant_a, quality_project_a,
+                         title="Retired v1 acceptance criteria",
+                         status="superseded", approved_by=admin_user,
+                         approved_at=timezone.now() - datetime.timedelta(days=14),
+                         created_by=admin_user)
+
+
+@pytest.fixture
+def quality_plan_closed(db, tenant_a, quality_project_a, admin_user):
+    """``closed`` — the SECOND locked status, so the lock is provably the tuple and not a
+    hard-coded ``== "superseded"``. Edit/delete refuse it too."""
+    return _quality_plan(tenant_a, quality_project_a, title="Archived pilot criteria",
+                         status="closed", approved_by=admin_user,
+                         approved_at=timezone.now() - datetime.timedelta(days=30),
+                         created_by=admin_user)
+
+
+@pytest.fixture
+def quality_plan_review_overdue(db, tenant_a, quality_project_a, admin_user):
+    """THE overdue row: ``planned_review_date=today−3`` while still ``draft`` →
+    ``is_review_overdue`` True. The ``?review_due=1``/``?overdue=1`` lens row (contract §4.1)."""
+    return _quality_plan(tenant_a, quality_project_a,
+                         title="Compliance criteria pending review",
+                         planned_review_date=_quality_today() - datetime.timedelta(days=3),
+                         created_by=admin_user)
+
+
+@pytest.fixture
+def quality_plan_b(db, tenant_b, quality_project_b, admin_b):
+    """Tenant B's plan — 404 as tenant A on detail/edit/delete and on both verbs; absent from
+    tenant A's register; the crafted-POST value for ``quality_plan`` on the review/inspection/
+    defect forms."""
+    return _quality_plan(tenant_b, quality_project_b, title="Globex acceptance criteria",
+                         created_by=admin_b)
+
+
+# ==================================================================================================
+# QualityReview — one per status plus the family / improvement-lens rows
+# ==================================================================================================
+
+@pytest.fixture
+def quality_review_planned(db, tenant_a, quality_project_a, admin_user):
+    """``planned`` ``methodology_review`` (review_date today) — the ``qrv_report`` happy path AND
+    the ``?kind=assurance`` family row. ``qrv_close`` must REFUSE it (nothing to retire yet)."""
+    return _quality_review(tenant_a, quality_project_a, title="Sprint methodology review",
+                           scope="How the delivery team runs its sprints.",
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_in_progress(db, tenant_a, quality_project_a, admin_user):
+    """``in_progress`` ``compliance_check`` — the SECOND legal ``qrv_report`` source (the
+    close-out amendment: a review reports from ``planned`` OR ``in_progress``)."""
+    return _quality_review(tenant_a, quality_project_a, title="ISO 9001 compliance check",
+                           review_type="compliance_check", status="in_progress",
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_reported(db, tenant_a, quality_project_a, admin_user):
+    """``reported`` ``gate_review`` with findings recorded — the ONLY ``qrv_close`` happy path;
+    ``qrv_report`` must answer "already" and write nothing."""
+    return _quality_review(tenant_a, quality_project_a, title="Stage-gate readiness review",
+                           review_type="gate_review", status="reported",
+                           findings="Two sign-off artefacts were missing at the gate.",
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_closed(db, tenant_a, quality_project_a, admin_user):
+    """``closed`` + ``closed_at`` (now−1d) — ``is_locked`` → edit/delete REFUSE it; report and
+    close both answer "already"."""
+    return _quality_review(tenant_a, quality_project_a, title="Closed methodology review",
+                           status="closed",
+                           findings="Process followed; no nonconformities.",
+                           closed_at=timezone.now() - datetime.timedelta(days=1),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_cancelled(db, tenant_a, quality_project_a, admin_user):
+    """``cancelled`` — the second locked status; a cancelled review can still carry findings but
+    nothing may be written to it."""
+    return _quality_review(tenant_a, quality_project_a, title="Cancelled compliance check",
+                           review_type="compliance_check", status="cancelled",
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_improvement(db, tenant_a, quality_project_a, admin_user):
+    """THE improvement-family row: ``retrospective`` with a PLANNED improvement action
+    (``improvement_action`` set, ``improvement_owner``=admin, ``improvement_due_date=today+7``,
+    ``improvement_status="planned"``). The ``?kind=improvement`` lens row, an improvement-board
+    row, and one of the two rows in ``improvement_open_count``."""
+    return _quality_review(tenant_a, quality_project_a, title="Sprint 12 retrospective",
+                           review_type="retrospective",
+                           improvement_action="Automate the regression pack before sprint 14.",
+                           improvement_owner=admin_user,
+                           improvement_due_date=_quality_today() + datetime.timedelta(days=7),
+                           improvement_status="planned",
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_improvement_overdue(db, tenant_a, quality_project_a, admin_user):
+    """THE overdue row: ``kaizen_event`` with ``improvement_due_date=today−3`` while
+    ``improvement_status="in_progress"`` → ``is_improvement_overdue`` True. The register's
+    ``?overdue=1`` lens row and the second ``improvement_open_count`` row."""
+    return _quality_review(tenant_a, quality_project_a, title="Deployment kaizen event",
+                           review_type="kaizen_event",
+                           improvement_action="Split the deploy pipeline's test stage.",
+                           improvement_status="in_progress",
+                           improvement_due_date=_quality_today() - datetime.timedelta(days=3),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_improvement_done(db, tenant_a, quality_project_a, admin_user):
+    """THE finished action: ``retrospective`` with ``improvement_status="done"`` and
+    ``improvement_due_date=today−7`` — completed on time, so ``is_improvement_overdue`` is False
+    and ``improvement_open_count`` EXCLUDES it while ``improvement_rows`` still shows it: the
+    boundary the overdue row contrasts with."""
+    return _quality_review(tenant_a, quality_project_a, title="Retro with a finished action",
+                           review_type="retrospective",
+                           improvement_action="Add the acceptance checklist to the template.",
+                           improvement_status="done",
+                           improvement_due_date=_quality_today() - datetime.timedelta(days=7),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_maturity(db, tenant_a, quality_project_a, admin_user):
+    """THE scored row: ``maturity_assessment`` with ``maturity_score=4`` — the default set's ONLY
+    ``maturity_score`` (``reviews_scored`` 1, avg 4.0), the 60% half of the improvement page's
+    computed maturity (3.0 / "Defined" / badge-info, pinned §3.1 of the test contract)."""
+    return _quality_review(tenant_a, quality_project_a, title="Q3 maturity assessment",
+                           review_type="maturity_assessment", maturity_score=4,
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_review_b(db, tenant_b, quality_project_b, admin_b):
+    """Tenant B's review — 404 as tenant A on detail/edit/delete and on both verbs; absent from
+    tenant A's register."""
+    return _quality_review(tenant_b, quality_project_b, title="Globex methodology review",
+                           created_by=admin_b)
+
+
+# ==================================================================================================
+# DeliverableInspection — one per status and per result, every row an honest verb-output shape
+# ==================================================================================================
+
+@pytest.fixture
+def quality_inspection_planned(db, tenant_a, quality_project_a, admin_user):
+    """``planned``/``pending`` with ``planned_date=today+7`` — the ``qci_record`` happy path and
+    an unlocked row: ``qci_edit``/``qci_delete`` stay OPEN. Never overdue."""
+    return _quality_inspection(tenant_a, quality_project_a,
+                               title="Sensor batch first-article",
+                               planned_date=_quality_today() + datetime.timedelta(days=7),
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_in_progress(db, tenant_a, quality_project_a, admin_user):
+    """The recorded-undecided shape ``qci_record`` leaves: result ``pass``,
+    ``inspected_date=today−1``, status ``in_progress``, decision still ``pending``. The
+    decide-later happy path for a NON-acceptance row (``qci_accept``/``qci_reject`` both take
+    it)."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Harness continuity test",
+                               inspection_type="testing",
+                               planned_date=_quality_today() - datetime.timedelta(days=1),
+                               inspected_date=_quality_today() - datetime.timedelta(days=1),
+                               result="pass", status="in_progress", created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_on_hold(db, tenant_a, quality_project_a, admin_user):
+    """``on_hold`` — hand-built: no verb writes this status, it is pure vocabulary. NOT locked
+    (edit/delete open) and a legal ``qci_record`` source (on_hold → in_progress)."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Paused walkthrough",
+                               status="on_hold",
+                               planned_date=_quality_today() + datetime.timedelta(days=7),
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_conditional(db, tenant_a, quality_project_a, admin_user):
+    """Result ``conditional``, recorded today−1, undecided — the punch-list state a conditional
+    acceptance resolves from. ``conditional_count`` does NOT read this row (it counts
+    ``usage_decision="accept_with_deviation"``)."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Panel surface inspection",
+                               inspected_date=_quality_today() - datetime.timedelta(days=1),
+                               result="conditional", status="in_progress",
+                               findings="Two scratches within the repair limit.",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_not_applicable(db, tenant_a, quality_project_a, admin_user):
+    """Result ``not_applicable`` — the longest choice value (the fields.E009 width note) with a
+    default row of its own."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Skipped dimensional check",
+                               inspected_date=_quality_today() - datetime.timedelta(days=1),
+                               result="not_applicable", status="in_progress",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_cancelled(db, tenant_a, quality_project_a, admin_user):
+    """``cancelled`` before execution — ``is_locked`` (terminal status) → edit/delete refuse."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Withdrawn demonstration",
+                               inspection_type="demonstration", status="cancelled",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_accepted(db, tenant_a, quality_project_a, quality_wbs_node_a,
+                                quality_client_party_a, admin_user):
+    """The shape ``qci_accept`` leaves: status ``passed``, result ``pass``,
+    ``usage_decision="accept"``, accepted_by/at (now−1d), ``accepted_by_party`` set, an
+    ``acceptance_note``. Anchored to ``quality_wbs_node_a`` — the acceptance board's latest
+    inspection (state "accepted"/badge-green, pinned §3.2). Locked."""
+    return _quality_inspection(
+        tenant_a, quality_project_a, title="Final acceptance inspection",
+        inspection_type="acceptance", wbs_node=quality_wbs_node_a,
+        planned_date=_quality_today() - datetime.timedelta(days=2),
+        inspected_date=_quality_today() - datetime.timedelta(days=2),
+        result="pass", usage_decision="accept", status="passed",
+        accepted_by=admin_user, accepted_by_party=quality_client_party_a,
+        accepted_at=timezone.now() - datetime.timedelta(days=1),
+        acceptance_note="Signed off against the plan's criteria.",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_rejected(db, tenant_a, quality_project_a, admin_user):
+    """The shape ``qci_reject`` leaves: result ``fail``, ``usage_decision="reject"``, status
+    ``failed``, NO acceptor stamps (the reject verb writes only the decision + status). Locked."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Failed weld inspection",
+                               inspection_type="testing",
+                               planned_date=_quality_today() - datetime.timedelta(days=2),
+                               inspected_date=_quality_today() - datetime.timedelta(days=2),
+                               result="fail", usage_decision="reject", status="failed",
+                               findings="Porosity beyond the acceptance limit.",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_acceptance_pending(db, tenant_a, quality_project_a, admin_user):
+    """THE acceptance-queue row: ``inspection_type="acceptance"`` with the result ALREADY
+    recorded (``qci_accept``/``qci_reject`` refuse a pending-result row first) and the decision
+    still ``pending``. The queue's default row (``acceptance_queue_count`` 1) and the decision
+    verbs' happy path."""
+    return _quality_inspection(tenant_a, quality_project_a,
+                               title="Customer sign-off inspection",
+                               inspection_type="acceptance",
+                               planned_date=_quality_today() + datetime.timedelta(days=3),
+                               inspected_date=_quality_today() - datetime.timedelta(days=1),
+                               result="pass", status="in_progress",
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_overdue(db, tenant_a, quality_project_a, admin_user):
+    """THE overdue row: ``planned_date=today−3`` while never executed (``inspected_date`` None)
+    and still ``planned`` → ``is_overdue`` True. The ``?overdue=1`` lens row."""
+    return _quality_inspection(tenant_a, quality_project_a, title="Slipped walkthrough",
+                               inspection_type="walkthrough",
+                               planned_date=_quality_today() - datetime.timedelta(days=3),
+                               created_by=admin_user)
+
+
+@pytest.fixture
+def quality_inspection_b(db, tenant_b, quality_project_b, admin_b):
+    """Tenant B's inspection — 404 as tenant A on detail/edit/delete and on all three verbs;
+    absent from tenant A's register; the crafted-POST value for ``inspection`` on the defect
+    form."""
+    return _quality_inspection(tenant_b, quality_project_b, title="Globex inspection",
+                               created_by=admin_b)
+
+
+# ==================================================================================================
+# QualityDefect — one per status and per severity, plus the overdue and bridge rows
+# ==================================================================================================
+
+@pytest.fixture
+def quality_defect_open(db, tenant_a, quality_project_a, quality_wbs_node_a, admin_user):
+    """THE live row: status ``open``, severity ``major``, identified today−2 (``age_days`` 2),
+    anchored to ``quality_wbs_node_a`` (the acceptance board's ``open_defects`` 1). The happy
+    path for ``qdf_resolve`` AND ``qdf_raise_issue``; edit/delete OPEN."""
+    return _quality_defect(tenant_a, quality_project_a, title="Sensor housing dimension drift",
+                           severity="major", wbs_node=quality_wbs_node_a,
+                           identified_date=_quality_today() - datetime.timedelta(days=2),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_in_progress(db, tenant_a, quality_project_a, admin_user):
+    """Status ``in_progress``, severity ``critical`` — the other live status ``qdf_resolve``
+    accepts (resolve is legal from open AND in_progress). Still ``is_open``."""
+    return _quality_defect(tenant_a, quality_project_a, title="Firmware fails safety check",
+                           severity="critical", status="in_progress", disposition="rework",
+                           identified_date=_quality_today() - datetime.timedelta(days=5),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_resolved(db, tenant_a, quality_project_a, admin_user):
+    """THE resolved row: severity ``minor`` + root_cause/resolution_note + resolved_by/at
+    (now−1d). The ONLY ``qdf_close`` happy path; ``qdf_resolve`` answers "already"; edit/delete
+    REFUSE it (locked). Counts into ``defects_closed`` — a dispositioned defect plates the
+    closure rate even before the close runs."""
+    return _quality_defect(tenant_a, quality_project_a, title="Label printed on wrong stock",
+                           severity="minor", status="resolved", disposition="repair",
+                           root_cause="The print template defaulted to the old stock code.",
+                           resolution_note="Template fixed and re-deployed; labels reprinted.",
+                           resolved_by=admin_user,
+                           resolved_at=timezone.now() - datetime.timedelta(days=1),
+                           identified_date=_quality_today() - datetime.timedelta(days=10),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_closed(db, tenant_a, quality_project_a, admin_user):
+    """THE closed row: full resolver stamps (now−3d) + ``status="closed"`` +
+    ``lessons_learned``. Locked; the improvement page's ONLY default lessons row
+    (``lessons_count`` 1)."""
+    return _quality_defect(tenant_a, quality_project_a, title="Packing list mismatch",
+                           severity="minor", status="closed", disposition="accept_as_is",
+                           root_cause="Two SKUs shared one barcode range.",
+                           resolution_note="Barcode ranges re-issued.",
+                           resolved_by=admin_user,
+                           resolved_at=timezone.now() - datetime.timedelta(days=3),
+                           lessons_learned="Audit barcode ranges whenever a new SKU family lands.",
+                           identified_date=_quality_today() - datetime.timedelta(days=15),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_cancelled(db, tenant_a, quality_project_a, admin_user):
+    """``cancelled`` with severity ``observation`` — locks like the QRV/QCI siblings (the M1
+    amendment: no edit, no delete, no resolve stamps, no issue bridge) and covers the fourth
+    severity value."""
+    return _quality_defect(tenant_a, quality_project_a, title="Cosmetic mark within tolerance",
+                           severity="observation", status="cancelled",
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_overdue(db, tenant_a, quality_project_a, admin_user):
+    """THE overdue row: ``due_date=today−2`` while status ``open`` (identified today−20 →
+    ``age_days`` 20) → ``is_overdue`` True. The ``?overdue=1`` lens row."""
+    return _quality_defect(tenant_a, quality_project_a, title="Documentation missing revision",
+                           defect_category="documentation", severity="minor",
+                           due_date=_quality_today() - datetime.timedelta(days=2),
+                           identified_date=_quality_today() - datetime.timedelta(days=20),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_bridged(db, tenant_a, quality_project_a, admin_user):
+    """THE bridge row: ``project_issue`` SET — built through the 7.5 FACTORY ``_risk_issue``
+    (same-module function call, NOT a 7.5 fixture row; the ``risk_baseline`` precedent). Still
+    ``open`` (raising an issue does not disposition the defect), so ``qdf_raise_issue`` must
+    answer "already raised issue ISS-…" (info) on it."""
+    issue = _risk_issue(tenant_a, quality_project_a,
+                        title="Sensor housing dimension drift escalated",
+                        severity="high", created_by=admin_user)
+    return _quality_defect(tenant_a, quality_project_a,
+                           title="Housing drift needs RAID tracking",
+                           severity="major", project_issue=issue,
+                           identified_date=_quality_today() - datetime.timedelta(days=3),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def quality_defect_b(db, tenant_b, quality_project_b, admin_b):
+    """Tenant B's defect — 404 as tenant A on detail/edit/delete and on all three verbs; absent
+    from tenant A's register."""
+    return _quality_defect(tenant_b, quality_project_b, title="Globex cosmetic defect",
+                           created_by=admin_b)
