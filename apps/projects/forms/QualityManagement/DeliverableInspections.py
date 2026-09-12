@@ -32,9 +32,11 @@ def _acceptor_parties(tenant):
     Deliberately mirrors ``apps/projects/views/_helpers.py::clients`` (any Party of the tenant,
     name-ordered, not role-narrowed — a project's customer can be any organisation on the spine).
     It lives HERE rather than being imported from the views package because the dependency
-    direction runs views → forms (``views/_helpers.py`` imports from the forms layer); a form
-    reaching back into views would invert it. ``None`` tenant yields an empty queryset rather
-    than the unscoped default manager — the same posture every other scoping helper takes.
+    direction runs views → forms: the views package ``__init__`` re-exports the view modules (and
+    they import this form), so a form reaching back into ``apps.projects.views`` would cycle the
+    package — ``views/_helpers.py`` itself imports nothing from forms. ``None`` tenant yields an
+    empty queryset rather than the unscoped default manager — the same posture every other
+    scoping helper takes.
     """
     if tenant is None:
         return Party.objects.none()
