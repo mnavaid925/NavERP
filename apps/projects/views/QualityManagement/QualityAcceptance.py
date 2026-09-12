@@ -13,8 +13,9 @@ tree, the plans and the inspections:
   usage decision, planned-date ordered; each links to its detail page where the decision verbs
   live.
 
-The acceptance state per deliverable reads the LATEST inspection that carries a decision — an
-older inspection's reject must not brand a deliverable that has since passed re-inspection.
+The acceptance state per deliverable is the LATEST inspection on the node, decided or not — a
+latest row still ``pending`` keeps the deliverable pending until a decision is taken on it, and
+an older inspection's reject must not brand a deliverable that has since been re-inspected.
 ``pending`` covers everything without an accept/reject-with-deviation decision yet (a ``rework``
 decision is pending too: the deliverable is going around again).
 """
