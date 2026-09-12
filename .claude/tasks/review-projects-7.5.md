@@ -9,6 +9,32 @@ Reviews appended below, most severe first. Base `3eacff12cf7f466922b6874bd4085db
 All six reviewers reported **0 Critical**. 23 findings: **10 Important, 13 Minor**. Cross-reviewer
 duplicates are merged into one ID; the merged-away twin is noted so nobody re-files it.
 
+## Fixer status (Phase 5 burn-down)
+
+- **I1** [x] fixed — 55ff404e + 26d45d71 (verified: `transaction.atomic()` wraps both writes in `rsk_realize` and `iss_escalate`)
+- **I2** [x] fixed — 93187504 + 2f9265e9 (verified: one materialised register in `Overview.py`, four stat cards in `overview.html`)
+- **I3** [x] fixed — 2978938e (verified: Realize gated on `{% if not obj.is_locked %}`, Close stays)
+- **I4** [x] fixed — ab388d81 (verified: Top risks link + hidden `top` carrier, overdue alias reflected in the checkbox)
+- **I5** [x] fixed — d827bbf7 + 040132bc (verified: `form-textarea` on both `IssueResolutionForm` textareas and `RiskClosureForm`)
+- **I6** [x] fixed — 5fc034df (verified: copy states a completed action is final, no cancel verb)
+- **I7** [x] fixed — a7cbf41e (model) + b5cd53a9 (migration 0008 carries `rra_tnt_created_idx`)
+- **I8** [x] fixed — 73025c7c (verified: `draws` precompute hoisted out of the iteration loop)
+- **I9** [x] fixed — 4b261cbb (decorators) + d542417c + c195c72a (template gating); runtime-probed: member `esc_create`/`esc_edit`/`esc_delete` → 403, controls hidden
+- **I10** [x] fixed — 1f287a02; runtime-probed: `?project=` lessons contain no foreign issue rows
+- **M1** [x] fixed — 19c6e5a2
+- **M2** [x] fixed — 8b7aca25, 1eb086bd, 231a6f3b, b0187d44 (one current-line docstring each)
+- **M3** [x] fixed — 5623ac2a
+- **M4** [x] fixed — aaa86633 (per-field resolution + query-string fallback; deviation noted in the commit: the range moved wholly to the view clamp so out-of-range iterations clamps instead of discarding); 12-case runtime matrix green
+- **M5** [x] fixed — 8c5ffe7e
+- **M6** [x] fixed — a6693a88
+- **M7** [x] fixed — 2a67f42d
+- **M8** [x] fixed — fb6444b1
+- **M9** [x] fixed — 0d011541 (verified byte-identical percentiles vs the old DB-side derivation, seed 123/500 iters)
+- **M10** [x] fixed — 5bb61ee6 (verified all context values identical to a first-principles reference)
+- **M11** [x] fixed — 193e420d + migration 0008 (b5cd53a9)
+- **M12** [x] fixed — 47681a08 + 99f57ee5 + migration 0008 (b5cd53a9)
+- **M13** [x] fixed — 554a739f + a7ea53a4 (`_REGISTER_CAP = 2000` on both boards; `_lessons` issues sliced `.order_by("-resolved_at", "-id")[:25]` DB-side, verified identical to the unbounded merge)
+
 | ID | Finding | Where | Source(s) |
 |---|---|---|---|
 | **I1** | `rsk_realize` / `iss_escalate` are two-model writes with no `transaction.atomic()` — a failed child create leaves a mutated parent | `views/RiskManagement/ProjectRisks.py:158-170`, `ProjectIssues.py:154-165` | code-reviewer |
