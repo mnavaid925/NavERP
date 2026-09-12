@@ -7316,6 +7316,67 @@ models, nothing of any peer's.
 
 ---
 
+### Projects 7.7 — Scope & Requirements Management (close-out 2026-09-12)
+
+Build (Phase 3) had already landed in prior sessions — 4 models (`Requirement` [REQ-],
+`ScopeItem` [SCI-], `ScopeChangeRequest` [SCR-], `ScopeVerification` [SVR-]) + the computed
+`scope_matrix` page, 9 forms, 16 verbs, 38 route names, 13 templates, `LIVE_LINKS["7.7"]`,
+migration `0007` — so this run was the close-out: Phases 4-7.
+
+Six review lanes ran serial (code/explorer/frontend/performance/qa-smoke/security) into
+`.claude/tasks/review-projects-7.7.md`: raw 32 findings, deduped **3C/10I/7M + N1-N6 no-actions**.
+Headline catches, each independently re-verified by the orchestrator rather than trusted from the
+lane report: **C1** `ScopeItem.STATUS_CHOICES` omitted `violated` entirely — the one status that
+means the boundary was breached was unwritable, and `is_locked` omitted it too (fixed; migration
+`0010_alter_scopeitem_status` chained onto the 7.6 leaf `0009` per L53). **C2** eight admin-gated
+verbs had `@tenant_admin_required` ABOVE `@require_POST`, so a *member's* GET answered **403
+instead of the house 405** — reproduced with a throwaway pytest before filing (the bug is invisible
+to an admin-actor test); all eight reordered to `@login_required → @require_POST →
+@tenant_admin_required` and the security lane now asserts 405 for BOTH actors. **C3** the seeder
+passed `schedule_impact_days=-10` into a `PositiveIntegerField`; the MySQL CHECK violation fired
+inside `transaction.atomic()`, so `_scope` committed nothing, failed silently, and could never be
+re-run (the guard saw "already seeded" from the prior good run, and the live rows that made it look
+healthy predated the bad edit). Proven by git-blame + live-vs-source drift + a scratch-DB
+reproduction. Fixed, **plus a second `-30` the review had missed**, plus `obj.full_clean(exclude=
+["number"])` on all four factories so a bad literal now fails loudly. This is why Lane 5 (QA) and
+Lane 6 (security) disagreed about the seeder — QA tested the *pre-existing* rows; security tested
+re-runnability. C3 upheld, Lane 5's seed claim superseded (recorded as no-action N6), its
+render/verb/IDOR results kept.
+
+Also fixed: **I3** `sci_retire` accepted an already-`realized` item (now gates on `obj.is_open`);
+**I5** the `elicitation_method` filter existed as a choice list but was never wired into the view's
+`filters` (dead dropdown); **I7/I8** `scope_matrix`'s 16 `COUNT(*)` fan-out and its unbounded creep
+loop (now grouped `.values().annotate()` aggregates and a `.values()`-sliced `CREEP_LIMIT = 500`
+scan); **I2** `elicitation_method` `max_length` 16-vs-20 (fixed the CONTRACT, not the model —
+`document_analysis` is 17); **I4** stale seeder `--flush` help; **I6** dead `creep_max` key; **I1**
+detail templates ignoring pinned unbound `*_form` keys. The code-fixer closed all **20** actionable
+findings in path-limited commits.
+
+Phase 6: `.claude/tasks/test-contract-projects-7.7.md` pinned the factory signatures, lifecycle
+fixtures, the post-fix gate table and the computed `scope_matrix` figures; conftest got an
+append-only `scope_*` block (L43); then `test_scope_{models,forms,views,security}.py` =
+**205/103/162/73 = 543 green**, one file per commit, helpers `_scope_*` (no namespace collision
+with `_quality_*`/`_taskwork_*`). The security module carries the **C2 regression net** (405 for
+both actors). Full unfiltered `apps/projects/tests/` gate at close-out: **2751 tests, 0 errors**;
+the 5 failures present are all in `test_planning_*` (7.4's own drift — `tsk_block` route removed,
+`actual_start/actual_end` un-migrated, two task indexes) and belong to the **7.8 session's
+un-migrated `TaskBlock` work**, not to 7.7; every `test_scope_*` passes. `manage.py check` clean;
+`makemigrations --check` lists only 7.8's pending `0011_taskblock_…`, nothing of 7.7's.
+
+Phase 7: `.claude/skills/projects/SKILL.md` gained a `## 7.7 Scope & Requirements Management`
+section (models, the 17-row verb table documenting the **post-fix decorator order** and the
+`sci_retire` gate, the register notes, the C1/C2/C3 gotchas 13-14) and the Routes / Templates /
+Seeder / Tests / Sidebar sections were refreshed to include 7.7 (route count corrected to the live
+**205** names). `README.md` row moved to **7 of 19** with a 7.7 paragraph.
+
+**Two items recorded for the product owner, deliberately NOT decided here:** (a) **I9/I10** —
+`sci_realize`, `sci_retire` and `svr_accept` are login-only today, matching the 7.6 `qpl_approve`
+precedent; whether they should be tenant-admin-gated is a policy call. (b) the **403-vs-405
+decorator ordering exists in 7.1-7.5 as well** — scope this run was 7.7 only, so it was recorded
+as a follow-up and deliberately not swept.
+
+---
+
 ## Projects 7.8 — Task & Work Management (build plan)
 
 > Source of truth: `.claude/tasks/research-projects-7.8.md` (committed 536c2230). Scope frozen by
