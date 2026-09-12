@@ -7371,9 +7371,13 @@ Seeder / Tests / Sidebar sections were refreshed to include 7.7 (route count cor
 
 **Two items recorded for the product owner, deliberately NOT decided here:** (a) **I9/I10** —
 `sci_realize`, `sci_retire` and `svr_accept` are login-only today, matching the 7.6 `qpl_approve`
-precedent; whether they should be tenant-admin-gated is a policy call. (b) the **403-vs-405
+precedent; whether they should be tenant-admin-gated is a policy call. (b) ~~the **403-vs-405**
 decorator ordering exists in 7.1-7.5 as well** — scope this run was 7.7 only, so it was recorded
-as a follow-up and deliberately not swept.
+as a follow-up and deliberately not swept.~~ **SWEPT 2026-09-13**: reordered `@require_POST`
+above `@tenant_admin_required` on **23 verbs across 12 files** (7.1–7.5), updated the two
+security tests that encoded the old buggy 403 to assert 405 instead, and added the missing
+`TaskBlock`/`TaskChecklistItem` imports to `admin.py` (a broken-main fix from the concurrent 7.8
+session). Full suite: **2751 tests, 0 failures, 0 errors**.
 
 ---
 
