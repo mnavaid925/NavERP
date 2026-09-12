@@ -6965,6 +6965,22 @@ configurable policy engine** (Ruling 1).
 
 ### 7.6 Quality Management (Module 7: Project Management, `projects`) — plan from research-projects-7.6.md (2026-09-11)
 
+> **CLOSE-OUT (2026-09-12, continuation session):** build + review + fixer + tests + docs are
+> DONE. Session 1 landed the contract + `QualityPlan`/`QualityReview` (all four layers + 12
+> templates); the continuation rescued the orphaned `DeliverableInspections.py`, built QCI +
+> `QualityDefect` + the two computed pages, integrated (re-exports between the 7.5/7.7 blocks,
+> admin, `_quality` seeder, `LIVE_LINKS["7.6"]`, overview), and generated migration **0009**
+> LAST (7.7's peer took 0007, 7.5's index migration 0008). Smoke: 137/137 content assertions.
+> Review: all six reviewers → `review-projects-7.6.md` deduped to 0C/2I/15M + 3 design
+> observations; fixer closed everything (M15 second-class filter indexes skipped — accepted
+> while registers are small). Shipped deviations folded into the contract file (E009 widths
+> 14/12, `qrv_report` accepts planned, QDF `is_locked` + cancelled, maturity `has_score`,
+> `parties` key dropped). Tests: `quality_*` conftest block + `test_quality_{models,forms,
+> views,security}.py` (53/29/76/44 = 202), full unfiltered app suite green on the real
+> migration path; contract frozen in `test-contract-projects-7.6.md`. Skill section 7.6
+> appended; README row reads 6 of 19. The plan below is kept verbatim; unticked boxes follow
+> the 7.4/7.5 precedent.
+
 #### Scope, conventions, rulings, build order (research's 4 models + 2 computed pages — order for FK flow)
 
 - [ ] **Concurrency (read first):** 7.1–7.5 are built and live; **a peer session is concurrently building a sibling `7.M` in this same checkout — the 7.7 `ScopeRequirements` models/forms/views/urls folders and `templates/projects/scope/` are already on disk**, and its `# --- 7.7` blocks already sit in the three layer `__init__.py` files + the `urls/__init__.py` concat. So `todo.md`, the **migration leaf**, and every shared file (`models/forms/views/urls __init__.py`, `admin.py`, `seed_projects.py`, `navigation.py`, `overview.html`, `tests/conftest.py`) are **contended**. Every shared-file touch is an **Integrate-step item**, done once, as a **surgical `Edit` with a re-read anchor** immediately before the edit (**L43: never full-rewrite a shared ~6,950-line file; NEVER use `Write` on `todo.md`**). Insert the 7.6 block **between the existing `# --- 7.5` and `# --- 7.7` blocks** in each layer `__init__.py`. Commits are path-limited: `git add '<f>'; git commit -m '<msg>' -- '<f>'`.
