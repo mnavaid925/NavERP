@@ -323,7 +323,7 @@ class RequirementAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "project", "requirement_type", "priority", "status",
                     "wbs_node", "owner", "tenant")
     list_filter = ("status", "requirement_type", "priority", "elicitation_method")
-    list_select_related = ("tenant", "project", "parent", "wbs_node", "source_party", "owner",
+    list_select_related = ("tenant", "project", "wbs_node", "source_party", "owner",
                            "requested_by", "approved_by", "verified_by")
     search_fields = ("number", "title", "description", "acceptance_criteria")
     # status is verb-driven (submit/approve/reject/implement/verify) and every stamp is written by
