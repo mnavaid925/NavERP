@@ -35,7 +35,7 @@ class RequirementRejectionForm(forms.Form):
     """The ``req_reject`` verb's body: a rejection without a reason is not actionable."""
 
     reason = forms.CharField(
-        required=True, widget=forms.Textarea(attrs={"rows": 3}),
+        required=True, widget=forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         help_text="Why the requirement was rejected. Stored on the register row.")
 
 
@@ -43,5 +43,5 @@ class RequirementVerificationForm(forms.Form):
     """The ``req_verify`` verb's body: how the acceptance criteria were actually confirmed."""
 
     note = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={"rows": 3}),
+        required=False, widget=forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         help_text="How the acceptance criteria were confirmed (optional).")
