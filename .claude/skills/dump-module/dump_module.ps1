@@ -5,7 +5,7 @@
 ##
 ## NavERP is a multi-tenant Enterprise Resource Planning (ERP) platform (Django 5.1 + Tailwind/HTMX/Chart.js/Lucide,
 ## MySQL/MariaDB via PyMySQL, DB nav_erp). Module 0 (System Admin & Security) is realized by the foundation apps
-## core/accounts/tenants/dashboard. Modules 1-13 (NavERP.md) are one Django app each, built on demand by the
+## core/accounts/tenants/dashboard. Modules 1-23 (NavERP.md) are one Django app each, built on demand by the
 ## /next-module skill -- until then the script prints "(no backend folder found ...)" for them, which is expected.
 ##
 ## Usage:
@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 # -------- Module registry --------
 # key = output file slug; value = @(<apps_folder>, <templates_folder>, <human title>)
 # Module 0 (System Admin & Security) = the foundation apps core/accounts/tenants/dashboard.
-# Modules 1-13 are FORWARD-COMPATIBLE entries matching the /next-module domain app slugs;
+# Modules 1-23 are FORWARD-COMPATIBLE entries matching the /next-module domain app slugs;
 # their apps/<slug> + templates/<slug> folders do not exist until /next-module builds them.
 $registry = [ordered]@{
     # --- Module 0 (System Admin & Security) + foundation apps ---
@@ -35,7 +35,7 @@ $registry = [ordered]@{
     'accounts'       = @('accounts',    'accounts',    'Foundation: Accounts (Users, Roles, IAM/RBAC, Auth)')
     'core'           = @('core',        'core',        'Foundation: Core (Tenant, Audit, Navigation, Party)')
     'dashboard'      = @('dashboard',   'dashboard',   'Foundation: Dashboard (KPI aggregation)')
-    # --- Modules 1-13 (domain modules; built on demand by /next-module) ---
+    # --- Modules 1-23 (domain modules; built on demand by /next-module) ---
     '01_crm'         = @('crm',         'crm',         '1. Customer Relationship Management (CRM)')
     '02_accounting'  = @('accounting',  'accounting',  '2. Accounting & Finance')
     '03_hrm'         = @('hrm',         'hrm',         '3. Human Resource Management (HRM)')
@@ -49,6 +49,16 @@ $registry = [ordered]@{
     '11_assets'      = @('assets',      'assets',      '11. Asset Management System')
     '12_quality'     = @('quality',     'quality',     '12. Quality Management System (QMS)')
     '13_documents'   = @('documents',   'documents',   '13. Document Management System (DMS)')
+    '14_manufacturing' = @('manufacturing', 'manufacturing', '14. Manufacturing Execution & Production Management (MES)')
+    '15_plm'           = @('plm',          'plm',          '15. Product Lifecycle & Engineering Management (PLM)')
+    '16_maintenance'   = @('maintenance',  'maintenance',  '16. Maintenance & Reliability Management (CMMS/EAM)')
+    '17_fieldservice'  = @('fieldservice', 'fieldservice', '17. Field Service Management (FSM)')
+    '18_itsm'          = @('itsm',         'itsm',         '18. IT Service Management (ITSM)')
+    '19_retail'        = @('retail',       'retail',       '19. Retail & Point of Sale (POS) Management')
+    '20_facilities'    = @('facilities',   'facilities',   '20. Facilities & Workplace Management')
+    '21_treasury'      = @('treasury',     'treasury',     '21. Treasury & Financial Operations Management')
+    '22_esg'           = @('esg',          'esg',          '22. Sustainability, EHS & ESG Management')
+    '23_ai'            = @('ai',           'ai',           '23. AI & Intelligent Automation')
 }
 
 # Friendly aliases -> registry key (every key must be UNIQUE)
@@ -78,6 +88,16 @@ $aliases = @{
     '11'  = '11_assets'
     '12'  = '12_quality'
     '13'  = '13_documents'
+    '14'  = '14_manufacturing'
+    '15'  = '15_plm'
+    '16'  = '16_maintenance'
+    '17'  = '17_fieldservice'
+    '18'  = '18_itsm'
+    '19'  = '19_retail'
+    '20'  = '20_facilities'
+    '21'  = '21_treasury'
+    '22'  = '22_esg'
+    '23'  = '23_ai'
     # --- Module 0 + foundation app folders + keywords ---
     'tenants'        = '00_tenants'
     'tenant'         = '00_tenants'
@@ -108,7 +128,7 @@ $aliases = @{
     'kpi'            = 'dashboard'
     'home'           = 'dashboard'
     'overview'       = 'dashboard'
-    # --- Modules 1-13 app folder names + friendly keywords ---
+    # --- Modules 1-23 app folder names + friendly keywords ---
     'crm'            = '01_crm'
     'customer'       = '01_crm'
     'customers'      = '01_crm'
@@ -232,9 +252,9 @@ $aliases = @{
     'equipment'      = '11_assets'
     'fleet'          = '11_assets'
     'vehicle'        = '11_assets'
-    'maintenance'    = '11_assets'
+    'maintenance'    = '16_maintenance'
     'depreciation'   = '11_assets'
-    'cmms'           = '11_assets'
+    'cmms'           = '16_maintenance'
     'itam'           = '11_assets'
     'quality'        = '12_quality'
     'qms'            = '12_quality'
@@ -256,6 +276,46 @@ $aliases = @{
     'knowledge'      = '13_documents'
     'file'           = '13_documents'
     'files'          = '13_documents'
+    # --- Modules 14-23 app folder names + friendly keywords ---
+    'manufacturing'  = '14_manufacturing'
+    'mes'            = '14_manufacturing'
+    'production'     = '14_manufacturing'
+    'shopfloor'      = '14_manufacturing'
+    'plm'            = '15_plm'
+    'ebom'           = '15_plm'
+    'cad'            = '15_plm'
+    'engineering'    = '15_plm'
+    'eam'            = '16_maintenance'
+    'reliability'    = '16_maintenance'
+    'fieldservice'   = '17_fieldservice'
+    'fsm'            = '17_fieldservice'
+    'dispatch'       = '17_fieldservice'
+    'technician'     = '17_fieldservice'
+    'itsm'           = '18_itsm'
+    'incident'       = '18_itsm'
+    'itil'           = '18_itsm'
+    'cmdb'           = '18_itsm'
+    'servicedesk'    = '18_itsm'
+    'retail'         = '19_retail'
+    'pos'            = '19_retail'
+    'loyalty'        = '19_retail'
+    'till'           = '19_retail'
+    'facilities'     = '20_facilities'
+    'facility'       = '20_facilities'
+    'workplace'      = '20_facilities'
+    'treasury'       = '21_treasury'
+    'liquidity'      = '21_treasury'
+    'fx'             = '21_treasury'
+    'hedging'        = '21_treasury'
+    'debt'           = '21_treasury'
+    'esg'            = '22_esg'
+    'ehs'            = '22_esg'
+    'sustainability' = '22_esg'
+    'carbon'         = '22_esg'
+    'ai'             = '23_ai'
+    'ml'             = '23_ai'
+    'llm'            = '23_ai'
+    'copilot'        = '23_ai'
 }
 
 # -------- Resolve which keys to process --------
@@ -287,10 +347,12 @@ if ($targetKeys.Count -eq 0) {
 Unknown module: '$Module'.
 
 Valid identifiers:
-  Number:       0..13  (or 00..13)
+  Number:       0..23  (or 00..23)
   App folder:   tenants, accounts, core, dashboard,
                 crm, accounting, hrm, scm, inventory, procurement, projects,
-                sales, ecommerce, bi, assets, quality, documents
+                sales, ecommerce, bi, assets, quality, documents,
+                manufacturing, plm, maintenance, fieldservice, itsm, retail,
+                facilities, treasury, esg, ai
   Special:      all   (regenerate every module)
 
 Examples:
