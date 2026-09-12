@@ -33,5 +33,5 @@ class VerificationDecisionForm(forms.Form):
     """
 
     note = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={"rows": 3}),
+        required=False, widget=forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         help_text="The acceptance decision's reasoning (required when rejecting).")
