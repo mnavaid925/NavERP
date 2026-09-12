@@ -21,6 +21,8 @@ dispositioned work under-plates the project.
 """
 import datetime
 
+from django.db.models import Avg, Count
+
 from apps.core.crud import as_db_int
 from apps.projects.models import Project, QualityDefect, QualityReview
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -42,6 +44,11 @@ _CLOSED_DEFECT_STATUSES = ("resolved", "closed")
 #: How many months the trend table reaches back (including the current one).
 _TREND_MONTHS = 6
 
+#: Working-set cap on the trend's single date pass (the RiskAnalysis register-cap idiom). A
+#: register large enough to hit it makes the trend a partial view — but an unparameterised
+#: whole-table pass in the request thread is the worse failure.
+_REGISTER_CAP = 2000
+
 #: Cap on the rendered register rows and the lessons lens — the page is a lens, not a register.
 _ROW_CAP = 25
 
@@ -62,27 +69,28 @@ def _maturity_band(score):
     return _MATURITY_BANDS[-1][1]
 
 
-def _compute_maturity(defects, reviews):
+def _compute_maturity(defects, review_agg):
     """The 1–5 maturity figure over this scope's reviews and defects — computed, never stored.
 
-    60% the reviews' own ``maturity_score`` average, 40% the defect closure rate. With no
-    scored reviews the closure rate stands alone; with neither, the score is ``None`` and the
-    template renders the no-data state rather than a band computed from nothing.
+    60% the reviews' own ``maturity_score`` average, 40% the defect closure rate. The review
+    half arrives pre-aggregated (a ``Count``/``Avg`` over ``maturity_score``) so the whole
+    register is never materialised for one average. With no scored reviews the closure rate
+    stands alone; with neither, the score is ``None`` and the template renders the no-data
+    state rather than a band computed from nothing.
     """
-    scored = [r.maturity_score for r in reviews if r.maturity_score]
     defects_total = defects.count()
     defects_closed = defects.filter(status__in=_CLOSED_DEFECT_STATUSES).count()
     closure_pct = round(defects_closed / defects_total * 100) if defects_total else 0
     closure_component = closure_pct / 20  # 0–100% onto the 0–5 scale
-    if scored:
-        avg_maturity = sum(scored) / len(scored)
-        score = round(0.6 * avg_maturity + 0.4 * closure_component, 1)
+    reviews_scored = review_agg["n"] or 0
+    if reviews_scored:
+        score = round(0.6 * review_agg["avg"] + 0.4 * closure_component, 1)
     elif defects_total:
         score = round(closure_component, 1)
     else:
         score = None
     maturity = {
-        "reviews_scored": len(scored),
+        "reviews_scored": reviews_scored,
         "defects_total": defects_total,
         "defects_closed": defects_closed,
         "closure_pct": closure_pct,
@@ -97,8 +105,11 @@ def _compute_maturity(defects, reviews):
 
 def _defect_trend(defects):
     """Opened vs dispositioned per month over the last ``_TREND_MONTHS`` months — period rows for
-    CSS bars, scaled against the busiest single figure. Both windows run through the ``__date``
-    lookup so the month bounds are plain local dates — no aware/naive datetime mixing."""
+    CSS bars, scaled against the busiest single figure. One capped pass over the two date columns
+    buckets the months in Python (the RiskAnalysis register-cap idiom) instead of two COUNTs per
+    month — the ``resolved_at`` half wraps the column and would be unindexable anyway. The stamp
+    is converted to a local date, the same semantics the ``__date`` lookup gave, so the month
+    bounds stay plain dates — no aware/naive datetime mixing."""
     today = timezone.localdate()
     months = []
     year, month = today.year, today.month
@@ -109,19 +120,25 @@ def _defect_trend(defects):
             year, month = year - 1, 12
     months.reverse()
 
+    buckets = {m: {"opened": 0, "closed": 0} for m in months}
+    for row in defects.values("identified_date", "resolved_at")[:_REGISTER_CAP]:
+        identified = row["identified_date"]
+        if identified is not None and (identified.year, identified.month) in buckets:
+            buckets[(identified.year, identified.month)]["opened"] += 1
+        resolved_at = row["resolved_at"]
+        if resolved_at is not None:
+            resolved = timezone.localdate(resolved_at)
+            if (resolved.year, resolved.month) in buckets:
+                buckets[(resolved.year, resolved.month)]["closed"] += 1
+
     rows, trend_max = [], 0
     for year, month in months:
         start = datetime.date(year, month, 1)
-        next_start = datetime.date(year + 1, 1, 1) if month == 12 \
-            else datetime.date(year, month + 1, 1)
-        opened = defects.filter(identified_date__gte=start,
-                                identified_date__lt=next_start).count()
-        closed = defects.filter(resolved_at__date__gte=start,
-                                resolved_at__date__lt=next_start).count()
-        trend_max = max(trend_max, opened, closed)
+        counts = buckets[(year, month)]
+        trend_max = max(trend_max, counts["opened"], counts["closed"])
         rows.append({"period": f"{year:04d}-{month:02d}",
                      "label": start.strftime("%b %Y"),
-                     "opened": opened, "closed": closed})
+                     "opened": counts["opened"], "closed": counts["closed"]})
     for row in rows:
         row["bar_pct"] = (round(max(row["opened"], row["closed"]) / trend_max * 100)
                           if trend_max else 0)
@@ -146,7 +163,9 @@ def quality_improvement(request):
 
     improvement_rows = list(reviews_qs.filter(review_type__in=_IMPROVEMENT_TYPES)
                             .order_by("-review_date", "-id")[:_ROW_CAP])
-    all_reviews = list(reviews_qs)
+    # The maturity figure needs one aggregate over the scored reviews — the register itself is
+    # never materialised for an average.
+    review_agg = reviews_qs.aggregate(n=Count("maturity_score"), avg=Avg("maturity_score"))
 
     trend_rows, trend_max = _defect_trend(defects_qs)
 
@@ -159,7 +178,7 @@ def quality_improvement(request):
         "projects": project_choices(tenant),
         "project": project,
         "improvement_rows": improvement_rows,
-        "maturity": _compute_maturity(defects_qs, all_reviews),
+        "maturity": _compute_maturity(defects_qs, review_agg),
         "defect_trend_rows": trend_rows,
         "defect_trend_max": trend_max,
         "lessons": lessons,
