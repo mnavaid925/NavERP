@@ -111,7 +111,7 @@
               {% for d in defects %}
                 <tr>
                   <td class="fw-600"><a href="{% url 'projects:qdf_detail' d.pk %}">{{ d.number }}</a><div class="text-muted">{{ d.title }}</div></td>
-                  <td>{% if d.severity == 'critical' %}<span class="badge badge-red">{{ d.get_severity_display }}</span>{% elif d.severity == 'major' %}<span class="badge badge-amber">{{ d.get_severity_display }}</span>{% elif d.severity == 'minor' %}<span class="badge badge-info">{{ d.get_severity_display }}</span>{% else %}{{ d.get_severity_display }}{% endif %}</td>
+                  <td>{% if d.severity == 'critical' %}<span class="badge badge-red">{{ d.get_severity_display }}</span>{% elif d.severity == 'major' %}<span class="badge badge-amber">{{ d.get_severity_display }}</span>{% elif d.severity == 'minor' %}<span class="badge badge-info">{{ d.get_severity_display }}</span>{% elif d.severity == 'observation' %}<span class="badge badge-green">{{ d.get_severity_display }}</span>{% else %}{{ d.get_severity_display }}{% endif %}</td>
                   <td>{{ d.get_defect_category_display }}</td>
                   <td>{% if d.owner %}{{ d.owner.get_full_name|default:d.owner.email }}{% else %}—{% endif %}</td>
                   <td>{% if d.due_date %}{{ d.due_date|date:"M d, Y" }}{% if d.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}—{% endif %}</td>
