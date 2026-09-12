@@ -443,10 +443,11 @@ def test_planning_index_names_are_the_as_built_set():
     """Migration 0003's index names are load-bearing: they appear in EXPLAIN plans, in DBA
     conversations and in any future migration that alters them. Re-adding or renaming one is a
     schema decision, so pin the exact set per model — dep carries the successor-side index ONLY
-    (the ``(tenant, predecessor, successor)`` unique already covers the predecessor prefix)."""
+    (the ``(tenant, predecessor, successor)`` unique already covers the predecessor prefix).
+    7.8's in-place execution extension added tsk's assignee and priority indexes (migration 0011)."""
     assert _planning_index_names(ProjectTask) == {
         "tsk_tnt_project_idx", "tsk_tnt_status_idx", "tsk_tnt_prj_parent_idx",
-        "tsk_tnt_ntype_idx"}
+        "tsk_tnt_ntype_idx", "tsk_tnt_assignee_idx", "tsk_tnt_priority_idx"}
     assert _planning_index_names(TaskDependency) == {"dep_tnt_succ_idx"}
     assert _planning_index_names(ProjectMilestone) == {
         "mst_tnt_project_idx", "mst_tnt_status_idx"}
@@ -484,10 +485,11 @@ def test_planning_ordering_and_unique_together_are_pinned(tenant_a):
 
 def test_planning_non_editable_stamps_carry_no_form_path():
     """The stamps a verb or ``save()`` owns — the numbers, the achievement stamp, the freeze-time
-    snapshot columns — are ``editable=False`` at the MODEL layer, so no ModelForm can offer them
-    however careless its ``Meta.fields``. Everything a user IS meant to edit stays editable."""
+    snapshot columns, 7.8's actual_start/actual_end execution stamps — are ``editable=False`` at
+    the MODEL layer, so no ModelForm can offer them however careless its ``Meta.fields``.
+    Everything a user IS meant to edit stays editable."""
     assert _planning_non_editable(ProjectTask) == {
-        "number", "created_by", "created_at", "updated_at"}
+        "number", "created_by", "created_at", "updated_at", "actual_start", "actual_end"}
     assert _planning_non_editable(TaskDependency) == {
         "number", "created_at", "updated_at"}
     assert _planning_non_editable(ProjectMilestone) == {
