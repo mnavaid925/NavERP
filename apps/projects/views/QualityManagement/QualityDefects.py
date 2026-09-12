@@ -60,8 +60,10 @@ def qdf_list(request):
             "disposition_choices": QualityDefect.DISPOSITION_CHOICES,
             "defect_category_choices": QualityDefect.DEFECT_CATEGORY_CHOICES,
             "owners": owners(request.tenant),
+            # The row-dropdown is a lens, not the register wholesale — capped at the latest 200
+            # so a long-lived inspection register cannot weigh the page down.
             "inspections": DeliverableInspection.objects.filter(tenant=request.tenant)
-                          .select_related("project").order_by("-created_at"),
+                          .select_related("project").order_by("-created_at")[:200],
         },
     )
 
