@@ -369,3 +369,31 @@ class ScopeVerificationAdmin(admin.ModelAdmin):
     search_fields = ("number", "deliverable", "findings", "decision_note")
     readonly_fields = ("acceptance_status", "decision_note", "accepted_by", "accepted_at",
                        "created_by", "created_at", "updated_at")
+
+
+# --- 7.8 Task & Work Management ---------------------------------------------------------------
+
+@admin.register(TaskChecklistItem)
+class TaskChecklistItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "label", "task", "sequence", "is_done", "done_by", "done_at",
+                    "tenant")
+    list_filter = ("is_done",)
+    list_select_related = ("tenant", "task", "done_by", "created_by")
+    search_fields = ("number", "label")
+    # is_done and the tick stamps are written by the tcl_check toggle — an admin-form edit would
+    # mint a tick with no one behind it.
+    readonly_fields = ("is_done", "done_by", "done_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(TaskBlock)
+class TaskBlockAdmin(admin.ModelAdmin):
+    list_display = ("number", "task", "reason", "is_active", "blocked_by", "blocked_at",
+                    "unblocked_by", "unblocked_at", "tenant")
+    list_filter = ("blocked_at", "unblocked_at")
+    list_select_related = ("tenant", "task", "blocked_by", "unblocked_by", "created_by")
+    search_fields = ("number", "reason", "unblock_criteria", "resolution_note")
+    # The whole lifecycle is verb-written: tsk_block mints the row with its stamps, tsk_unblock
+    # closes it exactly once — the frozen evidence must not be editable from an admin form.
+    readonly_fields = ("reason", "unblock_criteria", "blocked_by", "blocked_at", "unblocked_by",
+                       "unblocked_at", "resolution_note", "created_by", "created_at",
+                       "updated_at")
