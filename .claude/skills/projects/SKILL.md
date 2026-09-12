@@ -266,7 +266,82 @@ filter params + guards as `crud_list` re-applies (one conditional-Sum query), an
 card renders BELOW the filter bar. `cca_detail` pins its `budget_lines` to the EXACT active
 revision (a superseded-but-stamped revision must not leak in) and caps `expenses` at 25.
 
-## Routes (`app_name = "projects"`, 107 names)
+## 7.5 Risk & Issue Management — `RiskManagement/`, template slug `risk`
+
+Contract: `.claude/tasks/contract-projects-7.5.md`. Scope: the UNCERTAINTY layer — the risk
+register, response actions, the issue log with its escalation trail, and the two computed boards.
+Boundaries ruled at build time: the enterprise QMS (NCR/CAPA/audits/inspections) is **scm 4.9's**
+(7.6 quality is deliverable-scoped); per-tenant risk appetite is **7.19's** master data (7.5 pins
+the documented default `TOLERANCE_BANDS = {high, critical}`); the knowledge repository is
+**7.10's** (`lessons_learned` is a FIELD on the row, not a second store); no GL posting and no
+money columns beyond the risk's own exposure inputs (7.4 owns budgets — `contingency_account` is
+a read-only lens and the write to `CostControlAccount.contingency` stays 7.4's, Ruling 4).
+
+**Everything scored is DERIVED, never stored** — the 7.1 ROI / 7.4 EVM ruling again: `score`,
+`severity_band`, `emv`, `residual_*`, `is_review_overdue`, `is_open`, `is_overdue`, `age_days`
+are Python properties. `PROBABILITY_PCT = {1: 10, 2: 30, 3: 50, 4: 70, 5: 90}` (a MODULE-level
+constant, not a class attribute) converts the 1–5 ordinal for EMV and the Monte Carlo draw;
+`SEVERITY_BANDS` maps score 1–25 onto low/medium/high/critical. `residual_emv` divides the
+residual ordinal by 100 DIRECTLY (entered as a percent — deliberately not routed through
+`PROBABILITY_PCT`; the model tests pin this).
+
+### `ProjectRisk` [RSK-] — the register row
+`project` (CASCADE) + same-project `clean()` guards on `wbs_node` and `contingency_account`.
+Lifecycle `identified → assessing → response_planned → monitoring → realized → closed` is
+verb-driven (`status`/`closed_at`/`created_by` off the form). `is_locked` = realized|closed →
+edit/delete refuse.
+
+### `RiskResponseAction` [RRA-] — the committed work that executes a strategy
+`risk` CASCADE; own `owner`/`due_date`/`cost` (an estimate, not a 7.4 posting); strategy
+vocabulary mirrors the risk's six. `rra_complete` is the only writer of `status="completed"` +
+`completed_at`; a completed action is terminal — there is **no cancel verb** (the detail page
+says so; review I6).
+
+### `ProjectIssue` [ISS-] — what already happened
+`issue_type` issue/action_item/decision/other; triaged by `severity` (critical/high/medium/low —
+no P×I score). The realize bridge: `rsk_realize` mints the issue INSIDE its atomic block with
+`risk` FK + `severity=obj.severity_band` (the I1 invariant — the registers cannot drift about
+which risk materialized). `escalation_level` is stored 0–4 because the `?escalated=1` queue lens
+is a real column lookup; the evidence stamps (`root_cause`, `resolution_note`, `resolved_by/_at`,
+`escalated_to/_at`) are verb-written only.
+
+### `IssueEscalation` [ESC-] — one step of the escalation path
+No status, no lifecycle — appended by `iss_escalate` or `esc_create`; `escalated_at` is
+`auto_now_add`; `reason` REQUIRED. `LEVEL_CHOICES` 1–4 is the ONE level vocabulary (filter + form
++ verb all read it; the form field is a `TypedChoiceField(coerce=int)` over it).
+
+### 7.5 verbs — all `@require_POST`; GET answers 405
+
+| Verb | Gate | Requires |
+|---|---|---|
+| `rsk_realize` | login | any live status; **atomic** risk-save + issue-mint (review I1); replay = info no-op |
+| `rsk_close` | login | any live status; `RiskClosureForm` lesson optional; stamps `closed_at` |
+| `rsk_reopen` | **tenant_admin** | closed → monitoring, clears `closed_at` |
+| `rra_complete` | login | planned/in_progress → completed (terminal; replay refused) |
+| `iss_escalate` | **tenant_admin** | live issue; bumps `escalation_level` + mints the ESC row atomically |
+| `iss_resolve` | login | live issue; `resolution_note` REQUIRED; replay refuses to overwrite the note |
+| `iss_close` | login | resolved ONLY (an open issue cannot be closed) |
+| `esc_create`/`esc_edit`/`esc_delete` | **tenant_admin** (review I9) | the register that writes the escalation trail is admin-gated to match `iss_escalate`; the list/detail pages hide the controls for members |
+
+Audit: every verb captures `previous` BEFORE mutating and logs `{"verb", "from", "to"}` inside
+the atomic block where one runs; actions ≤ 10 chars.
+
+Register notes: the derived lenses are **pre-scoped in the views from real columns** — `_band_q`
+rebuilds `?band=` from the `(probability, impact)` pairs inside `SEVERITY_BANDS`' bounds (a
+property cannot be filtered), `?overdue=1` ≡ `?review_due=1`, `?top=1` orders by
+`(-probability, -impact, -cost_impact, -id)`. The two computed boards (no snapshot tables) cap
+their working set at `_REGISTER_CAP = 2000` rows (review M13). The Monte Carlo
+(`risk_analysis`, POST): `rng = random.Random(seed)`, one Bernoulli per open costed risk,
+nearest-rank percentiles; a seed is reproducible byte-for-byte (CSRF aside), `iterations` clamps
+to `[100, 10000]`, and a valid `?seed=` survives an out-of-range `?iterations=` and an
+empty-body POST (per-field resolution — review M4); population = `cost_impact > 0`, status live,
+**id-ascending** (the draw order IS the reproducibility guarantee, review M9). Monitoring's
+lessons lens follows `?project=` (review I10). All seven register indexes are named
+(`rsk_tnt_created_idx`, `rsk_tnt_review_idx`, `rsk_tnt_owner_idx`, `rra_tnt_created_idx`,
+`rra_tnt_strategy_idx`, `iss_tnt_type_idx`, `iss_tnt_due_idx` — migration 0008 added the last
+five reviews I7/M11/M12 asked for; `rsk_tnt_created_idx` came with the build in 0006).
+
+## Routes (`app_name = "projects"`, 137 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
 7.2: `tsk_{list,create,detail,edit,delete}` + `tsk_tree` (literal route `tasks/tree/`) ·
@@ -278,6 +353,10 @@ segments disjoint from 7.1's, so the url concatenation cannot shadow).
 7.4: `pbl_{list,create,detail,edit,delete}` · `bvr_…` + `bvr_{submit,approve,reject,activate}` ·
 `cca_{list,create,detail,edit,delete}` · `pex_…` + `pex_{post,void}` (path prefixes
 `budgetlines/ revisions/ controlaccounts/ expenses/` — disjoint literals).
+7.5: `rsk_{list,create,detail,edit,delete}` + `rsk_{realize,close,reopen}` ·
+`rra_…` + `rra_complete` · `iss_…` + `iss_{escalate,resolve,close}` · `esc_…` (full CRUD trio,
+no verbs) · `risk_analysis` + `risk_monitoring` (path prefixes `risks/ responses/ issues/
+escalations/ risk-analysis/ risk-monitoring/` — disjoint literals).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -315,11 +394,13 @@ charter-approved / ceremony-attested, the row is not editable. This is the modul
 
 Entity folders `initiation/{projectrequest, project, projectstakeholder, projectkickoff}/`,
 `planning/{task, taskdependency, milestone, schedulebaseline}/`,
-`resource/{resourceprofile, resourceallocation, resourcetimeentry}/` and
-`cost/{budgetrevision, costcontrolaccount, projectbudgetline, projectexpense}/`, plus
+`resource/{resourceprofile, resourceallocation, resourcetimeentry}/`,
+`cost/{budgetrevision, costcontrolaccount, projectbudgetline, projectexpense}/` and
+`risk/{projectrisk, responseaction, issue, escalation}/`, plus
 `templates/projects/overview.html` at the app root, the recursive
 `planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
-standalone `resource/capacity_demand.html` board (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
+standalone boards `resource/capacity_demand.html`, `risk/risk_analysis.html` and
+`risk/risk_monitoring.html` (sub-module root, rule 6). Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
 -danger` variants **do not exist** and render unstyled; the alignment class is `text-right` —
 `ta-right` is NOT defined, review I4).
@@ -344,7 +425,14 @@ the baseline), a draft sketch revision on the draft project, a pending-approval 
 (`amount_delta` +50,000.00), lines across all seven categories anchored to the WBS work
 packages, one CA per active-project deliverable tuned so CA-1 renders **over** (AC 160,000 vs EV
 147,250), CA-2 **watch** (CPI 0.97) and CA-3 **under** (no actuals — CPI None), and expenses in
-every entry type and status (PO/invoice STRINGS as soft references, one void, one draft). Log in as
+every entry type and status (PO/invoice STRINGS as soft references, one void, one draft). 7.5
+(own guard): **17 ProjectRisks / 7 RiskResponseActions / 7 ProjectIssues / 2 IssueEscalations per
+tenant** (12 risks on the active project, 5 on the chartered one) covering all nine categories,
+both threat/opportunity values, all four severity bands and all six statuses — one realized risk
+carrying the issue the realize verb would have minted, one closed with a lesson, three with a
+past review date — plus response actions on the top risks (one completed, one overdue), seven
+issues across all four severities and six statuses (one two-step escalation path: level 1 → 2,
+one resolved with lessons), and issues seeded so the `?escalated=1` queue is alive. Log in as
 `admin_acme` / `admin_globex`, password `password`. Run it twice to prove idempotency.
 
 Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocates `number`, and
@@ -352,14 +440,17 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
-`conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*`
-fixture blocks — **owned by itself; edit it only with a full unfiltered re-run**) plus
-`test_initiation_{models,forms,views,security}.py`, `test_planning_{models,forms,views,security}.py`,
-`test_resource_{models,forms,views,security}.py` and `test_cost_{models,forms,views,security}.py`
+`conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
+7.5 `risk_*` fixture blocks — **owned by itself; edit it only with a full unfiltered re-run**)
+plus `test_initiation_{models,forms,views,security}.py`,
+`test_planning_{models,forms,views,security}.py`,
+`test_resource_{models,forms,views,security}.py`, `test_cost_{models,forms,views,security}.py`
 (cost: models 67 / forms 42 / views 41 / security — names pinned in
 `.claude/tasks/test-contract-projects-7.4.md` with the computed EVM table the model tests
-assert). Naming: every test `test_<subslug>_*`, every helper
-`_<subslug>_*`, so the next sub-module cannot shadow them.
+assert) and `test_risk_{models,forms,views,security}.py` (risk: models 35 / forms 23 —
+band-boundary arithmetic, the seeded-Monte-Carlo draw replicated in-test, I9's esc-trio gating;
+names pinned in `.claude/tasks/test-contract-projects-7.5.md`). Naming: every test
+`test_<subslug>_*`, every helper `_<subslug>_*`, so the next sub-module cannot shadow them.
 
 ```bash
 venv\Scripts\python.exe -m pytest apps/projects/ --nomigrations
@@ -467,6 +558,20 @@ from `rsp_detail`, employee-keyed rows only).
 Forecasting & EAC maps to the same register as bullet 2 on purpose — the EVM columns are
 control-account columns, so a bullet may be a lens on a register rather than a new page
 (7.2's Task-Register precedent).
+
+```python
+"7.5": {
+    "Risk Identification & Register":        "projects:rsk_list",
+    "Qualitative & Quantitative Analysis":   "projects:risk_analysis",
+    "Risk Response Planning":                "projects:rra_list",
+    "Issue Logging & Escalation":            "projects:iss_list",
+    "Risk Monitoring & Reporting":           "projects:risk_monitoring",
+    "Issue Escalation Queue":                "projects:iss_list?escalated=1",  # extra live leaf
+}
+```
+Bullets 2 and 5 map to the computed boards (the matrix+EMV+Monte Carlo and the
+top-risks/burn-down/review/lessons strip — computed over the register on every load, no snapshot
+tables); the escalation-queue leaf deep-links the issue log's `?escalated=1` lens.
 
 ## Common tasks
 
