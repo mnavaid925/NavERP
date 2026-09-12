@@ -782,7 +782,8 @@ venv\Scripts\python.exe -m pytest apps/projects/ --nomigrations
    Swap the last two and a *member's* GET on an admin-gated verb returns **403 instead of the
    house 405** — the role check fires first. The bug hides from an admin-actor test (which gets
    the right answer either way); always assert the method guard with the MEMBER client too. This
-   same ordering bug exists in 7.1–7.5 and is a recorded, deliberately-unswept follow-up.
+   same ordering bug was found in 7.1–7.5 and **swept on 2026-09-13** (23 verbs across 12 files);
+   the full suite now asserts 405 for both actors on every POST-only verb.
 14. **A wrongly-signed numeric seed literal inside `transaction.atomic()` fails SILENTLY and
    permanently (7.7's C3).** `schedule_impact_days=-10` into a `PositiveIntegerField` raised a
    MySQL CHECK violation that rolled the WHOLE `_scope` block back — no rows, no loud error, and
