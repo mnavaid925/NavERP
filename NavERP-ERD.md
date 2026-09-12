@@ -1,6 +1,6 @@
 # NavERP — Unified Core Data Model (ERD)
 
-The shared "spine" every functional module (0–13, see [`NavERP.md`](NavERP.md)) points at. The design is held
+The shared "spine" every functional module (0–23, see [`NavERP.md`](NavERP.md)) points at. The design is held
 together by three ideas:
 
 1. **Party model** — `Party` + `PartyRole`: one record per real-world person/organization; *customer, vendor,
@@ -8,11 +8,11 @@ together by three ideas:
    customer/vendor/employee duplication otherwise spread across CRM, Accounting, HR, SCM, Procurement and Sales.
 2. **Two universal ledgers** — `StockMove` (inventory truth) and `JournalEntry`/`JournalLine` (financial truth).
    Every transaction posts to one or both. On-hand quantities and account balances are **derived** (aggregate
-   queries), never stored as editable fields — that consistency is what makes it an ERP rather than 14 apps.
+   queries), never stored as editable fields — that consistency is what makes it an ERP rather than 24 apps.
 3. **Shared cross-module anchors** — a small set of backbone entities (`OrgUnit`, `Employment`, `Activity`,
    `Project`, `Asset`, `WorkOrder`, `Contract`, `QualityRecord`, `Document`, `AuditLog`) that more than one module
    reads or writes. Each module adds only its *own* domain tables on top of this spine (see the
-   [Module coverage map](#module-coverage-map-0–13)).
+   [Module coverage map](#module-coverage-map-0–23)).
 
 **This document set.** Read this alongside [`NavERP.md`](NavERP.md) (the catalog of *what* each module does) and
 [`README.md`](README.md) (how to install/run the built foundation). This file is the *how the data is modeled*
@@ -452,10 +452,10 @@ erDiagram
     }
 ```
 
-## Module coverage map (0–13)
+## Module coverage map (0–23)
 
 Every module in [`NavERP.md`](NavERP.md) is built on the spine above: it **reuses** core entities (never copies
-them) and **adds** only its own domain tables. This is what keeps NavERP one ERP instead of fourteen apps.
+them) and **adds** only its own domain tables. This is what keeps NavERP one ERP instead of twenty-four apps.
 
 | # | Module | Reuses (core spine) | Adds (module-specific tables) |
 |---|--------|---------------------|-------------------------------|
@@ -473,6 +473,16 @@ them) and **adds** only its own domain tables. This is what keeps NavERP one ERP
 | 11 | Asset Management | **`scm.Asset` (AS BUILT — 4.13 owns it; extend by string FK, do NOT re-declare)** · `scm.MaintenanceWorkOrder` · `scm.MaintenancePlan` · `scm.MeterReading` · `Item` · `Location` · `Party` (custodian/vendor) · `accounting.FixedAsset` (depreciation lives there, not here) | AssetCategory, DepreciationSchedule, AssetDisposal, LeaseContract *(WarrantyClaim already exists as `scm.WarrantyClaim` from 4.10)* |
 | 12 | Quality (QMS) | `QualityRecord` · `Party` (supplier) · `Item` · `LotSerial` · `WorkOrder` · `Document` | NonConformance (NCR), CapaAction, Inspection, QualityAudit, Calibration |
 | 13 | Document Management (DMS) | `Document` (+ classification/version) · `Contract` · `Activity` · `AuditLog` | Folder, DocumentVersion, ApprovalRequest, RetentionPolicy, eForm |
+| 14 | Manufacturing Execution (MES) | **`scm.BillOfMaterials`/`BOMLine` · `scm.WorkOrder`/`WorkOrderComponent` · `scm.WorkCenter` · `scm.ProductionTimeLog` (AS BUILT — 4.8 owns the production spine; extend by FK, do NOT re-declare)** · `scm.Item`/`StockMove` (issue/backflush/production post to the one ledger) · `accounting.*` (WIP/variance posting, L29) | MPS plan, MRP run + PlannedOrder, CapacityPlan, DispatchList/sequence, shop-floor queues + labor/machine capture, backflush + substitutions, subcontract (outside) processing, lot/serial genealogy + recall, in-process quality handoff to QMS (12), OEE/downtime/yield analytics |
+| 15 | Product Lifecycle (PLM) | `scm.Item`/`ItemCategory` · **`scm.BillOfMaterials` (the EBOM→MBOM transform works ON 4.8's BOM, not a second one)** · `Document` (CAD/engineering files) · `Activity` · `Party` (supplier engineering) | ProductFamily, EngineeringPart/specifications, EbomLine, EngineeringChange (ECR/ECO/ECN) + revision/effectivity, CadReference, ProductRequirement, DesignReview, PrototypeBuild/PilotRun, ProductVariant, ShouldCost, product compliance/certification |
+| 16 | Maintenance & Reliability (CMMS/EAM) | **`scm.Asset` · `scm.MaintenanceWorkOrder` · `scm.MaintenancePlan` · `scm.MeterReading` (AS BUILT — 4.13 owns them; extend by FK, do NOT re-declare)** · `scm.WarrantyClaim` (4.10) · `scm.Item` (spares — no second parts catalogue) · `accounting.*` (maintenance costing) | FailureCode + root-cause analysis, ReliabilityRecord (MTBF/MTTR, derived), CalibrationRecord, MaintenanceServiceContract/SLA, ShutdownPlan/work packs, mobile execution, PermitToWork, IoT condition monitoring, maintenance cost rollup |
+| 17 | Field Service (FSM) | `Party` (service customer) · **`scm.Asset` (the installed base)** · `scm.MaintenanceWorkOrder` (the service job) · `scm.WarrantyClaim` · `Contract` · `accounting.Invoice` · `Activity` | ServiceSite, InstalledBaseUnit (serial + configuration), ServiceContract/Entitlement, ServiceRequest, DispatchSchedule/technician skills, VanStock (a `Location`), PreventiveServicePlan, ServiceBilling (fixed/T&M/milestone), service quality (first-time-fix/CSAT) |
+| 18 | IT Service Management (ITSM) | `Party` (IT supplier) · `Contract` · `Document` · `AuditLog` · `User`/`Permission` (access requests) | ServiceCatalogItem, Incident, ServiceRequest, ProblemRecord/KnownError, ItChange (standard/normal/emergency), Release/Deployment, CmdbItem + relationships, ItKnowledgeArticle, SlaTarget/OLA, SoftwareLicense, EndpointDevice |
+| 19 | Retail & POS | **`scm.SalesOrder` (4.5 OWNS the order — POS orders EXTEND by FK)** · `scm.Item` · `scm.Location` (store/till stock) · `scm.StockMove` · `inventory.ItemPrice` · `Party` (customer/loyalty member) · `accounting.Payment` · `scm.ReturnAuthorization` (4.10) | Store/Till/Register, CashierSession, RetailAssortment/Markdown, Coupon/Promotion, PosTransaction + tenders, LoyaltyProgram/PointsAccount, GiftCard, CashCount/daily settlement, Click&Collect / Ship-from-Store, shrink/loss prevention |
+| 20 | Facilities & Workplace | `OrgUnit` (site/branch anchor) · `scm.Asset` (facility equipment) · `Party` (landlord/vendor) · `Contract` (lease) · `accounting.*` (rent/cost) · `hrm.EmployeeProfile` (moves/seating) | FacilityNode (site→building→floor→room→zone), SpaceAllocation, LeaseAgreement, FacilityWorkOrder, CleaningSchedule, VisitorBadge, RoomBooking, UtilityMeterReading, SafetyInspection, CapitalProject, EmergencyPlan |
+| 21 | Treasury & Financial Operations | **`accounting.BankAccount` · `accounting.BankTransaction` · `accounting.Reconciliation` (AS BUILT — 2.5 owns them; extend by FK, do NOT re-declare)** · `accounting.Currency`/`ExchangeRate` · `accounting.IntercompanyTransaction` (2.10) · `Party` (bank/counterparty) — every treasury effect posts its JE via `accounting` (L29) | CashPosition/Forecast, BankMandate/Signatory, PaymentFactory (proposals→batch→submission), payment controls, LiquidityPool, DebtFacility/InterestSchedule, Investment, FxExposure/Hedge, counterparty/market risk, bank-fee analysis |
+| 22 | Sustainability, EHS & ESG | **`scm.SustainabilityAssessment` (AS BUILT — 4.12 owns the supplier ESG scorecard; extend by FK)** · `scm.MeterReading` (energy/water meters) · `Party` (supplier ESG risk) · `hrm.Training*` (competency) · `Document` (evidence) · `QualityRecord` | EsgPolicy/MaterialTopic, EsgDataPoint (validated + lineage), EmissionFactor + Scope 1/2/3 activity records, WasteStream, EsgQuestionnaire, EhsIncident/NearMiss, JobSafetyAssessment, PermitToWork, EsgAudit, DisclosurePack, SustainabilityTarget |
+| 23 | AI & Intelligent Automation | *read-only over the entire spine (the BI precedent — AI infers, it does not own business data)* · `AuditLog` (every AI action/answer auditable) · `Permission`/`Role` (permission-aware tool use — an agent sees what its user sees) | AiUseCase (governance inventory), AiConversation, AiAgent/AiRun (orchestration, retries, human handoff), PromptTemplate, KnowledgeSource (grounding), ExtractionJob (document AI), AnomalySignal, RecommendationCard, EvaluationMetric (quality/cost/latency) |
 
 ## Django implementation notes
 
