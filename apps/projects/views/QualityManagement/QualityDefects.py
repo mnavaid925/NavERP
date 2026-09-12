@@ -30,7 +30,8 @@ _LIVE_STATUSES = ("open", "in_progress")
 _ISSUE_SEVERITY = {"critical": "critical", "major": "high", "minor": "medium",
                    "observation": "low"}
 
-_LOCKED_MSG = ("A resolved or closed defect is frozen evidence and cannot be edited or deleted.")
+_LOCKED_MSG = ("A resolved, closed or cancelled defect is frozen evidence and cannot be edited "
+               "or deleted.")
 
 
 @login_required
@@ -187,8 +188,8 @@ def qdf_raise_issue(request, pk):
 
     obj = get_object_or_404(QualityDefect, pk=pk, tenant=request.tenant)
     if obj.is_locked:
-        messages.error(request, "A resolved or closed defect cannot raise an issue — it is "
-                                "already dispositioned.")
+        messages.error(request, "A resolved, closed or cancelled defect cannot raise an issue — "
+                                "it is frozen evidence.")
         return redirect("projects:qdf_detail", pk=obj.pk)
     if obj.project_issue_id:
         messages.info(request, f"That defect already raised issue {obj.project_issue.number}.")
