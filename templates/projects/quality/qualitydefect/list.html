@@ -93,6 +93,7 @@
                 {% if obj.severity == 'critical' %}<span class="badge badge-red">{{ obj.get_severity_display }}</span>
                 {% elif obj.severity == 'major' %}<span class="badge badge-amber">{{ obj.get_severity_display }}</span>
                 {% elif obj.severity == 'minor' %}<span class="badge badge-info">{{ obj.get_severity_display }}</span>
+                {% elif obj.severity == 'observation' %}<span class="badge badge-green">{{ obj.get_severity_display }}</span>
                 {% else %}{{ obj.get_severity_display }}{% endif %}
               </td>
               <td>{{ obj.get_defect_category_display }}</td>
