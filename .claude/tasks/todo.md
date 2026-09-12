@@ -6407,6 +6407,14 @@ notifications (7.17) · portfolio cost rollups (7.12).
 
 ## 7.5 Risk & Issue Management (Module 7: Project Management, `projects`) — plan from research-projects-7.5.md (2026-09-11)
 
+> **CLOSE-OUT (2026-09-12, continuation session):** build + review + fixer + tests + docs are
+> DONE. All 23 review findings (0C/10I/13M, `review-projects-7.5.md`) are `[x] fixed` — the
+> first fixer run landed I1–I8, the continuation finished I9–M13 and migration 0008 (six named
+> register indexes, I7+M11+M12). Tests: `risk_*` conftest block + `test_risk_{models,forms,
+> views,security}.py` (35/23/25/24), full unfiltered app suite green; contract frozen in
+> `test-contract-projects-7.5.md`. Skill section 7.5 appended; README row reads 5 of 19.
+> The plan below is kept verbatim; unticked boxes follow the 7.4 precedent.
+
 ### Scope, conventions, rulings, build order (research's 4 models — order for FK flow)
 
 - [ ] **Concurrency (read first):** 7.1–7.4 are all built and live in this tree; **no peer is writing
