@@ -36,7 +36,7 @@
   </div>
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-icon {% if maturity.score and maturity.score >= 4 %}green{% elif maturity.score and maturity.score < 2 %}red{% else %}purple{% endif %}"><i data-lucide="gauge"></i></div><div class="stat-value">{% if maturity.score %}{{ maturity.score }}/5{% else %}—{% endif %}</div><div class="stat-label">{% if maturity.band %}Maturity — {{ maturity.band }}{% else %}Maturity (no data yet){% endif %}</div></div>
+    <div class="stat-card"><div class="stat-icon {% if maturity.has_score and maturity.score >= 4 %}green{% elif maturity.has_score and maturity.score < 2 %}red{% else %}purple{% endif %}"><i data-lucide="gauge"></i></div><div class="stat-value">{% if maturity.has_score %}{{ maturity.score }}/5{% else %}—{% endif %}</div><div class="stat-label">{% if maturity.band %}Maturity — {{ maturity.band }}{% else %}Maturity (no data yet){% endif %}</div></div>
     <div class="stat-card"><div class="stat-icon blue"><i data-lucide="trending-up"></i></div><div class="stat-value">{{ improvement_open_count }}</div><div class="stat-label">Open improvement actions</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="bug"></i></div><div class="stat-value">{{ open_defect_count }}</div><div class="stat-label">Open defects</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="book-open"></i></div><div class="stat-value">{{ lessons_count }}</div><div class="stat-label">Recorded lessons</div></div>
@@ -50,7 +50,11 @@
   <div class="card">
     <div class="card-header"><h2>Process maturity assessment</h2></div>
     <div class="card-body">
-      {% if maturity.score %}
+      {% comment %}
+        Gated on ``has_score``, not the score's truthiness — a computed 0.0 (defects exist, 0%
+        closure) is a real score and still renders its band, not the no-data state.
+      {% endcomment %}
+      {% if maturity.has_score %}
         <dl class="detail-grid">
           <dt>Score</dt><dd>{{ maturity.score }} / 5</dd>
           <dt>Band</dt><dd><span class="badge {{ maturity.badge }}">{{ maturity.band }}</span></dd>
