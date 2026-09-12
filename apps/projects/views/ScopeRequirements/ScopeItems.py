@@ -159,6 +159,9 @@ def sci_retire(request, pk):
     if obj.status == "retired":
         messages.info(request, "That registry row is already retired.")
         return redirect("projects:sci_detail", pk=obj.pk)
+    if not obj.is_open:
+        messages.error(request, "Only an open or validated registry row can be retired.")
+        return redirect("projects:sci_detail", pk=obj.pk)
     form = ScopeItemOutcomeForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Retiring a registry row needs a written outcome.")
