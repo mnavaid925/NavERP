@@ -650,3 +650,55 @@ nothing, so the block cannot be re-run on a clean workspace and every claim abou
 matrix and creep board is currently unverifiable end-to-end. Fix C4 (one character plus a `full_clean()`),
 re-seed twice, and adjudicate I11/I12 (the admin-gate contract for `sci_realize`/`sci_retire`/
 `svr_accept`) with the contract owner. After that, 7.7 is shippable.
+
+---
+
+# FIX LOG (code-fixer, 2026-09-12)
+
+Status of every consolidated finding after the fix pass. **No finding is left `[ ] open`.**
+
+| ID | Status | File(s) | Fix | Verified by |
+|---|---|---|---|---|
+| C1 | `[x] fixed` | `models/ScopeRequirements/ScopeItems.py`, `migrations/0010_alter_scopeitem_status.py` | Added `("violated","Violated")` to `STATUS_CHOICES`; `is_locked` now `("realized","retired","violated")` | `violated` in choices, `max_length=12` fits 7 chars, `is_locked=True`/`is_open=False`; `migrate` + `check` clean |
+| C2 | `[x] fixed` | `views/ScopeRequirements/{Requirements,ScopeChangeRequests,ScopeVerifications}.py` | Reordered to `@login_required` → `@require_POST` → `@tenant_admin_required` on all **8** admin-gated verbs (the "nine" was a miscount — Lane 1 lists eight) | 403/405 matrix: all 15 verbs member-GET **405**; member POST **403, audit_delta=0** |
+| C3 | `[x] fixed` | `management/commands/seed_projects.py` | `-10`→`10` **and** the second violation `-30`→`30` (same field, would have aborted identically); added `full_clean(exclude=["number"])` to all four `_scope` factories | Fresh-DB seed run twice: 15/12/9/9 per tenant, 0 negative rows, run 2 = clean per-tenant no-op |
+| I1 | `[x] fixed` | 4× `scope/*/detail.html`, 4× `forms/ScopeRequirements/*.py` | Wired the pinned `rejection_form`/`verification_form`/`outcome_form`/`decision_form` into the four detail templates; added `form-textarea` to the five companion widgets | All four detail pages render the forms with correct field names (`reason`/`note`/`outcome`/`decision_note`); all four verbs still POST 302 and move state |
+| I2 | `[x] fixed` | `.claude/tasks/contract-projects-7.7.md` | Contract corrected to `max_length=20` (code was the safe value; `document_analysis` = 17 chars) | Code unchanged; contract now matches |
+| I3 | `[x] fixed` | `views/ScopeRequirements/ScopeItems.py` | `sci_retire` refuses non-`is_open` rows with `messages.error`, keeps already-`retired` as `messages.info` | POST `sci_retire` on a realized row: 302, status unchanged |
+| I4 | `[x] fixed` | `management/commands/seed_projects.py` | Extended command `help` and `--flush` help to name the 7.5 and 7.7 models, children-first | Read back from `manage.py help seed_projects` |
+| I5 | `[x] fixed` | `views/ScopeRequirements/Requirements.py`, `templates/projects/scope/requirement/list.html` | Added `("elicitation_method","elicitation_method",False)` + a matching `<select>` | All 8 techniques render; each `?elicitation_method=<v>` returns 200 with the value `selected` |
+| I6 | `[x] fixed` | `templates/projects/scope/scope_matrix.html` | Rendered `creep_max` in the creep caption ("largest month totals …") | Rendered page contains the line |
+| I7 | `[x] fixed` | `views/ScopeRequirements/ScopeMatrix.py` | Collapsed the 10 `_rows()` counts into 2 grouped aggregates and the 6 `scope_summary` counts into 2 (item_type group + one filtered live aggregate) | **31 → 19** queries tenant-wide, **34 → 22** with `?project=`; every figure byte-identical |
+| I8 | `[x] fixed` | `views/ScopeRequirements/ScopeMatrix.py` | Added `CREEP_LIMIT = 500` (documented) and sliced the creep SELECT | SQL emits `LIMIT 500`; figures unchanged |
+| I9 | `[~] skipped — contract pins login-only; flagged for the contract owner, no code change this run` | — | — | — |
+| I10 | `[~] skipped — contract pins login-only; flagged for the contract owner, no code change this run` | — | — | — |
+| M1 | `[x] fixed` | `apps/projects/admin.py` | Dropped `parent` from `RequirementAdmin.list_select_related` | `check` clean; admin loads |
+| M2 | `[x] fixed` | `templates/projects/scope/scope_matrix.html` | Added a "showing N of M requirements" clause to the matrix note | Rendered note reads "showing 3 of 3 work packages, 3 of 3 requirements" |
+| M3 | `[x] fixed` | 4× `ScopeRequirements/__init__.py` | Reworded the four docstrings to state the convention statically (dropped the "added in the Integrate step" tense) | Read back |
+| M4 | `[x] fixed` | `views/ScopeRequirements/Requirements.py` | Dropped `risk` from `req_detail`'s `change_requests` `select_related` | `check` clean; detail page renders |
+| M5 | `[x] fixed` | `views/ScopeRequirements/ScopeMatrix.py` | Resolved by I8 — the creep SELECT is now `.values(...)` | Same commit as I7/I8 |
+| M6 | `[~] skipped — cosmetic, no action` | — | — | — |
+| M7 | `[x] fixed — no action required, recorded as an accepted convention` | — | — | — |
+
+## Open question for the contract owner (I9 / I10)
+
+`sci_realize` / `sci_retire` (I9) and `svr_accept` (I10) are **login-only** — a plain member can close a
+registry row / accept a deliverable. The contract (§4.2, §4.4) explicitly pins them login-only, and the
+accept/reject asymmetry (`svr_reject`/`svr_waive` are admin-gated, `svr_accept` is not) reads as
+deliberate. **No code change was made.** The human should rule whether 7.7 intends members to close
+registry rows / accept deliverables; if not, hoist `@tenant_admin_required` above those three verbs in a
+follow-up.
+
+## Follow-up recorded, deliberately NOT swept this run
+
+The 403-vs-405 decorator order is a **module-wide pattern** — 7.1–7.5 carry the identical order. This
+run fixed **7.7 only** (the changeset under review). The siblings are a recorded follow-up.
+
+## Probes run
+
+* `manage.py check` — clean.
+* `pytest apps/projects/tests/ -q --nomigrations` — **1873 passed**, unfiltered.
+* Verb matrix (member vs admin GET, all 15 verbs) + member POST write-check.
+* `scope_matrix` query count via `CaptureQueriesContext`, before/after.
+* Fresh-DB `seed_core → seed_accounts → seed_projects` run twice.
+
