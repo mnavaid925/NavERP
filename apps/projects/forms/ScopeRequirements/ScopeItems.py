@@ -28,5 +28,5 @@ class ScopeItemOutcomeForm(forms.Form):
     """The ``sci_realize`` / ``sci_retire`` verbs' body: what actually happened to the item."""
 
     outcome = forms.CharField(
-        required=True, widget=forms.Textarea(attrs={"rows": 3}),
+        required=True, widget=forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         help_text="What happened — the assumption held, the constraint bit, the item is retired.")
