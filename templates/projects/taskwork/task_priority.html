@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Task Priority{% endblock %}
+{% block content %}
+  <style>
+    /* Priority-lens layout (7.8) — prefixed tw- classes; theme.css stays the shared system.
+       The Eisenhower matrix is a 2×2 grid; MoSCoW renders as grouped sections. */
+    .tw-eisenhower { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 800px) { .tw-eisenhower { grid-template-columns: 1fr; } }
+    .tw-quadrant { background: var(--page-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; }
+    .tw-quadrant-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+    .tw-quadrant-head h3 { margin: 0; font-size: .95rem; }
+    .tw-quadrant ul { margin: 0; padding-left: 1.1rem; }
+    .tw-quadrant li { font-size: .85rem; padding: .15rem 0; }
+  </style>
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Priority &amp; Urgency Scoring</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><span>Priority</span></div>
+      <p class="text-muted">MoSCoW, the Eisenhower matrix and the work queue over the same attested rows — every grouping is computed on read from the tasks' own classifications; nothing is scored into a store.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:task_board' %}" class="btn btn-outline"><i data-lucide="list-tree"></i> Task board</a>
+      <a href="{% url 'projects:gantt_timeline' %}" class="btn btn-outline"><i data-lucide="calendar-range"></i> Gantt timeline</a>
+      <a href="{% url 'projects:tsk_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Task register</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">All tasks in this workspace</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:200px;">
+          <label class="form-label" for="assignee-select">Assignee</label>
+          <select name="assignee" id="assignee-select" class="form-select">
+            <option value="">Anyone (whole team)</option>
+            {% for u in assignees %}
+              <option value="{{ u.pk }}" {% if request.GET.assignee == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+        <a href="{% url 'projects:task_priority' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ counts.overdue }}</div>
+      <div class="stat-label">Overdue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ban"></i></div>
+      <div class="stat-value">{{ counts.blocked }}</div>
+      <div class="stat-label">Blocked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ counts.unassigned }}</div>
+      <div class="stat-label">Live &amp; unassigned</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="activity"></i></div>
+      <div class="stat-value">{{ counts.in_progress }}</div>
+      <div class="stat-label">In progress</div>
+    </div>
+  </div>
+
+  {% comment %}
+    MoSCoW groups in declared order plus the trailing unclassified group — moscow has no
+    default on purpose (unclassified is a state, not a value), so unclassified rows surface
+    here instead of hiding inside one of the four.
+  {% endcomment %}
+  {% for group in moscow_groups %}
+    <div class="card">
+      <div class="card-header">
+        <h2>{{ group.label }}</h2>
+        <span class="badge {% if group.value == 'must_have' %}badge-red{% elif group.value == 'should_have' %}badge-amber{% elif group.value == 'could_have' %}badge-info{% elif group.value == 'wont_have' %}badge-muted{% else %}badge-slate{% endif %}">{{ group.count }}</span>
+      </div>
+      <div class="card-body">
+        {% if group.tasks %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Task</th><th>Project</th><th>Priority</th><th>Assignee</th><th>Planned start</th></tr></thead>
+              <tbody>
+                {% for t in group.tasks %}
+                  <tr>
+                    <td class="fw-600"><a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a><div class="text-muted">{{ t.name }}</div></td>
+                    <td><a href="{% url 'projects:prj_detail' t.project_id %}">{{ t.project.name }}</a></td>
+                    <td>
+                      {% if t.priority == 'critical' %}<span class="badge badge-red">{{ t.get_priority_display }}</span>
+                      {% elif t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>
+                      {% elif t.priority == 'medium' %}<span class="badge badge-info">{{ t.get_priority_display }}</span>
+                      {% else %}<span class="badge badge-slate">{{ t.get_priority_display }}</span>{% endif %}
+                    </td>
+                    <td>{% if t.assignee %}{{ t.assignee.get_full_name|default:t.assignee.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    <td>{% if t.planned_start %}{{ t.planned_start|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state"><i data-lucide="flag"></i><h3>Nothing in {{ group.label }}</h3><p>No task in this scope lands in this group — set a task's MoSCoW classification on its Execute page and the group fills itself.</p></div>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="card-header"><h2>Eisenhower matrix</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Urgent × Important, bucketed on read from each task's two flags through the model's own quadrant property — the page cannot disagree with the model.</p>
+      <div class="tw-eisenhower">
+        {% for quadrant in quadrants %}
+          <div class="tw-quadrant">
+            <div class="tw-quadrant-head">
+              <h3>{{ quadrant.label }}</h3>
+              <span class="badge {{ quadrant.badge }}">{{ quadrant.count }}</span>
+            </div>
+            {% if quadrant.tasks %}
+              <ul>
+                {% for t in quadrant.tasks %}
+                  <li>
+                    <a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a> {{ t.name|truncatechars:50 }}
+                    {% if t.priority == 'critical' or t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>{% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted" style="margin:0;">No tasks sit in this quadrant for this scope.</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Work queue</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Live tasks that are overdue, blocked or high/critical priority, ordered overdue-first and capped at 25 — the what-do-I-do-next lens, not a second register.</p>
+      {% if work_queue %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Task</th><th>Project</th><th>Why it queues</th><th>Assignee</th><th>Planned start</th></tr></thead>
+            <tbody>
+              {% for t in work_queue %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a><div class="text-muted">{{ t.name }}</div></td>
+                  <td><a href="{% url 'projects:prj_detail' t.project_id %}">{{ t.project.name }}</a></td>
+                  <td>
+                    {% if t.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+                    {% comment %} The blocked verdict from its two free halves — the manual
+                    half is the bulk-prefetched active-block list, so no per-row query. {% endcomment %}
+                    {% if t.is_dependency_blocked or t.active_blocks %}<span class="badge badge-red">Blocked</span>{% endif %}
+                    {% if t.priority == 'critical' %}<span class="badge badge-red">{{ t.get_priority_display }}</span>
+                    {% elif t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>{% endif %}
+                  </td>
+                  <td>{% if t.assignee %}{{ t.assignee.get_full_name|default:t.assignee.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>{% if t.planned_start %}{{ t.planned_start|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="check-circle-2"></i><h3>The queue is empty</h3><p>No live task in this scope is overdue, blocked or high/critical priority — the queue refills itself the moment one is.</p></div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
