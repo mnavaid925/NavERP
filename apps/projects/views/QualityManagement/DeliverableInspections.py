@@ -24,7 +24,7 @@ from apps.projects.models import DeliverableInspection
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages, redirect,
                                          render, require_POST, write_audit_log)
-from apps.projects.views._helpers import clients, owners, projects
+from apps.projects.views._helpers import owners, projects
 
 #: Live statuses an un-executed inspection can sit in — the ``?overdue=1`` lens reads them.
 _LIVE_STATUSES = ("planned", "in_progress")
@@ -60,7 +60,6 @@ def qci_list(request):
             "usage_decision_choices": DeliverableInspection.USAGE_DECISION_CHOICES,
             "status_choices": DeliverableInspection.STATUS_CHOICES,
             "owners": owners(request.tenant),
-            "parties": clients(request.tenant),
         },
     )
 
