@@ -134,8 +134,8 @@ def svr_accept(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def svr_reject(request, pk):
     """Admin-only: the deliverable is refused — and the reason is mandatory."""
     obj = get_object_or_404(ScopeVerification, pk=pk, tenant=request.tenant)
@@ -160,8 +160,8 @@ def svr_reject(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def svr_waive(request, pk):
     """Admin-only: the gate is formally waived — recorded, not silently skipped."""
     obj = get_object_or_404(ScopeVerification, pk=pk, tenant=request.tenant)
