@@ -1,0 +1,62 @@
+{% comment %}
+  7.8 task-detail panel — the per-link blocking verdict over 7.2's dependency network.
+
+  Reads obj.predecessor_links.all / obj.successor_links.all and the derived
+  is_dependency_blocked directly (Ruling 3: blocking is computed on read, never stored on the
+  task). An FS link blocks while its predecessor is not done/cancelled; an SS link blocks
+  while its predecessor has not started; FF/SF links never block.
+{% endcomment %}
+<div class="card">
+  <div class="card-header"><h2>Blocking verdict</h2></div>
+  <div class="card-body">
+    <p>
+      {% if obj.is_dependency_blocked %}<span class="badge badge-amber">Blocked by dependencies</span>
+      {% else %}<span class="badge badge-green">No dependency is holding this task</span>{% endif %}
+    </p>
+    <h3 class="text-muted">Incoming links — what holds this task</h3>
+    {% if obj.predecessor_links.all %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Dependency</th><th>Predecessor</th><th>Link type</th><th>Verdict</th></tr></thead>
+          <tbody>
+            {% for dep in obj.predecessor_links.all %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:dep_detail' dep.pk %}">{{ dep.number }}</a></td>
+                <td><a href="{% url 'projects:tsk_detail' dep.predecessor_id %}">{{ dep.predecessor.number }}</a> {{ dep.predecessor.name }}</td>
+                <td>{{ dep.get_link_type_display }}</td>
+                <td>
+                  {% if dep.link_type == 'finish_to_start' and dep.predecessor.status != 'done' and dep.predecessor.status != 'cancelled' %}<span class="badge badge-red">Blocking — must finish first</span>
+                  {% elif dep.link_type == 'start_to_start' and dep.predecessor.status == 'planned' %}<span class="badge badge-red">Blocking — must start first</span>
+                  {% else %}<span class="badge badge-green">Clear</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}<p class="text-muted">No predecessor links — nothing holds this task.</p>{% endif %}
+
+    <h3 class="text-muted">Outgoing links — what this task holds</h3>
+    {% if obj.successor_links.all %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Dependency</th><th>Successor</th><th>Link type</th><th>Verdict</th></tr></thead>
+          <tbody>
+            {% for dep in obj.successor_links.all %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'projects:dep_detail' dep.pk %}">{{ dep.number }}</a></td>
+                <td><a href="{% url 'projects:tsk_detail' dep.successor_id %}">{{ dep.successor.number }}</a> {{ dep.successor.name }}</td>
+                <td>{{ dep.get_link_type_display }}</td>
+                <td>
+                  {% if dep.link_type == 'finish_to_start' and obj.status != 'done' and obj.status != 'cancelled' %}<span class="badge badge-amber">Holds {{ dep.successor.number }}'s finish</span>
+                  {% elif dep.link_type == 'start_to_start' and obj.status == 'planned' %}<span class="badge badge-amber">Holds {{ dep.successor.number }}'s start</span>
+                  {% else %}<span class="badge badge-green">Clear</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}<p class="text-muted">No successor links — this task holds nothing.</p>{% endif %}
+  </div>
+</div>
