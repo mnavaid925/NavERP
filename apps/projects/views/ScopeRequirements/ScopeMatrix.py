@@ -43,6 +43,11 @@ MAX_MATRIX_COLUMNS = 12
 MAX_MATRIX_ROWS = 40
 #: The gap lists are review queues, not registers — the register is one click away.
 GAP_LIMIT = 25
+#: The creep loop's row cap. The board aggregates approved/implemented changes per month, and the
+#: figure is a control signal, not an audit — the register (``scr_list``) is one click away. Without
+#: a cap a project with thousands of approved changes would materialize every row in Python just to
+#: sum a handful of monthly totals.
+CREEP_LIMIT = 500
 
 _MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -119,24 +124,35 @@ def scope_matrix(request):
                       .select_related("project").order_by("-created_at", "-id")[:GAP_LIMIT])
 
     # -- scope creep: the approved/implemented changes, aggregated per month --------------
+    # ``.values()`` fetches only the four columns the loop reads, and the (stable-ordered) slice
+    # bounds the result set the way the two gap lists are bounded — the aggregate is a control
+    # signal, not an audit, and the register is one click away.
     creep_rows_map = {}
     creep_count, creep_cost, creep_days, creep_high = 0, ZERO, 0, 0
-    for change in changes_qs.filter(status__in=("approved", "implemented")):
+    creep_changes = (changes_qs.filter(status__in=("approved", "implemented"))
+                     .values("schedule_impact_days", "cost_impact", "quality_impact",
+                             "decided_at", "created_at")
+                     .order_by("-created_at", "-id")[:CREEP_LIMIT])
+    for change in creep_changes:
         creep_count += 1
-        creep_cost += change.cost_impact
-        creep_days += change.schedule_impact_days or 0
-        if change.is_high_impact:
+        cost = change["cost_impact"]
+        days = change["schedule_impact_days"] or 0
+        creep_cost += cost
+        creep_days += days
+        if (cost >= ScopeChangeRequest.HIGH_COST
+                or days >= ScopeChangeRequest.HIGH_SCHEDULE_DAYS
+                or change["quality_impact"] == "high"):
             creep_high += 1
         # ``decided_at`` is the approval instant the verb stamps; ``created_at`` is the fallback
         # for a row seeded straight into an approved state, so no change is silently dropped.
-        stamp = change.decided_at or change.created_at
+        stamp = change["decided_at"] or change["created_at"]
         key = (stamp.year, stamp.month)
         row = creep_rows_map.setdefault(
             key, {"period": f"{stamp.year}-{stamp.month:02d}", "label": _month_label(stamp),
                   "count": 0, "cost_total": ZERO, "schedule_days": 0})
         row["count"] += 1
-        row["cost_total"] += change.cost_impact
-        row["schedule_days"] += change.schedule_impact_days or 0
+        row["cost_total"] += cost
+        row["schedule_days"] += days
     creep_rows = [creep_rows_map[key] for key in sorted(creep_rows_map)]
     creep_max = max((row["cost_total"] for row in creep_rows), default=ZERO)
     for row in creep_rows:
@@ -145,19 +161,27 @@ def scope_matrix(request):
                           if creep_max else 0.0)
 
     # -- the summary strip -----------------------------------------------------------------
+    # One grouped aggregate per dimension replaces a ``.count()`` per choice: ten scalar tallies
+    # become two queries. ``.get(value, 0)`` restores the zero rows the choice list expects.
     def _rows(choices, qs, field):
-        return [{"label": label, "count": qs.filter(**{field: value}).count()}
-                for value, label in choices]
+        totals = dict(qs.values_list(field).annotate(total=Count("id")))
+        return [{"label": label, "count": totals.get(value, 0)} for value, label in choices]
 
     today = timezone.localdate()
+    # The six registry figures in one pass over ``item_type`` / ``status`` / ``review_date``:
+    # ``item_type`` yields items/boundaries/constraints/assumptions, and a single filtered
+    # ``status`` aggregate yields still-live and review-overdue.
+    item_type_totals = dict(items_qs.values_list("item_type").annotate(total=Count("id")))
+    live = items_qs.filter(status__in=("open", "validated")).aggregate(
+        total=Count("id"), overdue=Count("id", filter=Q(review_date__lt=today)))
     scope_summary = {
-        "items": items_qs.count(),
-        "boundaries": items_qs.filter(item_type__in=sorted(ScopeItem.BOUNDARY_TYPES)).count(),
-        "constraints": items_qs.filter(item_type="constraint").count(),
-        "assumptions": items_qs.filter(item_type="assumption").count(),
-        "open_items": items_qs.filter(status__in=("open", "validated")).count(),
-        "overdue_items": items_qs.filter(status__in=("open", "validated"),
-                                         review_date__lt=today).count(),
+        "items": sum(item_type_totals.values()),
+        "boundaries": sum(c for t, c in item_type_totals.items()
+                          if t in ScopeItem.BOUNDARY_TYPES),
+        "constraints": item_type_totals.get("constraint", 0),
+        "assumptions": item_type_totals.get("assumption", 0),
+        "open_items": live["total"],
+        "overdue_items": live["overdue"],
     }
 
     return render(request, "projects/scope/scope_matrix.html", {
