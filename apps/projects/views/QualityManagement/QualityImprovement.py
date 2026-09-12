@@ -90,6 +90,9 @@ def _compute_maturity(defects, review_agg):
     else:
         score = None
     maturity = {
+        # 0.0 is a real score (defects exist, 0% closure) — ``has_score`` lets the template
+        # distinguish "no score computed" from a falsy zero and still render the band.
+        "has_score": score is not None,
         "reviews_scored": reviews_scored,
         "defects_total": defects_total,
         "defects_closed": defects_closed,
