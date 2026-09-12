@@ -137,11 +137,6 @@ class QualityReview(TenantNumbered):
         """Closed and cancelled rows are frozen evidence — edit/delete refuse them."""
         return self.status in ("closed", "cancelled")
 
-    @property
-    def is_improvement(self):
-        """True for the bullet-4 review types — the improvement register lenses on this half."""
-        return self.review_type in ("kaizen_event", "retrospective")
-
     def clean(self):
         super().clean()
         if self.wbs_node_id and self.project_id \
