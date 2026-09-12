@@ -137,7 +137,7 @@ TextField(blank) · `improvement_owner` FK AUTH_USER_MODEL SET_NULL null+blank
 
 Derived / Meta: `is_improvement_overdue` = `improvement_due_date` set, `< today`,
 `improvement_status in ("planned","in_progress")` · `is_locked` = `status in ("closed","cancelled")`
-· `is_improvement` = `review_type in ("kaizen_event","retrospective")` · `clean()`: same-project
+· `clean()`: same-project
 guards on `wbs_node`, `quality_plan` · `ordering = ["-review_date","-id"]`; indexes
 `qrv_tnt_project_idx`, `qrv_tnt_type_idx` ("tenant","review_type"), `qrv_tnt_status_idx`,
 `qrv_tnt_imp_idx` ("tenant","improvement_status"), `qrv_tnt_date_idx` ("tenant","-review_date") ·
@@ -154,7 +154,7 @@ validation + document link)**. Named `DeliverableInspection` because `QualityIns
 Choices:
 * `INSPECTION_TYPE_CHOICES` (16): `review`/Review, `testing`/Testing, `demonstration`/Demonstration,
   `walkthrough`/Walkthrough, `acceptance`/Acceptance
-* `RESULT_CHOICES` (12): `pending`/Pending, `pass`/Pass, `fail`/Fail, `conditional`/Conditional,
+* `RESULT_CHOICES` (14): `pending`/Pending, `pass`/Pass, `fail`/Fail, `conditional`/Conditional,
   `not_applicable`/Not Applicable
 * `USAGE_DECISION_CHOICES` (24): `pending`/Pending, `accept`/Accept,
   `accept_with_deviation`/Accept with Deviation, `reject`/Reject, `rework`/Rework
@@ -167,8 +167,10 @@ null+blank `related_name="inspections"` · `milestone` FK `"projects.ProjectMile
 null+blank `related_name="quality_inspections"` (7.2's gate, not re-declared — Ruling 5) · `title`
 CharField(255) · `description` TextField(blank) · `inspection_type` CharField(16, default `review`) ·
 `planned_date` DateField(null+blank) · `inspected_date` DateField(null+blank) · `inspector` FK
-AUTH_USER_MODEL SET_NULL null+blank `related_name="conducted_inspections"` · `result` CharField(12,
-default `pending`) · `usage_decision` CharField(24, default `pending`) · `findings` TextField(blank) ·
+AUTH_USER_MODEL SET_NULL null+blank `related_name="conducted_inspections"` · `result` CharField(14,
+default `pending`) — 14, not 12: fields.E009 needs max_length ≥ the longest choice
+(`not_applicable`), matching scm 4.9's `QualityInspection.result` · `usage_decision` CharField(24,
+default `pending`) · `findings` TextField(blank) ·
 `accepted_by` FK AUTH_USER_MODEL SET_NULL null+blank `editable=False`
 `related_name="accepted_inspections"` · `accepted_by_party` FK `"core.Party"` SET_NULL null+blank
 `related_name="accepted_inspections"` · `accepted_at` DateTimeField(null+blank, `editable=False`) ·
@@ -198,7 +200,7 @@ Choices:
 * `DEFECT_CATEGORY_CHOICES` (16): `functional`/Functional, `performance`/Performance,
   `documentation`/Documentation, `compliance`/Compliance, `dimensional`/Dimensional,
   `workmanship`/Workmanship, `usability`/Usability, `other`/Other
-* `SEVERITY_CHOICES` (8): `critical`/Critical, `major`/Major, `minor`/Minor, `observation`/Observation
+* `SEVERITY_CHOICES` (12): `critical`/Critical, `major`/Major, `minor`/Minor, `observation`/Observation
 * `DISPOSITION_CHOICES` (16): `open`/Open, `rework`/Rework, `repair`/Repair, `resubmit`/Resubmit,
   `accept_as_is`/Accept As Is, `reject`/Reject, `deferred`/Deferred
 * `STATUS_CHOICES` (12): `open`/Open, `in_progress`/In Progress, `resolved`/Resolved,
@@ -209,8 +211,10 @@ null+blank `related_name="quality_defects"` · `quality_plan` FK QualityPlan SET
 `related_name="defects"` · `inspection` FK `"projects.DeliverableInspection"` SET_NULL null+blank
 `related_name="defects"` · `project_issue` FK `"projects.ProjectIssue"` SET_NULL null+blank
 `related_name="quality_defects"` (**the bridge**) · `title` CharField(255) · `description`
-TextField() · `defect_category` CharField(16, default `other`) · `severity` CharField(8, default
-`minor`) · `disposition` CharField(16, default `open`) · `status` CharField(12, default `open`) —
+TextField() · `defect_category` CharField(16, default `other`) · `severity` CharField(12, default
+`minor`) — 12, not 8: fields.E009 needs max_length ≥ the longest choice (`observation`), matching
+scm 4.9's `NonConformance.severity` · `disposition` CharField(16, default `open`) · `status`
+CharField(12, default `open`) —
 **off the form** · `owner` FK AUTH_USER_MODEL SET_NULL null+blank `related_name="owned_quality_defects"`
 · `identified_date` DateField(default `timezone.localdate`) · `due_date` DateField(null+blank) ·
 `root_cause` TextField(blank) · `resolution_note` TextField(blank) · `resolved_by` FK
@@ -220,7 +224,7 @@ AUTH_USER_MODEL SET_NULL null+blank `editable=False` `related_name="resolved_qua
 
 Derived / Meta: `is_overdue` = `due_date` set, `< today`, `status in ("open","in_progress")` ·
 `age_days` · `is_open` = `status in ("open","in_progress")` · `is_locked` = `status in
-("resolved","closed")` · `clean()`: same-project guards on `wbs_node`, `quality_plan`, `inspection` ·
+("resolved","closed","cancelled")` (cancelled locks like the QRV/QCI siblings) · `clean()`: same-project guards on `wbs_node`, `quality_plan`, `inspection` ·
 `ordering = ["-created_at","-id"]`; indexes `qdf_tnt_project_idx`, `qdf_tnt_status_idx`,
 `qdf_tnt_severity_idx`, `qdf_tnt_disp_idx` ("tenant","disposition"), `qdf_tnt_created_idx` ·
 `__str__` = `f"{self.number} — {self.title}"`
@@ -303,7 +307,8 @@ Routes: `inspections/` `qci_list` · `inspections/add/` `qci_create` · `inspect
 ("inspector","inspector_id",True)]`; pre-scoped `?overdue=1` → `Q(planned_date__lt=today,
 inspected_date__isnull=True, status__in=("planned","in_progress"))`.
 `extra_context`: `projects`, `inspection_type_choices`, `result_choices`, `usage_decision_choices`,
-`status_choices`, `owners`, `parties` (`clients(request.tenant)`).
+`status_choices`, `owners` — the originally pinned `parties` key is dropped: no template reads it,
+so it was one dead Party query per render.
 Detail: `obj`, `defects` (`obj.defects.select_related("owner")`), `accept_form` (unbound
 `InspectionAcceptanceForm(tenant=request.tenant)`).
 
@@ -330,9 +335,9 @@ Detail: `obj`, `resolution_form` (unbound `DefectResolutionForm()`).
 Template `projects/quality/quality_improvement.html`, **GET-only**. Context (exact keys):
 `projects`; `project` (`?project=`, `as_db_int`-guarded, tenant-filtered, else None);
 `improvement_rows` (the project's `QualityReview` with `review_type in ("kaizen_event",
-"retrospective")` ordered `-review_date`, cap 25); `maturity` (dict `{"score","band","badge",
-"reviews_scored","defects_total","defects_closed","closure_pct"}` — computed, **no stored table**);
-`defect_trend_rows` (period rows `{"period","label","opened","closed","bar_pct"}`, CSS bars, **not a
+"retrospective")` ordered `-review_date`, cap 25); `maturity` (dict `{"has_score","score","band",
+"badge","reviews_scored","defects_total","defects_closed","closure_pct"}` — computed, **no stored
+table**; `has_score` distinguishes a computed 0.0 from no data so the band renders); `defect_trend_rows` (period rows `{"period","label","opened","closed","bar_pct"}`, CSS bars, **not a
 chart**); `defect_trend_max`; `lessons` (list of `{"obj","lesson"}` over closed defects with a
 non-empty `lessons_learned`, newest first, cap 25); `lessons_count`; `open_defect_count`;
 `improvement_open_count`.
@@ -345,8 +350,9 @@ of the selected project: `{"wbs_node","plan","plan_status","latest_inspection","
 "usage_decision","open_defects","acceptance_state","badge"}` where `acceptance_state` ∈
 `pending`/`conditional`/`accepted`/`rejected` and `badge` is a colour-named class — **L33**);
 `acceptance_queue` (inspections with `inspection_type="acceptance"` and `usage_decision="pending"`,
-ordered `planned_date`; hosts the `qci_accept` action); `acceptance_queue_count`; `accepted_count`;
-`conditional_count`; `rejected_count`; `pending_count`.
+ordered `planned_date`, rendered rows capped at 100 with the header figure a DB count — each row
+links to its detail page, where the `qci_accept` action lives); `acceptance_queue_count`;
+`accepted_count`; `conditional_count`; `rejected_count`; `pending_count`.
 
 ## 5. Templates
 
