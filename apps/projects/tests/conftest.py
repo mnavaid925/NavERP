@@ -2350,6 +2350,672 @@ def cost_expense_b(db, tenant_b, admin_b, cost_project_b, cost_control_account_b
         amount="60.00", status="draft", created_by=admin_b, description="Globex expense")
 
 
+# ==================================================================================================
+# 7.5 Risk & Issue Management (subslug ``risk``)
+# --------------------------------------------------------------------------------------------------
+# Fixtures for ``test_risk_models.py`` / ``test_risk_forms.py`` / ``test_risk_views.py`` /
+# ``test_risk_security.py``. The frozen test contract is
+# ``.claude/tasks/test-contract-projects-7.5.md``; the build contract
+# (``.claude/tasks/contract-projects-7.5.md``) §2–§6 pins every name the code answers to.
+#
+# * Everything scored is DERIVED, never stored (``score``/``severity_band``/``emv``/``residual_*``/
+#   ``is_overdue``/``age_days``). The fixtures pin the INPUT columns (probability, impact,
+#   cost_impact, status, dates — the per-row field table in the test contract); the test modules
+#   assert the derived figures from them.
+# * Factories construct + ``.save()`` so ``TenantNumbered.save()`` mints RSK-/RRA-/ISS-/ESC-
+#   numbers. ``bulk_create`` would ship every row numberless — never use it here.
+# * Each of the four severity bands and each lifecycle status owns exactly one default tenant-A
+#   row (plus the simulation set on its own project), so the ``?band=``/``?top=`` lenses, the
+#   state-machine verbs and the two computed boards each have a deterministic row to read. Pulling
+#   MORE fixtures moves the composed counts — recompute expectations from the pulled rows (the
+#   contract's field table), never from memory.
+# * Determinism (L16): every date basis is ``_risk_today()`` (``timezone.localdate()``) and every
+#   datetime ``timezone.now()`` — the same clock ``is_review_overdue``/``age_days`` and the lenses
+#   read. ``datetime.date.today()`` would flake either side of local midnight.
+# * Tests NEVER touch ``management/commands/seed_projects.py`` (the demo seed) — every test builds
+#   exactly the rows it asserts on from the factories below.
+# ==================================================================================================
+
+#: ``apps.core.crud.crud_list``'s default ``per_page`` — every 7.5 register uses the default, so a
+#: pagination test needs ``RISK_PAGE_SIZE + 1`` rows for a second page (same rationale as
+#: ``COST_PAGE_SIZE`` above).
+RISK_PAGE_SIZE = 15
+
+
+def _risk_today():
+    """Today on the SAME basis the 7.5 code uses (``is_review_overdue`` / ``age_days`` / the
+    ``?overdue=``/``?review_due=`` lenses all read ``timezone.localdate()``)."""
+    return timezone.localdate()
+
+
+# ==================================================================================================
+# Factories — construct + ``.save()`` so TenantNumbered mints RSK-/RRA-/ISS-/ESC-
+# ==================================================================================================
+
+def _risk_project(tenant, **overrides):
+    """An ACTIVE host ``Project`` for 7.5 rows (built through the 7.1 FACTORY — function import,
+    not a 7.1 fixture; the ``cost_project_a`` precedent).
+
+    Defaults: ``status="active"``, ``charter_status="approved"``, window today−30 .. today+150, a
+    distinct per-tenant name/code ("Risk host NN" / "RHP-NN"). The board lenses work per project,
+    so a test that wants an isolated register builds a throwaway project here instead of sharing
+    the lifecycle rows' host.
+    """
+    from apps.projects.models import Project
+    seq = Project.objects.filter(tenant=tenant).count() + 1
+    # Defaults merge with (never collide with) the caller's overrides — the fixture passes
+    # ``name=``/``code=`` of its own, so a straight ``**overrides`` splat would raise
+    # ``TypeError: got multiple values for keyword argument 'name'``.
+    fields = dict(
+        name=f"Risk host {seq:02d}",
+        code=f"RHP-{seq:02d}",
+        status="active",
+        charter_status="approved",
+        start_date=_risk_today() - datetime.timedelta(days=30),
+        end_date=_risk_today() + datetime.timedelta(days=150),
+    )
+    fields.update(overrides)
+    return _projectinitiation_project(tenant, **fields)
+
+
+def _risk(tenant, project, **overrides):
+    """A ``ProjectRisk`` on ``project`` with defaults for every required field.
+
+    Defaults: ``probability=2`` / ``impact=2`` (score 4 → the MEDIUM band), ``status="identified"``,
+    ``cost_impact=0.00`` (so ``emv`` is 0.00 and the row stays OUT of the Monte Carlo population —
+    the population is ``cost_impact > 0`` AND status not realized/closed), ``category="other"``,
+    ``risk_type="threat"``, ``response_strategy="mitigate"``, ``identified_date=today``,
+    ``review_date=None``, a distinct per-tenant ``title`` ("Risk NN"). Pass explicit
+    ``probability=``/``impact=`` to place a row in a chosen band (see the contract's field table).
+    ``clean()`` runs before ``save()`` (the 7.4 factory precedent) so a cross-project
+    ``wbs_node``/``contingency_account`` raises at build time instead of seeding bad data.
+    """
+    from apps.projects.models import ProjectRisk
+    seq = ProjectRisk.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        title=f"Risk {seq:02d}",
+        description="Vendor delivery could slip the integration window.",
+        cause="The vendor single-sources the module.",
+        effect="Go-live slips by one sprint.",
+        category="other",
+        risk_type="threat",
+        probability=2,
+        impact=2,
+        cost_impact=Decimal("0.00"),
+        schedule_impact_days=None,
+        response_strategy="mitigate",
+        response_note="",
+        trigger="",
+        contingency_plan="",
+        status="identified",
+        owner=None,
+        identified_by=None,
+        identified_date=_risk_today(),
+        review_date=None,
+        residual_probability=None,
+        residual_impact=None,
+        contingency_account=None,
+        lessons_learned="",
+        closed_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = ProjectRisk(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _risk_action(risk, **overrides):
+    """A ``RiskResponseAction`` on ``risk`` (``tenant`` taken FROM the risk).
+
+    Defaults: ``status="planned"`` (edit/delete OPEN; ``is_locked`` is only ``completed``),
+    ``strategy="mitigate"``, ``due_date=None`` (NOT overdue), ``cost=0.00``, a distinct per-tenant
+    ``title`` ("Response action NN"). Pass ``due_date=_risk_today() - timedelta(days=3)`` for the
+    overdue lens and ``status="completed"`` (+ ``completed_at``) for the frozen row.
+    """
+    from apps.projects.models import RiskResponseAction
+    seq = RiskResponseAction.objects.filter(tenant=risk.tenant_id).count() + 1
+    fields = dict(
+        tenant=risk.tenant,
+        risk=risk,
+        title=f"Response action {seq:02d}",
+        description="Ship the fallback integration path.",
+        strategy="mitigate",
+        owner=None,
+        due_date=None,
+        cost=Decimal("0.00"),
+        trigger="",
+        status="planned",
+        residual_probability=None,
+        residual_impact=None,
+        completed_at=None,
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = RiskResponseAction(**fields)
+    obj.save()
+    return obj
+
+
+def _risk_issue(tenant, project, **overrides):
+    """A ``ProjectIssue`` on ``project`` with defaults for every required field.
+
+    Defaults: ``status="open"`` (edit/delete OPEN; ``is_locked`` is resolved/closed),
+    ``issue_type="issue"``, ``severity="medium"``, ``escalation_level=0`` (NOT in the
+    ``?escalated=1`` lens), ``identified_date=today``, ``due_date=None`` (NOT overdue),
+    ``risk=None``, a distinct per-tenant ``title`` ("Issue NN"). ``clean()`` runs before
+    ``save()`` — a cross-project ``wbs_node``/``risk`` raises at build time.
+    """
+    from apps.projects.models import ProjectIssue
+    seq = ProjectIssue.objects.filter(tenant=tenant).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        wbs_node=None,
+        risk=None,
+        title=f"Issue {seq:02d}",
+        description="The shared integration environment is down.",
+        issue_type="issue",
+        severity="medium",
+        status="open",
+        owner=None,
+        raised_by=None,
+        identified_date=_risk_today(),
+        due_date=None,
+        escalation_level=0,
+        escalated_to=None,
+        escalated_at=None,
+        root_cause="",
+        resolution_note="",
+        resolved_by=None,
+        resolved_at=None,
+        lessons_learned="",
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = ProjectIssue(**fields)
+    obj.clean()
+    obj.save()
+    return obj
+
+
+def _risk_escalation(issue, **overrides):
+    """An ``IssueEscalation`` on ``issue`` (``tenant`` taken FROM the issue).
+
+    Defaults: ``level=1``, ``reason`` filled (the model REQUIRES it), ``target_role=""``,
+    ``target_user=None``, ``escalated_by=None``, ``outcome=""``. ``escalated_at`` is
+    ``auto_now_add`` — it is stamped on INSERT and any override is ignored; do not pass it.
+    """
+    from apps.projects.models import IssueEscalation
+    seq = IssueEscalation.objects.filter(tenant=issue.tenant_id).count() + 1
+    fields = dict(
+        tenant=issue.tenant,
+        issue=issue,
+        level=1,
+        target_role="",
+        target_user=None,
+        reason=f"Escalation {seq:02d}: the blocker needs a decision above the delivery team.",
+        escalated_by=None,
+        resolved_at=None,
+        outcome="",
+        created_by=None,
+    )
+    fields.update(overrides)
+    obj = IssueEscalation(**fields)
+    obj.save()
+    return obj
+
+
+# -- bulk fills (pagination / search / the register cap) ---------------------------------------------
+#
+# Loops over the factories rather than bulk_create for the reason spelled out at the top of this
+# file: bulk_create skips save(), and save() is where `number` is minted.
+
+def _risk_fill_risks(tenant, project, count, **overrides):
+    """``count`` LOW-band backlog risks on ONE project — ``probability=1`` / ``impact=1`` (score 1,
+    never above tolerance), ``cost_impact=0`` (never in the simulation population),
+    ``review_date=None`` (never in the review queue), ``identified_date=today``,
+    distinct titles ("Backlog risk 01" …). Returns the list; overrides
+    land on EVERY row (pass ``identified_date=`` offsets for burndown spreads)."""
+    return [
+        _risk(tenant, project, title=f"Backlog risk {i:02d}",
+              probability=1, impact=1, **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+def _risk_fill_issues(tenant, project, count, **overrides):
+    """``count`` OPEN backlog issues on ONE project — ``due_date=None`` (never overdue),
+    ``escalation_level=0`` (never in the escalated queue), ``identified_date=today``, distinct
+    titles ("Backlog issue 01" …). Returns the list; overrides land on EVERY row."""
+    return [
+        _risk_issue(tenant, project, title=f"Backlog issue {i:02d}", **overrides)
+        for i in range(1, count + 1)
+    ]
+
+
+# ==================================================================================================
+# Core-spine records the 7.5 FKs point at
+# ==================================================================================================
+
+@pytest.fixture
+def risk_project_a(db, tenant_a, admin_user):
+    """Tenant A's ACTIVE host — every default 7.5 row hangs off this one or the tenant-B twin
+    (window today−30 .. today+150; the boards' ``?project=`` lens scopes to it)."""
+    return _risk_project(
+        tenant_a, name="Risk host Alpha", code="RHA-01",
+        charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=7),
+        created_by=admin_user)
+
+
+@pytest.fixture
+def risk_project_b(db, tenant_b, admin_b):
+    """Tenant B's host — 404 as tenant A everywhere; absent from tenant A's registers; the
+    crafted-POST value for ``project`` on all three ModelForms that carry it."""
+    return _risk_project(tenant_b, name="Risk host Beta", code="RHB-01", created_by=admin_b)
+
+
+@pytest.fixture
+def risk_wbs_node_a(db, risk_project_a):
+    """Tenant A work package — the VALID ``wbs_node`` anchor for a risk/issue on
+    ``risk_project_a`` (the same-project ``clean()`` branch) and the ``?``-less detail render."""
+    return _planning_task(risk_project_a.tenant, risk_project_a, name="Risk work package")
+
+
+@pytest.fixture
+def risk_wbs_node_b(db, risk_project_b):
+    """Tenant B's work package — the crafted-POST value for ``wbs_node`` on the risk and issue
+    forms, and the cross-project node for the same-project ``clean()`` refusal tests."""
+    return _planning_task(risk_project_b.tenant, risk_project_b,
+                          name="Globex risk work package")
+
+
+# ==================================================================================================
+# Extra actors + clients (aliases over the ROOT conftest — reuse, never redefine)
+# ==================================================================================================
+
+@pytest.fixture
+def risk_member(db, member_user):
+    """Tenant A's plain member — alias of the root ``member_user``: 403 on the admin-gated verbs
+    (``iss_escalate``, ``rsk_reopen`` and — the I9 fix — ``esc_create``/``esc_edit``/
+    ``esc_delete``), full run on the login-only ones (realize/close, complete, resolve/close and
+    all CRUD pages, deletes included — deletes are NOT admin-gated in 7.5)."""
+    return member_user
+
+
+@pytest.fixture
+def risk_member_b(db, tenant_b):
+    """A NON-admin member of tenant B. Separates the two refusals on the admin-gated verbs: a
+    tenant-B member hitting a tenant-A pk must 404 on scope, never 403 on role — and a tenant-A
+    member (root ``member_user``) must 403 before any lookup."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="risk-member@globex.com", username="member_globex_risk",
+        password="TestPass123!", tenant=tenant_b, is_tenant_admin=False)
+
+
+@pytest.fixture
+def risk_tenantless_user(db):
+    """A logged-in user with ``tenant=None`` — the superuser shape. The four 7.5 create views guard
+    this on their first branch and redirect to ``dashboard:home``; the registers and both computed
+    boards render EMPTY BY DESIGN (no 500, the 0-safe branches hold)."""
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="risk-drifter@example.com", username="risk_drifter",
+        password="TestPass123!", tenant=None)
+
+
+@pytest.fixture
+def risk_tenantless_client(db, risk_tenantless_user):
+    """Logged in, ``request.tenant is None``. Registers render empty; creates redirect away."""
+    client = Client()
+    client.force_login(risk_tenantless_user)
+    return client
+
+
+@pytest.fixture
+def risk_anon_client(db):
+    """Unauthenticated — every 7.5 view is ``@login_required``, so each must redirect to login."""
+    return Client()
+
+
+@pytest.fixture
+def risk_admin_client(db, client_a):
+    """Tenant A admin logged in — alias of the root ``client_a`` (7.1–7.4 define no admin client
+    of their own either; the alias exists so the 7.5 contract can pin the name). Runs the admin
+    happy paths AND every IDOR-404 probe."""
+    return client_a
+
+
+@pytest.fixture
+def risk_member_client(db, member_client):
+    """Tenant A member logged in — alias of the root ``member_client``. For tenant-B ADMIN
+    requests use the root ``client_b`` (no alias needed)."""
+    return member_client
+
+
+@pytest.fixture
+def risk_csrf_client(db, admin_user):
+    """Tenant A admin on a client that ENFORCES CSRF. A POST without a token must be 403."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    return client
+
+
+# ==================================================================================================
+# ProjectRisk — one fixture per severity band and lifecycle state
+# (all on risk_project_a except ``_b``; the per-row field table lives in the test contract §3)
+# ==================================================================================================
+
+@pytest.fixture
+def risk_low(db, tenant_a, risk_project_a, admin_user):
+    """THE LOW band row: p=1 × i=2 → score 2, ``status="identified"``. The ``?band=low`` lens row
+    and the ``rsk_edit``/``rsk_delete``/``rsk_realize`` happy-path row."""
+    return _risk(tenant_a, risk_project_a, title="Sensor lead time slips",
+                 description="A long-lead sensor pushes the integration window out.",
+                 category="technical", probability=1, impact=2, created_by=admin_user)
+
+
+@pytest.fixture
+def risk_medium(db, tenant_a, risk_project_a, admin_user):
+    """THE MEDIUM band row: p=2 × i=2 → score 4, ``status="assessing"``. The ``?band=medium``
+    lens row and the ``rsk_close``/``rsk_realize`` happy path (severity maps to ``medium``)."""
+    return _risk(tenant_a, risk_project_a, title="Key-person dependency",
+                 description="One engineer holds all the integration knowledge.",
+                 category="resource", probability=2, impact=2, status="assessing",
+                 created_by=admin_user)
+
+
+@pytest.fixture
+def risk_high(db, tenant_a, risk_project_a, admin_user):
+    """THE HIGH band row: p=3 × i=3 → score 9, ``status="response_planned"``. In
+    ``TOLERANCE_BANDS`` → counts into ``above_tolerance_count``; owns the three response-action
+    fixtures (``risk_action_*``)."""
+    return _risk(tenant_a, risk_project_a, title="Integration API instability",
+                 description="The vendor API breaks on every minor release.",
+                 category="external", probability=3, impact=3, status="response_planned",
+                 created_by=admin_user)
+
+
+@pytest.fixture
+def risk_critical(db, tenant_a, risk_project_a, admin_user):
+    """THE CRITICAL band row: p=4 × i=5 → score 20, ``status="monitoring"``. FIRST in the
+    ``?top=1`` ordering and in ``top_risks``; ``?band=critical`` row; above tolerance."""
+    return _risk(tenant_a, risk_project_a, title="Core vendor insolvency",
+                 description="The vendor enters administration mid-delivery.",
+                 category="external", probability=4, impact=5, status="monitoring",
+                 created_by=admin_user)
+
+
+@pytest.fixture
+def risk_overdue(db, tenant_a, risk_project_a, admin_user):
+    """THE overdue row: ``review_date=today−3`` while ``status="identified"`` →
+    ``is_review_overdue`` True. The ``?review_due=1``/``?overdue=1`` lens row and the monitoring
+    board's ``review_queue`` entry (p=2 × i=3 → medium band)."""
+    return _risk(tenant_a, risk_project_a, title="Regulatory sign-off drifts",
+                 description="The compliance review date keeps sliding.",
+                 category="compliance", probability=2, impact=3,
+                 review_date=_risk_today() - datetime.timedelta(days=3),
+                 created_by=admin_user)
+
+
+@pytest.fixture
+def risk_realized(db, tenant_a, risk_project_a, admin_user):
+    """THE realized row: p=4 × i=4 → score 16 (critical band), ``cost_impact=25000.00`` →
+    ``emv`` 17500.00. ``is_locked`` → edit/delete REFUSE it; realize answers "already realized"
+    and writes nothing; close is still allowed FROM it. Pull ``risk_realized_issue`` for the
+    linked-issue invariant pair (risk → its minted issue)."""
+    return _risk(tenant_a, risk_project_a, title="Data migration corrupted",
+                 description="The cutover script mangled the legacy dates.",
+                 category="technical", probability=4, impact=4,
+                 cost_impact=Decimal("25000.00"), status="realized",
+                 identified_date=_risk_today() - datetime.timedelta(days=65),
+                 created_by=admin_user)
+
+
+@pytest.fixture
+def risk_closed(db, tenant_a, risk_project_a, admin_user):
+    """THE closed row: p=3 × i=4 → score 12 (high band), ``cost_impact=12000.00`` → ``emv``
+    6000.00, ``closed_at`` stamped (now−2d), ``lessons_learned`` set (the monitoring lessons lens'
+    Risk half) and residual 2×2 (residual_score 4 → medium; ``residual_emv`` 240.00 — the only
+    residual row by default). ``is_locked`` → edit/delete refuse; realize REFUSES (closed);
+    ``rsk_reopen``'s only happy path (→ monitoring, ``closed_at`` cleared)."""
+    return _risk(tenant_a, risk_project_a, title="Requirements churn",
+                 description="Scope statements keep being rewritten after sign-off.",
+                 category="organizational", probability=3, impact=4,
+                 cost_impact=Decimal("12000.00"), status="closed",
+                 residual_probability=2, residual_impact=2,
+                 lessons_learned="Validate sign-off authority before baselining scope.",
+                 closed_at=timezone.now() - datetime.timedelta(days=2),
+                 identified_date=_risk_today() - datetime.timedelta(days=130),
+                 created_by=admin_user)
+
+
+@pytest.fixture
+def risk_b(db, tenant_b, risk_project_b, admin_b):
+    """Tenant B's risk (the factory-default identified/medium shape) — 404 as tenant A on
+    detail/edit/delete and on all five verbs; absent from tenant A's register; the crafted-POST
+    value for ``risk`` on the action and issue forms."""
+    return _risk(tenant_b, risk_project_b, title="Globex vendor delay",
+                 created_by=admin_b)
+
+
+# ==================================================================================================
+# ProjectIssue — one fixture per lifecycle state the three verbs branch on
+# ==================================================================================================
+
+@pytest.fixture
+def risk_issue_open(db, tenant_a, risk_project_a, admin_user):
+    """THE open issue (``identified_date`` today−5) — the happy path for ``iss_edit``/
+    ``iss_delete``/``iss_resolve`` and for ``iss_escalate`` (level 0 → 1). ``due_date=None`` →
+    NOT overdue; ``escalation_level=0`` → NOT in the ``?escalated=1`` lens."""
+    return _risk_issue(tenant_a, risk_project_a, title="Integration environment down",
+                       description="The shared environment has been unreachable since Monday.",
+                       identified_date=_risk_today() - datetime.timedelta(days=5),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def risk_issue_overdue(db, tenant_a, risk_project_a, admin_user):
+    """THE overdue issue: ``status="blocked"`` (still open) with ``due_date=today−2`` →
+    ``is_overdue`` True. The issue log's ``?overdue=1`` lens row; ``iss_close`` must REFUSE it
+    (only a resolved row closes); ``age_days`` reads 20."""
+    return _risk_issue(tenant_a, risk_project_a, title="Blocked on legal review",
+                       description="Contract language is stuck with legal.",
+                       status="blocked", due_date=_risk_today() - datetime.timedelta(days=2),
+                       identified_date=_risk_today() - datetime.timedelta(days=20),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def risk_issue_escalated(db, tenant_a, risk_project_a, admin_user):
+    """THE escalated issue: ``status="in_progress"``, ``escalation_level=2``,
+    ``escalated_to=admin_user``, ``escalated_at`` stamped (now−1h) — WITH its backing
+    ``IssueEscalation`` row (level 2, target_role "Programme manager", target_user admin_user,
+    escalated_by admin_user) so the trail and the level agree, the shape ``iss_escalate`` leaves
+    behind (the I1 atomic pair). The ``?escalated=1`` lens row and the escalation register's only
+    default tenant-A row."""
+    issue = _risk_issue(tenant_a, risk_project_a, title="Payment gateway outage",
+                        description="Checkout has been failing for two hours.",
+                        status="in_progress", escalation_level=2, escalated_to=admin_user,
+                        escalated_at=timezone.now() - datetime.timedelta(hours=1),
+                        identified_date=_risk_today() - datetime.timedelta(days=8),
+                        created_by=admin_user)
+    _risk_escalation(issue, level=2, target_role="Programme manager", target_user=admin_user,
+                     reason="Needs a budget decision above the project team.",
+                     escalated_by=admin_user, created_by=admin_user)
+    return issue
+
+
+@pytest.fixture
+def risk_issue_resolved(db, tenant_a, risk_project_a, admin_user):
+    """THE resolved issue: root_cause + resolution_note + ``resolved_by``/``resolved_at`` (now−1d)
+    + ``lessons_learned`` set. ``iss_close``'s ONLY happy path; ``iss_resolve`` answers "already
+    resolved"; edit/delete REFUSE it (locked). Past ``due_date`` (today−5) yet NOT overdue —
+    ``is_open`` is False, pinning the overdue lens' status guard. The lessons lens' newest Issue
+    half row."""
+    return _risk_issue(tenant_a, risk_project_a, title="License server flapping",
+                       description="Designers keep losing their seats.",
+                       status="resolved", root_cause="Expired TLS certificate on the daemon.",
+                       resolution_note="Certificate renewed and expiry monitoring added.",
+                       resolved_by=admin_user,
+                       resolved_at=timezone.now() - datetime.timedelta(days=1),
+                       lessons_learned="Certificate expiry belongs in the ops calendar.",
+                       due_date=_risk_today() - datetime.timedelta(days=5),
+                       identified_date=_risk_today() - datetime.timedelta(days=10),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def risk_issue_closed(db, tenant_a, risk_project_a, admin_user):
+    """THE closed issue: full resolved stamps (``resolved_at`` now−3d) + ``status="closed"`` +
+    ``lessons_learned``. Resolve/escalate/close all refuse it (frozen evidence); the lessons
+    lens' oldest Issue half row."""
+    return _risk_issue(tenant_a, risk_project_a, title="Duplicate invoice entries",
+                       description="Two entries appeared for one delivery.",
+                       status="closed", root_cause="Retry logic double-posted the webhook.",
+                       resolution_note="Webhook handler made idempotent.",
+                       resolved_by=admin_user,
+                       resolved_at=timezone.now() - datetime.timedelta(days=3),
+                       lessons_learned="Every webhook handler needs an idempotency key.",
+                       identified_date=_risk_today() - datetime.timedelta(days=15),
+                       created_by=admin_user)
+
+
+@pytest.fixture
+def risk_issue_b(db, tenant_b, risk_project_b, admin_b):
+    """Tenant B's issue (open) — 404 as tenant A on detail/edit/delete and on all three verbs;
+    absent from tenant A's register; the crafted-POST value for ``issue`` on the escalation
+    form."""
+    return _risk_issue(tenant_b, risk_project_b, title="Globex environment outage",
+                       created_by=admin_b)
+
+
+# ==================================================================================================
+# RiskResponseAction — the response plan's rows (hang off risk_high)
+# ==================================================================================================
+
+@pytest.fixture
+def risk_action_open(db, tenant_a, risk_high, admin_user):
+    """THE planned action (on ``risk_high``, cost 2500.00) — the happy path for ``rra_edit``/
+    ``rra_delete``/``rra_complete``. ``due_date=None`` → NOT overdue."""
+    return _risk_action(risk_high, title="Stand up fallback integration",
+                        description="Prebuild the queue-based fallback path.",
+                        cost=Decimal("2500.00"), created_by=admin_user)
+
+
+@pytest.fixture
+def risk_action_overdue(db, tenant_a, risk_high, admin_user):
+    """THE overdue action: ``status="in_progress"`` (still live) with ``due_date=today−3`` →
+    ``is_overdue`` True. The action register's ``?overdue=1`` lens row."""
+    return _risk_action(risk_high, title="Migrate vendor contract",
+                        status="in_progress",
+                        due_date=_risk_today() - datetime.timedelta(days=3),
+                        created_by=admin_user)
+
+
+@pytest.fixture
+def risk_action_completed(db, tenant_a, risk_high, admin_user):
+    """THE completed action: ``status="completed"`` + ``completed_at`` (now−1d). ``is_locked`` →
+    edit/delete REFUSE it; ``rra_complete`` answers "already completed" and writes nothing."""
+    return _risk_action(risk_high, title="Renegotiate the SLA",
+                        status="completed",
+                        completed_at=timezone.now() - datetime.timedelta(days=1),
+                        created_by=admin_user)
+
+
+@pytest.fixture
+def risk_action_b(db, tenant_b, risk_b, admin_b):
+    """Tenant B's action (planned, on ``risk_b``) — 404 as tenant A on detail/edit/delete and on
+    the complete verb; absent from tenant A's register."""
+    return _risk_action(risk_b, title="Globex contingency drill", created_by=admin_b)
+
+
+@pytest.fixture
+def risk_escalation_b(db, tenant_b, risk_issue_b, admin_b):
+    """Tenant B's escalation row (level 1, on ``risk_issue_b``) — 404 as tenant A on detail/edit
+    and on the delete verb; absent from tenant A's register."""
+    return _risk_escalation(risk_issue_b, level=1, reason="Vendor response overdue.",
+                            escalated_by=admin_b, created_by=admin_b)
+
+
+# ==================================================================================================
+# The Monte Carlo set — a dedicated project so ``?project=<sim>`` isolates the population
+# (the analysis board's POST population = register rows with cost_impact > 0 and status NOT
+# realized/closed, drawn in **id-ascending** order — replay it in-test with random.Random(seed))
+# ==================================================================================================
+
+@pytest.fixture
+def risk_sim_project(db, tenant_a, admin_user):
+    """The simulation board's dedicated tenant-A project — simulation tests select
+    ``?project=<this pk>``, so none of the lifecycle rows above can enter the population."""
+    return _risk_project(tenant_a, name="Risk simulation host", code="RSH-01",
+                         created_by=admin_user)
+
+
+@pytest.fixture
+def risk_sim_high(db, tenant_a, risk_sim_project, admin_user):
+    """Population row 1: p=5 (90% per ``PROBABILITY_PCT``), ``cost_impact=1000.00``,
+    identified → IN the Monte Carlo population (p×i = 20, critical)."""
+    return _risk(tenant_a, risk_sim_project, title="Cloud cost overrun",
+                 description="Autoscaling outruns the reserved capacity.",
+                 category="cost", probability=5, impact=4,
+                 cost_impact=Decimal("1000.00"), created_by=admin_user)
+
+
+@pytest.fixture
+def risk_sim_rare(db, tenant_a, risk_sim_project, admin_user):
+    """Population row 2: p=1 (10%), ``cost_impact=500.00``, identified → IN the population
+    (p×i = 1, low). The rare-but-expensive tail the percentile table exists for."""
+    return _risk(tenant_a, risk_sim_project, title="Data centre outage",
+                 description="A region loss stops fulfilment for days.",
+                 category="external", probability=1, impact=1,
+                 cost_impact=Decimal("500.00"), created_by=admin_user)
+
+
+@pytest.fixture
+def risk_sim_realized(db, tenant_a, risk_sim_project, admin_user):
+    """EXCLUDED from the population (status realized — a realized cost is actual spend, not
+    uncertainty) but still IN the register/matrix/EMV table (emv 8100.00). Proves the status
+    exclusion branch."""
+    return _risk(tenant_a, risk_sim_project, title="Legacy ETL failure",
+                 description="The cutover happened; the bill is real.",
+                 category="technical", probability=5, impact=5,
+                 cost_impact=Decimal("9000.00"), status="realized", created_by=admin_user)
+
+
+@pytest.fixture
+def risk_sim_zero_cost(db, tenant_a, risk_sim_project, admin_user):
+    """EXCLUDED from the population (``cost_impact=0`` — nothing to sample) but IN the register
+    and the matrix (p×i = 6, medium). Proves the cost exclusion branch."""
+    return _risk(tenant_a, risk_sim_project, title="Reputation drag",
+                 description="Public perception dips after the outage.",
+                 category="organizational", probability=3, impact=2,
+                 cost_impact=Decimal("0.00"), created_by=admin_user)
+
+
+@pytest.fixture
+def risk_baseline(db, tenant_a, admin_user, risk_sim_project):
+    """THE 7.4 cost baseline on ``risk_sim_project`` — an approved+ACTIVATED ``BudgetRevision``
+    (revision_no 0, the ``bvr_activate`` shape) carrying one 400.00 cost line, so the analysis
+    board scoped to the sim project reads ``baseline_total = 400.00`` and a POST simulation gets
+    ``overrun_probability`` (the % of samples > 400.00) and ``contingency_delta`` (p80 − 400.00).
+    Built through the 7.4 FACTORIES (same-module function calls, not 7.4 fixtures — the
+    ``cost_wbs_node_a`` uses-``_planning_task`` precedent). ``risk_project_a`` never has a
+    baseline, so the no-baseline edge (``baseline``/``baseline_total`` None,
+    ``overrun_probability`` None) stays testable there."""
+    revision = _cost_revision(tenant_a, risk_sim_project, no=0, activate=True,
+                              title="Simulation baseline", reason="P80 sizing input.",
+                              requested_by=admin_user, created_by=admin_user)
+    _cost_budget_line(tenant_a, revision, risk_sim_project, category="cost",
+                      amount="400.00", note="Contingency sizing baseline.")
+    return revision
+
 
 # ==================================================================================================
 # 7.6 Quality Management (subslug ``quality``)
@@ -2411,16 +3077,15 @@ def _quality_project(tenant, **overrides):
     """
     from apps.projects.models import Project
     seq = Project.objects.filter(tenant=tenant).count() + 1
-    return _projectinitiation_project(
-        tenant,
-        name=f"Quality host {seq:02d}",
-        code=f"QHP-{seq:02d}",
-        status="active",
-        charter_status="approved",
-        start_date=_quality_today() - datetime.timedelta(days=30),
-        end_date=_quality_today() + datetime.timedelta(days=150),
-        **overrides,
-    )
+    # Merge defaults into ``overrides`` (the ``_projectinitiation_project`` idiom) — re-declaring
+    # them as explicit kwargs collides with any caller override of the same name.
+    overrides.setdefault("name", f"Quality host {seq:02d}")
+    overrides.setdefault("code", f"QHP-{seq:02d}")
+    overrides.setdefault("status", "active")
+    overrides.setdefault("charter_status", "approved")
+    overrides.setdefault("start_date", _quality_today() - datetime.timedelta(days=30))
+    overrides.setdefault("end_date", _quality_today() + datetime.timedelta(days=150))
+    return _projectinitiation_project(tenant, **overrides)
 
 
 def _quality_wbs_node(tenant, project, **overrides):
