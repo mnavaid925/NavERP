@@ -36,6 +36,14 @@
           </select>
         </div>
         <div class="form-group">
+          <select name="elicitation_method" aria-label="Elicited by" class="form-select">
+            <option value="">Any technique</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.elicitation_method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="priority" aria-label="Priority" class="form-select">
             <option value="">Any priority</option>
             {% for val, label in priority_choices %}
