@@ -32,6 +32,7 @@ from apps.projects.models import (
     ScheduleBaseline,
     ScopeChangeRequest,
     ScopeVerification,
+    TaskBlock,
     TaskDependency,
 )
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -120,4 +121,13 @@ def overview(request):
             tenant=tenant, status__in=("draft", "submitted", "under_review")).count(),
         "pending_verification_count": ScopeVerification.objects.filter(
             tenant=tenant, acceptance_status="pending").count(),
+        # 7.8 task & work — flat counts plus the two figures that need a decision: the open
+        # blockers (what the standup works) and the overdue tasks (the execution debt). Both are
+        # plain column/derived-column filters over the extended 7.2 task register.
+        "task_execution_count": ProjectTask.objects.filter(tenant=tenant).count(),
+        "open_block_count": TaskBlock.objects.filter(
+            tenant=tenant, unblocked_at__isnull=True).count(),
+        "overdue_task_count": ProjectTask.objects.filter(
+            tenant=tenant, status__in=("planned", "in_progress"),
+            planned_end__lt=timezone.localdate()).count(),
     })
