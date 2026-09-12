@@ -125,7 +125,11 @@
                     {% elif t.moscow == 'could_have' %}<span class="badge badge-info">{{ t.get_moscow_display }}</span>
                     {% elif t.moscow == 'wont_have' %}<span class="badge badge-muted">{{ t.get_moscow_display }}</span>
                     {% else %}<span class="badge badge-slate">Unclassified</span>{% endif %}
-                    {% if t.is_blocked %}<span class="badge badge-red">Blocked</span>{% endif %}
+                    {% comment %} The blocked verdict from its two free halves: the
+                    dependency property reads the prefetched links, the manual half is the
+                    bulk-prefetched active-block list — is_blocked itself would re-query
+                    per card. {% endcomment %}
+                    {% if t.is_dependency_blocked or t.active_blocks %}<span class="badge badge-red">Blocked</span>{% endif %}
                     {% if t.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
                   </div>
                   <div class="tw-card-meta">
