@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Gantt Timeline{% endblock %}
+{% block content %}
+  <style>
+    /* Gantt-local layout (7.8) — prefixed tw- classes; theme.css stays the shared system.
+       Bars are pure CSS positioned over the resolved window: left/width come from the
+       view's percentages, progress shading is an inner fill, and the row track clips any
+       bar that pokes outside the window. Depth indentation is a per-row padding-left. */
+    .tw-chart { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+    .tw-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--border); }
+    .tw-row:last-child { border-bottom: 0; }
+    .tw-label { flex: 0 0 38%; min-width: 0; padding: .3rem .6rem; font-size: .86rem; display: flex; align-items: center; gap: .35rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .tw-track { flex: 1; position: relative; background: var(--page-bg); border-left: 1px solid var(--border); min-height: 1.7rem; overflow: hidden; }
+    .tw-bar { position: absolute; top: .35rem; height: .95rem; background: var(--brand-500); border-radius: 4px; min-width: 3px; overflow: hidden; }
+    .tw-critical { background: var(--bad); }
+    .tw-progress { height: 100%; background: var(--brand-700); border-radius: inherit; }
+    .tw-critical .tw-progress { background: var(--bad-bg); }
+    .tw-scale { display: flex; justify-content: space-between; font-size: .78rem; color: var(--text-muted); padding: 0 .6rem .35rem; }
+    .tw-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .75rem; font-size: .82rem; color: var(--text-muted); align-items: center; }
+    .tw-legend .swatch { display: inline-block; width: .9rem; height: .6rem; border-radius: 3px; vertical-align: middle; margin-right: .3rem; }
+  </style>
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Gantt Timeline</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><span>Gantt</span></div>
+      <p class="text-muted">The project's WBS as CSS bars over a resolved window, with progress shading and the critical chain highlighted — recomputed on every load, never stored.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:task_board' %}" class="btn btn-outline"><i data-lucide="list-tree"></i> Task board</a>
+      <a href="{% url 'projects:tsk_tree' %}{% if project %}?project={{ project.pk }}{% endif %}" class="btn btn-outline"><i data-lucide="list-tree"></i> WBS tree</a>
+      <a href="{% url 'projects:dep_list' %}{% if project %}?project={{ project.pk }}{% endif %}" class="btn btn-outline"><i data-lucide="git-merge"></i> Dependencies</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <label class="form-label" for="project-select">Project</label>
+          <select name="project" id="project-select" class="form-select">
+            <option value="">Pick a project…</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if project %}
+          <div class="form-group">
+            <label class="form-label" for="start-input">Window start</label>
+            <input type="date" id="start-input" name="start" value="{{ window.start|date:"Y-m-d" }}" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="end-input">Window end</label>
+            <input type="date" id="end-input" name="end" value="{{ window.end|date:"Y-m-d" }}" class="form-input">
+          </div>
+        {% endif %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="calendar-range"></i> Draw</button>
+        <a href="{% url 'projects:gantt_timeline' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}
+    Computed-lens caveat: this page is planning-grade. It draws the plan as attested and
+    flags where the plan contradicts itself (the FS date conflicts below) — it never
+    reschedules anything. Auto-rescheduling is deferred (7.17/7.16), arrows are JS and
+    deferred (the links render as the table beside the chart), and a Gantt baseline overlay
+    stays 7.2's ScheduleBaseline.
+  {% endcomment %}
+
+  {% if not project %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state"><i data-lucide="calendar-range"></i><h3>Pick a project</h3><p>The bars are that project's WBS nodes over a resolved window, so a project has to be selected. The default window is its task dates padded seven days each side.</p></div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header">
+        <h2>{{ project.name }} — timeline</h2>
+        <span class="text-muted">{{ window.start|date:"M d, Y" }} → {{ window.end|date:"M d, Y" }} · {{ window.days }} day{{ window.days|pluralize }}</span>
+        {% if today >= window.start and today <= window.end %}
+          <span class="badge badge-info">Today — {{ today|date:"M d, Y" }}</span>
+        {% else %}
+          <span class="text-muted">Today is {{ today|date:"M d, Y" }} — outside the window</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <div class="tw-scale"><span>{{ window.start|date:"M d, Y" }}</span><span>{{ window.end|date:"M d, Y" }}</span></div>
+        <div class="tw-chart">
+          {% for bar in bars %}
+            <div class="tw-row">
+              <div class="tw-label" style="padding-left: calc({{ bar.depth }} * 0.9rem);">
+                <a href="{% url 'projects:tsk_detail' bar.task.pk %}">{{ bar.task.number }}</a>
+                <span>{{ bar.task.name|truncatechars:40 }}</span>
+                {% if bar.is_deliverable %}<span class="badge badge-info">Deliverable</span>{% endif %}
+                {% if bar.is_critical %}<span class="badge badge-red">Critical</span>{% endif %}
+              </div>
+              <div class="tw-track">
+                {% if bar.left_pct is not None %}
+                  <div class="tw-bar{% if bar.is_critical %} tw-critical{% endif %}" style="left: {{ bar.left_pct }}%; width: {{ bar.width_pct }}%;" title="{{ bar.task.planned_start|date:"M d, Y" }} → {{ bar.task.planned_end|date:"M d, Y" }} · {{ bar.progress_pct }}% complete">
+                    {% if bar.progress_pct is not None %}<div class="tw-progress" style="width: {{ bar.progress_pct }}%;"></div>{% endif %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% empty %}
+            <div class="empty-state"><i data-lucide="list-tree"></i><h3>No WBS nodes</h3><p>{{ project.name }} has no tasks yet — build its work breakdown structure and the bars draw themselves.</p></div>
+          {% endfor %}
+        </div>
+        <div class="tw-legend">
+          <span><span class="swatch" style="background: var(--brand-500);"></span>Task bar (darker fill = progress)</span>
+          <span><span class="swatch" style="background: var(--bad);"></span>On the critical chain</span>
+          <span>Undated nodes render as label rows without a bar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Dependency links</h2></div>
+      <div class="card-body">
+        <p class="text-muted">The sequencing network behind the chart — arrow rendering is deferred, so the links read as a table beside the bars.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Link</th><th>Predecessor</th><th>Successor</th><th>Type</th><th class="text-right">Lag (days)</th></tr></thead>
+            <tbody>
+              {% for row in dep_rows %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'projects:dep_detail' row.dependency.pk %}">{{ row.dependency.number }}</a></td>
+                  <td><a href="{% url 'projects:tsk_detail' row.predecessor.pk %}">{{ row.predecessor.number }}</a><div class="text-muted">{{ row.predecessor.name|truncatechars:30 }}</div></td>
+                  <td><a href="{% url 'projects:tsk_detail' row.successor.pk %}">{{ row.successor.number }}</a><div class="text-muted">{{ row.successor.name|truncatechars:30 }}</div></td>
+                  <td>{{ row.link_type_label }}</td>
+                  <td class="text-right">{{ row.lag_days }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5"><div class="empty-state"><i data-lucide="git-merge"></i><h3>No dependency links</h3><p>Sequence the work packages on the dependency register and the links list themselves here.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Date conflicts</h2></div>
+      <div class="card-body">
+        <p class="text-muted">Finish-to-Start links whose successor starts before its predecessor finishes — the plan contradicting its own sequencing. This page flags them; it never reschedules (auto-rescheduling is deferred).</p>
+        {% if conflicts %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Link</th><th>Type</th><th>Predecessor finishes</th><th>Successor starts</th></tr></thead>
+              <tbody>
+                {% for dep in conflicts %}
+                  <tr>
+                    <td class="fw-600"><span class="badge badge-red">{{ dep.number }}</span></td>
+                    <td>{{ dep.get_link_type_display }}</td>
+                    <td>{{ dep.predecessor.planned_end|date:"M d, Y" }} — <a href="{% url 'projects:tsk_detail' dep.predecessor.pk %}">{{ dep.predecessor.number }}</a></td>
+                    <td>{{ dep.successor.planned_start|date:"M d, Y" }} — <a href="{% url 'projects:tsk_detail' dep.successor.pk %}">{{ dep.successor.number }}</a></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p><span class="badge badge-green">No FS date conflicts</span> — every finish-to-start successor starts at or after its predecessor's finish.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
