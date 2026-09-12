@@ -166,8 +166,8 @@ def pko_schedule(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def pko_mark_held(request, pk):
     obj = get_object_or_404(ProjectKickoff, pk=pk, tenant=request.tenant)
     if obj.status in ("held", "completed"):
@@ -193,8 +193,8 @@ def pko_mark_held(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def pko_complete(request, pk):
     obj = get_object_or_404(ProjectKickoff, pk=pk, tenant=request.tenant)
     if obj.status == "completed":
@@ -224,8 +224,8 @@ def pko_complete(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def pko_mark_baseline_set(request, pk):
     """Attest that the baseline was acknowledged at the ceremony.
 

@@ -142,8 +142,8 @@ def prq_submit(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def prq_approve(request, pk):
     """Record the Go decision. Only an approved request can be converted."""
     obj = get_object_or_404(ProjectRequest, pk=pk, tenant=request.tenant)
@@ -166,8 +166,8 @@ def prq_approve(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def prq_reject(request, pk):
     obj = get_object_or_404(ProjectRequest, pk=pk, tenant=request.tenant)
     form = ProjectRequestDecisionForm(request.POST)
@@ -204,8 +204,8 @@ def prq_reject(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def prq_return_for_information(request, pk):
     """Send back to the requester. The register's honesty depends on this being a real state and
     not a silent no-op — a request stuck in "assessment" with no answer is invisible work.
@@ -251,8 +251,8 @@ def prq_return_for_information(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def prq_convert(request, pk):
     """The highest-value verb in the sub-module: the request becomes a project.
 

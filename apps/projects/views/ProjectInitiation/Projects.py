@@ -182,8 +182,8 @@ def prj_submit_charter(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def prj_approve_charter(request, pk):
     """Approve the charter and move the project to ``chartered``.
 

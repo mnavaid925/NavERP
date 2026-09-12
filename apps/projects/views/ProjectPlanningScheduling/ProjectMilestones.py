@@ -73,8 +73,8 @@ def mst_delete(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def mst_achieve(request, pk):
     obj = get_object_or_404(ProjectMilestone, pk=pk, tenant=request.tenant)
     if obj.status == "achieved":

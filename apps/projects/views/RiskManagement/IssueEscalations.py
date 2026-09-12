@@ -85,7 +85,7 @@ def esc_edit(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def esc_delete(request, pk):
     return crud_delete(request, model=IssueEscalation, pk=pk, success_url="projects:esc_list")

@@ -199,8 +199,8 @@ def rte_submit(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def rte_approve(request, pk):
     obj = get_object_or_404(ResourceTimeEntry, pk=pk, tenant=request.tenant)
     if obj.status != "submitted":
@@ -219,8 +219,8 @@ def rte_approve(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def rte_reject(request, pk):
     obj = get_object_or_404(ResourceTimeEntry, pk=pk, tenant=request.tenant)
     if obj.status != "submitted":
@@ -241,8 +241,8 @@ def rte_reject(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def rte_approve_week(request, resource, year, week):
     """Bulk-approve every submitted entry of one person-week (the approval-queue verb).
 

@@ -127,8 +127,8 @@ def iss_delete(request, pk):
 # -- lifecycle verbs ----------------------------------------------------------------------------
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def iss_escalate(request, pk):
     """Push the issue up one level of the chain of command. Admin-only — escalation is a privileged
     act — and the only writer of the ``IssueEscalation`` row the escalation register lists."""

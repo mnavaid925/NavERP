@@ -203,8 +203,8 @@ def rsk_close(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def rsk_reopen(request, pk):
     """Admin-only: a closed register row is evidence, so putting it back on the register is a
     privileged act."""

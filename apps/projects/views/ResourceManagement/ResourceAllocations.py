@@ -115,8 +115,8 @@ def ral_delete(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def ral_assign(request, pk):
     obj = get_object_or_404(ResourceAllocation, pk=pk, tenant=request.tenant)
     if obj.resource_id is not None:
@@ -145,8 +145,8 @@ def ral_assign(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def ral_substitute(request, pk):
     obj = get_object_or_404(ResourceAllocation, pk=pk, tenant=request.tenant)
     if obj.resource_id is None:

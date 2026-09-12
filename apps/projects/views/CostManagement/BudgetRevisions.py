@@ -132,8 +132,8 @@ def bvr_submit(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def bvr_approve(request, pk):
     """Record the approval. This does NOT activate the baseline — activation is the separate,
     equally-governed step, so two approved revisions can coexist while the re-baseline decision
@@ -158,8 +158,8 @@ def bvr_approve(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def bvr_reject(request, pk):
     obj = get_object_or_404(BudgetRevision, pk=pk, tenant=request.tenant)
     # The status precondition fires BEFORE form validation — a stale POST against a non-pending
@@ -188,8 +188,8 @@ def bvr_reject(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def bvr_activate(request, pk):
     """The re-baseline. ``approve`` deliberately does not activate, so two ``approved`` revisions
     can coexist; THIS verb picks one. Supersedes EVERY other approved revision of the project

@@ -140,8 +140,8 @@ def pex_post(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def pex_void(request, pk):
     """Stop a posted row counting WITHOUT hiding it — the correction path for evidence the EVM
     math reads. Drafts have nothing to void; voiding is admin-gated because it rewrites what the

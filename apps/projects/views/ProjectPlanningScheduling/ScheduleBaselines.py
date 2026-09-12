@@ -98,8 +98,8 @@ def bsl_delete(request, pk):
 # ceremony's acknowledgement (7.1's pko_mark_baseline_set) attests to. Only POST can reach them.
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def bsl_activate(request, pk):
     obj = get_object_or_404(ScheduleBaseline, pk=pk, tenant=request.tenant)
     if obj.baseline_type != "baseline":
@@ -122,8 +122,8 @@ def bsl_activate(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def bsl_promote(request, pk):
     obj = get_object_or_404(ScheduleBaseline, pk=pk, tenant=request.tenant)
     if obj.baseline_type != "what_if":
