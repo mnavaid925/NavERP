@@ -571,18 +571,18 @@ def test_projectinitiation_an_admin_post_on_the_same_verb_and_row_succeeds(
 
 
 @pytest.mark.parametrize("verb", _PROJECTINITIATION_ADMIN_VERBS)
-def test_projectinitiation_a_member_get_on_a_gated_verb_is_403_not_405(
+def test_projectinitiation_a_member_get_on_a_gated_verb_is_405_not_403(
         member_client, request, verb):
-    """The decorator order is ``login_required(tenant_admin_required(require_POST(view)))``, so
-    for a member the ROLE check is reached before the method check. A 405 here would mean the
-    member cleared the gate and was stopped only by the HTTP method - a very different (and much
-    weaker) claim."""
+    """The decorator order is ``login_required(require_POST(tenant_admin_required(view)))``,
+    so for a member the METHOD check is reached before the role check. A 405 is house policy
+    for every POST-only verb; the 403 is reserved for an admin who cleared the gate but POSTed
+    an invalid payload."""
     target = _projectinitiation_target(request, verb)
     before = _projectinitiation_snapshot(target)
 
     resp = member_client.get(_projectinitiation_url(verb, target.pk))
 
-    assert resp.status_code == 403
+    assert resp.status_code == 405
     _projectinitiation_unchanged(target, before, verb)
 
 
