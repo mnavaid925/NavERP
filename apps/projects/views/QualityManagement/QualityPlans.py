@@ -124,8 +124,8 @@ def qpl_approve(request, pk):
 
 
 @login_required
-@tenant_admin_required
 @require_POST
+@tenant_admin_required
 def qpl_supersede(request, pk):
     """Admin-only: an active plan is retired in favour of a new one, so retiring it is a
     privileged act."""
