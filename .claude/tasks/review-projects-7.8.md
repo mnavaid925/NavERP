@@ -199,3 +199,30 @@ site, ~6-9 queries per render at any scale); the gantt template triggers no lazy
   file: `apps/projects/views/TaskWorkManagement/TaskBoard.py`  lines: 171-176; `apps/projects/views/TaskWorkManagement/TaskPriority.py`  lines: 148-153
   finding: `prefetch_related("predecessor_links__predecessor")` issues one query for links plus one for predecessors; a chained `Prefetch` with `select_related("predecessor")` does it in one (verdicts unchanged either way).
   fix: swap to the chained `Prefetch` in both modules.
+
+### Lane 5 — qa-smoke-tester (serial pass 5, report-only)
+
+Script: `temp/qa_smoke_78.py` (gitignored; verb edges on throwaway SMOKETEST rows, Acme/Globex
+read-only) — 52/52 checks green. Clean bands: state-machine refusals name their source; unblock-twice
+refused, trail written exactly once, audit payloads all name verb + from/to; `tcl_edit` on a DONE item
+leaves the one-time stamps untouched; `tcl_delete` keeps `checklist_progress` consistent; combined
+filters exact both directions; pagination truth (16 items → 2 pages, page 2 carries row 16, links
+preserve filters); gantt on undated/zero-task projects renders states, no 500; bulk mixed/foreign/empty
+id handling truthful ("No tasks updated — 1 skipped", zero cross-tenant write); TSK-00012 (no
+checklist/blocks/deps) renders every panel empty state with zero raw None.
+
+- [I1] The six execution fields have no reachable write surface anywhere in the UI — `tsk_execute` is orphaned
+  evidence: grep over `templates/` and `apps/core/navigation.py` finds zero references to `projects:tsk_execute` — no link, button, or nav entry anywhere; 7.2's task detail offers only Edit/Delete, and `TaskForm.Meta.fields` still ends at `"sequence"` (the §2.1 deviation already logged as Lane 1 I4). Runtime corroboration: `task_priority.html:114` empty state tells the user to "set a task's MoSCoW classification on its Execute page" — an instruction that dead-ends; the board/priority/gantt pages all render priority/MoSCoW/assignee/percent values no page can set. Contract §2.1 pinned those fields joining `TaskForm`, and §5.1 built the Execute page — the build smoke passed 71/71 only because it hits routes directly.
+  fix: add an "Execute" entry point on the task-detail page header (or per board card) linking to `tsk_execute`; or take Lane 1 I4's contract-amendment route and add at least one discoverable surface for `TaskExecutionForm`.
+- [M1] `tsk_block` has no status gate — blocking DONE (and CANCELLED) work is allowed
+  evidence: walked a throwaway task to done, then POSTed `tsk_block` → 302, an active TBK minted on the finished task; its detail shows "Manually blocked" + the Unblock form, the board `blocked_count` includes it (red badge on a Done card). Contract §5.1 pins only the one-open-blocker refusal — as-built == contract letter, but semantically odd.
+  fix: add a status gate to `tsk_block` (refuse terminal statuses with a named message) or amend the contract to bless blocking finished work.
+- [M2] The execution form silently overwrites a done task's verb-attested `percent_complete=100` (and writes freely on cancelled tasks)
+  evidence: on a done task (pct 100.00, `actual_end` stamped), POST `tsk_execute {percent_complete: 40.00}` → 200, pct now 40.00, status still done — the 100% attestation of `tsk_complete` is one form POST away from being contradicted, and the low pct then drags the effort-weighted deliverable rollups. On a CANCELLED task the same POST also saved priority/moscow/assignee. Contract pins no gate (only `actual_start`/`actual_end` are `editable=False`) — as-built == contract letter; directly URL-reachable.
+  fix: gate `percent_complete` (freeze or clamp to 100) when `status in ("done", "cancelled")` in `TaskExecutionForm.clean()`, or document the overwrite as intended.
+- [M3] Bulk terminal transitions bypass block gating — an open TaskBlock outlives cancellation
+  evidence: throwaway task to in_progress, active TBK raised, then `tsk_bulk_update status=cancelled` → applied; row now `cancelled` with the block still open (`is_manually_blocked` stays True forever until someone unblocks a cancelled task). As-built matches the contract's explicit gating list (`_VERB_GATED_STATUSES = ("in_progress", "done")` only) — extends Lane 1 M7. (Bulk foreign-tenant ids cleanly skipped; empty `task_ids` a clean no-op.)
+  fix: on a terminal bulk transition, either refuse rows with open blocks (naming the TBK) or auto-note the orphaned block; at minimum document the state in the contract.
+- [M4] Out-of-tenant `?assignee=`/`?project=` on the three computed pages silently degrade to the UNFILTERED workspace (contract-pinned; zero leak)
+  evidence: as Acme admin, `task_priority?assignee=<admin_globex.pk>` → 200, context `assignee` None, no Globex names in the body, but the full Acme workspace renders — the "my tasks" lens silently drops instead of showing empty. Contract §5.4 explicitly pins "an out-of-tenant id degrades to `None`, never a 500" — as-built == contract, no cross-tenant leak.
+  fix: optional polish only — flash "not in this workspace" or render the empty state when a parsed id resolves to None while one was supplied; otherwise leave as pinned.
