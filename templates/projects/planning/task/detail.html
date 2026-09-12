@@ -38,6 +38,13 @@
     </div>
   </div>
 
+  {% comment %}
+    7.8 execution lenses on the plan's row: the block evidence trail (which embeds the two
+    verb bodies tsk_detail passes) and the task's checklist with its computed progress.
+  {% endcomment %}
+  {% include "projects/taskwork/_task_blocks_panel.html" %}
+  {% include "projects/taskwork/_task_checklist_panel.html" %}
+
   <div class="card">
     <div class="card-header"><h2>Dependencies</h2></div>
     <div class="card-body">
@@ -80,6 +87,12 @@
       <p class="text-muted"><a href="{% url 'projects:dep_create' %}?predecessor={{ obj.pk }}">Add a dependency</a> in the dependency register.</p>
     </div>
   </div>
+
+  {% comment %}
+    7.8 blocking lens over the network above: the per-link blocking verdict — blocking is
+    DERIVED from these links (Ruling 3), never stored on the task.
+  {% endcomment %}
+  {% include "projects/taskwork/_task_dependencies_panel.html" %}
 
   <div class="card">
     <div class="card-header"><h2>Child nodes</h2></div>
