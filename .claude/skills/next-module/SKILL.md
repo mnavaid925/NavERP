@@ -18,13 +18,13 @@ something should look. The shared data spine is defined in **`NavERP.md`** (cata
 
 ## Triggers
 - User says: **"new"**, **"next"**, "next sub-module", "build/create the next sub-module", "continue the modules". **"new"/"next" mean the next *sub-module*, one per run — never the whole module.**
-- User invokes **`/next-module`** (optionally with a sub-module `N.M` like `3.4`, a sub-module name like `payroll`/`offboarding`, or a whole module number `1`–`13` / module name — in which case you build that module's *next unbuilt* sub-module).
+- User invokes **`/next-module`** (optionally with a sub-module `N.M` like `3.4`, a sub-module name like `payroll`/`offboarding`, or a whole module number `1`–`23` / module name — in which case you build that module's *next unbuilt* sub-module).
 
 ## When NOT to use
 - User wants tests for a module → `/manual-test` or `/sqa-review`.
 - User wants a code dump → `/dump-module`.
 - User wants to fix a specific bug → just fix it.
-- User wants to change the foundation (Module 0 / dashboard / auth) → edit those directly; this skill is for **new** domain modules 1–13.
+- User wants to change the foundation (Module 0 / dashboard / auth) → edit those directly; this skill is for **new** domain modules 1–23.
 
 ---
 
@@ -111,7 +111,7 @@ prefix + SHA-256 hash — the plaintext is never persisted), the `OnboardingForm
 ## Step 0 — Is the foundation built? (greenfield check)
 
 NavERP starts as a documentation repo. Before any domain module exists, the **foundation (Module 0)** must be
-built: `core` (Tenant + TenantMiddleware + `navigation.py` (`parse_catalog()` builds the module 0–13 catalog
+built: `core` (Tenant + TenantMiddleware + `navigation.py` (`parse_catalog()` builds the module 0–23 catalog
 from NavERP.md + `MODULE_ICONS` + `LIVE_LINKS`) + AuditLog + decorators + `crud.py`/`utils.py` helpers + the
 as-built spine masters Party/PartyRole/Address/ContactMethod/PartyRelationship/Employment/OrgUnit/Activity/
 Document), `accounts` (User/Role/Permission/UserInvite + auth/IAM/RBAC), `tenants`
@@ -135,7 +135,7 @@ follow `PROMPT.md` + `NavERP-ERD.md`) — it is the reference every domain modul
    - **Sub-module name** — e.g. `payroll`, `offboarding`, `exit interview`, `General Ledger`, `CAPA` → match it
      against the `### N.M <name>` headings in `NavERP.md` and resolve to that one `N.M`. (Match on the sub-module
      title and its feature bullets.)
-   - **Whole module number `1`–`13`, app slug, or module name** — e.g. `3`, `hrm`, `"Human Resource Management"`,
+   - **Whole module number `1`–`23`, app slug, or module name** — e.g. `3`, `hrm`, `"Human Resource Management"`,
      `inventory` → resolve to that module, then pick its **next unbuilt sub-module** = the lowest-numbered `N.M`
      (NavERP.md order) with **no** `LIVE_LINKS["N.M"]` entry. (Building "module 3" means building 3's next
      sub-module, NOT all of module 3.)
@@ -146,7 +146,7 @@ follow `PROMPT.md` + `NavERP-ERD.md`) — it is the reference every domain modul
    → Inventory's next unbuilt sub-module. `/next-module hrm` → HRM's next unbuilt sub-module.
 
 2. **If no argument**, **auto-detect the next unbuilt sub-module** of the module currently in progress:
-   1. **Active module** = the **highest-numbered** module `N` (1–13) whose app slug (table below) already exists
+   1. **Active module** = the **highest-numbered** module `N` (1–23) whose app slug (table below) already exists
       under `apps/` — that's the module under construction. (If NO domain app exists yet, the active module is the
       lowest unbuilt one, normally **Module 1 = `crm`**, and this run scaffolds its app + builds `1.1`.)
    2. **Next sub-module** within the active module = the **lowest-numbered `N.M`** (NavERP.md document order) that
@@ -157,7 +157,7 @@ follow `PROMPT.md` + `NavERP-ERD.md`) — it is the reference every domain modul
       "next" → X.4, then X.5 … Out-of-order earlier builds (X.9/X.10/X.12) don't matter — you always take the
       lowest-numbered unbuilt one.)*
    3. **Module rollover:** if the active module has a `LIVE_LINKS` entry for **every** `### N.M` in NavERP.md (fully
-      wired), advance to the **next module** = the lowest `1..13` whose app does NOT exist, scaffold its app, and
+      wired), advance to the **next module** = the lowest `1..23` whose app does NOT exist, scaffold its app, and
       build its **first** sub-module (`N.1`). Only then does a new app get created.
 
 3. **State the one sub-module you resolved** (`N.M <name>`) and which models it adds, then proceed: enter plan mode
@@ -186,6 +186,16 @@ INTENDED spine — several masters are not built yet, so always run the verify-g
 | 11 | Asset Management System | `assets` | Asset[AST-], AssetCategory, MaintenanceWorkOrder[WO-], DepreciationSchedule, AssetDisposal |
 | 12 | Quality Management System | `quality` | NonConformance[NCR-], CapaAction[CAPA-], Inspection[QC-], QualityAudit[QA-], Calibration |
 | 13 | Document Management System | `documents` | Folder, ControlledDocument[DOC-], DocumentVersion, ApprovalRequest, RetentionPolicy — (core `Document` is the generic attachment; DMS is the full repository) |
+| 14 | Manufacturing Execution & Production Management (MES) | `manufacturing` | MrpRun/PlannedOrder, ProductionSchedule/DispatchList, ShopFloorCapture, BackflushRule, SubcontractOrder, LotGenealogy, OeeRecord — (**BOM/WorkOrder/WorkCenter/ProductionTimeLog are OWNED by `scm` 4.8; extend by FK, do NOT re-declare**; consumption/production post to the one StockMove ledger) |
+| 15 | Product Lifecycle & Engineering Management (PLM) | `plm` | ProductFamily, EngineeringPart, EbomLine, EngineeringChange[ECR-/ECO-/ECN-], CadReference, ProductRequirement, DesignReview, PrototypeBuild, ProductVariant, ShouldCost — (extends `scm.Item` + `scm.BillOfMaterials`; CAD files on core `Document`) |
+| 16 | Maintenance & Reliability Management (CMMS/EAM) | `maintenance` | FailureCode, RootCauseAnalysis, ReliabilityRecord, CalibrationRecord, ServiceContract, ShutdownPlan, PermitToWork, ConditionMonitor — (**Asset/MaintenanceWorkOrder/MaintenancePlan/MeterReading are OWNED by `scm` 4.13; extend by FK, do NOT re-declare**; WarrantyClaim is 4.10) |
+| 17 | Field Service Management (FSM) | `fieldservice` | ServiceSite, InstalledBaseUnit, ServiceContract/Entitlement, ServiceRequest, DispatchSchedule, TechnicianSkill, VanStock, ServiceBilling — (service customer is a `Party` role; installed base extends `scm.Asset`; jobs extend `scm.MaintenanceWorkOrder`) |
+| 18 | IT Service Management (ITSM) | `itsm` | ServiceCatalogItem, Incident, ServiceRequest, ProblemRecord/KnownError, ItChangeRequest, Release, CmdbItem, ItKnowledgeArticle, SoftwareLicense, EndpointDevice — (IT supplier is a `Party` role; access requests reuse accounts `User`/`Permission`) |
+| 19 | Retail & Point of Sale (POS) Management | `retail` | Store/Till/Register, CashierSession, RetailPrice/Markdown, Coupon, PosTransaction, LoyaltyProgram/PointsAccount, GiftCard, CashCount/Settlement — (**orders EXTEND `scm.SalesOrder` by FK per 4.5**; store stock = `scm.Location`+`StockMove`; prices extend `inventory.ItemPrice`) |
+| 20 | Facilities & Workplace Management | `facilities` | FacilityNode (site→building→floor→room→zone), SpaceAllocation, LeaseAgreement, FacilityWorkOrder, VisitorBadge, RoomBooking, UtilityMeterReading, SafetyInspection, CapitalProject — (facility equipment extends `scm.Asset`; landlord/vendor is a `Party` role) |
+| 21 | Treasury & Financial Operations Management | `treasury` | CashPosition, CashForecast, BankMandate/Signatory, PaymentProposal/Batch, LiquidityPool, DebtFacility, Investment, FxExposure/Hedge — (**BankAccount/BankTransaction/Reconciliation are OWNED by `accounting` 2.5; extend by FK, do NOT re-declare**; every treasury effect posts its JE via `accounting`, L29) |
+| 22 | Sustainability, EHS & ESG Management | `esg` | EsgPolicy/MaterialTopic, EsgDataPoint, EmissionFactor/ScopeRecord, WasteStream, EsgQuestionnaire, EhsIncident, JobSafetyAssessment, PermitToWork, DisclosurePack, SustainabilityTarget — (**supplier ESG scorecards are OWNED by `scm` 4.12 `SustainabilityAssessment`; extend by FK**) |
+| 23 | AI & Intelligent Automation | `ai` | AiUseCase, AiConversation, AiAgent/AiRun, PromptTemplate, KnowledgeSource, ExtractionJob, AnomalySignal, RecommendationCard, EvaluationMetric — (reads the spine read-only, the BI precedent; every AI action audited via `core.AuditLog`; tool use permission-aware via `accounts`) |
 
 Aim for **1–4 models** per sub-module pass (the one `N.M` you resolved) so that sub-module's features each map to a
 real list page. Some sub-modules are already covered by the foundation (`accounts:role_list`, `accounts:user_list`,
