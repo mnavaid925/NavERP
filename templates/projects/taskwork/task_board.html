@@ -152,8 +152,8 @@
                   {% endif %}
                 </div>
               {% endif %}
-            {% else %}
-              <div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing here</h3><p>No task sits in {{ column.label }} for this scope.</p></div>
+              {% empty %}
+                <div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing here</h3><p>No task sits in {{ column.label }} for this scope.</p></div>
             {% endfor %}
           </div>
         </div>
