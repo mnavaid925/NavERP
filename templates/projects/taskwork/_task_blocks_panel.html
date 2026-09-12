@@ -1,0 +1,78 @@
+{% comment %}
+  7.8 task-detail panel — the block evidence trail for THIS task (obj is the ProjectTask).
+
+  Reads obj.blocks.all and the derived is_blocked / is_manually_blocked / is_dependency_blocked
+  badges directly — no panel-specific context keys beyond the two verb bodies tsk_detail passes
+  (block_form / unblock_form). They POST to the POST-only task verbs on THIS task; the unblock
+  panel renders only while an active block stands (one open blocker at a time, so
+  is_manually_blocked names THE row). Block rows are evidence: raised by the Block verb, closed
+  once by the Unblock verb — no edit or delete anywhere.
+{% endcomment %}
+<div class="card">
+  <div class="card-header"><h2>Blocks</h2></div>
+  <div class="card-body">
+    <p>
+      {% if obj.is_dependency_blocked %}<span class="badge badge-amber">Dependency blocked</span>{% endif %}
+      {% if obj.is_manually_blocked %}<span class="badge badge-red">Manually blocked</span>{% endif %}
+      {% if not obj.is_blocked %}<span class="badge badge-green">Not blocked</span>{% endif %}
+    </p>
+    {% for block in obj.blocks.all %}
+      <div class="card" style="margin-bottom:0.75rem;">
+        <div class="card-body">
+          <p>
+            <a href="{% url 'projects:tbk_detail' block.pk %}" class="fw-600">{{ block.number }}</a>
+            {% if block.is_active %}<span class="badge badge-red">Active</span>
+            {% else %}<span class="badge badge-green">Resolved</span>{% endif %}
+          </p>
+          <dl class="detail-grid">
+            <dt>Reason</dt><dd>{{ block.reason|linebreaksbr }}</dd>
+            <dt>Unblock criteria</dt><dd>{{ block.unblock_criteria|linebreaksbr }}</dd>
+            <dt>Blocked by</dt><dd>{% if block.blocked_by %}{{ block.blocked_by.get_full_name|default:block.blocked_by.email }}{% else %}—{% endif %}</dd>
+            <dt>Blocked at</dt><dd>{% if block.blocked_at %}{{ block.blocked_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+            {% if not block.is_active %}
+              <dt>Unblocked by</dt><dd>{% if block.unblocked_by %}{{ block.unblocked_by.get_full_name|default:block.unblocked_by.email }}{% else %}—{% endif %}</dd>
+              <dt>Unblocked at</dt><dd>{% if block.unblocked_at %}{{ block.unblocked_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+              <dt>Resolution note</dt><dd>{% if block.resolution_note %}{{ block.resolution_note|linebreaksbr }}{% else %}—{% endif %}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted">No blocker has ever been raised on this task. Dependency holds, if any, show in the blocking verdict below the dependency network.</p>
+    {% endfor %}
+
+    {% if obj.is_manually_blocked %}
+      {% comment %} The exit — the verb stamps the active row's unblock trail exactly once. {% endcomment %}
+      <form method="post" action="{% url 'projects:tsk_unblock' obj.pk %}" novalidate onsubmit="return confirm('Unblock task {{ obj.number }}? The active block\'s unblock trail is written once and cannot be changed.');">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in unblock_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Unblock task</button>
+      </form>
+    {% else %}
+      {% comment %} One open blocker at a time — the raise panel only shows while none stands. {% endcomment %}
+      <form method="post" action="{% url 'projects:tsk_block' obj.pk %}" novalidate onsubmit="return confirm('Block task {{ obj.number }}? A new evidence row is minted and frozen while it stands.');">
+        {% csrf_token %}
+        <div class="form-grid">
+          {% for field in block_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Block task</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
