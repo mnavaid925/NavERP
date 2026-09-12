@@ -197,12 +197,15 @@ DRAFT_MILESTONES = [
 
 class Command(BaseCommand):
     help = ("Seed Module 7 Project Management demo data (7.1 Initiation, 7.2 Planning, "
-            "7.3 Resourcing, 7.4 Cost & Budget).")
+            "7.3 Resourcing, 7.4 Cost & Budget, 7.5 Risk & Issue Management, "
+            "7.6 Quality Management, 7.7 Scope & Requirements Management).")
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(escalations, issues, response actions, risks, expenses, budget lines, "
+                  "(scope verifications, scope change requests, scope items, requirements, "
+                  "quality defects, deliverable inspections, quality reviews, quality plans, "
+                  "escalations, issues, response actions, risks, expenses, budget lines, "
                   "control accounts, budget revisions, time entries, allocations, resource "
                   "profiles, baselines, milestones, dependencies, tasks, kickoffs, "
                   "stakeholders, projects, requests) - not just seeder-created ones."))
@@ -1237,6 +1240,9 @@ class Command(BaseCommand):
                 verified_at=now if status == "verified" else None,
                 verification_note=kw.get("verification_note", ""),
                 created_by=requester)
+            # Fail loudly at seed time rather than at the DB CHECK: a bad choice value or a bad
+            # magnitude must name the offending row, not abort the whole atomic block.
+            obj.full_clean(exclude=["number"])
             obj.save()
             return obj
 
@@ -1251,6 +1257,7 @@ class Command(BaseCommand):
                 outcome=kw.get("outcome", ""),
                 closed_at=now if status in ("realized", "retired") else None,
                 created_by=requester)
+            obj.full_clean(exclude=["number"])
             obj.save()
             return obj
 
@@ -1270,6 +1277,7 @@ class Command(BaseCommand):
                 implemented_at=now - timedelta(days=kw["impl_age"])
                 if status == "implemented" else None,
                 created_by=requester)
+            obj.full_clean(exclude=["number"])
             obj.save()
             return obj
 
@@ -1283,6 +1291,7 @@ class Command(BaseCommand):
                 findings=kw.get("findings", ""), decision_note=kw.get("decision_note", ""),
                 accepted_by=owner if decided else None,
                 accepted_at=now if decided else None, created_by=requester)
+            obj.full_clean(exclude=["number"])
             obj.save()
             return obj
 
@@ -1405,7 +1414,7 @@ class Command(BaseCommand):
                        quality_note="Pricing rules would need a second approval path.",
                        decided_age=26)
                 change(active, "Reduce the accessibility target on the checkout screens",
-                       "regulatory", "medium", "0.00", -10, "high", "rejected",
+                       "regulatory", "medium", "0.00", 10, "high", "rejected",
                        justification="Buy ten days by shipping checkout at a lower conformance "
                                      "level.",
                        decision_note="Rejected: the accessibility target is a regulatory "
@@ -1415,7 +1424,7 @@ class Command(BaseCommand):
                        "22000.00", 8, "none", "submitted",
                        justification="Small, visible win for the loyalty programme.")
                 change(active, "Move the returns module to release 4", "internal", "high", "0.00",
-                       -30, "none", "under_review",
+                       30, "none", "under_review",
                        justification="Frees the QA team for the checkout work.",
                        description="De-scope the returns module to protect the checkout date.")
                 change(active, "Replace the legacy order export with the API", "technical",
