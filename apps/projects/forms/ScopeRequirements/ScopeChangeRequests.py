@@ -29,5 +29,5 @@ class ChangeRejectionForm(forms.Form):
     """The ``scr_reject`` verb's body: the board's reason for turning the change down."""
 
     decision_note = forms.CharField(
-        required=True, widget=forms.Textarea(attrs={"rows": 3}),
+        required=True, widget=forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
         help_text="The board's reason for rejecting the change. Stored on the register row.")
