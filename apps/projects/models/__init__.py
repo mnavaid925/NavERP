@@ -72,3 +72,14 @@ from .ScopeRequirements.Requirements import Requirement  # noqa: F401
 from .ScopeRequirements.ScopeChangeRequests import ScopeChangeRequest  # noqa: F401
 from .ScopeRequirements.ScopeItems import ScopeItem  # noqa: F401
 from .ScopeRequirements.ScopeVerifications import ScopeVerification  # noqa: F401
+
+# --- 7.8 Task & Work Management ---------------------------------------------------------------
+# Two new tables, no third: the checklist tick inside a task and the block/unblock evidence row
+# (minted by ``tsk_block``, closed by ``tsk_unblock``, frozen as evidence after — never
+# form-created, edited or deleted). The execution fields (assignee, priority, MoSCoW, the
+# Eisenhower pair, percent_complete and the verb-written actual_start/actual_end stamps) extend
+# ``ProjectTask`` IN PLACE — the documented 7.2 hand-off — and the kanban board, the gantt
+# timeline and the priority lens are computed pages: none of them is a table, because a stored
+# board goes stale the instant a task moves (the 7.4 EVM / 7.5 simulation / 7.6 boards ruling).
+from .TaskWorkManagement.TaskBlocks import TaskBlock  # noqa: F401
+from .TaskWorkManagement.TaskChecklistItems import TaskChecklistItem  # noqa: F401
