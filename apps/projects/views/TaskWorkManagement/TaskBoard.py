@@ -158,11 +158,20 @@ def task_board(request):
     project_id = as_db_int(request.GET.get("project"))
     if project_id is not None:
         project = Project.objects.filter(tenant=tenant, pk=project_id).first()
+        if project is None:
+            # A well-formed id from ANOTHER workspace (or a deleted row) degrades to the whole
+            # workspace — the pinned no-500 behaviour — but it now says so instead of silently
+            # showing unfiltered rows the user did not ask for (review M11).
+            messages.warning(request, "That project is not in this workspace — showing all "
+                                      "projects instead.")
 
     assignee = None
     assignee_id = as_db_int(request.GET.get("assignee"))
     if assignee_id is not None:
         assignee = get_user_model().objects.filter(tenant=tenant, pk=assignee_id).first()
+        if assignee is None:
+            messages.warning(request, "That assignee is not in this workspace — showing every "
+                                      "assignee instead.")
 
     qs = (ProjectTask.objects.filter(tenant=tenant)
           .select_related("project", "assignee")

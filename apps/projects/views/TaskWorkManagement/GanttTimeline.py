@@ -225,6 +225,10 @@ def gantt_timeline(request):
     project_id = as_db_int(request.GET.get("project"))
     if project_id is not None:
         project = Project.objects.filter(tenant=tenant, pk=project_id).first()
+        if project is None:
+            # A well-formed id from another workspace degrades to the picker empty state (the
+            # pinned no-500 behaviour) — but it now says so (review M11).
+            messages.warning(request, "That project is not in this workspace.")
 
     bars, dep_rows, conflicts, critical_ids, window = [], [], [], set(), None
     today_offset_pct = None  # no project → no window → no today marker
