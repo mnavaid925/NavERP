@@ -84,6 +84,10 @@ class ProjectNotification(TenantNumbered):
                          name="ntf_tnt_recipient_idx"),
             models.Index(fields=["tenant", "kind"], name="ntf_tnt_kind_idx"),
             models.Index(fields=["tenant", "project"], name="ntf_tnt_project_idx"),
+            # Serves `Meta.ordering` itself (`ntf_list` sorts every render) and the activity
+            # feed's notification source. The in-pattern add — ["tenant", "created_at"] already
+            # ships on 20+ models app-wide.
+            models.Index(fields=["tenant", "-created_at"], name="ntf_tnt_created_idx"),
         ]
 
     def __str__(self):
