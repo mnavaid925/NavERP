@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}Schedule a{% endif %} Meeting{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}Schedule a{% endif %} Meeting</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:mtg_list' %}">Meetings</a><span class="sep">›</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        Two things this page deliberately cannot do.
+
+        It cannot set the status: the machine is scheduled -> in progress -> completed, driven by
+        the start/complete/cancel verbs on the meeting's detail page, each of which stamps its own
+        actual-time field. A form that could jump the status would leave those stamps lying.
+
+        It cannot write the minutes: those are the capture-minutes verb's, so the recorder and the
+        timestamp are always recorded together with the text.
+
+        recurrence DECLARES the cadence only — nothing generates the next occurrence, because that
+        needs the scheduler the workflow & automation module owns.
+      {% endcomment %}
+      <p class="text-muted">A new meeting starts <strong>Scheduled</strong>. Build its agenda and capture its minutes from the meeting's own page.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'projects:mtg_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
