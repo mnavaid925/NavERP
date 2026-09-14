@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Notification Inbox{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Notification Inbox</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Notifications</span></div>
+      <p class="text-muted">What the workspace told people about — mentions, assignments, due dates, status changes and system events. Rows are minted by their trigger, never written by hand; this page reads them and clears them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:ntf_list' %}?mine=1" class="btn {% if mine %}btn-primary{% else %}btn-outline{% endif %}"><i data-lucide="inbox"></i> My inbox ({{ unread_count }} unread)</a>
+      {% if not mine %}<a href="{% url 'projects:ntf_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Whole workspace</a>{% endif %}
+      <form method="post" action="{% url 'projects:ntf_mark_all_read' %}" onsubmit="return confirm('Mark every unread notification in your inbox as read?');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-check"></i> Mark my inbox read</button>
+      </form>
+      <a href="{% url 'projects:activity_feed' %}" class="btn btn-outline"><i data-lucide="activity"></i> Activity Feed</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ unread_count }}</div>
+      <div class="stat-label">Your unread</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% if mine %}<input type="hidden" name="mine" value="1">{% endif %}
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title or body…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="recipient" aria-label="Recipient" class="form-select">
+            <option value="">Any recipient</option>
+            {% for u in recipients %}
+              <option value="{{ u.pk }}" {% if request.GET.recipient == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Kind" class="form-select">
+            <option value="">Any kind</option>
+            {% for value, label in kind_choices %}
+              <option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_read" aria-label="Read state" class="form-select">
+            <option value="">Any state</option>
+            <option value="False" {% if request.GET.is_read == 'False' %}selected{% endif %}>Unread</option>
+            <option value="True" {% if request.GET.is_read == 'True' %}selected{% endif %}>Read</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:ntf_list' %}{% if mine %}?mine=1{% endif %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Notification</th><th>Recipient</th><th>Project</th><th>Kind</th><th>Source</th><th>Triggered by</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:ntf_detail' obj.pk %}">{{ obj.number }}</a><div class="text-muted">{{ obj.title }}</div></td>
+              <td>{{ obj.recipient.get_full_name|default:obj.recipient.email }}</td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>
+                {% if obj.kind == 'mention' %}<span class="badge badge-info">Mention</span>
+                {% elif obj.kind == 'assignment' %}<span class="badge badge-amber">Assignment</span>
+                {% elif obj.kind == 'due_date' %}<span class="badge badge-red">Due Date</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_kind_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.message %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">message {{ obj.message.number }}</a>
+                {% elif obj.channel %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">{{ obj.channel.name }}</a>
+                {% elif obj.task %}<a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task.number }}</a>
+                {% elif obj.meeting %}<a href="{% url 'projects:mtg_detail' obj.meeting_id %}">{{ obj.meeting.number }}</a>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>{% if obj.triggered_by %}{{ obj.triggered_by.get_full_name|default:obj.triggered_by.email }}{% else %}<span class="text-muted">System</span>{% endif %}</td>
+              <td>
+                {% if obj.is_read %}<span class="badge badge-muted">Read</span>
+                {% else %}<span class="badge badge-green">Unread</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:ntf_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <form method="post" action="{% url 'projects:ntf_mark_read' obj.pk %}" onsubmit="return confirm('{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %} {{ obj.number }}?');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %}"><i data-lucide="{% if obj.is_read %}mail{% else %}mail-open{% endif %}"></i></button>
+                  </form>
+                  <form method="post" action="{% url 'projects:ntf_delete' obj.pk %}" onsubmit="return confirm('Dismiss notification {{ obj.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Dismiss"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="inbox"></i><h3>No notifications match</h3><p>Nothing has been delivered on this lens yet — mention a teammate in a channel and their inbox fills.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
