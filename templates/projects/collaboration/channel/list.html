@@ -68,7 +68,7 @@
                   <a href="{% url 'projects:chn_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'projects:chn_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                   <form method="post" action="{% url 'projects:chn_archive' obj.pk %}" onsubmit="return confirm('{% if obj.is_archived %}Reopen{% else %}Archive{% endif %} channel {{ obj.number }}?');">
-                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_archived %}Reopen{% else %}Archive{% endif %}"><i data-lucide="{% if obj.is_archived %}archive-restore{% else %}archive{% endif %}"></i></button>
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_archived %}Reopen{% else %}Archive{% endif %}"><i data-lucide="{% if obj.is_archived %}rotate-ccw{% else %}archive{% endif %}"></i></button>
                   </form>
                   <form method="post" action="{% url 'projects:chn_delete' obj.pk %}" onsubmit="return confirm('Delete channel {{ obj.number }}? Its messages and pinned documents go with it. This cannot be undone.');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
