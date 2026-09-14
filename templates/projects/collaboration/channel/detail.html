@@ -123,7 +123,7 @@
               <td>
                 {% if s.access_level == 'edit' %}<span class="badge badge-green">Can edit</span>
                 {% elif s.access_level == 'comment' %}<span class="badge badge-info">Comment</span>
-                {% else %}<span class="badge badge-muted">View only</span>{% endif %}
+                {% else %}<span class="badge badge-muted">{{ s.get_access_level_display }}</span>{% endif %}
               </td>
               <td>{% if s.shared_with %}{{ s.shared_with.get_full_name|default:s.shared_with.email }}{% else %}Whole team{% endif %}</td>
               <td>
@@ -150,9 +150,12 @@
     .collab-thread { border-bottom: 1px solid var(--border); padding: 0.75rem 0; }
     .collab-thread:last-child { border-bottom: none; }
     .collab-msg { padding: 0.5rem 0; }
-    .collab-reply { margin-left: 2rem; border-left: 2px solid var(--border); padding-left: 0.75rem; }
+    /* Logical properties: under html[dir="rtl"] a physical `left` gutter would read as an
+       outdent while the conversation flows right. theme.css's own .tree-children uses the
+       inline-start form for exactly this reason. */
+    .collab-reply { margin-inline-start: 2rem; border-inline-start: 2px solid var(--border); padding-inline-start: 0.75rem; }
     .collab-msg-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .collab-msg-body { margin: 0.25rem 0; }
-    .collab-reply-form { margin-left: 2rem; }
+    .collab-reply-form { margin-inline-start: 2rem; }
   </style>
 {% endblock %}
