@@ -4977,6 +4977,12 @@ def taskwork_checklist_empty_a(db, planning_project_a):
 
 
 @pytest.fixture
+def taskwork_checklist_mixed_item_a(db, taskwork_checklist_mixed_a):
+    """One item off ``taskwork_checklist_mixed_a`` — the detail/edit/delete/toggle subject."""
+    return taskwork_checklist_mixed_a.checklist_items.order_by("sequence").first()
+
+
+@pytest.fixture
 def taskwork_block_active_a(db, planning_project_a, admin_user):
     """The open block on its own (the unblock verb's subject)."""
     task = _planning_task(planning_project_a.tenant, planning_project_a, status="in_progress")
