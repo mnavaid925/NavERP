@@ -14,8 +14,13 @@ conditions, not one filter.
 
 ``ntf_mark_read`` is the ONE writer of ``is_read``/``read_at`` — a toggle, so marking something
 unread again goes through the SAME verb + audit, ``previous`` captured BEFORE mutating.
-``ntf_mark_all_read`` is deliberately scoped to the CALLER's own unread rows: an inbox is
-personal, and a bulk verb that could clear a teammate's is a privilege escalation with no upside.
+
+**All three write verbs are scoped to the CALLER's own rows.** An inbox is personal: a row is one
+person's delivery, not shared evidence, so clearing a teammate's unread badge (or destroying their
+row) is a privilege escalation with no upside. ``ntf_mark_all_read`` was already caller-scoped;
+``ntf_mark_read`` and ``ntf_delete`` carry ``recipient=request.user`` for the same reason — a
+teammate's row is a 404, exactly like another workspace's row. The templates offer the two
+controls only on rows the viewer owns (the L27 converse rule).
 """
 from apps.projects.models import ProjectNotification
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -65,8 +70,12 @@ def ntf_mark_read(request, pk):
 
     Read stamps both together; unread clears both — the "mark unread" goes through the SAME verb +
     audit, one writer per direction, with ``previous`` captured BEFORE mutating.
+
+    Scoped to the caller: a teammate's row is a 404, not something you may clear (see the module
+    docstring). ``ntf_mark_all_read`` and the model's per-recipient-delivery ruling agree.
     """
-    obj = get_object_or_404(ProjectNotification, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(ProjectNotification, pk=pk, tenant=request.tenant,
+                            recipient=request.user)
     previous = obj.is_read
     if previous:
         obj.is_read = False
@@ -114,10 +123,18 @@ def ntf_mark_all_read(request):
 @login_required
 @require_POST
 def ntf_delete(request, pk):
-    """Dismiss one of the tenant's notification rows.
+    """Dismiss one of the CALLER's own notification rows.
 
     Unlike 7.8's block evidence, an inbox row IS deletable — it is one person's delivery record,
     not shared evidence, and an inbox you cannot clear is a worse inbox (see the model docstring).
+
+    ``crud_delete`` cannot express the extra ``recipient`` predicate (it fetches on ``pk`` +
+    ``tenant`` only), so the fetch is hand-rolled the way ``agi_delete``/``mai_delete`` are: a
+    teammate's row is a 404, exactly like another workspace's.
     """
-    return crud_delete(request, model=ProjectNotification, pk=pk,
-                       success_url="projects:ntf_list")
+    obj = get_object_or_404(ProjectNotification, pk=pk, tenant=request.tenant,
+                            recipient=request.user)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Notification dismissed.")
+    return redirect("projects:ntf_list")
