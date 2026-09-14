@@ -670,8 +670,8 @@ Status of every consolidated finding after the fix pass. **No finding is left `[
 | I6 | `[x] fixed` | `templates/projects/scope/scope_matrix.html` | Rendered `creep_max` in the creep caption ("largest month totals …") | Rendered page contains the line |
 | I7 | `[x] fixed` | `views/ScopeRequirements/ScopeMatrix.py` | Collapsed the 10 `_rows()` counts into 2 grouped aggregates and the 6 `scope_summary` counts into 2 (item_type group + one filtered live aggregate) | **31 → 19** queries tenant-wide, **34 → 22** with `?project=`; every figure byte-identical |
 | I8 | `[x] fixed` | `views/ScopeRequirements/ScopeMatrix.py` | Added `CREEP_LIMIT = 500` (documented) and sliced the creep SELECT | SQL emits `LIMIT 500`; figures unchanged |
-| I9 | `[~] skipped — contract pins login-only; flagged for the contract owner, no code change this run` | — | — | — |
-| I10 | `[~] skipped — contract pins login-only; flagged for the contract owner, no code change this run` | — | — | — |
+| I9 | `[~] ruled 2026-09-13 — KEEP login-only` | — | No code change. The contract pins these login-only; the product owner ruled that execution steps stay member-accessible and only decisions are admin-gated (the 7.6 `qpl_approve` precedent) | Ruling recorded below |
+| I10 | `[~] ruled 2026-09-13 — KEEP login-only` | — | No code change. Same ruling as I9 (`svr_accept` is an execution step; `svr_reject`/`svr_waive` remain admin-gated) | Ruling recorded below |
 | M1 | `[x] fixed` | `apps/projects/admin.py` | Dropped `parent` from `RequirementAdmin.list_select_related` | `check` clean; admin loads |
 | M2 | `[x] fixed` | `templates/projects/scope/scope_matrix.html` | Added a "showing N of M requirements" clause to the matrix note | Rendered note reads "showing 3 of 3 work packages, 3 of 3 requirements" |
 | M3 | `[x] fixed` | 4× `ScopeRequirements/__init__.py` | Reworded the four docstrings to state the convention statically (dropped the "added in the Integrate step" tense) | Read back |
@@ -680,19 +680,28 @@ Status of every consolidated finding after the fix pass. **No finding is left `[
 | M6 | `[~] skipped — cosmetic, no action` | — | — | — |
 | M7 | `[x] fixed — no action required, recorded as an accepted convention` | — | — | — |
 
-## Open question for the contract owner (I9 / I10)
+## Open question for the contract owner (I9 / I10) — RULED 2026-09-13
 
 `sci_realize` / `sci_retire` (I9) and `svr_accept` (I10) are **login-only** — a plain member can close a
 registry row / accept a deliverable. The contract (§4.2, §4.4) explicitly pins them login-only, and the
 accept/reject asymmetry (`svr_reject`/`svr_waive` are admin-gated, `svr_accept` is not) reads as
-deliberate. **No code change was made.** The human should rule whether 7.7 intends members to close
-registry rows / accept deliverables; if not, hoist `@tenant_admin_required` above those three verbs in a
-follow-up.
+deliberate.
 
-## Follow-up recorded, deliberately NOT swept this run
+**Ruling: KEEP login-only.** Execution-style steps (realize a scope item, accept a verified
+deliverable) are done by the team; only *decisions* — approve, reject, waive, verify — are
+admin-gated. This matches the 7.6 `qpl_approve` precedent. **No code change.**
 
-The 403-vs-405 decorator order is a **module-wide pattern** — 7.1–7.5 carry the identical order. This
-run fixed **7.7 only** (the changeset under review). The siblings are a recorded follow-up.
+## Follow-up recorded, deliberately NOT swept this run — **SWEPT 2026-09-13**
+
+The 403-vs-405 decorator order is a **module-wide pattern** — 7.1–7.5 carried the identical order.
+This run fixed **7.7 only** (the changeset under review).
+
+**Swept the following day:** `@require_POST` was hoisted above `@tenant_admin_required` on **23
+verbs across 12 files** in 7.1–7.5, and the two security tests that encoded the old buggy 403
+(`test_initiation_security.py`, `test_resource_security.py`) were updated to assert **405**. The
+full unfiltered suite is **2751 tests, 0 failures, 0 errors**. The concurrent 7.8 session's broken
+`admin.py` (registrations for `TaskBlock`/`TaskChecklistItem` with no matching imports, which made
+`manage.py check` fail outright) was fixed in the same pass — it was blocking every test run.
 
 ## Probes run
 
