@@ -1,17 +1,19 @@
 {% comment %}
   7.8 task-detail panel — the task's checklist and its computed done/total progress.
 
-  Reads obj.checklist_items.all and obj.checklist_progress directly (no panel context keys).
-  The tick is the POST-only tcl_check verb on the ITEM — one writer per direction — and lands
-  on the item's detail page (no ?next= plumbing this pass, the documented trade-off). The
-  progress figure is computed on read from these rows, never stored; it is hidden when the
-  checklist is empty (the property is None then), never faked to 0%.
+  Reads obj.checklist_items.all (prefetched once by tsk_detail) and the view-computed
+  `checklist_progress` context key — NOT obj.checklist_progress, whose two COUNTs would bypass
+  the prefetch cache and re-query per render (review I7). The tick is the POST-only tcl_check
+  verb on the ITEM — one writer per direction — and lands on the item's detail page (no ?next=
+  plumbing this pass, the documented trade-off). The progress figure is computed on read from
+  these rows, never stored; it is hidden when the checklist is empty (the view passes None then),
+  never faked to 0%.
 {% endcomment %}
 <div class="card">
   <div class="card-header"><h2>Checklist</h2></div>
   <div class="card-body">
     {% if obj.checklist_items.all %}
-      <p class="text-muted">{{ obj.checklist_progress }}% of the checklist is done.</p>
+      <p class="text-muted">{{ checklist_progress }}% of the checklist is done.</p>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Item</th><th>Seq</th><th>State</th><th>Checked by</th><th>Checked at</th><th class="table-actions">Actions</th></tr></thead>
