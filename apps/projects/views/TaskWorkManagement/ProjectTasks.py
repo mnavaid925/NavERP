@@ -23,6 +23,7 @@ tenant-scoped queryset — a forged id can never write outside the workspace.
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.urls import reverse
 
 from apps.core.crud import as_db_int
@@ -142,6 +143,10 @@ def tsk_block(request, pk):
     One open blocker at a time: while one stands the verb refuses, so
     ``is_manually_blocked`` always names THE row. The stamps (``blocked_by``/``blocked_at``/
     ``created_by``) are written here, never by any form.
+
+    The guard is check-then-act, so the task is re-fetched under a lock and the guard re-tested
+    before minting (the ``qdf_raise_issue`` idiom) — two concurrent POSTs could otherwise both
+    pass and mint two open blocks.
     """
     obj = get_object_or_404(ProjectTask, pk=pk, tenant=request.tenant)
     active = obj.blocks.filter(unblocked_at__isnull=True).first()
@@ -154,15 +159,23 @@ def tsk_block(request, pk):
         messages.error(request, "; ".join(
             " ".join(errors) for errors in form.errors.values()))
         return redirect("projects:tsk_detail", pk=obj.pk)
-    block = TaskBlock.objects.create(
-        tenant=request.tenant, task=obj,
-        reason=form.cleaned_data["reason"],
-        unblock_criteria=form.cleaned_data["unblock_criteria"],
-        blocked_by=request.user, blocked_at=timezone.now(), created_by=request.user)
-    write_audit_log(request.user, block, "create",
-                    changes={"verb": "block", "task": obj.number})
-    messages.success(request, f"Block {block.number} raised on task {obj.number}.")
-    return redirect("projects:tsk_detail", pk=obj.pk)
+    with transaction.atomic():
+        locked = ProjectTask.objects.select_for_update().get(pk=obj.pk)
+        active = locked.blocks.filter(unblocked_at__isnull=True).first()
+        if active is not None:
+            messages.error(request, f"Task {locked.number} already has an open block "
+                                    f"({active.number}) — one open blocker at a time; "
+                                    f"unblock it first.")
+            return redirect("projects:tsk_detail", pk=locked.pk)
+        block = TaskBlock.objects.create(
+            tenant=request.tenant, task=locked,
+            reason=form.cleaned_data["reason"],
+            unblock_criteria=form.cleaned_data["unblock_criteria"],
+            blocked_by=request.user, blocked_at=timezone.now(), created_by=request.user)
+        write_audit_log(request.user, block, "create",
+                        changes={"verb": "block", "task": locked.number})
+    messages.success(request, f"Block {block.number} raised on task {locked.number}.")
+    return redirect("projects:tsk_detail", pk=locked.pk)
 
 
 @login_required
@@ -172,6 +185,10 @@ def tsk_unblock(request, pk):
 
     Unblock-twice is refused (``messages.info``): once ``unblocked_at`` is set the row is
     closed evidence. ``previous`` (the block's active state) is captured BEFORE mutating.
+
+    The guard is check-then-act, so the task is re-fetched under a lock and the active-block
+    re-tested before stamping (the ``qdf_raise_issue`` idiom) — two concurrent POSTs could
+    otherwise both pass and double-stamp the once-only trail.
     """
     obj = get_object_or_404(ProjectTask, pk=pk, tenant=request.tenant)
     block = obj.blocks.filter(unblocked_at__isnull=True).first()
@@ -183,15 +200,21 @@ def tsk_unblock(request, pk):
         messages.error(request, "; ".join(
             " ".join(errors) for errors in form.errors.values()))
         return redirect("projects:tsk_detail", pk=obj.pk)
-    previous = "active" if block.unblocked_at is None else "resolved"  # captured BEFORE mutating
-    block.unblocked_by = request.user
-    block.unblocked_at = timezone.now()
-    block.resolution_note = form.cleaned_data["resolution_note"]
-    block.save(update_fields=["unblocked_by", "unblocked_at", "resolution_note", "updated_at"])
-    write_audit_log(request.user, block, "update",
-                    changes={"verb": "unblock", "from": previous, "to": "resolved"})
-    messages.success(request, f"Block {block.number} cleared from task {obj.number}.")
-    return redirect("projects:tsk_detail", pk=obj.pk)
+    with transaction.atomic():
+        locked = ProjectTask.objects.select_for_update().get(pk=obj.pk)
+        block = locked.blocks.filter(unblocked_at__isnull=True).first()
+        if block is None:
+            messages.info(request, f"Task {locked.number} has no active block to clear.")
+            return redirect("projects:tsk_detail", pk=locked.pk)
+        previous = "active" if block.unblocked_at is None else "resolved"  # captured BEFORE mutating
+        block.unblocked_by = request.user
+        block.unblocked_at = timezone.now()
+        block.resolution_note = form.cleaned_data["resolution_note"]
+        block.save(update_fields=["unblocked_by", "unblocked_at", "resolution_note", "updated_at"])
+        write_audit_log(request.user, block, "update",
+                        changes={"verb": "unblock", "from": previous, "to": "resolved"})
+    messages.success(request, f"Block {block.number} cleared from task {locked.number}.")
+    return redirect("projects:tsk_detail", pk=locked.pk)
 
 
 #: The two status values whose transitions carry a single verb's gating row-by-row:
