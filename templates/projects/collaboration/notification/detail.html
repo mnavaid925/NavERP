@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Notification{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:ntf_list' %}">Notifications</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Delivered to {{ obj.recipient.get_full_name|default:obj.recipient.email }} on <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></p>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'projects:ntf_mark_read' obj.pk %}" onsubmit="return confirm('{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %} {{ obj.number }}?');">
+        {% csrf_token %}<button class="btn {% if obj.is_read %}btn-outline{% else %}btn-primary{% endif %}" type="submit"><i data-lucide="{% if obj.is_read %}mail{% else %}mail-open{% endif %}"></i> {% if obj.is_read %}Mark unread{% else %}Mark read{% endif %}</button>
+      </form>
+      <a href="{% url 'projects:ntf_list' %}" class="btn btn-outline">Back to Inbox</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Notification</h2>
+      {% if obj.is_read %}<span class="badge badge-muted">Read</span>{% else %}<span class="badge badge-green">Unread</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Kind</dt><dd>
+          {% if obj.kind == 'mention' %}<span class="badge badge-info">Mention</span>
+          {% elif obj.kind == 'assignment' %}<span class="badge badge-amber">Assignment</span>
+          {% elif obj.kind == 'due_date' %}<span class="badge badge-red">Due Date</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_kind_display }}</span>{% endif %}
+        </dd>
+        <dt>Recipient</dt><dd>{{ obj.recipient.get_full_name|default:obj.recipient.email }}</dd>
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project }}</a></dd>
+        <dt>Triggered by</dt><dd>{% if obj.triggered_by %}{{ obj.triggered_by.get_full_name|default:obj.triggered_by.email }}{% else %}System{% endif %}</dd>
+        <dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+        <dt>Read at</dt><dd>{% if obj.read_at %}{{ obj.read_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Body</dt><dd>{{ obj.body|default:"—"|linebreaksbr }}</dd>
+      </dl>
+      {% comment %}
+        The source panel is the point of the four optional FKs: a notification is useful only if it
+        takes you to the thing that caused it. Each link is guarded, because a source can have been
+        deleted since the notification was minted — the FK is SET_NULL precisely so the delivery
+        record outlives it.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <dt>Channel</dt><dd>{% if obj.channel %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">{{ obj.channel }}</a>{% else %}—{% endif %}</dd>
+        <dt>Message</dt><dd>{% if obj.message %}{{ obj.message.number }} — {{ obj.message.body|truncatechars:60 }}{% else %}—{% endif %}</dd>
+        <dt>Task</dt><dd>{% if obj.task %}<a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task.number }} — {{ obj.task.name }}</a>{% else %}—{% endif %}</dd>
+        <dt>Meeting</dt><dd>{% if obj.meeting %}<a href="{% url 'projects:mtg_detail' obj.meeting_id %}">{{ obj.meeting.number }} — {{ obj.meeting.title }}</a>{% else %}—{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:ntf_list' %}" class="btn btn-outline">Back to Inbox</a>
+    <form method="post" action="{% url 'projects:ntf_delete' obj.pk %}" onsubmit="return confirm('Dismiss notification {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Dismiss</button>
+    </form>
+  </div>
+{% endblock %}
