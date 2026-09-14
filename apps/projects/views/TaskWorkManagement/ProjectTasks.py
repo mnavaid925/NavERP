@@ -153,6 +153,13 @@ def tsk_block(request, pk):
     pass and mint two open blocks.
     """
     obj = get_object_or_404(ProjectTask, pk=pk, tenant=request.tenant)
+    # Terminal work cannot be blocked: a done/cancelled row has nothing left to hold, and an
+    # open block would outlive the work it was holding (review M8 — the as-built behaviour
+    # matched the contract's letter but not its intent).
+    if obj.status in _TERMINAL_STATUSES:
+        messages.error(request, f"Task {obj.number} is {obj.get_status_display().lower()} — "
+                                f"terminal work cannot be blocked.")
+        return redirect("projects:tsk_detail", pk=obj.pk)
     active = obj.blocks.filter(unblocked_at__isnull=True).first()
     if active is not None:
         messages.error(request, f"Task {obj.number} already has an open block ({active.number})"
@@ -165,6 +172,13 @@ def tsk_block(request, pk):
         return redirect("projects:tsk_detail", pk=obj.pk)
     with transaction.atomic():
         locked = ProjectTask.objects.select_for_update().get(pk=obj.pk)
+        # Re-tested inside the lock, status included — a concurrent complete/cancel must not
+        # slip a block past the gate (review M8, the same TOCTOU shape as C1).
+        if locked.status in _TERMINAL_STATUSES:
+            messages.error(request, f"Task {locked.number} is "
+                                    f"{locked.get_status_display().lower()} — terminal work "
+                                    f"cannot be blocked.")
+            return redirect("projects:tsk_detail", pk=locked.pk)
         active = locked.blocks.filter(unblocked_at__isnull=True).first()
         if active is not None:
             messages.error(request, f"Task {locked.number} already has an open block "
@@ -230,6 +244,8 @@ def tsk_unblock(request, pk):
 #: ``percent_complete=100``). ``planned``/``cancelled`` have no verb — they are the planning
 #: write, applied directly like ``TaskForm``'s own status field.
 _VERB_GATED_STATUSES = ("in_progress", "done")
+#: Work that is finished — no transition out of it, and nothing left to block (review M8).
+_TERMINAL_STATUSES = ("done", "cancelled")
 #: The bulk POST accepts an unbounded id list; beyond this the batch is truncated and the user
 #: is told so (review I9 — one request must not walk the whole workspace row by row).
 _BULK_CAP = 500
