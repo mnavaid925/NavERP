@@ -13,12 +13,16 @@ from django.db.models.functions import Coalesce
 
 from apps.projects.models import (
     BudgetRevision,
+    Channel,
     DeliverableInspection,
+    Meeting,
+    MeetingActionItem,
     Project,
     ProjectExpense,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
+    ProjectNotification,
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
@@ -137,4 +141,14 @@ def overview(request):
         "overdue_task_count": ProjectTask.objects.filter(
             tenant=tenant, status__in=("planned", "in_progress"),
             planned_end__lt=timezone.localdate()).count(),
+        # 7.9 collaboration & communication — three flat per-table counts (one COUNT each, no join
+        # they could share) plus the reader's OWN unread inbox depth. That last one is scoped to
+        # `request.user` on purpose: an inbox is personal, so the card reports what this reader has
+        # not read, not what the workspace has sent.
+        "channel_count": Channel.objects.filter(tenant=tenant).count(),
+        "meeting_count": Meeting.objects.filter(tenant=tenant).count(),
+        "open_action_count": MeetingActionItem.objects.filter(
+            tenant=tenant, is_done=False).count(),
+        "unread_notification_count": ProjectNotification.objects.filter(
+            tenant=tenant, recipient=request.user, is_read=False).count(),
     })
