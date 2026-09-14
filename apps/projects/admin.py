@@ -7,15 +7,22 @@ from django.contrib import admin
 
 from .models import (
     BudgetRevision,
+    Channel,
+    ChannelMessage,
     CostControlAccount,
     DeliverableInspection,
+    DocumentShare,
     IssueEscalation,
+    Meeting,
+    MeetingActionItem,
+    MeetingAgendaItem,
     Project,
     ProjectBudgetLine,
     ProjectExpense,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
+    ProjectNotification,
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
@@ -416,3 +423,94 @@ class TaskBlockAdmin(admin.ModelAdmin):
         the raw Python ``True``/``False`` (review M3). Ordered by ``unblocked_at`` so the
         boolean sort is the same ordering as the underlying column."""
         return obj.is_active
+
+
+# --- 7.9 Collaboration & Communication ---------------------------------------------------------
+
+
+@admin.register(Channel)
+class ChannelAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "kind", "is_archived", "tenant")
+    list_filter = ("kind", "is_archived")
+    list_select_related = ("tenant", "project", "created_by")
+    search_fields = ("number", "name", "topic")
+    # The archive state and its stamps are written by the chn_archive toggle — an admin-form edit
+    # would mint an archive with no one behind it.
+    readonly_fields = ("is_archived", "archived_by", "archived_at", "created_by", "created_at",
+                       "updated_at")
+
+
+@admin.register(ChannelMessage)
+class ChannelMessageAdmin(admin.ModelAdmin):
+    list_display = ("number", "channel", "parent", "created_by", "created_at", "tenant")
+    list_filter = ("created_at",)
+    list_select_related = ("tenant", "channel", "channel__project", "parent", "created_by")
+    search_fields = ("number", "body")
+    filter_horizontal = ("mentions",)
+    # The edit stamps are written by msg_edit alone.
+    readonly_fields = ("edited_by", "edited_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(DocumentShare)
+class DocumentShareAdmin(admin.ModelAdmin):
+    list_display = ("number", "document", "project", "access_level", "shared_with", "is_active",
+                    "claimed_by", "tenant")
+    list_filter = ("access_level", "is_active")
+    list_select_related = ("tenant", "project", "channel", "document", "shared_with", "claimed_by")
+    search_fields = ("number", "note", "document__name")
+    # Both the revoke state and the edit claim are verb-written (dsh_revoke / dsh_claim /
+    # dsh_release) — an admin edit could revoke a share without the claim release that must
+    # accompany it.
+    readonly_fields = ("is_active", "revoked_by", "revoked_at", "claimed_by", "claimed_at",
+                       "created_by", "created_at", "updated_at")
+
+
+@admin.register(Meeting)
+class MeetingAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "kind", "status", "scheduled_start",
+                    "recurrence", "tenant")
+    list_filter = ("kind", "status", "mode", "recurrence")
+    list_select_related = ("tenant", "project", "created_by")
+    search_fields = ("number", "title", "location")
+    # The status machine (start/complete/cancel), the minutes capture and both actual-time stamps
+    # are verb-written. An admin edit that moved the status would leave the actual stamps lying.
+    readonly_fields = ("status", "minutes", "minutes_by", "minutes_at", "actual_start",
+                       "actual_end", "created_by", "created_at", "updated_at")
+
+
+@admin.register(MeetingAgendaItem)
+class MeetingAgendaItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "meeting", "title", "sequence", "is_covered", "presenter", "tenant")
+    list_filter = ("is_covered",)
+    list_select_related = ("tenant", "meeting", "meeting__project", "presenter")
+    search_fields = ("number", "title")
+    # The covered tick and its stamps belong to the agi_cover toggle.
+    readonly_fields = ("is_covered", "covered_by", "covered_at", "created_by", "created_at",
+                       "updated_at")
+
+
+@admin.register(MeetingActionItem)
+class MeetingActionItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "meeting", "assignee", "due_date", "is_done", "task", "tenant")
+    list_filter = ("is_done", "due_date")
+    list_select_related = ("tenant", "meeting", "meeting__project", "assignee", "task")
+    search_fields = ("number", "description")
+    # The done state and its stamps belong to the mai_toggle verb.
+    readonly_fields = ("is_done", "done_by", "done_at", "created_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectNotification)
+class ProjectNotificationAdmin(admin.ModelAdmin):
+    list_display = ("number", "kind", "title", "recipient", "project", "is_read", "created_at",
+                    "tenant")
+    list_filter = ("kind", "is_read")
+    list_select_related = ("tenant", "project", "recipient", "channel", "triggered_by")
+    search_fields = ("number", "title", "body")
+    readonly_fields = ("is_read", "read_at", "created_by", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        """A notification is minted by a TRIGGER (msg_create/msg_edit, the seeder, later 7.17's
+        rule engine) — an admin add would put a delivery row in someone's inbox with no event
+        behind it, which is a lie the inbox cannot distinguish from a real one. Same ruling as
+        7.8's TaskBlockAdmin; unlike a block, a notification IS deletable (an inbox must clear)."""
+        return False
