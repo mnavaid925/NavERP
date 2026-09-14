@@ -1823,18 +1823,18 @@ LIVE_LINKS = {
     # EXTENDED in place with the execution fields (the documented hand-off — there is no second
     # task table); priority/urgency is the COMPUTED MoSCoW + Eisenhower lens; the board is the
     # COMPUTED kanban page; the gantt is the COMPUTED timeline — all three derived on read, none
-    # is a table (7.5's boards ruling). Dependencies/blocking: the dependency GRAPH is 7.2's
-    # TaskDependency register; what 7.8 adds is the BLOCK evidence row, so that bullet maps to the
-    # block register.
+    # is a table (7.5's boards ruling). Dependencies/blocking: bullet 5's LINKS half is 7.2's
+    # TaskDependency register (the L31 boundary — 7.8 owns only the blocking STATE, reached from
+    # the task-detail panels); the checklist register is a real 7.8 register and takes the extra
+    # live leaf. Both deliberate register mappings are per the pinned sidebar map.
     "7.8": {
         "Task Creation & Assignment":            "projects:tsk_list",
         "Priority & Urgency Scoring":            "projects:task_priority",
         "Kanban & Scrum Boards":                 "projects:task_board",
         "Gantt Charts & Timeline Views":         "projects:gantt_timeline",
-        "Task Dependencies & Blocking":          "projects:tbk_list",
-        # Extra live leaf: the open blockers are the register's `?active=1` lens (7.7's
-        # approval-queue precedent) — the list the standup actually works from.
-        "Active Blockers":                       "projects:tbk_list?active=1",
+        "Task Dependencies & Blocking":          "projects:dependencies",
+        # Extra live leaf: the per-task tick items are 7.8's own second register.
+        "Task Checklist Register":               "projects:tcl_list",
     },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
