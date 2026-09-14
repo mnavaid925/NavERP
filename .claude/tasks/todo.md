@@ -7320,7 +7320,7 @@ models, nothing of any peer's.
 
 Build (Phase 3) had already landed in prior sessions — 4 models (`Requirement` [REQ-],
 `ScopeItem` [SCI-], `ScopeChangeRequest` [SCR-], `ScopeVerification` [SVR-]) + the computed
-`scope_matrix` page, 9 forms, 16 verbs, 38 route names, 13 templates, `LIVE_LINKS["7.7"]`,
+`scope_matrix` page, 9 forms, 16 verbs, 37 route names, 13 templates, `LIVE_LINKS["7.7"]`,
 migration `0007` — so this run was the close-out: Phases 4-7.
 
 Six review lanes ran serial (code/explorer/frontend/performance/qa-smoke/security) into
@@ -7364,7 +7364,7 @@ un-migrated `TaskBlock` work**, not to 7.7; every `test_scope_*` passes. `manage
 `makemigrations --check` lists only 7.8's pending `0011_taskblock_…`, nothing of 7.7's.
 
 Phase 7: `.claude/skills/projects/SKILL.md` gained a `## 7.7 Scope & Requirements Management`
-section (models, the 17-row verb table documenting the **post-fix decorator order** and the
+section (models, the 16-row verb table documenting the **post-fix decorator order** and the
 `sci_retire` gate, the register notes, the C1/C2/C3 gotchas 13-14) and the Routes / Templates /
 Seeder / Tests / Sidebar sections were refreshed to include 7.7 (route count corrected to the live
 **205** names). `README.md` row moved to **7 of 19** with a 7.7 paragraph.
