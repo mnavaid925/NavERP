@@ -103,3 +103,20 @@ from .ScopeRequirements.ScopeVerifications import (  # noqa: F401
 from .TaskWorkManagement.ProjectTasks import TaskExecutionForm  # noqa: F401
 from .TaskWorkManagement.TaskBlocks import TaskBlockForm, TaskUnblockForm  # noqa: F401
 from .TaskWorkManagement.TaskChecklistItems import TaskChecklistItemForm  # noqa: F401
+
+# --- 7.9 Collaboration & Communication ---------------------------------------------------------
+# SEVEN re-exports across FOUR modules — and deliberately none for `ProjectNotification`: a
+# notification row is minted by a trigger (msg_create/msg_edit, the seeder, later 7.17's rule
+# engine) and closed by ntf_mark_read, so it has no ModelForm and no create/edit route, which
+# means no forms module for it. `MeetingMinutesForm` is a plain `forms.Form` verb body (the
+# `TaskBlockForm` idiom); `MeetingAgendaItemForm` and `MeetingActionItemForm` deliberately EXCLUDE
+# `meeting`, because it comes from the URL pk rather than from user input.
+from .CollaborationCommunication.ChannelMessages import ChannelMessageForm  # noqa: F401
+from .CollaborationCommunication.Channels import ChannelForm  # noqa: F401
+from .CollaborationCommunication.DocumentShares import DocumentShareForm  # noqa: F401
+from .CollaborationCommunication.Meetings import (  # noqa: F401
+    MeetingActionItemForm,
+    MeetingAgendaItemForm,
+    MeetingForm,
+    MeetingMinutesForm,
+)
