@@ -626,3 +626,15 @@ Corrections made while writing the code, before any reviewer ran. Where an amend
    from `apps.core.crud` directly and 7.9 follows that.
 5. **`_changed` is imported from `apps.core.crud`** for the `msg_edit` audit (the `hrm`/`scm`
    precedent for a view that audits without `crud_edit`).
+
+### Phase-5 (post-review) amendments
+
+Recorded by the `code-fixer` pass. Where an amendment supersedes a §-pinned line, THIS section wins.
+
+6. **`_notify_mentions` keeps the per-row `save()` but drops the `full_clean()`** (amends §6.6,
+   which pinned `row.full_clean(exclude=["number"]); row.save()`). §10.1's rationale covers the
+   `save()` — it is what mints `NTF-#####` — and never justified the `full_clean()`. That call
+   buys no model rule (`ProjectNotification` ships no `clean()`, and every value is an object the
+   form already validated) while issuing one `EXISTS` per non-null FK — seven per row. The
+   `mentions` multi-select is unbounded, so the fan-out cost is user-controlled: a 50-person
+   mention was ~350 SELECTs on one request. The per-row `save()` is unchanged.
