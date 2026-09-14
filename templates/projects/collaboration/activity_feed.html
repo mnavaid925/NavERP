@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Activity Feed{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Activity Feed</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Activity Feed</span></div>
+      <p class="text-muted">Everything that happened across the workspace's collaboration surfaces, newest first — channel messages, meetings, shared documents, notifications, and the audit trail behind them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:ntf_list' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Notification Inbox</a>
+      <a href="{% url 'projects:chn_list' %}" class="btn btn-outline"><i data-lucide="hash"></i> Channels</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Whole workspace</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.name|truncatechars:40 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Activity type" class="form-select">
+            <option value="">Every kind</option>
+            {% for value, label in kinds %}
+              <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="days" aria-label="Window" class="form-select">
+            {% for value, label in windows %}
+              <option value="{{ value }}" {% if days == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+        <a href="{% url 'projects:activity_feed' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="messages-square"></i></div>
+      <div class="stat-value">{{ counts.message }}</div>
+      <div class="stat-label">Messages</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ counts.meeting }}</div>
+      <div class="stat-label">Meetings</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="share-2"></i></div>
+      <div class="stat-value">{{ counts.share }}</div>
+      <div class="stat-label">Shared documents</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="bell"></i></div>
+      <div class="stat-value">{{ counts.notification }}</div>
+      <div class="stat-label">Notifications</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="scroll-text"></i></div>
+      <div class="stat-value">{{ counts.audit }}</div>
+      <div class="stat-label">Audit entries</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The audit half cannot be attributed to a project: the audit row carries only a generic
+    relation and a free-text target, so inferring a project from it would be a guess presented
+    as a fact. A project-filtered feed therefore shows the four collaboration sources only, and
+    says so below rather than quietly returning fewer rows than were asked for.
+  {% endcomment %}
+  {% if project %}
+    <p class="text-muted">Showing <strong>{{ project.name }}</strong> for the last {{ days }} days. Audit-trail entries are not attributable to a single project, so they are left out of a project-filtered feed — clear the project filter to see them.</p>
+  {% else %}
+    <p class="text-muted">Whole workspace, last {{ days }} days — {{ total_count }} entr{{ total_count|pluralize:"y,ies" }}{% if truncated %}, showing the most recent {{ entry_count }}{% endif %}.</p>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2>Stream</h2></div>
+    <div class="card-body">
+      {% for entry in entries %}
+        <div class="collab-entry">
+          <div class="collab-entry-head">
+            <span class="badge {{ entry.badge }}">{{ entry.kind_label }}</span>
+            <span class="fw-600">{{ entry.label }}</span>
+            <span class="text-muted">{{ entry.at|date:"M d, Y H:i" }}</span>
+          </div>
+          <div class="text-muted">
+            {% if entry.actor %}{{ entry.actor.get_full_name|default:entry.actor.email }}{% else %}System{% endif %}
+            {% if entry.project %} · <a href="{% url 'projects:prj_detail' entry.project.pk %}">{{ entry.project.name }}</a>{% endif %}
+            {% if entry.url %} · <a href="{{ entry.url }}">Open</a>{% endif %}
+          </div>
+          <div class="collab-entry-body">{{ entry.detail|truncatechars:200 }}</div>
+        </div>
+      {% empty %}
+        <div class="empty-state"><i data-lucide="activity"></i><h3>Nothing in this window</h3><p>Widen the window, or clear the type and project filters. The feed reads the collaboration registers and the audit trail — it holds no rows of its own.</p></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <style>
+    .collab-entry { border-bottom: 1px solid var(--border); padding: 0.6rem 0; }
+    .collab-entry:last-child { border-bottom: none; }
+    .collab-entry-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .collab-entry-body { margin-top: 0.15rem; }
+  </style>
+{% endblock %}
