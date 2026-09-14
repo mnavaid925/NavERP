@@ -483,7 +483,7 @@ def _notify_mentions(request, message, added):
     """
 ```
 
-Each row: `kind="mention"`, `title=f"Mentioned in {channel.number}"`, `body=message.body[:200]`, `project=channel.project`, `channel=channel`, `message=message`, `recipient=user`, `triggered_by=request.user`, `created_by=request.user`. **Bulk-created with `ProjectNotification.objects.bulk_create([...])`** (one INSERT, not N) — the rows are minted, not verb-stepped, so no per-row audit is written (the trigger is audited on the MESSAGE, which is the row that changed).
+Each row: `kind="mention"`, `title=f"Mentioned in {channel.number} — {channel.name}"`, `body=message.body[:200]`, `project=channel.project`, `channel=channel`, `message=message`, `recipient=user`, `triggered_by=request.user`, `created_by=request.user`. **The author is skipped** (you are not notified for mentioning yourself), and **the rows are saved one at a time with `row.full_clean(exclude=["number"]); row.save()`** — see the amendment in §10. No per-row audit is written (the trigger is audited on the MESSAGE, which is the row that changed).
 
 ### 6.7 `activity_feed` — GET-only, no model (the `task_board` / `gantt_timeline` precedent)
 
@@ -600,3 +600,29 @@ Every page `{% extends "base.html" %}` and fills `{% block title %}` + `{% block
 Tests: `test_collab_{models,forms,views,security}.py`, fixture block `collab_*`, helpers `_collab_*` (no collision with `test_initiation_*`/`test_planning_*`/`test_resource_*`/`test_cost_*`/`test_risk_*`/`test_quality_*`/`test_scope_*`/`test_taskwork_*`). Smoke script `temp/smoke_79.py` (the `smoke_78.py` sibling). Review file `.claude/tasks/review-projects-7.9.md`. Skill section in `.claude/skills/projects/SKILL.md`; README row → **8 of 19**.
 
 Deferred by ruling (do NOT build): the document repository/folders/versions (7.10), real-time co-editing (7.17/7.18), notification trigger rules + reminders (7.17), the recurrence engine (7.17), file-storage sync (7.18), sprint/retro boards (7.13), message reactions/attachments, rich-text bodies, message edit history, mention autocomplete UI, client-facing channels (7.14), and any mail/push delivery (no mail worker).
+
+## 10. Build-phase amendments (pre-review, 2026-09-14)
+
+Corrections made while writing the code, before any reviewer ran. Where an amendment supersedes a
+§-pinned line above, THIS section wins.
+
+1. **`_notify_mentions` saves its rows one at a time, not with `bulk_create`** (amends §6.6).
+   `ProjectNotification` inherits `TenantNumbered`, whose `save()` is the ONLY thing that mints the
+   per-tenant `NTF-#####` number. `bulk_create` bypasses `save()` entirely, so every fanned-out row
+   would have landed with `number=""` — and the **second** one would then have violated
+   `unique_together ("tenant", "number")` outright, making a two-person mention a 500. A message
+   names a handful of people, so per-row `save()` (the seeder's own path) is the correct trade.
+2. **The channel-detail composer carries `channel` as a hidden input** (amends §7's
+   `collaboration/channel/detail.html` row). `ChannelMessageForm` requires `channel`, and the
+   inline composer on the channel page does not render that `<select>` — the channel is fixed by
+   the page. Without the hidden field every post from the channel page would have failed
+   validation with "This field is required."
+3. **Page-local CSS uses the `collab-` prefix** on `channel/detail.html` (the 7.8 §9.6 `tw-`
+   precedent). The rules are contained to that one page and reuse the theme's `--border`
+   variable; promotion into `theme.css` is left for when a second page needs them.
+4. **`as_db_int` is imported from `apps.core.crud`, not from `views/_common`** (amends §6's
+   "Common" paragraph, which lists the shared decorators/helpers). `views/_common.py` re-exports
+   the four `crud_*` helpers but not `as_db_int`; the 7.8 `TaskChecklistItems.py` view imports it
+   from `apps.core.crud` directly and 7.9 follows that.
+5. **`_changed` is imported from `apps.core.crud`** for the `msg_edit` audit (the `hrm`/`scm`
+   precedent for a view that audits without `crud_edit`).
