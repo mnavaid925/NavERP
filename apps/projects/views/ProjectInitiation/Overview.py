@@ -32,7 +32,6 @@ from apps.projects.models import (
     ScheduleBaseline,
     ScopeChangeRequest,
     ScopeVerification,
-    TaskBlock,
     TaskDependency,
 )
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -68,6 +67,12 @@ def overview(request):
         if risk.status not in ("realized", "closed")
         and risk.severity_band in ProjectRisk.TOLERANCE_BANDS)
     review_due_count = sum(1 for risk in register if risk.is_review_overdue)
+    # 7.8's blocked figure is derived (`is_blocked` — dependency- or manually-blocked), so no
+    # column filter can count it: materialize the LIVE task list once (the `risk_count` shape
+    # above) and count the blocked rows in Python — finished work stays out, matching the board.
+    live_tasks = list(ProjectTask.objects.filter(
+        tenant=tenant, status__in=("planned", "in_progress")))
+    blocked_task_count = sum(1 for task in live_tasks if task.is_blocked)
     return render(request, "projects/overview.html", {
         "request_count": requests["total"],
         "awaiting_decision": requests["awaiting"],
@@ -121,12 +126,14 @@ def overview(request):
             tenant=tenant, status__in=("draft", "submitted", "under_review")).count(),
         "pending_verification_count": ScopeVerification.objects.filter(
             tenant=tenant, acceptance_status="pending").count(),
-        # 7.8 task & work — flat counts plus the two figures that need a decision: the open
-        # blockers (what the standup works) and the overdue tasks (the execution debt). Both are
-        # plain column/derived-column filters over the extended 7.2 task register.
-        "task_execution_count": ProjectTask.objects.filter(tenant=tenant).count(),
-        "open_block_count": TaskBlock.objects.filter(
-            tenant=tenant, unblocked_at__isnull=True).count(),
+        # 7.8 task & work — the pinned trio (§7.5): `in_progress` a DB count, `blocked` the
+        # derived figure over the materialized live list above (a dependency-blocked task with
+        # no manual block counts too), and the overdue tasks (the execution debt) as a plain
+        # column filter. The register-wide count is the pre-existing "WBS nodes" card — no
+        # duplicate Tasks card.
+        "in_progress_task_count": ProjectTask.objects.filter(
+            tenant=tenant, status="in_progress").count(),
+        "blocked_task_count": blocked_task_count,
         "overdue_task_count": ProjectTask.objects.filter(
             tenant=tenant, status__in=("planned", "in_progress"),
             planned_end__lt=timezone.localdate()).count(),
