@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Minutes — {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Minutes — {{ obj.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:mtg_list' %}">Meetings</a><span class="sep">›</span><a href="{% url 'projects:mtg_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Minutes</span></div>
+    <p class="text-muted">{{ obj.title }} · {{ obj.scheduled_start|date:"M d, Y H:i" }}</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-group">
+        <label class="form-label" for="{{ form.minutes.id_for_label }}">Minutes <span class="req">*</span></label>
+        {{ form.minutes }}
+        <div class="form-help">What was decided, what was agreed, and what was parked. Required — a minuted meeting with an empty minute records nothing.</div>
+        {% for e in form.minutes.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      {% comment %}
+        Saving stamps minutes_by / minutes_at together with the text — the recorder and the time
+        are written once by this verb and never by an edit form. It does NOT move the meeting's
+        status: writing up a meeting is not completing it, so the Complete verb stays separate.
+      {% endcomment %}
+      <p class="text-muted">Saving records <strong>you</strong> as the recorder and stamps the time. It does not complete the meeting — use <em>Complete</em> on the meeting page for that.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save minutes</button>
+      <a href="{% url 'projects:mtg_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
