@@ -60,14 +60,28 @@ class ChannelMessage(TenantNumbered):
         return f"{self.number} — {self.body[:60]}"
 
     def clean(self):
-        """A reply must stay in its own channel, one level deep.
+        """A reply must stay in its own channel, one level deep — and a root must not leave its
+        replies behind.
 
         The same cross-row guard idiom ``TaskDependency.clean()`` uses for its same-project rule.
-        Both checks read ``self.parent`` once: the FK is already loaded by the form's own
-        validation path, so this does not add a query per save.
+        The two reply checks read ``self.parent`` once: the FK is already loaded by the form's own
+        validation path, so they add no query per save.
+
+        The ROOT check is the other half of the same invariant. A root repointed at another channel
+        would keep its replies in the OLD channel — and ``chn_detail`` keys replies by parent pk
+        inside the channel's own message list, so those replies would then render on NEITHER
+        channel: user-authored content silently disappearing. Guarding here (rather than only in
+        the form) closes the admin and shell paths too, and the error maps onto the form's
+        ``channel`` field for free. It costs one indexed ``EXISTS`` and runs only for a SAVED root
+        (a create has no pk; a reply never reaches this branch), so it does not touch the common
+        create path.
         """
         super().clean()
         if self.parent_id is None:
+            if self.pk and self.replies.exclude(channel_id=self.channel_id).exists():
+                raise ValidationError(
+                    {"channel": "This message starts a thread — move or delete its replies "
+                                "before moving it to another channel."})
             return
         parent = self.parent
         if parent.channel_id != self.channel_id:
