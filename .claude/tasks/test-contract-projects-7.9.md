@@ -59,9 +59,9 @@ project.
 | `collab_notification_read_a` | `planning_project_a`, `admin_user` | `is_read=True` + `read_at` |
 | `collab_notification_other_a` | `planning_project_a`, `member_user` | `recipient=member_user` — **the I8 subject** |
 
-### Tenant A — the figure graph (`collab_figure_project_a`)
+### Tenant A — the figure graph (`collab_figures_a`)
 One fixture that builds a **closed, deterministic graph** so the annotated/derived figures are
-hand-computable. All rows hang off `planning_project_a`:
+hand-computable. It returns a dict of the rows it built. All rows hang off `planning_project_a`:
 
 ```
 2 channels:  ch1 "Figures"   -> 2 messages (root R + 1 reply)
