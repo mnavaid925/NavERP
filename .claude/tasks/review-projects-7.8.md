@@ -226,3 +226,95 @@ checklist/blocks/deps) renders every panel empty state with zero raw None.
 - [M4] Out-of-tenant `?assignee=`/`?project=` on the three computed pages silently degrade to the UNFILTERED workspace (contract-pinned; zero leak)
   evidence: as Acme admin, `task_priority?assignee=<admin_globex.pk>` → 200, context `assignee` None, no Globex names in the body, but the full Acme workspace renders — the "my tasks" lens silently drops instead of showing empty. Contract §5.4 explicitly pins "an out-of-tenant id degrades to `None`, never a 500" — as-built == contract, no cross-tenant leak.
   fix: optional polish only — flash "not in this workspace" or render the empty state when a parsed id resolves to None while one was supplied; otherwise leave as pinned.
+
+### Lane 6 — security-reviewer (serial pass 6)
+
+Verified clean across the pinned set: every view carries `@login_required`; every mutating verb except the contract-pinned GET+POST `tsk_execute` is `@require_POST`; every object fetch and queryset is `tenant=request.tenant`-scoped on GET and POST (the crud helpers re-scope internally); all 14 POST forms carry `{% csrf_token %}` and no `@csrf_exempt`/`|safe`/`mark_safe`/`autoescape off` exists; `confirm()` interpolations use only system-minted numbers (the 7.2 I3 rule); bulk `status`/`priority` allow-listed against CHOICES; `actual_start`/`actual_end` reachable by no form; `write_audit_log` on every mutating verb incl. per-row bulk entries; seeder ORM-only and secret-free.
+
+- [C1] `tsk_bulk_update` resolves `assignee` with an unscoped User lookup — a crafted POST can stamp a foreign-tenant user onto any in-tenant task and enumerate user pks/emails
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py`  lines: 223-231 (lookup), 288-290 (write), 302-305 (audit)
+  finding: `assignee = get_user_model().objects.filter(pk=assignee_id).first()` matches any User row in the deployment — no `tenant=` term, no form validation. A crafted bulk POST writes that cross-tenant FK onto the attacker's tenant's task(s) and then leaks the foreign user back out: board/queue/execution pages render `assignee.get_full_name|default:assignee.email`, and the audit entry stores `str(assignee)` = the foreign user's email. The differential error ("That assignee does not exist." only when the pk is globally missing, vs. silent 302 success) is a global user-pk existence oracle, iterable including the tenant-less superuser. The in-code justification is wrong: the `TaskForm.owner` precedent guards through `TenantModelForm.__init__` scoping, not through `_reject_foreign`; the bulk verb has neither guard. Amplifier: no template ships a `task_ids` bulk form, so this route's only consumer is hand-crafted POSTs.
+  fix: `assignee = get_user_model().objects.filter(tenant=request.tenant, pk=assignee_id).first()` (mirroring `TaskBoard.py:167`; collapses the oracle to the attacker's own tenant), delete the incorrect comment; while there, restrict to `status="active"` users.
+- [M1] `TaskBlockAdmin` freezes the prose and stamps but leaves the evidence row's `task` linkage editable and the row deletable — evidence can be repointed or destroyed with no audit entry
+  file: `apps/projects/admin.py`  lines: 390-402
+  finding: `readonly_fields` covers the prose/stamps but not `task`, so a staff user can re-point a closed block's evidence to a different task — rewriting which task the unblock trail belongs to and silently flipping both tasks' derived `is_manually_blocked` — and Django's default delete can destroy the row outright. Admin writes bypass `write_audit_log`, so this is the one mutation path for the evidence-row ruling with no trail.
+  fix: append `"task"` to `TaskBlockAdmin.readonly_fields` and add `has_add_permission = has_delete_permission = False` on the ModelAdmin (only the evidence model needs the freeze).
+- [M2] `tsk_block`/`tsk_unblock` one-open-blocker invariant is check-then-act without a lock (TOCTOU)
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py`  lines: 147-151, 177-180
+  finding: same shape as Lane 1 C1 — two concurrent `tsk_block` POSTs both see `active is None` and mint two open rows; two concurrent `tsk_unblock` POSTs can both pass and double-stamp the once-only trail.
+  fix: `select_for_update()` inside `transaction.atomic()` with the guard re-tested — the established 7.6 fix idiom.
+- [M3] `tsk_bulk_update` accepts an unbounded `task_ids` list — one DB round-trip per id in the request thread
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py`  lines: 236-247
+  finding: every entry runs its own tenant-scoped fetch plus up to three audit inserts; a member POSTing huge id lists keeps an authenticated request spinning serial DB queries with no cap (resource exhaustion, not isolation — foreign ids just refuse).
+  fix: cap the batch (e.g. first 200 with a truthful note) or resolve the whole id set in one tenant-scoped `pk__in` query and iterate the fetched rows.
+
+security-reviewer: 1 Critical, 0 Important, 3 Minor.
+
+---
+
+## Consolidated triage (post-lane-6; deduped, ordered Critical -> Important -> Minor)
+
+Raw lane tally: 4C / 11I / 21M across six lanes. Duplicates merged on shared root cause;
+each consolidated ID cites its raw lane refs.
+
+- [ ] C1 — Block/unblock verbs are check-then-act without a lock (TOCTOU): two concurrent `tsk_block` POSTs mint two open TaskBlock rows; two concurrent `tsk_unblock` POSTs double-stamp the once-only trail. (raw: code C1 + security M2)
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py` (tsk_block ~146-165, tsk_unblock ~176-194)
+  fix: `transaction.atomic()` + `select_for_update()` re-fetch and re-test inside the lock — the `qdf_raise_issue` idiom (`QualityDefects.py:199-210`).
+- [ ] C2 — `tsk_bulk_update` resolves `assignee` through an unscoped User lookup: crafted POST writes a foreign-tenant FK, leaks the user's email via audit + board render, and is a global user-pk existence oracle. (raw: explorer C1 + security C1)
+  file: `apps/projects/views/TaskWorkManagement/ProjectTasks.py` (~223-231, 288-290, 302-305)
+  fix: scope to `filter(Q(tenant=request.tenant) | Q(tenant__isnull=True), pk=...)` (tenant users + tenant-less superuser only), delete the incorrect "deliberately not tenant-rejected" comment; mirror `TaskBoard.py:167`.
+- [ ] I1 — `tsk_execute` is orphaned: zero links anywhere; the priority page's empty state instructs users toward the dead-end page. (raw: qa I1)
+  fix: add an Execute entry point on the task detail header (and/or board card action) linking to `projects:tsk_execute`.
+- [ ] I2 — Contract S2.1 (TaskForm gains the execution fields) contradicts the frozen 7.2 test pin; the build shipped `TaskExecutionForm` as the sole execution surface. Amend the contract, not the code. (raw: code I4)
+  fix: append a "Post-review amendments" section to `.claude/tasks/contract-projects-7.8.md` ruling TaskExecutionForm the sole write surface (planning-time execution via `tsk_execute` from the task detail page per I1); record the rationale (`test_planning_forms.py` pins TaskForm.Meta.fields to the exact 13).
+- [ ] I3 — `tsk_bulk_update` has no UI: fully built, audited, unreachable. NavERP bullet 1 names bulk operations. (raw: explorer I3 + frontend I1)
+  fix: wire a bulk bar into `templates/projects/planning/task/list.html` (per-row checkboxes + one status/assignee/priority picker + confirm + csrf, dropdowns tenant-scoped), or defer with a recorded ruling — wiring is preferred.
+- [ ] I4 — Overview 7.8 block: duplicate `task_execution_count` (== `task_count`), `open_block_count` counts block rows not blocked tasks, keys drift from the pinned `in_progress_task_count`/`blocked_task_count`/`overdue_task_count`. (raw: code I1 + explorer I2 + frontend M1 + perf M1)
+  fix: pinned keys; `blocked_task_count` computed in Python over a materialized live-task list (the `risk_count` shape, includes dependency-blocked); drop the duplicate; template labels updated.
+- [ ] I5 — Sidebar LIVE_LINKS["7.8"] drift: bullet 5 pinned to `projects:dependencies`, extra leaf pinned to `Task Checklist Register` -> tcl_list. (raw: code I2 + explorer I1)
+  fix: restore both pinned mappings; drop the unpinned Active Blockers leaf (the lens is one click from the block register); fix the justification comment to record both rulings.
+- [ ] I6 — Priority lens is two snapshots: groups/quadrants bucket ALL statuses while queue/counts are live-only. Amend contract S5.4 to live-only and align the code. (raw: explorer I5 + smoke observation)
+  fix: `_group_moscow`/`_bucket_quadrants` filter to `status in ("planned","in_progress")`; header note "live work only"; record the amendment per I2.
+- [ ] I7 — Detail-page panels: checklist panel double-materializes + 2 COUNTs + per-done-item `done_by` N+1; blocks/deps panels re-evaluate the derived blockers 3x each and re-walk links without select_related while ignoring the host view's prepared context lists; same shape on `tsk_execute`. (raw: perf C1 + perf C2 + explorer I4)
+  fix: tsk_detail (and tsk_execute's fetch) prefetches `checklist_items` (+done_by) with a view-computed progress figure, `blocks` (+user FKs) with `to_attr="active_blocks"`, `predecessor_links`/`successor_links` with select_related; panels consume the context lists and free-half idioms; deps panel iterates the existing context keys.
+- [ ] I8 — Gantt tooltips render raw None for deliverable bars (dates AND progress). (raw: frontend I3 + code M6)
+  fix: `_gantt_bars` puts the resolved window (`start`/`end`) on each bar dict; tooltip built from those; progress tail guarded `{% if bar.progress_pct is not None %}`.
+- [ ] I9 — `tsk_bulk_update` costs: per-row eager `obj.assignee` FK load, unbounded `task_ids`, refusal path re-queries the blocker source; plus the dead `"resolved"` branch in `tsk_unblock`. (raw: perf I1 + security M3 + code M7)
+  fix: compare `assignee_id`; load the old User only in the assignee audit branch; cap the batch (500, `_BOARD_CAP` precedent) with a truthful "first N applied" note; resolve ids in one tenant-scoped `pk__in` fetch; reuse one active-block fetch for gate + message.
+- [ ] I10 — Board offers Start/Complete on blocked cards (guaranteed-refusal click). (raw: frontend I2)
+  fix: gate the action block on the free halves (`not is_dependency_blocked and not active_blocks`) — disabled-with-title also acceptable.
+- [ ] M1 — Pre-Integrate import shims + stale comments across the four 7.8 layers. (raw: code M1)
+  fix: normalize urls modules to `from apps.projects import views`; point views/forms at the package re-exports; correct/delete the stale comments.
+- [ ] M2 — forms `__init__` 7.8 comment says "Three forms, no fourth" but re-exports four. (raw: code M2)
+  fix: correct the comment; the TaskBlocks.py placement ruling gets recorded per I2.
+- [ ] M3 — 7.8 admin registrations drift from the pinned tuples; `TaskBlockAdmin.is_active` renders raw True/False. (raw: code M3)
+  fix: align tuples (or record the useful additions as rulings per I2 — prefer keeping `reason`/`is_active` columns); add `@admin.display(boolean=True, ordering="unblocked_at")` for `is_active`.
+- [ ] M4 — `TaskBlockAdmin` leaves `task` editable and the row deletable — evidence repointable/destroyable with no audit trail. (raw: security M1)
+  fix: append `"task"` to readonly_fields; `has_add_permission = has_delete_permission = False` on TaskBlockAdmin only.
+- [ ] M5 — Seeder `_taskwork` coverage gaps: no unclassified MoSCoW rows, no cancelled task, no empty checklist, no page 2; `--flush` help text omits the new tables. (raw: code M4)
+  fix: leave one lead task per project `moscow=None`; add a cancelled work package to one WBS spec; 15+ checklist items incl. one empty checklist; append "checklist items, task blocks" to the help text; re-seed and verify the new states render.
+- [ ] M6 — Gantt today line pinned by contract S6 renders only as a header badge. (raw: code M5 + frontend I4)
+  fix: view computes `today_offset_pct` when today is inside the window; template draws one absolutely-positioned `.tw-today` line across the chart.
+- [ ] M7 — Eisenhower quadrant badges flatten Critical to amber. (raw: frontend I5)
+  fix: split the branch: critical -> badge-red, high -> badge-amber.
+- [ ] M8 — `tsk_block` has no status gate: blocking DONE/CANCELLED work is allowed (as-built == contract letter, semantically odd). (raw: qa M1)
+  fix: refuse terminal statuses with a named message; record the ruling per I2.
+- [ ] M9 — `tsk_execute` silently overwrites a done task's verb-attested `percent_complete=100` and writes freely on cancelled tasks. (raw: qa M2)
+  fix: `TaskExecutionForm.clean()`: when the instance is `done`, freeze `percent_complete` to its stored value; refuse execution-field writes on `cancelled` rows with a named error.
+- [ ] M10 — Bulk terminal transitions bypass block gating: an open TaskBlock outlives cancellation. (raw: qa M3)
+  fix: on a terminal bulk transition, refuse rows with open blocks (naming the TBK number) with a per-row skip + truthful summary.
+- [ ] M11 — Out-of-tenant `?assignee=`/`?project=` silently degrade to the unfiltered workspace (contract-pinned; zero leak). (raw: qa M4)
+  fix: optional polish — flash "not in this workspace" when a supplied id resolves to None; keep the pinned no-500 behavior.
+- [ ] M12 — Page-local `<style>` blocks are a new pattern for screen pages (contained, `tw-` prefixed). (raw: explorer M2 + frontend M2)
+  fix: record the precedent in the I2 amendments section (no theme.css move this pass).
+- [ ] M13 — Ready-queue header says "Action", siblings say "Actions". (raw: frontend M3)
+  fix: one-word change.
+- [ ] M14 — Board/priority link prefetch costs 2 queries where 1 suffices. (raw: perf M2)
+  fix: chained `Prefetch("predecessor_links", queryset=TaskDependency.objects.select_related("predecessor"))` in both modules.
+- [ ] M15 — `tsk_unblock` dead branch `previous = "active" if block.unblocked_at is None else "resolved"`. (raw: code M7)
+  fix: `previous = "active"`.
+- [ ] M16 — Task detail cannot move lifecycle (Start/Complete live only on the board) — contract-conformant asymmetry. (raw: frontend M4)
+  fix: record as deferred in the I2 amendments section (next pass: verb buttons on task detail).
+
+Counts: **2C / 10I / 15M** (+M16 recorded-deferred). Phase 5 fixes in ID order.
+
