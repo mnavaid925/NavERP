@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}Share a{% endif %} Document{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}Share a{% endif %} Document</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:dsh_list' %}">Shared Documents</a><span class="sep">›</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        Two deliberate omissions. There is no file field: the artifact is uploaded into the
+        workspace's document store and picked here, so this page never becomes a second file
+        store. And there is no revoke or claim control: is_active and its stamps are written by
+        the revoke verb alone, and the edit claim by the claim/release verbs — both live on the
+        share's detail page, where the state they change is visible.
+      {% endcomment %}
+      <p class="text-muted">Pick a document already stored in this workspace. A new share starts <strong>Live</strong>; leaving <em>Shared with</em> empty shares it with the whole project team.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'projects:dsh_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
