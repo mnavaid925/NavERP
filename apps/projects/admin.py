@@ -395,7 +395,24 @@ class TaskBlockAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "task", "blocked_by", "unblocked_by", "created_by")
     search_fields = ("number", "reason", "unblock_criteria", "resolution_note")
     # The whole lifecycle is verb-written: tsk_block mints the row with its stamps, tsk_unblock
-    # closes it exactly once — the frozen evidence must not be editable from an admin form.
-    readonly_fields = ("reason", "unblock_criteria", "blocked_by", "blocked_at", "unblocked_by",
-                       "unblocked_at", "resolution_note", "created_by", "created_at",
-                       "updated_at")
+    # closes it exactly once — the frozen evidence must not be editable from an admin form. The
+    # `task` FK is in there too: repointing a block to another task would rewrite the evidence
+    # trail with no audit entry (review M4).
+    readonly_fields = ("task", "reason", "unblock_criteria", "blocked_by", "blocked_at",
+                       "unblocked_by", "unblocked_at", "resolution_note", "created_by",
+                       "created_at", "updated_at")
+
+    # A block row is MINTED by tsk_block and CLOSED by tsk_unblock — an admin add would create
+    # an evidence row with no verb behind it, and a delete would destroy the trail (review M4).
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(boolean=True, ordering="unblocked_at", description="Active")
+    def is_active(self, obj):
+        """The derived open/closed state as a boolean column — without this the list rendered
+        the raw Python ``True``/``False`` (review M3). Ordered by ``unblocked_at`` so the
+        boolean sort is the same ordering as the underlying column."""
+        return obj.is_active
