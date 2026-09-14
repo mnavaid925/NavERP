@@ -17,7 +17,7 @@
     <div>
       <h1 class="page-title">Priority &amp; Urgency Scoring</h1>
       <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:tsk_list' %}">Tasks</a><span class="sep">›</span><span>Priority</span></div>
-      <p class="text-muted">MoSCoW, the Eisenhower matrix and the work queue over the same attested rows — every grouping is computed on read from the tasks' own classifications; nothing is scored into a store.</p>
+      <p class="text-muted">MoSCoW, the Eisenhower matrix and the work queue over the same attested rows — every grouping is computed on read from the tasks' own classifications; nothing is scored into a store. The groups and quadrants bucket <strong>live work only</strong> (planned / in progress); done and cancelled tasks drop out.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:task_board' %}" class="btn btn-outline"><i data-lucide="list-tree"></i> Task board</a>
