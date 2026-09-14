@@ -83,7 +83,13 @@
                 {% else %}<span class="badge badge-muted">{{ obj.get_kind_display }}</span>{% endif %}
               </td>
               <td>
-                {% if obj.message %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">message {{ obj.message.number }}</a>
+                {% comment %}
+                  `channel` and `message` are independent SET_NULL FKs, so a message can survive a
+                  cleared channel. Link the channel only when it is set — passing a NULL pk to
+                  {% url %} would be a NoReverseMatch — and fall back to the message number as text.
+                {% endcomment %}
+                {% if obj.message and obj.channel %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">message {{ obj.message.number }}</a>
+                {% elif obj.message %}{{ obj.message.number }}
                 {% elif obj.channel %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">{{ obj.channel.name }}</a>
                 {% elif obj.task %}<a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task.number }}</a>
                 {% elif obj.meeting %}<a href="{% url 'projects:mtg_detail' obj.meeting_id %}">{{ obj.meeting.number }}</a>
