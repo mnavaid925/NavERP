@@ -336,3 +336,20 @@ Entity SUB-FOLDERS exist only for the two entities (`checklistitem/`, `block/` �
 Tests land only after the 7.7 test wave: `test_taskwork_{models,forms,views,security}.py`, fixture block `taskwork_*`, helpers `_taskwork_*` (no collision with `test_initiation_*`/`test_planning_*`/`test_resource_*`/`test_cost_*`/`test_risk_*`/`test_quality_*`/`test_scope_*`). Smoke script `temp/smoke_78.py` (the `smoke_73.py` sibling). Review file `.claude/tasks/review-projects-7.8.md`. Skill section in `.claude/skills/projects/SKILL.md`; README row → **7 of 19**.
 
 Deferred by ruling (do NOT build): multi-assignee M2M (P2), WIP-limit values + over-limit hard stop (7.19), sprints (7.13), auto-rescheduling (7.17/7.16), computed priority scores (7.19), recurring/copy verbs (7.17), block/unblock notifications (7.17), Gantt baseline overlay (7.2's `ScheduleBaseline`), drag-drop JS / arrows, CCA write-back (Ruling 5).
+
+---
+
+## 9. Post-review amendments (Phase 5 fix pass, 2026-09-14)
+
+Rulings recorded by the consolidated review triage (`.claude/tasks/review-projects-7.8.md`,
+IDs I2/M2/M3/M12/M16 and the ruling halves of I6/M8). Where an amendment supersedes a
+§-pinned line above, THIS section wins.
+
+1. **`TaskExecutionForm` is the sole execution-field write surface** (amends §2.1). `TaskForm.Meta.fields` does NOT gain the six execution fields: `apps/projects/tests/test_planning_forms.py` pins `TaskForm.Meta.fields` to the exact 13 (ending at `"sequence"`) and the 7.2 form surface is frozen. Planning-time execution (assignee / priority / MoSCoW / urgent / important / percent) is written ONLY through `TaskExecutionForm` on `tsk_execute`, reached from the task-detail header's Execute entry point.
+2. **The priority lens buckets live work only** (amends §5.4). `_group_moscow` and `_bucket_quadrants` bucket tasks with `status in ("planned", "in_progress")` — done/cancelled drop out of the MoSCoW groups and Eisenhower quadrants, matching the work queue and the counts lenses; the page header states "live work only".
+3. **`tsk_block` refuses terminal statuses** (extends §5.1). A `done` or `cancelled` task cannot raise a `TaskBlock` — the verb refuses with a named message. The one-open-blocker invariant is unchanged.
+4. **Admin tuple additions ruled as-built** (amends §7.2 item 2). `TaskChecklistItemAdmin` keeps the as-built `list_display` ordering and extra `created_by` column; `TaskBlockAdmin` keeps the as-built `list_filter` and extra `reason` / `is_active` columns. The pinned `task__project` select-related is restored, the additions stay, and `TaskBlockAdmin.is_active` renders through `@admin.display(boolean=True, ordering="unblocked_at")`.
+5. **`TaskBlockForm` / `TaskUnblockForm` placement ruled as-built** (amends §3). They live in `forms/TaskWorkManagement/TaskBlocks.py` — §1's "same file name in all four layers" rule superseded §3's `ProjectTasks.py` file pin.
+6. **Page-local `tw-` CSS is a recorded precedent** (amends §6). The three computed pages (board, priority lens, gantt) carry page-local `<style>` blocks with the `tw-` prefix — contained and theme-variable-reusing. Promotion into `theme.css` is left for when a second feature needs the rules, not this pass.
+7. **Start/Complete on the task detail page is deferred** (§6 stands as-built this pass). The lifecycle verbs remain board-only; a next pass may add them to the task detail header with the same free-half gating.
+8. **The task-detail dependency panel iterates the host view's context lists** (amends the §6 note "the checklist/dependency panels read `obj.…links.all` directly"). `_task_dependencies_panel.html` consumes the `predecessor_links` / `successor_links` context keys `tsk_detail` prepares — one query path and one bound per page.
