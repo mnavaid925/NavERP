@@ -41,8 +41,8 @@
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="file-diff"></i></div><div class="stat-value">{{ scope_change_count }}</div><div class="stat-label">Change requests</div></div>
     <div class="stat-card"><div class="stat-icon red"><i data-lucide="inbox"></i></div><div class="stat-value">{{ pending_change_count }}</div><div class="stat-label">Before the board</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ pending_verification_count }}</div><div class="stat-label">Awaiting acceptance</div></div>
-    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="kanban"></i></div><div class="stat-value">{{ task_execution_count }}</div><div class="stat-label">Tasks</div></div>
-    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="octagon-alert"></i></div><div class="stat-value">{{ open_block_count }}</div><div class="stat-label">Open blockers</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="kanban"></i></div><div class="stat-value">{{ in_progress_task_count }}</div><div class="stat-label">In progress</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="octagon-alert"></i></div><div class="stat-value">{{ blocked_task_count }}</div><div class="stat-label">Blocked</div></div>
     <div class="stat-card"><div class="stat-icon red"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ overdue_task_count }}</div><div class="stat-label">Overdue tasks</div></div>
   </div>
 
