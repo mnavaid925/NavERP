@@ -7381,6 +7381,68 @@ session). Full suite: **2751 tests, 0 failures, 0 errors**.
 
 ---
 
+### Projects 7.8 — Task & Work Management (close-out 2026-09-14)
+
+Build (Phase 3) and the first half of the fix pass landed in the concurrent session — 2 new
+models (`TaskChecklistItem` [TCL-], `TaskBlock` [TBK-]) + the in-place execution extension of
+`ProjectTask` + 3 computed pages (`task_board`, `task_priority`, `gantt_timeline`) + 17 routes +
+migration `0011`. Six review lanes ran serial into `.claude/tasks/review-projects-7.8.md`:
+raw **4C/11I/21M**, deduped to **2C/10I/15M** (+M16 recorded-deferred). That session committed
+C1, C2 and I1–I6, then stalled mid-I7 with an uncommitted edit in
+`views/ProjectPlanningScheduling/ProjectTasks.py` (the `tsk_detail` prefetch). This run took the
+work over, adopted that edit rather than discarding it, and finished the pass.
+
+**I7–I10 (Important).** I7 was the headline: the three `tsk_detail` panels were reading the
+model's re-querying properties — `obj.checklist_progress` (2 COUNTs) and `obj.is_manually_blocked`
+(`.filter().exists()`, which builds a NEW queryset and so bypasses the prefetch cache entirely) —
+instead of the caches the view had just built. Moving the figures into the view and passing
+`checklist_progress` / `obj.active_blocks` as context took the page from **31 → 13 queries**
+(CaptureQueriesContext, measured against the committed version before restoring the fix). I8:
+gantt tooltips rendered raw `None` for deliverable bars because they read `bar.task.planned_*`
+(always None on a deliverable, whose window is the subtree union) — bars now carry their resolved
+`start`/`end` and the progress tail is guarded; 11/11 tooltips show real dates. I9: the bulk verb
+did one fetch per id, eagerly loaded the assignee FK on every row, had no batch cap and
+re-queried the blocker to build its refusal message — now one tenant-scoped `pk__in` fetch, a
+lazy assignee load in the audit branch only, `_BULK_CAP = 500` with a truthful truncation
+message, and one reused active-block fetch. I10: blocked board cards offered Start/Complete that
+the verb was guaranteed to refuse — now a disabled button.
+
+**M1–M16 (Minor).** Import shims normalized to the package re-exports (the "Integrate step"
+comments were stale); the admin renders `is_active` as a boolean and freezes `task` with no
+add/delete (an evidence row with no verb behind it is not evidence); the seeder gained an
+unclassified MoSCoW row, a cancelled work package, and enough checklist items to reach page 2;
+the Gantt got its today line (only when today is inside the window); Critical no longer renders
+amber in the Eisenhower quadrants; `tsk_block` refuses terminal work; `TaskExecutionForm` freezes
+a done row's `percent_complete` and refuses cancelled rows; the bulk verb refuses a terminal
+transition on a row with an open block; a filter id from another workspace now says so instead of
+silently showing unfiltered rows; and the board/priority prefetch chains the join instead of
+`__`-nesting. M12 and M16 were already recorded in the contract's §9 by the earlier session.
+
+**One regression I introduced and caught.** The M6 today-line computation was placed outside the
+`if project is not None` block, so `gantt_timeline` with no `?project=` raised
+`UnboundLocalError` — a 500 on a page that had been fine. Found by probing the empty state (not
+just the happy path) and fixed by initializing the value before the block. The regression net is
+now a test.
+
+**The 7.2 leak test.** `test_planning_no_template_comment_markers_leak` was failing: 7.8's new
+bulk-bar confirm was a digit-free static literal, and that test requires every server-rendered
+`confirm('...')` literal to carry a digit (its real concern is that confirms identify rows by
+number, never by name). The confirm is now assembled in JS from the selection count — better UX
+(it says how many rows are affected) and name-free, satisfying the rule's intent.
+
+Phase 6: `.claude/tasks/test-contract-projects-7.8.md` pins the fixtures and figures; conftest
+got an append-only `taskwork_*` block (reusing 7.2's spine rather than rebuilding it); then
+`test_taskwork_{models,forms,views,security}.py` = **29/16/53/39 = 137 green**, one file per
+commit. Full unfiltered `apps/projects/tests/`: **2888 tests, 0 failures, 0 errors** (up from
+2751). Phase 7: SKILL.md gained a `## 7.8` section plus refreshed Routes/Templates/Seeder/Tests/
+Sidebar/As-built, `README.md` moved to **8 of 19**, and the contract's §9 records the rulings.
+
+**Nothing open.** The only recorded deferral is M16 (task-detail lifecycle verbs remain
+board-only — a next pass may add Start/Complete to the detail header with the same free-half
+gating).
+
+---
+
 ## Projects 7.8 — Task & Work Management (build plan)
 
 > Source of truth: `.claude/tasks/research-projects-7.8.md` (committed 536c2230). Scope frozen by
