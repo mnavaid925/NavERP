@@ -8,6 +8,11 @@
       <p class="text-muted">On <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% if obj.parent %} · under <a href="{% url 'projects:tsk_detail' obj.parent_id %}">{{ obj.parent.name }}</a>{% else %} · a WBS root{% endif %}</p>
     </div>
     <div class="page-actions">
+      {% comment %}
+        7.8: the six execution fields (assignee/priority/MoSCoW/urgent/important/percent) are
+        written ONLY through TaskExecutionForm on the Execute page — never via the plan form.
+      {% endcomment %}
+      <a href="{% url 'projects:tsk_execute' obj.pk %}" class="btn btn-outline"><i data-lucide="play"></i> Execute</a>
       <a href="{% url 'projects:tsk_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     </div>
   </div>
