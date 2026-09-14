@@ -227,6 +227,7 @@ def gantt_timeline(request):
         project = Project.objects.filter(tenant=tenant, pk=project_id).first()
 
     bars, dep_rows, conflicts, critical_ids, window = [], [], [], set(), None
+    today_offset_pct = None  # no project → no window → no today marker
     if project is not None:
         nodes = list(project.tasks.order_by("sequence", "id"))
         starts = [node.planned_start for node in nodes if node.planned_start]
@@ -252,6 +253,12 @@ def gantt_timeline(request):
         bars = _gantt_bars(nodes, window_start, window_days, critical_ids)
         dep_rows, conflicts = _dependency_rows(project)
 
+        # The vertical "today" line (contract S6) — only when today actually falls inside the
+        # resolved window, so a past/future window draws no misleading marker (review M6).
+        # Computed HERE, not after the block: window_start only exists when a project resolved.
+        if window_start <= today <= window_end:
+            today_offset_pct = round(100.0 * (today - window_start).days / window_days, 2)
+
     return render(request, "projects/taskwork/gantt_timeline.html", {
         "projects": project_qs,
         "project": project,
@@ -261,4 +268,5 @@ def gantt_timeline(request):
         "dep_rows": dep_rows,
         "conflicts": conflicts,
         "today": today,
+        "today_offset_pct": today_offset_pct,
     })

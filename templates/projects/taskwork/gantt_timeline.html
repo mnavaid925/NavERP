@@ -15,6 +15,11 @@
     .tw-critical { background: var(--bad); }
     .tw-progress { height: 100%; background: var(--brand-700); border-radius: inherit; }
     .tw-critical .tw-progress { background: var(--bad-bg); }
+    /* The "today" marker (contract S6). It is drawn INSIDE each .tw-track rather than once on
+       .tw-chart because the chart also holds the 38% label column — a chart-level percentage
+       would sit left of the real date by that column's width. Stacked per row, the segments
+       read as one continuous vertical line (review M6). */
+    .tw-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--bad); opacity: .75; z-index: 2; pointer-events: none; }
     .tw-scale { display: flex; justify-content: space-between; font-size: .78rem; color: var(--text-muted); padding: 0 .6rem .35rem; }
     .tw-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .75rem; font-size: .82rem; color: var(--text-muted); align-items: center; }
     .tw-legend .swatch { display: inline-block; width: .9rem; height: .6rem; border-radius: 3px; vertical-align: middle; margin-right: .3rem; }
@@ -98,6 +103,7 @@
                 {% if bar.is_critical %}<span class="badge badge-red">Critical</span>{% endif %}
               </div>
               <div class="tw-track">
+                {% if today_offset_pct is not None %}<div class="tw-today" style="left: {{ today_offset_pct }}%;" title="Today — {{ today|date:"M d, Y" }}"></div>{% endif %}
                 {% if bar.left_pct is not None %}
                   <div class="tw-bar{% if bar.is_critical %} tw-critical{% endif %}" style="left: {{ bar.left_pct }}%; width: {{ bar.width_pct }}%;" title="{{ bar.start|date:"M d, Y" }} → {{ bar.end|date:"M d, Y" }}{% if bar.progress_pct is not None %} · {{ bar.progress_pct }}% complete{% endif %}">
                     {% if bar.progress_pct is not None %}<div class="tw-progress" style="width: {{ bar.progress_pct }}%;"></div>{% endif %}
