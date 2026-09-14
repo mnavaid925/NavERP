@@ -153,7 +153,12 @@ def _notify_mentions(request, message, added):
         )
         # Not bulk_create: it bypasses TenantNumbered.save(), so `number` would stay "" and the
         # second row would break unique_together ("tenant", "number"). See the module docstring.
-        row.full_clean(exclude=["number"])
+        # The per-row save() is what mints NTF-##### — that part is load-bearing.
+        #
+        # No full_clean() either. It buys no rule here (ProjectNotification ships no clean(), and
+        # every value is an object the form already validated) while costing one EXISTS per
+        # non-null FK — seven of them per row. The mention list is an unbounded multi-select, so a
+        # crafted 50-person mention would issue ~350 pointless SELECTs on one request.
         row.save()
         rows.append(row)
     return rows
