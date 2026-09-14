@@ -1,10 +1,12 @@
 {% comment %}
   7.8 task-detail panel — the per-link blocking verdict over 7.2's dependency network.
 
-  Reads obj.predecessor_links.all / obj.successor_links.all and the derived
-  is_dependency_blocked directly (Ruling 3: blocking is computed on read, never stored on the
-  task). An FS link blocks while its predecessor is not done/cancelled; an SS link blocks
-  while its predecessor has not started; FF/SF links never block.
+  Iterates the `predecessor_links` / `successor_links` CONTEXT keys tsk_detail already prepared
+  (prefetched with select_related on the counterpart task) rather than re-materializing
+  obj.predecessor_links.all — one query path per relation for the whole page (review I7).
+  is_dependency_blocked iterates the same CACHED links (Ruling 3: blocking is computed on read,
+  never stored on the task). An FS link blocks while its predecessor is not done/cancelled; an
+  SS link blocks while its predecessor has not started; FF/SF links never block.
 {% endcomment %}
 <div class="card">
   <div class="card-header"><h2>Blocking verdict</h2></div>
@@ -14,12 +16,12 @@
       {% else %}<span class="badge badge-green">No dependency is holding this task</span>{% endif %}
     </p>
     <h3 class="text-muted">Incoming links — what holds this task</h3>
-    {% if obj.predecessor_links.all %}
+    {% if predecessor_links %}
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Dependency</th><th>Predecessor</th><th>Link type</th><th>Verdict</th></tr></thead>
           <tbody>
-            {% for dep in obj.predecessor_links.all %}
+            {% for dep in predecessor_links %}
               <tr>
                 <td class="fw-600"><a href="{% url 'projects:dep_detail' dep.pk %}">{{ dep.number }}</a></td>
                 <td><a href="{% url 'projects:tsk_detail' dep.predecessor_id %}">{{ dep.predecessor.number }}</a> {{ dep.predecessor.name }}</td>
@@ -37,12 +39,12 @@
     {% else %}<p class="text-muted">No predecessor links — nothing holds this task.</p>{% endif %}
 
     <h3 class="text-muted">Outgoing links — what this task holds</h3>
-    {% if obj.successor_links.all %}
+    {% if successor_links %}
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Dependency</th><th>Successor</th><th>Link type</th><th>Verdict</th></tr></thead>
           <tbody>
-            {% for dep in obj.successor_links.all %}
+            {% for dep in successor_links %}
               <tr>
                 <td class="fw-600"><a href="{% url 'projects:dep_detail' dep.pk %}">{{ dep.number }}</a></td>
                 <td><a href="{% url 'projects:tsk_detail' dep.successor_id %}">{{ dep.successor.number }}</a> {{ dep.successor.name }}</td>
