@@ -127,7 +127,7 @@ def mtg_start(request, pk):
     """``scheduled`` → ``in_progress``, stamping the real start time."""
     obj = get_object_or_404(Meeting, pk=pk, tenant=request.tenant)
     if obj.status != "scheduled":
-        messages.error(request, f"{obj.number} is {obj.get_status_display()|lower} — only a "
+        messages.error(request, f"{obj.number} is {obj.get_status_display().lower()} — only a "
                                 f"scheduled meeting can be started.")
         return redirect("projects:mtg_detail", pk=obj.pk)
     previous = obj.status
@@ -146,7 +146,7 @@ def mtg_complete(request, pk):
     """``in_progress`` → ``completed``, stamping the real end time."""
     obj = get_object_or_404(Meeting, pk=pk, tenant=request.tenant)
     if obj.status != "in_progress":
-        messages.error(request, f"{obj.number} is {obj.get_status_display()|lower} — only a "
+        messages.error(request, f"{obj.number} is {obj.get_status_display().lower()} — only a "
                                 f"meeting in progress can be completed.")
         return redirect("projects:mtg_detail", pk=obj.pk)
     previous = obj.status
@@ -165,7 +165,7 @@ def mtg_cancel(request, pk):
     """``scheduled``/``in_progress`` → ``cancelled``. A terminal meeting cannot be cancelled."""
     obj = get_object_or_404(Meeting, pk=pk, tenant=request.tenant)
     if obj.status in ("completed", "cancelled"):
-        messages.info(request, f"{obj.number} is already {obj.get_status_display()|lower} — "
+        messages.info(request, f"{obj.number} is already {obj.get_status_display().lower()} — "
                                f"nothing to cancel.")
         return redirect("projects:mtg_detail", pk=obj.pk)
     previous = obj.status
