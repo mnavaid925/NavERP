@@ -54,6 +54,12 @@ from .TaskWorkManagement.TaskBlocks import urlpatterns as _tw_blocks
 from .TaskWorkManagement.TaskBoard import urlpatterns as _tw_board
 from .TaskWorkManagement.TaskChecklistItems import urlpatterns as _tw_checklistitems
 from .TaskWorkManagement.TaskPriority import urlpatterns as _tw_priority
+from .CollaborationCommunication.ActivityFeed import urlpatterns as _cc_activityfeed
+from .CollaborationCommunication.ChannelMessages import urlpatterns as _cc_messages
+from .CollaborationCommunication.Channels import urlpatterns as _cc_channels
+from .CollaborationCommunication.DocumentShares import urlpatterns as _cc_shares
+from .CollaborationCommunication.Meetings import urlpatterns as _cc_meetings
+from .CollaborationCommunication.ProjectNotifications import urlpatterns as _cc_notifications
 
 app_name = "projects"
 
@@ -118,4 +124,16 @@ urlpatterns = (
     + _tw_board
     + _tw_gantt
     + _tw_priority
+    # 7.9 Collaboration & Communication — first segments (channels/, messages/, shared-documents/,
+    # meetings/, agenda-items/, action-items/, notifications/, activity-feed/) are disjoint
+    # literals from 7.1's–7.8's and from each other, so nothing here can shadow another module's
+    # namespace. Within the notifications module `read-all/` is listed before `<int:pk>/` (a
+    # literal first, per the app-wide rule — the int converter could not capture it anyway), and
+    # the two child-add routes live as literal leaves below `meetings/<int:pk>/`.
+    + _cc_channels
+    + _cc_messages
+    + _cc_shares
+    + _cc_meetings
+    + _cc_notifications
+    + _cc_activityfeed
 )
