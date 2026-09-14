@@ -1169,3 +1169,95 @@ change `temp/smoke_79.py` or carry into the test-writing phase · **NO-ACTION** 
   POST **bodies** (foreign `channel`/`project`/`document`/`task`/`shared_with`/`assignee`/
   `presenter`/mention pks all rejected, 0 rows written, 0 foreign inbox rows; foreign pks on all 11
   pk-carrying verbs → 404). Lane 5's 30 IDOR probes agree. No finding.
+
+---
+
+# FIX LOG (Phase 5, 2026-09-14)
+
+Author: `code-fixer`. Every disposition in the Consolidated triage above is accounted for below.
+Method: each finding was reproduced against a pristine `seed_projects --flush` seed **before** the
+fix was written (a lane's claim is a claim until it is reproduced); one file per commit; no `push`.
+The 21 fix/doc commits are listed in order at the end.
+
+## Disposition accounting
+
+| ID | Disposition | Status | One line |
+|---|---|---|---|
+| I1 | FIX | **FIXED** | Root-side guard in `ChannelMessage.clean()` rejects a channel move while `replies` exist in another channel; reply-body edits and reply-less roots are untouched. `b138cbc9` |
+| I2 | FIX | **FIXED** | `(tenant, created_at)` index added to `ChannelMessage`, `DocumentShare`, `Meeting`, `ProjectNotification`; migration `0013` generated after `--dry-run` (4 `AddIndex`, nothing else). `91f25673`, `0875eb74`, `2e40b773`, `151ce93a`, `19805f7e` |
+| I3 | FIX | **FIXED** | Per-row `full_clean(exclude=["number"])` dropped from `_notify_mentions`; per-row `save()` kept (it mints `NTF-#####`). Measured 40 → 27 queries on a 2-mention post. `f389a6c7`; contract §10.6 `146ae5ff` |
+| I8 | FIX | **FIXED** | `ntf_mark_read`/`ntf_delete` now fetch with `recipient=request.user`; both templates render the read/dismiss controls only on the viewer's own rows. `8c5f7baa`, `9ef1d52b`, `4fb7400b` |
+| M1 | FIX | **FIXED** | `ntf_list` `select_related` gained `"message"` (the Source column reads `obj.message.number`). `8a9301ae` |
+| M2 | FIX | **FIXED** | Notification register guards the source link on `obj.message and obj.channel` before building the URL. `651637b8` |
+| M3 | FIX | **FIXED** | All five feed counts are computed pre-cap regardless of `?kind=`; the lens now gates only the fetch loop. `7e8e68d5` |
+| M4 | FIX | **FIXED** | Truncation caveat hoisted so it renders under a project lens too. `578a21ac` |
+| M5 | DOC | **FIXED** | §1 corrected to "38 existing URL first segments (39 incl. `\"\"`)" — re-counted by enumeration (38 pre-existing, 46 distinct with the 8 new). Also §5's cross-reference. `764846d8` |
+| M6 | DOC | **FIXED** | §0 "six tables" → seven; §3.6 "all six" / "beyond the six" → seven. §7 already read "five entities". Verified migration `0012` creates seven `CreateModel` across five entity files. `764846d8` |
+| M7 | NO-ACTION | **NO-ACTION** | Contract §7 authorises the three-level child nesting; left as ruled. |
+| M8 | FIX | **FIXED** | Channel register badge falls back to `{{ obj.get_kind_display }}`. `d42b0158` |
+| M9 | FIX | **FIXED** | Channel-detail access badge falls back to `{{ s.get_access_level_display }}`. `eb424fb8` |
+| M10 | FIX | **FIXED** | Dead `minutes_form` removed from `mtg_detail` (built every render, rendered nowhere); contract §6.4/§7 repinned read-only. `e53208b8`; §10.7 `8ad0d3d1` |
+| M11 | FIX | **FIXED** | `agi_edit`/`mai_edit` pin the `meeting` context key; contract §6 row corrected. `e53208b8` |
+| M12 | FIX | **FIXED** | Channel-detail reply indentation switched to logical properties (`margin-inline-start` etc.) so it does not outdent under RTL. `eb424fb8` |
+| M13 | FIX | **FIXED (amended)** | §10 amendment 3 rewritten to name all three `collab-*` pages; amendment 8 records the ruling. Promotion into `theme.css` deferred — that file is outside the 7.9 set. `8ad0d3d1` |
+| M14 | FIX | **FIXED** | Agenda table header `Minutes` → `Duration (min)`, disambiguated from the minutes panel. `b845adf9` |
+| M15 | FIX | **FIXED (amended)** | §7's notification-detail row now says three deep-links plus a guarded text reference; amendment 9 records why `message` cannot be a link (no `msg_detail` route). `8ad0d3d1` |
+| M16 | FIX | **FIXED** | `ntf_mark_all_read` is one `UPDATE` with `updated_at` stamped explicitly; one audit row preserved. `8a9301ae` |
+| M17 | NO-ACTION | **NO-ACTION** | Superseded by I2's new index, as ruled. |
+| M18 | FIX | **FIXED (amended)** | The five unused indexes are KEPT deliberately; amendment 10 records them as reserved for a later tenant-scoped child listing. `mait_tnt_done_idx` untouched. `8ad0d3d1` |
+| M19 | NO-ACTION | **NO-ACTION** | Seeder per-row `full_clean()` is the app-wide idiom and runs off the request path, as ruled. |
+| I4 | HARNESS | **FIXED** | `mtg_list`'s `distinct=True` false pass replaced: exact `object_list` length plus per-meeting `agenda_total`/`agenda_covered`/`open_actions` against real counts. |
+| I5 | HARNESS | **FIXED** | New section 11 drives a create → edit → delete round-trip for chn/msg/dsh/mtg/agi/mai/ntf — the success paths (where a `save_m2m()`-after-`save()` defect lives) now actually run. |
+| I6 | HARNESS | **FIXED** | The four false-pass assertions replaced with real needles/values: overview `"7.9 collaboration layer"`, feed `"<h2>Stream</h2>"`, `counts["audit"]`, non-empty `entries`, `unread_count`, `paginator.count`. |
+| I7 | HARNESS | **FIXED** | A successful `mtg_cancel` (scheduled → cancelled) is driven and the `changes["verb"]` audit loop now covers all 13 mutating verbs. |
+| M20 | HARNESS | **FIXED** | The smoke re-seeds with `seed_projects --flush` at the top, so it is a valid gate from any prior state (it used to crash on a consumed fixture); it now also exits non-zero on failure. |
+| M21 | HARNESS | **FIXED** | Added: a POSITIVE filter-narrowing list, an empty-tenant section, the full `?page=` edge loop (`0`,`-1`,`abc`,`1.5`, int-overflow, `""`), and second-user verbs (claim contention + the inbox boundary, incl. I8's 404/control checks). |
+
+## Gates (final)
+
+- `manage.py check` → `System check identified no issues (0 silenced).`
+- `temp/smoke_79.py` → **PASSED 405 / FAILED 0** (exit 0), and green on a **second consecutive run**
+  (re-entrancy). The harness grew from 276 to 405 checks under the HARNESS dispositions.
+- `manage.py seed_projects --flush` run twice → **byte-identical output** (idempotent).
+
+## Deliberately not fixed
+
+- **`theme.css` promotion (M13)** and **the five forward-looking indexes (M18)** are contract
+  amendments, not code changes: both files are outside this sub-module's file set, and each
+  finding's own `fix:` line sanctions the recorded ruling as the acceptable minimum.
+- **No `msg_detail` route invented (M15)** — the contract's "four deep-links" was not buildable;
+  amending §7 is the sanctioned fix, and a read-only message view belongs to a later pass.
+- **`temp/smoke_79.py` is gitignored** (`temp/`), so the HARNESS work lives on disk only and has no
+  commit — it is re-run, not committed, as the phase gate.
+- **Commit-message correction:** `8ad0d3d1`'s subject anticipated M5/M6, but its diff touched only
+  the Phase-5 amendments; the actual §0/§1/§3.6 count corrections landed in `764846d8`. Recorded
+  here rather than rewritten, since the commit was already made.
+
+## Commits (oldest → newest)
+
+```
+b138cbc9 fix(projects): 7.9 reject a root channel move that would orphan its replies
+91f25673 fix(projects): 7.9 index ChannelMessage (tenant, created_at) for the feed source
+0875eb74 fix(projects): 7.9 index DocumentShare (tenant, created_at) for its ordering and the feed
+2e40b773 fix(projects): 7.9 index ProjectNotification (tenant, created_at) for its ordering and the feed
+151ce93a fix(projects): 7.9 index Meeting (tenant, created_at) for the feed source
+19805f7e fix(projects): 7.9 migration 0013 adds the four (tenant, created_at) indexes
+f389a6c7 fix(projects): 7.9 drop the per-row full_clean() from the mention fan-out
+146ae5ff docs(projects): 7.9 record the mention fan-out full_clean removal in the contract
+8c5f7baa fix(projects): 7.9 scope ntf_mark_read and ntf_delete to the caller
+9ef1d52b fix(projects): 7.9 offer the inbox read/dismiss controls only on the viewer own rows
+4fb7400b fix(projects): 7.9 guard the notification detail controls to the recipient
+8a9301ae fix(projects): 7.9 select_related message on the notification register (M1, M16)
+651637b8 fix(projects): 7.9 guard the notification source link against a NULL channel (M2)
+7e8e68d5 fix(projects): 7.9 keep all five feed counts under a ?kind= lens (M3)
+578a21ac fix(projects): 7.9 show the truncation caveat under a project filter too (M4)
+d42b0158 fix(projects): 7.9 channel register badge falls back to get_kind_display (M8)
+eb424fb8 fix(projects): 7.9 channel detail badge fallback + RTL-safe reply indent (M9, M12)
+b845adf9 fix(projects): 7.9 disambiguate the agenda duration header from the minutes panel (M14)
+e53208b8 fix(projects): 7.9 drop the dead minutes_form and pin the child-edit meeting key (M10, M11)
+8ad0d3d1 docs(projects): 7.9 record the Phase-5 amendments (M13, M15, M18; §6.4/§7 repins)
+764846d8 docs(projects): 7.9 correct the §0/§1/§3.6 counts (M5, M6)
+```
+
+No file outside the 7.9 set was touched; `apps/projects/tests/conftest.py` and every non-
+`test_collab_*` test file are untouched. Nothing was pushed.
