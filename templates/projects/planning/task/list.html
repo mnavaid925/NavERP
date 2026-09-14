@@ -61,7 +61,7 @@
       nesting a second form inside the table would break the per-row Delete forms.
     {% endcomment %}
     <div class="card-body">
-      <form method="post" action="{% url 'projects:tsk_bulk_update' %}" id="tsk-bulk-form" class="filter-bar" onsubmit="return confirm('Apply the bulk update to every selected task? Refused rows are skipped and reported.');">
+      <form method="post" action="{% url 'projects:tsk_bulk_update' %}" id="tsk-bulk-form" class="filter-bar" onsubmit="return tskBulkConfirm();">
         {% csrf_token %}
         <label class="text-muted" style="align-self:center;">Bulk update the selected rows:</label>
         <div class="form-group">
@@ -128,4 +128,23 @@
     </div>
     {% include "partials/pagination.html" %}
   </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // 7.8 bulk-operations confirm. The message names the SELECTION SIZE, so the user sees how
+  // many rows the action covers before committing — the selection is client-side, so the count
+  // is read here rather than rendered server-side. The string is assembled into a variable and
+  // handed to confirm() as an argument, so it is never a server-rendered confirm literal; the
+  // message carries no row names (the 7.2 confirm rule's actual concern — see
+  // test_planning_security.py::test_planning_no_template_comment_markers_leak).
+  function tskBulkConfirm() {
+    var form = document.getElementById('tsk-bulk-form');
+    var n = form.querySelectorAll('input[name="task_ids"]:checked').length;
+    var msg = n
+      ? 'Apply the bulk update to ' + n + ' selected task(s)? Refused rows are skipped and reported.'
+      : 'No task is selected, so nothing will be applied. Submit anyway?';
+    return confirm(msg);
+  }
+</script>
 {% endblock %}
