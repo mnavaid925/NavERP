@@ -441,7 +441,8 @@ Common: every view `@login_required`; every queryset `filter(tenant=request.tena
   - `agenda_total` / `agenda_covered` — ints computed in Python over `agenda_items` (§3.4 has no such property, deliberately).
   - `open_action_count` — `sum(1 for a in action_items if not a.is_done)` (int).
   - `overdue_action_count` — `sum(1 for a in action_items if a.is_overdue)` (int).
-  - `minutes_form` — `MeetingMinutesForm(initial={"minutes": obj.minutes})`.
+  - **no `minutes_form`** — the minutes panel is a READ-ONLY summary that links to the dedicated
+    `mtg_minutes` page, which is the ONE writer of the minutes (§10 amendment 7).
   - `agenda_form` — `MeetingAgendaItemForm(tenant=request.tenant)`.
   - `action_form` — `MeetingActionItemForm(tenant=request.tenant)`.
 - **`mtg_edit`** — `crud_edit(..., success_url="projects:mtg_list")`. Context: `form`, `obj`, `is_edit=True`. `minutes`/`actual_start`/`actual_end`/`status` are unreachable (not in `Meta.fields`).
@@ -456,7 +457,7 @@ Common: every view `@login_required`; every queryset `filter(tenant=request.tena
 - **`agi_delete`** — `@require_POST`; tenant-scoped fetch then `crud_delete(..., success_url="projects:mtg_detail")` — **but `crud_delete` redirects with no pk**, so this view redirects to the MEETING: fetch `obj`, capture `meeting_pk = obj.meeting_id`, audit `delete`, `obj.delete()`, `messages.success`, `redirect("projects:mtg_detail", pk=meeting_pk)`.
 - **`agi_cover`** — `@login_required` `@require_POST`. Toggle, one writer for both directions: `previous = obj.is_covered` captured BEFORE mutating; covering stamps `covered_by=request.user`, `covered_at=timezone.now()`, `is_covered=True`; uncovering clears all three. `save(update_fields=["is_covered", "covered_by", "covered_at", "updated_at"])`; audit `update` `changes={"verb": "agi_cover", "from": previous, "to": obj.is_covered}`; redirect `projects:mtg_detail`.
 - **`mai_create`** — mirror of `agi_create` for `MeetingActionItemForm`; the `meeting` FK is stamped from the URL pk; audit `create`; redirect `projects:mtg_detail`. Context: `form`, `meeting`, `is_edit=False`.
-- **`mai_edit`** — mirror of `agi_edit`; `_reject_foreign(["task"])` runs in the form; audit `update`; redirect `projects:mtg_detail`. `is_done`/`done_by`/`done_at` unreachable.
+- **`mai_edit`** — mirror of `agi_edit` (same context, incl. `meeting`); `_reject_foreign(["task"])` runs in the form; audit `update`; redirect `projects:mtg_detail`. `is_done`/`done_by`/`done_at` unreachable.
 - **`mai_delete`** — mirror of `agi_delete` (redirect to the meeting).
 - **`mai_toggle`** — mirror of `agi_cover` for `is_done`/`done_by`/`done_at`; audit `changes={"verb": "mai_toggle", …}`; redirect `projects:mtg_detail`.
 
@@ -555,10 +556,10 @@ Every page `{% extends "base.html" %}` and fills `{% block title %}` + `{% block
 | `collaboration/meeting/agendaitem/form.html` | `agi_create` / `agi_edit` | the house form render (`meeting` is NOT a field — it comes from the URL) |
 | `collaboration/meeting/actionitem/form.html` | `mai_create` / `mai_edit` | the house form render (`meeting` is NOT a field — it comes from the URL) |
 | `collaboration/notification/list.html` | `ntf_list` | filter bar (`q`, `project`, `recipient`, `kind`, `is_read`) + the "Mine only" lens link (`?mine=1`), the `unread_count` stat, Actions column (view/delete + the read toggle POST), kind badge, unread dot |
-| `collaboration/notification/detail.html` | `ntf_detail` | `obj` fields, the four source deep-links (`channel`/`message`/`task`/`meeting`, each `{% if %}`-guarded), the read toggle, `triggered_by`/`read_at` stamps |
+| `collaboration/notification/detail.html` | `ntf_detail` | `obj` fields, the source panel — three deep-links (`channel`/`task`/`meeting`) plus a `{% if %}`-guarded TEXT reference to the source `message`, because §5 ships no `msg_detail` route (§10 amendment 9), the read toggle, `triggered_by`/`read_at` stamps |
 | `collaboration/activity_feed.html` | `activity_feed` | the kind filter + window dropdown + project picker, the `counts` stat row (five cards), the merged `entries` timeline (kind badge from `entries[].badge`, `actor`, `label`, `detail`, `at`, the `url` link when set), the `truncated` notice, and the audit-exclusion note when `project` is set |
 
-**Entity SUB-FOLDERS exist for all four entity groups** (`channel/`, `message/`, `documentshare/`, `meeting/` — 7.9 has four entities, so CLAUDE.md rule 3's single-entity collapse does NOT apply); the `activity_feed.html` computed page stands FLAT at the `collaboration/` root (rule 6), as do `meeting/minutes.html` (a secondary entity-action page inside the entity folder — the `cash/bank_transaction/import.html` idiom) and the two child forms under `meeting/agendaitem/` and `meeting/actionitem/` (child entities of the meeting folder).
+**Entity SUB-FOLDERS exist for all five entity groups** (`channel/`, `message/`, `documentshare/`, `meeting/`, `notification/` — 7.9 has five entities, so CLAUDE.md rule 3's single-entity collapse does NOT apply); the `activity_feed.html` computed page stands FLAT at the `collaboration/` root (rule 6), as do `meeting/minutes.html` (a secondary entity-action page inside the entity folder — the `cash/bank_transaction/import.html` idiom) and the two child forms under `meeting/agendaitem/` and `meeting/actionitem/` (child entities of the meeting folder).
 
 `templates/projects/collaboration/` is new (verified absent).
 
@@ -617,9 +618,15 @@ Corrections made while writing the code, before any reviewer ran. Where an amend
    inline composer on the channel page does not render that `<select>` — the channel is fixed by
    the page. Without the hidden field every post from the channel page would have failed
    validation with "This field is required."
-3. **Page-local CSS uses the `collab-` prefix** on `channel/detail.html` (the 7.8 §9.6 `tw-`
-   precedent). The rules are contained to that one page and reuse the theme's `--border`
-   variable; promotion into `theme.css` is left for when a second page needs them.
+3. **Page-local CSS uses the `collab-` prefix** (the 7.8 §9.6 `tw-` precedent). Three pages
+   carry a self-contained block — `channel/detail.html` (`collab-thread`/`collab-msg`/
+   `collab-reply*`), `activity_feed.html` (`collab-entry*`) and `meeting/detail.html`
+   (`collab-minutes`). Each reuses the theme's `--border` variable and collides with nothing in
+   `theme.css`. **The §10.3 promotion trigger has therefore already fired** — the first two are
+   near-duplicate "divider + flex head + body" rules that differ only in class name — but
+   `theme.css` is OUTSIDE this sub-module's file set, so promotion is recorded as the next
+   app-wide styling pass rather than done here. (Phase-5 amendment 8 corrects the original
+   one-page wording.)
 4. **`as_db_int` is imported from `apps.core.crud`, not from `views/_common`** (amends §6's
    "Common" paragraph, which lists the shared decorators/helpers). `views/_common.py` re-exports
    the four `crud_*` helpers but not `as_db_int`; the 7.8 `TaskChecklistItems.py` view imports it
@@ -638,3 +645,34 @@ Recorded by the `code-fixer` pass. Where an amendment supersedes a §-pinned lin
    form already validated) while issuing one `EXISTS` per non-null FK — seven per row. The
    `mentions` multi-select is unbounded, so the fan-out cost is user-controlled: a 50-person
    mention was ~350 SELECTs on one request. The per-row `save()` is unchanged.
+
+7. **`mtg_detail` no longer builds `minutes_form`** (amends §6.4 and §7). §6.4 pinned a
+   `minutes_form` on the meeting detail page and §7 described the minutes panel as that form
+   POSTing to `mtg_minutes`, but the built page renders a READ-ONLY minutes summary that links out
+   to the dedicated `meeting/minutes.html` editor (already linked from both the page header and the
+   panel header). The pin was stale — the form was constructed on every detail render and rendered
+   nowhere. The detail page's minutes panel now has no form; `mtg_minutes` remains the ONE writer
+   of `minutes`/`minutes_by`/`minutes_at`, exactly as §6.4's `mtg_minutes` row already said.
+
+8. **The page-local CSS block is on THREE pages, not one** (corrects §10.3's wording, which named
+   only `channel/detail.html`). `channel/detail.html`, `activity_feed.html` and
+   `meeting/detail.html` each carry a self-contained `collab-*` block. The first two are
+   near-duplicate "divider + flex head + body" rules, so §10.3's own promotion trigger has fired —
+   but `theme.css` is outside this sub-module's file set, so the promotion is recorded for the next
+   app-wide styling pass instead of being forced through here. `channel/detail.html`'s reply
+   indentation was also switched to logical properties (`margin-inline-start` etc.) so it does not
+   outdent under `html[dir="rtl"]`.
+
+9. **The notification detail page's source panel is THREE deep-links plus a text reference**
+   (amends §7, which said "the four source deep-links"). `message` cannot be a link: §5 ships no
+   `msg_detail` route and the only message route is `msg_edit`, a poor deep-link target. All four
+   sources remain `{% if %}`-guarded; `message` renders as plain text. A read-only message view is
+   a later pass's business, not a route to invent here.
+
+10. **The five indexes with no 7.9 access path are KEPT deliberately** (a ruling on §3.3/§3.4, not
+    a change to them). `dsh_tnt_document_idx`, `agi_tnt_meeting_idx`, `agi_tnt_covered_idx`,
+    `mait_tnt_meeting_idx` and `mait_tnt_assignee_idx` serve no query in this sub-module today, so
+    each is pure write-path cost for now. They are the house `(tenant, <dimension>)` idiom and are
+    forward-looking: a tenant-scoped child register or an admin `list_select_related` would use
+    them. Dropping them would fork 7.9 from the app-wide pattern for a Minor, so they stay.
+    `mait_tnt_done_idx` IS used (`Overview.py`) and is untouched.
