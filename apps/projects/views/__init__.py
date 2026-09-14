@@ -316,3 +316,61 @@ from .TaskWorkManagement.TaskChecklistItems import (  # noqa: F401
     tcl_list,
 )
 from .TaskWorkManagement.TaskPriority import task_priority  # noqa: F401
+
+# --- 7.9 Collaboration & Communication ---------------------------------------------------------
+# The channel register with its archive toggle, the message register with the mention-to-
+# notification trigger, the share register with revoke plus the single-editor claim pair, the
+# meeting register with its three lifecycle verbs and minutes capture (plus the two child
+# registers' CRUD and tick verbs, all of which land back on the meeting), the notification inbox
+# with its two read verbs, and the merged activity feed. 40 routes across six modules.
+from .CollaborationCommunication.ActivityFeed import activity_feed  # noqa: F401
+from .CollaborationCommunication.ChannelMessages import (  # noqa: F401
+    msg_create,
+    msg_delete,
+    msg_edit,
+    msg_list,
+)
+from .CollaborationCommunication.Channels import (  # noqa: F401
+    chn_archive,
+    chn_create,
+    chn_delete,
+    chn_detail,
+    chn_edit,
+    chn_list,
+)
+from .CollaborationCommunication.DocumentShares import (  # noqa: F401
+    dsh_claim,
+    dsh_create,
+    dsh_delete,
+    dsh_detail,
+    dsh_edit,
+    dsh_list,
+    dsh_release,
+    dsh_revoke,
+)
+from .CollaborationCommunication.Meetings import (  # noqa: F401
+    agi_cover,
+    agi_create,
+    agi_delete,
+    agi_edit,
+    mai_create,
+    mai_delete,
+    mai_edit,
+    mai_toggle,
+    mtg_cancel,
+    mtg_complete,
+    mtg_create,
+    mtg_delete,
+    mtg_detail,
+    mtg_edit,
+    mtg_list,
+    mtg_minutes,
+    mtg_start,
+)
+from .CollaborationCommunication.ProjectNotifications import (  # noqa: F401
+    ntf_delete,
+    ntf_detail,
+    ntf_list,
+    ntf_mark_all_read,
+    ntf_mark_read,
+)
