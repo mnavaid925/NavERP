@@ -332,6 +332,18 @@ def tsk_bulk_update(request):
                 messages.error(request, f"Task {obj.number} skipped — only an in-progress task "
                                         f"can be completed.")
                 continue
+        if status_changed and status_value in _TERMINAL_STATUSES \
+                and status_value not in _VERB_GATED_STATUSES:
+            # A TERMINAL transition that the block gate above did not already cover (i.e.
+            # cancelled): an open TaskBlock must not outlive the work it was holding, so the
+            # row is skipped by name (review M10).
+            active_block = obj.blocks.filter(unblocked_at__isnull=True).first()
+            if active_block is not None:
+                refused += 1
+                messages.error(request, f"Task {obj.number} skipped — {active_block.number} is "
+                                        f"still open; unblock it before making the task "
+                                        f"terminal.")
+                continue
         if not (status_changed or assignee_changed or priority_changed):
             messages.info(request, f"Task {obj.number} skipped — already in that state.")
             continue
