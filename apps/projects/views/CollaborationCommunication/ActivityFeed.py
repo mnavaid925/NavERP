@@ -83,15 +83,37 @@ def activity_feed(request):
 
     since = timezone.now() - timedelta(days=days)
     want = {kind} if kind else set(_KIND_VALUES)
-    counts = {value: 0 for value in _KIND_VALUES}
     entries = []
 
+    # Every source's window queryset, built once. The COUNTS are exact pre-cap figures for all
+    # five kinds — the stat row summarises the WINDOW, so `?kind=` narrows the STREAM, not the
+    # summary (otherwise picking one kind would zero the other four cards). Only the fetch loop
+    # is gated by `want`. Each source is a real DB LIMIT (the queryset is unevaluated when
+    # sliced), so a decade of history still costs the same.
+    message_qs = ChannelMessage.objects.filter(tenant=tenant, created_at__gte=since)
+    meeting_qs = Meeting.objects.filter(tenant=tenant, created_at__gte=since)
+    share_qs = DocumentShare.objects.filter(tenant=tenant, created_at__gte=since)
+    notification_qs = ProjectNotification.objects.filter(tenant=tenant, created_at__gte=since)
+    if project is not None:
+        message_qs = message_qs.filter(channel__project_id=project.pk)
+        meeting_qs = meeting_qs.filter(project_id=project.pk)
+        share_qs = share_qs.filter(project_id=project.pk)
+        notification_qs = notification_qs.filter(project_id=project.pk)
+    # The audit trail — None under a project lens, because it cannot be attributed to one (see
+    # the module docstring); that is the ONE pinned zeroing rule.
+    audit_qs = (None if project is not None
+                else AuditLog.objects.filter(tenant=tenant, at__gte=since))
+
+    counts = {
+        "message": message_qs.count(),
+        "meeting": meeting_qs.count(),
+        "share": share_qs.count(),
+        "notification": notification_qs.count(),
+        "audit": 0 if audit_qs is None else audit_qs.count(),
+    }
+
     if "message" in want:
-        qs = ChannelMessage.objects.filter(tenant=tenant, created_at__gte=since)
-        if project is not None:
-            qs = qs.filter(channel__project_id=project.pk)
-        counts["message"] = qs.count()
-        rows = (qs.select_related("channel", "channel__project", "created_by")
+        rows = (message_qs.select_related("channel", "channel__project", "created_by")
                 .order_by("-created_at", "-id")[:_SOURCE_CAP])
         for row in rows:
             entries.append({
@@ -103,11 +125,7 @@ def activity_feed(request):
             })
 
     if "meeting" in want:
-        qs = Meeting.objects.filter(tenant=tenant, created_at__gte=since)
-        if project is not None:
-            qs = qs.filter(project_id=project.pk)
-        counts["meeting"] = qs.count()
-        rows = (qs.select_related("project", "created_by")
+        rows = (meeting_qs.select_related("project", "created_by")
                 .order_by("-created_at", "-id")[:_SOURCE_CAP])
         for row in rows:
             entries.append({
@@ -118,11 +136,7 @@ def activity_feed(request):
             })
 
     if "share" in want:
-        qs = DocumentShare.objects.filter(tenant=tenant, created_at__gte=since)
-        if project is not None:
-            qs = qs.filter(project_id=project.pk)
-        counts["share"] = qs.count()
-        rows = (qs.select_related("project", "document", "created_by")
+        rows = (share_qs.select_related("project", "document", "created_by")
                 .order_by("-created_at", "-id")[:_SOURCE_CAP])
         for row in rows:
             entries.append({
@@ -133,11 +147,7 @@ def activity_feed(request):
             })
 
     if "notification" in want:
-        qs = ProjectNotification.objects.filter(tenant=tenant, created_at__gte=since)
-        if project is not None:
-            qs = qs.filter(project_id=project.pk)
-        counts["notification"] = qs.count()
-        rows = (qs.select_related("project", "recipient", "triggered_by")
+        rows = (notification_qs.select_related("project", "recipient", "triggered_by")
                 .order_by("-created_at", "-id")[:_SOURCE_CAP])
         for row in rows:
             entries.append({
@@ -147,12 +157,8 @@ def activity_feed(request):
                 "url": reverse("projects:ntf_detail", args=[row.pk]),
             })
 
-    # The audit trail — dropped under a project lens, because it cannot be attributed to one
-    # (see the module docstring).
-    if "audit" in want and project is None:
-        qs = AuditLog.objects.filter(tenant=tenant, at__gte=since)
-        counts["audit"] = qs.count()
-        rows = qs.select_related("user").order_by("-at")[:_SOURCE_CAP]
+    if "audit" in want and audit_qs is not None:
+        rows = audit_qs.select_related("user").order_by("-at")[:_SOURCE_CAP]
         for row in rows:
             entries.append({
                 "at": row.at, "kind": "audit", "actor": row.user, "project": None,
