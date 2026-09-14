@@ -28,7 +28,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Prefetch
 
 from apps.core.crud import as_db_int
-from apps.projects.models import Project, ProjectTask, TaskBlock
+from apps.projects.models import Project, ProjectTask, TaskBlock, TaskDependency
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, render
 from apps.projects.views._helpers import owners, projects as project_choices
@@ -160,7 +160,10 @@ def task_priority(request):
     qs = (ProjectTask.objects.filter(tenant=tenant)
           .select_related("project", "assignee")
           .prefetch_related(
-              "predecessor_links__predecessor",
+              # select_related INSIDE the prefetch: the nested "__predecessor" spelling costs
+              # two queries (links, then predecessors) where this one joins them (review M14).
+              Prefetch("predecessor_links",
+                       queryset=TaskDependency.objects.select_related("predecessor")),
               Prefetch("blocks",
                        queryset=TaskBlock.objects.filter(
                            tenant=tenant, unblocked_at__isnull=True),
