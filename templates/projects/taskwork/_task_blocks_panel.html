@@ -1,20 +1,22 @@
 {% comment %}
   7.8 task-detail panel — the block evidence trail for THIS task (obj is the ProjectTask).
 
-  Reads obj.blocks.all and the derived is_blocked / is_manually_blocked / is_dependency_blocked
-  badges directly — no panel-specific context keys beyond the two verb bodies tsk_detail passes
-  (block_form / unblock_form). They POST to the POST-only task verbs on THIS task; the unblock
-  panel renders only while an active block stands (one open blocker at a time, so
-  is_manually_blocked names THE row). Block rows are evidence: raised by the Block verb, closed
-  once by the Unblock verb — no edit or delete anywhere.
+  Reads obj.blocks.all and obj.active_blocks — both computed off the prefetch tsk_detail already
+  did — plus the derived is_dependency_blocked (which iterates the CACHED predecessor_links).
+  It deliberately does NOT call obj.is_manually_blocked / obj.is_blocked: those go through
+  .filter().exists(), which bypasses the prefetch cache and re-queries once per badge
+  (review I7). The two verb bodies tsk_detail passes (block_form / unblock_form) POST to the
+  POST-only task verbs on THIS task; the unblock panel renders only while an active block stands
+  (one open blocker at a time, so active_blocks names THE row). Block rows are evidence: raised
+  by the Block verb, closed once by the Unblock verb — no edit or delete anywhere.
 {% endcomment %}
 <div class="card">
   <div class="card-header"><h2>Blocks</h2></div>
   <div class="card-body">
     <p>
       {% if obj.is_dependency_blocked %}<span class="badge badge-amber">Dependency blocked</span>{% endif %}
-      {% if obj.is_manually_blocked %}<span class="badge badge-red">Manually blocked</span>{% endif %}
-      {% if not obj.is_blocked %}<span class="badge badge-green">Not blocked</span>{% endif %}
+      {% if obj.active_blocks %}<span class="badge badge-red">Manually blocked</span>{% endif %}
+      {% if not obj.is_dependency_blocked and not obj.active_blocks %}<span class="badge badge-green">Not blocked</span>{% endif %}
     </p>
     {% for block in obj.blocks.all %}
       <div class="card" style="margin-bottom:0.75rem;">
@@ -41,7 +43,7 @@
       <p class="text-muted">No blocker has ever been raised on this task. Dependency holds, if any, show in the blocking verdict below the dependency network.</p>
     {% endfor %}
 
-    {% if obj.is_manually_blocked %}
+    {% if obj.active_blocks %}
       {% comment %} The exit — the verb stamps the active row's unblock trail exactly once. {% endcomment %}
       <form method="post" action="{% url 'projects:tsk_unblock' obj.pk %}" novalidate onsubmit="return confirm('Unblock task {{ obj.number }}? The active block\'s unblock trail is written once and cannot be changed.');">
         {% csrf_token %}
