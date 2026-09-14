@@ -79,8 +79,13 @@
     as a fact. A project-filtered feed therefore shows the four collaboration sources only, and
     says so below rather than quietly returning fewer rows than were asked for.
   {% endcomment %}
+  {% comment %}
+    The truncation caveat belongs to BOTH branches: a project-filtered feed can exceed the entry
+    cap just as easily as the whole-workspace one, and hiding the caveat there would silently
+    present a capped stream as complete.
+  {% endcomment %}
   {% if project %}
-    <p class="text-muted">Showing <strong>{{ project.name }}</strong> for the last {{ days }} days. Audit-trail entries are not attributable to a single project, so they are left out of a project-filtered feed — clear the project filter to see them.</p>
+    <p class="text-muted">Showing <strong>{{ project.name }}</strong> for the last {{ days }} days — {{ total_count }} entr{{ total_count|pluralize:"y,ies" }}{% if truncated %}, showing the most recent {{ entry_count }}{% endif %}. Audit-trail entries are not attributable to a single project, so they are left out of a project-filtered feed — clear the project filter to see them.</p>
   {% else %}
     <p class="text-muted">Whole workspace, last {{ days }} days — {{ total_count }} entr{{ total_count|pluralize:"y,ies" }}{% if truncated %}, showing the most recent {{ entry_count }}{% endif %}.</p>
   {% endif %}
