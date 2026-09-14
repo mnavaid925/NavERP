@@ -55,12 +55,49 @@
         <a href="{% url 'projects:tsk_list' %}" class="btn btn-outline">Reset</a>
       </form>
     </div>
+    {% comment %}
+      7.8 bulk operations: the selected rows POST to tsk_bulk_update (per-row gating + audit).
+      The row checkboxes live outside this form but join it through the HTML5 form attribute —
+      nesting a second form inside the table would break the per-row Delete forms.
+    {% endcomment %}
+    <div class="card-body">
+      <form method="post" action="{% url 'projects:tsk_bulk_update' %}" id="tsk-bulk-form" class="filter-bar" onsubmit="return confirm('Apply the bulk update to every selected task? Refused rows are skipped and reported.');">
+        {% csrf_token %}
+        <label class="text-muted" style="align-self:center;">Bulk update the selected rows:</label>
+        <div class="form-group">
+          <select name="status" aria-label="Bulk status" class="form-select">
+            <option value="">Status: no change</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="assignee" aria-label="Bulk assignee" class="form-select">
+            <option value="">Assignee: no change</option>
+            {% for u in assignee_choices %}
+              <option value="{{ u.pk }}">{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Bulk priority" class="form-select">
+            <option value="">Priority: no change</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-outline" type="submit"><i data-lucide="check-check"></i> Apply to selected</button>
+      </form>
+    </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Task</th><th>Project</th><th>Type</th><th>Status</th><th>Planned window</th><th>Effort</th><th>Estimate</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th><span class="text-muted" title="Select a row for the bulk update">✓</span></th><th>Task</th><th>Project</th><th>Type</th><th>Status</th><th>Planned window</th><th>Effort</th><th>Estimate</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
+              <td><input type="checkbox" name="task_ids" value="{{ obj.pk }}" form="tsk-bulk-form" aria-label="Select {{ obj.number }} for the bulk update"></td>
               <td class="fw-600"><a href="{% url 'projects:tsk_detail' obj.pk %}">{{ obj.name }}</a><div class="text-muted">{{ obj.number }}{% if obj.owner %} · {{ obj.owner.get_full_name|default:obj.owner.username }}{% endif %}</div></td>
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>{% if obj.node_type == 'work_package' %}<span class="badge badge-info">{{ obj.get_node_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_node_type_display }}</span>{% endif %}</td>
@@ -84,7 +121,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-tree"></i><h3>No tasks match</h3><p>Add a work package to a project's WBS, or reset the filters.</p></div></td></tr>
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-tree"></i><h3>No tasks match</h3><p>Add a work package to a project's WBS, or reset the filters.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
