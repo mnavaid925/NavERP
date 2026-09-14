@@ -15,8 +15,8 @@ so the chosen task is re-checked against the form's workspace.
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
-# Direct sub-module import: the models package re-export lands in the Integrate step.
-from apps.projects.models.TaskWorkManagement.TaskChecklistItems import TaskChecklistItem
+# The model comes off the package re-export (the Integrate step is done, review M1).
+from apps.projects.models import TaskChecklistItem
 
 
 class TaskChecklistItemForm(TenantUniqueMixin, TenantModelForm):

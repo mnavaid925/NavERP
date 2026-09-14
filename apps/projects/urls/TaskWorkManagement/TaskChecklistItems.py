@@ -6,22 +6,13 @@ from 7.2's ``tasks/`` segment, which the six task verbs reuse with disjoint leaf
 """
 from django.urls import path
 
-# Direct sub-module import: the views package re-export lands in the Integrate step (the
-# sibling modules' ``from apps.projects import views`` idiom resolves through it).
-from apps.projects.views.TaskWorkManagement.TaskChecklistItems import (
-    tcl_check,
-    tcl_create,
-    tcl_delete,
-    tcl_detail,
-    tcl_edit,
-    tcl_list,
-)
+from apps.projects import views
 
 urlpatterns = [
-    path("checklist-items/", tcl_list, name="tcl_list"),
-    path("checklist-items/add/", tcl_create, name="tcl_create"),
-    path("checklist-items/<int:pk>/", tcl_detail, name="tcl_detail"),
-    path("checklist-items/<int:pk>/edit/", tcl_edit, name="tcl_edit"),
-    path("checklist-items/<int:pk>/delete/", tcl_delete, name="tcl_delete"),
-    path("checklist-items/<int:pk>/check/", tcl_check, name="tcl_check"),
+    path("checklist-items/", views.tcl_list, name="tcl_list"),
+    path("checklist-items/add/", views.tcl_create, name="tcl_create"),
+    path("checklist-items/<int:pk>/", views.tcl_detail, name="tcl_detail"),
+    path("checklist-items/<int:pk>/edit/", views.tcl_edit, name="tcl_edit"),
+    path("checklist-items/<int:pk>/delete/", views.tcl_delete, name="tcl_delete"),
+    path("checklist-items/<int:pk>/check/", views.tcl_check, name="tcl_check"),
 ]

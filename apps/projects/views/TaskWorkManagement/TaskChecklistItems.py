@@ -13,11 +13,10 @@ trade-off). ``label``/``sequence`` stay editable on done items (only the stamps 
 ``tcl_edit``/``tcl_delete`` carry no lock guard.
 """
 from apps.core.crud import as_db_int
-# Direct sub-module imports for this vertical's own modules: the forms/models package re-exports
-# land in the Integrate step. ProjectTask is already re-exported by the models package.
-from apps.projects.forms.TaskWorkManagement.TaskChecklistItems import TaskChecklistItemForm
-from apps.projects.models import ProjectTask
-from apps.projects.models.TaskWorkManagement.TaskChecklistItems import TaskChecklistItem
+# The 7.8 forms/models come off the package re-exports (the Integrate step is done — the
+# sub-module paths were the pre-Integrate shim, review M1).
+from apps.projects.forms import TaskChecklistItemForm
+from apps.projects.models import ProjectTask, TaskChecklistItem
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages, redirect,
                                          render, require_POST, write_audit_log)

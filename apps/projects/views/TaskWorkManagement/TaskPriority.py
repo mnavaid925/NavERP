@@ -28,9 +28,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Prefetch
 
 from apps.core.crud import as_db_int
-from apps.projects.models import Project, ProjectTask
-# Direct sub-module import: the models package re-export lands in the Integrate step.
-from apps.projects.models.TaskWorkManagement.TaskBlocks import TaskBlock
+from apps.projects.models import Project, ProjectTask, TaskBlock
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, render
 from apps.projects.views._helpers import owners, projects as project_choices

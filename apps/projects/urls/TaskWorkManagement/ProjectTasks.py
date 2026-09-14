@@ -11,22 +11,13 @@ literals ahead of its converters.
 """
 from django.urls import path
 
-# Direct sub-module import: the views package re-export lands in the Integrate step (the
-# sibling modules' ``from apps.projects import views`` idiom resolves through it).
-from apps.projects.views.TaskWorkManagement.ProjectTasks import (
-    tsk_block,
-    tsk_bulk_update,
-    tsk_complete,
-    tsk_execute,
-    tsk_start,
-    tsk_unblock,
-)
+from apps.projects import views
 
 urlpatterns = [
-    path("tasks/bulk-update/", tsk_bulk_update, name="tsk_bulk_update"),
-    path("tasks/<int:pk>/execute/", tsk_execute, name="tsk_execute"),
-    path("tasks/<int:pk>/start/", tsk_start, name="tsk_start"),
-    path("tasks/<int:pk>/complete/", tsk_complete, name="tsk_complete"),
-    path("tasks/<int:pk>/block/", tsk_block, name="tsk_block"),
-    path("tasks/<int:pk>/unblock/", tsk_unblock, name="tsk_unblock"),
+    path("tasks/bulk-update/", views.tsk_bulk_update, name="tsk_bulk_update"),
+    path("tasks/<int:pk>/execute/", views.tsk_execute, name="tsk_execute"),
+    path("tasks/<int:pk>/start/", views.tsk_start, name="tsk_start"),
+    path("tasks/<int:pk>/complete/", views.tsk_complete, name="tsk_complete"),
+    path("tasks/<int:pk>/block/", views.tsk_block, name="tsk_block"),
+    path("tasks/<int:pk>/unblock/", views.tsk_unblock, name="tsk_unblock"),
 ]

@@ -7,10 +7,8 @@ here can shadow another module's namespace.
 """
 from django.urls import path
 
-# Direct sub-module import: the views package re-export lands in the Integrate step (the
-# sibling modules' ``from apps.projects import views`` idiom resolves through it).
-from apps.projects.views.TaskWorkManagement.GanttTimeline import gantt_timeline
+from apps.projects import views
 
 urlpatterns = [
-    path("gantt-timeline/", gantt_timeline, name="gantt_timeline"),
+    path("gantt-timeline/", views.gantt_timeline, name="gantt_timeline"),
 ]
