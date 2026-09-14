@@ -139,7 +139,12 @@
                   </div>
                   {% if t.status == 'planned' or t.status == 'in_progress' %}
                     <div class="tw-card-actions">
-                      {% if t.status == 'planned' %}
+                      {% comment %} A blocked task's Start/Complete would be refused by the
+                      verb's own gate, so the card must not offer a guaranteed-refusal click
+                      (review I10). The same two free halves the Blocked badge above uses. {% endcomment %}
+                      {% if t.is_dependency_blocked or t.active_blocks %}
+                        <button class="btn btn-outline" type="button" disabled title="Blocked — clear the blocker before advancing this task."><i data-lucide="ban"></i> Blocked</button>
+                      {% elif t.status == 'planned' %}
                         <form method="post" action="{% url 'projects:tsk_start' t.pk %}" onsubmit="return confirm('Start task {{ t.number }}? This stamps its actual start.');">
                           {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="play"></i> Start</button>
                         </form>
@@ -174,7 +179,7 @@
       {% if ready_queue %}
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>Task</th><th>Project</th><th>Priority</th><th>Assignee</th><th>Planned start</th><th class="table-actions">Action</th></tr></thead>
+            <thead><tr><th>Task</th><th>Project</th><th>Priority</th><th>Assignee</th><th>Planned start</th><th class="table-actions">Actions</th></tr></thead>
             <tbody>
               {% for t in ready_queue %}
                 <tr>
