@@ -32,7 +32,11 @@ from apps.projects.views._helpers import owners, projects
 @login_required
 def ntf_list(request):
     qs = (ProjectNotification.objects.filter(tenant=request.tenant)
-          .select_related("project", "recipient", "channel", "task", "meeting", "triggered_by"))
+          # `message` is here because the register's Source column renders `obj.message.number`
+          # — without it every row that carries a message costs one extra query (up to per_page
+          # per render). The detail view already selected it; this closes the list's gap.
+          .select_related("project", "recipient", "channel", "message", "task", "meeting",
+                          "triggered_by"))
     # The "my inbox" lens is a PAIR of conditions, so it is applied before crud_list rather than
     # expressed as one filter tuple. Only the exact string "1" activates it.
     mine = request.GET.get("mine") == "1"
@@ -98,23 +102,23 @@ def ntf_mark_read(request, pk):
 def ntf_mark_all_read(request):
     """Clear the CALLER's own unread rows. Never a teammate's — an inbox is personal.
 
-    Saved row by row rather than with one ``queryset.update()``: ``auto_now`` fires only on
-    ``save()``, so a bulk update would leave every ``updated_at`` stale. The inbox is small, and
-    the per-row save keeps the audit trail's timestamps honest. One audit entry covers the batch
-    (the ``rte_approve_week`` precedent) — the verb is one action, not N.
+    One ``UPDATE`` for the whole batch, not one per row. ``auto_now`` does not fire on
+    ``queryset.update()``, so ``updated_at`` is stamped explicitly here rather than left stale —
+    the concern the per-row save used to address, met head-on instead of side-stepped. One audit
+    entry covers the batch (the ``rte_approve_week`` precedent) — the verb is one action, not N.
     """
-    rows = list(ProjectNotification.objects.filter(
-        tenant=request.tenant, recipient=request.user, is_read=False))
-    if not rows:
+    qs = ProjectNotification.objects.filter(
+        tenant=request.tenant, recipient=request.user, is_read=False)
+    count = qs.count()
+    if not count:
         messages.info(request, "Your inbox is already clear.")
         return redirect("projects:ntf_list")
+    # One representative row for the single audit entry, captured BEFORE the update (after it the
+    # queryset is empty).
+    first = qs.first()
     now = timezone.now()
-    for row in rows:
-        row.is_read = True
-        row.read_at = now
-        row.save(update_fields=["is_read", "read_at", "updated_at"])
-    count = len(rows)
-    write_audit_log(request.user, rows[0], "update",
+    qs.update(is_read=True, read_at=now, updated_at=now)
+    write_audit_log(request.user, first, "update",
                     changes={"verb": "ntf_mark_all_read", "from": count, "to": 0})
     messages.success(request, f"Marked {count} notification{'s' if count != 1 else ''} as read.")
     return redirect("projects:ntf_list")
