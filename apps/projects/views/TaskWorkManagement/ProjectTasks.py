@@ -24,6 +24,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.urls import reverse
 
 from apps.core.crud import as_db_int
@@ -246,9 +247,10 @@ def tsk_bulk_update(request):
     assignee_id = as_db_int(request.POST.get("assignee", ""))
     assignee = None
     if assignee_id is not None:
-        # Existence only — the User FK is deliberately not tenant-rejected (the TaskForm.owner
-        # precedent: users can be tenant-less, e.g. the superuser).
-        assignee = get_user_model().objects.filter(pk=assignee_id).first()
+        # Existence only — tenant users plus the tenant-less superuser are assignable (the
+        # TaskForm.owner precedent); a foreign-tenant user resolves to nothing and refuses.
+        assignee = get_user_model().objects.filter(
+            Q(tenant=request.tenant) | Q(tenant__isnull=True), pk=assignee_id).first()
         if assignee is None:
             messages.error(request, "That assignee does not exist.")
             return redirect("projects:tsk_list")
