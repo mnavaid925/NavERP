@@ -113,6 +113,12 @@ ACTIVE_WBS = [
     dict(name="Technical spike: SSO", parent="Discovery & design", node_type="work_package",
          start=-50, end=-40, effort="40.00", method="parametric", confidence="medium",
          status="done", sequence=3),
+    # A CANCELLED leaf: 7.8's board/priority/register lenses all need a terminal-but-not-done
+    # row to prove they exclude it (review M5 — the seed had no cancelled task). It carries
+    # planned dates (it WAS planned) but no actuals, exactly like a real cancellation.
+    dict(name="Legacy migration spike", parent="Discovery & design", node_type="work_package",
+         start=-48, end=-30, effort="24.00", method="analogous", confidence="low",
+         status="cancelled", sequence=4),
     dict(name="Self-service ordering", node_type="deliverable", sequence=2),
     dict(name="Order API", parent="Self-service ordering", node_type="work_package",
          start=-38, end=-18, effort="120.00", method="bottom_up", confidence="high",
@@ -206,17 +212,18 @@ DRAFT_MILESTONES = [
 class Command(BaseCommand):
     help = ("Seed Module 7 Project Management demo data (7.1 Initiation, 7.2 Planning, "
             "7.3 Resourcing, 7.4 Cost & Budget, 7.5 Risk & Issue Management, "
-            "7.6 Quality Management, 7.7 Scope & Requirements Management).")
+            "7.6 Quality Management, 7.7 Scope & Requirements Management, "
+            "7.8 Task & Work Management).")
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(scope verifications, scope change requests, scope items, requirements, "
-                  "quality defects, deliverable inspections, quality reviews, quality plans, "
-                  "escalations, issues, response actions, risks, expenses, budget lines, "
-                  "control accounts, budget revisions, time entries, allocations, resource "
-                  "profiles, baselines, milestones, dependencies, tasks, kickoffs, "
-                  "stakeholders, projects, requests) - not just seeder-created ones."))
+                  "(checklist items, task blocks, scope verifications, scope change requests, "
+                  "scope items, requirements, quality defects, deliverable inspections, quality "
+                  "reviews, quality plans, escalations, issues, response actions, risks, "
+                  "expenses, budget lines, control accounts, budget revisions, time entries, "
+                  "allocations, resource profiles, baselines, milestones, dependencies, tasks, "
+                  "kickoffs, stakeholders, projects, requests) - not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
@@ -1813,14 +1820,17 @@ class Command(BaseCommand):
         IN PLACE (the documented 7.2 hand-off) with the execution fields the board / gantt /
         priority pages compute over, and seeds the two 7.8 registers against them.
 
-        Execution coverage per tenant: every priority, all four MoSCoW values, all four
-        Eisenhower quadrants, percent_complete honest to the row's status (done rows at 100,
-        in_progress mid-flight, planned at 0), actual_start/actual_end written the way
-        tsk_start/tsk_complete would (the seeder stamps evidence directly, 7.5 precedent), one
-        overdue row (planned_end in the past, still in_progress) and every unassigned shape.
-        Checklists land on the first task of each project with mixed ticks so the progress
-        rollup is non-trivial; the block trail is one active blocker and one closed with its
-        full evidence (blocked_by/at, unblocked_by/at, resolution note).
+        Execution coverage per tenant: every priority, all four MoSCoW values PLUS an
+        unclassified row (the first work package of each project), all four Eisenhower
+        quadrants, percent_complete honest to the row's status (done rows at 100, in_progress
+        mid-flight, planned at 0), actual_start/actual_end written the way tsk_start/tsk_complete
+        would (the seeder stamps evidence directly, 7.5 precedent), one overdue row (planned_end
+        in the past, still in_progress) and every unassigned shape. A cancelled work package
+        (7.2's ``ACTIVE_WBS``) gives the terminal-but-not-done lens something to exclude.
+        Checklists land on every third work package with mixed ticks so the progress rollup is
+        non-trivial and the register runs to page 2; the un-checklisted rows are the documented
+        empty state. The block trail is one active blocker and one closed with its full evidence
+        (blocked_by/at, unblocked_by/at, resolution note).
         """
         if TaskChecklistItem.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: task execution rows already exist. "
@@ -1839,10 +1849,18 @@ class Command(BaseCommand):
         quadrants = [(False, False), (True, False), (True, True), (False, True)]
 
         with transaction.atomic():
+            seen_projects = set()
             for i, task in enumerate(tasks):
                 task.assignee = users[i % len(users)]
                 task.priority = priorities[i % 4]
-                task.moscow = moscow[i % 4]
+                # The FIRST work package of each project stays UNCLASSIFIED (moscow=None) so the
+                # board's "Unclassified" bucket and the priority page's unclassified group are
+                # both non-empty (review M5 — every row used to carry a MoSCoW value).
+                if task.project_id in seen_projects:
+                    task.moscow = moscow[i % 4]
+                else:
+                    task.moscow = None
+                    seen_projects.add(task.project_id)
                 task.is_urgent, task.is_important = quadrants[i % 4]
                 if task.status == "done":
                     task.percent_complete = Decimal("100.00")
@@ -1860,9 +1878,12 @@ class Command(BaseCommand):
                     "assignee", "priority", "moscow", "is_urgent", "is_important",
                     "percent_complete", "actual_start", "actual_end", "updated_at"])
 
-                if i % 4 == 0:
-                    # A checklist on the first work package of each project, one item short of
-                    # complete — the rollup must never read as trivially 0 or trivially 100.
+                if i % 3 == 0:
+                    # Every third work package carries a checklist, one item short of complete —
+                    # the rollup must never read as trivially 0 or trivially 100. The spacing
+                    # also pushes the register past its 15-row page so page 2 is reachable, and
+                    # leaves the un-checklisted rows as the documented EMPTY-checklist state
+                    # (review M5).
                     total = 4
                     for seq, label in enumerate([
                             "Confirm the work package's inputs with the owner",
