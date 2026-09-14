@@ -27,6 +27,12 @@ class TaskExecutionForm(TenantUniqueMixin, TenantModelForm):
     Every field here is execution state on the task row itself; the plan fields stay on 7.2's
     ``TaskForm`` and the stamps stay with the verbs. ``assignee`` is intentionally not
     ``_reject_foreign``-checked — users can be tenant-less (the ``owner`` precedent above).
+
+    Two guards keep this form from rewriting attested history (review M9):
+
+    * a **cancelled** row refuses execution-field writes outright — the work is not happening;
+    * a **done** row keeps its verb-attested ``percent_complete`` — ``tsk_complete`` wrote 100
+      as evidence, and a form that could quietly lower it would falsify the completion.
     """
 
     class Meta:
@@ -34,3 +40,17 @@ class TaskExecutionForm(TenantUniqueMixin, TenantModelForm):
         fields = [
             "assignee", "priority", "moscow", "is_urgent", "is_important", "percent_complete",
         ]
+
+    def clean(self):
+        cleaned = super().clean()
+        instance = self.instance
+        if instance is not None and instance.pk:
+            if instance.status == "cancelled":
+                raise forms.ValidationError(
+                    "This task is cancelled — execution fields cannot be written on cancelled "
+                    "work.")
+            if instance.status == "done" and "percent_complete" in self.fields:
+                # Restore the attested value rather than rejecting the whole form: the other
+                # five fields stay editable, only the completion stamp is frozen.
+                cleaned["percent_complete"] = instance.percent_complete
+        return cleaned
