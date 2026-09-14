@@ -55,7 +55,8 @@
               <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
               <td>
                 {% if obj.kind == 'announcement' %}<span class="badge badge-amber">Announcement</span>
-                {% else %}<span class="badge badge-info">Discussion</span>{% endif %}
+                {% elif obj.kind == 'discussion' %}<span class="badge badge-info">Discussion</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_kind_display }}</span>{% endif %}
               </td>
               <td>{{ obj.message_count }}</td>
               <td>
