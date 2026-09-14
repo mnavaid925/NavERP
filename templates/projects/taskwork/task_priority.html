@@ -133,7 +133,8 @@
                 {% for t in quadrant.tasks %}
                   <li>
                     <a href="{% url 'projects:tsk_detail' t.pk %}">{{ t.number }}</a> {{ t.name|truncatechars:50 }}
-                    {% if t.priority == 'critical' or t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>{% endif %}
+                    {% if t.priority == 'critical' %}<span class="badge badge-red">{{ t.get_priority_display }}</span>
+                    {% elif t.priority == 'high' %}<span class="badge badge-amber">{{ t.get_priority_display }}</span>{% endif %}
                   </li>
                 {% endfor %}
               </ul>
