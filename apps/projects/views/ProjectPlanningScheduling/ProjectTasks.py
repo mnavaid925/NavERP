@@ -15,7 +15,7 @@ from apps.projects.models import ProjectTask
 from apps.projects.models._base import ZERO, q2
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import get_object_or_404, login_required, redirect, render, require_POST
-from apps.projects.views._helpers import critical_path_ids, projects
+from apps.projects.views._helpers import critical_path_ids, owners, projects
 
 
 #: Hard ceiling on WBS depth the decoration walk will traverse. The template's own recursion is
@@ -115,6 +115,10 @@ def tsk_list(request):
             "node_type_choices": ProjectTask.NODE_TYPE_CHOICES,
             "estimation_method_choices": ProjectTask.ESTIMATION_CHOICES,
             "projects": projects(request.tenant),
+            # 7.8 bulk bar (context additions only): the picker dropdowns are tenant-scoped —
+            # statuses/priorities from the model's CHOICES, assignees from this workspace's users.
+            "priority_choices": ProjectTask.PRIORITY_CHOICES,
+            "assignee_choices": owners(request.tenant),
         },
     )
 
