@@ -1,6 +1,8 @@
 """Projects 7.8 — the Priority & Urgency lens (bullet 2; computed on read; no model; GET-only).
 
-Bullet 2 is two frameworks over the same scoped task list, neither of them a stored score:
+Bullet 2 is two frameworks over the same scoped task list, neither of them a stored score,
+and both bucket LIVE work only (``planned``/``in_progress`` — the §9 amendment; done and
+cancelled rows drop out, matching the queue and the counts lenses):
 
 * **MoSCoW** — the four declared classifications in order, PLUS a trailing ``unclassified``
   group: ``moscow`` has no default on purpose — unclassified is a STATE, not a value, so it
@@ -65,7 +67,8 @@ def _priority_sort_key(task):
 
 
 def _group_moscow(tasks):
-    """The MoSCoW groups in declared order plus the trailing ``unclassified`` group.
+    """The MoSCoW groups in declared order plus the trailing ``unclassified`` group — LIVE
+    work only (``planned``/``in_progress``; done/cancelled drop out, the §9 amendment).
 
     Group labels come from the model's own ``MOSCOW_CHOICES`` (a second inline copy could
     drift from the register without any error — the ``risk_monitoring`` band-vocabulary
@@ -76,6 +79,8 @@ def _group_moscow(tasks):
     groups.append({"value": None, "label": "Unclassified", "tasks": [], "count": 0})
     by_value = {group["value"]: group for group in groups}
     for task in tasks:
+        if task.status not in ("planned", "in_progress"):
+            continue
         by_value.get(task.moscow, by_value[None])["tasks"].append(task)
     for group in groups:
         group["tasks"].sort(key=_priority_sort_key)
@@ -84,9 +89,12 @@ def _group_moscow(tasks):
 
 
 def _bucket_quadrants(tasks):
-    """The 2×2 in fixed order, bucketed through the model's ``eisenhower_quadrant``."""
+    """The 2×2 in fixed order, bucketed through the model's ``eisenhower_quadrant`` — LIVE
+    work only (``planned``/``in_progress``; done/cancelled drop out, the §9 amendment)."""
     buckets = {key: [] for key, _, _ in _QUADRANTS}
     for task in tasks:
+        if task.status not in ("planned", "in_progress"):
+            continue
         buckets[task.eisenhower_quadrant].append(task)
     quadrants = []
     for key, label, badge in _QUADRANTS:
