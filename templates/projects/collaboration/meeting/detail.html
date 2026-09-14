@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:mtg_list' %}">Meetings</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.get_kind_display }} on <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ obj.scheduled_start|date:"M d, Y H:i" }}{% if obj.scheduled_end %} → {{ obj.scheduled_end|date:"H:i" }}{% endif %} · {{ obj.get_mode_display }}{% if obj.location %} · {{ obj.location }}{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'scheduled' %}
+        <form method="post" action="{% url 'projects:mtg_start' obj.pk %}" onsubmit="return confirm('Start meeting {{ obj.number }} now? The real start time is stamped.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start</button>
+        </form>
+      {% elif obj.status == 'in_progress' %}
+        <form method="post" action="{% url 'projects:mtg_complete' obj.pk %}" onsubmit="return confirm('Complete meeting {{ obj.number }}? The real end time is stamped.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Complete</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'scheduled' or obj.status == 'in_progress' %}
+        <form method="post" action="{% url 'projects:mtg_cancel' obj.pk %}" onsubmit="return confirm('Cancel meeting {{ obj.number }}?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x"></i> Cancel</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'projects:mtg_minutes' obj.pk %}" class="btn btn-outline"><i data-lucide="notebook-pen"></i> {% if obj.minutes %}Edit minutes{% else %}Capture minutes{% endif %}</a>
+      <a href="{% url 'projects:mtg_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-ordered"></i></div>
+      <div class="stat-value">{{ agenda_covered }} / {{ agenda_total }}</div>
+      <div class="stat-label">Agenda covered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="square-check"></i></div>
+      <div class="stat-value">{{ open_action_count }}</div>
+      <div class="stat-label">Open actions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ overdue_action_count }}</div>
+      <div class="stat-label">Overdue actions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="circle-dot"></i></div>
+      <div class="stat-value">
+        {% if obj.status == 'completed' %}Completed
+        {% elif obj.status == 'in_progress' %}In Progress
+        {% elif obj.status == 'cancelled' %}Cancelled
+        {% else %}{{ obj.get_status_display }}{% endif %}
+      </div>
+      <div class="stat-label">Status</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Meeting</h2>
+      {% if obj.status == 'completed' %}<span class="badge badge-green">Completed</span>
+      {% elif obj.status == 'in_progress' %}<span class="badge badge-info">In Progress</span>
+      {% elif obj.status == 'cancelled' %}<span class="badge badge-red">Cancelled</span>
+      {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+      {% if obj.recurrence != 'none' %}<span class="badge badge-info">{{ obj.get_recurrence_display }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project }}</a></dd>
+        <dt>Scheduled</dt><dd>{{ obj.scheduled_start|date:"M d, Y H:i" }}{% if obj.scheduled_end %} → {{ obj.scheduled_end|date:"M d, Y H:i" }}{% endif %}</dd>
+        <dt>Actual start</dt><dd>{% if obj.actual_start %}{{ obj.actual_start|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Actual end</dt><dd>{% if obj.actual_end %}{{ obj.actual_end|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Mode</dt><dd>{{ obj.get_mode_display }}</dd>
+        <dt>Location</dt><dd>{{ obj.location|default:"—" }}</dd>
+      </dl>
+      {% comment %}
+        recurrence is a DECLARED pattern, not a schedule: no engine creates the next occurrence
+        here — that is the workflow & automation module's job. The column exists so the register
+        can group and report on a recurring series.
+      {% endcomment %}
+      {% if obj.recurrence != 'none' %}
+        <p class="text-muted">Recurring {{ obj.get_recurrence_display|lower }}. This column records the cadence — the next occurrence is scheduled by hand, not generated.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Agenda</h2>
+      <a href="{% url 'projects:agi_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add agenda item</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Item</th><th>Presenter</th><th>Minutes</th><th>Covered</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for item in agenda_items %}
+            <tr>
+              <td>{{ item.sequence }}</td>
+              <td class="fw-600">{{ item.number }}<div class="text-muted">{{ item.title }}</div></td>
+              <td>{% if item.presenter %}{{ item.presenter.get_full_name|default:item.presenter.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ item.duration_minutes }}</td>
+              <td>
+                {% if item.is_covered %}<span class="badge badge-green">Covered</span>
+                {% else %}<span class="badge badge-muted">Pending</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <form method="post" action="{% url 'projects:agi_cover' item.pk %}" onsubmit="return confirm('{% if item.is_covered %}Reopen{% else %}Mark covered{% endif %} agenda item {{ item.number }}?{% if item.is_covered %} Its covered stamps are cleared.{% endif %}');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if item.is_covered %}Reopen{% else %}Mark covered{% endif %}"><i data-lucide="{% if item.is_covered %}rotate-ccw{% else %}check{% endif %}"></i></button>
+                  </form>
+                  <a href="{% url 'projects:agi_edit' item.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:agi_delete' item.pk %}" onsubmit="return confirm('Delete agenda item {{ item.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No agenda yet</h3><p>Build the agenda before the meeting — each line gets a presenter, a duration and a covered tick.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'projects:agi_create' obj.pk %}" novalidate>
+        {% csrf_token %}
+        {% for e in agenda_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in agenda_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Minutes</h2>
+      <a href="{% url 'projects:mtg_minutes' obj.pk %}" class="btn btn-outline"><i data-lucide="notebook-pen"></i> {% if obj.minutes %}Edit{% else %}Capture{% endif %}</a>
+    </div>
+    <div class="card-body">
+      {% if obj.minutes %}
+        <div class="collab-minutes">{{ obj.minutes|linebreaksbr }}</div>
+        <dl class="detail-grid">
+          <dt>Recorded by</dt><dd>{% if obj.minutes_by %}{{ obj.minutes_by.get_full_name|default:obj.minutes_by.email }}{% else %}—{% endif %}</dd>
+          <dt>Recorded at</dt><dd>{% if obj.minutes_at %}{{ obj.minutes_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        </dl>
+      {% else %}
+        <div class="empty-state"><i data-lucide="notebook-pen"></i><h3>No minutes captured</h3><p>Write up the meeting — the recorder and the timestamp are stamped on save. Capturing minutes does not close the meeting.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Action items</h2>
+      <a href="{% url 'projects:mai_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add action item</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Action</th><th>Assignee</th><th>Due</th><th>Task</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for item in action_items %}
+            <tr>
+              <td class="fw-600">{{ item.number }}<div class="text-muted">{{ item.description|truncatechars:70 }}</div></td>
+              <td>{% if item.assignee %}{{ item.assignee.get_full_name|default:item.assignee.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if item.due_date %}{{ item.due_date|date:"M d, Y" }}{% if item.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>{% if item.task %}<a href="{% url 'projects:tsk_detail' item.task_id %}">{{ item.task.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if item.is_done %}<span class="badge badge-green">Done</span>
+                {% else %}<span class="badge badge-muted">Open</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <form method="post" action="{% url 'projects:mai_toggle' item.pk %}" onsubmit="return confirm('{% if item.is_done %}Reopen{% else %}Close{% endif %} action item {{ item.number }}?{% if item.is_done %} Its done stamps are cleared.{% endif %}');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if item.is_done %}Reopen{% else %}Close{% endif %}"><i data-lucide="{% if item.is_done %}rotate-ccw{% else %}check{% endif %}"></i></button>
+                  </form>
+                  <a href="{% url 'projects:mai_edit' item.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:mai_delete' item.pk %}" onsubmit="return confirm('Delete action item {{ item.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="square-check"></i><h3>No action items</h3><p>Capture what the meeting agreed — an action can point at the task it produced.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'projects:mai_create' obj.pk %}" novalidate>
+        {% csrf_token %}
+        {% for e in action_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in action_form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:mtg_list' %}" class="btn btn-outline">Back to Meeting Register</a>
+    <form method="post" action="{% url 'projects:mtg_delete' obj.pk %}" onsubmit="return confirm('Delete meeting {{ obj.number }}? Its agenda and action items go with it. This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+
+  <style>
+    .collab-minutes { white-space: pre-wrap; }
+  </style>
+{% endblock %}
