@@ -25,12 +25,12 @@ to the MEETING rather than to a register that does not exist for either child.
 """
 from django.db.models import Count, Q
 
-from apps.core.crud import _changed
+from apps.core.crud import _changed, as_db_int
 from apps.projects.forms import (MeetingActionItemForm, MeetingAgendaItemForm, MeetingForm,
                                 MeetingMinutesForm)
 from apps.projects.models import Meeting, MeetingActionItem, MeetingAgendaItem
 from apps.projects.views._common import *  # noqa: F401,F403
-from apps.projects.views._common import (as_db_int, get_object_or_404, login_required, messages,
+from apps.projects.views._common import (get_object_or_404, login_required, messages,
                                          redirect, render, require_POST, timezone,
                                          write_audit_log)
 from apps.projects.views._helpers import projects
