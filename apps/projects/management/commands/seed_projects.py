@@ -45,6 +45,15 @@ Per tenant it builds one honest end-to-end chain:
   actual_start/actual_end stamped on the started/finished rows the way the verbs would; plus a
   checklist per lead task (mixed ticks so the progress rollup is non-trivial) and the block
   evidence trail (one active blocker, one closed with its full unblock trail).
+* **7.9 Collaboration & Communication** (``_collab``, its own guard): the conversation layer ON
+  the existing projects — three channels (discussion, announcement, and one ARCHIVED) carrying 17
+  messages across a two-reply thread, a one-reply thread, a bare root and an edited root with two
+  mentions; four shared documents covering every access level and both active states (one
+  claimed); four meetings, one per status, the completed one with full minutes, a covered agenda
+  and a mixed action list; six agenda and six action items (one overdue, one unassigned, one
+  linked to a real 7.2 work package); and 18 notifications covering every kind, both read states
+  and every optional source FK. It reuses the workspace's existing projects, work packages and a
+  ``core.Document`` — it never invents a project, a task or a second attachment store.
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -59,19 +68,26 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import Activity, OrgUnit, Party, PartyRole, Tenant
+from apps.core.models import Activity, Document, OrgUnit, Party, PartyRole, Tenant
 from apps.core.utils import write_audit_log
 from apps.projects.models import (
     BudgetRevision,
+    Channel,
+    ChannelMessage,
     CostControlAccount,
     DeliverableInspection,
+    DocumentShare,
     IssueEscalation,
+    Meeting,
+    MeetingActionItem,
+    MeetingAgendaItem,
     Project,
     ProjectBudgetLine,
     ProjectExpense,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
+    ProjectNotification,
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
@@ -218,12 +234,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(checklist items, task blocks, scope verifications, scope change requests, "
-                  "scope items, requirements, quality defects, deliverable inspections, quality "
-                  "reviews, quality plans, escalations, issues, response actions, risks, "
-                  "expenses, budget lines, control accounts, budget revisions, time entries, "
-                  "allocations, resource profiles, baselines, milestones, dependencies, tasks, "
-                  "kickoffs, stakeholders, projects, requests) - not just seeder-created ones."))
+                  "(notifications, action items, agenda items, document shares, messages, "
+                  "meetings, channels, checklist items, task blocks, scope verifications, "
+                  "scope change requests, scope items, requirements, quality defects, "
+                  "deliverable inspections, quality reviews, quality plans, escalations, issues, "
+                  "response actions, risks, expenses, budget lines, control accounts, budget "
+                  "revisions, time entries, allocations, resource profiles, baselines, "
+                  "milestones, dependencies, tasks, kickoffs, stakeholders, projects, requests) "
+                  "- not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
@@ -236,7 +254,17 @@ class Command(BaseCommand):
             # response actions, then the risks. 7.6's hang off projects/tasks/plans/inspections/
             # issues: the defect is the deepest child, then the inspections and the reviews (both
             # of which point at plans), then the plans. 7.8's checklist items and blocks hang off
-            # tasks, so they go before ProjectTask as well.
+            # tasks, so they go before ProjectTask as well. 7.9's notifications hang off the
+            # channel, the message, the task and the meeting — all four — so they go first of
+            # everything; then the meeting's two children, then the shares (which hang off the
+            # channel and the project), then the messages, then the meetings and channels.
+            ProjectNotification.objects.all().delete()
+            MeetingActionItem.objects.all().delete()
+            MeetingAgendaItem.objects.all().delete()
+            DocumentShare.objects.all().delete()
+            ChannelMessage.objects.all().delete()
+            Meeting.objects.all().delete()
+            Channel.objects.all().delete()
             TaskChecklistItem.objects.all().delete()
             TaskBlock.objects.all().delete()
             QualityDefect.objects.all().delete()
@@ -336,6 +364,10 @@ class Command(BaseCommand):
         # (assignee/priority/MoSCoW/Eisenhower/percent_complete + the actual stamps) plus the
         # checklist and block registers. Nothing here creates a task.
         self._taskwork(tenant, now)
+        # 7.9 has its OWN guard too — the collaboration layer: channels and their threads, the
+        # shared-document register, meetings with their agendas/minutes/actions, and the
+        # notification inbox. Nothing here creates a project or a task; it reuses both.
+        self._collab(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -1934,6 +1966,279 @@ class Command(BaseCommand):
             f"{TaskChecklistItem.objects.filter(tenant=tenant).count()} checklist items, "
             f"{TaskBlock.objects.filter(tenant=tenant).count()} block rows "
             f"(1 active, 1 closed)."))
+
+    def _collab(self, tenant, now):
+        """7.9 collaboration: channels + threads, shared documents, meetings, notifications.
+
+        Guarded per tenant. Nothing here invents a project, a task or a document store: the
+        channels hang off the workspace's existing projects, the action items point at 7.2's
+        existing work packages, and the shares reuse a ``core.Document`` row (the repository
+        belongs to 7.10 — this block creates at most two attachments so the register is not
+        empty, and never a parallel store).
+
+        Coverage per tenant: three channels (discussion / announcement / ARCHIVED, so the
+        archive facet and both badge states have rows); 17 messages — a two-reply thread, a
+        one-reply thread, a bare root, an EDITED root carrying two mentions, four announcement
+        roots and two on the archived channel — enough to push the message register past its
+        15-row page; four meetings, one per status, with the completed one carrying full minutes,
+        a covered agenda and a mixed action list; six agenda items and six action items (one
+        overdue, one unassigned, one linked to a real work package, one closed); and 18
+        notifications covering every kind, both read states, every optional source FK and three
+        recipients.
+        """
+        if Channel.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: collaboration rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+        projects = list(Project.objects.filter(tenant=tenant).order_by("id"))
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        if not projects or not users:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no projects or users - skipping collaboration."))
+            return
+        active = next((p for p in projects if p.status == "active"), projects[0])
+        other = next((p for p in projects if p.pk != active.pk), active)
+        tasks = list(ProjectTask.objects.filter(
+            tenant=tenant, project=active, node_type="work_package").order_by("id"))
+        today = timezone.localdate()
+
+        def channel(project, name, kind, topic, archived=False):
+            row = Channel(tenant=tenant, project=project, name=name, kind=kind, topic=topic,
+                          created_by=users[0])
+            if archived:
+                row.is_archived = True
+                row.archived_by = users[-1]
+                row.archived_at = now - timedelta(days=21)
+            row.full_clean(exclude=["number"])
+            row.save()
+            return row
+
+        def message(chan, body, author, parent=None, mentions=(), edited=False):
+            row = ChannelMessage(tenant=tenant, channel=chan, parent=parent, body=body,
+                                 created_by=author)
+            if edited:
+                row.edited_by = users[-1]
+                row.edited_at = now - timedelta(hours=3)
+            row.full_clean(exclude=["number"])
+            row.save()
+            if mentions:
+                row.mentions.set(mentions)
+            return row
+
+        def meeting(project, title, kind, status, day_offset, recurrence="none",
+                    location="", minutes="", covered=0, agenda=(), actions=()):
+            row = Meeting(tenant=tenant, project=project, title=title, kind=kind,
+                          scheduled_start=now + timedelta(days=day_offset),
+                          scheduled_end=now + timedelta(days=day_offset, hours=1),
+                          location=location, recurrence=recurrence, status=status,
+                          created_by=users[0])
+            if status == "in_progress":
+                row.actual_start = now + timedelta(days=day_offset)
+            elif status == "completed":
+                row.actual_start = now + timedelta(days=day_offset)
+                row.actual_end = now + timedelta(days=day_offset, hours=1)
+            if minutes:
+                row.minutes = minutes
+                row.minutes_by = users[0]
+                row.minutes_at = now + timedelta(days=day_offset, hours=1)
+            row.full_clean(exclude=["number"])
+            row.save()
+            for seq, (title_text, presenter, duration, is_covered) in enumerate(agenda):
+                item = MeetingAgendaItem(
+                    tenant=tenant, meeting=row, title=title_text,
+                    presenter=users[presenter % len(users)] if presenter is not None else None,
+                    duration_minutes=duration, sequence=seq, is_covered=is_covered,
+                    created_by=users[0])
+                if is_covered:
+                    item.covered_by = users[0]
+                    item.covered_at = now + timedelta(days=day_offset, hours=1)
+                item.full_clean(exclude=["number"])
+                item.save()
+            for index, (description, assignee, due_offset, is_done, task_index) in enumerate(
+                    actions):
+                item = MeetingActionItem(
+                    tenant=tenant, meeting=row, description=description,
+                    assignee=users[assignee % len(users)] if assignee is not None else None,
+                    due_date=today + timedelta(days=due_offset) if due_offset is not None else None,
+                    task=tasks[task_index] if task_index is not None and tasks else None,
+                    is_done=is_done, created_by=users[0])
+                if is_done:
+                    item.done_by = users[assignee % len(users)] if assignee is not None else users[0]
+                    item.done_at = now - timedelta(days=1)
+                item.full_clean(exclude=["number"])
+                item.save()
+            return row
+
+        def notify(project, recipient, kind, title, body="", chan=None, msg=None, task=None,
+                   mtg=None, read=False, trigger=None):
+            row = ProjectNotification(
+                tenant=tenant, project=project, recipient=recipient, kind=kind, title=title,
+                body=body, channel=chan, message=msg, task=task, meeting=mtg,
+                triggered_by=trigger if trigger is not None else users[-1], is_read=read,
+                read_at=(now - timedelta(hours=5)) if read else None, created_by=users[0])
+            row.full_clean(exclude=["number"])
+            row.save()
+            return row
+
+        with transaction.atomic():
+            # -- channels and their threads --------------------------------------------------
+            standup = channel(active, "Delivery Standup", "discussion",
+                              "Daily delivery coordination - blockers, hand-offs and owners.")
+            announce = channel(active, "Project Announcements", "announcement",
+                               "One-way updates for the whole delivery team.")
+            closed = channel(other, "Discovery (closed)", "discussion",
+                             "Archived once the discovery phase signed off.", archived=True)
+
+            root = message(standup, "Kicking off this week - we are behind on the integration "
+                                    "work package. Blockers here please.", users[0])
+            message(standup, "Sandbox credentials are still pending with the vendor; I have "
+                             "chased them again this morning.", users[1], parent=root)
+            message(standup, "Understood - I will keep the integration work package parked "
+                             "until they land.", users[2], parent=root)
+            second = message(standup, "Reminder: the steering pack is due before Thursday's "
+                                      "review. Numbers come off the cost register.",
+                             users[1])
+            message(standup, "I will pull the variance figures this afternoon.", users[0],
+                    parent=second)
+            message(standup, "Anyone able to pick up the acceptance checklist? It is the last "
+                             "open item on the quality plan.", users[2])
+            edited = message(standup, "Heads up: the delivery date moved. The revised plan is "
+                                      "on the shared document.", users[0],
+                             mentions=[users[1], users[2]], edited=True)
+            message(announce, "Charter approved - the project is now formally active.",
+                    users[0])
+            message(announce, "Baseline frozen at revision 0. Changes go through the CCB from "
+                              "here.", users[0])
+            message(announce, "New work packages published on the plan; owners have been "
+                              "notified.", users[1])
+            message(announce, "Monthly status pack is out - variance is inside tolerance.",
+                    users[2])
+            message(closed, "Discovery signed off - thank you all for the turnaround.",
+                    users[0])
+            message(closed, "Notes and the decision log are filed against the kickoff record.",
+                    users[1])
+
+            # -- shared documents ------------------------------------------------------------
+            # The artifact store is core.Document (7.10 owns the repository); these two rows exist
+            # so the share register is not empty, and no second attachment table is created.
+            pack, _ = Document.objects.get_or_create(
+                tenant=tenant, name="Project status pack",
+                defaults={"classification": "internal", "version": "2.0"})
+            plan, _ = Document.objects.get_or_create(
+                tenant=tenant, name="Integrated delivery plan",
+                defaults={"classification": "confidential", "version": "1.4"})
+            claimed = DocumentShare(
+                tenant=tenant, project=active, channel=standup, document=pack,
+                access_level="edit", shared_with=users[1],
+                note="Owner copy - update the variance table before each steering review.",
+                claimed_by=users[1], claimed_at=now - timedelta(hours=2), created_by=users[0])
+            claimed.full_clean(exclude=["number"])
+            claimed.save()
+            free = DocumentShare(
+                tenant=tenant, project=active, channel=standup, document=plan,
+                access_level="edit", note="Team copy - co-edit before the next review.",
+                created_by=users[0])
+            free.full_clean(exclude=["number"])
+            free.save()
+            DocumentShare(tenant=tenant, project=active, document=pack, access_level="comment",
+                          shared_with=users[2],
+                          note="Comments welcome on the narrative section.", created_by=users[0]
+                          ).save()
+            revoked = DocumentShare(
+                tenant=tenant, project=other, document=plan, access_level="view",
+                note="Superseded by the frozen baseline.", is_active=False, revoked_by=users[-1],
+                revoked_at=now - timedelta(days=14), created_by=users[0])
+            revoked.full_clean(exclude=["number"])
+            revoked.save()
+
+            # -- meetings: one per status ----------------------------------------------------
+            steering = meeting(
+                active, "Weekly steering committee", "steering", "completed", -3,
+                location="Boardroom 2",
+                minutes=("Agreed: the integration work package stays parked until the vendor "
+                         "sandbox lands. Variance is inside tolerance at 4%. The acceptance "
+                         "checklist is the last open quality item and is now owned."),
+                agenda=[("Variance review", 1, 20, True),
+                        ("Integration blocker", 2, 15, True),
+                        ("Acceptance checklist", None, 15, True)],
+                actions=[("Chase the vendor sandbox credentials", 1, -1, False, 0),
+                         ("Publish the revised steering pack", 0, 3, False, None),
+                         ("Close the acceptance checklist", 2, 7, False, None),
+                         ("File the discovery decision log", 1, -6, True, None)])
+            meeting(
+                active, "Delivery standup", "standup", "in_progress", 0, recurrence="daily",
+                agenda=[("Blockers", 0, 10, False),
+                        ("Hand-offs", 1, 10, False),
+                        ("Plan for the day", None, 10, False)])
+            meeting(
+                active, "Design review - reporting lens", "review", "scheduled", 5,
+                recurrence="biweekly", location="Teams",
+                agenda=[("Walk the report builder", 2, 30, False),
+                        ("Agree the KPI set", 0, 20, False)])
+            meeting(
+                other, "Discovery close-out", "workshop", "cancelled", -21,
+                location="Boardroom 1",
+                actions=[("Archive the discovery notes", 0, -18, True, None)])
+
+            # -- action items on the completed meeting's work packages ------------------------
+            # A sixth action, linked to a real 7.2 work package, so the task join has a row.
+            linked = MeetingActionItem(
+                tenant=tenant, meeting=steering, description="Re-baseline the integration work "
+                                                             "package once the blocker clears.",
+                assignee=users[0], due_date=today - timedelta(days=2),
+                task=tasks[0] if tasks else None, created_by=users[0])
+            linked.full_clean(exclude=["number"])
+            linked.save()
+            unassigned = MeetingActionItem(
+                tenant=tenant, meeting=steering,
+                description="Confirm who owns the acceptance checklist before the next review.",
+                due_date=today + timedelta(days=10), created_by=users[0])
+            unassigned.full_clean(exclude=["number"])
+            unassigned.save()
+
+            # -- notifications: every kind, both states, every optional source ---------------
+            notify(active, users[1], "mention", "Mentioned in CHN-00001 - Delivery Standup",
+                   body="Heads up: the delivery date moved.", chan=standup, msg=edited)
+            notify(active, users[2], "mention", "Mentioned in CHN-00001 - Delivery Standup",
+                   body="Heads up: the delivery date moved.", chan=standup, msg=edited, read=True)
+            notify(active, users[0], "assignment", "You own the integration work package",
+                   task=tasks[0] if tasks else None)
+            notify(active, users[1], "assignment", "You own the acceptance checklist",
+                   task=tasks[1] if len(tasks) > 1 else None, read=True)
+            notify(active, users[2], "due_date", "Action item due in 7 days",
+                   body="Close the acceptance checklist.", mtg=steering)
+            notify(active, users[0], "due_date", "Action item overdue by 2 days",
+                   body="Re-baseline the integration work package.", mtg=steering)
+            notify(active, users[1], "status_change",
+                   "MTG-00001 moved to Completed", mtg=steering)
+            notify(active, users[2], "status_change", "Project status moved to Active")
+            notify(active, users[0], "system", "Baseline frozen at revision 0",
+                   body="Changes now go through the change control board.", read=True)
+            notify(active, users[1], "system", "Quality plan activated")
+            notify(other, users[0], "system", "Discovery phase closed", chan=closed, read=True)
+            notify(other, users[1], "mention", "Mentioned in Discovery (closed)",
+                   body="Notes and the decision log are filed against the kickoff record.",
+                   chan=closed)
+            notify(active, users[2], "mention", "Mentioned on the shared status pack",
+                   body="Owner copy - update the variance table before each steering review.")
+            notify(active, users[0], "assignment", "Document share DSH-00001 is yours to edit")
+            notify(active, users[1], "due_date", "Steering pack due before Thursday",
+                   mtg=steering, read=True)
+            notify(active, users[2], "status_change", "Work package moved to In Progress",
+                   task=tasks[0] if tasks else None)
+            notify(active, users[0], "system", "New message in Project Announcements",
+                   chan=announce)
+            notify(active, users[1], "system", "New message in Project Announcements",
+                   chan=announce, read=True)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {Channel.objects.filter(tenant=tenant).count()} channels, "
+            f"{ChannelMessage.objects.filter(tenant=tenant).count()} messages, "
+            f"{DocumentShare.objects.filter(tenant=tenant).count()} document shares, "
+            f"{Meeting.objects.filter(tenant=tenant).count()} meetings, "
+            f"{MeetingAgendaItem.objects.filter(tenant=tenant).count()} agenda items, "
+            f"{MeetingActionItem.objects.filter(tenant=tenant).count()} action items, "
+            f"{ProjectNotification.objects.filter(tenant=tenant).count()} notifications."))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
