@@ -164,6 +164,11 @@ def _gantt_bars(nodes, window_start, window_days, critical_ids):
         bars.append({
             "task": node,
             "depth": depth,
+            # The RESOLVED window (a work package's own dates; a deliverable's subtree union).
+            # The template's tooltip reads these — node.planned_start/end are None on every
+            # deliverable, which is what made the tooltip render blank dates (review I8).
+            "start": start,
+            "end": end,
             "left_pct": left_pct,
             "width_pct": width_pct,
             "progress_pct": progress,
