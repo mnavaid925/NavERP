@@ -13,10 +13,11 @@ Two verbs, each the ONE writer of its own state:
   can be claimed, and only one holder at a time (the refusal names the current holder). Release
   is open to any member on purpose: a stale claim must not be able to deadlock the document.
 """
+from apps.core.crud import as_db_int
 from apps.projects.forms import DocumentShareForm
 from apps.projects.models import Channel, DocumentShare
 from apps.projects.views._common import *  # noqa: F401,F403
-from apps.projects.views._common import (as_db_int, get_object_or_404, login_required, messages,
+from apps.projects.views._common import (get_object_or_404, login_required, messages,
                                          redirect, render, require_POST, timezone,
                                          write_audit_log)
 from apps.projects.views._helpers import owners, projects
