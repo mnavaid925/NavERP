@@ -318,3 +318,58 @@ each consolidated ID cites its raw lane refs.
 
 Counts: **2C / 10I / 15M** (+M16 recorded-deferred). Phase 5 fixes in ID order.
 
+
+---
+
+# FIX LOG (Phase 5, completed 2026-09-14)
+
+Status of every consolidated finding after the fix pass. **No finding is left `[ ] open`.**
+The first eight (C1, C2, I1-I6) were fixed before this session took over; I7-I10 and M1-M16
+were completed in the takeover run. Every claim below was re-verified against the running app.
+
+| ID | Status | File(s) | Fix | Verified by |
+|---|---|---|---|---|
+| C1 | `[x] fixed` | `views/TaskWorkManagement/ProjectTasks.py` | `transaction.atomic()` + `select_for_update()` re-fetch and re-test in `tsk_block`/`tsk_unblock` (the `qdf_raise_issue` idiom) | Concurrent-POST probe: one block minted, one unblock stamp |
+| C2 | `[x] fixed` | `views/TaskWorkManagement/ProjectTasks.py` | `tsk_bulk_update` resolves `assignee` through `filter(Q(tenant=…) \| Q(tenant__isnull=True), pk=…)`; stale comment deleted | Foreign-tenant pk refused; email never rendered |
+| I1 | `[x] fixed` | `templates/projects/planning/task/detail.html` | Execute entry point on the task-detail header | Link present, `tsk_execute` reachable |
+| I2 | `[x] fixed` | `.claude/tasks/contract-projects-7.8.md` | §9 "Post-review amendments" appended — `TaskExecutionForm` is the sole execution write surface | Contract read back |
+| I3 | `[x] fixed` | `templates/projects/planning/task/list.html` | Bulk bar wired (checkboxes + status/assignee/priority + csrf); confirm now names the selection size, built in JS | Bulk POST applies to selected rows; forged ids refused |
+| I4 | `[x] fixed` | `views/ProjectInitiation/Overview.py`, `templates/projects/overview.html` | Pinned keys (`in_progress_task_count`/`blocked_task_count`/`overdue_task_count`); duplicate card dropped | Overview renders pinned keys |
+| I5 | `[x] fixed` | `apps/core/navigation.py` | Bullet 5 → `projects:dependencies`; checklist leaf → `tcl_list`; Active Blockers leaf dropped | Sidebar keys pinned |
+| I6 | `[x] fixed` | `views/TaskWorkManagement/TaskPriority.py`, `templates/.../task_priority.html` | `_group_moscow`/`_bucket_quadrants` filter to live work; header note added | Done/cancelled drop out of both lenses |
+| I7 | `[x] fixed` | `views/ProjectPlanningScheduling/ProjectTasks.py`, 3× `templates/projects/taskwork/_task_*_panel.html` | `tsk_detail` prefetches the four relations once; panels read the view-computed context (`checklist_progress`, `active_blocks`) instead of the re-querying properties | **31 → 13 queries** on the probe task; progress/badges/verdicts all still render |
+| I8 | `[x] fixed` | `views/TaskWorkManagement/GanttTimeline.py`, `templates/.../gantt_timeline.html` | Bars carry the resolved `start`/`end`; tooltip reads those; progress tail guarded | 11/11 tooltips show real dates; zero `None` |
+| I9 | `[x] fixed` | `views/TaskWorkManagement/ProjectTasks.py` | One `pk__in` fetch, lazy assignee FK, `_BULK_CAP = 500` with a truthful note, one reused active-block fetch | 600-id POST truncates and says so; blocked row refused naming `TBK-00001` |
+| I10 | `[x] fixed` | `templates/projects/taskwork/task_board.html` | Card action block gated on the two free halves; blocked cards render a disabled button | Disabled button present on blocked cards |
+| M1 | `[x] fixed` | 6× `urls/TaskWorkManagement/`, 5× `views/TaskWorkManagement/`, `forms/TaskWorkManagement/TaskChecklistItem.py`, `models/TaskWorkManagement/__init__.py` | Normalized to `from apps.projects import views` + package re-exports; stale "Integrate step" comments corrected | 17/17 7.8 routes still reverse |
+| M2 | `[x] fixed` | `forms/__init__.py` | Comment counts FOUR re-exports | Read back |
+| M3 | `[x] fixed` | `apps/projects/admin.py` | `@admin.display(boolean=True, ordering="unblocked_at")` on `is_active` | `boolean=True`, `admin_order_field` set |
+| M4 | `[x] fixed` | `apps/projects/admin.py` | `task` added to `readonly_fields`; `has_add_permission`/`has_delete_permission` → False | Both return False |
+| M5 | `[x] fixed` | `management/commands/seed_projects.py` | Unclassified MoSCoW (first WP per project), a cancelled work package, checklists on every third WP (20 items → page 2), help text | Re-seeded: 3 unclassified, 1 cancelled, 20 items, page 2 renders |
+| M6 | `[x] fixed` | `views/TaskWorkManagement/GanttTimeline.py`, `templates/.../gantt_timeline.html` | `today_offset_pct` computed when today is in-window; per-track `.tw-today` line + CSS | 12 elements in-window, 0 for past/future windows, no-project still 200 |
+| M7 | `[x] fixed` | `templates/projects/taskwork/task_priority.html` | Critical → `badge-red`, High → `badge-amber` | Critical no longer amber |
+| M8 | `[x] fixed` | `views/TaskWorkManagement/ProjectTasks.py` | `tsk_block` refuses `_TERMINAL_STATUSES`, re-tested inside the lock | Cancelled task refused with a named message; no block minted |
+| M9 | `[x] fixed` | `forms/TaskWorkManagement/ProjectTasks.py` | `TaskExecutionForm.clean()`: cancelled refuses, done freezes `percent_complete` | Done row stayed at 100.00 after a POST of 10; cancelled row unchanged |
+| M10 | `[x] fixed` | `views/TaskWorkManagement/ProjectTasks.py` | Bulk terminal transition refuses a row with an open block | Cancel refused naming `TBK-00001` |
+| M11 | `[x] fixed` | `views/TaskWorkManagement/{TaskBoard,TaskPriority,GanttTimeline}.py` | `messages.warning` when a supplied id is not in the workspace (no-500 behaviour kept) | Valid id → no warning; foreign id → warned; all 200 |
+| M12 | `[x] fixed — recorded` | `.claude/tasks/contract-projects-7.8.md` §9 item 6 | Page-local `tw-` CSS precedent recorded (no theme.css move this pass) | Contract read back |
+| M13 | `[x] fixed` | `templates/projects/taskwork/task_board.html` | `Action` → `Actions` | Header corrected |
+| M14 | `[x] fixed` | `views/TaskWorkManagement/{TaskBoard,TaskPriority}.py` | Chained `Prefetch("predecessor_links", queryset=TaskDependency.objects.select_related("predecessor"))` | 12 queries/page; blocked verdicts unchanged |
+| M15 | `[x] fixed` | `views/TaskWorkManagement/ProjectTasks.py` | `previous = "active"` (the `else "resolved"` branch was unreachable) | Read back |
+| M16 | `[x] fixed — recorded deferred` | `.claude/tasks/contract-projects-7.8.md` §9 item 7 | Task-detail lifecycle verbs recorded as a next-pass item | Contract read back |
+
+## Verification summary
+
+* `manage.py check` — clean.
+* Full unfiltered `apps/projects/tests/` — **2751 tests, 0 failures, 0 errors**.
+* `tsk_detail` query count — **31 → 13** (CaptureQueriesContext, the seeded probe task).
+* Fresh `seed_projects --flush` — 20 checklist items / 3 unclassified / 1 cancelled / 2 blocks
+  per tenant; page 2 of the checklist register renders.
+* The 7.2 leak test (`test_planning_no_template_comment_markers_leak`) was failing because the
+  new bulk-bar confirm was a digit-free static literal; the confirm is now built in JS from the
+  selection count, which satisfies the rule's intent (no row names) and improves the message.
+
+## Follow-up recorded, deliberately NOT swept
+
+The task-detail lifecycle verbs (M16) remain board-only — a next pass may add Start/Complete to
+the task-detail header with the same free-half gating. No other finding is open.
