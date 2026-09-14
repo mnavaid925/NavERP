@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Shared Document{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.document.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:dsh_list' %}">Shared Documents</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Shared on <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% if obj.channel %} · pinned in <a href="{% url 'projects:chn_detail' obj.channel_id %}">{{ obj.channel.name }}</a>{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.is_co_editable and not obj.is_claimed %}
+        <form method="post" action="{% url 'projects:dsh_claim' obj.pk %}" onsubmit="return confirm('Claim the edit on {{ obj.number }}? Teammates will see that you are editing it.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="pencil-line"></i> Start editing</button>
+        </form>
+      {% elif obj.is_claimed %}
+        <form method="post" action="{% url 'projects:dsh_release' obj.pk %}" onsubmit="return confirm('Release the edit claim on {{ obj.number }}?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="log-out"></i> Stop editing</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{% url 'projects:dsh_revoke' obj.pk %}" onsubmit="return confirm('{% if obj.is_revoked %}Restore{% else %}Revoke{% endif %} share {{ obj.number }}?{% if not obj.is_revoked %} Any edit claim on it is released too.{% endif %}');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_revoked %}rotate-ccw{% else %}ban{% endif %}"></i> {% if obj.is_revoked %}Restore{% else %}Revoke{% endif %}</button>
+      </form>
+      <a href="{% url 'projects:dsh_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Share</h2>
+      {% if obj.is_revoked %}<span class="badge badge-red">Revoked</span>
+      {% elif obj.is_claimed %}<span class="badge badge-amber">Editing now</span>
+      {% else %}<span class="badge badge-green">Live</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Document</dt><dd>{{ obj.document.name }} <span class="text-muted">v{{ obj.document.version }}</span></dd>
+        <dt>Classification</dt><dd>{{ obj.document.get_classification_display }}</dd>
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project }}</a></dd>
+        <dt>Channel</dt><dd>{% if obj.channel %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">{{ obj.channel }}</a>{% else %}—{% endif %}</dd>
+        <dt>Access level</dt><dd>
+          {% if obj.access_level == 'edit' %}<span class="badge badge-green">Can edit</span>
+          {% elif obj.access_level == 'comment' %}<span class="badge badge-info">Comment</span>
+          {% else %}<span class="badge badge-muted">{{ obj.get_access_level_display }}</span>{% endif %}
+        </dd>
+        <dt>Shared with</dt><dd>{% if obj.shared_with %}{{ obj.shared_with.get_full_name|default:obj.shared_with.email }}{% else %}Whole project team{% endif %}</dd>
+        <dt>Note</dt><dd>{{ obj.note|default:"—" }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Co-editing</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Editing now</dt><dd>{% if obj.claimed_by %}{{ obj.claimed_by.get_full_name|default:obj.claimed_by.email }}{% else %}Nobody{% endif %}</dd>
+        <dt>Claimed at</dt><dd>{% if obj.claimed_at %}{{ obj.claimed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Revoked by</dt><dd>{% if obj.revoked_by %}{{ obj.revoked_by.get_full_name|default:obj.revoked_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Revoked at</dt><dd>{% if obj.revoked_at %}{{ obj.revoked_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}—{% endif %}</dd>
+      </dl>
+      {% comment %}
+        Real-time co-editing needs a websocket stack the repo does not have, so the honest
+        affordance is the claim above: one editor at a time, visibly. The document's version
+        history, folders and retention belong to the document management module — this page
+        records the share, not the artifact's lifecycle.
+      {% endcomment %}
+      {% if not obj.is_co_editable %}
+        <p class="text-muted">Only a live share with <strong>Can edit</strong> access can be claimed. {% if obj.is_revoked %}This share is revoked.{% else %}This share is {{ obj.get_access_level_display|lower }}.{% endif %}</p>
+      {% elif obj.is_claimed %}
+        <p class="text-muted">Claimed by {% if obj.claimed_by %}{{ obj.claimed_by.get_full_name|default:obj.claimed_by.email }}{% else %}a teammate{% endif %} — anyone may release it, so a stale claim cannot deadlock the document.</p>
+      {% else %}
+        <p class="text-muted">Nobody is editing right now. Claim it to signal that you have it open.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:dsh_list' %}" class="btn btn-outline">Back to Shared Documents</a>
+    <form method="post" action="{% url 'projects:dsh_delete' obj.pk %}" onsubmit="return confirm('Delete share {{ obj.number }}? The document itself is not deleted. This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
