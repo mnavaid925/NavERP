@@ -41,6 +41,11 @@
     <div class="card-body">
       <form method="post" action="{% url 'projects:msg_create' %}" novalidate>
         {% csrf_token %}
+        {% comment %}
+          The channel is fixed by this page, so it travels as a hidden field rather than a second
+          <select> that could disagree with the URL the composer is rendered on.
+        {% endcomment %}
+        <input type="hidden" name="channel" value="{{ obj.pk }}">
         {% for e in message_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
         <div class="form-group">
           <label class="form-label" for="{{ message_form.body.id_for_label }}">Message <span class="req">*</span></label>
