@@ -54,6 +54,11 @@ class ChannelMessage(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "channel"], name="chm_tnt_channel_idx"),
             models.Index(fields=["tenant", "parent"], name="chm_tnt_parent_idx"),
+            # The activity feed's message source: `filter(tenant, created_at__gte=since)`
+            # ordered by `-created_at`. Without it that source is a tenant-wide filesort whose
+            # LIMIT caps the transfer, not the work. (The register itself sorts by `channel_id`
+            # first, so this index does not serve `msg_list` — that path rides chm_tnt_channel_idx.)
+            models.Index(fields=["tenant", "-created_at"], name="chm_tnt_created_idx"),
         ]
 
     def __str__(self):
