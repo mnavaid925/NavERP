@@ -45,7 +45,11 @@ def mtg_list(request):
               agenda_covered=Count("agenda_items",
                                    filter=Q(agenda_items__is_covered=True), distinct=True),
               open_actions=Count("action_items",
-                                 filter=Q(action_items__is_done=False), distinct=True)))
+                                 filter=Q(action_items__is_done=False), distinct=True))
+          # `annotate()` adds a GROUP BY, and Django's `QuerySet.ordered` is False whenever a
+          # GROUP BY is present — so `Meta.ordering` is silently dropped and the paginator
+          # slices an unordered set. Re-state the model's ordering explicitly.
+          .order_by("-scheduled_start", "-id"))
     return crud_list(
         request, qs, "projects/collaboration/meeting/list.html",
         search_fields=["number", "title", "location"],
