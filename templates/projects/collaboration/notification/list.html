@@ -97,12 +97,20 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'projects:ntf_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <form method="post" action="{% url 'projects:ntf_mark_read' obj.pk %}" onsubmit="return confirm('{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %} {{ obj.number }}?');">
-                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %}"><i data-lucide="{% if obj.is_read %}mail{% else %}mail-open{% endif %}"></i></button>
-                  </form>
-                  <form method="post" action="{% url 'projects:ntf_delete' obj.pk %}" onsubmit="return confirm('Dismiss notification {{ obj.number }}? This cannot be undone.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Dismiss"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% comment %}
+                    Read and dismiss are the OWNER's controls. The two verbs are scoped to the caller
+                    (a teammate's row is a 404), so offering them here on someone else's row would
+                    render a button that fails. Any member may still read the register — the inbox is
+                    workspace-visible, only the delivery state is personal.
+                  {% endcomment %}
+                  {% if obj.recipient_id == request.user.pk %}
+                    <form method="post" action="{% url 'projects:ntf_mark_read' obj.pk %}" onsubmit="return confirm('{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %} {{ obj.number }}?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_read %}Mark unread{% else %}Mark read{% endif %}"><i data-lucide="{% if obj.is_read %}mail{% else %}mail-open{% endif %}"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'projects:ntf_delete' obj.pk %}" onsubmit="return confirm('Dismiss notification {{ obj.number }}? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Dismiss"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
