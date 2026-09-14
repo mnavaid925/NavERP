@@ -5057,3 +5057,518 @@ def taskwork_block_active_b(db, planning_project_b, admin_b):
     """Tenant B's OPEN block — 404 as tenant A on its detail page."""
     task = _planning_task(planning_project_b.tenant, planning_project_b, status="in_progress")
     return _taskwork_block(planning_project_b.tenant, task, blocked_by=admin_b)
+
+
+# ==================================================================================================
+# 7.9 Collaboration & Communication (subslug ``collab``) — fixtures for
+# ``test_collab_{models,forms,views,security}.py``.
+#
+# Reuses the same root-conftest actors as every other sub-module in this package. Every helper is
+# ``_collab_*`` and every fixture ``collab_*``, so this lane cannot shadow 7.1-7.8's names.
+#
+# 7.9 invents no project, no task and no document store: the channels hang off the existing
+# ``planning_project_a`` / ``planning_project_b``, the action items point at 7.2's work packages,
+# and the shares reuse a ``core.Document`` — 7.10 owns the repository.
+#
+# No helper here calls ``write_audit_log``: an ``AuditLog`` row is written only when a VIEW posts a
+# verb, so within a test the audit table is empty unless the test itself drove a verb. That is what
+# lets the feed's ``counts["audit"]`` be pinned at 0.
+# ==================================================================================================
+
+def _collab_today():
+    """Today on the same basis the views use (``timezone.localdate()``, L16)."""
+    return timezone.localdate()
+
+
+def _collab_document(tenant, **overrides):
+    """A ``core.Document`` [no number] — the artifact a ``DocumentShare`` points at.
+
+    ``file`` is a bare storage path: ``FileField`` accepts a string without touching the
+    filesystem, so no upload is needed (the 7.1 ``projectinitiation_document_a`` idiom).
+    """
+    from apps.core.models import Document
+    fields = dict(
+        tenant=tenant,
+        name="Project status pack.pdf",
+        file="documents/2026/09/status-pack.pdf",
+        classification="internal",
+    )
+    fields.update(overrides)
+    return Document.objects.create(**fields)
+
+
+def _collab_channel(tenant, project, **overrides):
+    """A ``Channel`` [CHN-] on ``project``; open ``discussion`` unless told otherwise.
+
+    The name is sequenced per project because ``unique_together`` is ``(tenant, project, name)`` —
+    two default-named channels on one project would otherwise collide.
+    """
+    from apps.projects.models import Channel
+    seq = Channel.objects.filter(project=project).count() + 1
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        name=f"Channel {seq:02d}",
+        topic="Coordination.",
+        kind="discussion",
+        is_archived=False,
+    )
+    fields.update(overrides)
+    obj = Channel(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _collab_message(tenant, channel, **overrides):
+    """A ``ChannelMessage`` [CHM-] in ``channel``; a root unless ``parent`` is given."""
+    from apps.projects.models import ChannelMessage
+    fields = dict(
+        tenant=tenant,
+        channel=channel,
+        parent=None,
+        body="Standing update.",
+    )
+    fields.update(overrides)
+    obj = ChannelMessage(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _collab_share(tenant, project, document, **overrides):
+    """A ``DocumentShare`` [DSH-] of ``document`` into ``project``; a plain active view share."""
+    from apps.projects.models import DocumentShare
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        document=document,
+        channel=None,
+        access_level="view",
+        shared_with=None,
+        note="",
+        is_active=True,
+    )
+    fields.update(overrides)
+    obj = DocumentShare(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _collab_meeting(tenant, project, **overrides):
+    """A ``Meeting`` [MTG-] on ``project``; scheduled, one hour, starting tomorrow."""
+    from apps.projects.models import Meeting
+    start = timezone.now() + datetime.timedelta(days=1)
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        title="Delivery standup",
+        kind="standup",
+        scheduled_start=start,
+        scheduled_end=start + datetime.timedelta(hours=1),
+        location="",
+        mode="virtual",
+        recurrence="none",
+        status="scheduled",
+        minutes="",
+    )
+    fields.update(overrides)
+    obj = Meeting(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _collab_agenda(tenant, meeting, **overrides):
+    """A ``MeetingAgendaItem`` [AGI-] on ``meeting``, sequenced in insertion order."""
+    from apps.projects.models import MeetingAgendaItem
+    seq = MeetingAgendaItem.objects.filter(meeting=meeting).count() + 1
+    fields = dict(
+        tenant=tenant,
+        meeting=meeting,
+        title=f"Agenda item {seq:02d}",
+        presenter=None,
+        duration_minutes=10,
+        sequence=seq,
+        is_covered=False,
+    )
+    fields.update(overrides)
+    obj = MeetingAgendaItem(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _collab_action(tenant, meeting, **overrides):
+    """A ``MeetingActionItem`` [MAIT-] on ``meeting``; open, unassigned, no due date."""
+    from apps.projects.models import MeetingActionItem
+    fields = dict(
+        tenant=tenant,
+        meeting=meeting,
+        description="Chase the vendor for the sandbox credentials.",
+        assignee=None,
+        due_date=None,
+        task=None,
+        is_done=False,
+    )
+    fields.update(overrides)
+    obj = MeetingActionItem(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _collab_notification(tenant, project, recipient, **overrides):
+    """A ``ProjectNotification`` [NTF-] delivered to ``recipient``.
+
+    Rows are minted by triggers in production (mentions, the seeder, and later 7.17's rule engine);
+    the fixtures mint them directly, exactly the way the seeder does.
+    """
+    from apps.projects.models import ProjectNotification
+    fields = dict(
+        tenant=tenant,
+        project=project,
+        recipient=recipient,
+        kind="system",
+        title="Workspace notice",
+        body="",
+        channel=None,
+        message=None,
+        task=None,
+        meeting=None,
+        triggered_by=None,
+        is_read=False,
+    )
+    fields.update(overrides)
+    obj = ProjectNotification(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+# --- tenant A — the subjects ---------------------------------------------------------------------
+
+@pytest.fixture
+def collab_document_a(db, tenant_a):
+    """Tenant A's shared artifact."""
+    return _collab_document(tenant_a)
+
+
+@pytest.fixture
+def collab_channel_a(db, planning_project_a):
+    """An open discussion channel."""
+    return _collab_channel(planning_project_a.tenant, planning_project_a)
+
+
+@pytest.fixture
+def collab_channel_archived_a(db, planning_project_a, admin_user):
+    """An ARCHIVED channel with the full verb-written trail — the unarchive subject."""
+    return _collab_channel(
+        planning_project_a.tenant, planning_project_a, name="Archived channel",
+        is_archived=True, archived_by=admin_user,
+        archived_at=timezone.now() - datetime.timedelta(days=7))
+
+
+@pytest.fixture
+def collab_thread_root_a(db, collab_channel_a):
+    """A root carrying TWO replies — the thread tree, and the I1 guard's subject."""
+    tenant = collab_channel_a.tenant
+    root = _collab_message(tenant, collab_channel_a, body="Kicking off this week.")
+    _collab_message(tenant, collab_channel_a, parent=root, body="Credentials are pending.")
+    _collab_message(tenant, collab_channel_a, parent=root, body="Parked until they land.")
+    return root
+
+
+@pytest.fixture
+def collab_reply_a(db, collab_thread_root_a):
+    """One reply off the two-reply thread."""
+    return collab_thread_root_a.replies.order_by("id").first()
+
+
+@pytest.fixture
+def collab_message_bare_a(db, collab_channel_a):
+    """A root with NO replies — the thread-empty state, and the legitimate channel-move subject."""
+    return _collab_message(collab_channel_a.tenant, collab_channel_a, body="A bare root.")
+
+
+@pytest.fixture
+def collab_share_edit_free_a(db, planning_project_a, collab_document_a):
+    """`edit` + active + UNCLAIMED — the state `dsh_claim` accepts."""
+    return _collab_share(planning_project_a.tenant, planning_project_a, collab_document_a,
+                         access_level="edit")
+
+
+@pytest.fixture
+def collab_share_edit_claimed_a(db, planning_project_a, collab_document_a, admin_user):
+    """`edit` + active + already claimed by the admin — the "another holder" refusal subject."""
+    return _collab_share(
+        planning_project_a.tenant, planning_project_a, collab_document_a,
+        access_level="edit", claimed_by=admin_user, claimed_at=timezone.now())
+
+
+@pytest.fixture
+def collab_share_view_a(db, planning_project_a, collab_document_a):
+    """`view` only — `dsh_claim` must refuse it."""
+    return _collab_share(planning_project_a.tenant, planning_project_a, collab_document_a,
+                         access_level="view")
+
+
+@pytest.fixture
+def collab_share_revoked_a(db, planning_project_a, collab_document_a, admin_user):
+    """REVOKED with the full trail — the restore subject."""
+    return _collab_share(
+        planning_project_a.tenant, planning_project_a, collab_document_a,
+        access_level="edit", is_active=False, revoked_by=admin_user,
+        revoked_at=timezone.now() - datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def collab_meeting_scheduled_a(db, planning_project_a):
+    """`scheduled` — the state `mtg_start` accepts."""
+    return _collab_meeting(planning_project_a.tenant, planning_project_a)
+
+
+@pytest.fixture
+def collab_meeting_in_progress_a(db, planning_project_a):
+    """`in_progress` with its actual start — the state `mtg_complete` accepts."""
+    return _collab_meeting(
+        planning_project_a.tenant, planning_project_a, title="Running meeting",
+        status="in_progress", actual_start=timezone.now() - datetime.timedelta(minutes=20))
+
+
+@pytest.fixture
+def collab_meeting_completed_a(db, planning_project_a, admin_user):
+    """`completed` with minutes and both actual stamps — the frozen-evidence subject."""
+    return _collab_meeting(
+        planning_project_a.tenant, planning_project_a, title="Completed meeting",
+        status="completed",
+        actual_start=timezone.now() - datetime.timedelta(days=2),
+        actual_end=timezone.now() - datetime.timedelta(days=2) + datetime.timedelta(hours=1),
+        minutes="Decisions recorded.", minutes_by=admin_user,
+        minutes_at=timezone.now() - datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def collab_meeting_cancelled_a(db, planning_project_a):
+    """`cancelled` — terminal; `mtg_cancel` must refuse it."""
+    return _collab_meeting(planning_project_a.tenant, planning_project_a,
+                           title="Cancelled meeting", status="cancelled")
+
+
+@pytest.fixture
+def collab_agenda_covered_a(db, collab_meeting_completed_a, admin_user):
+    """A COVERED agenda item with its trail — the uncover subject."""
+    return _collab_agenda(
+        collab_meeting_completed_a.tenant, collab_meeting_completed_a,
+        title="Covered topic", is_covered=True, covered_by=admin_user,
+        covered_at=timezone.now() - datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def collab_agenda_open_a(db, collab_meeting_completed_a):
+    """An UNCOVERED agenda item — the cover subject."""
+    return _collab_agenda(collab_meeting_completed_a.tenant, collab_meeting_completed_a,
+                          title="Open topic")
+
+
+@pytest.fixture
+def collab_action_open_a(db, collab_meeting_completed_a):
+    """An open action item with NO due date — `is_overdue` must be False."""
+    return _collab_action(collab_meeting_completed_a.tenant, collab_meeting_completed_a)
+
+
+@pytest.fixture
+def collab_action_done_a(db, collab_meeting_completed_a, admin_user):
+    """A DONE action item with its trail — the reopen subject."""
+    return _collab_action(
+        collab_meeting_completed_a.tenant, collab_meeting_completed_a,
+        description="Closed action.", is_done=True, done_by=admin_user,
+        done_at=timezone.now() - datetime.timedelta(days=1))
+
+
+@pytest.fixture
+def collab_action_overdue_a(db, collab_meeting_completed_a):
+    """An OPEN action item three days past due — `is_overdue` must be True."""
+    return _collab_action(
+        collab_meeting_completed_a.tenant, collab_meeting_completed_a,
+        description="Overdue action.", due_date=_collab_today() - datetime.timedelta(days=3))
+
+
+@pytest.fixture
+def collab_notification_unread_a(db, planning_project_a, admin_user):
+    """The admin's own UNREAD row — the mark-read subject."""
+    return _collab_notification(planning_project_a.tenant, planning_project_a, admin_user)
+
+
+@pytest.fixture
+def collab_notification_read_a(db, planning_project_a, admin_user):
+    """The admin's own READ row — the toggle-back subject."""
+    return _collab_notification(
+        planning_project_a.tenant, planning_project_a, admin_user,
+        title="Already seen", is_read=True, read_at=timezone.now())
+
+
+@pytest.fixture
+def collab_notification_other_a(db, planning_project_a, member_user):
+    """A row delivered to ANOTHER member — the I8 subject: 404 for the admin."""
+    return _collab_notification(planning_project_a.tenant, planning_project_a, member_user,
+                                title="Someone else's notice")
+
+
+@pytest.fixture
+def collab_figures_a(db, planning_project_a, admin_user):
+    """The closed figure graph whose numbers the tests pin by hand.
+
+    Two channels (2 messages / 1 message), one meeting (3 agenda items, 2 covered; 3 action items,
+    2 open with one overdue), three shares (2 active, 1 revoked) and four notifications to the
+    admin (3 unread, 1 read). Returns a dict of the built rows so a test can read the objects it
+    is asserting about without re-querying by guesswork.
+    """
+    from apps.projects.models import ProjectNotification
+    project = planning_project_a
+    tenant = project.tenant
+
+    ch1 = _collab_channel(tenant, project, name="Figures")
+    ch2 = _collab_channel(tenant, project, name="Figures two")
+    root = _collab_message(tenant, ch1, body="Root of the figure thread.")
+    reply = _collab_message(tenant, ch1, parent=root, body="The one reply.")
+    bare = _collab_message(tenant, ch2, body="A bare figure root.")
+
+    meeting = _collab_meeting(tenant, project, title="Figures review")
+    agenda = [_collab_agenda(tenant, meeting, title=f"Figures agenda {i}") for i in (1, 2, 3)]
+    agenda[0].is_covered = True
+    agenda[0].covered_by = admin_user
+    agenda[0].covered_at = timezone.now()
+    agenda[0].save(update_fields=["is_covered", "covered_by", "covered_at", "updated_at"])
+    agenda[1].is_covered = True
+    agenda[1].covered_by = admin_user
+    agenda[1].covered_at = timezone.now()
+    agenda[1].save(update_fields=["is_covered", "covered_by", "covered_at", "updated_at"])
+
+    done_action = _collab_action(tenant, meeting, description="Done figure action",
+                                 is_done=True, done_by=admin_user, done_at=timezone.now())
+    open_action = _collab_action(tenant, meeting, description="Open figure action")
+    overdue_action = _collab_action(tenant, meeting, description="Overdue figure action",
+                                    due_date=_collab_today() - datetime.timedelta(days=2))
+
+    document = _collab_document(tenant, name="Figures pack.pdf")
+    shares = [
+        _collab_share(tenant, project, document, access_level="edit"),
+        _collab_share(tenant, project, document, access_level="view"),
+        _collab_share(tenant, project, document, access_level="view", is_active=False,
+                      revoked_by=admin_user, revoked_at=timezone.now()),
+    ]
+
+    notifications = [
+        _collab_notification(tenant, project, admin_user, title=f"Figure notice {i}",
+                             is_read=(i == 4))
+        for i in (1, 2, 3, 4)
+    ]
+    for row in notifications:
+        if row.is_read:
+            row.read_at = timezone.now()
+            row.save(update_fields=["read_at", "updated_at"])
+
+    return {
+        "project": project, "channels": [ch1, ch2], "root": root, "reply": reply, "bare": bare,
+        "meeting": meeting, "agenda": agenda, "actions": [done_action, open_action, overdue_action],
+        "document": document, "shares": shares, "notifications": notifications,
+        "unread_count": ProjectNotification.objects.filter(
+            tenant=tenant, recipient=admin_user, is_read=False).count(),
+    }
+
+
+# --- clients -------------------------------------------------------------------------------------
+
+@pytest.fixture
+def collab_admin_client(db, client_a):
+    """Tenant A admin — the actor every verb accepts."""
+    return client_a
+
+
+@pytest.fixture
+def collab_member_client(db, member_client):
+    """Tenant A member — member-level per contract L27, so verbs are allowed, not 403."""
+    return member_client
+
+
+@pytest.fixture
+def collab_anon_client(db):
+    """No session — every route must redirect to the login page."""
+    return Client()
+
+
+@pytest.fixture
+def collab_tenantless_user(db):
+    """A user with NO tenant — the tenant-None guard subject."""
+    from django.contrib.auth import get_user_model
+    return get_user_model().objects.create_user(
+        username="collab_tenantless", email="collab_tenantless@example.com",
+        password="password", tenant=None)
+
+
+@pytest.fixture
+def collab_tenantless_client(db, collab_tenantless_user):
+    c = Client()
+    c.force_login(collab_tenantless_user)
+    return c
+
+
+@pytest.fixture
+def collab_csrf_client(db, admin_user):
+    """CSRF-enforcing client for the token assertions."""
+    return Client(enforce_csrf_checks=True)
+
+
+# --- tenant B counterparts — the IDOR subjects (404 as tenant A) ---------------------------------
+
+@pytest.fixture
+def collab_document_b(db, tenant_b):
+    """Tenant B's artifact — the crafted-POST value for `DocumentShareForm.document`."""
+    return _collab_document(tenant_b, name="Globex status pack.pdf",
+                            file="documents/2026/09/globex-status-pack.pdf")
+
+
+@pytest.fixture
+def collab_channel_b(db, planning_project_b):
+    """Tenant B's channel — 404 as tenant A on every channel route."""
+    return _collab_channel(planning_project_b.tenant, planning_project_b, name="Globex channel")
+
+
+@pytest.fixture
+def collab_message_b(db, collab_channel_b):
+    """Tenant B's message — 404 as tenant A on edit/delete."""
+    return _collab_message(collab_channel_b.tenant, collab_channel_b, body="Globex note.")
+
+
+@pytest.fixture
+def collab_share_b(db, planning_project_b, collab_document_b):
+    """Tenant B's share — 404 as tenant A on every share route."""
+    return _collab_share(planning_project_b.tenant, planning_project_b, collab_document_b,
+                         access_level="edit")
+
+
+@pytest.fixture
+def collab_meeting_b(db, planning_project_b):
+    """Tenant B's meeting — 404 as tenant A on every meeting route."""
+    return _collab_meeting(planning_project_b.tenant, planning_project_b, title="Globex meeting")
+
+
+@pytest.fixture
+def collab_agenda_b(db, collab_meeting_b):
+    """Tenant B's agenda item — 404 as tenant A on edit/delete/cover."""
+    return _collab_agenda(collab_meeting_b.tenant, collab_meeting_b, title="Globex agenda")
+
+
+@pytest.fixture
+def collab_action_b(db, collab_meeting_b):
+    """Tenant B's action item — 404 as tenant A on edit/delete/toggle."""
+    return _collab_action(collab_meeting_b.tenant, collab_meeting_b, description="Globex action.")
+
+
+@pytest.fixture
+def collab_notification_b(db, planning_project_b, admin_b):
+    """Tenant B's notification — 404 as tenant A on detail/read/delete."""
+    return _collab_notification(planning_project_b.tenant, planning_project_b, admin_b,
+                                title="Globex notice")
