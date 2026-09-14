@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Shared Document Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Shared Document Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><span>Shared Documents</span></div>
+      <p class="text-muted">One row per share — who in this project may do what with a document already stored in the workspace. The file and its version belong to the document store; this register records the sharing, the access level and who is editing right now.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:dsh_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Share a Document</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, note or document name…">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="channel" aria-label="Channel" class="form-select">
+            <option value="">Any channel</option>
+            {% for c in channels %}
+              <option value="{{ c.pk }}" {% if request.GET.channel == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} — {{ c.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="access_level" aria-label="Access level" class="form-select">
+            <option value="">Any access</option>
+            {% for value, label in access_choices %}
+              <option value="{{ value }}" {% if request.GET.access_level == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Share state" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Live</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Revoked</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:dsh_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Share</th><th>Document</th><th>Project</th><th>Channel</th><th>Access</th><th>Shared with</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:dsh_detail' obj.pk %}">{{ obj.number }}</a></td>
+              <td>{{ obj.document.name }}<div class="text-muted">v{{ obj.document.version }} · {{ obj.document.get_classification_display }}</div></td>
+              <td><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a></td>
+              <td>{% if obj.channel %}<a href="{% url 'projects:chn_detail' obj.channel_id %}">{{ obj.channel.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.access_level == 'edit' %}<span class="badge badge-green">Can edit</span>
+                {% elif obj.access_level == 'comment' %}<span class="badge badge-info">Comment</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_access_level_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.shared_with %}{{ obj.shared_with.get_full_name|default:obj.shared_with.email }}{% else %}Whole team{% endif %}</td>
+              <td>
+                {% if obj.is_revoked %}<span class="badge badge-red">Revoked</span>
+                {% elif obj.is_claimed %}<span class="badge badge-amber">Editing now</span>
+                {% else %}<span class="badge badge-green">Live</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:dsh_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:dsh_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:dsh_revoke' obj.pk %}" onsubmit="return confirm('{% if obj.is_revoked %}Restore{% else %}Revoke{% endif %} share {{ obj.number }}?{% if not obj.is_revoked %} Any edit claim on it is released too.{% endif %}');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if obj.is_revoked %}Restore{% else %}Revoke{% endif %}"><i data-lucide="{% if obj.is_revoked %}rotate-ccw{% else %}ban{% endif %}"></i></button>
+                  </form>
+                  <form method="post" action="{% url 'projects:dsh_delete' obj.pk %}" onsubmit="return confirm('Delete share {{ obj.number }}? The document itself is not deleted. This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="share-2"></i><h3>No shares match</h3><p>Share a workspace document into a project to give the team its working paper.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
