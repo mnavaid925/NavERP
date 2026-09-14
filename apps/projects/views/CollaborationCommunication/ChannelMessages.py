@@ -34,7 +34,11 @@ from apps.projects.views._helpers import owners
 def msg_list(request):
     qs = (ChannelMessage.objects.filter(tenant=request.tenant)
           .select_related("channel", "channel__project", "parent", "created_by")
-          .annotate(reply_count=Count("replies")))
+          .annotate(reply_count=Count("replies"))
+          # `annotate()` adds a GROUP BY, and Django's `QuerySet.ordered` is False whenever a
+          # GROUP BY is present — so `Meta.ordering` is silently dropped and the paginator
+          # slices an unordered set. Re-state the model's chronological ordering explicitly.
+          .order_by("channel_id", "created_at", "id"))
     return crud_list(
         request, qs, "projects/collaboration/message/list.html",
         search_fields=["number", "body"],
