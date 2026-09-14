@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:chn_list' %}">Channels</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Conversation on <a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a> · {{ message_count }} message{{ message_count|pluralize }} ({{ reply_count }} in thread{{ reply_count|pluralize }})</p>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'projects:chn_archive' obj.pk %}" onsubmit="return confirm('{% if obj.is_archived %}Reopen{% else %}Archive{% endif %} channel {{ obj.number }}?{% if not obj.is_archived %} An archived channel stays readable but stops inviting new posts.{% endif %}');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_archived %}archive-restore{% else %}archive{% endif %}"></i> {% if obj.is_archived %}Reopen{% else %}Archive{% endif %}</button>
+      </form>
+      <a href="{% url 'projects:chn_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Channel</h2>
+      {% if obj.is_archived %}<span class="badge badge-slate">Archived</span>{% else %}<span class="badge badge-green">Open</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project }}</a></dd>
+        <dt>Type</dt><dd>{% if obj.kind == 'announcement' %}<span class="badge badge-amber">Announcement</span>{% elif obj.kind == 'discussion' %}<span class="badge badge-info">Discussion</span>{% else %}<span class="badge badge-muted">{{ obj.get_kind_display }}</span>{% endif %}</dd>
+        <dt>Topic</dt><dd>{{ obj.topic|default:"—" }}</dd>
+        <dt>Archived by</dt><dd>{% if obj.archived_by %}{{ obj.archived_by.get_full_name|default:obj.archived_by.email }}{% else %}—{% endif %}</dd>
+        <dt>Archived at</dt><dd>{% if obj.archived_at %}{{ obj.archived_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd>
+      </dl>
+    </div>
+  </div>
+
+  {% comment %}
+    The composer posts to msg_create, which mints a `mention` notification for every user picked
+    in the mentions control — that is the "@mention notifications" half of this bullet, and it is
+    why a mention is a real delivery row rather than only a highlight.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2>Post a message</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'projects:msg_create' %}" novalidate>
+        {% csrf_token %}
+        {% for e in message_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-group">
+          <label class="form-label" for="{{ message_form.body.id_for_label }}">Message <span class="req">*</span></label>
+          {{ message_form.body }}
+          {% for e in message_form.body.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ message_form.mentions.id_for_label }}">Mention</label>
+          {{ message_form.mentions }}
+          <div class="form-help">Each mentioned teammate gets a notification. Hold Ctrl (or Cmd) to pick more than one.</div>
+          {% for e in message_form.mentions.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Post</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Discussion</h2></div>
+    <div class="card-body">
+      {% for thread in threads %}
+        <div class="collab-thread">
+          <div class="collab-msg">
+            <div class="collab-msg-head">
+              <span class="fw-600">{% if thread.root.created_by %}{{ thread.root.created_by.get_full_name|default:thread.root.created_by.email }}{% else %}—{% endif %}</span>
+              <span class="text-muted">{{ thread.root.created_at|date:"M d, Y H:i" }}</span>
+              <span class="badge badge-muted">{{ thread.root.number }}</span>
+              {% if thread.root.is_edited %}<span class="badge badge-amber">Edited</span>{% endif %}
+            </div>
+            <div class="collab-msg-body">{{ thread.root.body|linebreaksbr }}</div>
+            <div class="table-actions">
+              <a href="{% url 'projects:msg_edit' thread.root.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'projects:msg_delete' thread.root.pk %}" onsubmit="return confirm('Delete message {{ thread.root.number }}? Its replies go with it.');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </div>
+          </div>
+          {% for reply in thread.replies %}
+            <div class="collab-msg collab-reply">
+              <div class="collab-msg-head">
+                <span class="fw-600">{% if reply.created_by %}{{ reply.created_by.get_full_name|default:reply.created_by.email }}{% else %}—{% endif %}</span>
+                <span class="text-muted">{{ reply.created_at|date:"M d, Y H:i" }}</span>
+                <span class="badge badge-muted">{{ reply.number }}</span>
+                {% if reply.is_edited %}<span class="badge badge-amber">Edited</span>{% endif %}
+              </div>
+              <div class="collab-msg-body">{{ reply.body|linebreaksbr }}</div>
+              <div class="table-actions">
+                <a href="{% url 'projects:msg_edit' reply.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'projects:msg_delete' reply.pk %}" onsubmit="return confirm('Delete message {{ reply.number }}?');">
+                  {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+          <div class="collab-reply-form">
+            <a href="{% url 'projects:msg_create' %}?channel={{ obj.pk }}&amp;parent={{ thread.root.pk }}" class="btn btn-outline"><i data-lucide="corner-down-right"></i> Reply</a>
+          </div>
+        </div>
+      {% empty %}
+        <div class="empty-state"><i data-lucide="messages-square"></i><h3>No messages yet</h3><p>Post the first message above — a thread reply is a message whose parent is set, one level deep.</p></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Pinned documents</h2><a href="{% url 'projects:dsh_create' %}?project={{ obj.project_id }}&amp;channel={{ obj.pk }}" class="btn btn-outline"><i data-lucide="share-2"></i> Share a document</a></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Share</th><th>Document</th><th>Access</th><th>Shared with</th><th>State</th></tr></thead>
+        <tbody>
+          {% for s in shares %}
+            <tr>
+              <td><a href="{% url 'projects:dsh_detail' s.pk %}">{{ s.number }}</a></td>
+              <td class="fw-600">{{ s.document.name }}<div class="text-muted">v{{ s.document.version }}</div></td>
+              <td>
+                {% if s.access_level == 'edit' %}<span class="badge badge-green">Can edit</span>
+                {% elif s.access_level == 'comment' %}<span class="badge badge-info">Comment</span>
+                {% else %}<span class="badge badge-muted">View only</span>{% endif %}
+              </td>
+              <td>{% if s.shared_with %}{{ s.shared_with.get_full_name|default:s.shared_with.email }}{% else %}Whole team{% endif %}</td>
+              <td>
+                {% if s.is_claimed %}<span class="badge badge-amber">Editing now</span>
+                {% else %}<span class="badge badge-green">Open</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="folder-open"></i><h3>Nothing pinned</h3><p>Share a document into this channel to give the conversation its working paper.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:chn_list' %}" class="btn btn-outline">Back to Channel Register</a>
+    <form method="post" action="{% url 'projects:chn_delete' obj.pk %}" onsubmit="return confirm('Delete channel {{ obj.number }}? Its messages and pinned documents go with it. This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+
+  <style>
+    .collab-thread { border-bottom: 1px solid var(--border); padding: 0.75rem 0; }
+    .collab-thread:last-child { border-bottom: none; }
+    .collab-msg { padding: 0.5rem 0; }
+    .collab-reply { margin-left: 2rem; border-left: 2px solid var(--border); padding-left: 0.75rem; }
+    .collab-msg-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .collab-msg-body { margin: 0.25rem 0; }
+    .collab-reply-form { margin-left: 2rem; }
+  </style>
+{% endblock %}
