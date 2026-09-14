@@ -53,14 +53,19 @@ def _unfinished_predecessor_numbers(obj):
     return numbers
 
 
-def _blocker_source(obj):
+def _blocker_source(obj, active_block=None):
     """The human-readable blocker source for a refusal message — the active ``TaskBlock``
     number when a manual block stands (one open blocker at a time, so it names THE row), the
-    unfinished FS/SS predecessor numbers when the dependency network holds the task."""
-    if obj.is_manually_blocked:
-        block = obj.blocks.filter(unblocked_at__isnull=True).first()
-        if block is not None:
-            return f"block {block.number}"
+    unfinished FS/SS predecessor numbers when the dependency network holds the task.
+
+    ``active_block`` lets a caller that has ALREADY fetched the open row pass it in, so naming
+    the blocker costs no second query (review I9 — the bulk loop fetches it once per row and
+    reuses it for both the gate and this message).
+    """
+    if active_block is None:
+        active_block = obj.blocks.filter(unblocked_at__isnull=True).first()
+    if active_block is not None:
+        return f"block {active_block.number}"
     numbers = _unfinished_predecessor_numbers(obj)
     if numbers:
         return "unfinished predecessor{} {}".format(
@@ -207,7 +212,10 @@ def tsk_unblock(request, pk):
         if block is None:
             messages.info(request, f"Task {locked.number} has no active block to clear.")
             return redirect("projects:tsk_detail", pk=locked.pk)
-        previous = "active" if block.unblocked_at is None else "resolved"  # captured BEFORE mutating
+        # Captured BEFORE mutating. The row came off a `filter(unblocked_at__isnull=True)`
+        # queryset, so it is active by construction — the old `else "resolved"` branch was
+        # unreachable (review M15).
+        previous = "active"
         block.unblocked_by = request.user
         block.unblocked_at = timezone.now()
         block.resolution_note = form.cleaned_data["resolution_note"]
@@ -224,6 +232,9 @@ def tsk_unblock(request, pk):
 #: ``percent_complete=100``). ``planned``/``cancelled`` have no verb — they are the planning
 #: write, applied directly like ``TaskForm``'s own status field.
 _VERB_GATED_STATUSES = ("in_progress", "done")
+#: The bulk POST accepts an unbounded id list; beyond this the batch is truncated and the user
+#: is told so (review I9 — one request must not walk the whole workspace row by row).
+_BULK_CAP = 500
 
 
 @login_required
@@ -263,16 +274,26 @@ def tsk_bulk_update(request):
     if not task_ids:
         messages.info(request, "No tasks were selected.")
         return redirect("projects:tsk_list")
+    # A POST can carry an unbounded id list; cap it so one request cannot walk the whole
+    # workspace row by row (review I9). The note tells the truth about what was applied.
+    truncated = len(task_ids) > _BULK_CAP
+    if truncated:
+        task_ids = task_ids[:_BULK_CAP]
+
+    # ONE tenant-scoped fetch for the whole batch — a forged or stale id simply resolves to
+    # nothing and never writes (the single-verb guarantee, kept without a query per row).
+    by_pk = {obj.pk: obj for obj in ProjectTask.objects.filter(
+        tenant=request.tenant, pk__in=task_ids)}
 
     updated = refused = 0
     for task_id in task_ids:
-        obj = ProjectTask.objects.filter(tenant=request.tenant, pk=task_id).first()
+        obj = by_pk.get(task_id)
         if obj is None:
             refused += 1
             continue
 
         previous_status = obj.status
-        previous_assignee = obj.assignee
+        previous_assignee_id = obj.assignee_id  # the id only — the User FK is loaded lazily
         previous_priority = obj.priority
         status_changed = bool(status_value) and status_value != previous_status
         assignee_changed = assignee is not None and obj.assignee_id != assignee.pk
@@ -280,10 +301,12 @@ def tsk_bulk_update(request):
 
         # -- the status transition, gated row-by-row like the single verbs -----------------------
         if status_changed and status_value in _VERB_GATED_STATUSES:
-            if obj.is_blocked:
+            # One fetch of the open row serves BOTH the gate and the refusal message (review I9).
+            active_block = obj.blocks.filter(unblocked_at__isnull=True).first()
+            if active_block is not None or obj.is_dependency_blocked:
                 refused += 1
                 messages.error(request, f"Task {obj.number} skipped — blocked by "
-                                        f"{_blocker_source(obj)}.")
+                                        f"{_blocker_source(obj, active_block)}.")
                 continue
             if status_value == "in_progress" and previous_status != "planned":
                 refused += 1
@@ -324,6 +347,11 @@ def tsk_bulk_update(request):
                             changes={"verb": "bulk_update", "field": "status",
                                      "from": previous_status, "to": status_value})
         if assignee_changed:
+            # The old User is loaded ONLY here — the audit's `from` is the one place the FK is
+            # needed, so the untouched rows never pay for it (review I9).
+            previous_assignee = (
+                get_user_model().objects.filter(pk=previous_assignee_id).first()
+                if previous_assignee_id else None)
             write_audit_log(request.user, obj, "update",
                             changes={"verb": "bulk_update", "field": "assignee",
                                      "from": str(previous_assignee) if previous_assignee else None,
@@ -339,4 +367,7 @@ def tsk_bulk_update(request):
                                   + (f"; {refused} skipped." if refused else "."))
     elif refused:
         messages.error(request, f"No tasks updated — {refused} skipped.")
+    if truncated:
+        messages.info(request, f"Only the first {_BULK_CAP} selected task(s) were considered — "
+                               f"re-run the bulk update for the remainder.")
     return redirect("projects:tsk_list")
