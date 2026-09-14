@@ -32,7 +32,12 @@ from apps.projects.views._helpers import projects
 def chn_list(request):
     qs = (Channel.objects.filter(tenant=request.tenant)
           .select_related("project")
-          .annotate(message_count=Count("messages")))
+          .annotate(message_count=Count("messages"))
+          # `annotate()` puts a GROUP BY on the query, and Django's `QuerySet.ordered` is
+          # False whenever a GROUP BY is present — so `Meta.ordering` is silently ignored and
+          # the paginator would slice an unordered set (a row can land on two pages or none,
+          # and Django raises UnorderedObjectListWarning). Re-state the model's ordering here.
+          .order_by("project_id", "name", "id"))
     return crud_list(
         request, qs, "projects/collaboration/channel/list.html",
         search_fields=["number", "name", "topic"],
