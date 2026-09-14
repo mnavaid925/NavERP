@@ -33,7 +33,8 @@ description: >-
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7.** 7.8–7.19 are roadmap (a parallel build is
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8.** 7.9–7.19 are roadmap (a parallel
+build may be
 landing them — always
 check `apps/projects/models/` first). Do
 not assume a model exists because NavERP.md lists the feature — check first.
@@ -553,6 +554,108 @@ Register indexes: `req_tnt_status_idx`, `req_tnt_project_idx`, `sci_tnt_project_
 build in migration `0007`; `violated` was added by `0010_alter_scopeitem_status` (chained onto the
 7.6 leaf `0009_...`, the L53 discipline — read the disk leaf, never assume the number).
 
+## 7.8 Task & Work Management — `TaskWorkManagement/`, template slug `taskwork`
+
+Contract: `.claude/tasks/contract-projects-7.8.md` (§9 carries the post-review amendments).
+Review: `.claude/tasks/review-projects-7.8.md`. Tests pinned in
+`.claude/tasks/test-contract-projects-7.8.md`. Scope: the EXECUTION layer — how the plan is
+actually worked: who is doing it, how urgent it is, how far along, what is blocking it, and the
+checklist of the work inside a task.
+
+**The defining ruling is that 7.8 EXTENDS `ProjectTask` IN PLACE — there is no second task
+table.** The six execution fields (`assignee`, `priority`, `moscow`, `is_urgent`, `is_important`,
+`percent_complete`) and the two verb-written stamps (`actual_start`, `actual_end`) live on 7.2's
+row; sub-tasks already work through its `parent` self-FK. A `WorkTask`/`TaskExecution` table
+would be the L29/L36 bug. `owner` stays the accountable manager, `assignee` is the doer, and team
+bookings remain 7.3's `ResourceAllocation`.
+
+Boundaries ruled at build time: the WBS is **7.2's** (7.8 only adds columns to it); team capacity
+is **7.3's**; money is **7.4's** (there is no cost column here); risks are **7.5's**; the sprint
+cadence is **7.13's** (the board is continuous flow, not scrum); WIP-limit VALUES are **7.19**
+master data (the board counts and badges ship, the limits do not); auto-rescheduling and resource
+levelling are **7.16/7.17** (7.8 flags conflicts, it never moves dates).
+
+### `TaskChecklistItem` [TCL-] — the checklist inside a task
+`task` CASCADE, `label`, `sequence`, `is_done` + `done_by`/`done_at`. **The tick is the POST-only
+`tcl_check` toggle and the ONLY writer** of those three — `is_done`/`done_by`/`done_at` are on no
+form (the `TaskChecklistItemForm` field list is `["task", "label", "sequence"]`). One writer per
+direction: the same verb ticks and un-ticks, clearing the stamps on the way back. Indexes
+`tcl_tnt_task_idx`, `tcl_tnt_done_idx`.
+
+### `TaskBlock` [TBK-] — the manual-blocker evidence row
+`reason` REQUIRED and `unblock_criteria` REQUIRED (a block with no stated reason or no exit is
+not evidence), plus the verb-written trail `blocked_by`/`blocked_at`/`unblocked_by`/
+`unblocked_at`/`resolution_note`. **`is_active` is `unblocked_at is None`** — derived, never a
+column. The row is minted ONLY by `tsk_block` and closed exactly once by `tsk_unblock`; there is
+no ModelForm and the admin refuses add/delete (M4) because an evidence row with no verb behind it
+is not evidence. One open blocker at a time, so `is_manually_blocked` always names THE row.
+Indexes `tbk_tnt_task_idx`, `tbk_tnt_unblocked_idx`.
+
+**"Blocked" is DERIVED from two independent halves (Ruling 3):** `is_dependency_blocked` walks
+`predecessor_links` (an unfinished FS predecessor holds the finish; an un-started SS predecessor
+holds the start; FF/SF never block) and `is_manually_blocked` reads the open TBK row.
+`is_blocked` is their OR — **never a stored boolean** (a stored one goes stale and has no
+evidence trail).
+
+### The in-place execution extension on `ProjectTask`
+`priority` low/medium/high/critical; **`moscow` is NULLABLE** (must/should/could/wont — `None` is
+the board's "Unclassified" bucket and the priority page's unclassified group, so nullability is
+load-bearing); `is_urgent`/`is_important` feed the derived `eisenhower_quadrant`
+(do_first/schedule/delegate/eliminate); `percent_complete` is the attestation and
+`actual_start`/`actual_end` are `editable=False` (verb-written only). Indexes
+`tsk_tnt_assignee_idx`, `tsk_tnt_priority_idx`.
+
+### 7.8 verbs — all `@require_POST`; GET answers 405
+
+| Verb | Gate | Requires |
+|---|---|---|
+| `tsk_start` | login | `planned` → in_progress; refuses while blocked; stamps `actual_start` once |
+| `tsk_complete` | login | `in_progress` → done; refuses while blocked; stamps `actual_end` + `percent_complete=100` |
+| `tsk_block` | login | **refuses terminal statuses** (M8) and an already-open block; mints the TBK row |
+| `tsk_unblock` | login | an OPEN block only; writes the unblock trail exactly once |
+| `tsk_bulk_update` | login | status/assignee/priority over the multi-selected ids, PER-ROW gating + one audit entry per applied field |
+| `tcl_check` | login | toggles the item's tick + stamps (the only writer) |
+| `tsk_execute` | login | the one GET+POST route — the six execution fields via `TaskExecutionForm` |
+
+**`tsk_block` refuses terminal work** (`done`/`cancelled`) — a finished task has nothing left to
+hold — and the check is **re-tested inside the `select_for_update` block** alongside the
+one-open-blocker re-test, so a concurrent complete/cancel cannot slip a block past the gate.
+`tsk_bulk_update` mirrors both rules row-by-row: a transition to a terminal status is refused for
+any row with an open block, so a block can never outlive the work it was holding.
+
+**`tsk_bulk_update` is bounded and cheap (review I9).** The POST accepts at most
+`_BULK_CAP = 500` ids and tells the user when it truncated; every id resolves through ONE
+tenant-scoped `pk__in` fetch (a forged id simply is not in the map and is counted refused); the
+old assignee `User` is loaded ONLY in the audit branch that needs its label; and the open-block
+row is fetched once per row and reused for both the gate and the refusal message.
+
+**`TaskExecutionForm` guards attested history (M9).** A `cancelled` row refuses execution-field
+writes outright; a `done` row has `clean()` restore its stored `percent_complete` rather than
+rejecting the form — `tsk_complete` wrote 100 as evidence and a form must not quietly lower it,
+while the other five fields stay editable. This is the ONLY execution write surface: I2's ruling
+keeps the six fields off `TaskForm` (whose `Meta.fields` is pinned to the exact 13 by 7.2's
+tests).
+
+Register notes: the three computed pages derive everything on read — no snapshot table anywhere.
+`task_board` buckets the live rows into the four status columns with a ready queue and WIP
+badges; `task_priority` groups by MoSCoW and buckets the Eisenhower quadrants, and **both bucket
+live work only** (`planned`/`in_progress` — done and cancelled drop out, the I6 amendment);
+`gantt_timeline` resolves its window from the union of planned dates and draws the bars with the
+resolved `start`/`end` on each bar dict. **A blocked card offers no Start/Complete** — the action
+block renders a disabled button instead of a guaranteed-refusal click (I10). All three pages
+flash a message when a supplied `?project=`/`?assignee=` id is not in the workspace, while still
+degrading to the unfiltered view with no 500 (M11).
+
+**The panels on `tsk_detail` consume view-computed context, not the model's re-querying
+properties (I7).** `tsk_detail` prefetches `checklist_items` (+`done_by`), `blocks` (+both stamp
+users), and both link sets (+the counterpart task) once, computes `checklist_progress` and
+`obj.active_blocks` off those caches, and passes the link lists as context; the three
+`_task_*_panel.html` includes read those keys. Calling `obj.checklist_progress` (2 COUNTs) or
+`obj.is_manually_blocked` (`.filter().exists()`) would bypass the prefetch cache — measured
+**31 → 13 queries** on the seeded probe task. The board/priority prefetch chains the join
+(`Prefetch("predecessor_links", queryset=TaskDependency.objects.select_related("predecessor"))`)
+rather than using `__`-nesting, which costs two queries where one suffices (M14).
+
 ## Routes (`app_name = "projects"`, 205 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
@@ -584,6 +687,12 @@ scope-matrix/` — disjoint literals).
 (`procurement:req_amendment_create`, prefix `requisitions/`). Both apps use a `req_` name prefix,
 which is safe only because the namespaces differ; when enumerating "7.7 routes" always scope to the
 `projects` namespace or you will pick up 4.1's `req_*` names.
+7.8: `tsk_{execute,start,complete,block,unblock}` + `tsk_bulk_update` (**REUSES 7.2's `tasks/`
+segment** with disjoint leaf literals — `execute|start|complete|block|unblock|bulk-update` cannot
+collide with 7.2's `tree|add|edit|delete`, and the literal `tasks/bulk-update/` is listed FIRST) ·
+`tcl_{list,create,detail,edit,delete}` + `tcl_check` · `tbk_{list,detail}` (read-only register —
+no CRUD) · `task_board` + `task_priority` + `gantt_timeline` (path prefixes
+`checklist-items/ blocks/ task-board/ task-priority/ gantt-timeline/`).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -628,6 +737,11 @@ Entity folders `initiation/{projectrequest, project, projectstakeholder, project
 `scope/{requirement, scopeitem, scopechange, scopeverification}/` and the sub-module-root board
 `scope/scope_matrix.html` (the folder names are `scopechange`/`scopeverification` — NOT
 `scopechangerequest`/`scopeverification`; match the on-disk names), plus
+`taskwork/{checklistitem, block}/{list,detail,form}.html` and the three computed pages
+`taskwork/{task_board, task_priority, gantt_timeline}.html` — plus the three panel partials
+`taskwork/_task_{blocks,checklist,dependencies}_panel.html`, which are `{% include %}`d by
+`planning/task/detail.html` (they read the host view's context keys, never a manager of their
+own), plus
 `templates/projects/overview.html` at the app root, the recursive
 `planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
 standalone boards `resource/capacity_demand.html`, `risk/risk_analysis.html`,
@@ -684,7 +798,17 @@ the approved rows carrying cost + schedule + quality impacts so all three creep 
 non-zero (one crosses `HIGH_COST`), `decided_at` stamped on every decided row because the creep
 board groups by decision month; and verifications across all three `result`s and all four
 `acceptance_status`es including a waived gate and a rejected deliverable with its mandatory
-written reason. Log in as `admin_acme` / `admin_globex`, password `password`. Run it twice to
+written reason. 7.8 (own guard): **20 work packages extended for execution / 20 checklist items /
+2 block rows per tenant** — the extension writes the six execution fields across every priority,
+all four MoSCoW values PLUS an unclassified row (the first work package of each project, so the
+board's "Unclassified" bucket and the priority page's unclassified group are both non-empty), all
+four Eisenhower quadrants, `percent_complete` honest to the row's status (done at 100, in_progress
+mid-flight, planned at 0), the `actual_start`/`actual_end` stamps written the way the verbs would,
+one overdue row and one **cancelled** work package (7.2's `ACTIVE_WBS`) so the
+terminal-but-not-done lens has something to exclude; checklists land on every third work package
+with mixed ticks so the rollup is non-trivial and the register runs to page 2, leaving the
+un-checklisted rows as the empty state; the block trail is one ACTIVE blocker and one CLOSED with
+its full evidence. Log in as `admin_acme` / `admin_globex`, password `password`. Run it twice to
 prove idempotency.
 
 **The seeder's own history is a gotcha (review C3).** The 7.7 block originally seeded
@@ -702,7 +826,8 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
-7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` fixture blocks — **owned by itself; edit it only
+7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` + 7.8 `taskwork_*` fixture blocks — **owned by
+itself; edit it only
 with a full unfiltered re-run**) plus `test_initiation_{models,forms,views,security}.py`,
 `test_planning_{models,forms,views,security}.py`,
 `test_resource_{models,forms,views,security}.py`, `test_cost_{models,forms,views,security}.py`
@@ -728,7 +853,15 @@ a `Decimal` while the 0-safe branch is float `0.0`; `creep_max` `60000.00`; `cre
 `{count 3, cost_total 110000.00, schedule_days 12, high_impact_count 2}`; `scope_summary`
 `{items 5, boundaries 2, constraints 1, assumptions 1, open_items 4, overdue_items 1}`), all 16
 verbs happy-path + refusal, and — the C2 regression net — **both actors** get 405 on every
-`@require_POST` verb; names pinned in `.claude/tasks/test-contract-projects-7.7.md`). Naming:
+`@require_POST` verb; names pinned in `.claude/tasks/test-contract-projects-7.7.md`) and
+`test_taskwork_{models,forms,views,security}.py` (taskwork: models 29 / forms 16 / views 53 /
+security 39 = **137** — the two registers' numbering and `is_active`, the derived blocking truth
+tables (manual / dependency / done-and-cancelled-predecessor), the `checklist_progress` figures
+(0 / 75 / 100 / `None`), the four choice vocabularies, the named indexes, the execution form's
+exact six-field set and the M9 guards, all 17 routes, the four computed pages' context keys, the
+bulk cap + the terminal-transition refusal, pagination, and the security lane's IDOR 404s,
+**both-actor 405s** (the C2 net), CSRF, mass assignment and XSS; names pinned in
+`.claude/tasks/test-contract-projects-7.8.md`). Naming:
 every test
 `test_<subslug>_*`, every helper `_<subslug>_*`, so the next sub-module cannot shadow them.
 
@@ -794,6 +927,18 @@ venv\Scripts\python.exe -m pytest apps/projects/ --nomigrations
    `--flush` then `seed` could never recover because the guard saw "already seeded" from the
    *previous* good run. Always add `obj.full_clean(exclude=["number"])` to new seed factories and
    prove a fresh seed by row count, not by "the command exited 0".
+15. **A derived property that uses `.filter()` bypasses the prefetch cache (7.8's I7).**
+   `obj.is_manually_blocked` is `self.blocks.filter(unblocked_at__isnull=True).exists()` — the
+   `.filter()` builds a NEW queryset, so it re-queries even when `blocks` was prefetched, once
+   per badge. `obj.checklist_progress` is the same trap (2 COUNTs). Compute the flag off the
+   prefetched list in the VIEW (`obj.active_blocks = [b for b in obj.blocks.all() if b.is_active]`)
+   and pass it as context. Only `.all()` reads the cache. Measured: 31 → 13 queries on
+   `tsk_detail`.
+16. **`Prefetch("a__b")` costs two queries where a chained `Prefetch` costs one (7.8's M14).**
+   The nested spelling prefetches `a`, then issues a SECOND query for `b`. Write
+   `Prefetch("a", queryset=A.objects.select_related("b"))` instead — the join rides the first
+   query. Both forms populate the same cache, so `is_dependency_blocked`'s `.all()` walk is
+   unaffected either way.
 
 ## Sidebar wiring — `apps/core/navigation.py`
 
@@ -893,6 +1038,22 @@ detail page where the `qci_accept` action lives.
     "Requirement Approval Queue":             "projects:req_list?status=submitted",  # extra live leaf
 }
 ```
+
+```python
+"7.8": {
+    "Task Creation & Assignment":            "projects:task_board",
+    "Priority & Urgency Scoring":            "projects:task_priority",
+    "Kanban & Scrum Boards":                 "projects:task_board",
+    "Gantt Charts & Timeline Views":         "projects:gantt_timeline",
+    "Task Dependencies & Blocking":          "projects:dependencies",
+    "Task Checklist Register":               "projects:tcl_list",  # extra live leaf
+}
+```
+Bullets 1 and 3 both map to the board (it IS the task surface: create/assign live there and the
+columns are the workflow); bullet 2 is the MoSCoW + Eisenhower lens; bullet 5 is 7.2's dependency
+register (7.8 derives the blocking verdict from it and adds no link table of its own — the pinned
+`LIVE_LINKS` mapping is a deliberate cross-sub-module deep link, recorded as review I5). The
+checklist register is the extra leaf.
 Bullet 2 is the computed traceability matrix (requirement × work-package coverage plus the gaps
 and the creep board — computed over the registers on every load, no snapshot table); the
 approval-queue leaf deep-links the register's `?status=submitted` lens (7.2's Task-Register /
