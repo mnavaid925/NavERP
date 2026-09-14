@@ -88,8 +88,11 @@ def msg_edit(request, pk):
         form = ChannelMessageForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
             before = set(obj.mentions.values_list("pk", flat=True))
+            # ``save()`` at the default commit=True persists the M2M itself: it calls
+            # ``_save_m2m()`` internally and deliberately does NOT leave a ``save_m2m``
+            # attribute behind (only commit=False does). So there is no ``form.save_m2m()``
+            # call here — after a committing save it is an AttributeError, not a second save.
             obj = form.save()
-            form.save_m2m()
             _notify_mentions(request, obj, obj.mentions.exclude(pk__in=before))
             # The edit stamp is verb-written — the form cannot reach edited_by/edited_at.
             obj.edited_by = request.user
