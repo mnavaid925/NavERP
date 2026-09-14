@@ -7443,6 +7443,71 @@ gating).
 
 ---
 
+### Projects 7.9 — Collaboration & Communication (close-out 2026-09-14)
+
+Build (Phase 3) landed first: **7 new models / 7 tables** in one sub-module —
+`Channel` [CHN-], `ChannelMessage` [CHM-], `DocumentShare` [DSH-], `Meeting` [MTG-],
+`MeetingAgendaItem` [AGI-], `MeetingActionItem` [MAIT-], `ProjectNotification` [NTF-] — plus
+**1 computed page** (`activity_feed`, no table), **41 routes**, **41 templates** and migration
+`0012`. The prefixes were chosen collision-proof rather than obvious (`CHM` because `MSG` is
+`scm.IntegrationMessage`'s; `MAIT` because `MAI` is `hrm.MeetingActionItem`'s) and both are pinned
+in the model tests. Boundaries were drawn deliberately against 7.10 (the file repository — the
+`_collab` block creates at most two `core.Document` rows and **no second file store**), 7.17
+(recurrence/trigger rules), 7.13 and 7.18. 7.9 also introduces the repo's **first three-level
+template nesting** (`collaboration/meeting/agendaitem/form.html`), contract-authorised in §7.
+
+**Four Criticals, all caught by the Step-3 verification pass rather than by a reviewer.** C-A: a
+Django template filter written inside a Python f-string (`{obj.get_status_display()|lower}`) made
+every meeting refusal path raise `NameError` → 500; fixed to `.lower()` in all three branches, and
+a repo-wide grep for the same shape found no other occurrence. C-B: `msg_edit` called
+`form.save_m2m()` after a **committing** `form.save()` — `save_m2m` only exists at `commit=False` —
+so every message edit raised `AttributeError`; removed. C-C: all three new registers
+(`chn_list`/`msg_list`/`mtg_list`) paginated an **unordered annotated** queryset, raising
+`UnorderedObjectListWarning` — a warning class that had been clean in this app before 7.9 (an
+`annotate()` with a GROUP BY silently drops `Meta.ordering`); fixed with explicit `.order_by(...)`.
+C-D: the `_collab` block seeded **13** messages where the contract pinned ≥16 for a genuine page 2,
+and its docstring claimed 17; fixed by seeding 18 and correcting the docstring.
+
+Six review lanes ran serial into `.claude/tasks/review-projects-7.9.md`: raw **0C/8I/21M = 29
+findings**, deduped to the same, with explicit NO-ACTION rulings so coverage is visible. Two were
+independently reproduced by the orchestrator before filing — and **I1 came out worse than filed**:
+repointing a `ChannelMessage` root that already carries replies orphans the replies, which then
+render on **neither** channel (the replies' own channel FK is not rewritten), so `clean()` now
+refuses the repoint and the tests pin both the guard and the cases it must NOT catch. **I8** was
+the mirror of 7.8's member bug: a project member could clear or delete a **teammate's** row through
+the ordinary edit/delete routes — every write surface was re-scoped to the actor (L27), and the
+security lane proved the new tests genuinely detect the hole by reintroducing it as a temporary
+negative control (test failed → restored).
+
+`code-fixer` burned the dispositions across **21 commits — 18 FIX / 2 DOC / 3 NO-ACTION /
+6 HARNESS**, one file per commit. I2 landed migration `0013` with exactly four `AddIndex` ops
+(`(tenant, -created_at)` on ChannelMessage / DocumentShare / Meeting / ProjectNotification); M18
+was the converse (indexes matching no access path). The fixer's own commit `8ad0d3d1` overclaimed
+M5/M6 in its message but only touched Phase-5 amendments — re-verified by enumeration and the real
+corrections landed in `764846d8`, recorded honestly in the FIX LOG. Post-fix verification:
+`manage.py check` clean, no pending migrations, `0013` exactly the four `AddIndex`, I1/I8 fixed
+with their legitimate cases intact, smoke **276 → 405/0**.
+
+Phase 6: `.claude/tasks/test-contract-projects-7.9.md` pins the fixtures and the figure graph;
+conftest got an **append-only** `collab_*` block (L43, after `taskwork_block_active_b`); then
+`test_collab_{models,forms,views,security}.py` = **70/32/140/140 = 382 green**, one file per
+commit. Three test-authoring misses were caught by running rather than by reading: the contract's
+§3.4 index prefix was a typo (`mai_tnt_*` where the code says `mait_tnt_*`), a `unique_together`
+violation surfaces on `__all__` and not on the named field, and the figure fixture is
+`collab_figures_a`. A fourth was a **false pass in my own smoke** — the page-2 check grepped for a
+row prefix that also appears on a single-page register, and `response.context` is `None` without
+`setup_test_environment()`; fixed by asserting `num_pages > 1`, that page 2 carries rows page 1
+does not, and that no warning fires.
+
+Phase 7: SKILL.md gained a `## 7.9 Collaboration & Communication` section plus refreshed
+frontmatter/Routes/Templates/Seeder/Tests/Sidebar/As-built (Routes count 205 → **263**),
+`README.md` moved to **9 of 19** with the 7.9 narrative, and the contract's §9 records the
+rulings.
+
+**Nothing open.**
+
+---
+
 ## Projects 7.8 — Task & Work Management (build plan)
 
 > Source of truth: `.claude/tasks/research-projects-7.8.md` (committed 536c2230). Scope frozen by
