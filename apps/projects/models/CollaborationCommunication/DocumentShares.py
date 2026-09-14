@@ -76,6 +76,10 @@ class DocumentShare(TenantNumbered):
             models.Index(fields=["tenant", "project"], name="dsh_tnt_project_idx"),
             models.Index(fields=["tenant", "is_active"], name="dsh_tnt_active_idx"),
             models.Index(fields=["tenant", "document"], name="dsh_tnt_document_idx"),
+            # Serves `Meta.ordering` itself (`dsh_list` sorts every render) and the activity
+            # feed's share source. The in-pattern add — ["tenant", "created_at"] already ships
+            # on 20+ models app-wide.
+            models.Index(fields=["tenant", "-created_at"], name="dsh_tnt_created_idx"),
         ]
 
     def __str__(self):
