@@ -16,28 +16,41 @@ description: >-
   budget revisions whose approved-and-activated row IS the cost baseline, the EVM control-account
   register and detail panel (BAC/EV/PV/AC/CPI/SPI/EAC/ETC/TCPI/VAC as guarded derived properties),
   the budget register with category totals, and the expense register (commitments, actuals,
-  accruals) with post/void verbs; and 7.6 Quality Management: per-deliverable acceptance-criteria
+  accruals) with post/void verbs; 7.5 Risk & Issue Management: the risk register with
+  probability×impact severity bands and realize/close/reopen verbs, response actions, the issue
+  register with an escalation path; 7.6 Quality Management: per-deliverable acceptance-criteria
   plans with an approve/supersede lifecycle, the combined QA + continuous-improvement review
   register (methodology/compliance/gate + kaizen/retrospective/maturity), deliverable inspections
   whose record→accept/reject verbs carry the acceptance decision and customer-party sign-off, the
   defect punch list with an issue bridge, and the two computed boards (CMMI-banded maturity +
-  defect trend + lessons lens; per-deliverable acceptance state + acceptance queue). Use when the user
+  defect trend + lessons lens; per-deliverable acceptance state + acceptance queue); 7.7 Scope &
+  Requirements Management: the requirements baseline with submit/approve/implement/verify verbs,
+  scope items, the CCB scope-change register, requirement-level verification, and the scope matrix;
+  7.8 Task & Work Management: the in-place execution extension on ProjectTask (priority/MoSCoW/
+  Eisenhower/percent/actuals), checklist items, the manual-block evidence register, and the board /
+  priority / Gantt lenses; and 7.9 Collaboration & Communication: the channel register with archive,
+  threaded channel messages, document shares with access levels and revoke/claim/release verbs,
+  meetings with agenda + action items and start/complete/cancel/minutes verbs, per-recipient
+  project notifications, and the merged activity feed. Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.6), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.9), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
-  QualityPlan/QualityReview/DeliverableInspection/QualityDefect,
+  QualityPlan/QualityReview/DeliverableInspection/QualityDefect/
+  ProjectRisk/RiskResponseAction/ProjectIssue/IssueEscalation/
+  Requirement/ScopeItem/ScopeChangeRequest/ScopeVerification/
+  TaskChecklistItem/TaskBlock/
+  Channel/ChannelMessage/DocumentShare/Meeting/MeetingAgendaItem/MeetingActionItem/
+  ProjectNotification,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8.** 7.9–7.19 are roadmap (a parallel
-build may be
-landing them — always
-check `apps/projects/models/` first). Do
-not assume a model exists because NavERP.md lists the feature — check first.
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9.** 7.10–7.19 are roadmap (a
+parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
+model exists because NavERP.md lists the feature — check first.
 
 App path `apps/projects/`, templates `templates/projects/`, `app_name = "projects"`, mounted at
 `/projects/`. Migrations `0001_initial`, `0002_ordering_indexes_and_nonnegative_estimates`,
@@ -656,7 +669,168 @@ users), and both link sets (+the counterpart task) once, computes `checklist_pro
 (`Prefetch("predecessor_links", queryset=TaskDependency.objects.select_related("predecessor"))`)
 rather than using `__`-nesting, which costs two queries where one suffices (M14).
 
-## Routes (`app_name = "projects"`, 205 names)
+## 7.9 Collaboration & Communication — `CollaborationCommunication/`, template slug `collab`
+
+Contract: `.claude/tasks/contract-projects-7.9.md` (§10 carries the build amendments).
+Review: `.claude/tasks/review-projects-7.9.md`. Tests pinned in
+`.claude/tasks/test-contract-projects-7.9.md`. Scope: the CONVERSATION layer — the five NavERP.md
+bullets collapse to **five entity files carrying SEVEN tables plus one computed page**:
+
+| Bullet | Artifact |
+|---|---|
+| Team Messaging & Channels | `Channel` [CHN-] + `ChannelMessage` [CHM-] |
+| Document Sharing & Co-Editing | `DocumentShare` [DSH-] |
+| Meeting Management | `Meeting` [MTG-] + `MeetingAgendaItem` [AGI-] + `MeetingActionItem` [MAIT-] |
+| Notifications & Alerts | `ProjectNotification` [NTF-] |
+| Activity Streams & Feeds | computed page `activity_feed` (**no table**) |
+
+**The defining ruling is that 7.9 ships the SHARE, never a second file store.** `DocumentShare`
+FKs the existing `core.Document` by string — the repository, folders, metadata and **version
+history are 7.10's**. Real-time co-editing is deferred (there is no websocket stack in the repo),
+so the honest affordance is an `access_level` plus a single-editor **claim**
+(`dsh_claim`/`dsh_release`). Likewise `Meeting.recurrence` merely **DECLARES** the pattern — the
+engine that would mint the next occurrence is 7.17's — and `ProjectNotification` rows are minted
+by triggers only, with the trigger RULES (and reminders) belonging to 7.17.
+
+**Prefix collisions that are deliberate.** `MSG` is taken by `scm.IntegrationMessage` and `MAI` by
+`hrm.MeetingActionItem` (a 1-on-1 action item in another app, `NUMBER_PREFIX = "MAI"`, indexes
+`hrm_mai_*`) — hence `CHM` and `MAIT` here. The `hrm` sibling is documented in 7.9's model
+docstring and must **not** be renamed or merged.
+
+### `Channel` [CHN-] — the conversation container
+`project` CASCADE rn `channels`, `name`, `topic`, `kind` (discussion/announcement),
+`is_archived` + `archived_by`/`archived_at`. `unique_together` is
+`(("tenant","number"), ("tenant","project","name"))` — a project cannot carry two channels of the
+same name. **`is_archived` and both stamps are verb-written by `chn_archive` only**, which is a
+single Toggle covering both directions (archiving stamps all three; unarchiving clears all three).
+Indexes `chn_tnt_project_idx`, `chn_tnt_archived_idx`. `message_count` is an **annotation on the
+list queryset**, never a model property.
+
+### `ChannelMessage` [CHM-] — the threaded message
+`channel` CASCADE rn `messages`, `parent` self-FK rn `replies` (one nesting level), `body`,
+`mentions` M2M to `AUTH_USER_MODEL` rn `channel_mentions`, `edited_by`/`edited_at`.
+`clean()` carries **three** invariants, and the third is the one that is easy to miss:
+1. a reply whose parent lives in another channel is refused;
+2. a reply whose parent is itself a reply is refused;
+3. **a ROOT may not change channel while it has replies elsewhere** — the replies would stay in the
+   old channel while the root moves, and because the channel page keys replies by parent inside
+   that channel's own message list, they would then render on **neither** channel. User-authored
+   content silently disappearing.
+
+`edited_by`/`edited_at` are written by `msg_edit` only. Indexes `chm_tnt_channel_idx`,
+`chm_tnt_parent_idx`, `chm_tnt_created_idx`.
+
+### `DocumentShare` [DSH-] — who may do what with an already-stored document
+`project` CASCADE, `channel` SET_NULL, `document` FK to `core.Document` rn `project_shares`,
+`access_level` (view/comment/edit), `shared_with` SET_NULL, `note`, plus `is_active` +
+`revoked_by`/`revoked_at` and the claim pair `claimed_by`/`claimed_at`. Derived:
+`is_revoked`, `is_claimed`, and `is_co_editable` = `is_active and access_level == "edit"` — **a
+revoked edit share is not co-editable**. `dsh_revoke` is the only writer of `is_active` and, being
+a Toggle, clears both revoke stamps on restore; **it also releases any active claim**, because a
+revoked share must not stay claimed. Indexes `dsh_tnt_project_idx`, `dsh_tnt_active_idx`,
+`dsh_tnt_document_idx`, `dsh_tnt_created_idx`.
+
+### `Meeting` [MTG-] + its two children
+`Meeting` carries `kind` (standup/review/steering/workshop/other), `mode`
+(in_person/virtual/hybrid), `recurrence` (none/daily/weekly/biweekly/monthly), `status`
+(scheduled/in_progress/completed/cancelled), `location`, `scheduled_start`/`scheduled_end`, and the
+two verb-written pairs `actual_start`/`actual_end` and `minutes`/`minutes_by`/`minutes_at`.
+`is_upcoming` needs BOTH `status == "scheduled"` AND a future start; `is_past` is the start
+comparison alone. Indexes `mtg_tnt_project_idx`, `mtg_tnt_status_idx`, `mtg_tnt_start_idx`,
+`mtg_tnt_created_idx`.
+
+`MeetingAgendaItem` [AGI-] (`presenter`, `duration_minutes`, `sequence`, `is_covered` +
+`covered_by`/`covered_at`) and `MeetingActionItem` [MAIT-] (`assignee`, `due_date`, optional `task`
+link to 7.2's `ProjectTask`, `is_done` + `done_by`/`done_at`, `is_overdue`) are both edited on the
+meeting detail page and neither has an independent register. `MeetingActionItem.task` is
+**optional** — a minute may point at the work it produced, but 7.9 never creates a task.
+
+### `ProjectNotification` [NTF-] — per-recipient delivery
+`project` CASCADE, `recipient` CASCADE, `kind` (mention/assignment/due_date/status_change/system),
+`title`, `body`, four optional source FKs (`channel`/`message`/`task`/`meeting`) that the feed and
+inbox deep-link from, `triggered_by`, `is_read`/`read_at`. Indexes `ntf_tnt_recipient_idx`
+(tenant, recipient, is_read), `ntf_tnt_kind_idx`, `ntf_tnt_project_idx`, `ntf_tnt_created_idx`.
+
+**There is no `ProjectNotification` ModelForm and no create/edit route — by design.** Rows are
+minted by triggers (`msg_create`/`msg_edit` mentions, the seeder, later 7.17's engine) and
+read/closed by `ntf_mark_read`. Unlike 7.8's `TaskBlock`, an inbox row **is** deletable: it is
+per-recipient delivery, not shared evidence. And it is **per-recipient in the authorization sense
+too** — `ntf_mark_read`, `ntf_delete` and `ntf_mark_all_read` all carry `recipient=request.user`,
+so a teammate's row is a **404**, not something you may clear. That was review finding I8: the two
+single-row verbs originally scoped by tenant only, which contradicted both the model's docstring
+and their own bulk sibling.
+
+### 7.9 verbs — all `@require_POST`; GET answers 405
+
+| Verb | Requires |
+|---|---|
+| `chn_archive` | Toggle both directions; stamps/clears `archived_by`/`archived_at` together |
+| `msg_delete` | redirects to the channel REGISTER (a message has no register of its own) |
+| `dsh_revoke` | Toggle; clears both revoke stamps on restore **and releases any claim** |
+| `dsh_claim` | `edit` + active + unheld only; re-claiming your own is a no-op; names the holder on refusal |
+| `dsh_release` | any member may release (a stale claim must not deadlock the document) |
+| `mtg_start` | `scheduled` → in_progress; stamps `actual_start` |
+| `mtg_complete` | `in_progress` → completed; stamps `actual_end` |
+| `mtg_cancel` | refuses a terminal meeting; `scheduled`/`in_progress` → cancelled |
+| `agi_cover` | Toggle; stamps/clears `covered_by`/`covered_at` |
+| `mai_toggle` | Toggle; stamps/clears `done_by`/`done_at` |
+| `ntf_mark_read` | Toggle; **caller's own row only** (404 otherwise) |
+| `ntf_mark_all_read` | bulk over the caller's own unread rows; ONE `UPDATE` + ONE audit entry |
+| `ntf_delete` | **caller's own row only** (404 otherwise) |
+
+The three GET+POST form pages are `msg_create`, `mtg_minutes` and the two child creates
+`agi_create`/`mai_create` (which take the meeting from the URL pk — `meeting` is excluded from both
+child forms). **`mtg_minutes` does not change `status`** — capturing minutes is not completing the
+meeting, and `mtg_complete` is.
+
+**Every mutating verb captures `previous` BEFORE mutating and writes its verb into
+`changes={"verb": …}`, never into `action`** — `AuditLog.action` is varchar(10), so a verb written
+there would truncate.
+
+### `activity_feed` — the merged computed page (no table)
+Five capped sources (`ChannelMessage`, `Meeting`, `DocumentShare`, `ProjectNotification`,
+`AuditLog`) filtered on `created_at__gte=since` / `at__gte=since`, each `.order_by("-created_at")`
+and sliced `[:100]` **in the database** (a real `LIMIT`, so a decade of history costs the same),
+merged and sorted in Python, then truncated to 100 rendered entries.
+
+- `?project=` → `as_db_int`, resolved tenant-scoped; an unresolvable id degrades to the
+  whole-workspace feed **with a `messages.warning`**.
+- `?kind=` → allow-listed against `_FEED_KINDS`; junk is IGNORED.
+- `?days=` → allow-listed against `{7, 30, 90}`; junk falls back to 30.
+- **The five `counts` are pre-cap window figures for ALL five kinds — `?kind=` narrows the STREAM,
+  not the summary.** Zeroing the other four cards when one kind is picked was review finding M3.
+- **`counts["audit"]` is 0 under a project lens, and the page says so in visible copy.**
+  `core.AuditLog` carries only a GFK and a free-text `target`, so attributing a row to one project
+  would be a fabricated fact. That is the one pinned zeroing rule.
+
+### Four Criticals, all caught by the Step-3 verification pass rather than by a reviewer
+
+Worth remembering as a class, because each is invisible to a status-only test:
+
+1. **A Django template filter inside a Python f-string** — `f"{obj.get_status_display()|lower}"`
+   in `mtg_start`/`mtg_complete`/`mtg_cancel`'s refusal branches. `NameError: name 'lower' is not
+   defined`, i.e. a **500 on the guard path** of all three lifecycle verbs. Use `.lower()`.
+2. **`form.save_m2m()` after a committing `form.save()`** in `msg_edit`. `ModelForm.save()` at the
+   default `commit=True` calls `_save_m2m()` internally and deliberately does **not** leave a
+   `save_m2m` attribute — only `commit=False` does. So every message edit 500'd. The correct
+   pairing (used by `msg_create`) is `save(commit=False)` → `obj.save()` → `form.save_m2m()`.
+3. **Paginating an UNORDERED queryset.** `annotate()` puts a `GROUP BY` on the query, and Django's
+   `QuerySet.ordered` is `False` whenever a GROUP BY is present — so `Meta.ordering` is silently
+   ignored and the paginator slices an unordered set, where a row can land on two pages or none
+   (`UnorderedObjectListWarning`). `chn_list`/`msg_list`/`mtg_list` all did this; the fix is to
+   re-state the model's own ordering with an explicit `.order_by(...)` on the annotated queryset.
+   Note this pattern was **new in 7.9** — no pre-7.9 projects list view warns.
+4. **A seeder that stops short of a real page 2.** `_collab` created 13 messages where the contract
+   pinned ≥16, so the message register could never paginate.
+
+**The lesson for the smoke harness: a page-2 assertion that greps the rendered HTML for the row
+prefix is a FALSE PASS.** `Paginator.get_page()` falls back to the last in-range page when
+`?page=` overshoots, so the prefix appears even on a single-page register. Assert
+`page_obj.paginator.num_pages > 1`, that page 2 carries row numbers page 1 does not, and that no
+`UnorderedObjectListWarning` was raised. Also call `setup_test_environment()` in a standalone
+script, or `response.context` is `None` and every context-key assertion silently becomes a no-op.
+
+## Routes (`app_name = "projects"`, 263 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
 7.2: `tsk_{list,create,detail,edit,delete}` + `tsk_tree` (literal route `tasks/tree/`) ·
@@ -693,6 +867,17 @@ collide with 7.2's `tree|add|edit|delete`, and the literal `tasks/bulk-update/` 
 `tcl_{list,create,detail,edit,delete}` + `tcl_check` · `tbk_{list,detail}` (read-only register —
 no CRUD) · `task_board` + `task_priority` + `gantt_timeline` (path prefixes
 `checklist-items/ blocks/ task-board/ task-priority/ gantt-timeline/`).
+7.9: `chn_{list,create,detail,edit,delete}` + `chn_archive` ·
+`msg_{list,create,edit,delete}` · `dsh_{list,create,detail,edit,delete}` +
+`dsh_{revoke,claim,release}` · `mtg_{list,create,detail,edit,delete}` +
+`mtg_{start,complete,cancel,minutes}` · `agi_{create,edit,delete,cover}` ·
+`mai_{create,edit,delete,toggle}` · `ntf_{list,detail,mark_read,delete}` + `ntf_mark_all_read` ·
+`activity_feed` (**eight new first segments** — `channels/ messages/ shared-documents/ meetings/
+agenda-items/ action-items/ notifications/ activity-feed/` — all disjoint from the 38 pre-existing
+segments and from each other, with no converter in any first component).
+Within each 7.9 module the literal routes precede the `<int:pk>/` routes, and
+`notifications/read-all/` is listed **before** `notifications/<int:pk>/` even though `read-all`
+cannot match an int converter (belt and braces, and it keeps the module readable).
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -746,7 +931,18 @@ own), plus
 `planning/task/{tree.html,_tree_node.html}` WBS pair (depth-capped, walks `node.kids`) and the
 standalone boards `resource/capacity_demand.html`, `risk/risk_analysis.html`,
 `risk/risk_monitoring.html`, `quality/quality_improvement.html`,
-`quality/quality_acceptance.html` and `scope/scope_matrix.html` (sub-module root, rule 6).
+`quality/quality_acceptance.html` and `scope/scope_matrix.html` (sub-module root, rule 6), plus
+`collaboration/{channel, message, documentshare, meeting}/{list,detail,form}.html` and
+`collaboration/{notification/{list,detail}.html, activity_feed.html}` — where `activity_feed.html`
+stands **FLAT at the `collaboration/` root** (the computed-page rule) alongside
+`collaboration/meeting/minutes.html` (a secondary entity-action page, the
+`cost/bank_transaction/import.html` idiom) and the two child forms under
+`collaboration/meeting/{agendaitem,actionitem}/form.html`. **7.9 introduces the repo's first
+THREE-LEVEL template nesting** (`collaboration/meeting/agendaitem/form.html`), which the contract
+authorised explicitly; the child forms sit under their parent's folder because they have no
+independent register. The channel page and the feed each carry a small **page-local** CSS block
+(the `collab-` prefix, mirroring 7.8's `tw-` precedent) — self-contained, and not yet promoted into
+`theme.css` because no second page needs them.
 Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
 -danger` variants **do not exist** and render unstyled; the alignment class is `text-right` —
@@ -809,7 +1005,21 @@ terminal-but-not-done lens has something to exclude; checklists land on every th
 with mixed ticks so the rollup is non-trivial and the register runs to page 2, leaving the
 un-checklisted rows as the empty state; the block trail is one ACTIVE blocker and one CLOSED with
 its full evidence. Log in as `admin_acme` / `admin_globex`, password `password`. Run it twice to
-prove idempotency.
+prove idempotency. 7.9 (own guard, `_collab`, dispatched after `_taskwork`): **3 channels / 18
+messages / 4 document shares / 4 meetings / 8 agenda items / 7 action items / 18 notifications per
+tenant** — three channels (discussion / announcement / ARCHIVED, so the archive facet and both
+badge states have rows); 18 messages, which is deliberately more than the register's 15-row page so
+the paginator has a **genuine** page 2 (13 was short — review C-D), comprising two roots carrying
+two and three replies, two bare roots, an EDITED root carrying two mentions, five announcement
+roots and three on the archived channel; four shares covering all three `access_level`s plus one
+revoked and one claimed; four meetings, one per status, the completed one carrying full minutes, a
+covered agenda and a mixed action list; agenda and action items spread across the meetings (one
+overdue, one task-linked to a real 7.2 work package, one unassigned); and 18 notifications covering
+every kind, both read states, every optional source FK and three recipients, so both the
+`?recipient=` and `?mine=1` lenses have rows. The block **creates at most two `core.Document`
+rows and never a second file store** — the repository is 7.10's. `--flush` deletes
+`ProjectNotification` FIRST (it FKs four tables), then `MeetingActionItem` / `MeetingAgendaItem` /
+`DocumentShare` / `ChannelMessage` / `Meeting` / `Channel`, all before `ProjectTask` / `Project`.
 
 **The seeder's own history is a gotcha (review C3).** The 7.7 block originally seeded
 `schedule_impact_days=-10` (and a second `-30`) into a `PositiveIntegerField`. MySQL's
@@ -826,7 +1036,8 @@ Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocate
 ## Tests — `apps/projects/tests/` (green unfiltered)
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
-7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` + 7.8 `taskwork_*` fixture blocks — **owned by
+7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` + 7.8 `taskwork_*` + 7.9 `collab_*` fixture blocks —
+**owned by
 itself; edit it only
 with a full unfiltered re-run**) plus `test_initiation_{models,forms,views,security}.py`,
 `test_planning_{models,forms,views,security}.py`,
@@ -861,7 +1072,26 @@ tables (manual / dependency / done-and-cancelled-predecessor), the `checklist_pr
 exact six-field set and the M9 guards, all 17 routes, the four computed pages' context keys, the
 bulk cap + the terminal-transition refusal, pagination, and the security lane's IDOR 404s,
 **both-actor 405s** (the C2 net), CSRF, mass assignment and XSS; names pinned in
-`.claude/tasks/test-contract-projects-7.8.md`). Naming:
+`.claude/tasks/test-contract-projects-7.8.md`) and
+`test_collab_{models,forms,views,security}.py` (collab: models 70 / forms 32 / views 140 /
+security 140 = **382** — the seven prefixes pinned against `MSG`/`MAI` so a future tidy-up cannot
+collide with `scm.IntegrationMessage`/`hrm.MeetingActionItem`; `ChannelMessage.clean()`'s three
+invariants including the I1 root-repoint guard, plus the cases it must NOT catch (a reply-less root
+may move, a reply's body stays editable); the `unique_together` constraint asserted BOTH through
+`full_clean()` — which reports it on `__all__`, not on `name` — and through a raw
+`objects.create()` that bypasses validation and reaches the DB; every derived property
+(`is_co_editable` false for a revoked edit share, `is_overdue` false on the due date itself);
+all 22 declared index names and that every one leads with `tenant`; the `Meta.fields` lists
+verbatim as the mass-assignment boundary; the M2M mention boundary (a foreign user pk is invalid)
+and that `_reject_foreign` never touches a User FK; all 41 routes; the pinned figure graph
+(channel 2/1, reply 1/0, agenda 3/2, open actions 2, overdue 1, unread 3, feed
+`{message 3, meeting 1, share 3, notification 4, audit 0}` / `total_count` 11); all 18 verbs
+both directions with their `changes["verb"]` audit row; the ordered-pagination assertion
+(no `UnorderedObjectListWarning`) and a page 2 that carries rows page 1 does not; and the security
+lane's 41 anonymous redirects, 30 cross-tenant 404s for **both** actors, crafted cross-tenant POST
+bodies, the I1/I8 regressions, CSRF, mass assignment and XSS through the five user-authored text
+fields; names pinned in
+`.claude/tasks/test-contract-projects-7.9.md`). Naming:
 every test
 `test_<subslug>_*`, every helper `_<subslug>_*`, so the next sub-module cannot shadow them.
 
@@ -1058,6 +1288,22 @@ Bullet 2 is the computed traceability matrix (requirement × work-package covera
 and the creep board — computed over the registers on every load, no snapshot table); the
 approval-queue leaf deep-links the register's `?status=submitted` lens (7.2's Task-Register /
 7.5's escalation-queue precedent).
+
+```python
+"7.9": {
+    "Team Messaging & Channels":             "projects:chn_list",
+    "Document Sharing & Co-Editing":         "projects:dsh_list",
+    "Meeting Management":                    "projects:mtg_list",
+    "Notifications & Alerts":                "projects:ntf_list",
+    "Activity Streams & Feeds":              "projects:activity_feed",
+    "Message Register":                      "projects:msg_list",  # extra live leaf
+}
+```
+Two mappings are deliberate and recorded as justification comments in `navigation.py`: bullet 2
+maps to the **SHARE** register (the document repository and its version history are 7.10's — 7.9
+only ships who may do what with an already-stored `core.Document`), and bullet 4 maps to the
+notification **ROWS** inbox (the trigger rules, reminders and escalation-on-timeout are 7.17's).
+Bullet 1's messaging half has its own register, hence the extra leaf.
 
 ## Common tasks
 
