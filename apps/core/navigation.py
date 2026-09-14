@@ -1836,6 +1836,26 @@ LIVE_LINKS = {
         # Extra live leaf: the per-task tick items are 7.8's own second register.
         "Task Checklist Register":               "projects:tcl_list",
     },
+    "7.9": {
+        "Team Messaging & Channels":             "projects:chn_list",
+        # Bullet 2 maps to the SHARE register, not a document repository: the file store, the
+        # folders and the VERSION HISTORY are 7.10 Document & Knowledge Management's. What 7.9
+        # owns — and what this page shows — is the share itself: the access level, the optional
+        # recipient and the single-editor claim that stands in for real-time co-editing.
+        "Document Sharing & Co-Editing":         "projects:dsh_list",
+        "Meeting Management":                    "projects:mtg_list",
+        # Bullet 4 maps to the notification ROWS, not a rules engine: the customizable triggers,
+        # the reminders and the escalation-on-timeout belong to 7.17 Workflow & Automation
+        # ("Notification & Reminder Rules"). This page is the delivery half — one row per
+        # recipient, with read state.
+        "Notifications & Alerts":                "projects:ntf_list",
+        # Bullet 5 is the one COMPUTED page of the five: it merges the four registers above with
+        # the tenant's audit trail into one reverse-chronological stream, and holds no table.
+        "Activity Streams & Feeds":              "projects:activity_feed",
+        # Extra live leaf: bullet 1 has two halves, and the message register is the second — the
+        # searchable cross-channel view of the conversation.
+        "Message Register":                      "projects:msg_list",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
