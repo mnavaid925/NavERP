@@ -5,13 +5,15 @@ prefetched once, then every node is decorated IN PYTHON — hierarchical WBS cod
 flag, and the post-order date/effort rollup a deliverable displays. Nothing decorated is stored;
 the register (``tsk_list``) is the flat lens on the same rows.
 """
+from django.db.models import Prefetch
+
 from apps.core.crud import as_db_int
 from apps.projects.forms import TaskForm
 # 7.8 surgical edit (context additions only — no behavior change): the task-detail page embeds
 # the blocks panel, whose two verb bodies POST to the POST-only task verbs. Direct sub-module
 # import — the forms package re-exports land in the Integrate step.
 from apps.projects.forms.TaskWorkManagement.TaskBlocks import TaskBlockForm, TaskUnblockForm
-from apps.projects.models import ProjectTask
+from apps.projects.models import ProjectTask, TaskBlock, TaskChecklistItem, TaskDependency
 from apps.projects.models._base import ZERO, q2
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import get_object_or_404, login_required, redirect, render, require_POST
@@ -170,18 +172,42 @@ def tsk_create(request):
 
 @login_required
 def tsk_detail(request, pk):
+    # The 7.8 panels are prefetched ONCE here so no panel materializes a manager of its own:
+    # the checklist trail (+ the done-by user), the block evidence trail (+ both stamp users),
+    # and the dependency links (+ the counterpart task) — the derived blocking verdicts then
+    # read straight off the prefetch caches.
     obj = get_object_or_404(
-        ProjectTask.objects.select_related("project", "parent", "owner"),
+        ProjectTask.objects.select_related("project", "parent", "owner").prefetch_related(
+            Prefetch("checklist_items",
+                     queryset=TaskChecklistItem.objects.select_related("done_by")),
+            Prefetch("blocks",
+                     queryset=TaskBlock.objects.select_related("blocked_by", "unblocked_by")),
+            Prefetch("predecessor_links", queryset=TaskDependency.objects.select_related(
+                "predecessor", "predecessor__project")),
+            Prefetch("successor_links", queryset=TaskDependency.objects.select_related(
+                "successor", "successor__project")),
+        ),
         pk=pk, tenant=request.tenant)
+    # The manual-block free half, computed once from the prefetched trail (the board's
+    # to_attr="active_blocks" idiom — is_manually_blocked's .filter().exists() would bypass
+    # the cache and re-query per badge). The dependency free half reads the cached links.
+    obj.active_blocks = [block for block in obj.blocks.all() if block.is_active]
+    checklist_items = obj.checklist_items.all()
+    checklist_progress = (
+        int(round(sum(1 for item in checklist_items if item.is_done)
+                  / len(checklist_items) * 100))
+        if len(checklist_items) else None)
     return render(request, "projects/planning/task/detail.html", {
         "obj": obj,
         "child_tasks": obj.children.select_related("owner").order_by("sequence", "id")[:50],
         # Links where THIS task is the predecessor (its successors) and where it is the
-        # successor (its predecessors) — the dependency network from the task's point of view.
-        "predecessor_links": obj.predecessor_links.select_related(
-            "predecessor", "predecessor__project")[:50],
-        "successor_links": obj.successor_links.select_related(
-            "successor", "successor__project")[:50],
+        # successor (its predecessors) — the dependency network from the task's point of view,
+        # sliced off the prefetch cache so the page keeps one query path per relation.
+        "predecessor_links": obj.predecessor_links.all()[:50],
+        "successor_links": obj.successor_links.all()[:50],
+        # 7.8: the one checklist progress figure, computed in the view off the prefetched rows
+        # (the model property's two COUNTs would bypass the prefetch by construction).
+        "checklist_progress": checklist_progress,
         # 7.8: the blocks panel embeds the two verb bodies — raising a blocker and clearing the
         # active one POST to projects:tsk_block / projects:tsk_unblock on this task.
         "block_form": TaskBlockForm(),
