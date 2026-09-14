@@ -4845,3 +4845,193 @@ def scope_matrix_item_dependency_realized(db, tenant_a, scope_matrix_project_a, 
                        closed_at=timezone.now() - datetime.timedelta(days=2),
                        identified_date=_scope_today() - datetime.timedelta(days=15),
                        created_by=admin_user)
+
+
+# ==================================================================================================
+# 7.8 Task & Work Management — fixtures (`taskwork_*`, helpers `_taskwork_*`)
+#
+# Reuses 7.2's spine (`tenant_a/tenant_b`, `admin_user`, `member_client`, `planning_project_a/_b`,
+# `planning_task_a/_b`, `planning_dependency_a`) instead of rebuilding it — the `taskwork_*`
+# prefix is what keeps this lane's fixtures from shadowing the planning ones (the model is the
+# same `ProjectTask`, so the NAMES are the only separation).
+# ==================================================================================================
+
+def _taskwork_today():
+    """Today on the same basis the views use (``timezone.localdate()``, L16)."""
+    return timezone.localdate()
+
+
+def _taskwork_checklist_item(tenant, task, **overrides):
+    """A ``TaskChecklistItem`` [TCL-] on ``task``; open unless told otherwise."""
+    from apps.projects.models import TaskChecklistItem
+    seq = TaskChecklistItem.objects.filter(task=task).count() + 1
+    fields = dict(
+        tenant=tenant,
+        task=task,
+        label=f"Checklist item {seq:02d}",
+        sequence=seq,
+        is_done=False,
+    )
+    fields.update(overrides)
+    obj = TaskChecklistItem(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _taskwork_block(tenant, task, **overrides):
+    """A ``TaskBlock`` [TBK-] on ``task``.
+
+    Defaults to an OPEN block (``unblocked_at`` left None) — the state every blocking lens reads.
+    Pass ``unblocked_at`` (and the stamps) for the closed-evidence case.
+    """
+    from apps.projects.models import TaskBlock
+    fields = dict(
+        tenant=tenant,
+        task=task,
+        reason="Waiting on the vendor sandbox credentials.",
+        unblock_criteria="Sandbox tenant provisioned and credentials received.",
+    )
+    fields.update(overrides)
+    obj = TaskBlock(**fields)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _taskwork_fill_checklist(tenant, task, count, done=0):
+    """``count`` checklist items on ``task``, the first ``done`` of them ticked."""
+    items = []
+    for i in range(count):
+        items.append(_taskwork_checklist_item(
+            tenant, task, label=f"Filled item {i + 1:02d}", sequence=i + 1,
+            is_done=i < done,
+            done_at=timezone.now() if i < done else None))
+    return items
+
+
+@pytest.fixture
+def taskwork_task_planned_a(db, planning_project_a):
+    """A `planned` work package — the state `tsk_start` accepts."""
+    return _planning_task(planning_project_a.tenant, planning_project_a, status="planned")
+
+
+@pytest.fixture
+def taskwork_task_in_progress_a(db, planning_project_a):
+    """`in_progress` with its actual start and a half-done attestation — the state
+    `tsk_complete` accepts."""
+    return _planning_task(planning_project_a.tenant, planning_project_a, status="in_progress",
+                          actual_start=_taskwork_today() - datetime.timedelta(days=3),
+                          percent_complete=Decimal("50.00"))
+
+
+@pytest.fixture
+def taskwork_task_done_a(db, planning_project_a):
+    """`done` with the verb-written stamps and `percent_complete=100.00` — the row the M9 guard
+    must protect from a form that would lower it."""
+    return _planning_task(planning_project_a.tenant, planning_project_a, status="done",
+                          actual_start=_taskwork_today() - datetime.timedelta(days=9),
+                          actual_end=_taskwork_today() - datetime.timedelta(days=1),
+                          percent_complete=Decimal("100.00"))
+
+
+@pytest.fixture
+def taskwork_task_cancelled_a(db, planning_project_a):
+    """`cancelled` — terminal but NOT done; the M8/M9 refusal subject."""
+    return _planning_task(planning_project_a.tenant, planning_project_a, status="cancelled")
+
+
+@pytest.fixture
+def taskwork_task_blocked_a(db, planning_project_a, admin_user):
+    """`in_progress` with an OPEN `TaskBlock` — the manual-blocked state."""
+    task = _planning_task(planning_project_a.tenant, planning_project_a, status="in_progress",
+                          percent_complete=Decimal("25.00"))
+    _taskwork_block(planning_project_a.tenant, task, blocked_by=admin_user,
+                    blocked_at=timezone.now() - datetime.timedelta(days=2),
+                    created_by=admin_user)
+    return task
+
+
+@pytest.fixture
+def taskwork_task_dep_blocked_a(db, planning_project_a):
+    """`planned` with an unfinished FS predecessor — blocked by the NETWORK, not by a row."""
+    tenant = planning_project_a.tenant
+    upstream = _planning_task(tenant, planning_project_a, status="in_progress", sequence=1)
+    downstream = _planning_task(tenant, planning_project_a, status="planned", sequence=2)
+    _planning_dependency(tenant, upstream, downstream)
+    return downstream
+
+
+@pytest.fixture
+def taskwork_checklist_mixed_a(db, planning_project_a, admin_user):
+    """4 items, 3 ticked → ``checklist_progress == 75``. The non-trivial rollup."""
+    task = _planning_task(planning_project_a.tenant, planning_project_a)
+    _taskwork_fill_checklist(planning_project_a.tenant, task, 4, done=3)
+    return task
+
+
+@pytest.fixture
+def taskwork_checklist_empty_a(db, planning_project_a):
+    """A task with NO checklist → the view passes ``checklist_progress = None``."""
+    return _planning_task(planning_project_a.tenant, planning_project_a)
+
+
+@pytest.fixture
+def taskwork_block_active_a(db, planning_project_a, admin_user):
+    """The open block on its own (the unblock verb's subject)."""
+    task = _planning_task(planning_project_a.tenant, planning_project_a, status="in_progress")
+    return _taskwork_block(planning_project_a.tenant, task, blocked_by=admin_user,
+                           blocked_at=timezone.now() - datetime.timedelta(days=2),
+                           created_by=admin_user)
+
+
+@pytest.fixture
+def taskwork_block_closed_a(db, planning_project_a, admin_user):
+    """A block with the FULL unblock trail — frozen evidence."""
+    task = _planning_task(planning_project_a.tenant, planning_project_a, status="in_progress")
+    return _taskwork_block(
+        planning_project_a.tenant, task, blocked_by=admin_user,
+        blocked_at=timezone.now() - datetime.timedelta(days=6),
+        unblocked_by=admin_user, unblocked_at=timezone.now() - datetime.timedelta(days=1),
+        resolution_note="Credentials arrived; work resumed.",
+        created_by=admin_user)
+
+
+@pytest.fixture
+def taskwork_admin_client(db, client_a):
+    """Tenant A admin — the actor every verb accepts."""
+    return client_a
+
+
+@pytest.fixture
+def taskwork_member_client(db, member_client):
+    """Tenant A member — the actor the method guards must stop with 405, not 403."""
+    return member_client
+
+
+@pytest.fixture
+def taskwork_anon_client(db):
+    from django.test import Client as _Client
+    return _Client()
+
+
+@pytest.fixture
+def taskwork_tenantless_user(db):
+    from django.contrib.auth import get_user_model
+    return get_user_model().objects.create_user(
+        username="taskwork_tenantless", email="taskwork_tenantless@example.com",
+        password="password", tenant=None)
+
+
+@pytest.fixture
+def taskwork_tenantless_client(db, taskwork_tenantless_user):
+    from django.test import Client as _Client
+    c = _Client()
+    c.force_login(taskwork_tenantless_user)
+    return c
+
+
+@pytest.fixture
+def taskwork_csrf_client(db, admin_user):
+    from django.test import Client as _Client
+    return _Client(enforce_csrf_checks=True)
