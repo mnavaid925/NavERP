@@ -5041,3 +5041,19 @@ def taskwork_tenantless_client(db, taskwork_tenantless_user):
 def taskwork_csrf_client(db, admin_user):
     from django.test import Client as _Client
     return _Client(enforce_csrf_checks=True)
+
+
+# --- tenant B counterparts — the IDOR subjects (404 as tenant A) --------------------------------
+
+@pytest.fixture
+def taskwork_item_b(db, planning_project_b):
+    """Tenant B's checklist item — 404 as tenant A on detail/edit/delete/toggle."""
+    task = _planning_task(planning_project_b.tenant, planning_project_b)
+    return _taskwork_checklist_item(planning_project_b.tenant, task)
+
+
+@pytest.fixture
+def taskwork_block_active_b(db, planning_project_b, admin_b):
+    """Tenant B's OPEN block — 404 as tenant A on its detail page."""
+    task = _planning_task(planning_project_b.tenant, planning_project_b, status="in_progress")
+    return _taskwork_block(planning_project_b.tenant, task, blocked_by=admin_b)
