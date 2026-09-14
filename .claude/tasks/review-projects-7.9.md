@@ -758,3 +758,414 @@ derived above rather than measured: `chn_detail` ≤ 4 queries (channel + messag
 ≤ 14 **independent of tenant history size** (the cap proof); `dsh_list`/`ntf_list`/`mtg_list`/`chn_list`
 ≤ 6 + the filter dropdowns; and `msg_create` with a 3-person mention ≤ 12 (which fails at ~28 today —
 that is I3).
+
+### Lane 5 — qa-smoke-tester (serial pass 5, report-only)
+
+**Reproduced.** `cd /c/xampp/htdocs/NavERP && venv/Scripts/python.exe temp/smoke_79.py`
+
+```
+PASSED 276   FAILED 0
+```
+
+Re-run three times from a pristine seed (`manage.py seed_projects --flush` first each time) — **276/276
+every time, no deviation from the reported figure.** The DB was left re-seeded to its pristine 7.9 shape
+(`chn=3 chm=18 dsh=4 mtg=4 agi=8 mai=7 ntf=18` per tenant) after the probes.
+
+**Adversarial probes written (all under `temp/`, gitignored).** `probe_lane5.py` (uncovered POST paths,
+verb repetition, `?page=` edges, junk-every-param, empty tenant, tenant-less guards, derived figures,
+feed window/cap), `probe_lane5b.py` (positive-value filter correctness, second-user verbs, correct window
+assertion), `probe_lane5c.py` (exact HTML evidence for the false-pass assertions + the `distinct=True`
+value proof), `probe_lane5d.py` (live repro of Lane 1's I1), `probe_lane5e.py` (audit-verb coverage),
+`probe_counts.py` (row counters).
+
+**Bottom line: I found NO functional defect in the build.** Every probe of the shipped code came back
+correct. My findings are all about the **smoke harness's coverage and its false-pass assertions** — which
+is the gate the whole review leans on.
+
+#### Route coverage — which of the 41 the harness actually exercises
+
+The harness references all **41** route names, but the *manner* is thin. Coverage of the 41:
+
+| Route group | Smoke coverage | Verdict |
+|---|---|---|
+| 13 GET pages/registers (`*_list`, `*_detail`, `*_create`, `*_edit`, `*_minutes`, `activity_feed`, `overview`) | GET 200 + (for 14 of 32 GET labels) a substring | content assertion on **14 of 32**; the other 18 pass `needle=None` and assert only "no comment leak" |
+| 18 POST-only verbs | GET → **405** | method guard only — never a successful POST (except the 6 toggles/lifecycle exercised below) |
+| 18 create/edit/delete routes | GET 200 **or** cross-tenant IDOR POST → 404 | **never POSTed successfully** (see I5) |
+| `mtg_start`/`mtg_complete`/`mtg_minutes`/`agi_cover`/`mai_toggle`/`dsh_claim`/`dsh_release`/`dsh_revoke`/`ntf_mark_read`/`ntf_mark_all_read`/`chn_archive`/`msg_edit` | POST with state assertions | genuine success-path coverage |
+| `mtg_cancel` | POST **only on an already-`completed` meeting** (the refusal) | the success edge is never executed |
+| `?page=2` | asserted with `num_pages > 1` + disjoint rows | genuine (the C-C strengthening holds — I re-confirmed no `UnorderedObjectListWarning` on `chn_list`/`msg_list`/`mtg_list`) |
+| junk params | 36 combinations, all 200 | genuine |
+| cross-tenant IDOR | 30 probes → 404 | genuine |
+
+**Positive-value filters are never tested on any register.** The `JUNK` list (lines 202-218) contains only
+*junk* (`nope`, `abc`, `²`, `0`, `9999`) plus `?mine=1`; no register is ever hit with a valid
+`?kind=announcement` / `?status=completed` / `?access_level=view` / `?is_read=True` / `?channel=<pk>`. I
+exercised all 37 positive lenses myself (`probe_lane5b.py` §I) and **every one returns the exact DB count**
+— but a mis-wired `filters` tuple would render 200 and pass the smoke silently.
+
+#### Findings
+
+- [I4] The harness's only `mtg_list` annotation check is a false-pass; the `distinct=True` guard it nominally protects is load-bearing and asserted nowhere
+  file: `temp/smoke_79.py`  lines: 576-580
+  finding: `check("mtg_list renders each meeting once", b.count("MTG-") >= n_meetings)`. With the pristine
+  seed the rendered page contains **8** `MTG-` tokens for **4** meetings, because each number is rendered
+  twice — the link cell (`templates/projects/collaboration/meeting/list.html:63`) and the delete
+  `confirm()` literal (`:79`) — so `>=` is satisfied with a 2× margin. The property `distinct=True`
+  actually protects is the annotation **value**, not the row count: `probe_lane5c.py` §6 prints
+  ```
+  WITH    distinct=True : {'MTG-00001': (3, 3, 5), 'MTG-00002': (3, 0, 0), ...}
+  WITHOUT distinct=True : {'MTG-00001': (18, 18, 15), 'MTG-00002': (3, 0, 0), ...}
+  differ: True
+  smoke check is: b.count('MTG-') >= n_meetings  ->  8 >= 4
+  ```
+  Dropping `distinct=True` (the exact regression contract §6.4 calls mandatory) renders **18/18/15** where
+  it should render **3/3/5**, the result-row count stays 4, the token count stays 8, and the assertion
+  still passes. The smoke never reads `agenda_total`/`agenda_covered`/`open_actions` anywhere.
+  fix: assert the values — for each `m` in `page_obj.object_list`, `m.agenda_total == m.agenda_items.count()`,
+  `m.agenda_covered == m.agenda_items.filter(is_covered=True).count()`,
+  `m.open_actions == m.action_items.filter(is_done=False).count()` — and replace `>=` with an exact
+  per-number count (`== 2 * n_meetings` for the link+confirm pair, or count only the table cell).
+
+- [I5] 18 of the 41 routes are never POSTed successfully; the header's "renders all 41 routes with CONTENT assertions" overstates the coverage
+  file: `temp/smoke_79.py`  lines: 119-152 (GETS), 177-199 (VERBS), 294-325 (IDOR)
+  finding: every create/edit/delete route is reached only by GET (200) or by the cross-tenant IDOR POST
+  (404). The success paths never run: `chn_create`/`chn_edit`/`chn_delete`, `dsh_create`/`dsh_edit`/
+  `dsh_delete`, `mtg_create`/`mtg_edit`/`mtg_delete`, `agi_create`/`agi_edit`/`agi_delete`,
+  `mai_create`/`mai_edit`/`mai_delete`, `msg_delete`, `ntf_delete` — **17 routes** — plus `mtg_cancel`'s
+  success edge. `probe_lane5.py` §A drives all 18 and every one returns **302 with the correct DB effect**
+  (`[A1]…[A18]`, e.g. `chn_create POST -> 302 created=True`, `dsh_delete POST -> 302 gone=True`), so no
+  bug is hiding today. But the C-B class of defect — `save_m2m()` after a committing `save()` — lives in
+  exactly these uncovered edit paths, and a regression there leaves the gate green. Also, 18 of the 32 GET
+  checks pass `needle=None`, so the header's "with CONTENT assertions" applies to only 14.
+  fix: add one create → edit → delete round-trip per entity (and a successful `mtg_cancel`) to the smoke.
+
+- [I6] Four more assertions of the false-pass shape survive in the harness
+  file: `temp/smoke_79.py`  lines: 167-168, 170-174, 147, 120
+  finding: the C-C/C-D strengthening fixed the page-2 checks but left these four, each satisfied by a token
+  that is present whether or not the page did its job (`probe_lane5c.py` §1-5):
+  - `:167-168` `check("feed excludes audit when project set", "Audit entries" in body(...))` — `"Audit entries"`
+    is the static stat-card **label** and prints `True` on the **unfiltered** page too; the assertion never
+    reads `counts["audit"]` (which is `0` and correct). It passes whether or not audit rows are excluded.
+  - `:171-172` `check("ntf_list shows unread stat", "Unread" in b or "unread" in b)` — `"Unread"` is a static
+    filter `<option>` (`<option> values containing 'nread': ['Unread']`), present regardless of the stat card.
+  - `:173-174` `check("mine=1 renders", "NTF-" in b or "Nothing" in b or "No notifications" in b)` — `"NTF-"`
+    prints with `?mine=1`, with `?mine=0`, **and** with `?mine=garbage`; it cannot tell the lens applied from
+    the lens being ignored.
+  - `:147`/`:120` `("activity_feed", …, "Activity Feed")` and `("overview", …, "Activity Feed")` — `"Activity Feed"`
+    is the page `<title>` (`<title>Activity Feed · NavERP</title>`) / a nav label, so the feed check passes on a
+    feed rendering zero entries.
+  fix: assert the real signals — `counts["audit"] == 0` under the project lens; `ctx("unread_count") ==
+  ProjectNotification.objects.filter(tenant=…, recipient=user, is_read=False).count()`; `page_obj.paginator.count`
+  for `?mine=1` vs the unfiltered count; `len(ctx("entries")) > 0` (or a specific entry `label`) for the feed.
+
+- [I7] The harness asserts `changes["verb"]` for 11 of the contract's 13 mutating verbs, and never runs `mtg_cancel`'s success path
+  file: `temp/smoke_79.py`  lines: 500-504
+  finding: the assertion loop covers `chn_archive, mtg_start, mtg_complete, agi_cover, mai_toggle, dsh_claim,
+  dsh_release, dsh_revoke, ntf_mark_read, ntf_mark_all_read, msg_edit` — **11**. The contract's verb set is
+  **13**: `mtg_cancel` and `mtg_minutes` are missing. `mtg_minutes` is at least executed; `mtg_cancel` is
+  posted **only** against an already-`completed` meeting (`:372`), which returns before the audit write, so
+  its success edge is never exercised. `probe_lane5e.py` confirms both verbs write correctly — successful
+  cancel → `audit_verb_present=True`; `mtg_minutes` → `audit_verb_present=True` — so no bug today, but the
+  header's "verifies `AuditLog.changes['verb']` for all 12 verbs" is both the wrong count (13) and an
+  overstatement (11 asserted).
+  fix: add `mtg_cancel`/`mtg_minutes` to the loop and add a successful `mtg_cancel` (scheduled → cancelled)
+  to the state-machine section.
+
+- [M20] The smoke harness is not re-entrant — a second run aborts with an `AttributeError` instead of reporting
+  file: `temp/smoke_79.py`  lines: 70-73 (fixture), 138 (crash site)
+  finding: run twice in a row with no re-seed:
+  ```
+  --- run 1 ---   PASSED 276   FAILED 0
+  --- run 2 ---   FIXTURE GAP — no such seeded row: ['mtg_sched']
+                  Traceback (most recent call last):
+                    File ".../temp/smoke_79.py", line 138, in <module>
+                      ("mtg_edit", reverse("projects:mtg_edit", args=[mtg_sched.pk]), None),
+                  AttributeError: 'NoneType' object has no attribute 'pk'
+  ```
+  Run 1's `mtg_start`/`mtg_complete` consume the only `scheduled` meeting, so `mtg_sched` is `None` on run 2.
+  The "276/276" figure is therefore valid **only** from a pristine seed; a fixer re-running the gate after a
+  partial fix gets a traceback, not a pass/fail signal. The header's own "35 junk-param combinations" is
+  actually **36** (counted from the source), and Lanes 1 and 3's "247/247" contradicts the header's "276/276"
+  (the real number is **276**).
+  fix: make the fixture block self-healing — assert-or-create a `scheduled` meeting (or re-seed at the top of
+  the script) — and correct the counts in this file's header.
+
+- [M21] Coverage the smoke lacks that would catch a silent regression: positive filters, `?page=` edge values, the empty tenant, and second-user verbs
+  file: `temp/smoke_79.py`  lines: 202-218 (JUNK), 265-291 (pagination)
+  finding: four whole classes are untested —
+  (a) **positive filter values** on any register (only junk is thrown; see the route-coverage section above);
+  (b) **`?page=` edge values** — only `9999` is tried; `0`, `-1`, `abc`, `1.5` and the 19-digit overflow are
+  never sent. `probe_lane5.py` §C sends all six to all five registers → **30/30 return 200**;
+  (c) **an empty tenant** (no projects, no collab rows) — the smoke only uses `Acme`/`Globex`, both fully
+  seeded. `probe_lane5.py` §E creates a scratch tenant + user and renders all 11 GET pages plus
+  `ntf_mark_all_read` → **all 200, no 500**;
+  (d) **second-user verbs** — the smoke tests `dsh_claim` contention and the `ntf_mark_all_read` inbox
+  boundary with a *single* logged-in user. `probe_lane5b.py` §L drives a second `Acme` user:
+  `[L1]` a held claim cannot be stolen (`holder 2->2`), `[L2]` any member may release (`claimed_by=None`),
+  `[L3]` `mark_all_read` leaves the admin's inbox untouched (`admin unread 4->4`) — all correct, but
+  unverified by the gate.
+  fix: add one positive-value assertion per register facet, the six `?page=` edge values, an empty-tenant
+  smoke tenant, and a two-client section for the claim/inbox verbs.
+
+#### Could not reproduce / unverified (report as clean, with evidence)
+
+- **The project-memory 500 class — NOT reproduced.** The recorded bug ("a new context key computed from a
+  project-scoped variable 500'd on a page with no `?project=`") does not occur anywhere in 7.9. Every 7.9
+  page renders **200** with: no params at all; `?project=` naming a real project that has **no** collaboration
+  rows (`probe_lane5b.py` §K3 → `counts` all 0); `?project=` naming a **non-existent** id (§K4 →
+  `project_ctx=None` + the "not in this workspace" warning in the HTML); and junk in **every** param of every
+  list (`probe_lane5.py` §D, 14 combinations). A **tenant with no data at all** (§E) renders all 11 GET pages
+  + `ntf_mark_all_read` at 200. The tenant-`None` guards also hold: the four create views 302 → `/`; the six
+  lists render 200 empty (§F).
+- **`activity_feed` window and caps — verified correct.** `?days=` changes the real window, not just the
+  label: with one message back-dated 40 days, `counts["message"]` is 17 / 17 / 18 for 7 / 30 / 90
+  (`probe_lane5b.py` §K1-K2) — the old row is excluded from 7d and 30d and included in 90d. `counts` is
+  **pre-cap** and `entries` is **post-cap**: after minting 150 notifications, `counts["notification"] == 167`,
+  `total_count == 2545`, `entry_count == 100`, `truncated == True` (`probe_lane5.py` §H3). A project lens
+  zeroes the audit half (`counts["audit"] == 0`, §H4) and `?kind=` zeroes the other four cards (§H5) —
+  the latter **confirms Lane 1's M3**, which I did not re-file.
+- **Verb repetition — all safe, no 500s** (`probe_lane5.py` §B). `mtg_start`/`mtg_complete` refuse on the
+  second call (`in_progress→in_progress`, `completed→completed`); `mtg_cancel` refuses a terminal meeting;
+  `dsh_claim` re-claim is a stable no-op (holder **and** `claimed_at` unchanged); `dsh_release` refuses an
+  unheld claim; `ntf_mark_all_read` on an empty inbox is a 200. `chn_archive`, `dsh_revoke`, `agi_cover`,
+  `mai_toggle` and `ntf_mark_read` flip back on the second call — **by design** (each is a contract-pinned
+  toggle, one writer per direction), not a double-mutation bug.
+- **Seeder idempotency and flush re-entrancy — clean.** `seed_projects` twice with no `--flush` leaves every
+  count identical (`chn=3 chm=18 dsh=4 mtg=4 agi=8 mai=7 ntf=18` both times) — a pure no-op. `--flush`
+  **twice in a row** restores the same working state both times, with no FK-ordering error (the
+  `ProjectNotification`-first ordering holds).
+- **Lane 1's I1 — live-reproduced and confirmed, not contradicted** (`probe_lane5d.py`). I created a root +
+  reply in `CHN-00001`, then repointed the root to `CHN-00002` via `msg_edit` (accepted, 200). Afterwards
+  `CHN-00001` renders `message_count=11 reply_count=6` but only **5** replies, and `CHN-00002` shows the moved
+  root with no replies — the reply is invisible on both channels while still counted. No 500 on either page.
+  This corroborates Lane 1's I1 exactly (Important); I did not re-file it.
+- **`mtg_list` row multiplication — does NOT occur.** The `object_list` contains exactly 4 objects for 4
+  meetings, so `distinct=True` is doing its job (the 8 tokens are the link + `confirm()` pair, not extra
+  rows). The *value* multiplication without `distinct` is I4's subject.
+
+### Lane 6 — security-reviewer (serial pass 6)
+
+**Scope check.** Read in full: the frozen contract (esp. §2 L27, §3, §4, §5, §6, §10); the six 7.9 view
+modules, four form modules, five model modules and six url modules under
+`apps/projects/{views,forms,models,urls}/CollaborationCommunication/`; the four shared toolkits they lean
+on (`apps/core/forms/_common.py`, `apps/projects/forms/_common.py`, `apps/core/crud.py`,
+`apps/core/utils.py`, `apps/projects/models/_base.py`); all 17 templates under
+`templates/projects/collaboration/` plus the 7.9 regions of `templates/projects/overview.html`; the
+`accounts.User` model (to confirm it carries a nullable `tenant`, which is what makes `TenantModelForm`
+scope the `shared_with`/`presenter`/`assignee` User FKs); and lanes 1–5's findings. This lane is
+**adversarial and empirical**, not static: I wrote three throwaway probe scripts
+(`temp/probe_lane6.py`, `temp/probe_lane6b.py`, `temp/probe_lane6c.py` — all gitignored, every mutating
+probe wrapped in a transaction that is rolled back) and **executed 60+ probes**, including the
+crafted-cross-tenant-POST-body class the build's own harness does *not* cover. The live seed is left
+pristine (`Acme`/`Globex` both `chn=3 chm=18 dsh=4 mtg=4 agi=8 mai=7 ntf=18`). **Could not verify:**
+concurrency/TOCTOU behaviour (no parallel-request harness) and anything outside the 7.9 file set
+(global `settings.py` security config, the test suite) — listed at the end rather than asserted.
+
+**Area verdicts (coverage — a clean area is a result):**
+
+1. **Tenant isolation — CLEAN (0 findings).** Every one of the 41 views is `@login_required` and every
+   queryset/fetch is tenant-scoped: all 20 `get_object_or_404` sites carry `tenant=request.tenant` (or a
+   `filter(tenant=…)` queryset), and `grep -rnE '\.objects\.all\(\)|\.objects\.get\('` over the six view
+   modules returns **nothing**. Verified by execution, not by reading: **11 pk-carrying verbs**
+   (`chn_archive`, `dsh_revoke`/`claim`/`release`, `mtg_start`/`complete`/`cancel`, `agi_cover`,
+   `mai_toggle`, `ntf_mark_read`, `ntf_delete`) each return **404** on a Globex pk via POST (and 405 on
+   GET, where `@require_POST` applies); `mtg_minutes` returns 404 on both GET and POST; the five foreign
+   `*_detail`/`*_edit` GETs return 404. The two **child** routes are safe against a crafted POST that
+   names a foreign parent: `agi_create`/`mai_create` resolve `meeting` from the URL with
+   `get_object_or_404(Meeting, pk=pk, tenant=request.tenant)` → **404** on a Globex meeting, and their
+   forms exclude `meeting` entirely, so the FK cannot be repointed. `msg_create`/`dsh_create`/
+   `chn_create`/`mtg_create` reject a **foreign pk in the POST body** (the case the build harness never
+   tested): `msg_create` + Globex `channel` → 200 + 0 new rows; `dsh_create` + Globex `document` or
+   `project` or `channel` → 200 + 0 new rows; `chn_create`/`mtg_create` + Globex `project` → 200 + 0 new
+   rows; `mai_create` + Globex `task` → 200 + 0 new rows. The **edit-repoint** vectors are closed too —
+   `msg_edit` cannot move a message onto a foreign `channel`, `chn_edit`/`mtg_edit` cannot repoint
+   `project`, `dsh_edit` cannot repoint `project`/`document` (each POST → 200, id unchanged). The five
+   registers + the feed with `?<fk>=<foreign pk>` all return **200 with 0 rows** (the feed degrades to the
+   tenant-scoped whole-workspace feed per §6.7 — see the unverified list). **No cross-tenant read, write
+   or delete was found by any probe.**
+2. **The M2M authorization boundary — CLEAN (0 findings).** `mentions` is the **only**
+   `ModelMultipleChoiceField` in 7.9 (grep-confirmed; `filter_horizontal=("mentions",)` exists in
+   `admin.py` only), and `ChannelMessageForm.__init__` narrows it explicitly
+   (`forms/CollaborationCommunication/ChannelMessages.py:41-43`), which is the boundary
+   `ModelMultipleChoiceField.clean()` re-validates against. Executed: `msg_create` with a Globex user pk
+   → 200 with `errors={'mentions': ['Select a valid choice. 5 is not one of the available choices.']}`,
+   0 new messages and **0 new notification rows in the Globex inbox**; a **mixed** valid-Acme +
+   foreign-Globex mention list rejects the *whole* POST (no partial fan-out, no half-written message);
+   the same on the `msg_edit` path; and a **tenant-less** user pk (the `admin` superuser) is rejected too
+   (`.filter(tenant=self.tenant)` excludes it). The narrowing is correct and complete for this pass.
+3. **Mass assignment — CLEAN (0 findings).** Every verb-written flag is absent from its form's
+   `Meta.fields` **and** unreachable from raw request data. The 22 flags (`is_archived`/`archived_by`/
+   `archived_at`; `is_active`/`revoked_by`/`revoked_at`/`claimed_by`/`claimed_at`; `is_read`/`read_at`;
+   `is_covered`/`covered_by`/`covered_at`; `is_done`/`done_by`/`done_at`; `edited_by`/`edited_at`;
+   `status`/`minutes`/`minutes_by`/`minutes_at`/`actual_start`/`actual_end`) plus `tenant`/`number`/
+   `created_by` appear in no `Meta.fields`, and every assignment in the six view modules is a literal,
+   `request.user`, `timezone.now()`, or `form.cleaned_data["minutes"]` (a plain `forms.Form` with that one
+   field). Executed on the edit forms: a POST carrying `is_archived=True` to `chn_edit`, `is_active=False`
+   + `claimed_by=<me>` to `dsh_edit`, `status=completed` + `minutes=FORGED` + `actual_end` to `mtg_edit`,
+   `is_covered=True` + `covered_by` to `agi_edit`, `is_done=True` + `done_by` to `mai_edit` — **all
+   ignored** (302, stored values unchanged), and `chn_create` cannot create a pre-archived channel. No
+   `ProjectNotification` form exists at all, so `is_read`/`read_at` are unreachable from any POST.
+4. **XSS / injection — CLEAN (0 findings).** `grep` over the 7.9 backend + templates for
+   `|safe`/`mark_safe`/`autoescape off`/`format_html` returns **nothing** (the one hit is the `is_open`
+   *property name*). The `activity_feed` `label`/`detail` strings are Python f-strings rendered through
+   auto-escaping `{{ }}` (`activity_feed.html:95,103`), and every `{% url %}` argument is a pk. Executed:
+   posting `<script>alert('xss')</script>` as a message body, a channel `topic`, and meeting `minutes`,
+   then rendering the channel detail + the feed + the meeting detail, leaves **no raw payload** in the
+   HTML (`&lt;script&gt;` present instead). No `eval`/`new Function`/inline handler carrying user data; no
+   `.raw()`/`.extra()`/`cursor.execute` anywhere in 7.9.
+5. **CSRF — CLEAN (0 findings).** No `@csrf_exempt` in any 7.9 view. All **37** `method="post"` forms in
+   the 17 templates carry `{% csrf_token %}` (mechanically counted: 37 forms / 37 tokens, and a
+   form-block scan finds no POST form missing the token). The one GET-only page (`activity_feed`) has no
+   form.
+6. **Authorization granularity — 1 finding (I8).** Everything else under the L27 member-level ruling is
+   internally consistent: `dsh_release` letting any member release a stale claim is **explicitly
+   authorised** by contract §6.3 ("a stale claim must not deadlock the document"), so it is *not* a
+   finding; `ntf_mark_all_read` is correctly caller-scoped (executed: caller `4→0` unread, the other
+   member `4→4`). The one defect is the two **single** notification verbs, which are tenant-scoped but not
+   recipient-scoped — I8.
+7. **Audit integrity — CLEAN (0 findings).** All **13** mutating verbs write
+   `action ∈ {create, update, delete}` (≤10 chars — the `AuditLog.action` varchar(10) is never fed a verb
+   name) with the verb in `changes`. Every one captures `previous` **before** mutating (verified by
+   reading each view: `previous = obj.<flag>` precedes the branch in all five toggles, all three lifecycle
+   verbs, `mtg_minutes`, `dsh_claim`/`release`). Executed: `chn_archive` writes
+   `action='update'`, `changes={'verb': 'chn_archive', 'from': False, 'to': True}` — the direction is
+   truthful. Every `changes` value is JSON-serialisable (bools/ints/strings/None).
+8. **Uploads / file paths / SSRF / secrets — CLEAN (0 findings).** The contract's claim holds: grep for
+   `FileField|ImageField|BinaryField|upload_to` in the 7.9 models returns **nothing** (the shared
+   `core.Document` is reached by FK only — no second file store), and grep for
+   `requests.|urllib|subprocess|open(|os.path|shutil` in the 7.9 backend returns **nothing**. No
+   user-controlled path, no outbound HTTP, no secret/credential field, no money column.
+
+**Findings.**
+
+- [I8] One member can mark a teammate's notification read — or delete it outright
+  file: `apps/projects/views/CollaborationCommunication/ProjectNotifications.py`  lines: 63-84 (`ntf_mark_read`), 114-123 (`ntf_delete`)
+  finding: both verbs fetch `get_object_or_404(ProjectNotification, pk=pk, tenant=request.tenant)` —
+  tenant-scoped but **not recipient-scoped** — while the sibling bulk verb is deliberately caller-scoped
+  (`:97-98`, `filter(tenant=request.tenant, recipient=request.user, is_read=False)`) and the model
+  docstring asserts the row is "one person's delivery row" and "an inbox is personal"
+  (`models/CollaborationCommunication/ProjectNotifications.py:15-17`). Any workspace member can therefore
+  clear a colleague's unread badge or destroy the colleague's delivery row, because
+  `notification/list.html:100-105` renders both POST controls on **every** row of the register and the
+  default lens is the whole workspace (executed: default `ntf_list` paginator count **18** of 18 tenant
+  rows; only `?mine=1` narrows to **6**). I ran the attack as `admin_acme`:
+  `POST /projects/notifications/<another Acme member's unread pk>/read/` → **302**, and the row read back
+  `is_read=True`; `POST /projects/notifications/<same>/delete/` → **302** and the row was gone. This is
+  not a tenant-boundary breach (no foreign row is reachable) and the register is already
+  workspace-readable, so the impact is integrity/business, not confidentiality — but it directly
+  contradicts the contract's own rationale for the bulk verb ("a bulk verb that could clear a teammate's
+  is a privilege escalation with no upside"), i.e. it breaks the stated per-recipient delivery model
+  rather than merely exercising the L27 member-level gate.
+  fix: scope both fetches to the recipient, mirroring the bulk verb —
+  `get_object_or_404(ProjectNotification, pk=pk, tenant=request.tenant, recipient=request.user)` in
+  `ntf_mark_read`, and the same three kwargs for `ntf_delete` (fetch tenant+recipient, then delete, so the
+  redirect target stays). Then stop offering the now-404 controls on someone else's row in
+  `notification/list.html:97-107` and `notification/detail.html:11-13,52-56`
+  (`{% if obj.recipient_id == request.user.pk %}`) — the L27 converse rule. If triage instead rules the
+  workspace register intentionally co-managed, amend §3.5/§6.5 and drop the "inbox is personal" wording —
+  but the single verbs and the bulk verb should not disagree.
+
+**Could not verify (reported as such, not asserted).**
+
+- **`dsh_claim` TOCTOU — not filed as a security finding.** The claim check (`:152`) and the save
+  (`:158-160`) are not inside one conditional `UPDATE`/`select_for_update()`, so two simultaneous claims
+  could both win. I did not build a parallel-request harness to test it, and it grants nothing a plain
+  `dsh_release` + `dsh_claim` does not already grant — the contract deliberately lets **any** member
+  release (`:170-184`). Noted only so triage can decide whether the "one holder at a time" affordance
+  needs the atomic form.
+- **Global security config, not this lane's file set.** `DEBUG`, `ALLOWED_HOSTS`, `SECURE_SSL_REDIRECT`,
+  `HSTS`, `SESSION_COOKIE_SECURE`/`HTTPONLY`, `CSRF_COOKIE_SECURE`, `SECURE_CONTENT_TYPE_NOSNIFF` and
+  `XFrameOptionsMiddleware` live in `config/settings.py` and were **not** re-verified here (7.9 adds no
+  setting). `manage.py check` and the test suite were not run by this lane.
+- **Concurrency generally.** `next_number()` and the audit `previous` capture are correct on every
+  sequential path I exercised, but I did not test parallel writes.
+- **`activity_feed` with `?project=<foreign pk>` returns the whole-workspace feed** (my probe initially
+  flagged this as a possible leak, then I confirmed it is the contract-pinned §6.7 degradation: the id
+  resolves to `None`, a `messages.warning` says so, and every source queryset is still
+  `filter(tenant=tenant)`, so **no foreign-tenant row can appear**). It is a warning-plus-fallback, not a
+  leak.
+
+**Probe evidence (all rolled back; live seed verified pristine afterwards).**
+`temp/probe_lane6.py` — 42 pass / 2 fail (the two fails are I8's two verbs, expected-and-reported);
+`temp/probe_lane6b.py` — 12/12 pass (M2M rejection mechanism + XSS); `temp/probe_lane6c.py` — 12 pass /
+1 "fail" that is the documented `activity_feed` fallback, not a defect; plus the inline `msg_edit`
+mention + tenant-less-target probes (both rejected).
+
+---
+
+## Consolidated triage (post-lane-6; deduped, ordered Critical → Important → Minor)
+
+**Lane yield:** 0 Critical filed by any lane · **8 Important** · **21 Minor** = 29 findings.
+The four Criticals (C-A…C-D) were found by Step-3 verification **before** the lanes ran and are
+already committed, so no lane re-filed them — the header above records all four.
+
+**Independent verification of the two consequential Importants** (re-run by the orchestrator at
+`temp/verify_79_I1_I8.py` against a pristine `--flush` seed, because a lane's claim is a claim
+until it is reproduced):
+
+- **I1 CONFIRMED, and worse than filed.** Repointing a root moved `CHM-00001` from `CHN-00001` to
+  `CHN-00003` while its two replies (`CHM-00002`, `CHM-00003`) stayed in `CHN-00001`. The replies
+  are then rendered on **neither** channel — not merely dropped from one view, as filed. Silent
+  disappearance of user-authored content.
+- **I8 CONFIRMED.** As `admin_acme`, `POST notifications/<ops_acme's row>/read/` → 302 and the row
+  came back `is_read=True`; `POST notifications/<sales_acme's row>/delete/` → 302 and the tenant's
+  row count went 18 → 17. The **bulk** verb is correctly caller-scoped (`mine` 4→0, `theirs` 7→7),
+  so the two single-row verbs contradict both the model's per-recipient-delivery docstring and
+  their own sibling.
+
+### Dispositions
+
+Legend: **FIX** = change shipped code · **DOC** = change the contract/comment only · **HARNESS** =
+change `temp/smoke_79.py` or carry into the test-writing phase · **NO-ACTION** = ruled correct.
+
+| ID | Sev | Disposition | Note |
+|---|---|---|---|
+| I1 | Important | **FIX** | Reject a channel change that would orphan replies |
+| I2 | Important | **FIX** | Add the missing `(tenant, created_at)` indexes (migration) |
+| I3 | Important | **FIX** | `_notify_mentions` per-row `full_clean()` cost |
+| I8 | Important | **FIX** | Scope the two single-row notification verbs to the caller |
+| M1 | Minor | **FIX** | `ntf_list` `select_related("message")` |
+| M2 | Minor | **FIX** | Nullable `channel_id` into `{% url %}` |
+| M3 | Minor | **FIX** | `?kind=` must not zero the other four feed counts |
+| M4 | Minor | **FIX** | `truncated` notice hidden under a project filter |
+| M8 | Minor | **FIX** | Badge fallback → `get_kind_display` |
+| M9 | Minor | **FIX** | Badge fallback → `get_access_level_display` |
+| M10 | Minor | **FIX** | Contract pins `minutes_form`; render it (or unpin it) |
+| M11 | Minor | **FIX** | Child edit pages read an unpinned `meeting` key |
+| M12 | Minor | **FIX** | RTL-hostile hard-coded reply indent |
+| M13 | Minor | **FIX** | Three page-local blocks vs contract §10.3's one |
+| M14 | Minor | **FIX** | Agenda `Minutes` header is ambiguous beside the minutes panel |
+| M15 | Minor | **FIX** | Notification detail: §7 promises four guarded deep-links |
+| M16 | Minor | **FIX** | `ntf_mark_all_read` one UPDATE per row |
+| M18 | Minor | **FIX** | Indexes matching no access path — drop or wire up |
+| M19 | Minor | **NO-ACTION** | Seeder per-row `full_clean()` is the app-wide idiom and runs off the request path |
+| M5 | Minor | **DOC** | Contract §1 says 35 first segments; 38 is correct |
+| M6 | Minor | **DOC** | Contract §0/§7 internal count inconsistency (six/four vs seven/five) |
+| M7 | Minor | **NO-ACTION** | Three-level nesting is contract-authorised (§7) and the `cash/…/import.html` precedent |
+| M17 | Minor | **NO-ACTION** | Superseded by I2's fix — the new index serves the facet |
+| I4 | Important | **HARNESS** | `mtg_list` `distinct=True` asserted nowhere; the check is a false pass |
+| I5 | Important | **HARNESS** | 18 of 41 routes never POSTed successfully |
+| I6 | Important | **HARNESS** | Four surviving false-pass assertions |
+| I7 | Important | **HARNESS** | `changes["verb"]` asserted for 11 of 13 verbs; `mtg_cancel` success never runs |
+| M20 | Minor | **HARNESS** | Smoke is not re-entrant |
+| M21 | Minor | **HARNESS** | Missing coverage: positive filters, `?page=` edges, empty tenant, second-user verbs |
+
+### Explicit NO-ACTION rulings (recorded so coverage is visible)
+
+- **`hrm.MeetingActionItem` name collision** — a same-named model in another app, deliberately
+  documented in 7.9's docstring with the prefix `MAIT` (not `MAI`). Not a defect. *(Lane 2)*
+- **The `ProjectNotification` no-form / no-create-route ruling** — rows are minted by triggers only;
+  the absence of a form is the design. *(Lanes 1, 6)*
+- **Deferred boundaries** — the document repository/version history (7.10), notification trigger
+  rules + reminders + the recurrence engine (7.17), file-storage sync (7.18), sprint/retro boards
+  (7.13), real-time co-editing, message reactions/attachments/rich text. None filed by any lane.
+- **Member-level authorization** — L27 makes every 7.9 view member-level by contract, so a plain
+  member mutating project collaboration data is intended, not a hole. I8 is filed not because a
+  member may write, but because the row is *another person's* inbox delivery and the sibling verb
+  already scopes to the caller.
+- **`dsh_claim` TOCTOU** — Lane 6 noted the check-then-write is not locked but did not file it,
+  because the contract deliberately lets **any** member release a stale claim. Accepted as-is.
+- **Tenant isolation** — verified CLEAN by Lane 6 over 60+ probes including crafted cross-tenant
+  POST **bodies** (foreign `channel`/`project`/`document`/`task`/`shared_with`/`assignee`/
+  `presenter`/mention pks all rejected, 0 rows written, 0 foreign inbox rows; foreign pks on all 11
+  pk-carrying verbs → 404). Lane 5's 30 IDOR probes agree. No finding.
