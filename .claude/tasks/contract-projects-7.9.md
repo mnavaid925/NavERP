@@ -6,7 +6,7 @@
 
 ## 0. Scope (frozen by the research pass)
 
-Five NavERP.md bullets → **five entity files, six tables, one computed page**:
+Five NavERP.md bullets → **five entity files, seven tables, one computed page**:
 
 | Bullet (verbatim NavERP.md 7.9) | What 7.9 owns | Artifact |
 |---|---|---|
@@ -47,7 +47,7 @@ Five NavERP.md bullets → **five entity files, six tables, one computed page**:
 | Badge classes: `badge-green badge-red badge-amber badge-info badge-muted badge-slate` (colour-named ONLY, L33). Stat-icon variants: `blue green orange purple red slate`. `stat-card`/`stat-value`/`stat-label` in use | `static/css/theme.css:286-291`; `templates/projects/taskwork/task_priority.html:57-76` |
 | `templates/partials/pagination.html` is L9-safe and preserves every GET param except `page` | `templates/partials/pagination.html` |
 | Migration leaf = `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more` → **7.9's is `0012_…`, assigned by `makemigrations` at generation, NEVER reserved** | `ls apps/projects/migrations/` |
-| **35 existing URL first segments** (incl. `""`): `project-requests/ projects/ stakeholders/ kickoffs/ tasks/ dependencies/ milestones/ baselines/ resource-profiles/ allocations/ time-entries/ capacity-demand/ budgetlines/ controlaccounts/ revisions/ expenses/ risks/ responses/ issues/ escalations/ risk-analysis/ risk-monitoring/ quality-plans/ quality-reviews/ inspections/ defects/ quality-improvement/ quality-acceptance/ requirements/ scope-items/ scope-changes/ scope-verifications/ scope-matrix/ checklist-items/ blocks/ task-board/ gantt-timeline/ task-priority/`. The **eight** new segments in §4 are disjoint from all of them and from each other. No route uses a converter in its first component | `apps/projects/urls/__init__.py` |
+| **38 existing URL first segments** (39 incl. `""`): `project-requests/ projects/ stakeholders/ kickoffs/ tasks/ dependencies/ milestones/ baselines/ resource-profiles/ allocations/ time-entries/ capacity-demand/ budgetlines/ controlaccounts/ revisions/ expenses/ risks/ responses/ issues/ escalations/ risk-analysis/ risk-monitoring/ quality-plans/ quality-reviews/ inspections/ defects/ quality-improvement/ quality-acceptance/ requirements/ scope-items/ scope-changes/ scope-verifications/ scope-matrix/ checklist-items/ blocks/ task-board/ gantt-timeline/ task-priority/`. The **eight** new segments in §4 are disjoint from all of them and from each other. No route uses a converter in its first component | `apps/projects/urls/__init__.py` |
 | Route volume precedent: 7.7 ScopeRequirements = 37 patterns, 7.1 = 32, 7.6 = 32, app total = 222 | `grep -c 'path(' apps/projects/urls/*/*.py` |
 | Prefixes **free**: `CHN`, `CHM`, `DSH`, `MTG`, `AGI`, `MAIT`, `NTF`. **Taken**: `MSG` (`scm.IntegrationMessage`), `MAI` (`hrm.MeetingActionItem`), `TSK`/`TASK`/`DEP`/`TCL`/`TBK`/`PRJ` | `grep -rhoE 'NUMBER_PREFIX = "[A-Z]+"' apps/*/models/` |
 | Related names **free in `apps/projects`**: `channels`, `messages`, `replies`, `document_shares`, `meetings`, `agenda_items`, `action_items`, `project_notifications`. (The repo-wide hits for `messages`/`document_shares`/`action_items` are on `scm.IntegrationEndpoint` / `scm.PortalAccount` / `hrm.OneOnOneMeeting` — different target models, so no reverse-accessor clash) | `grep -rn 'related_name="…"' apps/*/models/` |
@@ -295,7 +295,7 @@ created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NU
 
 ### 3.6 Migration
 
-`0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more` is the disk leaf → **expect `0012_…`, assigned by `makemigrations` at generation, NEVER reserved.** Announce-then-generate: `manage.py makemigrations projects --dry-run` first; read every model it names — anything beyond the six tables in §3 means **STOP and report**. ONE migration carries all six (build order: `Channel` → `ChannelMessage` → `DocumentShare` → `Meeting` → `MeetingAgendaItem` → `MeetingActionItem` → `ProjectNotification`).
+`0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more` is the disk leaf → **expect `0012_…`, assigned by `makemigrations` at generation, NEVER reserved.** Announce-then-generate: `manage.py makemigrations projects --dry-run` first; read every model it names — anything beyond the seven tables in §3 means **STOP and report**. ONE migration carries all seven (build order: `Channel` → `ChannelMessage` → `DocumentShare` → `Meeting` → `MeetingAgendaItem` → `MeetingActionItem` → `ProjectNotification`).
 
 ## 4. Forms (`forms/CollaborationCommunication/`)
 
@@ -383,7 +383,7 @@ Full route table (paths are under the app mount `/projects/`; `app_name = "proje
 - Within every module, literal routes precede `<int:pk>/` routes.
 - **`notifications/read-all/` MUST be listed BEFORE `notifications/<int:pk>/`** even though `read-all` cannot match an int converter — belt and braces, and it keeps the module readable (the `tasks/bulk-update/` precedent in 7.8's `ProjectTasks.py`).
 - The four `meetings/<int:pk>/…` child routes (`agenda/add/`, `actions/add/`) are literal leaves below the int converter — they cannot collide with `meetings/add/` (an int converter does not match `add`).
-- **Eight NEW first segments** — `channels/`, `messages/`, `shared-documents/`, `meetings/`, `agenda-items/`, `action-items/`, `notifications/`, `activity-feed/` — disjoint from all 35 existing (§1) and from each other. No route uses a converter in its first component.
+- **Eight NEW first segments** — `channels/`, `messages/`, `shared-documents/`, `meetings/`, `agenda-items/`, `action-items/`, `notifications/`, `activity-feed/` — disjoint from all 38 existing (§1) and from each other. No route uses a converter in its first component.
 - Integrate appends to `urls/__init__.py`: six imports (`from .CollaborationCommunication.ActivityFeed import urlpatterns as _cc_activityfeed`, `…Channels import … as _cc_channels`, `…ChannelMessages import … as _cc_messages`, `…DocumentShares import … as _cc_shares`, `…Meetings import … as _cc_meetings`, `…ProjectNotifications import … as _cc_notifications`) and the concat block appended AFTER the `+ _tw_priority` line, with a `# 7.9 Collaboration & Communication — first segments (…)` disjointness comment matching the 7.2–7.8 blocks.
 
 ## 6. Views (`views/CollaborationCommunication/`) — decorators, templates, CONTEXT KEYS
