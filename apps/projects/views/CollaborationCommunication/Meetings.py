@@ -104,7 +104,10 @@ def mtg_detail(request, pk):
         "agenda_covered": sum(1 for item in agenda_items if item.is_covered),
         "open_action_count": sum(1 for item in action_items if not item.is_done),
         "overdue_action_count": sum(1 for item in action_items if item.is_overdue),
-        "minutes_form": MeetingMinutesForm(initial={"minutes": obj.minutes}),
+        # No `minutes_form` on this page: the minutes panel is a READ-ONLY summary that links out
+        # to the dedicated `mtg_minutes` editor — the ONE place minutes are written (the page
+        # header and the panel header both link to it). Building a form the template never renders
+        # was a wasted construction per request; contract §6.4's pin was stale and is corrected.
         "agenda_form": MeetingAgendaItemForm(tenant=request.tenant),
         "action_form": MeetingActionItemForm(tenant=request.tenant),
     })
@@ -317,6 +320,7 @@ def mai_edit(request, pk):
             return redirect("projects:mtg_detail", pk=obj.meeting_id)
     else:
         form = MeetingActionItemForm(instance=obj, tenant=request.tenant)
+    # Same as agi_edit: `meeting` is pinned on the edit context for the breadcrumb/panel copy.
     return render(request, "projects/collaboration/meeting/actionitem/form.html",
                   {"form": form, "obj": obj, "meeting": obj.meeting, "is_edit": True})
 
