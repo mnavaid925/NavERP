@@ -83,3 +83,22 @@ from .ScopeRequirements.ScopeVerifications import ScopeVerification  # noqa: F40
 # board goes stale the instant a task moves (the 7.4 EVM / 7.5 simulation / 7.6 boards ruling).
 from .TaskWorkManagement.TaskBlocks import TaskBlock  # noqa: F401
 from .TaskWorkManagement.TaskChecklistItems import TaskChecklistItem  # noqa: F401
+
+# --- 7.9 Collaboration & Communication ---------------------------------------------------------
+# Six new tables across five entity modules, and no seventh: the channel owns the conversation,
+# the message carries the thread (a self-FK) and the mention audience, the share records who may
+# do what with an already-stored `core.Document` (7.10 owns the repository and its versions), the
+# meeting holds its agenda and its action items as children in ONE file (the `Invoices.py` =
+# `Invoice` + `InvoiceLine` rule — neither child has an independent register), and the
+# notification is the per-recipient delivery row. The merged ACTIVITY FEED is a computed page —
+# no table, because a stored feed goes stale the instant a message lands (the 7.4 EVM / 7.5
+# simulation / 7.6 boards / 7.8 board ruling).
+from .CollaborationCommunication.ChannelMessages import ChannelMessage  # noqa: F401
+from .CollaborationCommunication.Channels import Channel  # noqa: F401
+from .CollaborationCommunication.DocumentShares import DocumentShare  # noqa: F401
+from .CollaborationCommunication.Meetings import (  # noqa: F401
+    Meeting,
+    MeetingActionItem,
+    MeetingAgendaItem,
+)
+from .CollaborationCommunication.ProjectNotifications import ProjectNotification  # noqa: F401
