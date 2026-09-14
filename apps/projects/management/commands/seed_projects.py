@@ -1977,14 +1977,14 @@ class Command(BaseCommand):
         empty, and never a parallel store).
 
         Coverage per tenant: three channels (discussion / announcement / ARCHIVED, so the
-        archive facet and both badge states have rows); 17 messages — a two-reply thread, a
-        one-reply thread, a bare root, an EDITED root carrying two mentions, four announcement
-        roots and two on the archived channel — enough to push the message register past its
-        15-row page; four meetings, one per status, with the completed one carrying full minutes,
-        a covered agenda and a mixed action list; six agenda items and six action items (one
-        overdue, one unassigned, one linked to a real work package, one closed); and 18
-        notifications covering every kind, both read states, every optional source FK and three
-        recipients.
+        archive facet and both badge states have rows); 18 messages — two roots carrying two and
+        three replies, two bare roots, an EDITED root carrying two mentions, five announcement
+        roots and three on the archived channel — which clears the register's 15-row page so the
+        paginator has a genuine page 2; four meetings, one per status, with the completed one
+        carrying full minutes, a covered agenda and a mixed action list; six agenda items and six
+        action items (one overdue, one unassigned, one linked to a real work package, one closed);
+        and 18 notifications covering every kind, both read states, every optional source FK and
+        three recipients.
         """
         if Channel.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: collaboration rows already exist. "
@@ -2117,6 +2117,18 @@ class Command(BaseCommand):
                     users[0])
             message(closed, "Notes and the decision log are filed against the kickoff record.",
                     users[1])
+            # Four more so the register genuinely exceeds its 15-row page and the paginator has
+            # a real page 2 to serve (a 13-row register silently renders page 1 for every ?page=).
+            message(standup, "Variance commentary added to the pack; the two red lines are both "
+                             "integration-side.", users[0], parent=second)
+            message(standup, "Thanks - I will re-run the forecast against the new dates.",
+                    users[1], parent=second)
+            message(standup, "Risk review moved to Tuesday; the register has three new entries.",
+                    users[2])
+            message(announce, "Change freeze begins the 28th and lifts after the go-live "
+                              "checkpoint.", users[0])
+            message(closed, "Retro actions are all closed; nothing carried into delivery.",
+                    users[2])
 
             # -- shared documents ------------------------------------------------------------
             # The artifact store is core.Document (7.10 owns the repository); these two rows exist
