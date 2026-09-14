@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}Add{% endif %} Action Item{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}Add{% endif %} Action Item</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span><a href="{% url 'projects:mtg_list' %}">Meetings</a><span class="sep">›</span><a href="{% url 'projects:mtg_detail' meeting.pk %}">{{ meeting.number }}</a><span class="sep">›</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">{{ meeting.title }} · {{ meeting.scheduled_start|date:"M d, Y H:i" }}</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        The meeting is not a field: it comes from the page you are on, so a crafted POST cannot
+        move an action into a different meeting. The done state is not a field either — is_done
+        and its done_by/done_at stamps are written by the close/reopen toggle alone.
+
+        The optional Task link is the point of this register: an action can point at the work
+        package it produced, which is what joins a minute to the plan. This page never CREATES a
+        task — the WBS is the planning register's.
+      {% endcomment %}
+      <p class="text-muted">This action belongs to <strong>{{ meeting.number }}</strong>. Leave <em>Task</em> empty unless the action maps onto an existing work package.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'projects:mtg_detail' meeting.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
