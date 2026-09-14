@@ -89,6 +89,9 @@ class Meeting(TenantNumbered):
             models.Index(fields=["tenant", "project"], name="mtg_tnt_project_idx"),
             models.Index(fields=["tenant", "status"], name="mtg_tnt_status_idx"),
             models.Index(fields=["tenant", "scheduled_start"], name="mtg_tnt_start_idx"),
+            # The activity feed's meeting source, which orders by `-created_at` (the register
+            # itself sorts by `-scheduled_start`, served by mtg_tnt_start_idx).
+            models.Index(fields=["tenant", "-created_at"], name="mtg_tnt_created_idx"),
         ]
 
     def __str__(self):
