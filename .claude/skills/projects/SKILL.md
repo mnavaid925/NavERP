@@ -510,7 +510,6 @@ the matrix's `verified` count meaningful: a requirement is verified when its dom
 | `req_reject` | **tenant_admin** | submitted → rejected; `RequirementRejectionForm` reason |
 | `req_implement` | login | approved → implemented |
 | `req_verify` | **tenant_admin** | implemented → verified; `RequirementVerificationForm` |
-| `req_amendment_create` | login | mints a new version row from an approved baseline (the version-bump path) |
 | `sci_validate` | login | `is_open` → validated |
 | `sci_realize` | login (I9 — recorded for the product owner, see below) | `is_open` → realized |
 | `sci_retire` | login (I9) | **`obj.is_open` ONLY** (review I3 — realized was wrongly accepted) |
@@ -575,11 +574,16 @@ escalations/ risk-analysis/ risk-monitoring/` — disjoint literals).
 `qdf_{resolve,close,raise-issue}` · `quality_improvement` + `quality_acceptance` (path prefixes
 `quality-plans/ quality-reviews/ inspections/ defects/ quality-improvement/
 quality-acceptance/` — disjoint literals).
-7.7: `req_{list,create,detail,edit,delete}` + `req_{submit,approve,reject,implement,verify,
-amendment-create}` · `sci_…` + `sci_{validate,realize,retire}` · `scr_…` +
+7.7: `req_{list,create,detail,edit,delete}` + `req_{submit,approve,reject,implement,verify}` ·
+`sci_…` + `sci_{validate,realize,retire}` · `scr_…` +
 `scr_{submit,review,approve,reject,implement}` · `svr_…` + `svr_{accept,reject,waive}` ·
 `scope_matrix` (path prefixes `requirements/ scope-items/ scope-changes/ scope-verifications/
 scope-matrix/` — disjoint literals).
+
+**`req_amendment_create` is NOT 7.7's** — that name belongs to **procurement 4.1**
+(`procurement:req_amendment_create`, prefix `requisitions/`). Both apps use a `req_` name prefix,
+which is safe only because the namespaces differ; when enumerating "7.7 routes" always scope to the
+`projects` namespace or you will pick up 4.1's `req_*` names.
 
 **The 15 POST-only 7.1 verbs are `@require_POST`, so a GET returns 405, not 302** — that is the house
 pattern, not a bug. 7.2 adds three more, all `@require_POST` + `@tenant_admin_required`:
@@ -717,7 +721,7 @@ boards' pinned figures recomputed from the conftest fills; names pinned in
 `test_scope_{models,forms,views,security}.py` (scope: models 205 / forms 103 / views 162 /
 security 73 = **543** — numbering prefixes, every `*_CHOICES` set pinned against the model,
 `STATUS_BANDS` checked against the theme.css badge allow-list, derived-property truth tables
-(`is_open`/`is_locked`/`is_high_impact`), the same-project `clean()` guards, all 38 route names,
+(`is_open`/`is_locked`/`is_high_impact`), the same-project `clean()` guards, all 37 route names,
 the pinned `scope_matrix` figures (coverage total 4 / traced 2 / untraced 2 / verified 1 /
 `coverage_pct` `50.0`; `bar_pct` `[66.7, 100.0, 16.7]` asserted as the STRING form because it is
 a `Decimal` while the 0-safe branch is float `0.0`; `creep_max` `60000.00`; `creep`
