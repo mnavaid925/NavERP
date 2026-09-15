@@ -446,9 +446,14 @@ Route-name namespaces `pfd_`, `pdm_`, `pdv_`, `dtm_`, `kne_` (verified unused in
 - `clean()`: a title is required for a non-expected row; a legal hold refuses archive; a
   checked-out row refuses a second check-out and refuses upload until checked in; cross-tenant
   backstop on `folder`/`milestone`/`task` (`_id` tested FIRST — the 6.19 guard).
-- The create form offers **two honest paths**: *register an existing `core.Document`* (linked by id,
-  listed on the detail page) **or** *upload a first revision* (which becomes revision 1). The page
-  states which shelf the file lives on (Ruling 2).
+- The create form offers **two honest paths**: create a real document by uploading **revision 1**
+  (the only way a document gets bytes — the repository owns its uploads), or create an **`expected`
+  placeholder** (Deltek's slot-before-the-file). **Amended at build time (2026-09-15):** an earlier
+  draft offered "register an existing `core.Document`" as a third path; it was dropped because it
+  needs exactly the nullable FK to `core.Document` that Ruling 2 forbids (and 6.19 ships no such
+  link either). The two shelves stay distinct BY DESIGN, and the document detail page links to
+  **7.9's share register** (`dsh_list?project=…`) as the sibling shelf rather than pretending one
+  row can be on both.
 
 ### 3. `ProjectDocumentRevision` [PDV-] — `Revisions.py` — bullet 3
 `TenantOwned` child — no number of its own (6.19's shape: the revision is identified by its parent's
