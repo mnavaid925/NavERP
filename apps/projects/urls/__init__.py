@@ -60,6 +60,13 @@ from .CollaborationCommunication.Channels import urlpatterns as _cc_channels
 from .CollaborationCommunication.DocumentShares import urlpatterns as _cc_shares
 from .CollaborationCommunication.Meetings import urlpatterns as _cc_meetings
 from .CollaborationCommunication.ProjectNotifications import urlpatterns as _cc_notifications
+from .DocumentKnowledgeManagement.Documents import urlpatterns as _dk_documents
+from .DocumentKnowledgeManagement.Knowledge import urlpatterns as _dk_knowledge
+from .DocumentKnowledgeManagement.ProjectFolders import urlpatterns as _dk_folders
+from .DocumentKnowledgeManagement.RepositoryOverview import urlpatterns as _dk_repository
+from .DocumentKnowledgeManagement.RetentionBoard import urlpatterns as _dk_retention
+from .DocumentKnowledgeManagement.Revisions import urlpatterns as _dk_revisions
+from .DocumentKnowledgeManagement.Templates import urlpatterns as _dk_templates
 
 app_name = "projects"
 
@@ -135,5 +142,16 @@ urlpatterns = (
     + _cc_shares
     + _cc_meetings
     + _cc_notifications
-    + _cc_activityfeed
+    # 7.10 Document & Knowledge Management - first segments (doc-folders/, documents/,
+    # document-revisions/, document-templates/, knowledge/, document-repository/,
+    # document-retention/) are disjoint literals from 7.1's-7.9's and from each other, so nothing
+    # here can shadow another module's namespace. Within knowledge/ the literal search/ precedes
+    # the <int:pk>/ ones, and within document-revisions/ the literal compare/ does the same.
+    + _dk_folders
+    + _dk_documents
+    + _dk_revisions
+    + _dk_templates
+    + _dk_knowledge
+    + _dk_repository
+    + _dk_retention
 )
