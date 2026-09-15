@@ -68,6 +68,44 @@ STATUS_CSS = {
     "archived": "badge-muted",
 }
 
+#: The repository's upload rules, defined ONCE and applied by every upload path in this sub-module
+#: (the revision upload form and the template form), so "what may be stored here" has one answer.
+#: The extension list is an allow-list, not a deny-list: a deny-list is a moving target, and every
+#: extension not listed is simply not accepted.
+ALLOWED_FILE_EXTENSIONS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".md",
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".dwg", ".dxf", ".zip",
+}
+
+#: 20 MB. The cap is enforced in `validate_upload` and it is deliberately the same number the 6.19
+#: repository uses, so the two document shelves cannot disagree about what "too big" means.
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
+
+def upload_extension(uploaded_file):
+    """The lower-cased extension of an uploaded file ("" when there is none)."""
+    name = getattr(uploaded_file, "name", "") or ""
+    dot = name.rfind(".")
+    return name[dot:].lower() if dot > -1 else ""
+
+
+def validate_upload(uploaded_file, label="file"):
+    """Return a user-facing error string for an unacceptable upload, or ``None`` when it may pass.
+
+    Never raises, so both forms can call it from ``clean()`` and attach the message to the right
+    field. A file with no extension at all is refused: it cannot be typed, previewed or trusted.
+    """
+    if not uploaded_file:
+        return None
+    extension = upload_extension(uploaded_file)
+    if extension not in ALLOWED_FILE_EXTENSIONS:
+        allowed = ", ".join(sorted(ALLOWED_FILE_EXTENSIONS))
+        return f"That file type is not accepted here. Allowed: {allowed}."
+    size = getattr(uploaded_file, "size", None)
+    if size and size > MAX_UPLOAD_BYTES:
+        return f"That file is larger than the 20 MB cap ({size // (1024 * 1024)} MB)."
+    return None
+
 
 class ProjectDocument(TenantNumbered):
     NUMBER_PREFIX = "PDM"
