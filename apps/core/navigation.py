@@ -1856,6 +1856,27 @@ LIVE_LINKS = {
         # searchable cross-channel view of the conversation.
         "Message Register":                      "projects:msg_list",
     },
+    "7.10": {
+        # The folder tree is bullet 1's other half — the hierarchy the NavERP bullet mandates and
+        # 7.9's own sidebar comment assigned here ("the file store, the folders and the VERSION
+        # HISTORY are 7.10's"). It takes the extra live leaf, the 7.8/7.9 idiom.
+        "Document Repository & Folders":         "projects:pdm_list",
+        "Folder Tree":                           "projects:pfd_list",
+        # Bullet 2 maps to the standards library: FILE-BACKED standards only. A written standard
+        # that is prose lives in the knowledge register as kind="template"/"standard" (Ruling 4) —
+        # deliberately two lenses, not two near-duplicate tables.
+        "Document Templates & Standards":        "projects:dtm_list",
+        # Bullet 3 maps to the revision LOG: the immutable chain itself is reached from each
+        # document's detail page (upload/approve/restore are its verbs), and this register is the
+        # cross-document history view. It is NOT a diff — redlining is 13.2's.
+        "Version Control & Check-in/Out":        "projects:pdv_list",
+        # Bullet 4 maps to the insight library; the full-text page over it is a lens
+        # (knowledge/search/) linked from the register, not a bullet of its own.
+        "Knowledge Base & Lessons Learned":      "projects:kne_list",
+        # Bullet 5 is the one COMPUTED page of the five: the retention & archiving board, with the
+        # idempotent reminder Run. 7.10 deletes nothing on a schedule — enforcement is 13.9/13.14's.
+        "Document Retention & Archiving":        "projects:doc_retention",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
