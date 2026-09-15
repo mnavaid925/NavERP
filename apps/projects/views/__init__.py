@@ -374,3 +374,60 @@ from .CollaborationCommunication.ProjectNotifications import (  # noqa: F401
     ntf_mark_all_read,
     ntf_mark_read,
 )
+
+# --- 7.10 Document & Knowledge Management -------------------------------------------------------
+# Absolute imports (the package rule): one module per entity plus the two computed pages. The
+# revision views carry the chain's ONLY writers (upload/approve/restore/delete) and the document
+# views carry the five life-cycle verbs (checkout/checkin/archive/hold/release) plus the re-index.
+from .DocumentKnowledgeManagement.Documents import (  # noqa: F401
+    pdm_archive,
+    pdm_checkin,
+    pdm_checkout,
+    pdm_create,
+    pdm_delete,
+    pdm_detail,
+    pdm_edit,
+    pdm_hold,
+    pdm_list,
+    pdm_release,
+    pdm_reindex,
+)
+from .DocumentKnowledgeManagement.Knowledge import (  # noqa: F401
+    kne_create,
+    kne_delete,
+    kne_detail,
+    kne_edit,
+    kne_list,
+    kne_publish,
+    kne_search,
+    kne_use,
+)
+from .DocumentKnowledgeManagement.ProjectFolders import (  # noqa: F401
+    pfd_archive,
+    pfd_create,
+    pfd_delete,
+    pfd_detail,
+    pfd_edit,
+    pfd_list,
+)
+from .DocumentKnowledgeManagement.RepositoryOverview import doc_repository  # noqa: F401
+from .DocumentKnowledgeManagement.RetentionBoard import (  # noqa: F401
+    doc_retention,
+    doc_retention_run,
+)
+from .DocumentKnowledgeManagement.Revisions import (  # noqa: F401
+    pdv_approve,
+    pdv_compare,
+    pdv_delete,
+    pdv_list,
+    pdv_restore,
+    pdv_upload,
+)
+from .DocumentKnowledgeManagement.Templates import (  # noqa: F401
+    dtm_create,
+    dtm_delete,
+    dtm_detail,
+    dtm_edit,
+    dtm_list,
+    dtm_publish,
+)
