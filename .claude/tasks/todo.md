@@ -7981,3 +7981,281 @@ PRE-SCOPED in the view where a DB-side lens is impossible (L11).
       markers (the CRM board precedent).
 - [ ] **Write-back to `CostControlAccount.percent_complete`** — attested EV input stays manual (Ruling 5);
       the computed lens is advisory only.
+
+---
+
+## Projects 7.10 — Document & Knowledge Management (build plan)
+
+> Source of truth: `.claude/tasks/research-projects-7.10.md` (committed 84a522d8). Scope frozen by
+> Phase 1 — **5 new models** (`ProjectFolder` [PFD-], `ProjectDocument` [PDM-],
+> `ProjectDocumentRevision` [PDV-], `DocumentTemplate` [DTM-], `KnowledgeEntry` [KNE-]) +
+> **3 computed pages** (`doc_repository`, `doc_retention`, `kne_search`), no table of their own.
+> No GFK register, no second ACL, no workflow engine, no retention-policy table — the hierarchy is a
+> tree, access stays 7.9's `DocumentShare`, and retention is a flag plus audited verbs.
+> Migration leaf is `0013_channelmessage_chm_tnt_created_idx_and_more` today → **expect `0014_…`,
+> never reserve**.
+
+### Scope, conventions, rulings, build order
+
+- [ ] **Concurrency (read first):** 7.1–7.9 are built and live and **no peer session is active in this
+      checkout** (tree clean at `86eba20e` apart from the untracked `.workbuddy-ai/` and `.zcode/`,
+      which are not ours). Every shared file (`models/forms/views/urls/__init__.py`, `admin.py`,
+      `seed_projects.py`, `navigation.py`, `conftest.py`) is touched **once, in the Integrate step, as
+      a surgical `Edit` with a re-read anchor immediately before the edit** (L43: never rewrite a
+      shared 8,000-line file; **NEVER use `Write` on `todo.md`**). Commits are one file per commit:
+      `git add '<f>'; git commit -m '<msg>'`. **Never `git push`.**
+- [ ] **NavERP.md 7.10 bullets (verbatim — the `LIVE_LINKS["7.10"]` keys must match
+      character-for-character, because the sidebar maps bullet text → route):**
+      1. **Document Repository & Folders** — Hierarchical storage, metadata tagging, and project-specific organization.
+      2. **Document Templates & Standards** — Standardized formats for charters, plans, reports, and status updates.
+      3. **Version Control & Check-in/Out** — Revision history, comparison tools, and conflict resolution.
+      4. **Knowledge Base & Lessons Learned** — Searchable repository of past project insights, playbooks, and retrospectives.
+      5. **Document Retention & Archiving** — Lifecycle policies, legal hold, and post-project archival workflows.
+- [ ] **Prefixes verified free repo-wide:** `PFD`, `PDM`, `PDV`, `DTM`, `KNE` (the sweep that confirmed
+      it also found these TAKEN, so do not "tidy" into them: `PDOC` procurement 6.19, `DOCREQ`/`EDOC`/
+      `KB`/`KBA`/`KBC` hrm, `TPL` crm 1.9, `LSN` scm, `ARL` inventory, `RTV` procurement, `DSH`/`CHN`/
+      `CHM`/`MTG`/`AGI`/`MAIT`/`NTF` 7.9, `RSP`/`RAL`/`RTE` 7.3, `TSK`/`DEP`/`MST`/`BSL` 7.2, `TCL`/`TBK` 7.8).
+      Route-name namespaces `pfd_`, `pdm_`, `pdv_`, `dtm_`, `kne_` are unused in `apps/projects/urls/`.
+- [ ] **Build order: `ProjectFolder` → `ProjectDocument` → `ProjectDocumentRevision` →
+      `DocumentTemplate` → `KnowledgeEntry`** (PDM FKs PFD; PDV FKs PDM; KNE FKs PDM; DTM stands alone).
+- [ ] **Package layout (mandatory, §2a):** `apps/projects/{models,forms,views,urls}/DocumentKnowledgeManagement/`
+      with one `<Entity>.py` per model in each layer — folder name mirrored from procurement 6.19 —
+      plus the re-export block added to every touched `__init__.py`. Templates under
+      `templates/projects/documentknowledge/<entity>/{list,detail,form}.html`. **No flat `models.py`,
+      no `*_advanced.py`.**
+- [ ] **Rulings 1–6 (research §Rulings), each restated as a one-line build constraint:**
+      1. **FIVE registers, and bullet 1 is why** — the folder tree is a table (7.9's own sidebar
+         comment assigns "the file store, **the folders** and the VERSION HISTORY" to 7.10). If the pass
+         must cut, cut `DocumentTemplate` → bullet 2 goes to 7.19; **never** cut the revision chain and
+         **never** the knowledge library.
+      2. **`ProjectDocument` is 7.10's OWN row with REAL link FKs; `core.Document` is NOT touched** —
+         no import, no FK, no migration (its `version` is a flat CharField and a GFK cannot be
+         tenant-filtered, joined or faceted — procurement 6.19's recorded rejection). 7.9's
+         `DocumentShare` (which does FK `core.Document`) keeps working untouched, and 7.10 shows it as a
+         **read-only lens** on the detail page.
+      3. **The revision chain is linear and 6.19's invariants are copied verbatim** — allocate
+         `revision_no` inside `transaction.atomic()` behind `select_for_update()` on the parent; upload
+         NEVER moves the pointer; `pdv_approve` refuses `revision_no <= current_revision_no` (re-checked
+         inside the lock); `current_revision_no` is an **integer pointer** (0 = none), never a circular
+         FK; the older approved revision KEEPS `is_approved=True`; `current_revision` filters
+         `is_approved=True`; immutability is **structural** (no edit url/view/template). The check-out
+         lock is `is_checked_out` + `checked_out_by`/`checked_out_at` on the PARENT, moved only by
+         `pdm_checkout`/`pdm_checkin`, and every page says it is a **cooperative in-app lock**, not an
+         OS file lock.
+      4. **The knowledge library is CONTENT, not machinery** — `KnowledgeEntry` carries a `kind`
+         (template/standard/playbook/checklist/lesson_learned/retrospective); nothing stored there
+         executes; `usage_count` is a click counter (atomic `F()+1`) and `is_featured` is a shelf,
+         **never a permission**. `DocumentTemplate` exists only for **file-backed** standards.
+      5. **Retention is a documented INTENT plus verbs; Module 13 enforces** — `retention_months` →
+         computed `retain_until`/`is_retention_due`; `review_on` → computed `is_review_due`;
+         `pdm_archive` Toggle writes `is_archived` + both stamps; `is_legal_hold` + `hold_reason`
+         **blocks** archive and delete in `clean()` and on the delete view. **Nothing in 7.10 deletes
+         anything on a schedule** and no page claims it does (13.9/13.14).
+      6. **Search is a denormalized copy with a stated caveat** — `extracted_text` is refreshed by
+         exactly two writers (the approve verb and the re-index Run); the `icontains` sweep joins only
+         from **4+ characters** (Paginator runs it twice); extraction is a lazy `pdfplumber` import with
+         a never-raising fallback, bounded by a page cap AND a character cap; a scanned image has no
+         text layer and every page/empty state says so.
+- [ ] **Boundaries (park, do not build):** the access levels / claim / revoke stay **7.9's
+      `DocumentShare`**; contracts + contract templates + contract revisions stay **crm 1.9**
+      (`DocumentVersion`, `DocTemplates` [TPL-]); HR letters/knowledge stay **hrm** (`DOCREQ`, `EDOC`,
+      `KB`/`KBA`/`KBC`); the procurement repository stays **6.19** (`PDOC`/`PPOL`/`PKR` — 7.10 mirrors
+      the idiom, never the tables); and all of Module 13 stays Module 13 (authoring/co-editing 13.1,
+      branching/redlining/rollback 13.2, workflow designer + e-signature 13.3, storage deployment 13.4,
+      semantic search/auto-tagging 13.5/13.6, permission matrices/DRM 13.7, auto-destruction + legal-hold
+      enforcement 13.9/13.14, wikis 13.17). Master data (doc-type taxonomies, retention schedules,
+      report formats) is **7.19's**.
+
+### Model 1 — `ProjectFolder` [PFD-] (`models/DocumentKnowledgeManagement/ProjectFolders.py`)
+
+- [ ] `project` FK → `projects.Project` (`related_name="doc_folders"`, CASCADE) — **required**;
+      `parent` self-FK → `ProjectFolder` (`related_name="children"`, CASCADE, null = root);
+      `name`; `description` (blank); `sequence` (stable ordering); `is_archived` + `archived_by`
+      (SET_NULL) + `archived_at`.
+- [ ] `clean()`: parent must be the SAME project; refuse a self/descendant cycle; `unique_together
+      (tenant, project, parent, name)` so one parent cannot hold two folders of the same name.
+- [ ] **Computed, never stored:** the materialized `1.2.3` path and the per-folder document count are
+      rendered by the tree view (the 7.2 WBS `_decorate_wbs` idiom).
+- [ ] Indexes `pfd_tnt_project_idx`, `pfd_tnt_parent_idx`, `pfd_tnt_archived_idx`; verb
+      `pfd_archive` (Toggle, audited).
+- [ ] Form excludes `tenant`/`number`/derived/stamps; the `parent` queryset is narrowed to the same
+      project (and, on edit, excludes self + descendants).
+
+### Model 2 — `ProjectDocument` [PDM-] (`models/DocumentKnowledgeManagement/Documents.py`)
+
+- [ ] `project` FK (required, CASCADE, `related_name="documents"`); `folder` FK → `ProjectFolder`
+      (`related_name="documents"`) — **PROTECT, with an empty-folder delete guard** on the folder side
+      (6.19's "you cannot delete a container that has issued documents" rule, restated);
+      `title`; `document_type` ∈ charter/plan/schedule/report/status_update/minutes/specification/
+      drawing/test_result/handover/other; `classification` ∈ public/internal/confidential (the
+      `core.Document` vocabulary, reused); `owner` FK → `AUTH_USER_MODEL` (SET_NULL); `tags`
+      (normalized CharField via a shared `normalize_tags()`); `status` ∈ draft/**expected**/in_review/
+      approved/superseded/archived.
+- [ ] **Real link FKs declared by string** (never a GFK): `milestone` → `projects.ProjectMilestone`
+      (SET_NULL), `task` → `projects.ProjectTask` (SET_NULL), both nullable.
+- [ ] **The check-out lock (verb-written only):** `is_checked_out`, `checked_out_by` (SET_NULL),
+      `checked_out_at`.
+- [ ] **Retention intent:** `retention_months` (nullable), `review_on` (DateField), `is_archived` +
+      `archived_by`/`archived_at`, `is_legal_hold` + `hold_reason`.
+- [ ] **Pointer + search copy:** `current_revision_no` (PositiveSmallInteger, default 0);
+      `extracted_text` (TextField, the denormalized search copy) — **written by exactly two writers**
+      (the revision-approve verb and the re-index Run).
+- [ ] **Computed properties:** `is_expected`, `is_locked`, `retain_until` (from `retention_months`),
+      `is_retention_due`, `is_review_due`, `current_revision` (**filters `is_approved=True` — never
+      un-filtered**), `tag_list`.
+- [ ] `unique_together (tenant, number)`; indexes `pdm_tnt_project_idx`, `pdm_tnt_folder_idx`,
+      `pdm_tnt_status_idx`, `pdm_tnt_type_idx`, `pdm_tnt_archived_idx`.
+- [ ] **Verbs (POST-only unless noted):** `pdm_checkout`, `pdm_checkin`, `pdm_archive` (Toggle),
+      `pdm_hold`/`pdm_release` (Toggle), `pdm_reindex` (Runtime; guarded), and the create/edit/delete
+      CRUD. Delete is refused while `is_legal_hold` or while a revision is approved.
+- [ ] `clean()`: title required unless `status == "expected"`; a held row refuses archive; a
+      checked-out row refuses a second check-out and refuses a revision upload; `_id`-first cross-tenant
+      backstop on `folder`/`milestone`/`task`.
+
+### Model 3 — `ProjectDocumentRevision` [PDV-] (`models/DocumentKnowledgeManagement/Revisions.py`)
+
+- [ ] `TenantOwned` child (no number of its own): `document` FK → `ProjectDocument`
+      (`related_name="revisions"`, CASCADE); `revision_no`; `file` (FileField
+      `projects/documents/%Y/%m/`, extension allow-list + size cap in `clean()`); `checksum` (SHA-256
+      of the stored bytes, streamed — a module-level helper); `change_note` (**the ONLY column editable
+      after creation**); `is_approved` + `approved_by` (SET_NULL) + `approved_at`; `extracted_text`
+      (**the TEXT OF RECORD**) + `extraction_note`.
+- [ ] `unique_together (tenant, document, revision_no)`; index `pdv_tnt_document_idx`.
+      **No second timestamp column** — `TenantOwned.created_at` IS the upload moment.
+- [ ] **Immutability is STRUCTURAL:** no edit url, no edit view, no edit template; everything but
+      `change_note` is `editable=False`; the only form is the create-path `…RevisionUploadForm`.
+- [ ] `pdv_approve` verb: inside `transaction.atomic()` + `select_for_update()` on the PARENT, refuse
+      `revision_no <= current_revision_no` (re-checked **inside** the lock, TOCTOU), then stamp the row,
+      move the pointer, copy `extracted_text` up to the parent, and lift the parent `draft → approved`
+      on first approval — all in one audit-logged transaction.
+- [ ] `pdv_restore` verb: roll FORWARD from any older approved revision by creating a NEW revision
+      (history is never rewritten, never deleted).
+- [ ] `pdv_reindex` Run: re-runs extraction over the current approved revision and refreshes the
+      parent's search copy; idempotent; guarded to the tenant.
+- [ ] Delete is permitted only for an **unapproved, non-current** revision, and the guard runs under
+      the parent row lock.
+
+### Model 4 — `DocumentTemplate` [DTM-] (`models/DocumentKnowledgeManagement/Templates.py`)
+
+- [ ] `name`; `category` ∈ charter/plan/schedule/report/status_update/minutes/register/checklist/other;
+      `document_type` (the SAME vocabulary as `ProjectDocument`, so "start from a template" can be
+      offered per type); `description`; `version` (CharField — the Deltek publish version);
+      `file` (FileField + allow-list); `is_active`; `is_format_locked` (**an INTENT only — no page may
+      claim it is enforced**); `owner` FK → `AUTH_USER_MODEL` (SET_NULL); `review_on`.
+- [ ] **Tenant-wide with NO project FK** — a standard belongs to the PMO, not to one project (the
+      deliberate contrast with `ProjectDocument.project`, which is required).
+- [ ] `unique_together (tenant, name, version)`; indexes `dtm_tnt_category_idx`, `dtm_tnt_active_idx`;
+      verb `dtm_publish` (Toggle: publish/retire, audited).
+- [ ] Form excludes `tenant`/`number`/stamps; file is required on create, optional on edit.
+
+### Model 5 — `KnowledgeEntry` [KNE-] (`models/DocumentKnowledgeManagement/Knowledge.py`)
+
+- [ ] `title`; `kind` ∈ lesson_learned/retrospective/playbook/checklist/best_practice/template/
+      standard; `summary`; `body` (TextField); `category`; `tags` (**the same shared normalizer**);
+      `source_project` FK → `projects.Project` (SET_NULL, nullable — an insight outlives its project);
+      `owner` FK → `AUTH_USER_MODEL` (SET_NULL); `status` ∈ draft/published/retired; `review_on`;
+      `usage_count` (PositiveInteger); `is_featured`; optional `document` FK → `ProjectDocument`
+      (SET_NULL) — **no FileField here** ("one artifact, one place, one history").
+- [ ] `Meta.ordering = ["-is_featured", "-created_at", "-id"]` — the `-id` tiebreak is load-bearing for
+      deterministic paging; `unique_together (tenant, number)`; indexes `kne_tnt_kind_idx`,
+      `kne_tnt_status_idx`, `kne_tnt_feat_idx`.
+- [ ] `kne_use` verb: atomic `F("usage_count") + 1` (never read-modify-write); `kne_publish` verb
+      (Toggle draft/published/retired as the house verb style requires).
+- [ ] `clean()`: normalize `tags`; cross-tenant backstop on `document` (`_id`-first guard).
+- [ ] **`usage_count` is a CLICK COUNTER** — not a metric, not an audit trail, never reconciled;
+      `is_featured` is a SHELF — never a permission and never a branch condition.
+
+### Computed pages (no model — the 7.3 `capacity_demand` / 7.5 `risk_analysis` precedent)
+
+- [ ] `doc_repository`: overview stat tiles (documents, folders, in review, retention due, archived,
+      held) + the register serving `?q=`/`?folder=`/`?type=`/`?status=`/`?classification=`/`?owner=lens`
+      with pagination and Actions.
+- [ ] `doc_retention`: the retention & archiving board (overdue retention, review due, held rows,
+      archived rows) + the idempotent **reminder Run** at module level (no scheduler, no mail worker)
+      that raises in-app rows only.
+- [ ] `kne_search`: library search over title/summary/body/tags with the 4+-character rule, a
+      featured-first shelf and an honest empty state.
+- [ ] **Every empty/junk-param path is probed** (`?folder=abc`, no project, junk pk) — the 7.8
+      `UnboundLocalError` on the no-project Gantt is the precedent for why.
+
+### Backend layers (mirror packages, one file per entity)
+
+- [ ] `forms/DocumentKnowledgeManagement/{ProjectFolders,Documents,Revisions,Templates,Knowledge}.py`
+      — ModelForms excluding `tenant`/`number`/derived/stamps/verb-written fields; the revision upload
+      form is create-path only. Every FK queryset is narrowed by tenant **and** by project where the row
+      is project-scoped.
+- [ ] `views/DocumentKnowledgeManagement/<Entity>.py` ×5 — `@login_required` function views,
+      tenant+project-scoped CRUD, filter bar reflecting `request.GET`, Actions column
+      (view/edit/delete-POST+confirm+csrf), pagination with `has_previous`/`has_next` guards (L9),
+      empty state, and the POST-only verbs listed per model. Every verb writes an `core.AuditLog` row
+      with the verb in `changes` (**never** in `action` — varchar(10)).
+- [ ] `urls/DocumentKnowledgeManagement/<Entity>.py` ×5 — `<entity>_list/_detail/_create/_update/_delete`
+      + the verb routes; **literal routes before `<int:pk>` ones** (Django is first-match-wins).
+- [ ] `admin.py` registrations ×5 (revision registered read-only: no add/change, `readonly_fields`).
+- [ ] **Re-export block added to all four `__init__.py`** (`models`, `forms`, `views`, `urls`) — the
+      `*_CHOICES` tuples stay on the classes, not hoisted (the 6.14/6.15 rule).
+
+### Shared files (Integrate step only — surgical Edits with a re-read anchor)
+
+- [ ] `navigation.py` → `LIVE_LINKS["7.10"]` with the five bullet keys **character-for-character**, plus
+      the extra live leaf: bullet 1 → `projects:pdm_list`, extra leaf **Folders** → `projects:pfd_list`,
+      bullet 2 → `projects:dtm_list`, bullet 3 → `projects:pdv_list`, bullet 4 → `projects:kne_list`,
+      bullet 5 → `projects:doc_retention`. Add the module's usual comment explaining any deliberate
+      omission (e.g. why `kne_search`/`doc_repository` are lenses rather than bullets).
+- [ ] `apps/projects/management/commands/seed_projects.py` → a `_docmgt` block **under its own guard,
+      dispatched after `_collab`**, idempotent per tenant, seeded off the EXISTING projects/parties/tasks
+      (never a new project): a folder tree, documents across several doc types and statuses (including
+      one `expected` placeholder and one held/archived row), a revision chain with at least one
+      superseded + one approved revision, templates, and knowledge rows — **deliberately crossing the
+      15-row page so the paginator has a genuine page 2** (the 7.9 C-D lesson), with mixed ticks so the
+      retention board's figures are non-trivial. `--flush` must remain safe.
+- [ ] `templates/projects/documentknowledge/<entity>/{list,detail,form}.html` ×5 + the three computed
+      pages + the overview tiles; badges use the colour-named `theme.css` classes
+      (`badge-green/red/amber/info/muted/slate` — semantic `-success/-danger` names do not exist, L33).
+- [ ] `makemigrations projects` → inspect the generated `0014` → `migrate` → `seed_projects` ×2
+      (idempotency) → `manage.py check`.
+
+### Verify
+
+- [ ] `manage.py check` clean; `makemigrations --check --dry-run` reports **no** changes after `0014`.
+- [ ] `seed_projects --flush` then `seed_projects` again → identical row counts (idempotent), and the
+      register has a real page 2.
+- [ ] A `temp/` smoke sweep as `admin_acme` / **`password`**: every new `projects:*` URL 200/302, page
+      titles and a seeded record present, no `{#` / `{% comment` leaks, cross-tenant IDOR → 404 for
+      **both** actors, and the empty/junk-param probes above.
+- [ ] Sidebar shows **7.10 Document & Knowledge Management** Live with all five bullets + the extra leaf.
+- [ ] The chain invariants are asserted by hand once: upload → pointer unmoved; approve → pointer moves
+      and the parent's search copy updates; a second upload while checked out → refused.
+
+### Close-out
+
+- [ ] Six reviewers **strictly serially** → `.claude/tasks/review-projects-7.10.md` (each lane appends
+      its own section, then a deduped `# CONSOLIDATED FINDINGS` with IDs + explicit no-action rows).
+- [ ] `code-fixer` burns down the findings file in ID order, one file per commit, then a `# FIX LOG`
+      accounting for every disposition.
+- [ ] Tests: pin `.claude/tasks/test-contract-projects-7.10.md` first (fixtures + the computed figures),
+      then the **append-only** `docmgt_*` conftest block (L43), then
+      `test_docmgt_{models,forms,views,security}.py` one file per commit, then the **full unfiltered**
+      app suite (never `-k`, L47).
+- [ ] **Update** `.claude/skills/projects/SKILL.md` (add the `## 7.10` section + refresh
+      Routes/Templates/Seeder/Tests/Sidebar/As-built), `README.md` (**9 → 10 of 19**), and `todo.md`
+      with a `### Projects 7.10 — … (close-out <date>)` note. Each committed on its own.
+
+### Later passes / deferred
+
+- [ ] **Document diff / redline / track-changes comparison** — 7.10 compares revision METADATA
+      side-by-side only → **13.2** owns real redlining.
+- [ ] **Template merge-field generation** (stamp project data into a standard) → **13.1**.
+- [ ] **Multi-file renditions per document** (Deltek's Word + TIFF + PDF against one placeholder) —
+      deferred; this pass keeps one file per revision.
+- [ ] **Email/push delivery and scheduled reminders** — no scheduler, no mail worker → **7.17**.
+- [ ] **Automatic retention destruction, immutable vault, proof-of-deletion artefacts** → **13.9/13.14**.
+- [ ] **OCR of scans, semantic/vector search, auto-tagging** → **13.5/13.6**, Module 23.
+- [ ] **Bulk folder/placeholder import (CSV/TXT)** — deferred until the register shape is stable.
+- [ ] **Document sets / baskets / share-by-email** → **7.14** / Module 13.
+- [ ] **Per-project document numbering schemes** → **7.19** master data.
+- [ ] **A live document preview pane / viewer** (Newforma's 2D/3D viewer class of feature) → Module 13.
+
+### Review notes
+
+(filled in at the end)
