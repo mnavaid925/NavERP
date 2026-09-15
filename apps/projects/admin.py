@@ -12,12 +12,17 @@ from .models import (
     CostControlAccount,
     DeliverableInspection,
     DocumentShare,
+    DocumentTemplate,
     IssueEscalation,
+    KnowledgeEntry,
     Meeting,
     MeetingActionItem,
     MeetingAgendaItem,
     Project,
     ProjectBudgetLine,
+    ProjectDocument,
+    ProjectDocumentRevision,
+    ProjectFolder,
     ProjectExpense,
     ProjectIssue,
     ProjectKickoff,
@@ -514,3 +519,70 @@ class ProjectNotificationAdmin(admin.ModelAdmin):
         behind it, which is a lie the inbox cannot distinguish from a real one. Same ruling as
         7.8's TaskBlockAdmin; unlike a block, a notification IS deletable (an inbox must clear)."""
         return False
+
+
+@admin.register(ProjectFolder)
+class ProjectFolderAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "parent", "sequence", "is_archived",
+                    "created_at", "tenant")
+    list_filter = ("is_archived", "project")
+    list_select_related = ("tenant", "project", "parent")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("created_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectDocument)
+class ProjectDocumentAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "project", "folder", "document_type", "status",
+                    "current_revision_no", "is_checked_out", "is_legal_hold", "is_archived",
+                    "created_at", "tenant")
+    list_filter = ("document_type", "status", "classification", "is_archived", "is_legal_hold")
+    list_select_related = ("tenant", "project", "folder", "owner")
+    search_fields = ("number", "title", "tags", "extracted_text")
+    # The pointer, the search copy, the lock and the hold are all VERB-WRITTEN state: an admin edit
+    # would forge the one thing the register exists to attest (who checked what out, and when).
+    readonly_fields = ("current_revision_no", "extracted_text", "is_checked_out", "checked_out_by",
+                       "checked_out_at", "is_legal_hold", "hold_reason", "held_by", "held_at",
+                       "created_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectDocumentRevision)
+class ProjectDocumentRevisionAdmin(admin.ModelAdmin):
+    # Read-only by construction (structural immutability): no add, no change - the row is created by
+    # the upload verb and stamped by the approve verb, and admin is not a second upload path.
+    list_display = ("document", "revision_no", "is_approved", "checksum", "uploaded_by",
+                    "created_at", "tenant")
+    list_filter = ("is_approved",)
+    list_select_related = ("tenant", "document", "approved_by", "uploaded_by")
+    search_fields = ("document__number", "document__title", "change_note", "checksum")
+    readonly_fields = ("document", "revision_no", "file", "checksum", "change_note",
+                       "is_approved", "approved_by", "approved_at", "extracted_text",
+                       "extraction_note", "uploaded_by", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DocumentTemplate)
+class DocumentTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "category", "document_type", "version", "is_active",
+                    "review_on", "created_at", "tenant")
+    list_filter = ("category", "is_active")
+    list_select_related = ("tenant", "owner")
+    search_fields = ("number", "name", "description", "version")
+    readonly_fields = ("created_by", "created_at", "updated_at")
+
+
+@admin.register(KnowledgeEntry)
+class KnowledgeEntryAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "kind", "status", "source_project", "usage_count",
+                    "is_featured", "review_on", "created_at", "tenant")
+    list_filter = ("kind", "status", "is_featured")
+    list_select_related = ("tenant", "source_project", "document", "owner")
+    search_fields = ("number", "title", "summary", "body", "tags")
+    # usage_count is a CLICK COUNTER written by kne_use with an atomic F()+1 - an admin edit would
+    # reset somebody's count by saving a stale copy of the row.
+    readonly_fields = ("usage_count", "created_by", "created_at", "updated_at")
