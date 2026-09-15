@@ -120,3 +120,15 @@ from .CollaborationCommunication.Meetings import (  # noqa: F401
     MeetingForm,
     MeetingMinutesForm,
 )
+
+# --- 7.10 Document & Knowledge Management -------------------------------------------------------
+# FIVE re-exports across FOUR modules: the folder tree, the document register, the revision UPLOAD
+# form (create-path only — a revision has no edit form anywhere, because its immutability is
+# structural), the file-backed standards library and the reusable-insight library. The revision
+# form deliberately carries NO `revision_no`/`is_approved`: the view assigns the number from
+# next_revision_no() inside the save transaction and an upload never approves itself.
+from .DocumentKnowledgeManagement.Documents import ProjectDocumentForm  # noqa: F401
+from .DocumentKnowledgeManagement.Knowledge import KnowledgeEntryForm  # noqa: F401
+from .DocumentKnowledgeManagement.ProjectFolders import ProjectFolderForm  # noqa: F401
+from .DocumentKnowledgeManagement.Revisions import ProjectDocumentRevisionUploadForm  # noqa: F401
+from .DocumentKnowledgeManagement.Templates import DocumentTemplateForm  # noqa: F401
