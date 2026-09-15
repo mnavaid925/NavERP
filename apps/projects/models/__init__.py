@@ -102,3 +102,20 @@ from .CollaborationCommunication.Meetings import (  # noqa: F401
     MeetingAgendaItem,
 )
 from .CollaborationCommunication.ProjectNotifications import ProjectNotification  # noqa: F401
+
+# --- 7.10 Document & Knowledge Management -------------------------------------------------------
+# Five new tables, no sixth: the per-project folder tree, the document REGISTER (metadata, the
+# expected/placeholder state, the cooperative check-out lock, retention intent, the archive and
+# legal-hold flags, the integer revision pointer and the denormalized search copy), the immutable
+# revision chain, the tenant-wide standards library and the reusable-insight library. This
+# sub-module deliberately does NOT touch `core.Document` (a GFK register cannot be tenant-filtered,
+# joined or faceted — procurement 6.19's recorded rejection): 7.9's `DocumentShare` keeps FK-ing
+# `core.Document` and is shown here as a read-only lens. The repository overview, the retention &
+# archiving board and the knowledge search are computed pages — no tables, because a stored board
+# goes stale the instant a document is approved (the 7.4 EVM / 7.5 simulation / 7.6 / 7.8 / 7.9
+# ruling). Nothing here deletes anything on a schedule: retention is an intent a human reads.
+from .DocumentKnowledgeManagement.Documents import ProjectDocument  # noqa: F401
+from .DocumentKnowledgeManagement.Knowledge import KnowledgeEntry  # noqa: F401
+from .DocumentKnowledgeManagement.ProjectFolders import ProjectFolder  # noqa: F401
+from .DocumentKnowledgeManagement.Revisions import ProjectDocumentRevision  # noqa: F401
+from .DocumentKnowledgeManagement.Templates import DocumentTemplate  # noqa: F401
