@@ -23,8 +23,10 @@ from apps.projects.views._helpers import projects
 
 @login_required
 def kne_list(request):
+    # `body` is DEFERRED: the register renders title/summary/kind/tags, never the prose, and `body`
+    # is the one TextField in this sub-module with no length cap of its own.
     qs = (KnowledgeEntry.objects.filter(tenant=request.tenant)
-          .select_related("source_project", "document", "owner"))
+          .select_related("source_project", "document", "owner").defer("body"))
     return crud_list(
         request, qs, "projects/documentknowledge/knowledgeentry/list.html",
         search_fields=["number", "title", "summary", "tags"],
@@ -47,8 +49,10 @@ def kne_search(request):
     plainly which fields it searched, so an empty result is never a mystery.
     """
     raw = (request.GET.get("q") or "").strip()
+    # `body` is DEFERRED — it is SEARCHED (a WHERE clause below) but never rendered, and the
+    # projection is the only half that costs transfer.
     qs = KnowledgeEntry.objects.filter(tenant=request.tenant).select_related(
-        "source_project", "document", "owner")
+        "source_project", "document", "owner").defer("body")
     searched = ["title", "summary", "body", "tags", "category"]
     if raw:
         cond = Q()
