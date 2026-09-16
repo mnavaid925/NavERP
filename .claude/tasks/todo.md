@@ -7995,6 +7995,68 @@ PRE-SCOPED in the view where a DB-side lens is impossible (L11).
 > Migration leaf is `0013_channelmessage_chm_tnt_created_idx_and_more` today → **expect `0014_…`,
 > never reserve**.
 
+### Build completion note — 2026-09-16 (adopted from an interrupted session)
+
+The **backend was already committed** when this session picked the sub-module up (last commit
+`d8bcee2c`, 2026-09-15 15:09) and the **Build step was not finished**. A stalled session had
+committed models/forms/views/urls/admin/migration/`LIVE_LINKS["7.10"]`, then died while writing
+templates: **1 of 22 templates** existed (`overview.html`, plus a `projectdocument/list.html` that
+was not even valid UTF-8 — cp1252 `0x85` in the middle of it), a third had been written to a bogus
+path `$t/projectdocument/detail.html` from an unexpanded shell variable, **migration `0014` had
+never been applied** (`nav_erp.projects_projectfolder` did not exist), and the seeder had no 7.10
+block. The sidebar advertised 7.10 as **Live** over 21 pages that would `TemplateDoesNotExist`.
+
+Adopted and completed — the two stray files were re-encoded and carried forward, never
+`git checkout`-ed away:
+
+- **19 new templates + the 2 adopted ones repaired** (22 total) under
+  `templates/projects/documentknowledge/<entity>/{list,detail,form,delete}.html` plus
+  `retention.html` and the overview. The adopted `list.html` was rewritten onto the house idiom
+  (`.table-wrap`/`.table-actions`/`.btn-icon`, the standard `partials/pagination.html`) because it
+  used `.btn-xs`, `.link-danger` and a hand-rolled paginator that dropped every GET param — none of
+  which exist in `theme.css`.
+- **`_docmgt` seeder block** under its own guard, dispatched after `_collab`: 12 folders / 22
+  documents / 23 revisions / 16 standards / 17 knowledge entries per tenant, with the revision
+  numbers, checksums and extracted text produced by the SAME helpers the upload verb uses. Documents
+  and knowledge both clear the 15-row page, and the retention board's four headline figures are all
+  non-zero — which required `backdate()`: `retain_until` is `created_at + 30 * retention_months`, so
+  without ageing a seeded row **no** document could ever be retention-due.
+- **`0014` applied**, `seed_projects` run twice (idempotent, **no** second file written under
+  `MEDIA_ROOT`), `--flush` + re-seed returns identical counts, `makemigrations --check --dry-run`
+  reports no changes, `manage.py check` clean.
+
+**Four defects in the already-committed backend were found and fixed** (each its own commit, each
+verified with an independent probe):
+
+1. `pdm_list` applied **only** `?q=`. The seven-select filter bar rendered and filtered nothing.
+   Now hands the whole `filters` spec to `crud_list` (where the L11 guards live), `search_fields=[]`
+   keeping the custom 4+-character rule as the only search.
+2. `kne_search` raised **`NameError: name 'Q' is not defined` on every non-empty `?q=`** — `Q` was
+   never imported. A hard 500 on the sub-module's own search page.
+3. `ProjectDocumentForm` left `project` **editable** on an existing instance while narrowing
+   `folder`/`milestone`/`task` from the instance's OLD project — so changing the project could never
+   validate. The field is now `disabled` on edit, which is what the form's docstring already claimed
+   ("a document never moves between projects").
+4. **Pre-existing 7.9 defect:** `_cc_activityfeed` was imported into
+   `apps/projects/urls/__init__.py` but **never concatenated into `urlpatterns`**, so
+   `projects:activity_feed` raised `NoReverseMatch` and took `/projects/` — the module landing page,
+   which every 7.10 breadcrumb hangs off — down with it. Three templates reverse that name. Measured
+   before/after: reverting the one-line fix leaves 7.9's own
+   `test_collab_security.py::test_collab_anonymous_is_redirected_to_login[activity_feed-None]`
+   **failing on `main`**; with the fix it passes.
+
+**Verified:** `temp/smoke_710.py` — **167 checks, 0 failures** (every 7.10 route rendered with
+content assertions, POST-only verbs 405 on GET, the verb state machines, the retention Run's
+idempotency, page 2 and out-of-range pages, 31 junk/empty lenses, an empty tenant, cross-tenant IDOR
+→ 404 for both actors, anonymous → login, no `{#`/`{% comment` leaks). Full `apps/projects` suite:
+**3270 passed, 0 failed, 2 skipped**.
+
+**Still open — the close-out is NOT done.** The `### Close-out` checkboxes below remain unticked:
+the six serial reviewers → `review-projects-7.10.md`, the `code-fixer` burn-down, the
+`test-contract-projects-7.10.md` + `docmgt_*` conftest block + `test_docmgt_{models,forms,views,
+security}.py` lanes, and the `.claude/skills/projects/SKILL.md` refresh. Nothing in this pass
+substitutes for them.
+
 ### Scope, conventions, rulings, build order
 
 - [ ] **Concurrency (read first):** 7.1–7.9 are built and live and **no peer session is active in this
