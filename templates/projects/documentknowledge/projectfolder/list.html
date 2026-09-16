@@ -59,10 +59,10 @@
                 <div class="table-actions">
                   <a href="{% url 'projects:pfd_detail' row.obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'projects:pfd_edit' row.obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'projects:pfd_archive' row.obj.pk %}" onsubmit="return confirm('{% if row.obj.is_archived %}Restore{% else %}Archive{% endif %} folder {{ row.obj.name }}?{% if not row.obj.is_archived %} Its documents stay readable through the archive lens.{% endif %}');">
+                  <form method="post" action="{% url 'projects:pfd_archive' row.obj.pk %}" onsubmit="return confirm('{% if row.obj.is_archived %}Restore{% else %}Archive{% endif %} folder {{ row.obj.name|escapejs }}?{% if not row.obj.is_archived %} Its documents stay readable through the archive lens.{% endif %}');">
                     {% csrf_token %}<button class="btn-icon" type="submit" title="{% if row.obj.is_archived %}Restore{% else %}Archive{% endif %}"><i data-lucide="{% if row.obj.is_archived %}rotate-ccw{% else %}archive{% endif %}"></i></button>
                   </form>
-                  <form method="post" action="{% url 'projects:pfd_delete' row.obj.pk %}" onsubmit="return confirm('Delete folder {{ row.obj.name }}? A folder that still holds documents or sub-folders is refused.');">
+                  <form method="post" action="{% url 'projects:pfd_delete' row.obj.pk %}" onsubmit="return confirm('Delete folder {{ row.obj.name|escapejs }}? A folder that still holds documents or sub-folders is refused.');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
                 </div>
