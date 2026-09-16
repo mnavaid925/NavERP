@@ -33,7 +33,8 @@ from django.db.models import Q
 
 from apps.core.crud import as_db_int
 from apps.projects.forms import ProjectDocumentForm, ProjectDocumentRevisionUploadForm
-from apps.projects.models import ProjectDocument
+from apps.projects.models import ProjectDocument, ProjectDocumentRevision
+from apps.projects.models.DocumentKnowledgeManagement.Documents import purge_stored_files
 from apps.projects.models.DocumentKnowledgeManagement.Revisions import extract_text
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (crud_list, get_object_or_404, login_required, messages,
@@ -163,9 +164,13 @@ def pdm_delete(request, pk):
                                     f"document by archiving it instead.")
             return redirect("projects:pdm_detail", pk=obj.pk)
         number, title = obj.number, obj.title
+        # Captured before the delete: the revisions cascade with the document, and the purge has to
+        # run after the rows are gone or each row counts as a reference to its own payload.
+        file_names = list(obj.revisions.values_list("file", flat=True))
         write_audit_log(request.user, obj, "delete",
                         changes={"verb": "pdm_delete", "title": title})
         obj.delete()
+        purge_stored_files(ProjectDocumentRevision, file_names)
         messages.success(request, f"Document {number} ({title}) deleted.")
         return redirect("projects:pdm_list")
     return render(request, "projects/documentknowledge/projectdocument/delete.html", {"obj": obj})
