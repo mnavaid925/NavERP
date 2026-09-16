@@ -23,6 +23,7 @@ from django.db import transaction
 from apps.core.crud import as_db_int
 from apps.projects.forms import ProjectDocumentRevisionUploadForm
 from apps.projects.models import ProjectDocument, ProjectDocumentRevision
+from apps.projects.models.DocumentKnowledgeManagement.Documents import purge_stored_files
 from apps.projects.models.DocumentKnowledgeManagement.Revisions import (extract_text,
                                                                         file_sha256,
                                                                         next_revision_no)
@@ -172,9 +173,13 @@ def pdv_delete(request, pk):
             return redirect("projects:pdm_detail", pk=document.pk)
         no, doc_pk = revision.revision_no, document.pk
         doc_number = document.number
+        # Captured BEFORE the delete: `Model.delete()` nulls the instance's pk, and the stored
+        # payload has to be purged after the row is gone or the row counts as its own reference.
+        file_name = revision.file.name
         write_audit_log(request.user, revision, "delete",
                         changes={"verb": "pdv_delete", "revision_no": no})
         revision.delete()
+        purge_stored_files(ProjectDocumentRevision, [file_name])
     messages.success(request, f"Unapproved revision {no} of {doc_number} deleted.")
     return redirect("projects:pdm_detail", pk=doc_pk)
 
