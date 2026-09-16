@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Upload a Revision — {{ document.number }}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Upload a Revision</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdm_list' %}">Register</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdm_detail' document.pk %}">{{ document.number }}</a><span class="sep">&rsaquo;</span><span>New revision</span></div>
+    <p class="text-muted">{{ document.number }}{% if document.title %} &mdash; {{ document.title }}{% endif %}</p>
+  </div></div>
+
+  {% if document.is_locked %}
+    <div class="card"><div class="card-body">
+      <p class="text-muted">{{ document.number }} is checked out by {% if document.checked_out_by %}{{ document.checked_out_by.get_full_name|default:document.checked_out_by.email }}{% else %}somebody{% endif %} &mdash; an upload will be refused until it is checked in. Whoever holds the check-out wins; that is the whole conflict-resolution story here (merge tooling is Module 13.2's).</p>
+      <a href="{% url 'projects:pdm_detail' document.pk %}" class="btn btn-outline">Back to the document</a>
+    </div></div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="document" value="{{ document.pk }}">
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-group">
+        <label class="form-label" for="{{ form.file.id_for_label }}">File <span class="req">*</span></label>
+        {{ form.file }}
+        <div class="form-help">Allowed: .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .csv .md .png .jpg .jpeg .gif .svg .dwg .dxf .zip &mdash; up to 20 MB. These are the same rules the standards library applies, so the two upload paths cannot disagree about what may be stored.</div>
+        {% for e in form.file.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.change_note.id_for_label }}">What changed</label>
+        {{ form.change_note }}
+        <div class="form-help">One line somebody can scan in the history table.</div>
+        {% for e in form.change_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      {% comment %}
+        What this page deliberately does not offer: a revision number (allocated from the highest
+        existing one inside the transaction that takes the parent's row lock), an approval control
+        (an upload NEVER approves itself), and an edit control of any kind (immutability is
+        structural — there is no edit url, view or template for a revision anywhere in this
+        sub-module). A checksum and a text read are taken at ingest and cannot be typed.
+      {% endcomment %}
+      <p class="text-muted">The revision number is allocated for you, one past the highest already on this document. Your upload lands <strong>unapproved</strong>: it is stored, checksummed and readable, but the current version does not change until somebody approves it. A deleted revision leaves a gap in the numbering &mdash; the gap is the honest record of what happened.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="upload"></i> Upload revision</button>
+      <a href="{% url 'projects:pdm_detail' document.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
