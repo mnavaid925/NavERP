@@ -34,12 +34,20 @@ authorize a thing. The ordering below puts featured rows first and then falls ba
 and the unique `-id`, which is what makes paging deterministic: without the `id` tiebreak two rows
 created in the same second could swap places between page 1 and page 2.
 """
+from django.core.validators import MaxLengthValidator
+
 from apps.projects.models._base import *  # noqa: F401,F403
 from apps.projects.models._base import models, settings
 
 # The tag normalizer is SHARED with the document register on purpose: one tag typed on a document and
 # on a playbook has to be the SAME tag, or a facet lists "hvac" twice.
 from apps.projects.models.DocumentKnowledgeManagement.Documents import normalize_tags
+
+#: The prose cap. `body` is the one TextField in this sub-module that had no bound at all, while
+#: `kne_search` sweeps it with `icontains` — so an unbounded body is an unbounded scan, and it is
+#: also what `kne_list`/`kne_search` used to drag off every row. The number matches the document
+#: search copy's cap (`EXTRACT_MAX_CHARS`), so the two text columns in 7.10 are bounded identically.
+BODY_MAX_CHARS = 200_000
 
 
 class KnowledgeEntry(TenantNumbered):
@@ -71,7 +79,9 @@ class KnowledgeEntry(TenantNumbered):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="lesson_learned")
     summary = models.CharField(
         max_length=255, blank=True, help_text="One line somebody can scan in the register.")
-    body = models.TextField(blank=True, help_text="The insight itself, in plain text.")
+    body = models.TextField(
+        blank=True, validators=[MaxLengthValidator(BODY_MAX_CHARS)],
+        help_text="The insight itself, in plain text.")
     category = models.CharField(max_length=120, blank=True)
     #: The same normalized CharField the document register carries — see `normalize_tags`.
     tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated keywords.")
