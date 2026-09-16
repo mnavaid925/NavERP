@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Folder Tree{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Folder Tree</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><span>Folders</span></div>
+      <p class="text-muted">The per-project hierarchy the repository is organised into. The full path and the document count beside each row are computed on read &mdash; nothing here is a stored column, so renaming a parent can never leave a stale path behind. A folder is organisation, not authorisation: it grants nobody access to anything.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pfd_create' %}{% if project_filter %}?project={{ project_filter }}{% endif %}" class="btn btn-primary"><i data-lucide="folder-plus"></i> Add a Folder</a>
+      <a href="{% url 'projects:pdm_list' %}" class="btn btn-outline"><i data-lucide="files"></i> Document Register</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search folder name or description&hellip;">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} &mdash; {{ p.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:pfd_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Folder</th><th>Path</th><th>Project</th><th>Documents</th><th>State</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td style="padding-left: calc(0.75rem + {{ row.depth }} * 1.5rem);">
+                {% if row.depth %}<span class="text-muted">&#8627;</span> {% endif %}
+                <span class="fw-600"><a href="{% url 'projects:pfd_detail' row.obj.pk %}">{{ row.obj.name }}</a></span>
+                <div class="text-muted">{{ row.obj.number }}{% if row.obj.sequence %} &middot; seq {{ row.obj.sequence }}{% endif %}</div>
+              </td>
+              <td class="text-muted">{{ row.path }}</td>
+              <td><a href="{% url 'projects:prj_detail' row.obj.project_id %}">{{ row.obj.project.number }}</a></td>
+              <td>
+                {% if row.doc_count %}<span class="badge badge-info">{{ row.doc_count }}</span>
+                {% else %}<span class="text-muted">empty</span>{% endif %}
+              </td>
+              <td>
+                {% if row.obj.is_archived %}<span class="badge badge-muted">Archived</span>
+                {% else %}<span class="badge badge-green">Live</span>{% endif %}
+                {% if row.obj.is_root %}<span class="badge badge-slate">Root</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pfd_detail' row.obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:pfd_edit' row.obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:pfd_archive' row.obj.pk %}" onsubmit="return confirm('{% if row.obj.is_archived %}Restore{% else %}Archive{% endif %} folder {{ row.obj.name }}?{% if not row.obj.is_archived %} Its documents stay readable through the archive lens.{% endif %}');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if row.obj.is_archived %}Restore{% else %}Archive{% endif %}"><i data-lucide="{% if row.obj.is_archived %}rotate-ccw{% else %}archive{% endif %}"></i></button>
+                  </form>
+                  <form method="post" action="{% url 'projects:pfd_delete' row.obj.pk %}" onsubmit="return confirm('Delete folder {{ row.obj.name }}? A folder that still holds documents or sub-folders is refused.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="folder-tree"></i><h3>No folders {% if q or project_filter %}match{% else %}yet{% endif %}</h3><p>{% if q or project_filter %}Nothing in the tree matches that lens &mdash; reset it, or widen the search.{% else %}A folder tree is how a project's documents stay findable. Create the first root folder.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The tree is deliberately NOT paginated: the rows are decorated depth-first from the whole
+      folder set, so paging it would cut a parent away from its children and render an indented
+      row under nothing. Folders are organisation, not data — a tenant has tens, not thousands.
+    {% endcomment %}
+    {% if rows %}<div class="pagination"><span class="muted">{{ total_count }} folder{{ total_count|pluralize }} in the tree</span></div>{% endif %}
+  </div>
+{% endblock %}
