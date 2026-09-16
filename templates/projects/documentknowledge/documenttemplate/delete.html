@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Delete Standard</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:dtm_list' %}">Standards</a><span class="sep">&rsaquo;</span><span>Delete {{ obj.number }}</span></div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <h2 class="text-lg font-semibold">Delete {{ obj.number }} &mdash; {{ obj.name }} v{{ obj.version }}?</h2>
+    <p>This removes the standard from the organisation's library. It is not attached to any project, so nothing else changes &mdash; projects that already copied the format keep their own documents.</p>
+    <p class="text-muted">If the intent is to take it off the active list rather than destroy it, <strong>retire</strong> it instead: a retired standard stays readable and leaves the "start from this" list. Retiring is reversible; this is not.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete standard</button>
+        <a href="{% url 'projects:dtm_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
