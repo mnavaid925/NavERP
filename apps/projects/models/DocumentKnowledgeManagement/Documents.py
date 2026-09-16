@@ -228,6 +228,12 @@ class ProjectDocument(TenantNumbered):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         editable=False, related_name="+")
     archived_at = models.DateTimeField(null=True, blank=True, editable=False)
+    #: The status the row carried BEFORE `pdm_archive` stamped it ``archived``. Stored rather than
+    #: re-derived, because un-archiving used to GUESS ("approved if a revision is current, else
+    #: draft") — which brought an ``in_review`` or ``superseded`` document back as **Approved**
+    #: with no approval action behind it, overstating the register, its ``?status=`` lens and
+    #: ``doc_repository``'s ``approved`` figure.
+    pre_archive_status = models.CharField(max_length=20, blank=True, editable=False)
     is_legal_hold = models.BooleanField(
         default=False, help_text="While held, this record may not be archived or deleted.")
     hold_reason = models.CharField(max_length=255, blank=True)
