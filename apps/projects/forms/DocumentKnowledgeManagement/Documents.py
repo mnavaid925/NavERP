@@ -10,7 +10,9 @@
 ``held_by``/``held_at`` (``pdm_hold``/``pdm_release``), ``current_revision_no`` and
 ``extracted_text`` (the revision verbs and the re-index Run) and ``created_by``. A form that could
 set ``is_archived`` would let somebody archive a held record by typing, which is exactly what the
-model's ``clean()`` refuses.
+model's ``clean()`` refuses. ``status`` is likewise narrowed to the three states a human may type
+(``draft``/``expected``/``in_review``): ``approved``, ``archived`` and ``superseded`` belong to the
+verbs, and a form that offered them minted the state with no verb behind it.
 
 ``owner`` is a ``settings.AUTH_USER_MODEL`` FK and is **deliberately absent** from the
 ``_reject_foreign`` list: users can be tenant-less, so a narrowed ``<select>`` is the boundary and
@@ -23,6 +25,12 @@ from apps.projects.models import ProjectDocument
 
 
 class ProjectDocumentForm(TenantUniqueMixin, TenantModelForm):
+    #: The statuses a human may TYPE. ``approved`` is `pdv_approve`'s, ``archived`` is
+    #: `pdm_archive`'s and ``superseded`` is nobody's to type — offering them on the form let a
+    #: crafted POST mint an `approved` or `archived` record with no verb behind it, and a typed
+    #: ``archived`` rendered "Archived" on a HELD row without tripping the hold's own refusal.
+    TYPED_STATUSES = ("draft", "expected", "in_review")
+
     class Meta:
         model = ProjectDocument
         fields = [
@@ -32,6 +40,16 @@ class ProjectDocumentForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Narrow `status` to the states a human may type. On EDIT the row's OWN status is added
+        # back so the widget renders it selected: without that the browser would fall back to the
+        # first option and any save would silently demote an approved/archived record.
+        allowed = set(self.TYPED_STATUSES)
+        if self.instance and self.instance.pk:
+            allowed.add(self.instance.status)
+        self.fields["status"].choices = [
+            (value, label) for value, label in ProjectDocument.STATUS_CHOICES if value in allowed
+        ]
 
         # The project this document belongs to drives every narrowed queryset. On EDIT it is the
         # instance's own project and the field is not even offered (a document never moves between
