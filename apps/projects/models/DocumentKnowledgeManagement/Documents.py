@@ -43,6 +43,10 @@ from datetime import timedelta
 from apps.projects.models._base import *  # noqa: F401,F403
 from apps.projects.models._base import models, settings
 
+# The house allow-list, reached through the module that owns it rather than through the package
+# re-export (the 6.19 precedent) so the model import graph stays off `core.forms`' entity modules.
+from apps.core.forms._common import ALLOWED_DOC_EXTENSIONS as _HOUSE_ALLOWED_DOC_EXTENSIONS
+
 
 #: The one tag normalizer both 7.10 registers share (`KnowledgeEntry.tags` too), so one tag typed on
 #: a document and on a playbook is ONE tag and a facet cannot hold "HVAC" and "hvac" side by side.
@@ -72,10 +76,14 @@ STATUS_CSS = {
 #: (the revision upload form and the template form), so "what may be stored here" has one answer.
 #: The extension list is an allow-list, not a deny-list: a deny-list is a moving target, and every
 #: extension not listed is simply not accepted.
-ALLOWED_FILE_EXTENSIONS = {
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".md",
-    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".dwg", ".dxf", ".zip",
-}
+#:
+#: The house list (`core.forms.ALLOWED_DOC_EXTENSIONS`) is IMPORTED and EXTENDED, never forked: 7.10
+#: needs `.ppt`/`.pptx` (a deck is a legitimate project deliverable) and `.md` (plain text, read by
+#: the extractor), and adds exactly those three. The previous fork also admitted `.svg` — the one
+#: SCRIPTABLE extension the house list deliberately omits — plus `.dwg`/`.dxf`, which no browser
+#: renders. Since `/media/` is served unauthenticated with `Content-Disposition: inline`, an `.svg`
+#: upload ran script on this origin for any visitor, including anonymous ones.
+ALLOWED_FILE_EXTENSIONS = _HOUSE_ALLOWED_DOC_EXTENSIONS | {".ppt", ".pptx", ".md"}
 
 #: 20 MB. The cap is enforced in `validate_upload` and it is deliberately the same number the 6.19
 #: repository uses, so the two document shelves cannot disagree about what "too big" means.
