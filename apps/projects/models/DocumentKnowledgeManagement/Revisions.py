@@ -134,6 +134,21 @@ class ProjectDocumentRevision(TenantOwned):
         if errors:
             raise ValidationError(errors)
 
+    def delete(self, *args, **kwargs):
+        """Refuse to destroy a revision while its parent is under legal hold.
+
+        ``clean()`` is NOT invoked on a delete path, so the hold rule cannot live there — this is the
+        mirror of the ``is_approved``-under-hold guard in ``clean()`` above, in the one hook a delete
+        actually runs. ``pdv_delete`` guards before it gets here; this layer stops a future caller (or
+        an ad-hoc shell) from doing what the view refuses. Queryset deletes (``--flush``,
+        ``delete_queryset``) bypass this deliberately — the hold is an in-app control, not a database
+        constraint.
+        """
+        if self.document_id and self.document.is_legal_hold:
+            raise ValidationError(
+                "This document is under legal hold — a revision may not be deleted from it.")
+        return super().delete(*args, **kwargs)
+
 
 # ------------------------------------------------------------------------------------------------
 # Module-level helpers. Both are used by the view verbs and by the seeder; neither reads the chain
