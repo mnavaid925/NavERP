@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Compare Revisions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Compare Revisions</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdv_list' %}">Revisions</a><span class="sep">&rsaquo;</span><span>Compare</span></div>
+      <p class="text-muted">Two revisions of <strong>one</strong> document, side by side. This is a <strong>metadata</strong> comparison &mdash; revision number, file, checksum, who uploaded and approved it, when, and the change note. It is deliberately not a document diff.</p>
+    </div>
+    <div class="page-actions">
+      {% if document %}<a href="{% url 'projects:pdm_detail' document.pk %}" class="btn btn-outline">Back to {{ document.number }}</a>{% endif %}
+      <a href="{% url 'projects:pdv_list' %}" class="btn btn-outline">Revision log</a>
+    </div>
+  </div>
+
+  {% if a and b %}
+    <div class="card">
+      <div class="card-header">
+        <h2>{{ document.number }}{% if document.title %} &mdash; {{ document.title }}{% endif %}</h2>
+        {% if same_checksum %}<span class="badge badge-amber">Identical bytes</span>{% else %}<span class="badge badge-info">Different bytes</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Attribute</th><th>Revision {{ a.revision_no }}</th><th>Revision {{ b.revision_no }}</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Revision number</td>
+              <td>{{ a.revision_no }}</td>
+              <td>{{ b.revision_no }}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Current version?</td>
+              <td>{% if a.is_current and a.is_approved %}<span class="badge badge-green">Current</span>{% else %}<span class="text-muted">not current</span>{% endif %}</td>
+              <td>{% if b.is_current and b.is_approved %}<span class="badge badge-green">Current</span>{% else %}<span class="text-muted">not current</span>{% endif %}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Approved?</td>
+              <td>{% if a.is_approved %}<span class="badge badge-info">Approved</span>{% else %}<span class="badge badge-slate">Pending</span>{% endif %}</td>
+              <td>{% if b.is_approved %}<span class="badge badge-info">Approved</span>{% else %}<span class="badge badge-slate">Pending</span>{% endif %}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">File</td>
+              <td>{% if a.file %}<a href="{{ a.file.url }}" target="_blank" rel="noopener">{{ a.file.name }}</a>{% else %}&mdash;{% endif %}</td>
+              <td>{% if b.file %}<a href="{{ b.file.url }}" target="_blank" rel="noopener">{{ b.file.name }}</a>{% else %}&mdash;{% endif %}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">SHA-256</td>
+              <td>{% if a.checksum %}<span class="fw-600">{{ a.checksum }}</span>{% else %}&mdash;{% endif %}</td>
+              <td>{% if b.checksum %}<span class="fw-600">{{ b.checksum }}</span>{% else %}&mdash;{% endif %}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Uploaded by</td>
+              <td>{% if a.uploaded_by %}{{ a.uploaded_by.get_full_name|default:a.uploaded_by.email }}{% else %}&mdash;{% endif %}<div class="text-muted">{{ a.created_at|date:"M d, Y H:i" }}</div></td>
+              <td>{% if b.uploaded_by %}{{ b.uploaded_by.get_full_name|default:b.uploaded_by.email }}{% else %}&mdash;{% endif %}<div class="text-muted">{{ b.created_at|date:"M d, Y H:i" }}</div></td>
+            </tr>
+            <tr>
+              <td class="fw-600">Approved by</td>
+              <td>{% if a.approved_by %}{{ a.approved_by.get_full_name|default:a.approved_by.email }}{% else %}&mdash;{% endif %}{% if a.approved_at %}<div class="text-muted">{{ a.approved_at|date:"M d, Y H:i" }}</div>{% endif %}</td>
+              <td>{% if b.approved_by %}{{ b.approved_by.get_full_name|default:b.approved_by.email }}{% else %}&mdash;{% endif %}{% if b.approved_at %}<div class="text-muted">{{ b.approved_at|date:"M d, Y H:i" }}</div>{% endif %}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Change note</td>
+              <td>{% if a.change_note %}{{ a.change_note }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if b.change_note %}{{ b.change_note }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Text read</td>
+              <td>{% if a.extracted_text %}{{ a.extracted_text|length }} characters{% else %}<span class="text-muted">none{% if a.extraction_note %} &mdash; {{ a.extraction_note }}{% endif %}</span>{% endif %}</td>
+              <td>{% if b.extracted_text %}{{ b.extracted_text|length }} characters{% else %}<span class="text-muted">none{% if b.extraction_note %} &mdash; {{ b.extraction_note }}{% endif %}</span>{% endif %}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          The page states its own limit rather than letting somebody assume otherwise: only the
+          checksum compares the bytes, and "identical bytes" is a fact about the two files, not a
+          statement that nothing changed. Redlining, track-changes and side-by-side text are
+          Module 13.2's, and this page does not pretend to be them.
+        {% endcomment %}
+        {% if same_checksum %}
+          <p class="text-muted">The two files have the <strong>same SHA-256</strong> &mdash; byte-for-byte the same content, re-uploaded under a new revision number. A restore forward produces exactly this, and it is a legitimate, auditable way to roll back.</p>
+        {% else %}
+          <p class="text-muted">The two files have <strong>different SHA-256</strong> digests, so their bytes differ. <em>How</em> they differ is not answered here: this is a metadata comparison only, and redlining, track-changes and side-by-side text are Module 13.2's.</p>
+        {% endif %}
+        <div class="form-actions">
+          {% if a.is_approved and not a.is_current %}
+            <form method="post" action="{% url 'projects:pdv_restore' a.pk %}" onsubmit="return confirm('Restore revision {{ a.revision_no }}? Its file is re-uploaded as a NEW revision — history is never rewritten.');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Restore revision {{ a.revision_no }} forward</button>
+            </form>
+          {% endif %}
+          {% if b.is_approved and not b.is_current %}
+            <form method="post" action="{% url 'projects:pdv_restore' b.pk %}" onsubmit="return confirm('Restore revision {{ b.revision_no }}? Its file is re-uploaded as a NEW revision — history is never rewritten.');">
+              {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Restore revision {{ b.revision_no }} forward</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="git-compare"></i>
+        <h3>Pick two revisions of the same document</h3>
+        <p>A comparison has to stay inside one document's chain: two revisions of different documents have no shared baseline, so the numbers would not mean the same thing.</p>
+      </div>
+      {% if a_query or b_query %}<p class="text-muted">One of the two revisions could not be used &mdash; it may belong to another workspace, belong to a different document, or be the same revision picked twice.</p>{% endif %}
+      <p class="text-muted">Open a document from the <a href="{% url 'projects:pdm_list' %}">register</a>, then use <em>Compare metadata</em> on any row of its revision history &mdash; that link arrives here with both revisions already chosen.</p>
+      <div class="form-actions">
+        <a href="{% url 'projects:pdm_list' %}" class="btn btn-primary">Open the document register</a>
+        <a href="{% url 'projects:pdv_list' %}" class="btn btn-outline">Browse the revision log</a>
+      </div>
+    </div></div>
+  {% endif %}
+{% endblock %}
