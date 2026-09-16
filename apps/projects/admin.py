@@ -548,8 +548,8 @@ class ProjectDocumentAdmin(admin.ModelAdmin):
     # them writable let an admin archive a HELD record by typing, which the model's clean() refuses.
     readonly_fields = ("current_revision_no", "extracted_text", "is_checked_out", "checked_out_by",
                        "checked_out_at", "is_legal_hold", "hold_reason", "held_by", "held_at",
-                       "is_archived", "archived_by", "archived_at", "created_by", "created_at",
-                       "updated_at")
+                       "is_archived", "archived_by", "archived_at", "pre_archive_status",
+                       "created_by", "created_at", "updated_at")
 
     def has_delete_permission(self, request, obj=None):
         """Refuse to delete a row under legal hold.
