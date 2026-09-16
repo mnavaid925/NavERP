@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list), the 7.7 scope layer (requirements, boundaries, change control, acceptance), the 7.8 execution layer (assignments, priorities, the board, the gantt, blocking) and the 7.9 collaboration layer (channels, shared documents, meetings, notifications, the activity feed). The rest of Module 7 is separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list), the 7.7 scope layer (requirements, boundaries, change control, acceptance), the 7.8 execution layer (assignments, priorities, the board, the gantt, blocking), the 7.9 collaboration layer (channels, shared documents, meetings, notifications, the activity feed) and the 7.10 document layer (the folder tree, the document register with its revisions and legal holds, the standard templates, the knowledge base and the retention board). The rest of Module 7 is separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -48,6 +48,10 @@
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div><div class="stat-value">{{ meeting_count }}</div><div class="stat-label">Meetings</div></div>
     <div class="stat-card"><div class="stat-icon orange"><i data-lucide="square-check"></i></div><div class="stat-value">{{ open_action_count }}</div><div class="stat-label">Open meeting actions</div></div>
     <div class="stat-card"><div class="stat-icon slate"><i data-lucide="inbox"></i></div><div class="stat-value">{{ unread_notification_count }}</div><div class="stat-label">Your unread</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="file-text"></i></div><div class="stat-value">{{ document_count }}</div><div class="stat-label">Documents</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="folder-tree"></i></div><div class="stat-value">{{ folder_count }}</div><div class="stat-label">Document folders</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="book-open"></i></div><div class="stat-value">{{ knowledge_count }}</div><div class="stat-label">Knowledge entries</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="lock"></i></div><div class="stat-value">{{ legal_hold_count }}</div><div class="stat-label">Under legal hold</div></div>
   </div>
 
   <div class="card">
@@ -271,6 +275,41 @@
               <td class="fw-600"><a href="{% url 'projects:activity_feed' %}">Activity Feed</a></td>
               <td>One reverse-chronological stream over the collaboration registers and the audit trail.</td>
               <td><a href="{% url 'projects:activity_feed' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:doc_repository' %}">Document Repository</a></td>
+              <td>The 7.10 landing page — documents, folders, in review, retention due, held and archived.</td>
+              <td><a href="{% url 'projects:doc_repository' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pdm_list' %}">Documents</a></td>
+              <td>The document register — classification, current revision, check-out state and legal hold.</td>
+              <td><a href="{% url 'projects:pdm_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pfd_list' %}">Folder Tree</a></td>
+              <td>The document hierarchy — nested folders with the documents filed in each.</td>
+              <td><a href="{% url 'projects:pfd_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:dtm_list' %}">Standard Templates</a></td>
+              <td>The standards library — the file-backed templates a document is authored from.</td>
+              <td><a href="{% url 'projects:dtm_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pdv_list' %}">Document Revisions</a></td>
+              <td>The cross-document version log — uploads, approvals, restores and their checksums.</td>
+              <td><a href="{% url 'projects:pdv_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:kne_list' %}">Knowledge Base</a></td>
+              <td>Lessons learned, FAQs and written standards — the insight library, full-text searchable.</td>
+              <td><a href="{% url 'projects:kne_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:doc_retention' %}">Retention &amp; Archiving</a></td>
+              <td>The records whose retention or review date has arrived, and the reminders Run.</td>
+              <td><a href="{% url 'projects:doc_retention' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>

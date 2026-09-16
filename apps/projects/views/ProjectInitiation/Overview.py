@@ -15,10 +15,13 @@ from apps.projects.models import (
     BudgetRevision,
     Channel,
     DeliverableInspection,
+    KnowledgeEntry,
     Meeting,
     MeetingActionItem,
     Project,
+    ProjectDocument,
     ProjectExpense,
+    ProjectFolder,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
@@ -151,4 +154,15 @@ def overview(request):
             tenant=tenant, is_done=False).count(),
         "unread_notification_count": ProjectNotification.objects.filter(
             tenant=tenant, recipient=request.user, is_read=False).count(),
+        # 7.10 document & knowledge — three flat per-table counts (the same one-COUNT-per-table
+        # rule) plus the figure that needs a decision: the documents a legal hold is pinning, which
+        # is what the retention board opens with and the one number a member must not miss. The
+        # board's derived "retention due" figure is deliberately NOT duplicated here — it needs a
+        # per-row date pass (`_due_rows`), and this page is the module's most-hit one; the card
+        # links to the board instead.
+        "document_count": ProjectDocument.objects.filter(tenant=tenant).count(),
+        "folder_count": ProjectFolder.objects.filter(tenant=tenant).count(),
+        "knowledge_count": KnowledgeEntry.objects.filter(tenant=tenant).count(),
+        "legal_hold_count": ProjectDocument.objects.filter(
+            tenant=tenant, is_legal_hold=True).count(),
     })
