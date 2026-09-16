@@ -11,7 +11,7 @@ an edit, because it is metadata, not a state machine with evidence attached.
 """
 from django.db.models import F, Q
 
-from apps.core.crud import as_db_int
+from apps.core.crud import as_db_int, paginate
 from apps.projects.forms import KnowledgeEntryForm
 from apps.projects.models import KnowledgeEntry
 from apps.projects.views._common import *  # noqa: F401,F403
@@ -66,19 +66,16 @@ def kne_search(request):
     else:
         kind_filter = ""
     return render(request, "projects/documentknowledge/knowledgeentry/search.html", {
-        "rows": _page(request, qs),
+        # `crud.paginate`, not a private copy: it is the helper that stamps `page.window`, and
+        # `partials/pagination.html`'s number loop iterates `page_obj.window` — a local
+        # `Paginator(...).get_page(...)` renders Prev/Next and no page numbers at all.
+        "rows": paginate(request, qs),
         "total_count": qs.count(),
         "q": raw,
         "searched_fields": searched,
         "kind_choices": KnowledgeEntry.KIND_CHOICES,
         "kind_filter": kind_filter,
     })
-
-
-def _page(request, qs, size=15):
-    """Paginate a queryset the way the app's lists do, returning a page object."""
-    from django.core.paginator import Paginator
-    return Paginator(qs, size).get_page(request.GET.get("page"))
 
 
 @login_required
