@@ -150,11 +150,17 @@ def pdv_restore(request, pk):
 @require_POST
 @tenant_admin_required
 def pdv_delete(request, pk):
-    """Delete an unapproved, non-current revision. Both guards run under the parent row lock."""
+    """Delete an unapproved, non-current revision. All three guards run under the parent row lock:
+    the legal hold (which freezes the chain's pending rows too), ``is_approved`` and the pointer.
+    """
     revision = get_object_or_404(ProjectDocumentRevision, pk=pk, tenant=request.tenant)
     with transaction.atomic():
         document = (ProjectDocument.objects.select_for_update()
                     .get(pk=revision.document_id, tenant=request.tenant))
+        if document.is_legal_hold:
+            messages.error(request, f"{document.number} is under legal hold — a revision may not "
+                                    f"be deleted from it. Release the hold first.")
+            return redirect("projects:pdm_detail", pk=document.pk)
         if revision.is_approved:
             messages.error(request, f"Revision {revision.revision_no} of {document.number} is "
                                     f"approved history — it is evidence and is not deleted.")
