@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:kne_list' %}">Knowledge</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.get_kind_display }}{% if obj.source_project %} &middot; learned on <a href="{% url 'projects:prj_detail' obj.source_project_id %}">{{ obj.source_project }}</a>{% else %} &middot; not tied to one project{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'projects:kne_use' obj.pk %}" onsubmit="return confirm('Count a reuse of {{ obj.number }}? The counter records that somebody pressed this button — nothing more.');">
+        {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="recycle"></i> Use this ({{ obj.usage_count }})</button>
+      </form>
+      <form method="post" action="{% url 'projects:kne_publish' obj.pk %}" onsubmit="return confirm('{% if obj.status == 'published' %}Return {{ obj.number }} to draft{% else %}Publish {{ obj.number }}{% endif %}?');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.status == 'published' %}file-minus{% else %}file-check{% endif %}"></i> {% if obj.status == 'published' %}Return to draft{% else %}Publish{% endif %}</button>
+      </form>
+      <a href="{% url 'projects:kne_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>{{ obj.number }}</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      {% if obj.is_featured %}<span class="badge badge-amber">Featured shelf</span>{% endif %}
+      {% if obj.is_review_due %}<span class="badge badge-amber">Review due</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd>
+        <dt>Category</dt><dd>{% if obj.category %}{{ obj.category }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Tags</dt><dd>{% if obj.tag_list %}{% for tag in obj.tag_list %}<span class="badge badge-slate">{{ tag }}</span> {% endfor %}{% else %}&mdash;{% endif %}</dd>
+        <dt>Summary</dt><dd>{% if obj.summary %}{{ obj.summary }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Review on</dt><dd>{% if obj.review_on %}{{ obj.review_on|date:"M d, Y" }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Recorded by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}&mdash;{% endif %} on {{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>The insight</h2></div>
+    <div class="card-body">
+      {% if obj.body %}{{ obj.body|linebreaks }}{% else %}<p class="text-muted">No body text &mdash; this entry is a summary or a pointer to an artifact.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>The artifact behind it</h2></div>
+    <div class="card-body">
+      {% comment %}
+        The attached artifact is a ProjectDocument, deliberately — this model has no file field of
+        its own. A playbook PDF or a scorecard workbook goes through the repository's extension
+        allow-list, size cap, checksum, text read and revision chain, so the library never holds an
+        unversioned second copy of a file that also exists, differently, on a document row.
+        One artifact, one place, one history.
+      {% endcomment %}
+      {% if obj.document %}
+        <dl class="detail-grid">
+          <dt>Document</dt><dd><a href="{% url 'projects:pdm_detail' obj.document_id %}">{{ obj.document.number }} &mdash; {{ obj.document.title }}</a></dd>
+          <dt>Current revision</dt><dd>{% if obj.document.current_revision_no %}v{{ obj.document.current_revision_no }}{% else %}<span class="text-muted">no approved revision</span>{% endif %}</dd>
+          <dt>Status</dt><dd><span class="badge {{ obj.document.status_css }}">{{ obj.document.get_status_display }}</span></dd>
+        </dl>
+        <p class="text-muted">The file lives in the document repository and carries its own revision chain. It is not copied here: one artifact, one place, one history.</p>
+      {% else %}
+        <p class="text-muted">No artifact attached. If this insight has a file behind it, register it in the <a href="{% url 'projects:pdm_list' %}">document repository</a> first and then pick it here &mdash; the library deliberately has no upload path of its own.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>What this row is</h2></div>
+    <div class="card-body">
+      {% comment %}
+        Three honest limits. The library is CONTENT, not machinery: nothing stored here executes,
+        raises a risk or schedules anything. `usage_count` is a click counter with no idea who
+        pressed it and no reconciliation against anything. And `is_featured` is a shelf — it decides
+        what surfaces first and it gates nothing.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <dt>Used</dt><dd>{{ obj.usage_count }} time(s). A <strong>click counter</strong> &mdash; it counts presses of the button above, it does not know who pressed it, and it is not evidence that the lesson was applied.</dd>
+        <dt>Featured</dt><dd>{% if obj.is_featured %}On the shelf, so it surfaces first on the register and in search results.{% else %}Not featured.{% endif %} A shelf, never a permission: it gates nothing and no rule branches on it.</dd>
+        <dt>What it does</dt><dd>Nothing executes from this row. It is content people read &mdash; it raises no risk, opens no issue and schedules no review. Related: <a href="{% url 'projects:kne_search' %}">search the library</a>.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:kne_list' %}" class="btn btn-outline">Back to the Library</a>
+    <form method="post" action="{% url 'projects:kne_delete' obj.pk %}" onsubmit="return confirm('Delete knowledge entry {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
