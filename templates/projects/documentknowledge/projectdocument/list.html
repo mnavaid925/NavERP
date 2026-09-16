@@ -95,7 +95,7 @@
             <tr>
               <td class="fw-600"><a href="{% url 'projects:pdm_detail' d.pk %}">{{ d.number }}</a></td>
               <td>
-                {% if d.title %}{{ d.title|truncatechars:44 }}{% else %}<span class="text-muted">expected placeholder</span>{% endif %}
+                {{ d.title|truncatechars:44 }}
                 {% if d.tag_list %}<div class="text-muted">{% for tag in d.tag_list %}<span class="badge badge-slate">{{ tag }}</span> {% endfor %}</div>{% endif %}
               </td>
               <td><a href="{% url 'projects:prj_detail' d.project_id %}">{{ d.project.number }}</a></td>
