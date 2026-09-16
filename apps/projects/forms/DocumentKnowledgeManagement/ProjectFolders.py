@@ -14,6 +14,11 @@ cannot graft another workspace's branch into this tree.
 to the tenant; this adds (a) the chosen project, because a folder from another project would make the
 tree a graph, and (b) on EDIT, the folder itself so the obvious self-parent is not even offered —
 ``clean()`` refuses it regardless, because a narrowed ``<select>`` is UX and never a boundary.
+
+**``project`` is disabled on EDIT**, mirroring ``ProjectDocumentForm``: the ``parent`` queryset above
+is narrowed from the instance's project, so a posted change of ``project`` would leave every chosen
+parent failing "Select a valid choice" with no way to recover — and the children keep their own
+``project`` FK, so the move would strand them and the project lens would then hide them.
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
@@ -42,6 +47,13 @@ class ProjectFolderForm(TenantUniqueMixin, TenantModelForm):
             queryset = queryset.filter(project_id=project_id)
         if self.instance and self.instance.pk:
             queryset = queryset.exclude(pk=self.instance.pk)
+            # A folder does not move between projects, and the field is not even offered (the
+            # `ProjectDocumentForm` ruling, restated). Two reasons: the `parent` queryset above is
+            # narrowed from the INSTANCE's project, so a posted change of `project` would leave
+            # every chosen parent failing "Select a valid choice" with no way to recover; and the
+            # children keep their own `project` FK, so the move would strand them and the project
+            # lens would then hide them from the old project's tree.
+            self.fields["project"].disabled = True
         self.fields["parent"].queryset = queryset.order_by("name")
 
     def clean(self):
