@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}Publish a{% endif %} Standard{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}Publish a Standard{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:dtm_list' %}">Standards</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        Two deliberate omissions. There is no publish/retire control: is_active is written by the
+        publish verb alone (a Toggle), so a form cannot publish a standard that a review was about
+        to retire. And there is no project column at all — this register is tenant-wide by design,
+        because a standard belongs to the PMO and not to one project. Attaching one to a project
+        copies it into the repository as a document.
+      {% endcomment %}
+      <p class="text-muted">The file is optional: a standard published as prose is a legitimate row. It is required on create only when there is an artifact to publish &mdash; the same extension allow-list and 20 MB cap apply as everywhere else in this repository. <strong>Format lock</strong> records an intent; nothing here enforces it.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'projects:dtm_detail' obj.pk %}{% else %}{% url 'projects:dtm_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
