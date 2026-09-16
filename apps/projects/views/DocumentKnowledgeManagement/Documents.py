@@ -15,8 +15,10 @@ which is where the L11 guards live.
 * ``pdm_checkout`` / ``pdm_checkin`` — the cooperative single-editor lock. Check-out is refused on a
   locked row (the refusal names the holder); check-in is open to any member ON PURPOSE, because a
   stale lock must not be able to deadlock a document any more than 7.9's stale claim could.
-* ``pdm_archive`` — a Toggle over ``is_archived``/``archived_by``/``archived_at``; refused on a held
-  row (the hold outranks the archive).
+* ``pdm_archive`` — a Toggle over ``is_archived``/``archived_by``/``archived_at``/``status``, and
+  the one writer of ``pre_archive_status``: archiving stamps the status the row carried so that
+  un-archiving RESTORES it rather than guessing. Refused on a held row (the hold outranks the
+  archive).
 * ``pdm_hold`` / ``pdm_release`` — the legal hold. While held, the row refuses archive AND delete
   (the model's ``clean()`` is the second half of that guarantee; the delete view is the third).
 * ``pdm_reindex`` — a guarded Runtime that re-runs extraction on the current approved revision and
@@ -248,17 +250,25 @@ def pdm_archive(request, pk):
         obj.is_archived = False
         obj.archived_by = None
         obj.archived_at = None
-        obj.status = "approved" if obj.current_revision_no else "draft"
+        # RESTORE the status the row carried before the archive. The old code guessed
+        # (`"approved" if obj.current_revision_no else "draft"`), which brought an `in_review` or
+        # `superseded` document back as Approved with no approval action behind it. The fallback
+        # only fires for a row archived before `pre_archive_status` existed.
+        obj.status = obj.pre_archive_status or (
+            "approved" if obj.current_revision_no else "draft")
+        obj.pre_archive_status = ""
     else:
         if obj.is_legal_hold:
             messages.error(request, f"{obj.number} is under legal hold — the hold outranks the "
                                     f"archive. Release it first.")
             return redirect("projects:pdm_detail", pk=obj.pk)
+        obj.pre_archive_status = obj.status
         obj.is_archived = True
         obj.archived_by = request.user
         obj.archived_at = timezone.now()
         obj.status = "archived"
-    obj.save(update_fields=["is_archived", "archived_by", "archived_at", "status", "updated_at"])
+    obj.save(update_fields=["is_archived", "archived_by", "archived_at", "pre_archive_status",
+                            "status", "updated_at"])
     write_audit_log(request.user, obj, "update",
                     changes={"verb": "pdm_archive", "from": previous, "to": obj.is_archived})
     if obj.is_archived:
