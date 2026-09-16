@@ -18,7 +18,8 @@
       <div class="text-muted text-sm">Current revision</div>
       <div class="text-2xl font-semibold">{% if obj.current_revision_no %}v{{ obj.current_revision_no }}{% else %}&mdash;{% endif %}</div>
       {% if current %}
-        <div class="text-muted text-sm">approved by {{ current.approved_by.get_full_name|default:current.approved_by.email|default:"&mdash;" }} on {{ current.approved_at|date:"M d, Y" }}</div>
+        {# The `|default:` ARGUMENT is resolved eagerly, so `|default:current.approved_by.email` raises on a deleted approver (SET_NULL) instead of falling back — guard the FK, as the other 23 sites do. #}
+        <div class="text-muted text-sm">approved by {% if current.approved_by %}{{ current.approved_by.get_full_name|default:current.approved_by.email }}{% else %}&mdash;{% endif %} on {{ current.approved_at|date:"M d, Y" }}</div>
       {% else %}
         <div class="text-muted text-sm">No approved revision yet &mdash; uploads hang behind the pointer until somebody approves one.</div>
       {% endif %}
