@@ -7,7 +7,8 @@ path or count would go stale the instant a parent moved or a document was approv
 ruling), so nothing here writes one.
 
 ``?project=`` is the tree's lens (an int-FK lookup, ``as_db_int``-guarded, skipped on ``0``); a
-plain search narrows by ``name`` and ``description`` across the whole tree.
+plain search narrows by ``name`` and ``description`` across the whole tree — and it runs over the
+DECORATED tree, so a nested match keeps its ancestors as context rows and is findable at all.
 """
 from apps.core.crud import as_db_int
 from apps.projects.forms import ProjectFolderForm
@@ -55,6 +56,38 @@ def _decorate(tenant, rows):
     return decorated
 
 
+def _narrow(decorated, needle):
+    """The rows to render for a search: the matches, plus their ancestors and descendants.
+
+    A flat filter over the folder rows kept ONLY the matches and ``_decorate`` then walked from
+    ``parent_id is None``, so a match whose parent had been filtered out was unreachable —
+    ``?q=Yankee`` for ``Zulu > Yankee > Xray`` rendered nothing at all. The tree is decorated in
+    FULL first and this keeps the ancestors as context rows (so a nested match is not indented under
+    nothing) and the descendants (so a matching parent still shows its branch). The parent map is
+    built from the already-loaded ``parent_id`` values, so this costs no queries.
+    """
+    parent_of = {row["obj"].pk: row["obj"].parent_id for row in decorated}
+    hit = {row["obj"].pk for row in decorated
+           if needle in (row["obj"].name or "").lower()
+           or needle in (row["obj"].description or "").lower()}
+    if not hit:
+        return [], 0
+    keep = set()
+    for pk in parent_of:
+        node = pk
+        while node is not None:
+            if node in hit:
+                keep.add(pk)
+                break
+            node = parent_of.get(node)
+    for pk in hit:
+        node = parent_of.get(pk)
+        while node is not None:
+            keep.add(node)
+            node = parent_of.get(node)
+    return [row for row in decorated if row["obj"].pk in keep], len(hit)
+
+
 @login_required
 def pfd_list(request):
     rows = list(ProjectFolder.objects.filter(tenant=request.tenant)
@@ -62,14 +95,14 @@ def pfd_list(request):
     project_filter = as_db_int(request.GET.get("project", ""))
     if project_filter:
         rows = [row for row in rows if row.project_id == project_filter]
+    decorated = _decorate(request.tenant, rows)
+    total = len(rows)
     needle = (request.GET.get("q") or "").strip().lower()
     if needle:
-        rows = [row for row in rows
-                if needle in (row.name or "").lower()
-                or needle in (row.description or "").lower()]
+        decorated, total = _narrow(decorated, needle)
     return render(request, "projects/documentknowledge/projectfolder/list.html", {
-        "rows": _decorate(request.tenant, rows),
-        "total_count": len(rows),
+        "rows": decorated,
+        "total_count": total,
         "projects": projects(request.tenant),
         "project_filter": project_filter,
         "q": request.GET.get("q", ""),
