@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Retention &amp; Archiving{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Retention &amp; Archiving</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><span>Retention</span></div>
+      <p class="text-muted">The queue of records whose retention window or review date has arrived, plus the legal holds and the archive. Every figure here is computed against today &mdash; a stored "is due" flag would go stale at midnight. <strong>Nothing on this page deletes anything</strong>: it tells a human what to look at, and enforcement belongs to Module 13.</p>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'projects:doc_retention_run' %}" onsubmit="return confirm('Raise in-app reminders for every record inside the {{ window_days }}-day window? The same window state cannot raise twice — only a changed date raises a fresh reminder.');">
+        {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="bell-ring"></i> Run reminders</button>
+      </form>
+      <a href="{% url 'projects:pdm_list' %}" class="btn btn-outline">Document Register</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="card card-body"><div class="text-muted text-sm">Retention due</div><div class="text-2xl font-semibold">{{ figures.retention_due }}</div></div>
+    <div class="card card-body"><div class="text-muted text-sm">Review due</div><div class="text-2xl font-semibold">{{ figures.review_due }}</div></div>
+    <div class="card card-body"><div class="text-muted text-sm">Under legal hold</div><div class="text-2xl font-semibold">{{ figures.held }}</div></div>
+    <div class="card card-body"><div class="text-muted text-sm">Archived</div><div class="text-2xl font-semibold">{{ figures.archived }}</div></div>
+    <div class="card card-body"><div class="text-muted text-sm">In the live register</div><div class="text-2xl font-semibold">{{ figures.live }}</div></div>
+    <div class="card card-body"><div class="text-muted text-sm">With a retention window</div><div class="text-2xl font-semibold">{{ figures.with_window }}</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Due inside {{ window_days }} days</h2>
+      <span class="badge badge-slate">{{ due|length }} row(s)</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Document</th><th>Project</th><th>Reason</th><th>Date</th><th>Timing</th><th>Status</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for row in due %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pdm_detail' row.document.pk %}">{{ row.document.number }}</a>
+                <div class="text-muted">{{ row.document.title|default:"expected placeholder"|truncatechars:38 }}</div>
+              </td>
+              <td><a href="{% url 'projects:prj_detail' row.document.project_id %}">{{ row.document.project.number }}</a></td>
+              <td>
+                {% if row.reason == 'retention' %}<span class="badge badge-amber">Retention window</span>
+                {% else %}<span class="badge badge-info">Review date</span>{% endif %}
+              </td>
+              <td>{{ row.when|date:"M d, Y" }}</td>
+              <td>
+                {% comment %}
+                  `days_left` is signed: negative means the date has passed. `widthratio` is used to
+                  print its magnitude — (value / 1) * -1 — because Django ships no abs filter and
+                  "-3 day(s) overdue" reads like a bug.
+                {% endcomment %}
+                {% if row.days_left < 0 %}<span class="badge badge-red">{% widthratio row.days_left 1 -1 %} day(s) overdue</span>
+                {% elif row.days_left == 0 %}<span class="badge badge-amber">due today</span>
+                {% else %}<span class="text-muted">in {{ row.days_left }} day(s)</span>{% endif %}
+              </td>
+              <td><span class="badge {{ row.document.status_css }}">{{ row.document.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pdm_detail' row.document.pk %}" class="btn-icon" title="Open the document"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state">
+              <i data-lucide="calendar-check"></i>
+              <h3>Nothing is due in the next {{ window_days }} days</h3>
+              <p>No live record has a retention window or a review date landing inside the window. A document with no retention window set is never counted here &mdash; set one on the document itself if it should be.</p>
+            </div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        The Run raises IN-APP rows into the notification inbox and nothing else: there is no
+        scheduler and no mail worker in this repository, so it is a button, not a cron. Idempotency
+        comes from the reminder's title, which embeds the document's number AND its date — so the
+        same window state cannot raise twice, while a genuinely changed date raises a fresh row. The
+        authoritative re-check happens inside the document's row lock.
+      {% endcomment %}
+      <p class="text-muted">The <strong>Run reminders</strong> button raises one in-app notification per in-window record into the project inbox. It is a button, not a schedule: this repository has no scheduler and no mail worker, so nothing is sent by email and nothing runs while nobody is looking. Pressing it twice changes nothing &mdash; the reminder's title carries the document number and its date, so an unchanged window cannot raise a second time.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>How retention actually works here</h2></div>
+    <div class="card-body">
+      {% comment %}
+        The honest scope of bullet 5. Retention in this sub-module is a documented INTENT plus
+        audited verbs: a window a human reads, a computed due date, an archive Toggle and a legal
+        hold that BLOCKS. Automatic destruction, an immutable vault and proof-of-deletion artefacts
+        are Module 13.9/13.14's, and no page here may claim otherwise.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <dt>The window</dt><dd><code>retention_months</code> on the document feeds a <strong>computed</strong> retention date. Nothing is stored, so nothing goes stale.</dd>
+        <dt>The due date</dt><dd>Read against today's date on every page load. There is no nightly job to fall behind and no flag to forget to clear.</dd>
+        <dt>Archiving</dt><dd>A document leaves the live register and stays readable through the archive lens. It is the honest alternative to deleting evidence, and it is <strong>refused while a legal hold is in place</strong>.</dd>
+        <dt>Legal hold</dt><dd>While held, a record may not be archived and may not be deleted, and no new revision may be approved onto it. That is the whole guarantee.</dd>
+        <dt>What deletes</dt><dd><strong>Nothing here, ever.</strong> Automatic destruction, retention enforcement, an immutable vault and proof-of-deletion artefacts are Module 13.9 / 13.14. This board owns the human-readable queue.</dd>
+      </dl>
+    </div>
+  </div>
+{% endblock %}
