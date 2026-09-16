@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}Register a{% endif %} Document{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}Register a Document{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdm_list' %}">Register</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
+    {% if is_edit %}<p class="text-muted">{{ obj.title|default:"expected placeholder" }} &mdash; the file itself lives in the revision chain below, never here.</p>{% endif %}
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        Four deliberate omissions, and each one protects evidence. There is no file field: the bytes
+        live on the revision chain, which is immutable and checksummed, so this page never becomes a
+        second upload path. There is no check-out control (the checkout/checkin verbs own it), no
+        archive control (the archive Toggle owns it) and no legal-hold control (hold/release own it),
+        so a form can never archive a held record by typing. `current_revision_no` and the stored
+        search copy are absent for the same reason: only the revision verbs and the re-index Run
+        write them.
+      {% endcomment %}
+      <p class="text-muted">Set <strong>Status</strong> to <em>Expected</em> to create a named placeholder before the file exists &mdash; that is the one state where a title may be left blank. Uploading a file, approving a revision, checking the record out and placing a legal hold all happen on the document's own page.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'projects:pdm_detail' obj.pk %}{% else %}{% url 'projects:pdm_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
