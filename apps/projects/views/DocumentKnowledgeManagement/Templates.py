@@ -12,6 +12,7 @@ verb this pass ships is the download link on the detail page.
 from apps.core.crud import as_db_int
 from apps.projects.forms import DocumentTemplateForm
 from apps.projects.models import DocumentTemplate
+from apps.projects.models.DocumentKnowledgeManagement.Documents import purge_stored_files
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages,
                                          redirect, render, require_POST, tenant_admin_required,
@@ -80,9 +81,11 @@ def dtm_delete(request, pk):
     obj = get_object_or_404(DocumentTemplate, pk=pk, tenant=request.tenant)
     if request.method == "POST":
         number, name = obj.number, obj.name
+        file_name = obj.file.name if obj.file else ""
         write_audit_log(request.user, obj, "delete",
                         changes={"verb": "dtm_delete", "name": name})
         obj.delete()
+        purge_stored_files(DocumentTemplate, [file_name])
         messages.success(request, f"Standard {number} ({name}) deleted.")
         return redirect("projects:dtm_list")
     return render(request, "projects/documentknowledge/documenttemplate/delete.html", {"obj": obj})
