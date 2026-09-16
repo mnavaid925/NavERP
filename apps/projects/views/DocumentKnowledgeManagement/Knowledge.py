@@ -9,7 +9,7 @@ read-modify-write, so two people pressing "use this" in the same second both cou
 ``kne_publish`` is the ONE writer that moves a row between ``draft`` and ``published``; retiring is
 an edit, because it is metadata, not a state machine with evidence attached.
 """
-from django.db.models import F
+from django.db.models import F, Q
 
 from apps.core.crud import as_db_int
 from apps.projects.forms import KnowledgeEntryForm
@@ -54,13 +54,23 @@ def kne_search(request):
         for field in searched:
             cond |= Q(**{f"{field}__icontains": raw})
         qs = qs.filter(cond)
+    # The kind lens is applied here rather than left to the template: a dropdown that renders and
+    # then filters nothing is worse than no dropdown at all. Unknown values are IGNORED, not matched
+    # (the L11 rule crud_list applies) — `?kind=nope` must fall back to the whole library rather
+    # than silently emptying the page.
+    kind_filter = request.GET.get("kind", "").strip()
+    valid_kinds = {value for value, _label in KnowledgeEntry.KIND_CHOICES}
+    if kind_filter and kind_filter in valid_kinds:
+        qs = qs.filter(kind=kind_filter)
+    else:
+        kind_filter = ""
     return render(request, "projects/documentknowledge/knowledgeentry/search.html", {
         "rows": _page(request, qs),
         "total_count": qs.count(),
         "q": raw,
         "searched_fields": searched,
         "kind_choices": KnowledgeEntry.KIND_CHOICES,
-        "kind_filter": request.GET.get("kind", ""),
+        "kind_filter": kind_filter,
     })
 
 
