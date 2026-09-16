@@ -137,6 +137,12 @@ urlpatterns = (
     # namespace. Within the notifications module `read-all/` is listed before `<int:pk>/` (a
     # literal first, per the app-wide rule — the int converter could not capture it anyway), and
     # the two child-add routes live as literal leaves below `meetings/<int:pk>/`.
+    #
+    # `_cc_activityfeed` was imported but NEVER concatenated here, which is why
+    # `projects:activity_feed` raised NoReverseMatch and took the whole module overview page
+    # (`/projects/`) down with it — three templates reverse that name. Its route is the disjoint
+    # literal `activity-feed/`, so it can shadow nothing.
+    + _cc_activityfeed
     + _cc_channels
     + _cc_messages
     + _cc_shares
