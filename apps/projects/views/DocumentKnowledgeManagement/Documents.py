@@ -59,8 +59,12 @@ def _search(qs, raw):
 
 @login_required
 def pdm_list(request):
+    # `extracted_text` is DEFERRED: no cell on this register renders it, and it can hold
+    # `EXTRACT_MAX_CHARS` characters per row. `_search` still sweeps it in the WHERE clause below —
+    # filtering does not require the column to be in the projection.
     qs = (ProjectDocument.objects.filter(tenant=request.tenant)
-          .select_related("project", "folder", "owner", "task", "milestone"))
+          .select_related("project", "folder", "owner", "task", "milestone")
+          .defer("extracted_text"))
     qs, _ = _search(qs, request.GET.get("q"))
     # `search_fields=[]` is the point: `apply_search` no-ops on an empty field list, so the
     # 4+-character rule above stays the ONLY search this register runs. The `filters` spec below is
