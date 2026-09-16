@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pfd_list' %}">Folders</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.full_path }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pfd_create' %}?project={{ obj.project_id }}&amp;parent={{ obj.pk }}" class="btn btn-primary"><i data-lucide="folder-plus"></i> Add a Sub-folder</a>
+      <a href="{% url 'projects:pdm_create' %}?project={{ obj.project_id }}&amp;folder={{ obj.pk }}" class="btn btn-outline"><i data-lucide="file-plus"></i> Register a Document Here</a>
+      <form method="post" action="{% url 'projects:pfd_archive' obj.pk %}" onsubmit="return confirm('{% if obj.is_archived %}Restore{% else %}Archive{% endif %} folder {{ obj.name }}?{% if not obj.is_archived %} Its documents stay readable through the archive lens.{% endif %}');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_archived %}rotate-ccw{% else %}archive{% endif %}"></i> {% if obj.is_archived %}Restore{% else %}Archive{% endif %}</button>
+      </form>
+      <a href="{% url 'projects:pfd_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Folder</h2>
+      {% if obj.is_archived %}<span class="badge badge-muted">Archived</span>
+      {% else %}<span class="badge badge-green">Live</span>{% endif %}
+      {% if obj.is_root %}<span class="badge badge-slate">Root folder</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project }}</a></dd>
+        <dt>Parent</dt><dd>{% if obj.parent %}<a href="{% url 'projects:pfd_detail' obj.parent_id %}">{{ obj.parent.name }}</a>{% else %}&mdash; this is a root folder{% endif %}</dd>
+        <dt>Full path</dt><dd>{{ obj.full_path }}</dd>
+        <dt>Sequence</dt><dd>{{ obj.sequence }}</dd>
+        <dt>Documents here</dt><dd>{{ document_total }}</dd>
+        <dt>Description</dt><dd>{% if obj.description %}{{ obj.description|linebreaksbr }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Archived by</dt><dd>{% if obj.archived_by %}{{ obj.archived_by.get_full_name|default:obj.archived_by.email }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Archived at</dt><dd>{% if obj.archived_at %}{{ obj.archived_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}&mdash;{% endif %}</dd>
+      </dl>
+      {% comment %}
+        A folder is organisation, not authorisation. Membership in this folder grants nobody
+        anything: access to a document is the share register's business (access level + claim),
+        and permission matrices are Module 13.7's. The archived state keeps the folder's
+        documents readable through the archive lens while taking the folder out of the live tree.
+      {% endcomment %}
+      <p class="text-muted">A folder is a filing decision, not a permission: it grants nobody access to what it holds. Sharing a document is the <a href="{% url 'projects:dsh_list' %}">share register</a>'s job.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Sub-folders</h2><span class="badge badge-slate">{{ children|length }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Folder</th><th>Number</th><th>Sequence</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for child in children %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pfd_detail' child.pk %}">{{ child.name }}</a></td>
+              <td>{{ child.number }}</td>
+              <td>{{ child.sequence }}</td>
+              <td>{% if child.is_archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-green">Live</span>{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'projects:pfd_detail' child.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="folder-tree"></i><h3>No sub-folders</h3><p>This folder holds no child folders &mdash; its documents sit directly inside it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Documents in this folder</h2><span class="badge badge-slate">{{ document_total }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Status</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for d in documents %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pdm_detail' d.pk %}">{{ d.number }}</a></td>
+              <td>{% if d.title %}{{ d.title|truncatechars:50 }}{% else %}<span class="text-muted">expected placeholder</span>{% endif %}</td>
+              <td>{{ d.get_document_type_display }}</td>
+              <td><span class="badge {{ d.status_css }}">{{ d.get_status_display }}</span></td>
+              <td>{% if d.owner %}{{ d.owner.get_full_name|default:d.owner.email }}{% else %}&mdash;{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'projects:pdm_detail' d.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="file-text"></i><h3>No documents here</h3><p>This folder is empty. Register a document into it, or create a sub-folder to organise further.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if document_total > 50 %}<div class="pagination"><span class="muted">Showing the 50 most recent of {{ document_total }} &mdash; the full set is on the <a href="{% url 'projects:pdm_list' %}?folder={{ obj.pk }}">document register</a>.</span></div>{% endif %}
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:pfd_list' %}" class="btn btn-outline">Back to Folders</a>
+    <form method="post" action="{% url 'projects:pfd_delete' obj.pk %}" onsubmit="return confirm('Delete folder {{ obj.name }}? A folder that still holds documents or sub-folders is refused.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
