@@ -1079,10 +1079,42 @@ concatenation are two separate edits — grep for the `+ _xx_` line, not just th
 ### As-built (2026-09-16)
 
 5 models · 7 url modules · 40 route names (`pfd_`/`pdm_`/`pdv_`/`dtm_`/`kne_` + `doc_repository`/
-`doc_retention`/`doc_retention_run`) · 22 templates · migration `0014` · `_docmgt` seeder block.
-Verified: `temp/smoke_710.py` **167 checks / 0 failures**; `apps/projects` suite **3270 passed /
-0 failed / 2 skipped**. The close-out (six reviewers → `code-fixer` → the `docmgt_*` test lanes →
-this skill's per-sub-module test counts) is **NOT done** — see `.claude/tasks/todo.md`.
+`doc_retention`/`doc_retention_run`) · 22 templates · migrations `0014`–`0016` · `_docmgt` seeder
+block. Verified: `temp/smoke_710.py` **169 checks / 0 failures**.
+
+**The close-out ran and found 53 things.** Six serial reviewers produced **5 Critical, 22 Important,
+26 Minor** (plus 18 explicit no-action rows) in `.claude/tasks/review-projects-7.10.md`; `code-fixer`
+pass 1 closed **C1–C5 and I1–I22** (26 fixed, 1 skipped, 0 refuted) across 71 commits. The five
+Criticals are worth knowing before touching this sub-module, because four of them are silent:
+
+- **C1** — the upload verb must read `extract_text(revision.file)` **after** `save()`, never the raw
+  `UploadedFile`: the raw object has no `.path`, the never-raising extractor returns
+  `("", NOTE_UNREADABLE_PATH)`, and `pdv_approve` then **overwrites** the parent's search copy with
+  that empty string. The seeder's order is the correct one.
+- **C2** — `ProjectFolder._is_descendant_of()` is the cycle guard, and it is only correct with
+  `seen = set()` and the equality test **before** the membership check; seeding `seen` with `self.pk`
+  makes it structurally unable to return `True`, and a folder cycle then makes `_decorate`'s
+  `walk(None, …)` drop the whole branch from the tree without an error.
+- **C3** — never interpolate a user-authored string into a single-quoted JS literal inside an
+  `onsubmit`: HTML escaping does not protect an inline-handler attribute, because it is
+  character-reference-decoded before the browser compiles it. **`|escapejs`, always** (lesson **L42**;
+  this was its third recurrence).
+- **C4** — `.svg` must not be on an upload allow-list while `MEDIA_ROOT` is served unauthenticated
+  with `Content-Disposition: inline`: the script runs on the site origin for anonymous visitors. The
+  list is now imported from `core.forms.ALLOWED_DOC_EXTENSIONS` and extended, never forked.
+- **C5** — `AuditLog.action` is `varchar(10)` with `choices` that `.create()` never validates. A
+  longer action is silently truncated on a non-strict MySQL and raises `DataError` (a 500) on a
+  strict-mode one. The verb goes in `changes`; the action stays `create`/`update`/`delete`.
+
+**Still open — two carried items and one gap:**
+
+- **Carried, cross-module (do NOT fold into a 7.10 fix):** the anonymous `/media/` handler in
+  `config/urls.py` (the enabling half of C4 — one authenticated media view fixes 14 modules), and
+  the repo-wide over-length `AuditLog.action` sweep (25 other sites, mostly procurement 6.19's).
+- **Gap:** `M1`–`M26` are unticked in the review file, and **7.10 has no pytest module of its own** —
+  `apps/projects/tests/` covers 7.1–7.9 only. The `docmgt_*` conftest block and the four
+  `test_docmgt_*.py` lanes are the first item of the next pass. Until they land, 7.10's gate is
+  `temp/smoke_710.py` plus the four existing lanes continuing to pass — **not** a lane of its own.
 
 ## Routes (`app_name = "projects"`, 303 names)
 
@@ -1350,9 +1382,13 @@ that order (the PROTECT edge, not just FK depth) and must leave the re-seed's co
 
 ⚠️ **7.10's four lanes are NOT written yet.** The `docmgt_*` conftest block and
 `test_docmgt_{models,forms,views,security}.py` are the outstanding close-out work (see
-`.claude/tasks/todo.md`); until they land, 7.10 is covered by `temp/smoke_710.py` (167 checks) and by
+`.claude/tasks/todo.md`); until they land, 7.10 is covered by `temp/smoke_710.py` (169 checks) and by
 the four existing lanes continuing to pass — **not** by a lane of its own. Do not read the green
-suite as 7.10 being tested.
+suite as 7.10 being tested. The review's own routing named the assertions the model lane most needs:
+a **create-path** duplicate root must be refused (and an edit-path rename still refused), the cycle
+guard must return `True` for a descendant, `pdv_restore` must carry the checksum, and
+`_is_descendant_of` must be exercised from a verified parent/child pair — a probe that passes `None`
+returns `False` and reads as a failure.
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
 7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` + 7.8 `taskwork_*` + 7.9 `collab_*` fixture blocks —
