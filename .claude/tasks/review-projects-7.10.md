@@ -434,3 +434,113 @@ The empty state interpolates the **raw** filter value: *"…or category, within 
 - **L3-I1 — CONFIRMED.** `KNE-00004` ("Discovery retrospective…") is `retired`; its detail page renders `action="/projects/knowledge/38/publish/" onsubmit="return confirm('Publish KNE-00004?');"` under a `badge-muted` Retired badge, and `?status=retired` renders the same form. `POST` → **302 with the status still `retired`**, i.e. the button's promise is refused.
 - **L3-I3 — CONFIRMED.** The instruction is on the create page and the field is required in every status; the seeded `expected` row has a title. Lane 3's correction of lane 1's no-action note 6 is accepted — the premise was wrong even though the disposition (leave the model, fix the copy) stands.
 - **L3-M2 — ACCEPTED.** Lane 3's correction of lane 1's routing note is right: `pdm_edit` has no archived/hold guard, so Edit on an archived row *works*, and it is the detail page that hides it.
+
+### Lane 4 — performance-reviewer (serial pass 4)
+
+**Scope check.** Read in full: the 7 view modules under `views/DocumentKnowledgeManagement/`, all 22 templates, the 5 model modules, `apps/core/crud.py`, migration `0014`. **Measurement method:** `CaptureQueriesContext` + `connection.queries` through the Django test client as `admin_acme` on the live dev DB — **GET only, no writes, no `--flush`**, so nothing was added to the residue lane 2 recorded. 26 GET routes measured, plus 9 sibling 7.1–7.9 routes for the house bar. Every SQL statement was labelled; every claim below is a captured statement or an `EXPLAIN`, not a reading. Fixed per-request overhead is 7 queries (session, auth user, tenant, branding, BEGIN/UPDATE/COMMIT), measured identically on every route.
+
+**Sanity-checks of F-1..F-4 (performance angle)**
+
+- **F-1 — PASS.** `pdm_list` = **12 queries** with and without `?q=`; the filter spec runs before `paginate` and all 8 lenses narrow with **0 per-row queries** (project/folder/owner/task/milestone all in `select_related`, `Documents.py:53`).
+- **F-2 — PASS.** `kne_search?q=charter` = 9 queries / 200, no `NameError` — but the sweep is issued **twice** (L4-I2).
+- **F-3 — PASS.** No query impact: `pdm_edit` = 13, `pdm_create` = 12.
+- **F-4 — PASS.** All 26 routes `reverse()` and render 200, so the un-concatenated-module shape is not repeated.
+
+**Measured query counts** — 26 GET routes, seeded tenant (22 docs / 12 folders / 23 revs / 16 standards / 17 entries). House bar measured alongside: 7.1–7.9 registers **10–12**; computed boards `projects:overview` **72**, `activity_feed` **18**.
+
+| route | queries | page-specific | verdict |
+|---|---|---|---|
+| `doc_repository` | **29** | 22 | above registers (12), below 7.1 `overview` (72); **20 COUNTs**, 11 from one loop → L4-I4 |
+| `pdm_list` / `?q=charter` | 12 / 12 | 5 | **at the bar**; 0 per-row; payload → L4-I3 |
+| `pdm_detail` | 14–17 | 7–10 | at the bar; +1/ancestor level; 1 redundant → L4-M2 |
+| `pdm_create` / `pdm_edit` / `pdm_delete` | 12 / 13 / 9 | 5/6/2 | at the bar |
+| `pfd_list` | 10 | 3 | **at the bar**; whole tree, 1 grouped count (not 1/folder) |
+| `pfd_detail` root / child | 13 / 14 | 6 / 7 | at the bar; +1 per ancestor level → L4-M4 |
+| `pfd_create` / `pfd_edit` / `pfd_delete` | 9 / 10 / 11 | 2/3/4 | at the bar |
+| `pdv_list` | 11 | 4 | **at the bar**; `rev.is_current` costs 0 (cache) |
+| `pdv_compare` empty / populated | 7 / **15** | 0 / **8** | populated is 2× its siblings → L4-M1 |
+| `pdv_upload` | 8 | 1 | at the bar |
+| `dtm_list` | 9 | 2 | **below the bar** |
+| `dtm_detail` / `dtm_create` / `dtm_edit` / `dtm_delete` | 10 / 8 / 9 / 8 | 3/1/2/1 | `dtm_detail` 3 FKs unjoined → L4-M1 |
+| `kne_list` | 10 | 3 | at the bar |
+| `kne_search` no-match / match | 9 / 10 | 2 / 3 | **2 identical COUNTs** → L4-I2 |
+| `kne_detail` / `kne_create` / `kne_edit` / `kne_delete` | 11 / 10 / 11 / 8 | 4/3/4/1 | `kne_detail` 3 FKs unjoined → L4-M1 |
+| `doc_retention` | 12 | 5 | at the bar in **count**; payload + unbounded table → L4-I1 |
+
+**Coverage — clean categories (no findings filed)**
+
+- **No N+1 in any of the 5 paginated registers.** `pdm_list` 12, `pdv_list` 11, `kne_list` 10, `dtm_list` 9, `kne_search` 9–10 — all constant against a 15-row page, and every FK the templates touch is in the view's `select_related`.
+- **`ProjectDocumentRevision.is_current` is NOT an N+1 — measured 0 queries.** Django's reverse manager populates the parent cache, so `rev.document.current_revision_no` costs nothing.
+- **`_decorate()` issues exactly one grouped count, not one per folder.** `pfd_list` = 10 queries with 12 folders → 3 page queries.
+- **Bounded row sets where they exist:** `pfd_detail`'s document list capped at 50 with a count footer; `doc_repository`'s recent list capped at 10; all five registers paginate at 15 before slicing. `doc_repository`'s `retention_due` bounds its column set with `.only(...)`.
+- **Writes:** `kne_use` is atomic `F()+1` with no read-modify-write; `pdv_approve`/`pdv_delete`/`pdv_upload` take the parent row lock; no per-row `.save()` loop in any view. `file_sha256` streams and rewinds; `extract_text` frees each page's cache.
+- **No `objects.all()`, no `list(qs)` on a register, no cross-tenant read, no unbounded slice.**
+
+**Disagreements with lanes 1–3**
+
+- **Lane 1's routing of `doc_repository`:** the 11-COUNT loop is confirmed, but the page is **not** "materially above its siblings" — 29 is *below* 7.1's own `overview` at 72. The grade rests on the §5 rule (one aggregate, not one query per stat card), not on an outlier comparison.
+- **Lane 1's `_due_rows` routing:** confirmed (1 SELECT, all columns); the lane implied a query-count problem — it is a **payload/unbounded-render** problem; the count is 1 and constant.
+- **Lane 1's L1-C1 has a performance side-effect worth recording:** approving a UI upload overwrites the parent's search copy with `""`, which *shrinks* the TextField payload L4-I1/I3 worry. Not re-filed; no grade changes.
+
+**Findings**
+
+**L4-I1 — Important — `RetentionBoard.py:42-43` + `templates/.../retention.html:38`**
+`_due_rows` runs `ProjectDocument.objects.filter(tenant, is_archived=False).select_related("project").order_by("number")` with **no `.only()`/`.defer()`**, so it pulls every column of every live document — including `extracted_text`, a TextField capped at **200 000 chars** — to read two date columns in Python. The board then renders `{% for row in due %}` with **no Paginator**, so the row set is up to 2 rows per live document.
+*Growth:* linear in live documents × the 200 000-char cap → **≈4 MB per render at 20 live docs and ≈40 MB at 200 (10×)**, and **400 unpaginated rows** at 10×. At 1× the seeded text is tiny, so this is a bound, not a current cost. `doc_repository`'s equivalent figure already does `.only(...)` — the two boards disagree.
+*Fix:* add `.defer("extracted_text")` (or an explicit `.only(...)`) and wrap the due table in `crud.paginate`.
+
+**L4-I2 — Important — `Knowledge.py:68-69,77-80`**
+`kne_search` builds `rows = _page(request, qs)` **and** `"total_count": qs.count()`. Measured: `?q=charter` issues **two byte-identical `COUNT(*)` statements carrying the full 5-field `icontains` sweep**, then a third SELECT for the page. `rows.paginator.count` is already that number.
+*Growth:* each sweep is a full scan with 5 leading-wildcard `LIKE`s — **unindexable at any size** — so the duplicate is a 2× multiplier on the one unbounded operation on the page.
+*Fix:* `"total_count": rows.paginator.count` (one line, halves the sweep).
+
+**L4-I3 — Important — `Documents.py:52-53`, `ProjectFolders.py:84-85`, `Knowledge.py:24-26,49-50`, `RepositoryOverview.py:36-37`**
+Four list/detail querysets load a TextField no template on the page reads. Measured: `pdm_list`'s row SELECT **includes `extracted_text`** and `projectdocument/list.html` never references it; `pfd_detail`'s 50-row document list and `doc_repository`'s 10-row recent list likewise; `kne_list`/`kne_search` load `body` for all 15 rows while rendering only `title`/`summary`.
+*Growth:* per page render at the cap — `pdm_list` ≤3.0 MB, `pdv_list` ≤3.0 MB, `doc_repository` ≤2.0 MB, **`pfd_detail` ≤10.0 MB (50 rows)**; `kne_list`/`kne_search` are worse because **`body` has no cap at all** (a bare TextField, unlike the capped `extracted_text`). Linear in page size × row size.
+*Fix:* `.defer("extracted_text")` on the four document querysets; `.defer("body")` on both knowledge querysets; annotate `Length("extracted_text")` where `pdv_list` needs only the count; and give `body` a `MaxLengthValidator`.
+
+**L4-I4 — Important — `RepositoryOverview.py:38-42`**
+The `by_type` loop issues **one `COUNT(*)` per `DOC_TYPE_CHOICES` entry**: measured **11 COUNT statements for 11 choices**. `doc_repository` is 29 queries of which **20 are COUNTs**; this loop is 11 of them.
+*Growth:* the query count is **constant in rows** (11 forever) but each is a separate round-trip and index probe, so at 10× the round-trips stay 11 while the scans grow linearly. Exactly the §5 rule ("multiple KPIs over one table should share a single aggregate query").
+*Fix:* one grouped aggregate — `documents.values("document_type").annotate(n=Count("id"))` mapped to labels — collapsing 11 round-trips to 1 and the board from 29 to 19.
+
+**L4-M1 — Minor — `Revisions.py:198-214` (`pdv_compare`), `Knowledge.py:84-86` (`kne_detail`), `Templates.py:33-35` (`dtm_detail`)**
+No `select_related` on three detail views. Measured: `pdv_compare?a=&b=` = **15 queries, 8 page-specific** — `a` (1), `b` (1), **`a.document` and `b.document` = two SELECTs of the *same* row**, and four user FKs; with `select_related` it is 2. `kne_detail` = 11 (4 page-specific) although `kne_list` already joins all three; `dtm_detail` = 10 (3 page-specific).
+*Fix:* `select_related("document","document__project","uploaded_by","approved_by")` on both `pdv_compare` lookups; mirror `kne_list`'s and `dtm_list`'s `select_related` in the two detail views.
+
+**L4-M2 — Minor — `views/Documents.py:93` with `models/.../Documents.py:277-288`**
+`pdm_detail` loads `revisions` (1 query) and then calls `obj.current_revision`, which is `self.revisions.filter(is_approved=True, revision_no=...)` — a `.filter()`, so it **bypasses the loaded list**. Measured directly: **1 query** with the rows already in memory, and `prefetch_related("revisions")` does **not** help (still 1).
+*Growth:* constant 1 query, but it is the exact class the house lesson records (7.8 `tsk_detail` 31→13). *Fix:* derive it in Python — `next((r for r in revisions if r.is_approved and r.revision_no == obj.current_revision_no), None)` — and pass `revisions` as a list so `detail.html`'s `revisions|length` does not force a second evaluation.
+
+**L4-M3 — Minor — `models/.../ProjectFolders.py:63-67`, `models/.../Documents.py:219-225`, `models/.../Revisions.py:87-89`**
+Index audit of the 10 declared in `0014`, against the filters and orderings actually issued:
+- **`pfd_tnt_archived_idx` has no reader.** No query filters `ProjectFolder` by `is_archived` (grep = 0 hits; `pfd_list` filters in Python). Pure write overhead on every folder insert/update. *Fix:* drop it, or give the tree a real `?archived=` SQL lens.
+- **`ProjectDocument.classification` is unindexed** although `pdm_list` offers `?classification=` as one of its eight lenses — `EXPLAIN` falls back to the `(tenant, number)` unique index + `Using filesort`, while the five sibling filters in the same `Meta.indexes` list each get their own index. *Fix:* add `models.Index(fields=["tenant","classification"], name="pdm_tnt_class_idx")`.
+- **`ProjectDocumentRevision.is_approved` is unindexed** although `pdv_list` offers `?is_approved=` and `current_revision` filters on it. *Fix:* `models.Index(fields=["tenant","is_approved"], name="pdv_tnt_approved_idx")`.
+- Verified **used**: the other 8 indexes each appear as the chosen key in `EXPLAIN` for their lens.
+
+**L4-M4 — Minor — `models/.../ProjectFolders.py:84-102,142-150`**
+`ancestor_chain()` walks `node.parent` in a Python loop — **1 query per ancestor level**. Measured on fresh instances: depth-1 folder `full_path` = **1 query**, root = **0**; `_is_descendant_of` cold = **1 query** for a depth-1 candidate (called from `clean()`, i.e. on every `pfd_edit` POST). `_decorate`'s `walk()` recurses once per level and the model imposes **no depth cap**, so a chain deeper than Python's frame limit raises `RecursionError` on `pfd_list`. The seeded tree is depth **1**, so this is a bound, not a cost.
+*Fix:* expose `_decorate`'s pk→parent map so `full_path`/`_is_descendant_of` walk in memory, and add a depth guard.
+
+**L4-M5 — Minor — `Documents.py:38-47`; `models/.../Knowledge.py:111-112`**
+Two comments measurement contradicts: `Documents.py` claims the `extracted_text` sweep "runs **at most once** per page render" — measured **2** statements carry it at `?q=charter` (the Paginator's COUNT and the page SELECT) and **0** at `?q=abc`, so the 4-character rule works but the "once" does not; and `Knowledge.py` claims `kne_tnt_feat_idx` "serves the shelf query" — measured, the default register lens picks the `(tenant, number)` unique index and `filesort`s, and the index is chosen only for the filtered `?is_featured=True` facet.
+
+**L4-M6 — Minor (code-derived, deliberately not measured) — `RetentionBoard.py:83-111`**
+`doc_retention_run` opens a `transaction.atomic()` **per in-window row** and inside it issues `select_for_update` + `exists()` + `create()` — ≈3 statements and 2 transaction-control round-trips per document. At the seeded 20 live documents that is ~60 statements / 20 transactions per press; at 10× ~600 / 200. The per-row lock is the documented authoritative dedupe, so this is **not** filed as a defect — but the loop could run inside one `atomic()` over a single locked fetch of the in-window ids and keep the same guarantee. Not measured: the route is POST-only and posting would add residue.
+
+**Deliberate no-action notes**
+
+1. **Every 7.10 list `filesort`s** — `EXPLAIN` shows `Using filesort` on all five default lenses because no declared index carries the ordering column. This matches the app-wide reference pattern (no list in the app indexes its ordering column), so it is an app-wide pass, not a 7.10 fork.
+2. `pfd_list`'s unpaginated whole-tree render is deliberate and commented; measured 3 page queries at 12 folders.
+3. `pdv_list`'s `rev.is_current` per row costs **0 queries** — not filed.
+4. `doc_repository`'s `projects(tenant)` context is never rendered by `overview.html`, so it is lazy and costs **0 queries**.
+5. `kne_search`'s 1-character rule over `body` is documented; the finding is the duplicate evaluation (L4-I2), not the rule.
+6. `pdv_upload` = 8 queries; `file_sha256` streams in chunks and `extract_text` is bounded with per-page cache flushes — no memory finding.
+7. The 14 POST-only verbs are outside this lane's GET measurement; they answered 405 in the smoke and add no residue here.
+
+### Orchestrator verification of lane 4's measurements (before filing)
+
+- **Query counts — CONFIRMED exactly.** Re-measured independently with `CaptureQueriesContext`: `doc_repository` **29 queries / 20 COUNTs**, `pdm_list` **12 / 1**, `kne_search?q=charter` **9 / 2**, `kne_search?q=e` **10 / 2**, `pdv_compare` (empty) **7 / 0**, `doc_retention` **12 / 4**. Every number the lane published reproduces, including the two that carry findings (the 11-COUNT `by_type` loop inside `doc_repository`'s 20, and the duplicate COUNT on `kne_search`).
+- **L4-M3 index audit — CONFIRMED.** No query anywhere filters `ProjectFolder` by `is_archived` (grep = 0 hits), so `pfd_tnt_archived_idx` has no reader; `classification` appears in no index declaration despite being a `pdm_list` lens; `ProjectDocumentRevision`'s only declared index is `pdv_tnt_document_idx`, so `is_approved` is unindexed despite being a `pdv_list` lens and a `current_revision` filter.
+- **L4-I1/I3 growth figures are bounds, not current costs** — the lane says so itself, and at 1× the seeded `extracted_text` is small (measured 1 182 chars across 20 rows). Filed at Important because the fix is one `.defer()` and the cap is 200 000 chars.
