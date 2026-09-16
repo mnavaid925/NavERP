@@ -20,6 +20,7 @@ from datetime import timedelta
 
 from django.db import transaction
 
+from apps.core.crud import paginate
 from apps.projects.models import ProjectDocument, ProjectNotification
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (login_required, messages, redirect, render,
@@ -36,11 +37,15 @@ def _due_rows(tenant, window_end):
 
     One pass over the tenant's live documents; the two dates derive from two different columns with
     two different semantics, so they are read in Python rather than forced into one SQL expression.
+
+    ``extracted_text`` is DEFERRED: it is the search copy of a stored file and can hold
+    ``EXTRACT_MAX_CHARS`` characters, while this function reads two date columns and a number. On a
+    workspace with a few thousand live documents that one column is the whole cost of the pass.
     """
     today = timezone.localdate()
     rows = []
     for row in (ProjectDocument.objects.filter(tenant=tenant, is_archived=False)
-                .select_related("project").order_by("number")):
+                .select_related("project").defer("extracted_text").order_by("number")):
         if row.retain_until and row.retain_until <= window_end:
             rows.append({"document": row, "reason": "retention", "when": row.retain_until,
                          "days_left": (row.retain_until - today).days})
@@ -65,8 +70,15 @@ def doc_retention(request):
         "live": documents.filter(is_archived=False).count(),
         "with_window": documents.filter(retention_months__isnull=False).count(),
     }
+    # The queue is paginated (one document can contribute two rows — a retention date and a review
+    # date), but the FIGURES above are computed over the whole queue, not the page. `doc_retention_run`
+    # reads `_due_rows` directly and is therefore unaffected by paging: reminders are still raised for
+    # every in-window record, not just the ones on screen.
+    queue = paginate(request, due)
     return render(request, "projects/documentknowledge/retention.html", {
-        "due": due,
+        "due": queue.object_list,
+        "due_total": len(due),
+        "page_obj": queue,
         "figures": figures,
         "window_days": 30,
     })

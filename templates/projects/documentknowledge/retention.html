@@ -27,7 +27,7 @@
   <div class="card">
     <div class="card-header">
       <h2>Due inside {{ window_days }} days</h2>
-      <span class="badge badge-slate">{{ due|length }} row(s)</span>
+      <span class="badge badge-slate">{{ due_total }} row(s)</span>
     </div>
     <div class="table-wrap">
       <table class="table">
@@ -73,6 +73,7 @@
         </tbody>
       </table>
     </div>
+    {% include "partials/pagination.html" with page_obj=page_obj %}
     <div class="card-body">
       {% comment %}
         The Run raises IN-APP rows into the notification inbox and nothing else: there is no
