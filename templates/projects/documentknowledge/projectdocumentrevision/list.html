@@ -31,7 +31,7 @@
           <select name="document" aria-label="Document" class="form-select">
             <option value="">Any document</option>
             {% for d in documents %}
-              <option value="{{ d.pk }}" {% if request.GET.document == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.number }} &mdash; {{ d.title|default:"expected placeholder"|truncatechars:26 }}</option>
+              <option value="{{ d.pk }}" {% if request.GET.document == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.number }} &mdash; {{ d.title|truncatechars:26 }}</option>
             {% endfor %}
           </select>
         </div>
@@ -64,7 +64,7 @@
             <tr>
               <td>
                 <span class="fw-600"><a href="{% url 'projects:pdm_detail' rev.document_id %}">{{ rev.document.number }}</a></span>
-                <div class="text-muted">{{ rev.document.title|default:"expected placeholder"|truncatechars:36 }}</div>
+                <div class="text-muted">{{ rev.document.title|truncatechars:36 }}</div>
               </td>
               <td class="fw-600">v{{ rev.revision_no }}</td>
               <td>
