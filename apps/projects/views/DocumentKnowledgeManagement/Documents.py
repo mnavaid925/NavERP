@@ -6,6 +6,9 @@ TextField twice per matching search (Paginator's COUNT, then the page) for resul
 Instead the view applies its own search BEFORE ``crud_list`` — title/number/tags always, the text
 copy only from 4 characters — and passes ``search_fields=[]`` (``apply_search`` no-ops on an empty
 field list), so the sweep runs at most once per page render and only when it can plausibly help.
+Everything else on the filter bar (``?project=``/``?folder=``/``?document_type=``/``?status=``/
+``?classification=``/``?owner=``/``?archived=``) goes through ``crud_list``'s own ``filters`` spec,
+which is where the L11 guards live.
 
 **Five verbs, each the ONE writer of its own state:**
 
@@ -26,10 +29,10 @@ from apps.projects.forms import ProjectDocumentForm, ProjectDocumentRevisionUplo
 from apps.projects.models import ProjectDocument
 from apps.projects.models.DocumentKnowledgeManagement.Revisions import extract_text
 from apps.projects.views._common import *  # noqa: F401,F403
-from apps.projects.views._common import (get_object_or_404, login_required, messages,
+from apps.projects.views._common import (crud_list, get_object_or_404, login_required, messages,
                                          redirect, render, require_POST, timezone,
                                          write_audit_log)
-from apps.projects.views._helpers import projects
+from apps.projects.views._helpers import owners, projects
 
 
 def _search(qs, raw):
@@ -48,23 +51,28 @@ def _search(qs, raw):
 def pdm_list(request):
     qs = (ProjectDocument.objects.filter(tenant=request.tenant)
           .select_related("project", "folder", "owner", "task", "milestone"))
-    qs, q = _search(qs, request.GET.get("q"))
-    return render(request, "projects/documentknowledge/projectdocument/list.html", {
-        "rows": _page(request, qs),
-        "total_count": qs.count(),
-        "projects": projects(request.tenant),
-        "folders": _folder_choices(request),
-        "doc_type_choices": ProjectDocument.DOC_TYPE_CHOICES,
-        "status_choices": ProjectDocument.STATUS_CHOICES,
-        "classification_choices": ProjectDocument.CLASSIFICATION_CHOICES,
-        "q": q,
-    })
-
-
-def _page(request, qs, size=15):
-    """Paginate a queryset the way the app's lists do, returning a page object."""
-    from django.core.paginator import Paginator
-    return Paginator(qs, size).get_page(request.GET.get("page"))
+    qs, _ = _search(qs, request.GET.get("q"))
+    # `search_fields=[]` is the point: `apply_search` no-ops on an empty field list, so the
+    # 4+-character rule above stays the ONLY search this register runs. The `filters` spec below is
+    # `crud_list`'s, which is where the L11 guards live (a junk enum is IGNORED rather than silently
+    # emptying the register; `?folder=0` is not a pk and is skipped). Hand-rolling the loop here
+    # would mean hand-rolling those guards too.
+    return crud_list(
+        request, qs, "projects/documentknowledge/projectdocument/list.html",
+        search_fields=[],
+        filters=[("project", "project_id", True), ("folder", "folder_id", True),
+                 ("document_type", "document_type", False), ("status", "status", False),
+                 ("classification", "classification", False), ("owner", "owner_id", True),
+                 ("archived", "is_archived", False)],
+        extra_context={
+            "projects": projects(request.tenant),
+            "folders": _folder_choices(request),
+            "doc_type_choices": ProjectDocument.DOC_TYPE_CHOICES,
+            "status_choices": ProjectDocument.STATUS_CHOICES,
+            "classification_choices": ProjectDocument.CLASSIFICATION_CHOICES,
+            "owners": owners(request.tenant),
+        },
+    )
 
 
 def _folder_choices(request):
