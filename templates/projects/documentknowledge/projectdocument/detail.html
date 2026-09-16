@@ -237,7 +237,7 @@
         <div class="form-group">
           <label class="form-label" for="{{ upload_form.file.id_for_label }}">File <span class="req">*</span></label>
           {{ upload_form.file }}
-          <div class="form-help">Allowed: .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .csv .md .png .jpg .jpeg .gif .svg .dwg .dxf .zip &mdash; up to 20 MB. A PDF with a text layer and a plain-text file are read for search; a scan is stored, downloadable and simply not readable as text.</div>
+          <div class="form-help">Allowed: .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .csv .md .png .jpg .jpeg .gif .webp .zip &mdash; up to 20 MB. A PDF with a text layer and a plain-text file are read for search; a scan is stored, downloadable and simply not readable as text.</div>
           {% for e in upload_form.file.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
         </div>
         <div class="form-group">
