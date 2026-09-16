@@ -4,13 +4,22 @@
 and it is create-path only — the chain's immutability is structural (models.Revisions docstring), so
 there is no edit form, no edit url and no edit template anywhere for a revision.
 
-**What the form carries and what it deliberately does not.** ``document``, ``file`` and
-``change_note``. Everything else is assigned by the view in the same transaction that saves the row:
-``revision_no`` comes from :func:`next_revision_no` (one past the highest — a deleted unapproved
-revision leaves a gap and the gap is the honest record), ``checksum`` from
-:func:`file_sha256`, ``extracted_text``/``extraction_note`` from :func:`extract_text`,
-``uploaded_by`` from ``request.user`` and ``is_approved`` stays False — an upload NEVER moves the
-pointer or approves itself (6.19's first invariant).
+**What the form carries and what it deliberately does not.** ``file`` and ``change_note``. Everything
+else is assigned by the view in the same transaction that saves the row: ``document`` from the URL
+(``get_object_or_404(..., tenant=request.tenant)``), ``revision_no`` from
+:func:`next_revision_no` (one past the highest — a deleted unapproved revision leaves a gap and the
+gap is the honest record), ``checksum`` from :func:`file_sha256`,
+``extracted_text``/``extraction_note`` from :func:`extract_text`, ``uploaded_by`` from
+``request.user`` and ``is_approved`` stays False — an upload NEVER moves the pointer or approves
+itself (6.19's first invariant).
+
+**``document`` is NOT a form field, and that is the fix for a confused deputy.** It used to be one,
+and the lock refusal below authorized whatever row the POST named — while the view then overwrote
+that with the URL's row. A crafted POST naming an UNLOCKED document therefore bypassed the
+check-out lock on a LOCKED one. The view now passes the URL's document in as ``document=``, so the
+check below authorizes exactly the row that is written. The parent's ``(tenant, document,
+revision_no)`` uniqueness is unaffected: ``next_revision_no()`` allocates under the parent's row
+lock and the DB constraint is the backstop.
 
 **The lock is refused here, not only in the view.** A document that is checked out accepts no
 upload: "whoever holds the check-out wins" has to be true in the model layer too, not just in the
@@ -23,7 +32,7 @@ about what "storable" means.
 from django.core.exceptions import ValidationError
 
 from apps.projects.forms._common import *  # noqa: F401,F403
-from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
+from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin
 from apps.projects.models import ProjectDocumentRevision
 from apps.projects.models.DocumentKnowledgeManagement.Documents import validate_upload
 
@@ -31,7 +40,13 @@ from apps.projects.models.DocumentKnowledgeManagement.Documents import validate_
 class ProjectDocumentRevisionUploadForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = ProjectDocumentRevision
-        fields = ["document", "file", "change_note"]
+        fields = ["file", "change_note"]
+
+    def __init__(self, *args, **kwargs):
+        # The document the upload will be written to, supplied by the view from the URL. It is
+        # NOT read from the POST — see the module docstring (the confused deputy).
+        self.document = kwargs.pop("document", None)
+        super().__init__(*args, **kwargs)
 
     def clean_file(self):
         uploaded = self.cleaned_data.get("file")
@@ -45,9 +60,7 @@ class ProjectDocumentRevisionUploadForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
 
-        _reject_foreign(self, cleaned, ["document"])
-
-        document = cleaned.get("document")
+        document = self.document
         if document is not None and document.is_locked:
             holder = document.checked_out_by.get_username() if document.checked_out_by else "somebody"
             self.add_error(
