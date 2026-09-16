@@ -38,7 +38,7 @@
           {% for row in due %}
             <tr>
               <td class="fw-600"><a href="{% url 'projects:pdm_detail' row.document.pk %}">{{ row.document.number }}</a>
-                <div class="text-muted">{{ row.document.title|default:"expected placeholder"|truncatechars:38 }}</div>
+                <div class="text-muted">{{ row.document.title|truncatechars:38 }}</div>
               </td>
               <td><a href="{% url 'projects:prj_detail' row.document.project_id %}">{{ row.document.project.number }}</a></td>
               <td>
