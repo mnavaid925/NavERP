@@ -136,6 +136,18 @@ class ProjectFolder(TenantNumbered):
             if clash.exists():
                 errors["name"] = "This project already has a root folder with that name."
 
+        # A folder that already holds sub-folders (or documents) may not be MOVED to another
+        # project: the children carry their own `project` FK, so the move strands them and the
+        # project lens then hides them from the old project's tree. The form disables `project` on
+        # edit for the ordinary path; this is the schema-level backstop (admin, seeder, shell).
+        if self.pk and getattr(self, "project_id", None):
+            stored = (type(self).objects.filter(pk=self.pk)
+                      .values_list("project_id", flat=True).first())
+            if stored and stored != self.project_id and (self.children.exists()
+                                                         or self.documents.exists()):
+                errors["project"] = ("A folder that still holds sub-folders or documents may not be "
+                                     "moved to another project — move or delete them first.")
+
         if errors:
             raise ValidationError(errors)
 
