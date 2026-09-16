@@ -53,6 +53,15 @@ class ProjectDocumentForm(TenantUniqueMixin, TenantModelForm):
                 if field is not None:
                     field.queryset = field.queryset.filter(project_id=project_id).order_by("pk")
 
+        if self.instance and self.instance.pk:
+            # A document does not move between projects: its per-tenant number and its revision
+            # chain belong to one. Disabling the field (rather than merely narrowing the three FKs
+            # above) is what makes that true — those querysets are narrowed from the INSTANCE's
+            # project, so a posted change of `project` would leave every folder/milestone/task on
+            # the form failing "Select a valid choice" with no way to recover. Django reads a
+            # disabled field's value from the instance, so a crafted POST cannot move it either.
+            self.fields["project"].disabled = True
+
     def clean(self):
         cleaned = super().clean()
 
