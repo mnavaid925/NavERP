@@ -544,3 +544,109 @@ Two comments measurement contradicts: `Documents.py` claims the `extracted_text`
 - **Query counts — CONFIRMED exactly.** Re-measured independently with `CaptureQueriesContext`: `doc_repository` **29 queries / 20 COUNTs**, `pdm_list` **12 / 1**, `kne_search?q=charter` **9 / 2**, `kne_search?q=e` **10 / 2**, `pdv_compare` (empty) **7 / 0**, `doc_retention` **12 / 4**. Every number the lane published reproduces, including the two that carry findings (the 11-COUNT `by_type` loop inside `doc_repository`'s 20, and the duplicate COUNT on `kne_search`).
 - **L4-M3 index audit — CONFIRMED.** No query anywhere filters `ProjectFolder` by `is_archived` (grep = 0 hits), so `pfd_tnt_archived_idx` has no reader; `classification` appears in no index declaration despite being a `pdm_list` lens; `ProjectDocumentRevision`'s only declared index is `pdv_tnt_document_idx`, so `is_approved` is unindexed despite being a `pdv_list` lens and a `current_revision` filter.
 - **L4-I1/I3 growth figures are bounds, not current costs** — the lane says so itself, and at 1× the seeded `extracted_text` is small (measured 1 182 chars across 20 rows). Filed at Important because the fix is one `.defer()` and the cap is 200 000 chars.
+
+### Lane 5 — qa-smoke-tester (serial pass 5)
+
+**Scope check.** Probed by live request only, as `admin_acme` / `admin_globex` and as a throwaway tenant admin, with `Client(raise_request_exception=False)` + `setup_test_environment()`. Covered: the upload→approve→search chain for `.txt` / a real-text-layer `.pdf` / `.png` / `.zip` (including `extract_text` on the *saved* FieldFile as the counterfactual); the whole revision state machine under abuse; `--flush` reasoning + the plain re-seed file-count invariant; the retention Run in the state the page claims; degenerate tenants/documents/folders/knowledge; `?page=` and `?q=` edges on all five registers + `kne_search`; cross-tenant IDOR for the five POST verbs the smoke omits plus `pdv_upload`'s POST body; `MEDIA_URL` serving in a clean process; the folder tree's `?project=` lens, its `?q=` search, and the cycle guard. **Could not** run `--flush` (destructive, other lanes need the data) — read `handle()`/`_docmgt` and reasoned, then verified the file-count invariant on a safe plain re-run. Could not verify browser JS (L42) or re-measure lane 4's counts. **Residue:** every probe ran on a tenant created and then deleted (`l5-710-*`); final DB identical to the pre-probe snapshot — acme 12/22/23/0 pending/16/17, globex 12/22/23/4 pending/16/17, `AuditLog` total unchanged at **6297** with 0 tenant-NULL rows, 0 media delta from the re-seed. **Three orphan files could not be deleted (sandbox denied the `rm`):** `media/projects/documents/2026/09/{gamma.pdf,delta.png,epsilon.zip}` (599/113/21 B, referenced by no row). `l1c1-probe.txt` is **pre-existing, not lane 5's** (the orchestrator's L1-C1 probe). No code/template/file edited, no `git add`/`commit`; probe scripts left in gitignored `temp/l5_*`.
+
+**Sanity-checks of F-1..F-4** — all four **PASS** at runtime.
+- **F-1** — `pdm_list`, 17 lens values: narrowing proven where the result is under a page (`?q=PDM-00001`→1, `?q=PDM-0000`→9, `?status=draft`→0, `?document_type=charter`→2, `?archived=True`→2) and `?status=approved`→"Showing 1–15 of 17" of 22; every junk value is ignored without a 500.
+- **F-2** — `kne_search` 200 for `?q=charter`, `?q=a`, `?q=`, `?q=zzzznope`, `?q=charter&kind=nope`, `?q=charter&kind=lesson_learned`; filters correctly (`?q=retro`→2, `?q=a`→15, `?q=zzzznope`→0). No `NameError`.
+- **F-3** — `GET pdm_edit(PDM-00016)` renders `<select name="project" class="form-select" required disabled id="id_project">`.
+- **F-4** — `GET /projects/` → 200 and `GET /projects/activity-feed/` → 200.
+
+**Reproductions / refutations of lanes 1–4's runtime claims**
+- **L1-C1 — REPRODUCED, both halves, end to end.** Real `POST pdv_upload` of a `.txt`: `extracted_text=''`, `extraction_note='The stored file could not be reached on disk.'`, while `extract_text(<the same saved FieldFile>)` returns the full text — so the note is false and the caller is the bug. Approving took the parent's copy from `'ALPHATOKEN7788 the quick brown fox…'` (103 chars) to `''`; the register then returned **0 rows** for the old token and 0 for the new one. `pdm_reindex` repaired it both times. Same for a hand-built **real-text-layer `.pdf`** (`extract_text(v3.file)` → `'PDFTOKEN4455 report body'`, stored `''`). `.png`/`.zip` got the **wrong** note (`unreadable path`, not `NOTE_NO_TEXT_LAYER`).
+- **L1-I1 — REPRODUCED.** `pdv_restore` → new revision `checksum=''` while the source is `d4580ce0…`; `pdv_compare` prints **"Different bytes"** for a byte-identical restore, and the sentence at `compare.html:82` sits inside the `same_checksum` branch so it can never render.
+- **L2-M1 — REPRODUCED.** Run→1, Run→1, mark read, Run→**2**, against a page that says "cannot raise twice".
+- **L3 no-action note 9 (un-archive status guess) — REPRODUCED** and filed below as L5-I2.
+- **L1-M5 — CONFIRMED** (edit form excludes only self; the child is offered).
+- **Lane 1's coverage §"cycle enforced" and lane 2's contract-walk line 8137 — REFUTED.** The cycle guard is dead; see **L5-C1**.
+- L2-I3's drift signature confirmed independently (acme 0 pending vs globex 4). Lane 4's counts not re-measured.
+
+**Coverage — clean categories (no findings filed)**
+Revision numbering sequential across two uploads (1→2) and gapped after deleting an unapproved revision (→5), as documented. Upload refused while checked out (200 + visible error, 0 rows). Approve twice / at-below-pointer / under hold all refused with the pointer unmoved. Restore-unapproved, delete-approved, delete-current all refused. `pdm_delete` works on a document with no approved revision. Upload validation: no file / `.exe` / no extension all refused with a visible error. Cross-tenant **POST** → 404 for `pdm_checkin`, `pdm_release`, `pdm_reindex`, `pdv_restore`, `pdv_upload` (plus the smoke's nine); a crafted cross-tenant `document=` POST writes nothing. Empty tenant: 13 GET routes 200, no comment leak. A document with no revisions, a folder with no documents, and a summary-only knowledge entry all render and behave. Pagination `?page=0|-1|abc|99999999|1e5|" 2 "` → 200 everywhere. `?q=` lengths: `pdm_list` sweeps `extracted_text` only from 4 chars (`ZZQ`→0, `ZZQX`→1); `kne_search` has no length rule (`Z`→1). Plain `seed_projects` re-run: **0 media-file delta, 0 row delta** on all six 7.10 tables for both tenants.
+
+**Findings**
+
+**L5-C1 — Critical — `apps/projects/models/DocumentKnowledgeManagement/ProjectFolders.py:142-150`**
+`_is_descendant_of()` **can never return `True`**. `seen` is seeded with `self.pk`, and the loop condition `while node is not None and node.pk not in seen` is evaluated **before** `if node.pk == self.pk: return True` — so the walk exits the moment it reaches `self`, and the `return True` is unreachable.
+*Exact requests:* `ProjectFolder.full_clean()` on an instance whose `parent` is its own grandchild → **passes, no error**; `A._is_descendant_of(B)` → `False` where B is A's direct child. Through the UI: `POST /projects/doc-folders/<Delta>/edit/` with `parent=<Foxtrot>` (Delta's grandchild) → **302, cycle created, no error shown**; and `GET /projects/doc-folders/<Echo>/edit/` renders `<option value="73">PFD-00006 — Foxtrot</option>` where Foxtrot is Echo's own child, so the dropdown itself offers it.
+*Observed state:* with the cycle in place `GET /projects/doc-folders/` rendered **4 rows for 7 existing p1 folders** — the whole cyclic branch vanished with no error and the page showed the ordinary tree; `Echo.full_path` became `'Foxtrot / Delta / Echo'`.
+*Why it matters:* the model's `clean()` comment and `Meta` comment assert the invariant, and **lane 1's coverage section and lane 2's contract walk both recorded the cycle guard as enforced** — a false PASS that would have buried this. `_decorate`'s `walk(None, …)` starts from `parent_id is None`, so a cyclic branch is unreachable and silently disappears from the tree. Reachable by an ordinary user picking a descendant from the `<select>`; no data is lost and re-editing the parent recovers it, which is the only reason this is not graded worse.
+*Fix:* drop `self.pk` from the initial `seen` (or test equality before the membership check). Also exclude the subtree from the edit form's `parent` queryset (lane 1's L1-M5), and assert both in the `docmgt_*` model lane.
+
+**L5-I1 — Important — `forms/DocumentKnowledgeManagement/ProjectFolders.py:28-45` + `models/…/ProjectFolders.py:106-140`**
+A folder that has children can be moved to another project; the children are stranded and no guard exists.
+*Exact request:* `POST /projects/doc-folders/<Hotel>/edit/` with `project=<p2>` and an empty `parent` → **302**, `Hotel.project_id = p2`, `India.project_id` stays `p1` with `parent = Hotel`.
+*Observed state:* `GET /projects/doc-folders/?project=<p1>` no longer shows `India` at all; `pfd_detail India` still 200. `ProjectFolder.clean()` validates only the moved row's own `parent`/`project` pair, never its children.
+*Why it matters:* `ProjectDocumentForm` deliberately disables `project` on edit; the folder form has no equivalent and `project` is a live `<select>`, so one POST grafts a branch across projects and the project lens then hides the stranded children — the same silent-hiding effect as L5-C1 by a second route that is not even claimed to be guarded.
+*Fix:* disable `project` on edit in `ProjectFolderForm`, or refuse the move when `self.children.exists()`.
+
+**L5-I2 — Important — `views/DocumentKnowledgeManagement/Documents.py:226-252`**
+`pdm_archive`'s un-archive branch guesses the status: `obj.status = "approved" if obj.current_revision_no else "draft"`. The Toggle is not status-neutral.
+*Exact requests:* on a document with `status='in_review'`, `current_revision_no=1`: archive then un-archive.
+*Observed state:* `in_review`+pointer → `approved`; `superseded`+pointer → `approved`; `in_review`, no pointer → `draft`; only `draft`, no pointer round-trips. A document under review comes back **Approved** with no approval action.
+*Why it matters:* `status` drives the register's badge, its `?status=` lens and the repository's `approved` figure, so `pdm_list?status=approved` and `doc_repository` overstate.
+*Fix:* stamp the pre-archive status and restore it (a column, or the value already written into the audit row), or refuse to un-archive into a guessed state.
+
+**L5-I3 — Important — `views/DocumentKnowledgeManagement/ProjectFolders.py:59-76` + `:22-55`**
+The folder tree's own search cannot find a nested folder.
+*Exact requests / observed:* tree `Zulu Root > Yankee Middle > Xray Leaf`, plus root `Whiskey Root`. `?q=Yankee` → **200, 0 rows**, empty state "No folders match"; `?q=Xray` → 0; `?q=Middle` → 0; `?q=Zulu` → 1; `?q=Whiskey` → 1; `?q=Root` → 2. The input's placeholder is "Search folder name or description…".
+*Why it matters:* `pfd_list` filters `rows` to the matches and then `_decorate` walks `by_parent` from `parent_id is None`, so any match whose parent was filtered out is never reached — only roots survive. The page then states "Nothing in the tree matches that lens" for a folder that exists, and the count footer is suppressed so nothing contradicts it.
+*Fix:* walk each match's `parent_id` chain upward and keep the ancestors as context rows, or search in memory over the whole decorated tree.
+
+**L5-M1 — Minor — `projectdocumentrevision/form.html:28-42` and `projectdocument/detail.html:237-250`**
+Both upload surfaces render `form.non_field_errors`, `form.file.errors` and `form.change_note.errors` — never `form.document.errors`, and `document` is a bare hidden input.
+*Exact requests / observed:* `POST …/upload/` with `document=<globex pk>` → **200, zero `.form-error` divs, "another workspace" nowhere on the page** (refusal is correct: 0 revisions written); the same with a non-existent pk and with `document` omitted → 200, zero errors. Control: `file=x.exe` renders its error normally.
+*Why it matters:* `_reject_foreign` keys the refusal on `document`, so every `document`-field refusal is invisible — the user gets the same form back with no explanation. Only reachable by tampering.
+*Fix:* render `{% for e in form.document.errors %}` or convert the failure to a non-field error.
+
+**L5-M2 — Minor — `views/DocumentKnowledgeManagement/Revisions.py:37-71` + `:76-107`**
+An **archived** document accepts a new revision and an approval, and stays Archived.
+*Exact requests / observed:* archive the document, then `POST …/upload/` → 302, revision added; `POST …/approve/` → 302, pointer moved and the parent's `extracted_text` replaced, while `status` remains `archived` and `is_archived` is True. Neither view nor either form checks `is_archived`; `pdv_approve`'s status lift is gated on `("draft","expected","in_review")` so `archived` is excluded.
+*Why it matters:* the register's archive lens and the retention board's `archived` figure still count the row as closed. A record someone archived to freeze silently changes content.
+*Fix:* refuse an upload/approval while `is_archived` (or clear the archive on approve, audited).
+
+**L5-M3 — Minor — `views/DocumentKnowledgeManagement/Documents.py:295-318`**
+`pdm_reindex`, the verb advertised as the repair, is the second writer that can wipe the search copy.
+*Exact requests / observed:* copy `'RECOVERABLE TOKEN TEXT'`; delete the revision's stored file from disk; `POST …/reindex/` → 302 and `extracted_text` becomes `''` with `NOTE_UNREADABLE_PATH`. The document then drops out of the register's 4+-character search.
+*Why it matters:* the same "overwrite rather than guard" shape as L1-C1, in the one verb a user presses *because* they suspect the index. A transiently unreachable file permanently destroys a good copy.
+*Fix:* when the read returns empty with a note, keep the existing copy and record the note instead of overwriting.
+
+**L5-M4 — Minor — `management/commands/seed_projects.py:285-296`**
+`--flush` deletes rows and never touches storage, so a re-seed orphans every 7.10 file.
+*Evidence:* the flush block performs no filesystem operation; `_docmgt`'s own docstring warns the block would "quietly pile up duplicate files"; and Django's storage **renames on collision** rather than overwriting — demonstrated live: two uploads named `alpha.txt` produced `alpha.txt` and `alpha_iT29B7Z.txt`. After a flush the rows are gone but the pre-flush files remain, and the re-seed mints new names, leaving the originals unreferenced for ever.
+*Why it matters:* the close-out ends with `--flush` + re-seed, so this is not hypothetical — and because `/media/` is served without authentication (note 2 below), the "reset" leaves the previous documents downloadable.
+*Fix:* have `--flush` also delete the 7.10 storage subtree, or document explicitly that it does not.
+
+**Deliberate no-action notes**
+1. **Upload onto a document under legal hold is accepted (302, file written), but approve and restore are both refused under the hold** — exactly what `ProjectDocumentRevision.clean()` and `pdv_approve` pin, and `detail.html:232` states it. Staging-only upload is the documented posture; not filed.
+2. **`/media/` is served with no authentication — a project-wide configuration fact, not a 7.10 defect.** `config/urls.py:22-23` appends `static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)` whenever `DEBUG` is True. Measured in a clean process: `GET /media/projects/documents/2026/09/cart-ui-test-results-r2_39Ps8Th.txt` → **200 / 66 bytes as an anonymous client**, while `GET /projects/documents/<globex pk>/` → 404 for the same actor. 7.10 has **no** download route at all and every one of its views is `@login_required`, so the leak is the handler, not the module. **Routed to security-reviewer:** 7.10 is the module that stores confidential and legally-held payloads in `MEDIA_ROOT`, and `.svg` is on the upload allow-list, so the same handler serves a user-uploaded SVG inline under the site's origin.
+3. `pfd_list` has no `?archived=` lens — `?archived=True` is ignored, consistent with lane 4's L4-M3.
+4. `pdm_list`'s "Live register" default lens includes archived rows — lane 1's L1-M2, reproduced.
+5. `pdv_restore`'s missing checksum → "Different bytes" — lane 1's L1-I1, reproduced.
+6. The retention Run re-raises after the reminders are read — lane 2's L2-M1, reproduced.
+7. `_docmgt`'s guard is `ProjectFolder.objects.filter(tenant=tenant).exists()`, so a single hand-created folder blocks the whole 7.10 seed for that tenant. Deliberate (the block's entry table is the guard — the house idiom).
+8. `pdv_compare` given a document pk returns 200 with the empty state; `pdm_reindex` on a document with no approved revision returns 302 with "nothing to index". Clean.
+9. Probe scripts left in `temp/l5_*.py` as evidence; the three orphan media files are the only residue lane 5 could not remove.
+
+### Orchestrator verification of lane 5's Critical (before filing)
+
+**L5-C1 — CONFIRMED, and the mechanism is now pinned exactly.** Re-measured directly:
+
+- `A._is_descendant_of(B)` where B is A's **direct child** → **`False`** (should be `True`).
+- `ProjectFolder.full_clean(exclude=["number"])` with `parent` set to the folder's own descendant → **ACCEPTED, no error** (should be `ValidationError` on `parent`).
+- The source, read out:
+  ```python
+  seen, node = {self.pk}, candidate
+  while node is not None and node.pk not in seen:
+      if node.pk == self.pk:
+          return True
+      seen.add(node.pk)
+      node = node.parent
+  return False
+  ```
+  `seen` is pre-seeded with `self.pk`, so the guard `node.pk not in seen` fires **before** the equality test can: the walk up the ancestor chain terminates precisely when it reaches `self`, and `return True` is unreachable for every input. A correct version seeds `seen = set()` and tests equality first.
+
+**This is a false PASS in the review record, and it is worth naming.** Lane 1's coverage list recorded "descendant-cycle … enforced (`:120-129`)"; lane 2's contract walk marked line 8137 PARTIAL only for the root-duplicate half, implying the cycle half held. Neither had run it. Lane 5's live request is what settled it. The lesson generalises: **a guard whose only evidence is the code that reads it is not verified** — and this is the second time in this review that a lane's confident coverage claim was wrong (the first was lane 1's "only instance repo-wide" for L1-C2).
