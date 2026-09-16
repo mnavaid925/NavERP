@@ -65,12 +65,16 @@ def kne_search(request):
         qs = qs.filter(kind=kind_filter)
     else:
         kind_filter = ""
+    rows = paginate(request, qs)
     return render(request, "projects/documentknowledge/knowledgeentry/search.html", {
         # `crud.paginate`, not a private copy: it is the helper that stamps `page.window`, and
         # `partials/pagination.html`'s number loop iterates `page_obj.window` — a local
         # `Paginator(...).get_page(...)` renders Prev/Next and no page numbers at all.
-        "rows": paginate(request, qs),
-        "total_count": qs.count(),
+        "rows": rows,
+        # `rows.paginator.count`, NOT `qs.count()`: the paginator has already run the identical
+        # `COUNT(*)` over the same five-field `icontains` sweep to size itself, and that sweep is
+        # the one operation on this page no index can serve. Asking twice paid for it twice.
+        "total_count": rows.paginator.count,
         "q": raw,
         "searched_fields": searched,
         "kind_choices": KnowledgeEntry.KIND_CHOICES,
