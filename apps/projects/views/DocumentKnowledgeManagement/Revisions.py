@@ -52,10 +52,14 @@ def pdv_upload(request, document_pk):
                 revision.checksum = file_sha256(uploaded)
                 revision.uploaded_by = request.user
                 revision.is_approved = False
-                text, note = extract_text(uploaded)
+                revision.save()
+                # Extraction reads the STORED file, so it must run AFTER save() — a raw
+                # ``UploadedFile`` has no ``.path``, and reading it first stored an empty search
+                # copy with a false "could not be reached on disk" note (the seeder's order).
+                text, note = extract_text(revision.file)
                 revision.extracted_text = text
                 revision.extraction_note = note
-                revision.save()
+                revision.save(update_fields=["extracted_text", "extraction_note"])
                 write_audit_log(request.user, revision, "create",
                                 changes={"verb": "pdv_upload",
                                          "revision_no": revision.revision_no,
