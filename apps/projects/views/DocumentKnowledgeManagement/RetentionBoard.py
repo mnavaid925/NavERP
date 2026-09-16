@@ -109,8 +109,12 @@ def doc_retention_run(request):
                 task=locked.task, triggered_by=request.user,
             )
             raised += 1
-    write_audit_log(request.user, None, "retention_reminders_run",
-                    {"raised": raised, "skipped_open": skipped})
+    # `AuditLog.action` is a varchar(10) holding create/update/delete — the verb belongs in
+    # `changes`, not in the action. Writing "retention_reminders_run" there truncated to
+    # "retention_" on a non-strict server and raised DataError (1406) under STRICT_TRANS_TABLES.
+    write_audit_log(request.user, None, "update",
+                    {"verb": "retention_reminders_run", "raised": raised,
+                     "skipped_open": skipped})
     messages.success(request, f"Retention reminders: {raised} raised, {skipped} already open and "
                               f"unread.")
     return redirect("projects:doc_retention")
