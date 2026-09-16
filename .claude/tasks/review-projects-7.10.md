@@ -242,3 +242,105 @@ a 7.10 close-out.
 **Corrected severity/scope for the consolidated block:** L1-C2 keeps Critical; the "only instance"
 sentence is struck; the finding text should say *"the 7.10 instance of a repo-wide idiom — 25 other
 sites exist, mostly procurement 6.19's; fix 7.10's here and record the sweep."*
+
+### Lane 2 — explorer (serial pass 2)
+
+**Scope check.** Read: all 5 model modules, 5 form modules, 7 view modules, 8 url modules + the 7.10 wiring in `apps/projects/urls/__init__.py`, the 7.10 admin block, `_docmgt` + `--flush` + `_seed_tenant` dispatch, `LIVE_LINKS["7.10"]` + the `parse_catalog()` round-trip, migration `0014`, all 22 templates, `apps/core/crud.py`, `apps/projects/{forms,views}/_common.py`, `views/_helpers.py`, `templates/partials/pagination.html`, and the plan (todo.md:7987-8324) bullet by bullet. Probed (read-only): `manage.py check` → 0 issues; `makemigrations --check --dry-run` → "No changes detected"; `parse_catalog()` → 7.10's five bullet strings match `LIVE_LINKS` keys exactly; `reverse()` on all 7.10 names; a reverse-FK sweep for every model pointing into the 5 new tables; `full_clean()` on an unsaved duplicate root folder; the test client (GET only) over `pdm_list` ×13 lens values and `kne_search` ×5; read-only DB queries for counts/statuses/approvers. Could NOT verify: any runtime mutation, and `--flush` + re-seed identical counts (destructive) — see **L2-I3**.
+
+**Sanity-checks of F-1..F-4**
+
+- **F-1 — PASS.** `_search()` then the whole 7-tuple spec to `crud_list` with `search_fields=[]` (`views/…/Documents.py:54,60-75`). Measured: `?status=nope`→15 rows (junk enum ignored), `?folder=0`→15, `?folder=abc`→15, `?document_type=nope`→15, `?status=draft`→narrows, `?archived=True`→2, `?page=99`→clamps, `?page=abc`→page 1. No 500 on any of the 13.
+- **F-2 — PASS.** `from django.db.models import F, Q` (`views/…/Knowledge.py:12`), used `:53-56`. `?q=charter`→200, `?q=a`→200.
+- **F-3 — PASS.** `self.fields["project"].disabled = True` inside the instance branch (`forms/…/Documents.py:56-63`), narrowed querysets at `:50-54` from `self.instance.project_id`.
+- **F-4 — PASS.** Imported at `urls/__init__.py:57` **and** concatenated `:145`; `/projects/`→200. All seven `_dk_*` modules concatenated (`:156-162`).
+
+**Contract walk** (todo.md line → verdict; only the non-MET rows are shown, all others MET)
+
+- `8137` M1 `clean()` + `unique_together` — **PARTIAL**. Same-project, self-parent and cycle enforced (`ProjectFolders.py:120-129`); constraint exists (`:57-62`). The root-duplicate half does not run on create → **L2-I2**.
+- `8143` M1 form narrowed parent — **PARTIAL** (lane 1's L1-M5, not re-filed).
+- `8173` M2 `clean()` — **PARTIAL**. Title rule `:302-303` ✓, held+archived `:305-307` ✓, `_id`-first backstop `:314-318` ✓. The two check-out refusals live in the view (`pdm_checkout:179`) and the form (`forms/…/Revisions.py:51-56`), not `clean()` → see **L2-M5**.
+- `8181` M3 file rules "in `clean()`" — **DELIBERATELY-MOVED**. Rules exist once (`validate_upload`, `models/…/Documents.py:92-107`), applied by the form's `clean_file` (`forms/…/Revisions.py:36-43`). Defensible (the error attaches to the field).
+- `8187` M3 immutability — **MET in substance**. No edit url/view/template; only form is the upload form with `fields=["document","file","change_note"]`. (The plan's literal "everything but `change_note` is `editable=False`" is false — `document`/`file`/`revision_no`/`is_approved` must be editable for the create path — but nothing surfaces them.)
+- `8195` M3 `pdv_reindex` — **MISSING under that name**; the behaviour is complete as `pdm_reindex` on the document (`views/…/Documents.py:295-318`), which is what the Model-2 bullet pins.
+- `8211` M4 "file required on create" — **MISSING** (lane 1's L1-M4, not re-filed).
+- `8224` M5 `kne_publish` Toggle draft/published/**retired** — **DELIBERATELY-CHANGED**. Toggles draft↔published and **refuses** a retired row (`views/…/Knowledge.py:160-163`); retiring is an edit. Documented in the view docstring, not in the plan.
+- `8232` `doc_repository` tiles **+ the register with six lenses** — **DELIBERATELY-SPLIT**. All six tile figures present plus four more (`RepositoryOverview.py:23-35`), but the page hosts no register: the register is `pdm_list` at `documents/` with 7 lenses. The plan's `?type=` is `?document_type=`.
+- `8235` `doc_retention` — **PARTIAL**. Figures all computed (`RetentionBoard.py:60-67`), Run raises in-app rows only, deduped in the lock (`:92-111`). Held and archived are figures only, with no row list and no click-through → **L2-M6**; the Run's idempotency is weaker than the page claims → **L2-M1**.
+- `8238` `kne_search` 4+-character rule — **DELIBERATELY-CHANGED**. Deliberately not applied (documented in the view docstring and the page copy), `category` added to the searched set, shelf from `Meta.ordering`, empty state names the fields (`search.html:74-76`).
+- `8249` views layer — **PARTIAL**. Everything holds except "verb in `changes`, never in `action`", which `RetentionBoard.py:112` breaks (lane 1's L1-C2, not re-filed).
+- `8262` navigation block — **PARTIAL**. Five keys character-for-character ✓, extra leaf present ✓ (label "Folder Tree" where the plan wrote "Folders" — deliberately the page's own title). The plan asked for a comment explaining **both** `kne_search` **and** `doc_repository` as lenses; only `kne_search` is explained.
+- `8283` `--flush` then re-seed identical counts — **PARTIAL/unverifiable here**; the ordering is PROTECT-safe (`:285-296`: knowledge → templates → revisions → documents → folders) and page 2 exists.
+- `8285` smoke sweep — **MET as reported** (167/0). **Caveat: the smoke mutates the dev DB (L2-I3).**
+- `8298` `test-contract` + `docmgt_*` conftest + 4 test lanes — **MISSING**.
+- `8302` todo.md close-out note — **MISSING** (no `### Projects 7.10 — … (close-out …)` section).
+- `8308-8319` deferred items — **MET**: none built; each named as another sub-module's on the relevant page.
+
+**Disagreements with lane 1.** None substantive. Two calibrations: (a) L1-I4 is arguably a Minor on its own, raised only as a compounding factor of L1-C1; (b) L1-M3 is right about the mechanism but understates the blast radius — the false claim is in **three** places, not one (see **L2-M5**).
+
+**Findings**
+
+**L2-I1 — Important — `apps/projects/views/ProjectInitiation/Overview.py:14-39,148-152` + `templates/projects/overview.html:8,54-275`**
+7.10 is invisible on the Projects **module landing page**. The model-import list has none of the five 7.10 models, the context dict has no 7.10 count, the intro paragraph stops at "…the 7.9 collaboration layer…", and the "Start here" quick-links table ends with 7.9's `Shared Documents`/`My Inbox`/`Activity Feed`. A grep for any 7.10 route name in the template returns **0**.
+*Why it matters:* every prior sub-module added its stat cards + quick links + intro mention (7.9 did exactly this in `578eda82`), and 7.10's own landing page breadcrumbs back to `/projects/` — so a user who clicks "Projects" from the document repository arrives at a page that does not acknowledge the sub-module. Live in `LIVE_LINKS` but undiscoverable from the module's front door.
+*Fix:* mirror the 7.9 block — add `document_count`/`folder_count`/`retention_due_count`/`knowledge_count` to the view context, and a five-row quick-link group plus the intro clause.
+
+**L2-I2 — Important — `apps/projects/models/DocumentKnowledgeManagement/ProjectFolders.py:130-137`**
+The root-folder duplicate-name guard is gated on `self.pk`, so it only runs on **edit**. On create it never fires, and neither Django nor MySQL can cover the gap: `_perform_unique_checks` skips a `unique_together` whose value is `None`, and MySQL treats NULLs in a unique index as distinct. The invariant is asserted in three places that are therefore false — the `Meta` comment (`:59-60`), the `clean()` comment (`:131-132`), and `SKILL.md:865-867`.
+*Why it matters:* a user can create two root folders of the same name in one project through the only create path (`pfd_create` → `ProjectFolderForm` → `full_clean()`), and both render identical `full_path`s in the tree and in every folder dropdown.
+*Fix:* drop `and self.pk` from the `elif` (or hoist the clash check so it runs on create and edit), and add the two assertions to the `docmgt_*` model lane.
+
+**L2-I3 — Important (review integrity, not a 7.10 code defect) — `temp/smoke_710.py`; header block `.claude/tasks/review-projects-7.10.md:96-100`**
+The dev database is **no longer in its seeded state**. Measured on `admin_acme`'s 7.10 rows: **0** revisions pending approval (documented shape: 4); 6 `ProjectNotification` rows of `kind="due_date"` (the seeder creates none — only the retention Run does); **13** `AuditLog` rows whose `action` is the truncated `retention_`, i.e. 13 presses of the retention Run; and documents PDM-00011/12/22 carry `status="approved"` with a moved pointer.
+*Why it matters:* the header tells all six lanes to treat the seeded shape as fact; a lane that asserts it from the DB will report a defect that is really a probe artefact. `--flush` + re-seed identical counts can no longer be re-verified without the destructive flush.
+*Fix:* record that the seeded-shape block describes the **code**, not the current DB; either have the smoke run inside a rolled-back transaction or restore the touched rows; note that clean re-verification needs `seed_projects --flush`.
+
+**L2-M1 — Minor — `apps/projects/views/DocumentKnowledgeManagement/RetentionBoard.py:97-99` + `retention.html:11,84`**
+The dedupe key includes `is_read=False`, so the Run is idempotent only while the reminders are unread: Run → mark read → Run raises the full set again. The docstring ("cannot raise twice") and the page copy ("Pressing it twice changes nothing") state it absolutely.
+*Fix:* scope the copy to "while the reminder is still unread", or dedupe on the title alone.
+
+**L2-M2 — Minor — `models/…/ProjectFolders.py:80-82`; `models/…/Revisions.py:108-111`**
+Two computed helpers have no reader anywhere: `ProjectFolder.status_css` (the templates read `row.obj.is_archived` directly) and `ProjectDocumentRevision.is_editable` (a constant `False`; no template asks). Same class as L1-M1 — listed so the burn-down closes the set.
+
+**L2-M3 — Minor — `apps/projects/management/commands/seed_projects.py:2320`**
+The `_docmgt` docstring says "**25 revisions** … and four left pending approval". The block mints **23** per tenant (DB agrees: 23/tenant). The header's own seeded-shape line says 23. Also at `:61` (the module docstring). *Fix:* change both to 23.
+
+**L2-M4 — Minor — `models/…/Templates.py:54`; `views/…/Templates.py:27`; `documenttemplate/list.html:22-36`**
+`DocumentTemplate.document_type` is a bare `CharField(max_length=20, blank=True)` with **no `choices`**, so the plan's "the SAME vocabulary as `ProjectDocument`" is unenforced: a hand-typed "Report" never matches the register's `report`. Separately, `dtm_list` declares a `("document_type", "document_type", False)` filter that **no control sends** — the list template renders only `category` and `is_active` — so it is a lens reachable only by typing the URL (the mirror image of F-1).
+*Fix:* give the field `choices=ProjectDocument.DOC_TYPE_CHOICES`, and either render a `document_type` select fed from `extra_context["doc_type_choices"]` or drop the filter.
+
+**L2-M5 — Minor (amplifies lane 1's L1-M3) — `.claude/skills/projects/SKILL.md:941-942`; `.claude/tasks/todo.md:8173-8175`; `models/…/Revisions.py:19-21`**
+The claim that a checked-out parent refuses an upload *in the model layer* is stated in three places. Verified: there is no such check in `ProjectDocument.clean()` (`Documents.py:292-324`) or `ProjectDocumentRevision.clean()` (`Revisions.py:115-135`).
+*Fix:* correct all three, or move the check into `ProjectDocumentRevision.clean()` as the plan's Model-2 bullet specifies.
+
+**L2-M6 — Minor — `templates/projects/documentknowledge/retention.html:18-25`**
+The board's plan parenthetical names "overdue retention, review due, **held rows, archived rows**". Only the due rows are listed (`_due_rows` filters `is_archived=False` by design); held and archived are figures with no table, no lens link and no click-through.
+*Fix:* add two held/archived panels, or make the two tiles link to `pdm_list?archived=True` and a held lens.
+
+**L2-M7 — Minor — `models/…/Documents.py:153`**
+`ProjectDocument.folder`'s comment cites "the 6.19 container rule". Procurement 6.19 has **no** container/folder concept (the only "container" hits are `container_ref` on an ASN and an unrelated SourcingEvent mention; 6.19's `ProcurementDocument` has no `folder` FK and no PROTECT edge). The rule is Deltek PIM's, correctly attributed in `ProjectFolders.py:20-22` — the 6.19 attribution is spurious. The *behaviour* is real and correct.
+*Fix:* strike "(the 6.19 container rule)". (The rest of the 6.19 mirror claim holds; the only 6.19 *defect* carried across is the over-length audit action of L1-C2.)
+
+**Deliberate no-action notes**
+
+1. `pfd_list` is unpaginated on purpose — commented in the view and `projectfolder/list.html:77-81`.
+2. `pdv_restore` re-uses the source revision's file object — only the missing checksum (L1-I1) is a defect.
+3. `pdm_checkin` is open to any member; the lock is explicitly cooperative in-app.
+4. No 7.10 verb carries a `tenant_admin_required` gate; the plan pins none. Whether a legal hold should be member-writable is lane 6's question.
+5. `DocumentTemplateForm`'s no-op `_reject_foreign(self, cleaned, [])` is intentional and commented.
+6. `ProjectDocument.title` `blank=False` vs the unreachable `clean()` branch: `SKILL.md:900-905` already records it as a close-out decision, so lane 1's "recorded rather than filed" is correct.
+7. `core.Document` untouched; `share_register_url` is a read-only lens to a route that exists and honours `?project=`.
+8. `usage_count`/`is_featured`/`is_format_locked` — every one of the 22 templates was read for an enforcement claim; none found.
+9. Retention deletes nothing; `retention.html:102` states it.
+10. `pdv_compare` is metadata-only and says so (`compare.html:8,76-85`); the cross-document and same-revision refusals are messages, not silent renders.
+11. The navigation leaf label is "Folder Tree" where the plan wrote "Folders"; the character-for-character rule applies to the five NavERP.md bullet names, which match exactly.
+12. `_docmgt` mints `ContentFile` only inside the guard's `else`; the `backdate()` constraint is real and correctly handled.
+
+### Orchestrator verification of lane 2's findings (before filing)
+
+Re-measured independently, through probes rather than by re-reading the lane's citations:
+
+- **L2-I1 — CONFIRMED.** `grep -cE "pdm_list|pfd_list|dtm_list|kne_list|doc_retention|doc_repository" templates/projects/overview.html` → **0**, while 7.9's five routes (`chn_list`, `dsh_list`, `mtg_list`, `ntf_list`, `activity_feed`) are all present. So the omission is 7.10-specific and not a house convention.
+- **L2-I2 — CONFIRMED exactly as described.** A **new** `ProjectFolder(tenant=acme, project=<active>, parent=None, name="01 Governance")` passes `full_clean(exclude=["number"])` with **no error**; renaming a *second* existing root to the same name is **refused** (`{'name': ['This project already has a root folder with that name.']}`). The `and self.pk` gate is the cause, and the invariant is indeed claimed in the model comments and in `SKILL.md`.
+- **L2-M7 — CONFIRMED.** Procurement's only "container" hits are `container_ref` on `AdvancedShipmentNotice` and an unrelated `SourcingEvent` mention; 6.19 has no folder/container concept. The attribution is spurious.
+- **L2-M3 — CONFIRMED.** `25 revisions` appears at `seed_projects.py:61` (module docstring) **and** `:2320` (`_docmgt` docstring); the minted count is 23/tenant and the DB agrees.
+- **L2-I3 — CONFIRMED, and it is this session's own residue.** Measured: **0** pending revisions (shape says 4), **6** `kind="due_date"` notifications (the seeder creates none), **13** `AuditLog` rows with `action='retention_'`. Cause: `temp/smoke_710.py` presses real verbs (approve, checkout/checkin, `kne_use`, the retention Run) against the dev DB, and the two verification probes pressed more. **Action taken: the close-out ends with `seed_projects --flush` + `seed_projects` to restore the canonical seeded state, and the header's seeded-shape block is hereby marked as describing the CODE, not the live DB.** (The 13 truncated `retention_` rows are themselves the L1-C2 evidence.)
