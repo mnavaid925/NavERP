@@ -22,7 +22,7 @@
       <div class="form-group">
         <label class="form-label" for="{{ form.file.id_for_label }}">File <span class="req">*</span></label>
         {{ form.file }}
-        <div class="form-help">Allowed: .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .csv .md .png .jpg .jpeg .gif .svg .dwg .dxf .zip &mdash; up to 20 MB. These are the same rules the standards library applies, so the two upload paths cannot disagree about what may be stored.</div>
+        <div class="form-help">Allowed: .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .csv .md .png .jpg .jpeg .gif .webp .zip &mdash; up to 20 MB. These are the same rules the standards library applies, so the two upload paths cannot disagree about what may be stored.</div>
         {% for e in form.file.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
       </div>
       <div class="form-group">
