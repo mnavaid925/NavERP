@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Delete Folder</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pfd_list' %}">Folders</a><span class="sep">&rsaquo;</span><span>Delete {{ obj.number }}</span></div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <h2 class="text-lg font-semibold">Delete {{ obj.name }}?</h2>
+    <p>This removes the folder <strong>{{ obj.number }} &mdash; {{ obj.name }}</strong> ({{ obj.full_path }}) from {{ obj.project.number }}.</p>
+    <p class="text-muted">The folder holds <strong>{{ obj.documents.count }}</strong> document(s) and <strong>{{ obj.children.count }}</strong> sub-folder(s). A folder that still holds either is <strong>refused</strong> &mdash; move or delete them first. Documents are protected at the schema level, so a folder delete can never orphan one out of the repository.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete folder</button>
+        <a href="{% url 'projects:pfd_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
