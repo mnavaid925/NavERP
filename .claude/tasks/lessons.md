@@ -1429,3 +1429,76 @@ than "no findings". Likewise `git add 'f'; git commit -m '…'` sweeps whatever 
 
 Related: L43 (migrations are where concurrent work collides), L45 (a dirty tree is not yours),
 L47 (never `-k` the final run), and the memory note *"a verified answer to the wrong question"*.
+
+---
+
+## L54 — A committed backend is not a built sub-module, and four of the checks that would have said so are silent
+
+Found finishing `projects` 7.10, whose backend a session had committed ~21 hours earlier before
+dying mid-template. The tree was **clean**, `manage.py check` was **clean**, `makemigrations --check
+--dry-run` reported **no changes**, the sidebar advertised the sub-module as **Live**, and every
+backend file existed — and the sub-module was 21 templates, one applied migration and one seeder
+block short of working. Each of those five signals was true and none of them answered the question.
+
+**1. `makemigrations --check --dry-run` does not prove a migration was APPLIED.** It compares models
+to *files*. The tree can be perfectly consistent while the database is behind — here
+`projects.0014` was committed and unapplied, so `nav_erp.projects_projectfolder` did not exist and
+the first ORM read raised `ProgrammingError: (1146, "Table … doesn't exist")`. `showmigrations
+<app>` is the only thing that answers it.
+
+**2. A url module can be imported and never mounted, and nothing complains.** The app urlconf uses
+`from .X import urlpatterns as _xx` plus a **separate** `+ _xx` line inside the tuple, so the import
+is a complete no-op on its own. 7.9's `_cc_activityfeed` sat imported-but-unconcatenated on `main`:
+`projects:activity_feed` raised `NoReverseMatch`, which took `/projects/` — the module landing page —
+down with it, and three templates reverse that name. `manage.py check` was clean throughout. It also
+left 7.9's own committed `test_collab_security.py::…[activity_feed-None]` **red on `main`**.
+**Grep for the `+ _xx_` line, not just the import, and `reverse()` every name the module declares.**
+
+**3. A filter bar that renders and filters nothing.** `pdm_list` passed `projects`, `folders`, four
+choice tuples and `owners` into the context and rendered a seven-select bar — and applied only `?q=`.
+**Choices in the context are not evidence that a filter is applied**; only the view's `filters` spec
+is. The template is where you notice, because the template is what offers the affordance.
+
+**4. A star-imported toolkit does not export `Q`/`F`.** `views/_common.py` re-exports `crud_*`,
+`login_required`, `timezone`, `write_audit_log` — and **not** `django.db.models.Q/F`. A view doing
+`from …_common import *` and then using `Q()` raises `NameError` **on the request**, which for
+`kne_search` meant a 500 on every non-empty `?q=` and a 200 on the empty page. pyflakes reports this
+only as *"may be undefined, or defined from star imports"* — the same wording it uses for the ~40
+harmless names — so the reliable check is a runtime one: import each entity module and
+`hasattr()`-test the names it actually uses.
+
+**5. A field the docstring calls immutable, that is not.** `ProjectDocumentForm` narrowed
+`folder`/`milestone`/`task` from `self.instance.project_id` — the **OLD** project — while leaving
+`project` editable. Changing it left every folder failing *"Select a valid choice"* with no way to
+recover. Its own docstring already said "a document never moves between projects"; the claim was in
+the comment and not in the code. `disabled = True` on edit is what makes it true (Django reads a
+disabled field from the instance, so a crafted POST cannot move it either).
+
+**6. A figure derived from `created_at` is structurally zero in a seeder.** `retain_until` is
+`created_at + 30 * retention_months`, so on a freshly seeded workspace **no** row can ever be
+retention-due and the retention board's headline figure is 0 — which reads as "the feature is
+broken". `created_at` is `auto_now_add` and cannot be passed to the constructor; a queryset
+`.update(created_at=…)` bypasses the `pre_save` hook and is the only honest way to give a seeded row
+a past. Assign the value back onto the in-memory instance too, or the next helper reads the old one.
+
+**7. The signature of a session that died mid-write.** Two stray files gave it away: a template
+carrying **cp1252 bytes** (`0x85`, `0x97`) inside otherwise-UTF-8 output, and a directory literally
+named `$t/` from an unexpanded shell variable. Both mean "interrupted", and neither is visible to
+`cat` on a UTF-8 terminal — **byte-scan the file** (`any(b > 127 for b in raw)`) before assuming a
+half-written file is merely truncated. Adopt them (re-encode and carry the content forward); a
+`git checkout` throws away the only record of what the dead session intended.
+
+**Rules:**
+1. Before trusting "built", run `showmigrations`, `reverse()` every route name, and count the
+   templates the views actually reference against the ones on disk. `check` and `--check --dry-run`
+   answer neither question.
+2. Adding a url module is **two** edits. Grep for the concatenation line, not the import.
+3. A context key in a view is not a filter. If the template renders a control, the view applies it.
+4. Runtime-check the names a star-importing module uses; do not read pyflakes' star-import wording as
+   either an error or an all-clear.
+5. A seeder that must produce a non-zero figure derived from `created_at` has to backdate.
+6. `hasattr`-style probes and byte scans over trusting a rendered page or a `cat`.
+
+Related: L43 (migrations are where concurrent work collides), L45 (a dirty tree is not yours),
+L46 (harnesses live in gitignored `temp/`), L47 (never `-k` the final run), L52 (silence reads as
+success), L53 (in a shared checkout, `makemigrations` and `grep` both lie about scope).
