@@ -949,3 +949,69 @@ would be rewriting it.
 * `temp/smoke_710.py` → **169 checks, 0 failures** (the review recorded 167; the script itself was
   extended by two checks after the review — its mtime post-dates it and it was not touched here).
 
+
+---
+
+## Close-out outcome (2026-09-16)
+
+**Gates after the fix pass.**
+
+| gate | result |
+|---|---|
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `makemigrations --check --dry-run` | No changes detected (`0014`–`0016` are the applied leaf set) |
+| `temp/smoke_710.py` | **169 checks / 0 failures** (was 167 before the fixer; two checks were added) |
+| `apps/projects` suite (full, unfiltered, `--nomigrations`) | **3270 passed / 0 failed / 2 skipped** — unchanged from before the fix pass, so nothing regressed |
+| new migrations | `0015_projectdocument_pre_archive_status` (I8), `0016_alter_knowledgeentry_body` (I21) — both generated, inspected and applied |
+
+**Findings: 26 fixed (C1–C5, I1–I22), 1 skipped (I12), 26 unticked (M1–M26). 0 refuted.**
+
+**All five Criticals were re-verified by the orchestrator after the fix, with independent probes:**
+
+- **C1** — a real `POST` to `pdv_upload` now stores `extracted_text='VERIFYTOKEN9911 body text here'`
+  with an empty `extraction_note`, instead of `""` plus the false unreadable-path note.
+- **C2** — `a._is_descendant_of(child)` → **`True`**, and `full_clean()` now **refuses** a parent set
+  to the folder's own child (`{'parent': ['That would move the folder inside its own subtree.']}`).
+  ⚠️ **The first re-probe reported "still broken" and was WRONG** — it passed `None`, because two
+  roots tie on `(sequence, name)` and `Meta.ordering` therefore picked the *other* project's root
+  (which has no children), so the walk had nothing to walk. Re-run against a verified parent/child
+  pair it passes. **Check the probe before believing the result** — the same discipline that caught
+  lane 1's two false coverage claims.
+- **C3** — the tree page renders 24 `confirm` handlers with **no unescaped interpolation**, and the
+  crafted payload now compiles as a string rather than as code.
+- **C4** — `validate_upload(evil.svg)` → refused; `.dwg`/`.dxf` likewise. The list is now imported
+  from `core.forms.ALLOWED_DOC_EXTENSIONS` and **extended**, not forked: the delta is
+  `['.md', '.ppt', '.pptx']` — three non-scriptable document types — and `house minus 7.10` is empty.
+- **C5** — the Run now writes `action='update'` with the verb in `changes`; no truncation, and the
+  session-scoped `STRICT_TRANS_TABLES` probe no longer raises.
+
+**I12's DB-restore half was DECLINED by the user.** The close-out intended to finish with
+`seed_projects --flush` + `seed_projects` to put the dev database back into its canonical seeded
+shape; the permission request was refused, so **the drift stands** and is recorded here rather than
+quietly left:
+
+- acme's 7.10 rows no longer match the seeder's output — 0 revisions pending approval against the
+  documented 4, and documents `PDM-00011`/`00012`/`00022` sit in `approved` rather than `draft`
+  because probes and the smoke press real verbs.
+- **9** `ProjectNotification` rows of `kind="due_date"` (the seeder creates none — only the
+  retention Run does) and **14** `AuditLog` rows whose `action` is the truncated `retention_`
+  (13 from before the C5 fix, 1 from the verification probe). Append-only history; left as evidence.
+- **66 unreferenced files** under `media/projects/{documents,templates}/` — the smoke's and the
+  lanes' upload probes, plus the three lane 5 could not delete. They are still served by the
+  anonymous `/media/` handler, which is exactly the C4/N15 carried item.
+
+**A fresh `seed_projects` run (without `--flush`) remains a no-op for 7.10** — the block is guarded
+on `ProjectFolder.objects.filter(tenant=tenant).exists()` — so the drifted state persists until
+someone with the authority to flush chooses to. `temp/restore_710_acme.py` (written by the fixer)
+converged acme onto globex's untouched copy of the same seeded set and is the non-destructive
+alternative if the flush stays declined.
+
+**Carried to the next pass, in priority order:**
+
+1. **The `docmgt_*` test lanes** — `test-contract-projects-7.10.md`, the append-only conftest block,
+   then `test_docmgt_{models,forms,views,security}.py`. This is the one part of the close-out that is
+   genuinely unfinished, and 7.10 has no pytest module of its own today.
+2. **`M1`–`M26`** — the 26 Minors, each with its `file:line` and its fix, unticked above.
+3. **The two cross-module items** — the anonymous `/media/` handler (C4's other half) and the
+   repo-wide over-length `AuditLog.action` sweep (25 sites).
+4. **Storage hygiene** — no delete path erases bytes; `--flush` leaves the tree behind; 66 orphans.
