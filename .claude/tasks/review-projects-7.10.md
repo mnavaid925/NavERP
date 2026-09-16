@@ -344,3 +344,93 @@ Re-measured independently, through probes rather than by re-reading the lane's c
 - **L2-M7 — CONFIRMED.** Procurement's only "container" hits are `container_ref` on `AdvancedShipmentNotice` and an unrelated `SourcingEvent` mention; 6.19 has no folder/container concept. The attribution is spurious.
 - **L2-M3 — CONFIRMED.** `25 revisions` appears at `seed_projects.py:61` (module docstring) **and** `:2320` (`_docmgt` docstring); the minted count is 23/tenant and the DB agrees.
 - **L2-I3 — CONFIRMED, and it is this session's own residue.** Measured: **0** pending revisions (shape says 4), **6** `kind="due_date"` notifications (the seeder creates none), **13** `AuditLog` rows with `action='retention_'`. Cause: `temp/smoke_710.py` presses real verbs (approve, checkout/checkin, `kne_use`, the retention Run) against the dev DB, and the two verification probes pressed more. **Action taken: the close-out ends with `seed_projects --flush` + `seed_projects` to restore the canonical seeded state, and the header's seeded-shape block is hereby marked as describing the CODE, not the live DB.** (The 13 truncated `retention_` rows are themselves the L1-C2 evidence.)
+
+### Lane 3 — frontend-reviewer (serial pass 3)
+
+**Scope check.** Read in full: all 22 templates under `templates/projects/documentknowledge/**` (line by line, not diffed — they are new in this session), the seven 7.10 view modules, all five form modules, `apps/core/crud.py`, `apps/core/forms/_common.py` (`TenantModelForm`), `apps/projects/forms/_common.py`, `templates/partials/pagination.html`, `static/css/theme.css` (all 428 lines), the five 7.10 model modules, and `.claude/CLAUDE.md` §Filter Implementation Rules / §CRUD Completeness Rules / §Template Folder Structure. **Read-only; no file written, no POST issued.** Probes (all GET): a programmatic set-difference of every `class="…"` token in the 22 files against the class set extracted from `theme.css`; a second pass comparing every *rendered* `class="badge X"` against `theme.css` over 26 routes; per-file tag-balance and `{% if %}`/`{% for %}`/`{% block %}`/`{% comment %}` counts; per-table `colspan` vs `<th>` count; a `{#` leak scan; a label-`for`↔`id` and icon-control accessible-name sweep; a scan of every `{{ }}`/`{% %}` inside a single-quoted JS string in an `on*` handler; `ProjectDocumentForm(title="", status="expected").is_valid()`; live DB status counts; and one rendered HTML dump per page through the test client as `admin_acme`. Cannot verify browser JS execution — the one claim that depends on it (**L3-I2**) is split below into what was measured and what is spec, and the repo documents the identical mechanism as **L42**.
+
+**Sanity-checks of F-1..F-4** (re-verified from the rendered HTML, not by re-reading the fix)
+
+- **F-1 — PASS.** Tenant 1 has 22 documents / 0 drafts. Rendered: no lens → "Showing 1–15 of 22"; `?status=approved` → 17; `?status=draft` → empty state (correct, 0 drafts); `?status=nope` → 22 (junk ignored, L11); `?archived=True` → 2 rows. All eight selects in `pdm_list`'s filter bar now narrow.
+- **F-2 — PASS.** `GET /projects/knowledge/search/?q=charter` → **200** with a rendered result table; no `NameError`.
+- **F-3 — PASS.** `pdm_edit` renders `<select name="project" class="form-select" required disabled id="id_project">` — present, disabled, value from the instance.
+- **F-4 — PASS.** `doc_repository` renders 200 with the `href="/projects/"` breadcrumb; every 7.10 breadcrumb's first link is live.
+
+**Coverage — clean categories (no findings filed)**
+
+- **Design-system conformance / L33 — CLEAN, verified twice.** Every static class token in the 22 files either exists in `theme.css` or is a Tailwind utility the Play CDN generates (67 distinct classes). Rendering all 26 routes yields badge classes `{badge-green, badge-info, badge-amber, badge-red, badge-muted, badge-slate}` — **no** `-success`/`-danger`/`-warning`, no `stat-icon` misuse, no invented name. All four `status_css` properties resolve to real colour names. Layout classes `detail-grid`, `form-grid`, `form-actions`, `filter-bar`, `table-wrap`, `table-actions`, `empty-state`, `.req`, `pagination`, `badge-group`, `form-select` all exist. `TenantModelForm` stamps `form-input`/`form-select`/`form-textarea`/`form-check` on every widget, so the `{{ field }}` loops are styled without per-template work.
+- **Comment leaks / markup validity — CLEAN.** Zero `{#` in the 22 files. Every tag balances; every `{% if %}`/`{% for %}`/`{% block %}`/`{% comment %}` balances; **every** `colspan` equals its table's `<th>` count (all 12 tables). No rendered page leaves a `{%`/`{{` behind.
+- **CSRF / POST hygiene — CLEAN.** 40 `<form method="post">` blocks, all 40 carry `{% csrf_token %}`; no form is missing a `method`.
+- **Accessibility — CLEAN.** Across the 5 form pages, 4 list pages, `pdm_detail`, `pdv_upload`, `kne_search` and `doc_retention`: **0** controls with neither a matching `<label for>` nor an `aria-label`, and **0** orphan `for=` targets. Every icon-only control carries `title`. Colour is never the only status carrier.
+- **Pagination guards (L9) — CLEAN.** `partials/pagination.html` guards both `previous_page_number` and `next_page_number` and preserves every GET param except `page`. Every paginated register includes it. (The one page whose *window* is empty is lane 1's L1-I3.)
+- **Badges — CLEAN.** All read the model's exact CHOICES via `status_css` + `get_status_display`; the Boolean badges correctly branch (no `get_*_display` exists for them).
+- **Filter-bar contract — CLEAN.** All six filter forms send `name="q"` plus real `<select>`s; pk comparisons use `|stringformat:"d"`, never `|slugify`; every select re-selects from `request.GET`; `{{ q }}` is populated because `crud_list` always sets it even when `search_fields=[]`.
+- **Empty-state / structure — CLEAN.** All five registers use the same pattern; all five have a filter form, an Actions column, a csrf+confirm delete, and an `.empty-state`; all four detail pages end in a `.form-actions` row with a Back link **and** a POST-Delete; no list page has a "Back" (consistent — they carry cross-links instead). Paths conform to CLAUDE.md §Template Folder Structure.
+- **Copy honesty on the six pinned rulings — CLEAN** except L3-I3. `is_format_locked` is called an *intent* on both pages that mention it and the badge reads "Format lock recorded"; the check-out lock is called cooperative in-app on three pages; "Nothing here deletes anything on a schedule" appears on four; `usage_count` is called a click counter on four; `is_featured` is called a shelf on three; the share register is a read-only lens and `dtm_detail:60` says generating from a standard is **not** offered.
+- **The four new `delete.html` pages — the refusals are real.** `pfd_delete:12` matches `ProjectFolders.py:140-147`; `pdm_delete:16-17` matches `Documents.py:148-157`; `dtm_delete`/`kne_delete` state **no** refusal and correctly so — neither view has one.
+
+**Disagreements with lanes 1–2**
+
+- **Lane 1's routing note is half wrong.** It routed "edit/delete offered on archived/held rows, **refused server-side** with a message". Delete is refused (`Documents.py:148-157`); **edit is not refused anywhere** — `pdm_edit` (`:124-138`) and `ProjectDocumentForm` have no archived/hold guard. So the list offering Edit on an archived row is a *working* action, and it is the detail page that hides it. Filed as **L3-M2** with that correction.
+- **Lane 1's no-action note 6 rests on a false premise** (disposition still fine, fact isn't). It says the blank-title placeholder is "reachable through the form". Measured: `ProjectDocumentForm().fields["title"].required is True`; a blank title with `status="expected"` is rejected with `['This field is required.']`; the seeded `expected` rows carry the title `"Decommissioning plan (slot)"`; `ProjectDocument.objects.filter(title="").count() == 0`. The form cannot produce a blank-title row, and the seven `|default:"expected placeholder"` branches are unreachable. Folded into **L3-I3**.
+- Lane 2's L2-M2 is confirmed — the folder templates read `is_archived` directly, and `ProjectFolder.status_css` is the only unread `status_css`.
+
+**Findings**
+
+**L3-I1 — Important — `knowledgeentry/list.html:90-92` and `knowledgeentry/detail.html:14-16`** (view: `Knowledge.py:160-163`)
+`kne_publish` **refuses a `retired` row** and redirects with an error ("edit it back to draft before publishing it again"), but both templates render the button unconditionally. On a retired row `k.status == 'published'` is False, so the control renders as a **Publish** button whose confirm says *"Publish KNE-00004?"* — a promise the server will not keep.
+*Measured:* tenant 1 has 2 retired entries; `GET /projects/knowledge/38/` renders `action="/projects/knowledge/38/publish/" onsubmit="return confirm('Publish KNE-00004?');"` immediately below a `badge-muted` **Retired** badge, and `?status=retired` renders the same form as an icon button `title="Publish"`. `POST` → 302 and the status stays `retired`.
+*Why it matters:* a dead primary-looking action on the sub-module's main library page, in the state where a user is most likely to press it. The flash-message advice is unreachable from the button that triggers it.
+*Fix:* wrap both forms in `{% if k.status != 'retired' %}` and render the hint the view already gives in the `{% else %}`.
+
+**L3-I2 — Important — `projectfolder/list.html:62,65` and `projectfolder/detail.html:13,98`**
+Four `onsubmit="return confirm('…')"` handlers interpolate a **user-authored** string — the folder name — inside a single-quoted JS literal without `|escapejs`.
+*Measured:* the template engine escapes `'` to `&#x27;` — rendered `confirm('Delete folder Bob&#x27;s Docs? x');`. HTML attribute values are character-reference-decoded before an inline handler is compiled, so the handler body the browser parses is `…confirm('Delete folder Bob's Docs? x');` — a **SyntaxError**. A throwing `onsubmit` does not `preventDefault`, so the form submits **unconfirmed**. With `|escapejs` the render is `Bob\u0027s Docs`, which survives attribute decoding.
+*Why it matters:* a documented house lesson with a documented fix, not a novel risk — `templates/procurement/spendanalytics/spendrule/list.html:35,169` states the mechanism verbatim and applies the fix, and `hrm/candidates/candidate/list.html:80` does the same. **7.10 is the third recurrence of L42's shape.** The blast radius is bounded (`pfd_delete` still refuses a non-empty folder; the archive toggle is reversible), which is why this is Important and not Critical — but "Delete folder" is a confirmation whose whole job is to appear, and it silently won't.
+*Fix:* `{{ row.obj.name|escapejs }}` / `{{ obj.name|escapejs }}` at all four sites.
+
+**L3-I3 — Important — `projectdocument/form.html:33`** (model: `Documents.py:157`)
+The page instructs: *"Set **Status** to *Expected* to create a named placeholder before the file exists — that is the one state where a title may be left blank."* That is false in the same page's own render: `title` is `blank=False`, so the loop at `:17` prints `<span class="req">*</span>` beside **Title** and the field is required in every status.
+*Measured:* `ProjectDocumentForm().fields["title"].required is True`; a blank title with `status="expected"` → `is_valid() == False`, `errors == {'title': ['This field is required.'], …}`; `filter(title="").count() == 0`; the seeded `expected` row carries a real title.
+*Why it matters:* an instruction the form forbids, on the create page, contradicting a required-marker two lines below it. It is also the rendered half of the model inconsistency the header asked the lanes to decide: because the state is unreachable, the seven `|default:"expected placeholder"` branches are dead markup, and `retention:41` presents the fallback as a real document state.
+*Fix:* replace the sentence with the truth — "An *Expected* placeholder still needs a title: it is the name the file will arrive under." — and drop the dead `|default:` branches (or flip `title` to `blank=True` and make `clean()`'s existing branch live). Lane 1's disposition — leave the model, fix the copy — is the cheaper of the two.
+
+**L3-M1 — Minor — `projectdocumentrevision/form.html` (whole file)**
+`pdv_upload`'s GET page is **orphaned**: `grep -rn "pdv_upload" templates/` returns exactly one hit — the POST `action=` on `pdm_detail:233`. No page renders a link to it, so the standalone upload form (breadcrumb, lock warning card, help text, Cancel) is reachable only by typing the URL, and `pdm_detail` re-renders its own inline copy of the same two fields on validation failure.
+*Fix:* link it (an "Upload a revision" button in `pdv_list`'s `page-actions`) or delete the template and keep the inline form as the only path.
+
+**L3-M2 — Minor — `projectdocument/list.html:116` vs `projectdocument/detail.html:11`**
+The list always renders the pencil; the detail page wraps Edit in `{% if obj.status != 'archived' %}`. `pdm_archive` sets `status="archived"` and restores it on un-archive, and **nothing refuses an edit of an archived document** — `pdm_edit` and `ProjectDocumentForm` have no status guard. So the detail page hides a working action, and the two sibling pages disagree.
+*Fix:* drop the `{% if %}` on `detail.html:11`, or gate both the pencil and the view on the same condition.
+
+**L3-M3 — Minor — `projectdocument/delete.html:25`**
+The button labelled **"Archive it instead"** links to `{% url 'projects:doc_retention' %}` — the retention board, whose only per-row control is an eye icon and which carries no archive action at all. The document's actual archive form is on the page the **Cancel** button already points at.
+*Fix:* point it at `{% url 'projects:pdm_detail' obj.pk %}` (ideally `#archive`), or fold it into Cancel and drop the third button.
+
+**L3-M4 — Minor — `documenttemplate/delete.html:12`** (same wording in `views/…/Templates.py:102` and `models/…/Templates.py:61`)
+*"a retired standard stays readable and leaves the **"start from this" list**"* names a list that does not exist anywhere in the UI. `dtm_detail:60` states the opposite ruling plainly, and `grep -rn "start from this" templates/` returns only this one line.
+*Fix:* reword to "leaves the active list on the Standards register".
+
+**L3-M5 — Minor — `knowledgeentry/search.html:74`**
+The empty state interpolates the **raw** filter value: *"…or category, within the {{ kind_filter }} kind"* renders "within the lesson_learned kind". Every other surface shows the choice label.
+*Fix:* pass the display label from the view, or look it up from `kind_choices`.
+
+**Deliberate no-action notes**
+
+1. `pfd_list`'s unpaginated tree and the `.pagination` div used as a plain count footer — the comment explains it; `.pagination` exists and renders correctly.
+2. `pdm_list`'s archive lens labelled "Live register" is lane 1's L1-M2. One added data point: `retention.html:23`'s "In the live register" tile genuinely means `is_archived=False`, so the two pages use the same phrase for different sets — relabel the register to "Any state" and the tile can stay.
+3. `retention.html`'s held/archived rows and the idempotency claim are lane 2's L2-M6/L2-M1; reproduced, not re-filed.
+4. `pdv_compare`'s `same_checksum → "Different bytes"` on a restored revision is lane 1's L1-I1; the template is otherwise correct.
+5. `pdm_detail:66`'s `obj.extraction_note` is lane 1's L1-I4 — confirmed dead, not re-filed.
+6. `dtm_list`'s unsent `document_type` filter is lane 2's L2-M4; not duplicated.
+7. Detail-header action sets differ across siblings, but every one still ends in the same `.form-actions` Back + Delete row; noted for consistency, not filed.
+8. `doc_repository` links only to `pdm_create` and to recent documents' detail pages — no link to the register, folder tree, retention board, standards or knowledge. The sidebar carries all five bullets, so a user is not stranded. Not filed.
+9. `pdm_archive`'s un-archive guesses the status (`"approved" if current_revision_no else "draft"`) — an `in_review`/`superseded` document comes back wearing a different badge. A state-machine question in the view, so it belongs to code-reviewer; flagged here only so the burn-down does not read it as a UI bug.
+10. `share_register_url` is a hardcoded path rather than a `{% url %}`; the rendered link is correct, so it is a maintainability note.
+
+### Orchestrator verification of lane 3's findings (before filing)
+
+- **L3-I2 — CONFIRMED.** `grep -rc escapejs templates/projects/documentknowledge/` → **zero files**; all four `onsubmit` sites interpolate the bare name (`projectfolder/list.html:62,65`, `projectfolder/detail.html:13,98`). Rendered probe: `{{ name }}` → `confirm('Delete folder Bob&#x27;s Docs? x');` vs `{{ name|escapejs }}` → `Bob\u0027s Docs`. The repo's own L42 precedent is real and applies the fix in `procurement/…/spendrule/list.html:169` with the mechanism documented at `:35`. **Third recurrence — and the fix is a four-token change.**
+- **L3-I1 — CONFIRMED.** `KNE-00004` ("Discovery retrospective…") is `retired`; its detail page renders `action="/projects/knowledge/38/publish/" onsubmit="return confirm('Publish KNE-00004?');"` under a `badge-muted` Retired badge, and `?status=retired` renders the same form. `POST` → **302 with the status still `retired`**, i.e. the button's promise is refused.
+- **L3-I3 — CONFIRMED.** The instruction is on the create page and the field is required in every status; the seeded `expected` row has a title. Lane 3's correction of lane 1's no-action note 6 is accepted — the premise was wrong even though the disposition (leave the model, fix the copy) stands.
+- **L3-M2 — ACCEPTED.** Lane 3's correction of lane 1's routing note is right: `pdm_edit` has no archived/hold guard, so Edit on an archived row *works*, and it is the detail page that hides it.
