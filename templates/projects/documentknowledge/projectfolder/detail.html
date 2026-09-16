@@ -78,7 +78,7 @@
           {% for d in documents %}
             <tr>
               <td class="fw-600"><a href="{% url 'projects:pdm_detail' d.pk %}">{{ d.number }}</a></td>
-              <td>{% if d.title %}{{ d.title|truncatechars:50 }}{% else %}<span class="text-muted">expected placeholder</span>{% endif %}</td>
+              <td>{{ d.title|truncatechars:50 }}</td>
               <td>{{ d.get_document_type_display }}</td>
               <td><span class="badge {{ d.status_css }}">{{ d.get_status_display }}</span></td>
               <td>{% if d.owner %}{{ d.owner.get_full_name|default:d.owner.email }}{% else %}&mdash;{% endif %}</td>
