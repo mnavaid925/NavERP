@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Library{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Knowledge Library</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><span>Knowledge</span></div>
+      <p class="text-muted">The reusable insights: lessons learned, retrospectives, delivery playbooks, readiness checklists and written standards. This is where a lesson becomes <strong>findable</strong> rather than staying a column on the row where it was dispositioned. A featured entry is on a shelf, not on an approval list &mdash; it gates nothing.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:kne_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add an Insight</a>
+      <a href="{% url 'projects:kne_search' %}" class="btn btn-outline"><i data-lucide="search"></i> Search the library</a>
+      <a href="{% url 'projects:dtm_list' %}" class="btn btn-outline"><i data-lucide="layout-template"></i> Standards</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, summary or tags&hellip;">
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Kind" class="form-select">
+            <option value="">Any kind</option>
+            {% for value, label in kind_choices %}
+              <option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Source project" class="form-select">
+            <option value="">Any source project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} &mdash; {{ p.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_featured" aria-label="Shelf" class="form-select">
+            <option value="">Whole library</option>
+            <option value="True" {% if request.GET.is_featured == 'True' %}selected{% endif %}>Featured shelf only</option>
+            <option value="False" {% if request.GET.is_featured == 'False' %}selected{% endif %}>Not featured</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:kne_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      {% comment %}
+        The ordering is featured-first, then newest, then the unique id — and the id tiebreak is
+        load-bearing, not decoration. Without it, two entries created in the same second could swap
+        places between page 1 and page 2, so a row would repeat on one page while another vanished
+        entirely. `usage_count` beside each row is a CLICK COUNTER: it counts presses of "use this",
+        it does not know who pressed it, and it is not evidence that a lesson was applied.
+      {% endcomment %}
+      <p class="text-muted">Ordered featured first, then newest. The <em>used</em> figure is a click counter &mdash; how many times somebody pressed "use this" &mdash; not a measure of value and not an audit trail.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Number</th><th>Title</th><th>Kind</th><th>Source project</th><th>Tags</th><th>Artifact</th><th>Used</th><th>Status</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for k in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:kne_detail' k.pk %}">{{ k.number }}</a></td>
+              <td>
+                {% if k.is_featured %}<span class="badge badge-amber">Featured</span> {% endif %}
+                {{ k.title|truncatechars:42 }}
+                {% if k.summary %}<div class="text-muted">{{ k.summary|truncatechars:56 }}</div>{% endif %}
+              </td>
+              <td>{{ k.get_kind_display }}</td>
+              <td>{% if k.source_project %}<a href="{% url 'projects:prj_detail' k.source_project_id %}">{{ k.source_project.number }}</a>{% else %}<span class="text-muted">project-agnostic</span>{% endif %}</td>
+              <td>{% if k.tag_list %}{% for tag in k.tag_list %}<span class="badge badge-slate">{{ tag }}</span> {% endfor %}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{% if k.document %}<a href="{% url 'projects:pdm_detail' k.document_id %}">{{ k.document.number }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td><span class="badge badge-info">{{ k.usage_count }}</span></td>
+              <td><span class="badge {{ k.status_css }}">{{ k.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:kne_detail' k.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:kne_edit' k.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:kne_publish' k.pk %}" onsubmit="return confirm('{% if k.status == 'published' %}Return{% else %}Publish{% endif %} {{ k.number }}?{% if k.status == 'published' %} It goes back to draft.{% endif %}');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if k.status == 'published' %}Return to draft{% else %}Publish{% endif %}"><i data-lucide="{% if k.status == 'published' %}file-minus{% else %}file-check{% endif %}"></i></button>
+                  </form>
+                  <form method="post" action="{% url 'projects:kne_delete' k.pk %}" onsubmit="return confirm('Delete knowledge entry {{ k.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="book-open"></i><h3>No entries {% if q or request.GET.kind or request.GET.status or request.GET.project or request.GET.is_featured %}match{% else %}yet{% endif %}</h3><p>{% if q or request.GET.kind or request.GET.status or request.GET.project or request.GET.is_featured %}Nothing matches that lens &mdash; reset the filters, or widen the search.{% else %}Write down the first lesson your team would otherwise learn twice.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
