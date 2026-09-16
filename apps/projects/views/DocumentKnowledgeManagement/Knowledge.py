@@ -16,7 +16,8 @@ from apps.projects.forms import KnowledgeEntryForm
 from apps.projects.models import KnowledgeEntry
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages,
-                                         redirect, render, require_POST, write_audit_log)
+                                         redirect, render, require_POST, tenant_admin_required,
+                                         write_audit_log)
 from apps.projects.views._helpers import projects
 
 
@@ -154,8 +155,12 @@ def kne_use(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def kne_publish(request, pk):
-    """Toggle draft/published. THE one writer of that transition (retiring stays an edit)."""
+    """Toggle draft/published. THE one writer of that transition (retiring stays an edit).
+
+    Admin-gated: publishing to the shared library is a curation decision, not a personal one.
+    """
     obj = get_object_or_404(KnowledgeEntry, pk=pk, tenant=request.tenant)
     if obj.status == "retired":
         messages.error(request, f"{obj.number} is retired — edit it back to draft before "
