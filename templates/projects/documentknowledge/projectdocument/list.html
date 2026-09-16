@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Document Register{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Document Register</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><span>Register</span></div>
+      <p class="text-muted">One row per controlled project document. Only the latest <strong>APPROVED</strong> revision is the current one &mdash; an upload lands unapproved and stays behind the pointer until somebody approves it. The check-out lock is cooperative (an in-app signal, not an OS file lock), and nothing here deletes anything on a schedule.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pdm_create' %}" class="btn btn-primary"><i data-lucide="file-plus"></i> Register a Document</a>
+      <a href="{% url 'projects:pfd_list' %}" class="btn btn-outline"><i data-lucide="folder-tree"></i> Folder Tree</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title or tags&hellip;">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} &mdash; {{ p.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="folder" aria-label="Folder" class="form-select">
+            <option value="">Any folder</option>
+            {% for f in folders %}
+              <option value="{{ f.pk }}" {% if request.GET.folder == f.pk|stringformat:"d" %}selected{% endif %}>{{ f.project.number }} &rsaquo; {{ f.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="document_type" aria-label="Document type" class="form-select">
+            <option value="">Any type</option>
+            {% for value, label in doc_type_choices %}
+              <option value="{{ value }}" {% if request.GET.document_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="classification" aria-label="Classification" class="form-select">
+            <option value="">Any classification</option>
+            {% for value, label in classification_choices %}
+              <option value="{{ value }}" {% if request.GET.classification == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="archived" aria-label="Archive lens" class="form-select">
+            <option value="">Live register</option>
+            <option value="True" {% if request.GET.archived == 'True' %}selected{% endif %}>Archived only</option>
+            <option value="False" {% if request.GET.archived == 'False' %}selected{% endif %}>Not archived</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:pdm_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      {% comment %}
+        The register's search is a denormalized copy with a 4+-character rule: number, title and
+        tags always match, but the stored file-text copy is only swept from four characters on —
+        below that the sweep is noise nobody asked for. A document whose file had no text layer to
+        read simply has an empty copy, so it stays findable by its metadata and not by its bytes.
+      {% endcomment %}
+      <p class="text-muted">Searching covers the number, the title and the tags &mdash; and from four characters on, the stored text copy of the current approved revision. A scanned file has no text layer to read, so it is findable by its metadata only.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Number</th><th>Title</th><th>Project</th><th>Folder</th><th>Type</th><th>Status</th><th>Rev</th><th>State</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for d in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:pdm_detail' d.pk %}">{{ d.number }}</a></td>
+              <td>
+                {% if d.title %}{{ d.title|truncatechars:44 }}{% else %}<span class="text-muted">expected placeholder</span>{% endif %}
+                {% if d.tag_list %}<div class="text-muted">{% for tag in d.tag_list %}<span class="badge badge-slate">{{ tag }}</span> {% endfor %}</div>{% endif %}
+              </td>
+              <td><a href="{% url 'projects:prj_detail' d.project_id %}">{{ d.project.number }}</a></td>
+              <td>{% if d.folder %}<a href="{% url 'projects:pfd_detail' d.folder_id %}">{{ d.folder.name|truncatechars:24 }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>{{ d.get_document_type_display }}</td>
+              <td><span class="badge {{ d.status_css }}">{{ d.get_status_display }}</span></td>
+              <td>{% if d.current_revision_no %}<span class="badge badge-green">v{{ d.current_revision_no }}</span>{% else %}<span class="text-muted">none</span>{% endif %}</td>
+              <td>
+                {% if d.is_legal_hold %}<span class="badge badge-red">Legal hold</span>
+                {% elif d.is_locked %}<span class="badge badge-amber">Checked out</span>
+                {% elif d.is_archived %}<span class="badge badge-muted">Archived</span>
+                {% elif d.is_retention_due %}<span class="badge badge-amber">Retention due</span>
+                {% else %}<span class="badge badge-green">Live</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pdm_detail' d.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:pdm_edit' d.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:pdm_delete' d.pk %}" onsubmit="return confirm('Delete document {{ d.number }}? A record under legal hold, or one carrying an approved revision, is refused. This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="file-text"></i><h3>No documents {% if q or request.GET.project or request.GET.folder or request.GET.status or request.GET.document_type or request.GET.classification or request.GET.owner or request.GET.archived %}match{% else %}yet{% endif %}</h3><p>{% if q or request.GET.project or request.GET.folder or request.GET.status or request.GET.document_type or request.GET.classification or request.GET.owner or request.GET.archived %}Nothing matches that lens &mdash; reset the filters, or widen the search.{% else %}Register the first controlled document, or create a folder tree to file it into.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
