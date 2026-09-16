@@ -16,7 +16,11 @@
 
   <form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
-    <input type="hidden" name="document" value="{{ document.pk }}">
+    {% comment %}
+      No hidden `document` input: the view takes the parent from the URL and assigns it inside the
+      transaction that writes the row, so a posted value could only ever be a confused deputy for
+      the check-out lock.
+    {% endcomment %}
     <div class="card"><div class="card-body">
       {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
       <div class="form-group">
