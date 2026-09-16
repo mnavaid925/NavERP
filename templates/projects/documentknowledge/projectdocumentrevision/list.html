@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Revision Log{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Revision Log</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><span>Revisions</span></div>
+      <p class="text-muted">Every uploaded revision across every document, newest first. The chain only moves forward: an upload never becomes current on its own, an older approved revision keeps its approval for ever, and nothing here is ever amended in place. This register is <strong>metadata</strong> &mdash; the bytes are reached from the document's own page.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pdm_list' %}" class="btn btn-outline"><i data-lucide="files"></i> Document Register</a>
+      <a href="{% url 'projects:pdv_compare' %}" class="btn btn-outline"><i data-lucide="git-compare"></i> Compare revisions</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search document number, title or change note&hellip;">
+        </div>
+        <div class="form-group">
+          <select name="project" aria-label="Project" class="form-select">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} &mdash; {{ p.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="document" aria-label="Document" class="form-select">
+            <option value="">Any document</option>
+            {% for d in documents %}
+              <option value="{{ d.pk }}" {% if request.GET.document == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.number }} &mdash; {{ d.title|default:"expected placeholder"|truncatechars:26 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_approved" aria-label="Approval state" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.is_approved == 'True' %}selected{% endif %}>Approved</option>
+            <option value="False" {% if request.GET.is_approved == 'False' %}selected{% endif %}>Pending approval</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:pdv_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      {% comment %}
+        Immutability is STRUCTURAL here, and this register is where that shows: there is no edit
+        link on any row, because there is no edit url, no edit view and no edit template anywhere
+        for a revision. Everything but the change note is `editable=False`, so no ModelForm could
+        surface a column to change. A wrong revision is superseded by the next upload, never
+        amended in place.
+      {% endcomment %}
+      <p class="text-muted">A revision cannot be edited &mdash; that is why no row here offers an Edit action. Approve, restore forward or delete an unapproved one, and let the next upload supersede it.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Document</th><th>Rev</th><th>File</th><th>State</th><th>Uploaded</th><th>Approved</th><th>Change note</th><th>Text read</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for rev in object_list %}
+            <tr>
+              <td>
+                <span class="fw-600"><a href="{% url 'projects:pdm_detail' rev.document_id %}">{{ rev.document.number }}</a></span>
+                <div class="text-muted">{{ rev.document.title|default:"expected placeholder"|truncatechars:36 }}</div>
+              </td>
+              <td class="fw-600">v{{ rev.revision_no }}</td>
+              <td>
+                {% if rev.file %}<a href="{{ rev.file.url }}" target="_blank" rel="noopener">{{ rev.file.name|truncatechars:26 }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+                {% if rev.checksum %}<div class="text-muted">sha256 {{ rev.checksum|truncatechars:16 }}</div>{% endif %}
+              </td>
+              <td>
+                {% if rev.is_current and rev.is_approved %}<span class="badge badge-green">Current</span>
+                {% elif rev.is_approved %}<span class="badge badge-info">Approved</span>
+                {% else %}<span class="badge badge-slate">Pending</span>{% endif %}
+              </td>
+              <td>
+                {% if rev.uploaded_by %}{{ rev.uploaded_by.get_full_name|default:rev.uploaded_by.email }}{% else %}&mdash;{% endif %}
+                <div class="text-muted">{{ rev.created_at|date:"M d, Y H:i" }}</div>
+              </td>
+              <td>
+                {% if rev.approved_by %}{{ rev.approved_by.get_full_name|default:rev.approved_by.email }}{% else %}&mdash;{% endif %}
+                {% if rev.approved_at %}<div class="text-muted">{{ rev.approved_at|date:"M d, Y H:i" }}</div>{% endif %}
+              </td>
+              <td>{% if rev.change_note %}{{ rev.change_note|truncatechars:44 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>
+                {% if rev.extracted_text %}<span class="badge badge-info">{{ rev.extracted_text|length }} chars</span>
+                {% else %}<span class="text-muted">none</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pdm_detail' rev.document_id %}" class="btn-icon" title="View the document and compare its revisions"><i data-lucide="eye"></i></a>
+                  {% if not rev.is_approved %}
+                    <form method="post" action="{% url 'projects:pdv_approve' rev.pk %}" onsubmit="return confirm('Approve revision {{ rev.revision_no }} of {{ rev.document.number }}? It becomes the current version and the pointer moves forward.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check-circle"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if rev.is_approved and not rev.is_current %}
+                    <form method="post" action="{% url 'projects:pdv_restore' rev.pk %}" onsubmit="return confirm('Restore revision {{ rev.revision_no }}? Its file is re-uploaded as a NEW revision — history is never rewritten.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Restore forward"><i data-lucide="rotate-ccw"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if not rev.is_approved %}
+                    <form method="post" action="{% url 'projects:pdv_delete' rev.pk %}" onsubmit="return confirm('Delete unapproved revision {{ rev.revision_no }}? The number is not reused, so a gap is left.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="history"></i><h3>No revisions {% if q or request.GET.document or request.GET.project or request.GET.is_approved %}match{% else %}yet{% endif %}</h3><p>{% if q or request.GET.document or request.GET.project or request.GET.is_approved %}Nothing matches that lens &mdash; reset the filters, or widen the search.{% else %}Upload the first revision from a document's page. It lands unapproved, and the pointer does not move until somebody approves it.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
