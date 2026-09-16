@@ -64,7 +64,7 @@
         <dt>Search copy</dt><dd>{% if obj.extracted_text %}{{ obj.extracted_text|length }} characters of the current approved revision are searchable.{% else %}<span class="text-muted">Nothing stored &mdash; no approved revision yet, or the file carries no text layer (a scan has none).</span>{% endif %}</dd>
         <dt>Registered by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}&mdash;{% endif %} on {{ obj.created_at|date:"M d, Y H:i" }}</dd>
       </dl>
-      {% if obj.extraction_note %}<p class="text-muted">Last extraction note: {{ obj.extraction_note }}</p>{% endif %}
+      {% if current and current.extraction_note %}<p class="text-muted">Last extraction note: {{ current.extraction_note }}</p>{% endif %}
     </div>
   </div>
 
