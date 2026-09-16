@@ -114,8 +114,11 @@ def pfd_detail(request, pk):
     obj = get_object_or_404(ProjectFolder, pk=pk, tenant=request.tenant)
     children = (ProjectFolder.objects.filter(tenant=request.tenant, parent=obj)
                 .order_by("sequence", "name", "-id"))
+    # `extracted_text` is DEFERRED: the folder page lists a document's number, title, status and
+    # owner — never its search copy, which can hold `EXTRACT_MAX_CHARS` characters per row.
     documents = (ProjectDocument.objects.filter(tenant=request.tenant, folder=obj)
-                 .select_related("project", "owner").order_by("-created_at", "-id")[:50])
+                 .select_related("project", "owner").defer("extracted_text")
+                 .order_by("-created_at", "-id")[:50])
     return render(request, "projects/documentknowledge/projectfolder/detail.html", {
         "obj": obj,
         "children": children,
