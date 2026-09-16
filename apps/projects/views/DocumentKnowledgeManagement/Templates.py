@@ -14,7 +14,8 @@ from apps.projects.forms import DocumentTemplateForm
 from apps.projects.models import DocumentTemplate
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages,
-                                         redirect, render, require_POST, write_audit_log)
+                                         redirect, render, require_POST, tenant_admin_required,
+                                         write_audit_log)
 
 
 @login_required
@@ -89,8 +90,13 @@ def dtm_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def dtm_publish(request, pk):
-    """Toggle publish/retire. THE one writer of ``is_active``."""
+    """Toggle publish/retire. THE one writer of ``is_active``.
+
+    Admin-gated: a standard is a PMO artefact, so publishing or retiring one is a house-rule
+    decision rather than a member's filing act.
+    """
     obj = get_object_or_404(DocumentTemplate, pk=pk, tenant=request.tenant)
     previous = obj.is_active
     obj.is_active = not previous
