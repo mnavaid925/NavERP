@@ -21,6 +21,13 @@ which is where the L11 guards live.
   (the model's ``clean()`` is the second half of that guarantee; the delete view is the third).
 * ``pdm_reindex`` — a guarded Runtime that re-runs extraction on the current approved revision and
   refreshes the search copy. Idempotent, and the ONLY other writer of ``extracted_text``.
+
+**Which verbs are admin-gated, and why.** ``pdm_delete``, ``pdm_archive`` and ``pdm_release`` carry
+``@tenant_admin_required``: destroying a record, retiring it from the live register and lifting
+somebody else's legal hold are register-level decisions, the same class the app already gates at
+``bvr_approve`` / ``pex_void``. ``pdm_hold`` stays open to any member — somebody who is worried
+about a record must be able to freeze it — but the reason is REQUIRED, so the hold always has an
+account of why. ``pdm_checkout``/``pdm_checkin``/``pdm_reindex`` are cooperative and stay open.
 """
 from django.db.models import Q
 
@@ -30,8 +37,8 @@ from apps.projects.models import ProjectDocument
 from apps.projects.models.DocumentKnowledgeManagement.Revisions import extract_text
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (crud_list, get_object_or_404, login_required, messages,
-                                         redirect, render, require_POST, timezone,
-                                         write_audit_log)
+                                         redirect, render, require_POST, tenant_admin_required,
+                                         timezone, write_audit_log)
 from apps.projects.views._helpers import owners, projects
 
 
@@ -139,6 +146,7 @@ def pdm_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def pdm_delete(request, pk):
     obj = get_object_or_404(ProjectDocument, pk=pk, tenant=request.tenant)
     if request.method == "POST":
@@ -223,8 +231,13 @@ def pdm_checkin(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def pdm_archive(request, pk):
-    """Toggle the archive state. THE one writer of ``is_archived`` + both stamps."""
+    """Toggle the archive state. THE one writer of ``is_archived`` + both stamps.
+
+    Admin-gated: archiving retires a record from the live register, which is a register-level
+    decision rather than a filing one (the ``bvr_approve`` / ``chn_archive`` posture).
+    """
     obj = get_object_or_404(ProjectDocument, pk=pk, tenant=request.tenant)
     previous = obj.is_archived
     if previous:
@@ -255,13 +268,23 @@ def pdm_archive(request, pk):
 @login_required
 @require_POST
 def pdm_hold(request, pk):
-    """Place the legal hold. THE one writer of ``is_legal_hold`` + the hold stamps."""
+    """Place the legal hold. THE one writer of ``is_legal_hold`` + the hold stamps.
+
+    Deliberately NOT admin-gated: any member must be able to freeze a record they are worried
+    about. The REASON is required, though — a hold with no stated reason is a lock with no account
+    of why, and the audit row would read ``to: held``.
+    """
     obj = get_object_or_404(ProjectDocument, pk=pk, tenant=request.tenant)
     if obj.is_legal_hold:
         messages.info(request, f"{obj.number} is already under legal hold.")
         return redirect("projects:pdm_detail", pk=obj.pk)
+    reason = (request.POST.get("hold_reason") or "").strip()[:255]
+    if not reason:
+        messages.error(request, "A legal hold needs a stated reason — it freezes the record, so "
+                                "whoever releases it has to know what they are releasing.")
+        return redirect("projects:pdm_detail", pk=obj.pk)
     obj.is_legal_hold = True
-    obj.hold_reason = (request.POST.get("hold_reason") or "").strip()[:255]
+    obj.hold_reason = reason
     obj.held_by = request.user
     obj.held_at = timezone.now()
     obj.save(update_fields=["is_legal_hold", "hold_reason", "held_by", "held_at", "updated_at"])
@@ -274,8 +297,13 @@ def pdm_hold(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def pdm_release(request, pk):
-    """Release the legal hold. THE one writer that can clear it."""
+    """Release the legal hold. THE one writer that can clear it.
+
+    Admin-gated: releasing a hold a colleague placed is exactly the act the app's own precedent
+    gates (``bvr_approve``/``pex_void``), and a plain member must not be able to lift one.
+    """
     obj = get_object_or_404(ProjectDocument, pk=pk, tenant=request.tenant)
     if not obj.is_legal_hold:
         messages.info(request, f"{obj.number} is not under legal hold — nothing to release.")
