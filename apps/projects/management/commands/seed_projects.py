@@ -260,6 +260,28 @@ class Command(BaseCommand):
                   "milestones, dependencies, tasks, kickoffs, stakeholders, projects, requests) "
                   "- not just seeder-created ones."))
 
+    @staticmethod
+    def _purge_docmgt_files():
+        """Remove 7.10's two MEDIA_ROOT subtrees and return how many files went.
+
+        `--flush` clears the rows; this clears the BYTES. It runs inside the flush only, so a plain
+        re-seed (which is guarded per tenant and writes no new file for an existing row) never
+        touches the store.
+        """
+        import os
+        import shutil
+
+        from django.conf import settings
+
+        removed = 0
+        for prefix in ("projects/documents", "projects/templates"):
+            path = os.path.join(settings.MEDIA_ROOT, *prefix.split("/"))
+            if not os.path.isdir(path):
+                continue
+            removed += sum(len(files) for _root, _dirs, files in os.walk(path))
+            shutil.rmtree(path, ignore_errors=True)
+        return removed
+
     def handle(self, *args, **options):
         if options["flush"]:
             # Children first: dependencies and milestones hang off tasks, tasks and baselines
@@ -294,6 +316,15 @@ class Command(BaseCommand):
             ProjectDocumentRevision.objects.all().delete()
             ProjectDocument.objects.all().delete()
             ProjectFolder.objects.all().delete()
+            # 7.10 stores real BYTES under MEDIA_ROOT (`projects/documents/` for revisions,
+            # `projects/templates/` for standards) and no row delete removes them — Django never
+            # unlinks a FileField. A flush that cleared the tables but left the payloads behind
+            # would keep the previous corpus downloadable at its old URLs for ever, which for a
+            # module whose point is confidential and legally-held documents is a retention
+            # failure rather than a tidy-up detail. These are the only two `upload_to` prefixes in
+            # apps/projects, so nothing outside 7.10 lives in either subtree.
+            purged = self._purge_docmgt_files()
+            self.stdout.write(f"  removed {purged} stored 7.10 file(s) from MEDIA_ROOT")
             TaskChecklistItem.objects.all().delete()
             TaskBlock.objects.all().delete()
             QualityDefect.objects.all().delete()
