@@ -28,8 +28,8 @@ from apps.projects.models.DocumentKnowledgeManagement.Revisions import (extract_
                                                                         next_revision_no)
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages,
-                                         redirect, render, require_POST, timezone,
-                                         write_audit_log)
+                                         redirect, render, require_POST, tenant_admin_required,
+                                         timezone, write_audit_log)
 from apps.projects.views._helpers import projects
 
 
@@ -77,6 +77,7 @@ def pdv_upload(request, document_pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def pdv_approve(request, pk):
     """Make this revision the current one — the chain's single forward-moving verb."""
     revision = get_object_or_404(ProjectDocumentRevision, pk=pk, tenant=request.tenant)
@@ -148,6 +149,7 @@ def pdv_restore(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def pdv_delete(request, pk):
     """Delete an unapproved, non-current revision. Both guards run under the parent row lock."""
     revision = get_object_or_404(ProjectDocumentRevision, pk=pk, tenant=request.tenant)
