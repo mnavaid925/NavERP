@@ -54,6 +54,16 @@ Per tenant it builds one honest end-to-end chain:
   linked to a real 7.2 work package); and 18 notifications covering every kind, both read states
   and every optional source FK. It reuses the workspace's existing projects, work packages and a
   ``core.Document`` — it never invents a project, a task or a second attachment store.
+* **7.10 Document & Knowledge Management** (``_docmgt``, its own guard): the record layer ON the
+  existing projects — a 12-folder tree across two projects (including an ARCHIVED branch), 22
+  controlled documents spanning every doc type and every status (one ``expected`` placeholder, one
+  checked-out row, one under legal hold, two archived, one superseded, two whose retention window
+  has closed), 25 revisions whose numbers, checksums and extracted text are produced by the same
+  helpers the upload verb uses (two superseded pairs, four rows left pending approval), 16
+  standards covering every category with both publish states, and 17 knowledge entries covering
+  every kind and every status with three on the featured shelf. It reuses the workspace's existing
+  projects, work packages and milestones; the only files it writes are the revision and standard
+  payloads, and only for rows this run created.
 
 Every block is idempotent on its own guard, so a second run is a no-op without ``--flush``.
 Nothing here invents a parallel customer or department: the chain reuses the workspace's existing
@@ -77,13 +87,18 @@ from apps.projects.models import (
     CostControlAccount,
     DeliverableInspection,
     DocumentShare,
+    DocumentTemplate,
     IssueEscalation,
+    KnowledgeEntry,
     Meeting,
     MeetingActionItem,
     MeetingAgendaItem,
     Project,
     ProjectBudgetLine,
+    ProjectDocument,
+    ProjectDocumentRevision,
     ProjectExpense,
+    ProjectFolder,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
@@ -229,12 +244,14 @@ class Command(BaseCommand):
     help = ("Seed Module 7 Project Management demo data (7.1 Initiation, 7.2 Planning, "
             "7.3 Resourcing, 7.4 Cost & Budget, 7.5 Risk & Issue Management, "
             "7.6 Quality Management, 7.7 Scope & Requirements Management, "
-            "7.8 Task & Work Management).")
+            "7.8 Task & Work Management, 7.9 Collaboration & Communication, "
+            "7.10 Document & Knowledge Management).")
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL projects rows for ALL tenants before seeding "
-                  "(notifications, action items, agenda items, document shares, messages, "
+                  "(knowledge entries, standards, document revisions, documents, folders, "
+                  "notifications, action items, agenda items, document shares, messages, "
                   "meetings, channels, checklist items, task blocks, scope verifications, "
                   "scope change requests, scope items, requirements, quality defects, "
                   "deliverable inspections, quality reviews, quality plans, escalations, issues, "
@@ -258,6 +275,13 @@ class Command(BaseCommand):
             # channel, the message, the task and the meeting — all four — so they go first of
             # everything; then the meeting's two children, then the shares (which hang off the
             # channel and the project), then the messages, then the meetings and channels.
+            #
+            # 7.10's rows are ordered by their PROTECT edge as much as by their FK depth: a
+            # revision hangs off its document, a document is PROTECTed by its folder, and a
+            # folder nests inside its parent — so revisions go first, then the documents, then
+            # the folders. `ProjectFolder.parent` is a CASCADE self-FK, so one folder delete
+            # would already take the subtree; the documents are deleted EXPLICITLY rather than
+            # left to the PROTECT edge to refuse the folder delete.
             ProjectNotification.objects.all().delete()
             MeetingActionItem.objects.all().delete()
             MeetingAgendaItem.objects.all().delete()
@@ -265,6 +289,11 @@ class Command(BaseCommand):
             ChannelMessage.objects.all().delete()
             Meeting.objects.all().delete()
             Channel.objects.all().delete()
+            KnowledgeEntry.objects.all().delete()
+            DocumentTemplate.objects.all().delete()
+            ProjectDocumentRevision.objects.all().delete()
+            ProjectDocument.objects.all().delete()
+            ProjectFolder.objects.all().delete()
             TaskChecklistItem.objects.all().delete()
             TaskBlock.objects.all().delete()
             QualityDefect.objects.all().delete()
@@ -368,6 +397,11 @@ class Command(BaseCommand):
         # shared-document register, meetings with their agendas/minutes/actions, and the
         # notification inbox. Nothing here creates a project or a task; it reuses both.
         self._collab(tenant, now)
+        # 7.10 has its OWN guard as well — the document repository: the folder tree, the
+        # controlled documents with their approved-revision chains, the tenant-wide standards
+        # library and the knowledge register. It reuses the projects, tasks, milestones and
+        # users every block above already created; nothing here invents a project.
+        self._docmgt(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -2251,6 +2285,543 @@ class Command(BaseCommand):
             f"{MeetingAgendaItem.objects.filter(tenant=tenant).count()} agenda items, "
             f"{MeetingActionItem.objects.filter(tenant=tenant).count()} action items, "
             f"{ProjectNotification.objects.filter(tenant=tenant).count()} notifications."))
+
+    # -- 7.10 document & knowledge management -----------------------------------------------------
+
+    def _docmgt(self, tenant, now):
+        """7.10 document & knowledge management: the folder tree, the controlled documents with
+        their approved-revision chains, the tenant-wide standards library and the knowledge
+        register.
+
+        Guarded per tenant on the FOLDER tree, because that is this block's entry point: every
+        document needs a folder (``ProjectDocument.folder`` is PROTECT and required), every
+        revision hangs off a document, and the standards and knowledge registers stand alone.
+        Nothing here invents a project, a task, a milestone or a user — it reuses 7.1's projects
+        and 7.2's plan, exactly as 7.9 does.
+
+        **The two revision writers are modelled on their views, never hand-stamped.** The number
+        comes from ``next_revision_no``, the checksum from ``file_sha256`` over the payload BEFORE
+        the storage layer consumes it, and the text from ``extract_text`` AFTER the row exists —
+        there is nothing on disk to read until then. ``approve`` moves the parent's integer pointer
+        and copies the revision's text up into the parent's denormalized search copy, which is what
+        makes the register's four-character full-text sweep demonstrably work on a fresh workspace.
+        The payloads are ``.txt`` on purpose: ``.txt`` is in ``PLAIN_TEXT_EXTENSIONS``, so the
+        extractor genuinely reads them without committing a binary fixture to the repository.
+
+        **WARNING: this WRITES FILES under MEDIA_ROOT** (revisions and standards). Every
+        ``ContentFile`` is minted only for a row this run just created, inside the guard's ``else``
+        branch, so a second run writes none — Django's storage layer RENAMES on collision rather
+        than overwriting, so a block that re-ran would quietly pile up duplicate files nobody ever
+        looks at.
+
+        Coverage per tenant: a 12-folder tree across two projects, including an ARCHIVED branch so
+        the archive lens and both badge states have rows; 22 documents spanning every doc type and
+        every status — one ``expected`` placeholder, one checked-out row, one under legal hold, two
+        archived, one superseded, and two whose retention window has already closed; 25 revisions,
+        two of them superseded pairs (v1 and v2 both approved, the pointer on v2) and four left
+        pending approval; 16 standards covering every category with both publish states; and 17
+        knowledge entries covering every kind and every status, three of them on the featured
+        shelf. The document and knowledge registers both clear their 15-row page, so the paginator
+        has a genuine page 2, and the retention board's four headline figures are all non-zero.
+        """
+        from django.core.files.base import ContentFile
+
+        # Deep imports into the entity modules, never through the package re-export: `normalize_tags`
+        # has a rival definition in a sibling app's repository and `next_revision_no` / `file_sha256`
+        # are names several modules use, so they are reached by the module that owns them.
+        from apps.projects.models.DocumentKnowledgeManagement.Revisions import (
+            EXTRACT_MAX_CHARS, extract_text, file_sha256, next_revision_no)
+
+        if ProjectFolder.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: document repository rows already exist. "
+                              f"Use --flush to re-seed.")
+            return
+
+        projects = list(Project.objects.filter(tenant=tenant).order_by("id"))
+        users = list(get_user_model().objects.filter(tenant=tenant, is_active=True).order_by("id"))
+        if not projects or not users:
+            self.stdout.write(self.style.WARNING(
+                f"  {tenant.name}: no projects or users - skipping document & knowledge "
+                f"management."))
+            return
+
+        active = next((p for p in projects if p.status == "active"), projects[0])
+        other = next((p for p in projects if p.pk != active.pk), None)
+        tasks = list(ProjectTask.objects.filter(
+            tenant=tenant, project=active, node_type="work_package").order_by("id"))
+        milestones = list(ProjectMilestone.objects.filter(
+            tenant=tenant, project=active).order_by("id"))
+        owner = users[0]
+        approver = users[-1]
+        holder = users[1] if len(users) > 1 else owner
+        today = timezone.localdate()
+
+        def backdate(row, days):
+            """Age a seeded row the way a real workspace would be aged.
+
+            ``created_at`` is ``auto_now_add``, so it cannot be passed to the constructor; a
+            queryset ``.update()`` bypasses the ``pre_save`` hook and is the only honest way to give
+            a seeded row a past. It matters here more than anywhere: ``retain_until`` is
+            ``created_at + 30 * retention_months``, so without backdating NO document could ever be
+            retention-due on a fresh workspace and the retention board's headline figure would be
+            structurally zero.
+            """
+            stamp = now - timedelta(days=days)
+            type(row).objects.filter(pk=row.pk).update(created_at=stamp)
+            row.created_at = stamp
+            return row
+
+        def folder(project, name, sequence, parent=None, description="", archived=False):
+            row = ProjectFolder(tenant=tenant, project=project, parent=parent, name=name,
+                                description=description, sequence=sequence, created_by=owner)
+            if archived:
+                row.is_archived = True
+                row.archived_by = approver
+                row.archived_at = now - timedelta(days=45)
+            row.full_clean(exclude=["number"])
+            row.save()
+            return row
+
+        def document(folder_row, title, doc_type, status="draft", classification="internal",
+                     tags="", description="", retention_months=None, review_on=None,
+                     milestone=None, task=None, doc_owner=None, hold="", archived=False,
+                     checked_out=False, age_days=0):
+            """One controlled document. ``folder_row`` fixes the project — never a second argument.
+
+            The folder is PROTECT and required, so a document always has a project by construction;
+            taking it from the folder rather than as a parameter is what makes "the folder belongs
+            to another project" unrepresentable in this seeder (the model's ``clean()`` would refuse
+            it, but a seeder should not be able to construct the error in the first place).
+            """
+            row = ProjectDocument(
+                tenant=tenant, project=folder_row.project, folder=folder_row, title=title,
+                document_type=doc_type, classification=classification, status=status, tags=tags,
+                description=description, retention_months=retention_months, review_on=review_on,
+                milestone=milestone, task=task, owner=doc_owner or owner, created_by=owner)
+            # The hold and the archive are kept mutually exclusive: the model's clean() refuses a
+            # held row that is also archived, and the seed must not need that refusal to fire.
+            if hold:
+                row.is_legal_hold = True
+                row.hold_reason = hold
+                row.held_by = approver
+                row.held_at = now - timedelta(days=12)
+            if archived:
+                row.is_archived = True
+                row.archived_by = approver
+                row.archived_at = now - timedelta(days=30)
+            if checked_out:
+                row.is_checked_out = True
+                row.checked_out_by = holder
+                row.checked_out_at = now - timedelta(hours=6)
+            row.full_clean(exclude=["number"])
+            row.save()
+            if age_days:
+                backdate(row, age_days)
+            return row
+
+        def mint(document_row, filename, change_note, body):
+            """Create the next revision the way ``pdv_upload`` does — unapproved, pointer unmoved.
+
+            The view allocates under a ``select_for_update()`` on the parent because two uploaders
+            can race; a management command is the single writer, so there is nothing to serialize
+            against and no lock is taken here.
+            """
+            payload = ContentFile(body.encode("utf-8"), name=filename)
+            digest = file_sha256(payload)
+            revision = ProjectDocumentRevision(
+                tenant=tenant, document=document_row, revision_no=next_revision_no(document_row),
+                file=payload, checksum=digest, change_note=change_note, uploaded_by=owner)
+            revision.save()
+            text, note = extract_text(revision.file)
+            revision.extracted_text = (text or "")[:EXTRACT_MAX_CHARS]
+            revision.extraction_note = note
+            revision.save(update_fields=["extracted_text", "extraction_note"])
+            return revision
+
+        def approve(document_row, revision):
+            """Approve one revision the way ``pdv_approve`` does.
+
+            Stamp the revision, move the parent's integer pointer, copy the revision's text up into
+            the parent's denormalized SEARCH COPY and lift a still-open document to ``approved``.
+            An earlier approved revision is deliberately LEFT approved: it was, and "only the latest
+            approved version is current" is expressed by the pointer landing on exactly one row,
+            never by un-approving history. That is what gives the chain its superseded pair.
+            """
+            revision.is_approved = True
+            revision.approved_by = approver
+            revision.approved_at = now - timedelta(days=1)
+            revision.save(update_fields=["is_approved", "approved_by", "approved_at"])
+            previous = document_row.current_revision_no
+            document_row.current_revision_no = revision.revision_no
+            document_row.extracted_text = (revision.extracted_text or "")[:EXTRACT_MAX_CHARS]
+            if document_row.status in ("draft", "expected", "in_review"):
+                document_row.status = "approved"
+            document_row.save(update_fields=["current_revision_no", "extracted_text", "status",
+                                             "updated_at"])
+            write_audit_log(approver, revision, "update",
+                            {"verb": "pdv_approve", "from": previous,
+                             "to": revision.revision_no})
+            return revision
+
+        def standard(name, category, doc_type, version, is_active=True, locked=False,
+                     review_on=None, description="", filename=None, body=""):
+            row = DocumentTemplate(
+                tenant=tenant, name=name, category=category, document_type=doc_type,
+                version=version, description=description, is_active=is_active,
+                is_format_locked=locked, owner=owner, review_on=review_on, created_by=owner)
+            if filename:
+                row.file = ContentFile(body.encode("utf-8"), name=filename)
+            row.full_clean(exclude=["number"])
+            row.save()
+            return row
+
+        def insight(title, kind, summary, body="", status="published", featured=False, used=0,
+                    project=None, document_row=None, tags="", category=""):
+            row = KnowledgeEntry(
+                tenant=tenant, title=title, kind=kind, summary=summary, body=body, category=category,
+                tags=tags, source_project=project, document=document_row, owner=owner,
+                status=status, is_featured=featured, created_by=owner)
+            # `usage_count` is `editable=False`, so `full_clean` skips it and it is assigned here.
+            # It is a CLICK COUNTER — a seeded number is a plausible press count, nothing more.
+            row.usage_count = used
+            row.full_clean(exclude=["number"])
+            row.save()
+            return row
+
+        # -- the folder tree ---------------------------------------------------------------------
+        gov = folder(active, "01 Governance", 1,
+                     description="Charter, approvals and the audit trail.")
+        charter_folder = folder(active, "Charter & approvals", 1, parent=gov)
+        status_folder = folder(active, "Status reports", 2, parent=gov)
+        design = folder(active, "02 Design", 2,
+                        description="Design packs, drawings and specifications.")
+        drawings = folder(active, "Drawings", 1, parent=design)
+        specs = folder(active, "Specifications", 2, parent=design)
+        delivery = folder(active, "03 Delivery", 3,
+                          description="Test evidence, handover packs and statutory certificates.")
+        tests = folder(active, "Test results", 1, parent=delivery)
+        handover = folder(active, "Handover", 2, parent=delivery)
+        legacy = folder(active, "04 Legacy archive", 4, archived=True,
+                        description="The 2024-25 programme, retained for audit.")
+        other_gov = other_delivery = None
+        if other is not None:
+            other_gov = folder(other, "01 Governance", 1)
+            other_delivery = folder(other, "02 Delivery", 2)
+
+        # -- the controlled documents ------------------------------------------------------------
+        d_charter = document(
+            charter_folder, "Project charter (signed)", "charter", status="draft",
+            classification="confidential", tags="Charter, governance ,signed",
+            description="The approved charter, countersigned by the sponsor.",
+            retention_months=84, milestone=milestones[0] if milestones else None, age_days=400)
+        d_approval = document(
+            charter_folder, "Charter approval memo", "other", tags="charter, approval",
+            retention_months=60, age_days=395)
+        d_status_aug = document(
+            status_folder, "Monthly status report - August", "status_update",
+            tags="status, monthly", retention_months=24,
+            review_on=today + timedelta(days=12), age_days=45)
+        d_status_sep = document(
+            status_folder, "Monthly status report - September", "status_update",
+            status="in_review", tags="status, monthly",
+            review_on=today + timedelta(days=20), age_days=10)
+        d_schedule = document(
+            status_folder, "Baseline schedule v3", "schedule", tags="baseline, schedule",
+            # Past its review date: one of the two rows the retention board's review lens shows.
+            review_on=today - timedelta(days=10), age_days=120)
+        d_reqs = document(
+            specs, "Requirements specification (release 3)", "specification",
+            classification="confidential", tags="requirements, release-3",
+            retention_months=120, task=tasks[0] if tasks else None, age_days=200)
+        d_ux = document(
+            design, "UX design pack - ordering", "plan", tags="ux, design", age_days=150)
+        d_api = document(
+            drawings, "Order API interface drawing", "drawing", tags="api, drawing",
+            task=tasks[1] if len(tasks) > 1 else None, age_days=100)
+        d_api_test = document(
+            tests, "Order API test results", "test_result", tags="test, api",
+            task=tasks[1] if len(tasks) > 1 else None, age_days=40)
+        d_cart_test = document(
+            tests, "Cart UI test results", "test_result", status="in_review", tags="test, cart-ui",
+            task=tasks[2] if len(tasks) > 2 else None, age_days=8)
+        d_checkout = document(
+            tests, "Checkout integration test plan", "plan", tags="checkout, test-plan",
+            description="Drafted while the integration work package is still open.",
+            task=tasks[3] if len(tasks) > 3 else None, checked_out=True, age_days=5)
+        d_handover = document(
+            handover, "Handover pack - release 3", "handover", tags="handover, release-3",
+            retention_months=300, review_on=today - timedelta(days=3), age_days=20)
+        d_photo = document(
+            drawings, "Site photo log (scanned)", "other", tags="photo, site",
+            description="Scanned pages - stored and downloadable, with no text layer to read.",
+            age_days=60)
+        d_nda = document(
+            charter_folder, "Vendor NDA - Northwind", "other", classification="confidential",
+            tags="nda, vendor", retention_months=12, age_days=400)
+        d_fire = document(
+            handover, "Fire safety certificate", "other", classification="public",
+            tags="certificate, compliance", retention_months=6, age_days=380)
+        d_expected = document(
+            handover, "Decommissioning plan (slot)", "plan", status="expected",
+            tags="decommissioning",
+            description="A named slot created before the file exists.", age_days=2)
+        d_hold = document(
+            charter_folder, "Litigation bundle 2026", "other", classification="confidential",
+            tags="litigation, hold",
+            hold="Litigation hold raised 2026-09-01 - do not destroy.", age_days=90)
+        d_superseded = document(
+            specs, "Integration plan (superseded)", "plan", tags="integration",
+            retention_months=36, age_days=300)
+        d_arch_a = document(
+            legacy, "Legacy migration spike report", "report", status="archived",
+            tags="legacy, migration", archived=True, age_days=500)
+        d_arch_b = document(
+            legacy, "2025 status pack", "status_update", status="archived", tags="status, 2025",
+            archived=True, age_days=450)
+        d_other_charter = d_other_plan = None
+        if other_gov is not None:
+            d_other_charter = document(
+                other_gov, "Charter - pilot programme", "charter", tags="charter, pilot",
+                retention_months=48, age_days=250)
+            d_other_plan = document(
+                other_delivery, "Pilot delivery plan", "plan", tags="pilot, delivery",
+                age_days=180)
+
+        # -- the revision chains -----------------------------------------------------------------
+        # The charter carries the superseded PAIR: v1 and v2 are both approved and the pointer sits
+        # on v2, so v1 renders the amber "superseded" badge without any history being rewritten.
+        approve(d_charter, mint(d_charter, "project-charter.txt", "Charter as first issued.",
+                                "Project charter, revision 1.\nApproved scope for release 3.\n"))
+        approve(d_charter, mint(d_charter, "project-charter-r2.txt",
+                                "Sponsor amendments folded in.",
+                                "Project charter, revision 2.\nSponsor amendments: the returns "
+                                "module moves behind the checkout release.\n"))
+        approve(d_approval, mint(d_approval, "charter-approval-memo.txt", "Initial upload.",
+                                 "Charter approval memo.\nCountersigned by the sponsor.\n"))
+        approve(d_status_aug, mint(d_status_aug, "status-2026-08.txt", "August report as issued.",
+                                   "August status report.\nSchedule variance: 3 days.\n"))
+        approve(d_schedule, mint(d_schedule, "baseline-schedule-v3.txt", "Third baseline.",
+                                 "Baseline schedule v3.\nCritical path: workshops, SSO spike, "
+                                 "order API, cart UI, checkout.\n"))
+        approve(d_reqs, mint(d_reqs, "requirements-release-3.txt", "Initial upload.",
+                             "Requirements specification, release 3.\nTraceability to the "
+                             "requirement register.\n"))
+        approve(d_reqs, mint(d_reqs, "requirements-release-3-r2.txt",
+                             "Acceptance criteria sharpened after review.",
+                             "Requirements specification, release 3, revision 2.\nAcceptance "
+                             "criteria rewritten to be testable.\n"))
+        approve(d_ux, mint(d_ux, "ux-design-pack.txt", "Initial upload.",
+                           "UX design pack - ordering.\nWireframes and the interaction model.\n"))
+        approve(d_api, mint(d_api, "order-api-drawing.txt", "Initial upload.",
+                            "Order API interface drawing.\nEndpoint shapes and error envelope.\n"))
+        approve(d_api_test, mint(d_api_test, "order-api-test-results.txt", "Initial upload.",
+                                 "Order API test results.\nAll contract tests passing.\n"))
+        approve(d_cart_test, mint(d_cart_test, "cart-ui-test-results.txt", "Initial upload.",
+                                  "Cart UI test results.\nTwo accessibility defects open.\n"))
+        # A PENDING revision behind an approved one: the register shows a green current badge
+        # beside a slate pending row, which is exactly the state the pointer rule produces.
+        mint(d_cart_test, "cart-ui-test-results-r2.txt",
+             "Re-test after the accessibility fixes.",
+             "Cart UI test results, revision 2.\nAccessibility defects retested.\n")
+        mint(d_checkout, "checkout-integration-test-plan.txt", "Initial upload.",
+             "Checkout integration test plan.\nAwaiting the integration work package.\n")
+        mint(d_handover, "handover-pack-release-3.txt", "Initial upload.",
+             "Handover pack - release 3.\nOperations runbook and support model.\n")
+        approve(d_photo, mint(d_photo, "site-photo-log.txt", "Scanned pages uploaded.",
+                              "Site photo log.\nThis plain-text stand-in stands for a scanned "
+                              "image, which would carry no text layer.\n"))
+        approve(d_nda, mint(d_nda, "vendor-nda-northwind.txt", "Signed NDA filed.",
+                            "Vendor NDA - Northwind.\nExecuted copy.\n"))
+        approve(d_fire, mint(d_fire, "fire-safety-certificate.txt", "Certificate filed.",
+                             "Fire safety certificate.\nIssued against the new floor.\n"))
+        approve(d_hold, mint(d_hold, "litigation-bundle-2026.txt", "Bundle assembled.",
+                             "Litigation bundle 2026.\nCorrespondence and the decision log.\n"))
+        approve(d_superseded, mint(d_superseded, "integration-plan.txt",
+                                   "Initial upload, since superseded.",
+                                   "Integration plan.\nSuperseded by the release 3 plan.\n"))
+        # Its revision is approved and still on the pointer; the STATUS says the plan it described
+        # has been replaced. Nothing was un-approved to express that.
+        d_superseded.status = "superseded"
+        d_superseded.save(update_fields=["status", "updated_at"])
+        approve(d_arch_a, mint(d_arch_a, "legacy-migration-spike.txt", "Closed with the spike.",
+                               "Legacy migration spike report.\nThe spike was cancelled.\n"))
+        approve(d_arch_b, mint(d_arch_b, "status-pack-2025.txt", "Annual pack.",
+                               "2025 status pack.\nTwelve monthly reports.\n"))
+        if d_other_charter is not None:
+            approve(d_other_charter, mint(d_other_charter, "pilot-charter.txt", "Initial upload.",
+                                          "Charter - pilot programme.\nApproved for the pilot "
+                                          "workspace.\n"))
+            mint(d_other_plan, "pilot-delivery-plan.txt", "Initial upload.",
+                 "Pilot delivery plan.\nStill in draft.\n")
+
+        # -- the standards library (tenant-wide: no project FK, by design) -----------------------
+        standard("Project charter", "charter", "charter", "3.0",
+                 description="The organisation's charter format, with the approval block.",
+                 filename="standard-charter.txt",
+                 body="Project charter - standard format.\nSections: context, objectives, scope, "
+                      "governance, approval.\n")
+        standard("Project charter (light)", "charter", "charter", "1.2",
+                 description="A one-page variant for small internal projects.")
+        standard("Project plan", "plan", "plan", "4.1",
+                 description="Work breakdown, schedule baseline and resource summary.",
+                 filename="standard-project-plan.txt",
+                 body="Project plan - standard format.\nWBS, schedule, resources, risks.\n")
+        standard("Detailed schedule template", "schedule", "schedule", "2.0",
+                 description="The level-3 schedule layout the PMO reviews against.")
+        standard("Monthly status report", "status_update", "status_update", "5.0",
+                 description="The monthly report the steering group receives.",
+                 filename="standard-status-report.txt",
+                 body="Monthly status report - standard format.\nProgress, variance, risks, "
+                      "decisions needed.\n")
+        standard("Weekly status note", "status_update", "status_update", "1.4", is_active=False,
+                 description="Retired in favour of the monthly report.")
+        standard("Steering pack", "report", "report", "2.3",
+                 description="The pack circulated before each steering review.",
+                 filename="standard-steering-pack.txt",
+                 body="Steering pack - standard format.\nVariance table, decisions, next "
+                      "period.\n")
+        standard("Post-implementation review", "report", "report", "1.1",
+                 description="Benefits realisation and lessons capture after go-live.")
+        standard("Meeting minutes", "minutes", "minutes", "3.2",
+                 description="Minutes format, with the action table the register reads.",
+                 filename="standard-minutes.txt",
+                 body="Meeting minutes - standard format.\nAttendees, decisions, actions with "
+                      "owners and dates.\n")
+        standard("Decision log", "register", "other", "1.0", locked=True,
+                 description="The decision register format. The lock is recorded as intent.",
+                 filename="standard-decision-log.txt",
+                 body="Decision log - standard format.\nDate, decision, rationale, owner.\n")
+        standard("Risk register", "register", "other", "2.6",
+                 description="Risk scoring and response columns.")
+        standard("Issue log", "register", "other", "1.5", is_active=False,
+                 description="Retired - issues now live in the risk register.")
+        standard("Handover checklist", "checklist", "handover", "2.0",
+                 description="What operations needs before a release is accepted.",
+                 filename="standard-handover-checklist.txt",
+                 body="Handover checklist - standard format.\nRunbook, support model, "
+                      "certificates, access.\n")
+        standard("Go-live readiness checklist", "checklist", "other", "1.3",
+                 description="The gate the release is signed off against.",
+                 review_on=today - timedelta(days=5))
+        standard("Benefits realisation plan", "other", "report", "1.0",
+                 description="Baseline, target and measurement for each benefit.")
+        standard("Lessons learned log", "other", "other", "1.2",
+                 description="The capture sheet a retrospective fills in.",
+                 filename="standard-lessons-log.txt",
+                 body="Lessons learned log - standard format.\nWhat happened, so what, now "
+                      "what.\n")
+
+        # -- the knowledge library --------------------------------------------------------------
+        insight("Anchor the SSO spike to a real identity provider", "lesson_learned",
+                "A spike against a stub answered the wrong question and cost two weeks.",
+                body="The spike proved our own code could talk to a stub. It told us nothing about "
+                     "the client's identity provider, which is where the integration actually "
+                     "broke. Next time the spike goes against the real tenant, in their "
+                     "environment.",
+                featured=True, used=14, project=active, tags="sso, integration, spike",
+                category="Delivery")
+        insight("Baseline before you forecast", "best_practice",
+                "Forecasts without a frozen baseline cannot be argued with, only believed.",
+                body="Every variance conversation needs a baseline both sides accepted. Freeze it, "
+                     "date it, and record what changed it.",
+                featured=True, used=11, project=active, tags="baseline, forecasting",
+                category="Governance")
+        insight("Release 3 retrospective", "retrospective",
+                "What worked, what did not, and the three changes we are keeping.",
+                body="Kept: the weekly integration checkpoint. Changed: requirements sign-off now "
+                     "happens before estimation. Dropped: the separate design review board.",
+                featured=True, used=9, project=active, tags="retrospective, release-3",
+                category="Delivery")
+        insight("Discovery retrospective - what the workshops missed", "retrospective",
+                "We captured the happy path and missed every exception.",
+                body="The workshops were run against a script. Nobody asked what happens when the "
+                     "payment is declined.",
+                status="retired", used=4, project=active, tags="discovery, workshops",
+                category="Delivery")
+        insight("Estimating integration work", "playbook",
+                "A repeatable way to size work that depends on somebody else's system.",
+                body="Count the interfaces, not the screens. For each interface, ask who owns the "
+                     "contract, whether a test environment exists, and who can grant access. Any "
+                     "answer of 'we will find out' is an unbounded risk.",
+                used=13, project=active, document_row=d_handover,
+                tags="estimating, integration, playbook", category="Delivery")
+        insight("Running a requirements workshop", "playbook",
+                "How to get testable requirements out of a room in one day.",
+                body="Bring the exception cases as cards, not slides. Ask for the last three "
+                     "things that went wrong with the current system before asking what the new "
+                     "one should do.",
+                used=12, project=active, tags="requirements, workshops, facilitation",
+                category="Delivery")
+        insight("Change control in practice", "playbook",
+                "The route a change takes, and why the CCB needs a cost before it decides.",
+                body="A change without an impact assessment is a wish. Get the cost, the schedule "
+                     "effect and the risk, then decide.",
+                status="draft", used=2, project=active, tags="change-control, ccb",
+                category="Governance")
+        insight("Go-live readiness checklist", "checklist",
+                "The gate items that have actually blocked a release here.",
+                body="Access provisioned in production. Rollback rehearsed. Support rota agreed. "
+                     "Monitoring dashboards live. Data migration reconciled to the penny.",
+                used=16, project=active, document_row=d_charter, tags="go-live, checklist",
+                category="Delivery")
+        insight("Data migration readiness checklist", "checklist",
+                "What to confirm before the first migration rehearsal.",
+                body="Row counts agreed. Field mappings signed off. Reconciliation query written. "
+                     "An owner named for every source system.",
+                used=7, project=active, tags="migration, checklist", category="Delivery")
+        insight("Handover acceptance checklist", "checklist",
+                "What operations signs when it accepts a release.",
+                body="Runbook complete. Support model agreed. Certificates filed. Access "
+                     "transferred. Monitoring in place.",
+                used=6, project=active, document_row=d_handover, tags="handover, checklist",
+                category="Delivery")
+        insight("Vendor onboarding playbook", "playbook",
+                "The sequence that avoids a vendor starting work without a contract.",
+                body="NDA, then due diligence, then the contract, then purchase order, then "
+                     "access. Never access before the order.",
+                used=5, project=active, tags="vendor, onboarding, procurement",
+                category="Governance")
+        insight("Standard: status report format", "standard",
+                "The written standard behind the monthly report template.",
+                body="One page. Progress against the baseline, variance with a cause, top three "
+                     "risks, decisions needed. No narrative padding.",
+                used=10, project=active, tags="status, standard", category="Governance")
+        insight("Standard: document naming convention", "standard",
+                "Project, document type, title, revision - in that order.",
+                body="`PRJ3-SPEC-Order-API-v2`. The type segment comes from the register's own "
+                     "document-type vocabulary so the two agree.",
+                used=8, project=active, tags="naming, standard, repository",
+                category="Governance")
+        insight("Template: decision log entry", "template",
+                "The four fields a decision needs to be usable later.",
+                body="Date, decision, rationale, owner. The rationale is the field everybody "
+                     "skips and everybody needs eighteen months later.",
+                used=3, project=active, tags="decision, template", category="Governance")
+        insight("Template: risk description", "template",
+                "Cause, event, consequence - so the description can be scored.",
+                body="Because of <cause>, <event> may occur, resulting in <consequence>. Without "
+                     "all three the score is a guess.",
+                status="draft", used=1, project=active, tags="risk, template",
+                category="Governance")
+        insight("Lessons from the legacy migration spike", "lesson_learned",
+                "A spike that was cancelled still paid for itself.",
+                body="We spent four days and learned the legacy schema could not be mapped "
+                     "automatically. That was cheaper than finding out during delivery.",
+                used=6, project=active, document_row=d_arch_a, tags="legacy, migration, spike",
+                category="Delivery")
+        insight("Cost variance triage", "lesson_learned",
+                "Separate the variance you caused from the variance you inherited.",
+                body="Inherited variance is a conversation with the sponsor. Self-inflicted "
+                     "variance is a conversation with the team. Mixing them hides both.",
+                status="draft", used=0, project=other, tags="cost, variance",
+                category="Cost")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {ProjectFolder.objects.filter(tenant=tenant).count()} folders, "
+            f"{ProjectDocument.objects.filter(tenant=tenant).count()} documents, "
+            f"{ProjectDocumentRevision.objects.filter(tenant=tenant).count()} revisions, "
+            f"{DocumentTemplate.objects.filter(tenant=tenant).count()} standards, "
+            f"{KnowledgeEntry.objects.filter(tenant=tenant).count()} knowledge entries."))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
