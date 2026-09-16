@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Document{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}{% if obj.title %} &mdash; {{ obj.title }}{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdm_list' %}">Register</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Controlled project document. Only the latest <strong>APPROVED</strong> revision is the current one &mdash; an upload lands unapproved behind the pointer until somebody approves it.</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status != 'archived' %}<a href="{% url 'projects:pdm_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      <a href="{% url 'projects:pdm_list' %}?project={{ obj.project_id }}" class="btn btn-outline">Back to register</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="card card-body">
+      <div class="text-muted text-sm">Current revision</div>
+      <div class="text-2xl font-semibold">{% if obj.current_revision_no %}v{{ obj.current_revision_no }}{% else %}&mdash;{% endif %}</div>
+      {% if current %}
+        <div class="text-muted text-sm">approved by {{ current.approved_by.get_full_name|default:current.approved_by.email|default:"&mdash;" }} on {{ current.approved_at|date:"M d, Y" }}</div>
+      {% else %}
+        <div class="text-muted text-sm">No approved revision yet &mdash; uploads hang behind the pointer until somebody approves one.</div>
+      {% endif %}
+    </div>
+    <div class="card card-body">
+      <div class="text-muted text-sm">State</div>
+      <div class="badge-group">
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        {% if obj.is_locked %}<span class="badge badge-amber">Checked out</span>{% endif %}
+        {% if obj.is_legal_hold %}<span class="badge badge-red">Legal hold</span>{% endif %}
+        {% if obj.is_archived %}<span class="badge badge-muted">Archived</span>{% endif %}
+        {% if obj.is_retention_due %}<span class="badge badge-amber">Retention due</span>{% endif %}
+        {% if obj.is_review_due %}<span class="badge badge-info">Review due</span>{% endif %}
+      </div>
+      <div class="text-muted text-sm">{{ obj.get_document_type_display }} &middot; {{ obj.get_classification_display }}</div>
+    </div>
+    <div class="card card-body">
+      <div class="text-muted text-sm">Retention intent</div>
+      <div class="text-2xl font-semibold">{% if obj.retain_until %}{{ obj.retain_until|date:"M d, Y" }}{% else %}&mdash;{% endif %}</div>
+      <div class="text-muted text-sm">{% if obj.retention_months %}{{ obj.retention_months }} months from registration.{% else %}No retention window set.{% endif %} A flag a human reads &mdash; nothing here deletes anything on a schedule.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Document</h2>
+      {% if obj.is_expected %}<span class="badge badge-amber">Expected placeholder</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Title</dt><dd>{% if obj.title %}{{ obj.title }}{% else %}<span class="text-muted">&mdash; a placeholder waiting for a file</span>{% endif %}</dd>
+        <dt>Project</dt><dd><a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project }}</a></dd>
+        <dt>Folder</dt><dd>{% if obj.folder %}<a href="{% url 'projects:pfd_detail' obj.folder_id %}">{{ obj.folder.full_path }}</a>{% else %}&mdash;{% endif %}</dd>
+        <dt>Type</dt><dd>{{ obj.get_document_type_display }}</dd>
+        <dt>Classification</dt><dd>{{ obj.get_classification_display }}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Milestone</dt><dd>{% if obj.milestone %}<a href="{% url 'projects:mst_detail' obj.milestone_id %}">{{ obj.milestone }}</a>{% else %}&mdash;{% endif %}</dd>
+        <dt>Task</dt><dd>{% if obj.task %}<a href="{% url 'projects:tsk_detail' obj.task_id %}">{{ obj.task }}</a>{% else %}&mdash;{% endif %}</dd>
+        <dt>Tags</dt><dd>{% if obj.tag_list %}{% for tag in obj.tag_list %}<span class="badge badge-slate">{{ tag }}</span> {% endfor %}{% else %}&mdash;{% endif %}</dd>
+        <dt>Description</dt><dd>{% if obj.description %}{{ obj.description|linebreaksbr }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Search copy</dt><dd>{% if obj.extracted_text %}{{ obj.extracted_text|length }} characters of the current approved revision are searchable.{% else %}<span class="text-muted">Nothing stored &mdash; no approved revision yet, or the file carries no text layer (a scan has none).</span>{% endif %}</dd>
+        <dt>Registered by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}&mdash;{% endif %} on {{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+      {% if obj.extraction_note %}<p class="text-muted">Last extraction note: {{ obj.extraction_note }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Check-out lock</h2>
+      {% if obj.is_locked %}<span class="badge badge-amber">Checked out</span>{% else %}<span class="badge badge-green">Available</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% comment %}
+        The lock is COOPERATIVE: it signals that somebody in this installation has the record open,
+        and any member may release it. It is not an OS-level file lock, and it cannot stop a person
+        from editing a copy on their own desktop. A stale lock must never deadlock a document, which
+        is exactly why check-in is open to everyone.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <dt>Held by</dt><dd>{% if obj.checked_out_by %}{{ obj.checked_out_by.get_full_name|default:obj.checked_out_by.email }}{% else %}Nobody{% endif %}</dd>
+        <dt>Since</dt><dd>{% if obj.checked_out_at %}{{ obj.checked_out_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd>
+      </dl>
+      <p class="text-muted">This is an in-app signal, not an enforced file lock: it says a teammate has the record open, and it refuses a second check-out and a revision upload while held. Any member may check it back in, so a stale lock cannot deadlock the document.</p>
+      <div class="form-actions">
+        {% if obj.is_locked %}
+          <form method="post" action="{% url 'projects:pdm_checkin' obj.pk %}" onsubmit="return confirm('Check {{ obj.number }} back in? The next revision may then be uploaded.');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="log-out"></i> Check in</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'projects:pdm_checkout' obj.pk %}" onsubmit="return confirm('Check {{ obj.number }} out? Teammates will see that you are editing it.');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Check out</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'projects:pdm_reindex' obj.pk %}" onsubmit="return confirm('Re-run text extraction on the current approved revision of {{ obj.number }}?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Re-index search copy</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Legal hold</h2>
+      {% if obj.is_legal_hold %}<span class="badge badge-red">Under hold</span>{% else %}<span class="badge badge-green">Not held</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Reason</dt><dd>{% if obj.hold_reason %}{{ obj.hold_reason }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Placed by</dt><dd>{% if obj.held_by %}{{ obj.held_by.get_full_name|default:obj.held_by.email }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Placed at</dt><dd>{% if obj.held_at %}{{ obj.held_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd>
+      </dl>
+      <p class="text-muted">A hold outranks everything else: while it is in place this record may not be <strong>archived</strong> and may not be <strong>deleted</strong>, and no new revision may be approved onto it. That is the whole guarantee &mdash; automatic destruction and legal-hold <em>enforcement</em> are Module 13.9/13.14's.</p>
+      {% if obj.is_legal_hold %}
+        <form method="post" action="{% url 'projects:pdm_release' obj.pk %}" onsubmit="return confirm('Release the legal hold on {{ obj.number }}?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="unlock"></i> Release hold</button>
+        </form>
+      {% else %}
+        <form method="post" action="{% url 'projects:pdm_hold' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_hold_reason">Reason for the hold</label>
+            <input type="text" name="hold_reason" id="id_hold_reason" class="form-input" maxlength="255" placeholder="e.g. litigation hold raised 2026-09-01">
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Place legal hold</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Archive</h2>
+      {% if obj.is_archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-green">In the live register</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Archived by</dt><dd>{% if obj.archived_by %}{{ obj.archived_by.get_full_name|default:obj.archived_by.email }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Archived at</dt><dd>{% if obj.archived_at %}{{ obj.archived_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd>
+      </dl>
+      <p class="text-muted">Archiving takes the record out of the live register while keeping it readable through the archive lens. It is the honest alternative to deleting evidence, and it is refused while a legal hold is in place.</p>
+      <form method="post" action="{% url 'projects:pdm_archive' obj.pk %}" onsubmit="return confirm('{% if obj.is_archived %}Restore{% else %}Archive{% endif %} {{ obj.number }}?{% if not obj.is_archived %} It leaves the live register and stays readable through the archive lens.{% endif %}');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_archived %}rotate-ccw{% else %}archive{% endif %}"></i> {% if obj.is_archived %}Restore to the register{% else %}Archive this document{% endif %}</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Revision history</h2>
+      <span class="badge badge-slate">{{ revisions|length }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Rev</th><th>File</th><th>Status</th><th>Uploaded</th><th>Approved by</th><th>Change note</th><th>Search copy</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for rev in revisions %}
+            <tr>
+              <td class="fw-600">v{{ rev.revision_no }}</td>
+              <td>
+                {% if rev.file %}<a href="{{ rev.file.url }}" target="_blank" rel="noopener">{{ rev.file.name|truncatechars:34 }}</a>
+                {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+                {% if rev.checksum %}<div class="text-muted">sha256 {{ rev.checksum|truncatechars:16 }}</div>{% endif %}
+              </td>
+              <td>
+                {% if rev.is_current and rev.is_approved %}<span class="badge badge-green">Current</span>
+                {% elif rev.is_approved %}<span class="badge badge-info">Approved</span>
+                {% else %}<span class="badge badge-slate">Pending approval</span>{% endif %}
+              </td>
+              <td>
+                {% if rev.uploaded_by %}{{ rev.uploaded_by.get_full_name|default:rev.uploaded_by.email }}{% else %}&mdash;{% endif %}
+                <div class="text-muted">{{ rev.created_at|date:"M d, Y H:i" }}</div>
+              </td>
+              <td>
+                {% if rev.approved_by %}{{ rev.approved_by.get_full_name|default:rev.approved_by.email }}{% else %}&mdash;{% endif %}
+                {% if rev.approved_at %}<div class="text-muted">{{ rev.approved_at|date:"M d, Y H:i" }}</div>{% endif %}
+              </td>
+              <td>{% if rev.change_note %}{{ rev.change_note|truncatechars:50 }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td>
+                {% if rev.extracted_text %}<span class="badge badge-info">{{ rev.extracted_text|length }} chars</span>
+                {% else %}<span class="text-muted">none</span>{% endif %}
+                {% if rev.extraction_note %}<div class="text-muted">{{ rev.extraction_note|truncatechars:40 }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:pdv_compare' %}?a={{ rev.pk }}{% if current and current.pk != rev.pk %}&amp;b={{ current.pk }}{% endif %}" class="btn-icon" title="Compare metadata"><i data-lucide="git-compare"></i></a>
+                  {% if not rev.is_approved %}
+                    <form method="post" action="{% url 'projects:pdv_approve' rev.pk %}" onsubmit="return confirm('Approve revision {{ rev.revision_no }} of {{ obj.number }}? It becomes the current version and the pointer moves forward.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check-circle"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if rev.is_approved and not rev.is_current %}
+                    <form method="post" action="{% url 'projects:pdv_restore' rev.pk %}" onsubmit="return confirm('Restore revision {{ rev.revision_no }}? Its file is re-uploaded as a NEW revision — history is never rewritten. Approve the new one to make it current.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Restore forward"><i data-lucide="rotate-ccw"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if not rev.is_approved %}
+                    <form method="post" action="{% url 'projects:pdv_delete' rev.pk %}" onsubmit="return confirm('Delete unapproved revision {{ rev.revision_no }}? The number is not reused, so a gap is left. This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="history"></i><h3>No revisions yet</h3><p>Upload revision 1 to start the chain. It lands unapproved, and the pointer does not move until somebody approves it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        This is a METADATA history: rev number, file, status, uploader, approver, timestamp and
+        change note. It is deliberately NOT a document diff — bytes are never compared beyond the
+        checksum, and redlining, track-changes and side-by-side text are Module 13.2's.
+      {% endcomment %}
+      <p class="text-muted">This history is <strong>metadata</strong> only &mdash; who uploaded what, who approved it, when, and why. It is not a document diff: redlining, track-changes and side-by-side text comparison are Module 13.2's.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Upload the next revision</h2></div>
+    <div class="card-body">
+      {% if obj.is_locked %}
+        <p class="text-muted">{{ obj.number }} is checked out by {% if obj.checked_out_by %}{{ obj.checked_out_by.get_full_name|default:obj.checked_out_by.email }}{% else %}somebody{% endif %} &mdash; check it in before uploading, because whoever holds the check-out wins.</p>
+      {% elif obj.is_legal_hold %}
+        <p class="text-muted">{{ obj.number }} is under legal hold. A revision may still be uploaded, but it may not be approved while the hold is in place &mdash; a hold freezes what it is holding.</p>
+      {% endif %}
+      <form method="post" action="{% url 'projects:pdv_upload' obj.pk %}" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="document" value="{{ obj.pk }}">
+        {% for e in upload_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-group">
+          <label class="form-label" for="{{ upload_form.file.id_for_label }}">File <span class="req">*</span></label>
+          {{ upload_form.file }}
+          <div class="form-help">Allowed: .pdf .doc .docx .xls .xlsx .ppt .pptx .txt .csv .md .png .jpg .jpeg .gif .svg .dwg .dxf .zip &mdash; up to 20 MB. A PDF with a text layer and a plain-text file are read for search; a scan is stored, downloadable and simply not readable as text.</div>
+          {% for e in upload_form.file.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ upload_form.change_note.id_for_label }}">What changed</label>
+          {{ upload_form.change_note }}
+          <div class="form-help">One line somebody can scan in the history table.</div>
+          {% for e in upload_form.change_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="upload"></i> Upload revision</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Where this record sits</h2></div>
+    <div class="card-body">
+      {% comment %}
+        Two shelves, deliberately kept apart. This page is the PROJECT REPOSITORY: it owns the
+        folder, the revision chain, the check-out lock and retention. 7.9's share register records
+        who in the project may do what with a document, and it points at the generic workspace
+        attachment table instead. Neither is a second copy of the other, and this page never
+        writes to the share register.
+      {% endcomment %}
+      <p class="text-muted">This row lives in the <strong>project repository</strong> &mdash; it owns the folder, the revision chain, the check-out lock and the retention intent. It is not the generic workspace attachment drawer, and it is not the share register: <a href="{{ share_register_url }}">7.9's shared document register</a> records who in the project may do what with a file.</p>
+      <div class="form-actions">
+        <a href="{{ share_register_url }}" class="btn btn-outline"><i data-lucide="share-2"></i> Open the share register for this project</a>
+        <a href="{% url 'projects:pdv_list' %}?document={{ obj.pk }}" class="btn btn-outline"><i data-lucide="history"></i> This document in the revision log</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:pdm_list' %}" class="btn btn-outline">Back to Register</a>
+    <a href="{% url 'projects:doc_retention' %}" class="btn btn-outline">Retention board</a>
+    <form method="post" action="{% url 'projects:pdm_delete' obj.pk %}" onsubmit="return confirm('Delete document {{ obj.number }}? A record under legal hold, or one carrying an approved revision, is refused. This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
