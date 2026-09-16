@@ -98,8 +98,7 @@ def pdm_detail(request, pk):
         "obj": obj,
         "revisions": revisions,
         "current": obj.current_revision,
-        "upload_form": ProjectDocumentRevisionUploadForm(tenant=request.tenant, initial={
-            "document": obj.pk}),
+        "upload_form": ProjectDocumentRevisionUploadForm(tenant=request.tenant, document=obj),
         "share_register_url": f"/projects/shared-documents/?project={obj.project_id}",
     })
 
