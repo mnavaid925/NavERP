@@ -8379,6 +8379,21 @@ Three things are worth carrying forward from this review as *method*, not just a
 0 failures**) plus the four existing lanes continuing to pass. That is a real gap in the close-out
 and the first item of the next pass.
 
+**The dev database was NOT restored.** The close-out intended to finish with `seed_projects --flush`
++ `seed_projects`; the permission request was **declined by the user**, so the drift recorded as I12
+stands: acme has 0 pending revisions (documented shape: 4), documents `PDM-00011`/`00012`/`00022`
+sit in `approved` rather than `draft`, and there are 9 `kind="due_date"` notifications and 14
+truncated `retention_` audit rows from the smoke and the probes. A plain `seed_projects` cannot fix
+it (the 7.10 block is guarded on the folder tree), and `temp/restore_710_acme.py` — which converged
+acme onto globex's untouched copy — is the non-destructive alternative. **Anything that reads the
+seeded shape off the live DB will be misled; read it off `_docmgt` instead.**
+
+**The close-out's own method is worth carrying.** Three things in this review were caught only by
+refusing to accept a confident answer: two of lane 1's coverage claims were false (the cycle guard,
+and "the only instance repo-wide"), lane 3's XSS payload was the dead shape while its mechanism was
+right, and **the orchestrator's own first C2 re-probe was wrong** — it passed `None` and read as
+"still broken". Verify the probe, then the fix, then the claim.
+
 ### Later passes / deferred
 
 - [ ] **Document diff / redline / track-changes comparison** — 7.10 compares revision METADATA
