@@ -140,8 +140,14 @@ class ProjectFolder(TenantNumbered):
             raise ValidationError(errors)
 
     def _is_descendant_of(self, candidate):
-        """True when ``candidate`` is this folder or one of its descendants (a cycle in the making)."""
-        seen, node = {self.pk}, candidate
+        """True when ``candidate`` is this folder or one of its descendants (a cycle in the making).
+
+        ``seen`` starts EMPTY and the equality test runs FIRST: seeding it with ``self.pk`` made the
+        membership guard fire before the equality test, so the walk exited exactly when it reached
+        ``self`` and the method could never return ``True`` — a folder cycle was creatable through
+        the ordinary edit form and ``_decorate``'s ``walk(None, …)`` then dropped the branch.
+        """
+        seen, node = set(), candidate
         while node is not None and node.pk not in seen:
             if node.pk == self.pk:
                 return True
