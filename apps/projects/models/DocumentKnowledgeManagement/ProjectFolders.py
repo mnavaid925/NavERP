@@ -127,12 +127,17 @@ class ProjectFolder(TenantNumbered):
                 errors["parent"] = "The parent folder belongs to another project."
             elif self.pk and self._is_descendant_of(parent):
                 errors["parent"] = "That would move the folder inside its own subtree."
-        elif getattr(self, "project_id", None) and self.pk:
+        elif getattr(self, "project_id", None):
             # Two ROOT folders with the same name are refused here because a MySQL unique index
             # treats NULL parents as distinct (the `unique_together` above cannot catch them).
+            # This runs on CREATE as well as edit: the index covers the NULL-parent case not at
+            # all, so gating on `self.pk` left the create path — the only path `pfd_create` uses —
+            # with no guard whatsoever and two identical `full_path`s in the tree.
             clash = type(self).objects.filter(
                 tenant_id=self.tenant_id, project_id=self.project_id, parent__isnull=True,
-                name__iexact=name).exclude(pk=self.pk)
+                name__iexact=name)
+            if self.pk:
+                clash = clash.exclude(pk=self.pk)
             if clash.exists():
                 errors["name"] = "This project already has a root folder with that name."
 
