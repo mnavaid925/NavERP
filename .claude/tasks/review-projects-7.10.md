@@ -903,14 +903,32 @@ says outright that it describes the **code**, not the live DB, and names the mea
 **DB-restore half** is `seed_projects --flush` + `seed_projects`, which this pass was instructed not
 to run.
 
-**Measured drift at the end of this pass (evidence for the close-out's re-seed):** 0 pending
-revisions (shape says 4); 6 `kind="due_date"` notifications the seeder never creates; 13
-`retention_`-truncated `AuditLog` rows (the C5 evidence); and **two seeded acme documents damaged by
-the I3 probe before it was rewritten** — `PDM-00003` ("Monthly status report - August") was deleted,
-and `PDM-00005` ("Baseline schedule v3") carries the title "I3 probe doc" with its folder, type,
-classification, tags, description and `review_on` overwritten. The probe is now non-polluting (per-run
-title, id-watermark detection, a throwaway row for its EDIT half), so this cannot recur; a re-seed
-restores both rows.
+**Drift measured, then repaired.** The probes are Django scripts that log in through the test client
+and POST real forms at the **dev** DB, so the fixture drifted. Two kinds of damage:
+
+* an early `temp/verify_i3_status_choices.py` POSTed to `pdm_delete` with a hard-coded title, so it
+  deleted acme's `PDM-00001`..`PDM-00003` and renamed `PDM-00005` ("Baseline schedule v3") to
+  "I3 probe doc", with its folder, type, classification, tags, description and `review_on`
+  overwritten;
+* an approval-exercising probe approved all four of acme's pending revisions
+  (`PDM-00010/00011/00012/00022`), which lifted `PDM-00011`, `PDM-00012` and `PDM-00022` out of
+  `draft`, moved their pointers, and left a debug revision (`i6dbg.txt`, no. 103) on `PDM-00022`.
+
+`seed_projects` cannot put that back — the 7.10 block is guarded on
+`ProjectFolder.objects.filter(tenant=tenant).exists()`, so a plain re-seed is a no-op, and `--flush`
+was out of bounds for this pass. Instead `temp/restore_710_acme.py` converged acme's 7.10 rows onto
+**globex's untouched copy of the same seeded set** (the seeder seeds every tenant identically, so
+globex is the reference). acme now matches globex field-for-field: **22 documents, 23 revisions,
+4 pending revisions, 0 mismatched documents** — the three deleted rows are back, `PDM-00005` is
+itself again, the four stray approvals are un-approved, the debug revision and its file are gone, and
+`smoke_710.py` is back to 169/0. The I3 probe is now non-polluting (per-run title, id-watermark
+detection, a throwaway row for its EDIT half), so this cannot recur.
+
+**Drift the seeder cannot express, left for the close-out's re-seed:** 9 `kind="due_date"`
+`ProjectNotification` rows (7.9's, minted by the retention board's real verb) and 14
+`retention_`-truncated `AuditLog` rows (the C5 evidence — `acknowledg` / `amendment_` are the same
+truncation on other actions). Both are append-only history the seeder never writes; deleting them
+would be rewriting it.
 
 ## Cross-module items carried, not dropped
 
