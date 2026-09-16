@@ -93,9 +93,11 @@
                 <div class="table-actions">
                   <a href="{% url 'projects:pdm_detail' rev.document_id %}" class="btn-icon" title="View the document and compare its revisions"><i data-lucide="eye"></i></a>
                   {% if not rev.is_approved %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'projects:pdv_approve' rev.pk %}" onsubmit="return confirm('Approve revision {{ rev.revision_no }} of {{ rev.document.number }}? It becomes the current version and the pointer moves forward.');">
                       {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check-circle"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                   {% if rev.is_approved and not rev.is_current %}
                     <form method="post" action="{% url 'projects:pdv_restore' rev.pk %}" onsubmit="return confirm('Restore revision {{ rev.revision_no }}? Its file is re-uploaded as a NEW revision — history is never rewritten.');">
@@ -103,9 +105,11 @@
                     </form>
                   {% endif %}
                   {% if not rev.is_approved %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'projects:pdv_delete' rev.pk %}" onsubmit="return confirm('Delete unapproved revision {{ rev.revision_no }}? The number is not reused, so a gap is left.');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
