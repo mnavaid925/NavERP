@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Standards Library{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Standards Library</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><span>Standards</span></div>
+      <p class="text-muted">The file-backed formats the PMO publishes: the charter template, the plan format, the status-report format, the minutes format, the handover checklist. This register is <strong>tenant-wide on purpose</strong> &mdash; a standard belongs to the organisation, not to one project, which is what stops the standard charter format becoming forty copies of itself.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:dtm_create' %}" class="btn btn-primary"><i data-lucide="file-plus"></i> Publish a Standard</a>
+      <a href="{% url 'projects:kne_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Knowledge Library</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, name, version or description&hellip;">
+        </div>
+        <div class="form-group">
+          <select name="category" aria-label="Category" class="form-select">
+            <option value="">Any category</option>
+            {% for value, label in category_choices %}
+              <option value="{{ value }}" {% if request.GET.category == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Publish state" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Published</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Retired</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'projects:dtm_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      {% comment %}
+        Two shelves, deliberately kept apart. This register holds only FILE-BACKED standards — an
+        artifact with a file and a publishable version. A standard that is written prose lives in
+        the knowledge library with kind="template"/"standard", so the two registers never both
+        hold "how we write a charter".
+      {% endcomment %}
+      <p class="text-muted">Only <strong>file-backed</strong> standards live here. A written standard that is prose belongs in the <a href="{% url 'projects:kne_list' %}">knowledge library</a> instead &mdash; deliberately two lenses, never two near-duplicate tables.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Number</th><th>Name</th><th>Category</th><th>Version</th><th>File</th><th>Owner</th><th>Review due</th><th>State</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for t in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:dtm_detail' t.pk %}">{{ t.number }}</a></td>
+              <td>
+                {{ t.name|truncatechars:44 }}
+                {% if t.document_type %}<div class="text-muted">produces: {{ t.document_type }}</div>{% endif %}
+              </td>
+              <td>{{ t.get_category_display }}</td>
+              <td>{{ t.version }}</td>
+              <td>
+                {% if t.file %}<a href="{{ t.file.url }}" target="_blank" rel="noopener"><i data-lucide="download"></i> download</a>
+                {% else %}<span class="text-muted">prose only</span>{% endif %}
+              </td>
+              <td>{% if t.owner %}{{ t.owner.get_full_name|default:t.owner.email }}{% else %}&mdash;{% endif %}</td>
+              <td>{% if t.is_review_due %}<span class="badge badge-amber">Due</span> <span class="text-muted">{{ t.review_on|date:"M d, Y" }}</span>{% elif t.review_on %}<span class="text-muted">{{ t.review_on|date:"M d, Y" }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+              <td><span class="badge {{ t.status_css }}">{% if t.is_active %}Published{% else %}Retired{% endif %}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'projects:dtm_detail' t.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:dtm_edit' t.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:dtm_publish' t.pk %}" onsubmit="return confirm('{% if t.is_active %}Retire{% else %}Publish{% endif %} standard {{ t.number }}?{% if t.is_active %} It stays readable but leaves the active list.{% endif %}');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="{% if t.is_active %}Retire{% else %}Publish{% endif %}"><i data-lucide="{% if t.is_active %}archive{% else %}upload{% endif %}"></i></button>
+                  </form>
+                  <form method="post" action="{% url 'projects:dtm_delete' t.pk %}" onsubmit="return confirm('Delete standard {{ t.number }}? This cannot be undone.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="layout-template"></i><h3>No standards {% if q or request.GET.category or request.GET.is_active %}match{% else %}yet{% endif %}</h3><p>{% if q or request.GET.category or request.GET.is_active %}Nothing matches that lens &mdash; reset the filters, or widen the search.{% else %}Publish the charter template, or the format your status reports follow, so every project starts from the same page.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
