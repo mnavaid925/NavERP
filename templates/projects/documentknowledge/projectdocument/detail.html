@@ -114,15 +114,20 @@
       </dl>
       <p class="text-muted">A hold outranks everything else: while it is in place this record may not be <strong>archived</strong> and may not be <strong>deleted</strong>, and no new revision may be approved onto it. That is the whole guarantee &mdash; automatic destruction and legal-hold <em>enforcement</em> are Module 13.9/13.14's.</p>
       {% if obj.is_legal_hold %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'projects:pdm_release' obj.pk %}" onsubmit="return confirm('Release the legal hold on {{ obj.number }}?');">
           {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="unlock"></i> Release hold</button>
         </form>
+        {% else %}
+        <p class="text-muted">Releasing a hold is a workspace administrator's decision &mdash; ask one of them to lift it.</p>
+        {% endif %}
       {% else %}
         <form method="post" action="{% url 'projects:pdm_hold' obj.pk %}">
           {% csrf_token %}
           <div class="form-group">
-            <label class="form-label" for="id_hold_reason">Reason for the hold</label>
-            <input type="text" name="hold_reason" id="id_hold_reason" class="form-input" maxlength="255" placeholder="e.g. litigation hold raised 2026-09-01">
+            <label class="form-label" for="id_hold_reason">Reason for the hold <span class="req">*</span></label>
+            <input type="text" name="hold_reason" id="id_hold_reason" class="form-input" maxlength="255" required placeholder="e.g. litigation hold raised 2026-09-01">
+            <div class="form-help">Required &mdash; the hold freezes the record, so whoever releases it has to know what they are releasing. Any member may place a hold.</div>
           </div>
           <button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Place legal hold</button>
         </form>
@@ -141,9 +146,11 @@
         <dt>Archived at</dt><dd>{% if obj.archived_at %}{{ obj.archived_at|date:"M d, Y H:i" }}{% else %}&mdash;{% endif %}</dd>
       </dl>
       <p class="text-muted">Archiving takes the record out of the live register while keeping it readable through the archive lens. It is the honest alternative to deleting evidence, and it is refused while a legal hold is in place.</p>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
       <form method="post" action="{% url 'projects:pdm_archive' obj.pk %}" onsubmit="return confirm('{% if obj.is_archived %}Restore{% else %}Archive{% endif %} {{ obj.number }}?{% if not obj.is_archived %} It leaves the live register and stays readable through the archive lens.{% endif %}');">
         {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_archived %}rotate-ccw{% else %}archive{% endif %}"></i> {% if obj.is_archived %}Restore to the register{% else %}Archive this document{% endif %}</button>
       </form>
+      {% endif %}
     </div>
   </div>
 
@@ -189,9 +196,11 @@
                 <div class="table-actions">
                   <a href="{% url 'projects:pdv_compare' %}?a={{ rev.pk }}{% if current and current.pk != rev.pk %}&amp;b={{ current.pk }}{% endif %}" class="btn-icon" title="Compare metadata"><i data-lucide="git-compare"></i></a>
                   {% if not rev.is_approved %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'projects:pdv_approve' rev.pk %}" onsubmit="return confirm('Approve revision {{ rev.revision_no }} of {{ obj.number }}? It becomes the current version and the pointer moves forward.');">
                       {% csrf_token %}<button class="btn-icon" type="submit" title="Approve"><i data-lucide="check-circle"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                   {% if rev.is_approved and not rev.is_current %}
                     <form method="post" action="{% url 'projects:pdv_restore' rev.pk %}" onsubmit="return confirm('Restore revision {{ rev.revision_no }}? Its file is re-uploaded as a NEW revision — history is never rewritten. Approve the new one to make it current.');">
@@ -199,9 +208,11 @@
                     </form>
                   {% endif %}
                   {% if not rev.is_approved %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'projects:pdv_delete' rev.pk %}" onsubmit="return confirm('Delete unapproved revision {{ rev.revision_no }}? The number is not reused, so a gap is left. This cannot be undone.');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
@@ -274,8 +285,10 @@
   <div class="form-actions">
     <a href="{% url 'projects:pdm_list' %}" class="btn btn-outline">Back to Register</a>
     <a href="{% url 'projects:doc_retention' %}" class="btn btn-outline">Retention board</a>
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}
     <form method="post" action="{% url 'projects:pdm_delete' obj.pk %}" onsubmit="return confirm('Delete document {{ obj.number }}? A record under legal hold, or one carrying an approved revision, is refused. This cannot be undone.');">
       {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
     </form>
+    {% endif %}
   </div>
 {% endblock %}
