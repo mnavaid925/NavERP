@@ -71,9 +71,11 @@
                 <div class="table-actions">
                   <a href="{% url 'projects:dtm_detail' t.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'projects:dtm_edit' t.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
                   <form method="post" action="{% url 'projects:dtm_publish' t.pk %}" onsubmit="return confirm('{% if t.is_active %}Retire{% else %}Publish{% endif %} standard {{ t.number }}?{% if t.is_active %} It stays readable but leaves the active list.{% endif %}');">
                     {% csrf_token %}<button class="btn-icon" type="submit" title="{% if t.is_active %}Retire{% else %}Publish{% endif %}"><i data-lucide="{% if t.is_active %}archive{% else %}upload{% endif %}"></i></button>
                   </form>
+                  {% endif %}
                   <form method="post" action="{% url 'projects:dtm_delete' t.pk %}" onsubmit="return confirm('Delete standard {{ t.number }}? This cannot be undone.');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
