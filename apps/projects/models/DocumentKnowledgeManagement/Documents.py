@@ -115,6 +115,30 @@ def validate_upload(uploaded_file, label="file"):
     return None
 
 
+def purge_stored_files(model, names):
+    """Unlink stored payloads that no row of ``model`` references any more; return what went.
+
+    Django never removes a ``FileField``'s bytes when its row goes, so without this every delete
+    leaves the payload on disk at a URL the media handler keeps serving — and this sub-module's
+    whole point is documents classified ``confidential`` and payloads under legal hold.
+
+    The purge is REFERENCE-COUNTED on purpose: ``pdv_restore`` deliberately re-uploads an older
+    revision's file by assigning the SAME ``FieldFile`` (two rows, one path), so a bare
+    ``instance.file.delete()`` would blank the payload out from under the surviving row. Call it
+    AFTER the row(s) have been deleted, so the row being removed does not count as a reference to
+    itself.
+    """
+    from django.core.files.storage import default_storage
+
+    purged = []
+    for name in {candidate for candidate in names if candidate}:
+        if model.objects.filter(file=name).exists():
+            continue
+        default_storage.delete(name)
+        purged.append(name)
+    return purged
+
+
 class ProjectDocument(TenantNumbered):
     NUMBER_PREFIX = "PDM"
 
