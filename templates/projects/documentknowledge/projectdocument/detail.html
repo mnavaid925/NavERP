@@ -243,7 +243,11 @@
       {% endif %}
       <form method="post" action="{% url 'projects:pdv_upload' obj.pk %}" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
-        <input type="hidden" name="document" value="{{ obj.pk }}">
+        {% comment %}
+          No hidden `document` input: the view takes the parent from the URL and assigns it inside
+          the transaction, so a posted value could only ever be a confused deputy for the
+          check-out lock.
+        {% endcomment %}
         {% for e in upload_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
         <div class="form-group">
           <label class="form-label" for="{{ upload_form.file.id_for_label }}">File <span class="req">*</span></label>
