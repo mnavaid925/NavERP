@@ -2437,9 +2437,14 @@ class Command(BaseCommand):
                 row.held_by = approver
                 row.held_at = now - timedelta(days=12)
             if archived:
+                # Mirrors `pdm_archive` exactly: the status the row carried is STAMPED before the
+                # verb overwrites it, so un-archiving restores it instead of guessing. `status` is
+                # therefore the PRE-archive state on these calls, not "archived".
+                row.pre_archive_status = row.status
                 row.is_archived = True
                 row.archived_by = approver
                 row.archived_at = now - timedelta(days=30)
+                row.status = "archived"
             if checked_out:
                 row.is_checked_out = True
                 row.checked_out_by = holder
@@ -2604,10 +2609,10 @@ class Command(BaseCommand):
             specs, "Integration plan (superseded)", "plan", tags="integration",
             retention_months=36, age_days=300)
         d_arch_a = document(
-            legacy, "Legacy migration spike report", "report", status="archived",
+            legacy, "Legacy migration spike report", "report", status="approved",
             tags="legacy, migration", archived=True, age_days=500)
         d_arch_b = document(
-            legacy, "2025 status pack", "status_update", status="archived", tags="status, 2025",
+            legacy, "2025 status pack", "status_update", status="approved", tags="status, 2025",
             archived=True, age_days=450)
         d_other_charter = d_other_plan = None
         if other_gov is not None:
