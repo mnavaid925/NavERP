@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:dtm_list' %}">Standards</a><span class="sep">&rsaquo;</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">A published format for project deliverables &mdash; the standard the organisation writes from. Version {{ obj.version }}, {{ obj.get_category_display|lower }}.</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.file %}<a href="{{ obj.file.url }}" target="_blank" rel="noopener" class="btn btn-primary"><i data-lucide="download"></i> Download the standard</a>{% endif %}
+      <form method="post" action="{% url 'projects:dtm_publish' obj.pk %}" onsubmit="return confirm('{% if obj.is_active %}Retire{% else %}Publish{% endif %} standard {{ obj.number }}?{% if obj.is_active %} It stays readable but leaves the active list.{% endif %}');">
+        {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_active %}archive{% else %}upload{% endif %}"></i> {% if obj.is_active %}Retire{% else %}Publish{% endif %}</button>
+      </form>
+      <a href="{% url 'projects:dtm_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Standard</h2>
+      <span class="badge {{ obj.status_css }}">{% if obj.is_active %}Published{% else %}Retired{% endif %}</span>
+      {% if obj.is_format_locked %}<span class="badge badge-slate">Format lock recorded</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <dt>Number</dt><dd>{{ obj.number }}</dd>
+        <dt>Category</dt><dd>{{ obj.get_category_display }}</dd>
+        <dt>Produces</dt><dd>{% if obj.document_type %}{{ obj.document_type }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Version</dt><dd>{{ obj.version }}</dd>
+        <dt>File</dt><dd>{% if obj.file %}<a href="{{ obj.file.url }}" target="_blank" rel="noopener">{{ obj.file.name }}</a>{% else %}<span class="text-muted">prose only &mdash; no file attached</span>{% endif %}</dd>
+        <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Review on</dt><dd>{% if obj.review_on %}{{ obj.review_on|date:"M d, Y" }}{% if obj.is_review_due %} <span class="badge badge-amber">Due</span>{% endif %}{% else %}&mdash;{% endif %}</dd>
+        <dt>Description</dt><dd>{% if obj.description %}{{ obj.description|linebreaksbr }}{% else %}&mdash;{% endif %}</dd>
+        <dt>Published by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.email }}{% else %}&mdash;{% endif %} on {{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>What this register is, and is not</h2></div>
+    <div class="card-body">
+      {% comment %}
+        Two honest limits, stated where somebody would otherwise assume otherwise. First: the
+        format lock is an INTENT a human reads. Nothing in this sub-module enforces authorship or
+        formatting, so no page may claim it does. Second: there is no "generate a document from
+        this standard" affordance, because stamping project data into a standard is an authoring
+        engine (Module 13.1) — the closest honest verb this pass ships is the download above.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <dt>Format lock</dt>
+        <dd>
+          {% if obj.is_format_locked %}
+            Recorded as frozen by policy. This is an <strong>intent</strong> the PMO notes, not an enforcement: nothing in this sub-module stops anyone editing a copy of the file.
+          {% else %}
+            No format lock recorded.
+          {% endif %}
+        </dd>
+        <dt>Generating from it</dt>
+        <dd>Not offered here. Merging project data into a standard &mdash; merge fields, locked formatting, co-editing &mdash; is an authoring engine and belongs to <strong>Module 13.1</strong>. Downloading the file and filling it in is the honest workflow at this stage.</dd>
+        <dt>Version chain</dt>
+        <dd>None, deliberately. A standard is not a controlled project record: re-publishing edits this row. Attaching one to a project copies it into the <a href="{% url 'projects:pdm_list' %}">document register</a>, where the revision chain and retention then apply to the copy.</dd>
+        <dt>Where a project uses it</dt>
+        <dd>A project that adopts this format registers its own copy as a document. The standard stays one row here for the whole organisation.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'projects:dtm_list' %}" class="btn btn-outline">Back to Standards</a>
+    <form method="post" action="{% url 'projects:dtm_delete' obj.pk %}" onsubmit="return confirm('Delete standard {{ obj.number }}? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+{% endblock %}
