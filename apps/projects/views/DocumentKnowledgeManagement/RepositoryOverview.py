@@ -19,7 +19,10 @@ def doc_repository(request):
     tenant = request.tenant
     if tenant is None:
         return redirect("dashboard:home")
-    documents = ProjectDocument.objects.filter(tenant=tenant)
+    # `extracted_text` is DEFERRED on the base queryset: this page reads counts and a ten-row
+    # recent shelf, and no tile renders the search copy — which can hold `EXTRACT_MAX_CHARS`
+    # characters per row. The retention tile below narrows further with its own `.only(...)`.
+    documents = ProjectDocument.objects.filter(tenant=tenant).defer("extracted_text")
     figures = {
         "document_count": documents.count(),
         "folder_count": ProjectFolder.objects.filter(tenant=tenant).count(),
