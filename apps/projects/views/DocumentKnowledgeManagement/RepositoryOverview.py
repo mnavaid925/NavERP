@@ -8,6 +8,8 @@ Every figure here is a single aggregated COUNT over a tenant-scoped queryset, co
 Nothing is stored, because a stored tile goes stale the instant a document is approved (the 7.4 EVM
 / 7.5 simulation / 7.6 / 7.8 / 7.9 rulings).
 """
+from django.db.models import Count
+
 from apps.projects.models import DocumentTemplate, KnowledgeEntry, ProjectDocument, ProjectFolder
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import login_required, redirect, render
@@ -38,11 +40,15 @@ def doc_repository(request):
     }
     recent = (documents.select_related("project", "folder", "owner")
               .order_by("-created_at", "-id")[:10])
-    by_type = {}
-    for doc_type, label in ProjectDocument.DOC_TYPE_CHOICES:
-        count = documents.filter(document_type=doc_type).count()
-        if count:
-            by_type[label] = count
+    # ONE grouped query, not one COUNT per doc-type choice: the loop this replaces issued eleven
+    # round-trips for a single figure. `DOC_TYPE_CHOICES` still supplies the label AND the order —
+    # the dict keeps only the types that have rows, which is the template's contract.
+    labels = dict(ProjectDocument.DOC_TYPE_CHOICES)
+    tally = dict(documents.values_list("document_type")
+                 .annotate(n=Count("pk")).values_list("document_type", "n"))
+    by_type = {labels[value]: tally[value]
+               for value, _label in ProjectDocument.DOC_TYPE_CHOICES
+               if tally.get(value)}
     return render(request, "projects/documentknowledge/overview.html", {
         "figures": figures,
         "recent_documents": recent,
