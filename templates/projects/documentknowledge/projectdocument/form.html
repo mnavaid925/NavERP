@@ -4,7 +4,7 @@
   <div class="page-header"><div>
     <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}Register a Document{% endif %}</h1>
     <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdm_list' %}">Register</a><span class="sep">&rsaquo;</span><span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span></div>
-    {% if is_edit %}<p class="text-muted">{{ obj.title|default:"expected placeholder" }} &mdash; the file itself lives in the revision chain below, never here.</p>{% endif %}
+    {% if is_edit %}<p class="text-muted">{{ obj.title }} &mdash; the file itself lives in the revision chain below, never here.</p>{% endif %}
   </div></div>
 
   <form method="post" novalidate>
@@ -30,7 +30,7 @@
         search copy are absent for the same reason: only the revision verbs and the re-index Run
         write them.
       {% endcomment %}
-      <p class="text-muted">Set <strong>Status</strong> to <em>Expected</em> to create a named placeholder before the file exists &mdash; that is the one state where a title may be left blank. Uploading a file, approving a revision, checking the record out and placing a legal hold all happen on the document's own page.</p>
+      <p class="text-muted">Set <strong>Status</strong> to <em>Expected</em> to create a named placeholder before the file exists &mdash; name the slot now and upload the file when it arrives, because a <strong>title is required in every state</strong> and the placeholder has to be findable from the moment it exists. Uploading a file, approving a revision, checking the record out and placing a legal hold all happen on the document's own page.</p>
     </div></div>
 
     <div class="form-actions">
