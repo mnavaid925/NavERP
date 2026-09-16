@@ -39,7 +39,7 @@ def pdv_upload(request, document_pk):
     document = get_object_or_404(ProjectDocument, pk=document_pk, tenant=request.tenant)
     if request.method == "POST":
         form = ProjectDocumentRevisionUploadForm(request.POST, request.FILES,
-                                                 tenant=request.tenant)
+                                                 tenant=request.tenant, document=document)
         if form.is_valid():
             uploaded = request.FILES.get("file")
             with transaction.atomic():
@@ -69,8 +69,7 @@ def pdv_upload(request, document_pk):
                                       f"approves it.")
             return redirect("projects:pdm_detail", pk=document.pk)
     else:
-        form = ProjectDocumentRevisionUploadForm(tenant=request.tenant,
-                                                 initial={"document": document.pk})
+        form = ProjectDocumentRevisionUploadForm(tenant=request.tenant, document=document)
     return render(request, "projects/documentknowledge/projectdocumentrevision/form.html",
                   {"form": form, "document": document})
 
