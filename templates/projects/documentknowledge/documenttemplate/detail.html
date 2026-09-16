@@ -9,9 +9,11 @@
     </div>
     <div class="page-actions">
       {% if obj.file %}<a href="{{ obj.file.url }}" target="_blank" rel="noopener" class="btn btn-primary"><i data-lucide="download"></i> Download the standard</a>{% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
       <form method="post" action="{% url 'projects:dtm_publish' obj.pk %}" onsubmit="return confirm('{% if obj.is_active %}Retire{% else %}Publish{% endif %} standard {{ obj.number }}?{% if obj.is_active %} It stays readable but leaves the active list.{% endif %}');">
         {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="{% if obj.is_active %}archive{% else %}upload{% endif %}"></i> {% if obj.is_active %}Retire{% else %}Publish{% endif %}</button>
       </form>
+      {% endif %}
       <a href="{% url 'projects:dtm_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
     </div>
   </div>
