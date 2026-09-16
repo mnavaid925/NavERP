@@ -528,7 +528,10 @@ class ProjectFolderAdmin(admin.ModelAdmin):
     list_filter = ("is_archived", "project")
     list_select_related = ("tenant", "project", "parent")
     search_fields = ("number", "name", "description")
-    readonly_fields = ("created_by", "created_at", "updated_at")
+    # The archive state and both stamps are written by the pfd_archive toggle — an admin-form edit
+    # would mint an archive with no one behind it (the ChannelAdmin precedent, same file).
+    readonly_fields = ("is_archived", "archived_by", "archived_at", "created_by", "created_at",
+                       "updated_at")
 
 
 @admin.register(ProjectDocument)
@@ -539,17 +542,33 @@ class ProjectDocumentAdmin(admin.ModelAdmin):
     list_filter = ("document_type", "status", "classification", "is_archived", "is_legal_hold")
     list_select_related = ("tenant", "project", "folder", "owner")
     search_fields = ("number", "title", "tags", "extracted_text")
-    # The pointer, the search copy, the lock and the hold are all VERB-WRITTEN state: an admin edit
-    # would forge the one thing the register exists to attest (who checked what out, and when).
+    # The pointer, the search copy, the lock, the hold AND the archive are all VERB-WRITTEN state:
+    # an admin edit would forge the one thing the register exists to attest (who checked what out,
+    # and when). `is_archived`/`archived_by`/`archived_at` belong to pdm_archive alone — leaving
+    # them writable let an admin archive a HELD record by typing, which the model's clean() refuses.
     readonly_fields = ("current_revision_no", "extracted_text", "is_checked_out", "checked_out_by",
                        "checked_out_at", "is_legal_hold", "hold_reason", "held_by", "held_at",
-                       "created_by", "created_at", "updated_at")
+                       "is_archived", "archived_by", "archived_at", "created_by", "created_at",
+                       "updated_at")
+
+    def has_delete_permission(self, request, obj=None):
+        """Refuse to delete a row under legal hold.
+
+        The admin delete path never runs `clean()`, so the model's hold rule is not consulted there:
+        without this, a superuser could destroy a held record that every in-app verb refuses.
+        """
+        if obj is not None and obj.is_legal_hold:
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(ProjectDocumentRevision)
 class ProjectDocumentRevisionAdmin(admin.ModelAdmin):
-    # Read-only by construction (structural immutability): no add, no change - the row is created by
-    # the upload verb and stamped by the approve verb, and admin is not a second upload path.
+    # Read-only by construction (structural immutability): no add, no change, no delete - the row is
+    # created by the upload verb and stamped by the approve verb, and admin is not a second upload
+    # path. `has_delete_permission` matters as much as the other two: an approved revision is the
+    # EVIDENCE this module exists to keep, and the admin delete path runs no `full_clean()` and
+    # writes no AuditLog row (the TaskBlockAdmin precedent, same file).
     list_display = ("document", "revision_no", "is_approved", "checksum", "uploaded_by",
                     "created_at", "tenant")
     list_filter = ("is_approved",)
@@ -563,6 +582,9 @@ class ProjectDocumentRevisionAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 
