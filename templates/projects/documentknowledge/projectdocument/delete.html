@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Delete Document</h1>
+    <div class="breadcrumb"><a href="{% url 'projects:doc_repository' %}">Documents</a><span class="sep">&rsaquo;</span><a href="{% url 'projects:pdm_list' %}">Register</a><span class="sep">&rsaquo;</span><span>Delete {{ obj.number }}</span></div>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <h2 class="text-lg font-semibold">Delete {{ obj.number }}{% if obj.title %} &mdash; {{ obj.title }}{% endif %}?</h2>
+    <p>This removes the document row, its folder membership and any unapproved revisions attached to it.</p>
+    <p class="text-muted">
+      Two states refuse this outright, and both are checked again on POST:
+    </p>
+    <ul class="text-muted">
+      <li><strong>Legal hold.</strong> {% if obj.is_legal_hold %}This record IS under legal hold{% if obj.hold_reason %} ({{ obj.hold_reason }}){% endif %} &mdash; the delete will be refused.{% else %}This record is not held.{% endif %}</li>
+      <li><strong>Approved history.</strong> {% if obj.current_revision_no %}This record carries {{ obj.revisions.count }} revision(s) with at least one approved &mdash; approved history is evidence and is not deleted.{% else %}No revision has been approved on this record.{% endif %}</li>
+    </ul>
+    <p class="text-muted">If either applies, <strong>archive</strong> the document instead: it leaves the live register and stays readable through the archive lens, which is the honest way to retire a record without destroying it.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete document</button>
+        <a href="{% url 'projects:pdm_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+        <a href="{% url 'projects:doc_retention' %}" class="btn btn-outline">Archive it instead</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
