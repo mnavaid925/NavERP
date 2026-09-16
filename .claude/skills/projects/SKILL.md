@@ -31,9 +31,15 @@ description: >-
   priority / Gantt lenses; and 7.9 Collaboration & Communication: the channel register with archive,
   threaded channel messages, document shares with access levels and revoke/claim/release verbs,
   meetings with agenda + action items and start/complete/cancel/minutes verbs, per-recipient
-  project notifications, and the merged activity feed. Use when the user
+  project notifications, and the merged activity feed; and 7.10 Document & Knowledge Management: the
+  per-project folder tree with a computed path and document count, the controlled-document register
+  with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
+  check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
+  library (usage counter + featured shelf, no FileField), and the three computed pages (repository
+  overview, retention & archiving board with its idempotent reminder Run, and knowledge search).
+  Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.9), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.10), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -42,13 +48,14 @@ description: >-
   Requirement/ScopeItem/ScopeChangeRequest/ScopeVerification/
   TaskChecklistItem/TaskBlock/
   Channel/ChannelMessage/DocumentShare/Meeting/MeetingAgendaItem/MeetingActionItem/
-  ProjectNotification,
+  ProjectNotification/
+  ProjectFolder/ProjectDocument/ProjectDocumentRevision/DocumentTemplate/KnowledgeEntry,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9.** 7.10–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10.** 7.11–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -60,7 +67,11 @@ App path `apps/projects/`, templates `templates/projects/`, `app_name = "project
 tables), `0006_projectrisk_projectissue_riskresponseaction_and_more` (7.5),
 `0008_projectissue_iss_tnt_type_idx_and_more` (7.5 review indexes) and
 `0009_deliverableinspection_qualityplan_qualitydefect_and_more` (the 7.6 tables — the 0007 leaf
-went to the parallel 7.7 build).
+went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `violated` status the
+build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
+(7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
+(7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -830,7 +841,250 @@ prefix is a FALSE PASS.** `Paginator.get_page()` falls back to the last in-range
 `UnorderedObjectListWarning` was raised. Also call `setup_test_environment()` in a standalone
 script, or `response.context` is `None` and every context-key assertion silently becomes a no-op.
 
-## Routes (`app_name = "projects"`, 263 names)
+## 7.10 Document & Knowledge Management — `DocumentKnowledgeManagement/`, template slug `documentknowledge`
+
+The **record layer**: the folder tree, the controlled documents with their approved-revision chains,
+the tenant-wide standards library and the insight library, plus three computed pages. It reuses the
+workspace's existing projects, work packages and milestones; it invents no project and no user.
+
+### What it deliberately does NOT reuse — `core.Document` is untouched
+
+`core.Document` is the generic per-record attachment every module hangs off a `GenericForeignKey`.
+It carries **no project FK, no doc type, no status, no owner**, a flat `version` CharField instead of
+a chain, and a GFK cannot be `.filter(tenant=…)`-ed, joined or faceted — which makes it an IDOR
+surface the moment a register lists it. That is procurement 6.19's recorded rejection, inherited
+here verbatim: 7.10 declares its own `ProjectDocument` with **real link FKs** (`projects.ProjectMilestone`,
+`projects.ProjectTask`), no import of `core.Document`, no FK to it and no migration against it. 7.9's
+`DocumentShare` (which *does* FK `core.Document`) keeps working untouched and is shown on the
+document detail page as a **read-only lens** linking out to `?project=`.
+
+### `ProjectFolder` [PFD-] — the per-project tree
+
+`project` FK (required, CASCADE) · `parent` self-FK (CASCADE, null = root) · `name` · `description` ·
+`sequence` · `is_archived`/`archived_by`/`archived_at` (verb-written). `unique_together` on
+`(tenant, project, parent, name)` **and** `(tenant, number)`; indexes `pfd_tnt_{project,parent,archived}_idx`.
+`clean()` refuses a cross-project parent, a self-parent, a descendant cycle, and two same-named
+**root** folders (a MySQL unique index treats NULL parents as distinct, so the constraint cannot
+catch those).
+
+**The materialized path and the per-folder document count are COMPUTED, never stored** — the 7.2
+WBS `_decorate_wbs` ruling. `pfd_list` decorates the whole tree in memory (depth, `path`, `doc_count`)
+from **two** queries total and orders it depth-first by `(sequence, name.lower(), -pk)`; a stored
+path would go stale the instant a parent was renamed.
+
+**A folder is organisation, not authorisation.** It grants nobody anything — access is 7.9's
+`DocumentShare`, permission matrices are 13.7's, and no code may branch on folder membership to
+authorize a thing. Deleting a folder that still holds documents or children is refused outright (the
+Deltek PIM "you cannot delete a container that has issued documents" rule); `ProjectDocument.folder`
+being PROTECT is the schema-level half of that guarantee.
+
+### `ProjectDocument` [PDM-] — the register row
+
+`project` (required, CASCADE) · `folder` (PROTECT, required) · `title` · `document_type` (11 values:
+charter/plan/schedule/report/status_update/minutes/specification/drawing/test_result/handover/other) ·
+`classification` (public/internal/confidential — the `core.Document` vocabulary reused on purpose) ·
+`owner` (User, SET_NULL) · `tags` (normalized CharField via the shared `normalize_tags()`) ·
+`description` · `status` (draft/**expected**/in_review/approved/superseded/archived) · the two real
+link FKs `milestone`/`task` (SET_NULL, nullable) · the check-out lock `is_checked_out`/`checked_out_by`/
+`checked_out_at` · the retention intent `retention_months`/`review_on` · the archive
+`is_archived`/`archived_by`/`archived_at` · the legal hold `is_legal_hold`/`hold_reason`/`held_by`/
+`held_at` · the pointer `current_revision_no` (PositiveSmallInteger, **0 = none**) and the search copy
+`extracted_text`. `unique_together (tenant, number)`; five `pdm_tnt_*_idx` indexes.
+
+**`expected` is the Deltek PIM document placeholder** — a named slot created *before* the file
+arrives. `clean()` allows a blank title only in that state; every other state is a document somebody
+has to find by title later. ⚠️ **The field is `CharField(max_length=255)` with `blank=False`, so
+`full_clean()` refuses a blank title at the FIELD level before `clean()` ever runs — the relaxation
+is currently unreachable and a titleless placeholder cannot be created through a form.** The seeder
+therefore creates its placeholder *with* a title ("a named slot"). Recorded for the close-out: either
+the field gains `blank=True` (and `0014` needs a sibling `AlterField`) or the `clean()` branch should
+be deleted as dead slack — leaving it in place is what a reviewer will read as an inconsistency.
+
+**Derived, never stored:** `is_expected`, `is_locked` (the check-out), `is_live`, `tag_list`,
+`retain_until` (**`created_at + 30 * retention_months`** — 30-day months on purpose, so the figure
+does not drift with the calendar), `is_retention_due`, `is_review_due`, `status_css`, and
+`current_revision` — which **filters `is_approved=True`**. Do not "unify" that filter away: without
+it a re-allocated number can put an unapproved file on the record and the register renders a green
+*Current* badge beside *Not approved*. (6.19 reproduced that three ways; the filter is the fix.)
+
+### `ProjectDocumentRevision` [PDV-] — the immutable chain
+
+`document` FK (CASCADE, `related_name="revisions"`) · `revision_no` · `file`
+(`projects/documents/%Y/%m/`) · `checksum` (SHA-256 of the stored bytes, streamed) · `change_note`
+(**the ONLY column editable after creation**) · `is_approved`/`approved_by`/`approved_at` ·
+`extracted_text` (**the text of record**) · `extraction_note` · `uploaded_by`.
+`unique_together (tenant, document, revision_no)`; index `pdv_tnt_document_idx`.
+
+**There is no `uploaded_at` column** — `TenantOwned.created_at` IS the upload moment.
+
+**The chain is linear and only moves forward.** `revision_no` is allocated by `next_revision_no()`
+(one past the highest — a deleted revision leaves a **gap**, and the gap is the honest record) inside
+the transaction that takes the **parent's** `select_for_update()`. An upload NEVER moves the pointer
+and never approves itself. `pdv_approve` refuses `revision_no <= current_revision_no` and
+**re-checks that refusal INSIDE the lock** (the TOCTOU the unique constraint alone cannot catch),
+then stamps the row, moves the pointer, copies `extracted_text` up to the parent and lifts a
+still-open parent to `approved` — all in one audit-logged transaction. **An older approved revision
+KEEPS `is_approved=True` for ever**: it *was* approved, and "only one version is current" is
+expressed by the pointer landing on exactly one row, never by un-approving history. `pdv_restore`
+rolls **FORWARD** (an older approved revision's file is re-uploaded as a NEW revision), so history is
+never rewritten and never deleted.
+
+**Immutability is STRUCTURAL, not a `save()` guard.** There is **no edit url, no edit view and no
+edit template** for a revision anywhere; everything but `change_note` is `editable=False` so no
+`ModelForm` can surface a column; the only form is `ProjectDocumentRevisionUploadForm` and it is
+create-path only. A wrong revision is superseded by the next upload, never amended in place.
+
+**The check-out lock belongs to the PARENT and is cooperative.** `is_checked_out` +
+`checked_out_by`/`checked_out_at` are written by `pdm_checkout`/`pdm_checkin` alone. Check-in is open
+to **any member on purpose** — a stale lock must not be able to deadlock a document any more than
+7.9's stale claim could. Every page that shows it says it is an **in-app signal, not an OS file
+lock**. 7.10 refuses an upload while the parent is checked out (the form's `clean()` and the model's
+`clean()` both), so "whoever holds the check-out wins" is the whole conflict-resolution story here —
+there is no merge tool (13.2 owns branching/redlining).
+
+**Text extraction is honest about its limits and bounded in three ways.** `extract_text()` never
+raises; it reads plain-text uploads from a bounded prefix and PDFs through a **lazy `pdfplumber`
+import** stopped at `MAX_EXTRACT_PAGES` (60) or `EXTRACT_MAX_CHARS` (200,000), freeing each page's
+cache as it goes. A scanned image simply has no text layer — `extraction_note` says so **on the row**
+rather than leaving a silently empty column that looks like a bug.
+
+### `DocumentTemplate` [DTM-] — the standards library (bullet 2)
+
+`name` · `category` (charter/plan/schedule/report/status_update/minutes/register/checklist/other) ·
+`document_type` (the **same vocabulary** as `ProjectDocument`, so "start from the standard for this
+type" is expressible) · `description` · `version` (**CharField** — real template versions read
+"2026.1" or "v3 (brand refresh)") · `file` · `is_active` (verb-written by `dtm_publish`, a Toggle) ·
+`is_format_locked` (**an INTENT only**) · `owner` · `review_on`.
+`unique_together (tenant, name, version)`; indexes `dtm_tnt_{category,active}_idx`.
+
+**Tenant-wide with NO project FK — deliberately.** A standard belongs to the PMO, not to one project;
+that asymmetry with `ProjectDocument.project` (required) is the design, and it is what stops the
+standard charter format becoming forty copies of itself. **No version chain**: re-publishing edits
+the row. Attaching a standard to a project copies it into the repository as a `ProjectDocument`,
+where the chain and the retention then apply to the copy.
+
+**`is_format_locked` records an intent a human reads.** Nothing in this sub-module enforces
+authorship or formatting, so **no page, label or help text may claim the format is locked**. There is
+also no "generate a document from this template" affordance anywhere — merge fields, locked
+formatting and co-editing are 13.1's; the honest verb this pass ships is the download link.
+
+**Content-only standards live in `KnowledgeEntry.kind="template"/"standard"`, not here** (Ruling 4).
+This register exists for artifacts with a file and a publishable version, so the two registers never
+both hold "how we write a charter".
+
+### `KnowledgeEntry` [KNE-] — the insight library (bullet 4)
+
+`title` · `kind` (lesson_learned/retrospective/playbook/checklist/best_practice/template/standard) ·
+`summary` · `body` · `category` · `tags` (the same normalizer) · `source_project` (SET_NULL,
+nullable) · `document` FK → `ProjectDocument` (SET_NULL) · `owner` · `status` (draft/published/
+retired) · `review_on` · `usage_count` · `is_featured`. `Meta.ordering = ["-is_featured",
+"-created_at", "-id"]` — **the `-id` tiebreak is load-bearing for deterministic paging**: without it
+two rows created in the same second can swap places between page 1 and page 2, so a row repeats on
+one page while another vanishes.
+
+**No `FileField`, deliberately.** The attached artifact is a `ProjectDocument` chosen through the FK,
+so a playbook PDF goes through the repository's extension allow-list, size cap, checksum, text read
+and revision chain. A second upload path here would skip all five and leave the library holding an
+unversioned copy of a file that also exists, differently, on a document row. **One artifact, one
+place, one history.**
+
+**`usage_count` is a CLICK COUNTER, never a metric and never an audit trail.** It counts presses of
+"use this" and nothing else: it does not know who pressed it, it is not evidence that a lesson was
+applied, and it can never be reconciled against anything. `kne_use` increments it with an atomic
+`F("usage_count") + 1` — a read-modify-write silently drops one of two concurrent presses. It is
+**off the form**, so no save path can reset somebody's counter to zero. **`is_featured` is a SHELF,
+never a permission**: it decides what surfaces first, it gates nothing, and no code may branch on it.
+
+**Not machinery.** Nothing stored here executes — it raises no risk, opens no issue and schedules no
+review. 7.5's risk register and 7.6's defect rows each keep their OWN `lessons_learned` field on the
+row where the lesson was dispositioned; this library is where a lesson becomes **findable and
+reusable across projects**, which is the 7.5/7.6 ruling quoted back at itself. Wikis (13.17),
+semantic search / auto-tagging (13.5/13.6) and AI summaries (Module 23) stay where they are.
+
+### Retention — a documented INTENT plus audited verbs
+
+`retention_months` feeds the computed `retain_until`; `review_on` feeds `is_review_due`; `pdm_archive`
+is a **Toggle** over `is_archived` + both stamps; `pdm_hold`/`pdm_release` are a Toggle over
+`is_legal_hold` + `hold_reason` + both stamps. **A hold outranks the archive**: it blocks archive AND
+delete in the model's `clean()` *and* on the delete view (three surfaces, deliberately), and it also
+refuses a new revision approval. **Nothing in 7.10 deletes anything on a schedule** and no page may
+claim it does — automatic destruction, an immutable vault and proof-of-deletion artefacts are
+**13.9/13.14's**.
+
+`doc_retention` recomputes everything against `timezone.localdate()` on every load (a stored "is due"
+flag goes stale at midnight — the 6.19 ruling) and its **Run is a button, not a cron**: there is no
+scheduler and no mail worker in this repo, so `doc_retention_run` raises **in-app rows only** into
+7.9's inbox. **Idempotency comes from the TITLE**, because `ProjectNotification` has no link column
+and no open/closed state machine — it has a recipient, a kind, a title and `is_read`, so the dedupe
+key is `(tenant, kind="due_date", recipient, title, is_read=False)` with the document's **number AND
+its date** inside the title. The same window state therefore cannot raise twice, while a genuinely
+changed date raises a fresh row; the authoritative re-check runs INSIDE the per-document row lock, so
+two concurrent Runs cannot both raise for one document.
+
+### Search — a denormalized copy with a stated caveat (Ruling 6)
+
+`ProjectDocument.extracted_text` is the parent's search copy and has **exactly two writers**: the
+`pdv_approve` verb and the `pdm_reindex` Run. Do not "fix" this into a live join — the copy is the
+feature. `pdm_list` deliberately does **not** pass `extracted_text` to `crud_list`'s `search_fields`:
+it applies its own `_search()` BEFORE `crud_list` (number/title/tags always, the TextField copy only
+from **4 characters**) and passes `search_fields=[]`, because `apply_search` no-ops on an empty field
+list. A 1–3 character `?q=` would otherwise sweep a TextField twice per matching search (the
+Paginator's COUNT, then the page) for results nobody wanted. Every page says plainly that a scan has
+no text layer, so an empty result is never a mystery.
+
+### The three computed pages (no table of their own)
+
+`doc_repository` (the sub-module landing page: ten tiles + the by-type lens + the ten most recent
+rows, every figure a single aggregated COUNT computed on read) · `doc_retention` (the queue, the four
+figures, the Run) · `kne_search` (title/summary/body/tags/category from ONE character — the
+4-character rule governs a stored file copy, **not** prose a person typed — with a featured-first
+shelf and an empty state that **names the fields it searched**).
+
+### 7.10 verbs — all `@require_POST`; GET answers 405
+
+`pdm_{checkout,checkin,archive,hold,release,reindex}` · `pfd_archive` · `dtm_publish` ·
+`kne_{use,publish}` · `pdv_{approve,restore,delete}` · `doc_retention_run`. Five of them are
+**Toggles** whose un-doing goes through the SAME verb and the same audit row (`pdm_archive`,
+`pfd_archive`, `dtm_publish`, `pdm_hold`/`pdm_release`, `kne_publish`). Every verb writes an
+`core.AuditLog` row with the verb in **`changes`**, never in `action` (varchar(10)).
+
+### Three defects this pass found in its own already-committed backend
+
+Worth reading before touching any of these three, because each was invisible until a template
+exercised it:
+
+1. **`pdm_list` applied only `?q=`.** The seven-select filter bar rendered and filtered *nothing*.
+   It now hands the whole `filters` spec to `crud_list` — which is where the L11 guards live (a junk
+   enum is IGNORED rather than silently emptying the register; `?folder=0` is not a pk and is
+   skipped). Hand-rolling that loop means hand-rolling those guards.
+2. **`kne_search` raised `NameError: name 'Q' is not defined` on every non-empty `?q=`.** `Q` was
+   never imported; `views/_common.py` exports `crud_*` and `write_audit_log` but **no** `Q`/`F`, so
+   any view using them must import them explicitly. A hard 500 on the sub-module's own search page.
+3. **`ProjectDocumentForm` left `project` editable** on an existing instance while narrowing
+   `folder`/`milestone`/`task` from `self.instance.project_id` — the OLD project. Changing the
+   project therefore left every folder on the form failing "Select a valid choice", with no way to
+   recover. The field is now `disabled` on edit, which is what the form's own docstring already
+   claimed ("a document never moves between projects"); Django reads a disabled field's value from
+   the instance, so a crafted POST cannot move it either.
+
+**Plus one pre-existing 7.9 defect found while smoking the module overview:**
+`_cc_activityfeed` was imported into `apps/projects/urls/__init__.py` but **never concatenated into
+`urlpatterns`**, so `projects:activity_feed` raised `NoReverseMatch` and took `/projects/` — the
+module landing page, which every 7.10 breadcrumb hangs off — down with it. Three templates reverse
+that name. Measured before/after: reverting the one-line fix leaves 7.9's own
+`test_collab_security.py::test_collab_anonymous_is_redirected_to_login[activity_feed-None]`
+**failing on `main`**; with the fix it passes. **When adding a url module, the import and the
+concatenation are two separate edits — grep for the `+ _xx_` line, not just the import.**
+
+### As-built (2026-09-16)
+
+5 models · 7 url modules · 40 route names (`pfd_`/`pdm_`/`pdv_`/`dtm_`/`kne_` + `doc_repository`/
+`doc_retention`/`doc_retention_run`) · 22 templates · migration `0014` · `_docmgt` seeder block.
+Verified: `temp/smoke_710.py` **167 checks / 0 failures**; `apps/projects` suite **3270 passed /
+0 failed / 2 skipped**. The close-out (six reviewers → `code-fixer` → the `docmgt_*` test lanes →
+this skill's per-sub-module test counts) is **NOT done** — see `.claude/tasks/todo.md`.
+
+## Routes (`app_name = "projects"`, 303 names)
 
 `overview` · `prq_{list,create,detail,edit,delete}` · `prj_…` · `pst_…` · `pko_…` plus the verbs ·
 7.2: `tsk_{list,create,detail,edit,delete}` + `tsk_tree` (literal route `tasks/tree/`) ·
@@ -856,6 +1110,17 @@ quality-acceptance/` — disjoint literals).
 `scr_{submit,review,approve,reject,implement}` · `svr_…` + `svr_{accept,reject,waive}` ·
 `scope_matrix` (path prefixes `requirements/ scope-items/ scope-changes/ scope-verifications/
 scope-matrix/` — disjoint literals).
+7.10: `pfd_{list,create,detail,edit,delete}` + `pfd_archive` ·
+`pdm_{list,create,detail,edit,delete}` + `pdm_{checkout,checkin,archive,hold,release,reindex}` ·
+`pdv_{list,compare,upload}` + `pdv_{approve,restore,delete}` ·
+`dtm_{list,create,detail,edit,delete}` + `dtm_publish` ·
+`kne_{list,search,create,detail,edit,delete}` + `kne_{use,publish}` ·
+`doc_repository` · `doc_retention` + `doc_retention_run` (path prefixes `doc-folders/ documents/
+document-revisions/ document-templates/ knowledge/ document-repository/ document-retention/` —
+disjoint literals; within `knowledge/` the literal `search/` precedes the `<int:pk>/` ones and
+within `document-revisions/` the literal `compare/` does the same). `pdv_upload` is nested under the
+**document's** pk (`document-revisions/<int:document_pk>/upload/`) because an upload is always an
+upload ONTO a specific document — the form carries no document chooser of its own.
 
 **`req_amendment_create` is NOT 7.7's** — that name belongs to **procurement 4.1**
 (`procurement:req_amendment_create`, prefix `requisitions/`). Both apps use a `req_` name prefix,
@@ -943,6 +1208,18 @@ authorised explicitly; the child forms sit under their parent's folder because t
 independent register. The channel page and the feed each carry a small **page-local** CSS block
 (the `collab-` prefix, mirroring 7.8's `tw-` precedent) — self-contained, and not yet promoted into
 `theme.css` because no second page needs them.
+7.10 adds `documentknowledge/{projectfolder, projectdocument, projectdocumentrevision,
+documenttemplate, knowledgeentry}/{list,detail,form,delete}.html` — **`delete.html` is a fourth page
+file in every entity folder here**, because every one of the five models has a POST-only delete view
+with a refusal the page has to explain up front. Three pages stand at the sub-module root rather than
+in an entity folder: `documentknowledge/overview.html` (the sub-module landing page, which doubles as
+the entity-less repository overview), `documentknowledge/retention.html` and
+`documentknowledge/knowledgeentry/search.html` — the computed-page rule. `projectdocumentrevision`
+carries no `detail.html` (a revision has no page of its own: the chain renders inside its parent's
+detail page) and instead carries `compare.html`, a secondary entity-action page (the
+`cost/bank_transaction/import.html` idiom). `knowledgeentry/search.html` is the library's second
+lens over the same rows and lives inside the entity folder because it is the entity's page, not a
+board.
 Extend `base.html`; colour-named theme.css
 badges only (`badge-green/-red/-amber/-info/-muted/-slate` — the semantic `-success/-warning/
 -danger` variants **do not exist** and render unstyled; the alignment class is `text-right` —
@@ -1033,7 +1310,49 @@ touch a numeric seed literal, run the command twice and confirm the row counts.
 Do **not** "optimize" it with `bulk_create` — `TenantNumbered.save()` allocates `number`, and
 `bulk_create` bypasses `save()`, shipping rows with empty numbers.
 
-## Tests — `apps/projects/tests/` (green unfiltered)
+7.10 (own guard, dispatched after `_collab`): **12 ProjectFolders / 22 ProjectDocuments /
+23 ProjectDocumentRevisions / 16 DocumentTemplates / 17 KnowledgeEntries per tenant**. The guard is
+on the FOLDER tree because that is the block's entry point — `ProjectDocument.folder` is PROTECT and
+required, so every document needs a folder by construction (the `document()` factory takes the folder
+and reads the project OFF it, which makes "the folder belongs to another project" unrepresentable in
+the seeder). Coverage: a 10-folder tree on the active project plus 2 on the second, including an
+ARCHIVED branch so the archive lens has rows; documents spanning every doc type and every status —
+one `expected` placeholder, one checked-out, one under legal hold, two archived, one superseded, and
+two whose retention window has already closed; 25 revisions with two superseded PAIRS (v1 and v2 both
+approved, pointer on v2) and four left pending approval; 16 standards covering every category with
+both publish states; 17 knowledge entries covering every kind and every status with three featured.
+Both the document and the knowledge registers clear the 15-row page, so the paginator has a genuine
+page 2.
+
+**Two seeder gotchas specific to 7.10, and both are load-bearing:**
+
+- **`backdate()` is not cosmetic.** `retain_until` is `created_at + 30 * retention_months`, so with
+  `created_at` at seed time **no** document could ever be retention-due and the retention board's
+  headline figure would be structurally zero. `created_at` is `auto_now_add` and cannot be passed to
+  the constructor; a queryset `.update(created_at=…)` bypasses the `pre_save` hook and is the only
+  honest way to give a seeded row a past. Assign the attribute back on the in-memory row too, or the
+  later `approve()` calls read the wrong value.
+- **The revision writers are the VIEWS' helpers, never hand-stamped literals.** `next_revision_no()`
+  allocates the number, `file_sha256()` measures the checksum over the payload BEFORE the storage
+  layer consumes it, and `extract_text()` reads the text AFTER the row exists — there is nothing on
+  disk to read until then. The payloads are `.txt` on purpose (`PLAIN_TEXT_EXTENSIONS`), so the
+  extractor genuinely reads them and the register's four-character full-text sweep is demonstrably
+  working on a fresh workspace without committing a binary fixture.
+
+**The block writes FILES under `MEDIA_ROOT`, and only for rows it just created.** Every
+`ContentFile` is minted inside the guard's `else` branch, so a second run writes none — which is what
+keeps the media folder clean, because Django's storage layer **renames on collision**
+(`project-charter-r2_a3f9c1x.txt`) rather than overwriting. Verify with a file count either side of a
+second run, not by trusting the guard's message. `--flush` deletes revisions → documents → folders in
+that order (the PROTECT edge, not just FK depth) and must leave the re-seed's counts identical.
+
+## Tests — `apps/projects/tests/` (green unfiltered — **3270 passed / 0 failed / 2 skipped**)
+
+⚠️ **7.10's four lanes are NOT written yet.** The `docmgt_*` conftest block and
+`test_docmgt_{models,forms,views,security}.py` are the outstanding close-out work (see
+`.claude/tasks/todo.md`); until they land, 7.10 is covered by `temp/smoke_710.py` (167 checks) and by
+the four existing lanes continuing to pass — **not** by a lane of its own. Do not read the green
+suite as 7.10 being tested.
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
 7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` + 7.8 `taskwork_*` + 7.9 `collab_*` fixture blocks —
@@ -1304,6 +1623,27 @@ maps to the **SHARE** register (the document repository and its version history 
 only ships who may do what with an already-stored `core.Document`), and bullet 4 maps to the
 notification **ROWS** inbox (the trigger rules, reminders and escalation-on-timeout are 7.17's).
 Bullet 1's messaging half has its own register, hence the extra leaf.
+
+```python
+"7.10": {
+    "Document Repository & Folders":         "projects:pdm_list",
+    "Folder Tree":                           "projects:pfd_list",   # extra live leaf
+    "Document Templates & Standards":        "projects:dtm_list",
+    "Version Control & Check-in/Out":        "projects:pdv_list",
+    "Knowledge Base & Lessons Learned":      "projects:kne_list",
+    "Document Retention & Archiving":        "projects:doc_retention",
+}
+```
+Bullet 1 has two halves and both are live pages: the **register** is the bullet, and the **folder
+tree** takes the extra leaf — 7.9's own sidebar comment settled that ("the file store, **the
+folders** and the VERSION HISTORY are 7.10's"). Bullet 2 maps to the standards library, **file-backed
+only**: a written standard that is prose lives in the knowledge register as
+`kind="template"/"standard"`, deliberately two lenses rather than two near-duplicate tables (Ruling
+4). Bullet 3 maps to the revision **LOG** — the immutable chain itself is reached from each
+document's detail page, where upload/approve/restore are its verbs — and it is explicitly NOT a diff
+(redlining is 13.2's). Bullet 5 is the one computed page of the five. `kne_search` and
+`doc_repository` are **lenses**, not bullets, and each has a justification comment in
+`navigation.py` saying so.
 
 ## Common tasks
 
