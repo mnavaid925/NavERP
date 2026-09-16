@@ -8291,17 +8291,93 @@ substitutes for them.
 
 ### Close-out
 
-- [ ] Six reviewers **strictly serially** → `.claude/tasks/review-projects-7.10.md` (each lane appends
+- [x] Six reviewers **strictly serially** → `.claude/tasks/review-projects-7.10.md` (each lane appends
       its own section, then a deduped `# CONSOLIDATED FINDINGS` with IDs + explicit no-action rows).
-- [ ] `code-fixer` burns down the findings file in ID order, one file per commit, then a `# FIX LOG`
-      accounting for every disposition.
+      **Done 2026-09-16:** six lanes, 53 deduped findings — **5 Critical, 22 Important, 26 Minor** —
+      plus 18 explicit no-action rows. Every Critical and every load-bearing Important was
+      re-verified by the orchestrator with an independent probe before filing.
+- [x] `code-fixer` burns down the findings file in ID order, one file per commit, then a `# FIX LOG`
+      accounting for every disposition. **Pass 1 done 2026-09-16: C1–C5 + I1–I22 = 26 fixed, 1
+      skipped (I12, a review-integrity note rather than a code defect), 0 refuted.** `M1–M26` are
+      **left unticked for a second pass** (see the carried list below).
 - [ ] Tests: pin `.claude/tasks/test-contract-projects-7.10.md` first (fixtures + the computed figures),
       then the **append-only** `docmgt_*` conftest block (L43), then
       `test_docmgt_{models,forms,views,security}.py` one file per commit, then the **full unfiltered**
       app suite (never `-k`, L47).
-- [ ] **Update** `.claude/skills/projects/SKILL.md` (add the `## 7.10` section + refresh
+- [x] **Update** `.claude/skills/projects/SKILL.md` (add the `## 7.10` section + refresh
       Routes/Templates/Seeder/Tests/Sidebar/As-built), `README.md` (**9 → 10 of 19**), and `todo.md`
       with a `### Projects 7.10 — … (close-out <date>)` note. Each committed on its own.
+
+### Projects 7.10 — Document & Knowledge Management (close-out 2026-09-16)
+
+The sub-module was **adopted mid-build** (see the build-completion note above) and then carried
+through the full close-out. What the close-out produced, and what it found:
+
+**Review — six serial lanes, 53 deduped findings.** The lanes were scoped to the whole 7.10 file set
+(5 models, 5 forms, 7 view modules, 8 url modules, admin, seeder, `LIVE_LINKS`, migration `0014`,
+22 templates) with the four already-fixed build defects listed as **sanity-checks, not findings**.
+
+Three things are worth carrying forward from this review as *method*, not just as results:
+
+1. **Two lanes' confident coverage claims were wrong, and only a probe settled it.** Lane 1 recorded
+   the folder cycle guard as enforced and claimed the over-length audit action was the only instance
+   repo-wide; lane 5's live request proved the guard is **dead code** (`_is_descendant_of` could
+   never return `True`), and a repo-wide grep found **25** other over-length actions, mostly
+   procurement 6.19's. **A guard whose only evidence is the code that reads it is not verified.**
+2. **A later lane can be right about the mechanism and wrong about the payload.** Lane 3 found the
+   unescaped `confirm()` interpolation (L42's third recurrence) and graded it Important on an
+   apostrophe payload that only breaks the handler; lane 6 supplied a payload that keeps the
+   injected code *inside* the `confirm(...)` argument list, which **executes** — so the same finding
+   was escalated to Critical. Severity was re-set on evidence, not on lane order.
+3. **The orchestrator's own probes can be wrong too.** The first C2 re-probe reported "still broken"
+   because it passed `None` (two roots tie on `(sequence, name)`, so `Meta.ordering` picked the
+   *other* project's root, which has no children). It was re-run against a verified parent/child pair
+   before the fix was accepted. **Check the probe before believing the result.**
+
+**The five Criticals, all verified fixed:**
+
+- **C1** — `pdv_upload` read the raw `UploadedFile` instead of the saved `FieldFile`, so every UI
+  upload stored an empty search copy with a false "could not be reached on disk" note, and
+  `pdv_approve` then **overwrote** the parent's copy with it (measured: 103 chars → 0).
+- **C2** — `ProjectFolder._is_descendant_of()` seeded `seen` with `self.pk`, so the membership guard
+  fired before the equality test and the walk could never return `True`: the cycle guard was dead,
+  a cycle was creatable through the ordinary edit form, and the cyclic branch then **vanished** from
+  the tree.
+- **C3** — stored XSS: four `onsubmit="return confirm('… {{ name }} …')"` handlers interpolated a
+  member-authored folder name into a single-quoted JS literal. HTML escaping does not protect an
+  inline-handler attribute (it is character-reference-decoded before the browser compiles it);
+  `|escapejs` at all four sites is the fix the repo already documents as **L42**.
+- **C4** — `.svg` was on 7.10's upload allow-list — a **fork** of the house list that added the one
+  scriptable extension `core.forms.ALLOWED_DOC_EXTENSIONS` omits — and `MEDIA_ROOT` is served
+  unauthenticated with `Content-Disposition: inline`, so a member-uploaded `.svg` executed on the
+  site origin for **anonymous** visitors. **7.10's half is fixed** (the list is now imported from
+  core and extended, delta `['.md','.ppt','.pptx']`); **the project-wide half is carried** — see the
+  carried list.
+- **C5** — `doc_retention_run` wrote a 23-character action into `AuditLog.action` (`varchar(10)`):
+  truncated to `retention_` on a non-strict checkout, a `DataError`/500 on a strict-mode server.
+  **7.10's instance is fixed; the repo-wide sweep (25 other sites) is carried.**
+
+**Carried forward (deliberately NOT fixed in this close-out — cross-module work):**
+
+- **The anonymous `/media/` handler** (`config/urls.py` `static(MEDIA_URL, …)` under `DEBUG`) — the
+  enabling half of C4. One authenticated media view (or nginx `internal`) fixes 14 modules at once,
+  so it does not belong inside a 7.10 fix. Until then, **every module that stores a payload in
+  `MEDIA_ROOT` has a world-readable file store**, and 7.10 is the one holding `confidential` and
+  legally-held documents.
+- **The repo-wide over-length `AuditLog.action` sweep** — 25 sites, overwhelmingly procurement
+  6.19's, which 7.10 inherited. The column is `varchar(10)` with `choices` that `.create()` never
+  validates, so the sweep is a one-pass change across `apps/`.
+- **`M1`–`M26`** — the 26 Minor findings, unticked in `review-projects-7.10.md`, each with its
+  `file:line` and its concrete fix. They are cosmetic-to-modest (dead helpers, stale copy, a missing
+  `select_related`, two unindexed lenses, an orphaned GET page).
+- **No delete path erases bytes** (I6 was fixed for the *views*, but `--flush` still leaves the
+  storage tree behind, and the 66 unreferenced payloads the probes and the smoke produced are still
+  on disk and still served).
+
+**The `docmgt_*` test lanes are still NOT written** — 7.10 has no pytest module of its own, and
+`apps/projects/tests/` covers 7.1–7.9 only. Its gate today is `temp/smoke_710.py` (**169 checks,
+0 failures**) plus the four existing lanes continuing to pass. That is a real gap in the close-out
+and the first item of the next pass.
 
 ### Later passes / deferred
 
