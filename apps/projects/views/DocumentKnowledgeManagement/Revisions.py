@@ -136,6 +136,11 @@ def pdv_restore(request, pk):
             tenant=request.tenant, document=document,
             revision_no=next_revision_no(document),
             file=revision.file, change_note=f"Restored from revision {revision.revision_no}.",
+            # The restore re-uses the source's stored file (N2 — no copy), so the bytes ARE the
+            # source's bytes and the checksum must be carried, not left blank: an empty digest made
+            # `pdv_compare` render "Different bytes" for a byte-identical pair and left the copy
+            # that explains a restore-forward inside the unreachable `same_checksum` branch.
+            checksum=revision.checksum,
             extracted_text=revision.extracted_text, extraction_note=revision.extraction_note,
             uploaded_by=request.user)
         restored.save()
