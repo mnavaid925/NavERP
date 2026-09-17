@@ -10,7 +10,7 @@
     {% csrf_token %}
     <div class="card"><div class="card-body">
       {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
-      <p class="text-muted">Status and approval stamps are verb-driven — they never appear on this form.</p>
+      <p class="text-muted">Status and approval stamps are verb-driven — they never appear on this form. Mark an entry billable to include it in the client-billing split on the Utilization board.</p>
       <div class="form-grid">
         {% for field in form %}
           <div class="form-group">
