@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}{{ release.name }} ({{ release.version_tag }}) · Release Details · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:rel_list' %}">Releases</a>
+      <span>{{ release.version_tag }}</span>
+    </nav>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ release.name }} <span class="text-brand font-mono">({{ release.version_tag }})</span></h1>
+      {% if release.status == 'released' %}
+        <span class="badge badge-green">Released</span>
+      {% elif release.status == 'in_progress' %}
+        <span class="badge badge-amber">In Progress</span>
+      {% elif release.status == 'unreleased' %}
+        <span class="badge badge-info">Unreleased</span>
+      {% elif release.status == 'archived' %}
+        <span class="badge badge-slate">Archived</span>
+      {% else %}
+        <span class="badge badge-slate">{{ release.get_status_display }}</span>
+      {% endif %}
+      {% if release.is_overdue %}
+        <span class="badge badge-red">Overdue</span>
+      {% endif %}
+    </div>
+    <p class="text-muted font-mono text-xs">{{ release.number }} · Project: <a href="{% url 'projects:prj_detail' release.project.pk %}" class="text-brand">{{ release.project.name }}</a></p>
+  </div>
+  <div class="page-actions">
+    {% if release.status != 'released' %}
+      <form method="post" action="{% url 'projects:rel_publish' release.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Publish release {{ release.version_tag }}?');">
+          <i data-lucide="rocket"></i> Publish Release
+        </button>
+      </form>
+    {% endif %}
+    <a href="{% url 'projects:rel_edit' release.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{% url 'projects:rel_list' %}" class="btn btn-outline">Back to Releases</a>
+  </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Total Stories / Tasks</div>
+    <div class="text-2xl font-bold mt-1">{{ release.total_stories }}</div>
+    <div class="text-xs text-muted mt-1">Included in release train</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Completed Stories</div>
+    <div class="text-2xl font-bold mt-1 text-brand">{{ release.completed_stories }}</div>
+    <div class="text-xs text-muted mt-1">{{ release.progress_percent }}% ready</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Planned Release Date</div>
+    <div class="text-sm font-semibold mt-1">
+      {% if release.release_date %}{{ release.release_date|date:"M d, Y" }}{% else %}—{% endif %}
+    </div>
+    <div class="text-xs text-muted mt-1">
+      {% if release.released_at %}Published on {{ release.released_at|date:"M d, Y" }}{% else %}Target delivery milestone{% endif %}
+    </div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Published By</div>
+    <div class="text-sm font-semibold mt-1">
+      {% if release.released_by %}{{ release.released_by.get_full_name|default:release.released_by.username }}{% else %}<span class="text-muted">Not published yet</span>{% endif %}
+    </div>
+    <div class="text-xs text-muted mt-1">Release lead / coordinator</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+  <!-- Release Notes -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="file-text"></i> Release Notes & Changelog</h2>
+    </div>
+    <div class="card-body">
+      {% if release.release_notes %}
+        <div class="text-sm leading-relaxed whitespace-pre-line">{{ release.release_notes }}</div>
+      {% else %}
+        <p class="text-muted text-sm">No release notes documented yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Feature Flags -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="flag"></i> Feature Flags & Toggles</h2>
+    </div>
+    <div class="card-body">
+      {% if release.feature_flags %}
+        <div class="text-sm font-mono leading-relaxed whitespace-pre-line bg-slate-50 p-3 rounded border">{{ release.feature_flags }}</div>
+      {% else %}
+        <p class="text-muted text-sm">No feature flags configured for this release.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Included Tasks -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="card-title"><i data-lucide="check-square"></i> Stories & Tasks in this Release Train ({{ tasks.count }})</h2>
+    <a href="{% url 'projects:sprint_backlog' %}?project={{ release.project.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Assign from Backlog</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Sprint</th>
+          <th>Epic</th>
+          <th>Assignee</th>
+          <th>Points</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tsk in tasks %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:tsk_detail' tsk.pk %}" class="text-brand">{{ tsk.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ tsk.number }}</div>
+            </td>
+            <td>
+              {% if tsk.sprint %}
+                <a href="{% url 'projects:spt_detail' tsk.sprint.pk %}"><span class="badge badge-info">{{ tsk.sprint.name }}</span></a>
+              {% else %}
+                <span class="badge badge-slate">Backlog</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tsk.epic %}
+                <span class="badge" style="background-color:{{ tsk.epic.color_code }}20; color:{{ tsk.epic.color_code }};">
+                  {{ tsk.epic.name }}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tsk.assignee %}
+                {{ tsk.assignee.get_full_name|default:tsk.assignee.username }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ tsk.story_points|default:"0" }}</strong> pts
+            </td>
+            <td>
+              {% if tsk.status == 'done' %}
+                <span class="badge badge-green">Done</span>
+              {% elif tsk.status == 'in_progress' %}
+                <span class="badge badge-amber">In Progress</span>
+              {% elif tsk.status == 'planned' %}
+                <span class="badge badge-info">Planned</span>
+              {% elif tsk.status == 'cancelled' %}
+                <span class="badge badge-red">Cancelled</span>
+              {% else %}
+                <span class="badge badge-slate">{{ tsk.get_status_display }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-6 text-muted">
+              No tasks currently assigned to this release train.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

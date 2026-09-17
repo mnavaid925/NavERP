@@ -72,8 +72,14 @@ from .TimeAttendanceTracking.OvertimeRecords import urlpatterns as _ta_overtimer
 from .TimeAttendanceTracking.OvertimeRules import urlpatterns as _ta_overtimerules
 from .TimeAttendanceTracking.TimeCalendar import urlpatterns as _ta_calendar
 from .TimeAttendanceTracking.UtilizationDashboard import urlpatterns as _ta_utilization
+from .PortfolioProgramManagement.Portfolios import urlpatterns as _pfm_portfolios
+from .PortfolioProgramManagement.Programs import urlpatterns as _pfm_programs
+from .PortfolioProgramManagement.PortfolioInvestments import urlpatterns as _pfm_investments
+from .PortfolioProgramManagement.ProgramDependencies import urlpatterns as _pfm_dependencies
+from .PortfolioProgramManagement.PortfolioDashboard import urlpatterns as _pfm_dashboard
 
 app_name = "projects"
+
 
 urlpatterns = (
     _pi_overview
@@ -172,5 +178,14 @@ urlpatterns = (
     + _ta_overtimerecords
     + _ta_utilization
     + _ta_calendar
+    # 7.12 Portfolio & Program Management — first segments (portfolios/, programs/,
+    # investments/, program-dependencies/, portfolio-dashboard/) are disjoint literals from
+    # earlier sub-modules and from each other.
+    + _pfm_portfolios
+    + _pfm_programs
+    + _pfm_investments
+    + _pfm_dependencies
+    + _pfm_dashboard
 )
+
 
