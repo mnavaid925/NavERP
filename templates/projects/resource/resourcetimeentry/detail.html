@@ -25,6 +25,11 @@
           </form>
         {% endif %}
       {% endif %}
+      {% if obj.status == 'rejected' %}
+        <form method="post" action="{% url 'projects:rte_relog' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="copy-plus"></i> Re-log correction</button>
+        </form>
+      {% endif %}
       {% if obj.status == 'draft' or obj.status == 'submitted' %}
         <a href="{% url 'projects:rte_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       {% endif %}
@@ -44,6 +49,8 @@
         <dt>Date</dt><dd>{{ obj.entry_date|date:"D, M d, Y" }} <span class="text-muted">(week {{ obj.iso_week }}, {{ obj.iso_year }})</span></dd>
         <dt>Hours</dt><dd>{{ obj.hours }}h</dd>
         <dt>Description</dt><dd>{% if obj.task_description %}{{ obj.task_description }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        <dt>Billable</dt><dd>{% if obj.is_billable %}<span class="badge badge-green">Billable</span>{% else %}<span class="badge badge-muted">Non-billable</span>{% endif %}</dd>
+        <dt>Activity code</dt><dd>{% if obj.activity_code %}{{ obj.activity_code }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
         <dt>Status</dt>
         <dd>
           {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
