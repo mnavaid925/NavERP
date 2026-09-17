@@ -122,6 +122,9 @@ from apps.projects.models import (
     TaskBlock,
     TaskChecklistItem,
     TaskDependency,
+    TimeActivityCode,
+    OvertimeRule,
+    ProjectOvertimeRecord,
 )
 
 
@@ -433,6 +436,10 @@ class Command(BaseCommand):
         # library and the knowledge register. It reuses the projects, tasks, milestones and
         # users every block above already created; nothing here invents a project.
         self._docmgt(tenant, now)
+        # 7.11 has its OWN guard as well — the time & attendance tracking layer: standard
+        # activity codes, overtime calculation policies, project overtime records, and
+        # activity/billable updates on time entries.
+        self._time_attendance(tenant, now)
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -2858,6 +2865,143 @@ class Command(BaseCommand):
             f"{ProjectDocumentRevision.objects.filter(tenant=tenant).count()} revisions, "
             f"{DocumentTemplate.objects.filter(tenant=tenant).count()} standards, "
             f"{KnowledgeEntry.objects.filter(tenant=tenant).count()} knowledge entries."))
+
+
+    def _time_attendance(self, tenant, now):
+        """7.11 Time & Attendance Tracking: activity codes, overtime rules, overtime records."""
+        if TimeActivityCode.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.11 time & attendance tracking already seeded.")
+            return
+
+        today = timezone.localdate()
+        with transaction.atomic():
+            # 1. Standard Activity Codes
+            activity_specs = [
+                ("DEV", "Software Development", "direct_project", True, "Core application programming and feature development."),
+                ("QA", "Quality Assurance & Testing", "direct_project", True, "Manual & automated test case execution and defect verification."),
+                ("UI", "UI/UX & Product Design", "direct_project", True, "Wireframing, mockups, design system components, and usability review."),
+                ("PM", "Project Management & Agile Delivery", "direct_project", True, "Sprint planning, stakeholder reviews, WBS tracking, and status reports."),
+                ("MTG", "Client Meetings & Advisory", "client_service", True, "Direct meetings with client project teams and consulting."),
+                ("ADM", "General Administration & Overhead", "general_admin", False, "Administrative work, workspace management, and internal coordination."),
+                ("TRN", "Training & Professional Development", "training", False, "Continuing technical education, certifications, and workshops."),
+                ("RD", "Internal Research & Innovation", "research_dev", False, "Prototyping, architectural spikes, and internal tooling."),
+            ]
+            codes = {}
+            for code, name, cat, billable, desc in activity_specs:
+                tac = TimeActivityCode(
+                    tenant=tenant,
+                    code=code,
+                    name=name,
+                    category=cat,
+                    is_billable_default=billable,
+                    is_active=True,
+                    description=desc,
+                )
+                tac.save()
+                codes[code] = tac
+
+            # 2. Overtime Rules
+            active_project = Project.objects.filter(tenant=tenant, status="active").order_by("id").first()
+            rule_default = OvertimeRule(
+                tenant=tenant,
+                project=None,
+                name="Standard Company Overtime Policy",
+                standard_daily_hours=Decimal("8.00"),
+                standard_weekly_hours=Decimal("40.00"),
+                daily_overtime_multiplier=Decimal("1.50"),
+                weekly_overtime_multiplier=Decimal("1.50"),
+                weekend_multiplier=Decimal("1.50"),
+                holiday_multiplier=Decimal("2.00"),
+                requires_pre_approval=False,
+                is_active=True,
+                notes="Default company policy for project overtime.",
+            )
+            rule_default.save()
+
+            if active_project:
+                rule_project = OvertimeRule(
+                    tenant=tenant,
+                    project=active_project,
+                    name=f"{active_project.name} Premium Delivery Rule",
+                    standard_daily_hours=Decimal("8.00"),
+                    standard_weekly_hours=Decimal("40.00"),
+                    daily_overtime_multiplier=Decimal("1.50"),
+                    weekly_overtime_multiplier=Decimal("1.50"),
+                    weekend_multiplier=Decimal("2.00"),
+                    holiday_multiplier=Decimal("2.50"),
+                    requires_pre_approval=True,
+                    is_active=True,
+                    notes="Project specific overtime rule for critical deliverables.",
+                )
+                rule_project.save()
+
+            # 3. Update existing ResourceTimeEntry rows with activity codes and billable flags
+            entries = list(ResourceTimeEntry.objects.filter(tenant=tenant).order_by("id"))
+            code_cycle = ["DEV", "QA", "UI", "PM", "MTG", "ADM"]
+            for idx, entry in enumerate(entries):
+                code_name = code_cycle[idx % len(code_cycle)]
+                entry.activity_code = code_name
+                entry.is_billable = codes[code_name].is_billable_default
+                entry.save(update_fields=["activity_code", "is_billable"])
+
+            # 4. Project Overtime Records
+            profiles = list(ResourceProfile.objects.filter(tenant=tenant, status="active").order_by("id"))
+            users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+            manager = users[2] if len(users) > 2 else users[0]
+
+            if profiles and active_project:
+                ot1 = ProjectOvertimeRecord(
+                    tenant=tenant,
+                    resource=profiles[0],
+                    project=active_project,
+                    date=today - timedelta(days=2),
+                    overtime_hours=Decimal("3.50"),
+                    overtime_type="daily",
+                    pay_multiplier=Decimal("1.50"),
+                    billable_multiplier=Decimal("1.25"),
+                    is_billable=True,
+                    status="approved",
+                    approved_by=manager,
+                    approved_at=now,
+                    notes="Sprint deadline overtime for critical bug triage.",
+                )
+                ot1.save()
+
+                ot2 = ProjectOvertimeRecord(
+                    tenant=tenant,
+                    resource=profiles[1] if len(profiles) > 1 else profiles[0],
+                    project=active_project,
+                    date=today - timedelta(days=1),
+                    overtime_hours=Decimal("4.00"),
+                    overtime_type="weekend",
+                    pay_multiplier=Decimal("1.50"),
+                    billable_multiplier=Decimal("1.00"),
+                    is_billable=True,
+                    status="submitted",
+                    submitted_at=now,
+                    notes="Weekend emergency server migration and cutover support.",
+                )
+                ot2.save()
+
+                ot3 = ProjectOvertimeRecord(
+                    tenant=tenant,
+                    resource=profiles[0],
+                    project=active_project,
+                    date=today,
+                    overtime_hours=Decimal("2.00"),
+                    overtime_type="daily",
+                    pay_multiplier=Decimal("1.50"),
+                    billable_multiplier=Decimal("1.00"),
+                    is_billable=True,
+                    status="draft",
+                    notes="Draft overtime claim.",
+                )
+                ot3.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.11 seeded: {len(activity_specs)} activity codes, "
+            f"2 overtime rules, 3 overtime records, time entries updated."))
+
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
