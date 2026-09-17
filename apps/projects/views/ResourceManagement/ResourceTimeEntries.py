@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Q
+from django.urls import reverse
 
 from apps.core.crud import as_db_int
 from apps.projects.forms import ResourceTimeEntryForm
@@ -114,7 +115,8 @@ def rte_list(request):
                  ("resource", "resource_id", True),
                  ("project", "project_id", True),
                  ("year", "entry_date__iso_year", True),
-                 ("week", "entry_date__week", True)],
+                 ("week", "entry_date__week", True),
+                 ("billable", "is_billable", False)],
         extra_context={
             "status_choices": ResourceTimeEntry.STATUS_CHOICES,
             "resources": resource_profiles(request.tenant),
@@ -141,8 +143,22 @@ def rte_create(request):
             messages.success(request, f"Time entry {obj.number} created.")
             return redirect("projects:rte_detail", pk=obj.pk)
     else:
-        form = ResourceTimeEntryForm(tenant=request.tenant,
-                                     initial={"resource": request.GET.get("resource", "")})
+        initial = {"resource": request.GET.get("resource", "")}
+        # 7.11's rejection loop: ?relog=<pk> prefills a correction draft from the frozen
+        # rejected row. The rejected row itself is never modified (the evidence ruling).
+        relog_pk = as_db_int(request.GET.get("relog"))
+        if relog_pk is not None:
+            source = ResourceTimeEntry.objects.filter(
+                tenant=request.tenant, pk=relog_pk, status="rejected").first()
+            if source is not None:
+                initial.update({
+                    "resource": source.resource_id, "project": source.project_id,
+                    "project_task": source.project_task_id, "entry_date": source.entry_date,
+                    "hours": source.hours, "task_description": source.task_description,
+                    "is_billable": source.is_billable, "activity_code": source.activity_code,
+                    "notes": source.notes,
+                })
+        form = ResourceTimeEntryForm(tenant=request.tenant, initial=initial)
     return render(request, "projects/resource/resourcetimeentry/form.html",
                   {"form": form, "is_edit": False})
 
@@ -196,6 +212,21 @@ def rte_submit(request, pk):
     write_audit_log(request.user, obj, "submit", changes={"verb": "submit"})
     messages.success(request, f"Entry {obj.number} submitted for approval.")
     return redirect("projects:rte_detail", pk=obj.pk)
+
+
+@login_required
+@require_POST
+def rte_relog(request, pk):
+    """7.11's rejection loop: a REJECTED row is frozen evidence, so the correction is a NEW
+    draft entry prefilled from the frozen one (the pinned 're-log instead' ruling). The verb
+    never writes to the rejected row - the GET redirects to the prefilled create form."""
+    obj = get_object_or_404(ResourceTimeEntry, pk=pk, tenant=request.tenant)
+    if obj.status != "rejected":
+        messages.error(request, "Only a rejected entry can be re-logged as a correction.")
+        return redirect("projects:rte_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "update",
+                    changes={"verb": "relog", "source": obj.number})
+    return redirect(f"{reverse('projects:rte_create')}?relog={obj.pk}")
 
 
 @login_required
