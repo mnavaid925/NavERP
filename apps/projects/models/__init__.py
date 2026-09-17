@@ -119,3 +119,9 @@ from .DocumentKnowledgeManagement.Knowledge import KnowledgeEntry  # noqa: F401
 from .DocumentKnowledgeManagement.ProjectFolders import ProjectFolder  # noqa: F401
 from .DocumentKnowledgeManagement.Revisions import ProjectDocumentRevision  # noqa: F401
 from .DocumentKnowledgeManagement.Templates import DocumentTemplate  # noqa: F401
+
+# --- 7.11 Time & Attendance Tracking ------------------------------------------------------------
+from .TimeAttendanceTracking.ActivityCodes import TimeActivityCode  # noqa: F401
+from .TimeAttendanceTracking.OvertimeRecords import ProjectOvertimeRecord  # noqa: F401
+from .TimeAttendanceTracking.OvertimeRules import OvertimeRule  # noqa: F401
+
