@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{% if form.instance.pk %}Edit Release {{ form.instance.version_tag }}{% else %}New Release{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:rel_list' %}">Releases</a>
+      <span>{% if form.instance.pk %}Edit {{ form.instance.version_tag }}{% else %}New Release{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if form.instance.pk %}Edit Release {{ form.instance.version_tag }}{% else %}New Release{% endif %}</h1>
+  </div>
+  <div class="page-actions">
+    <a href="{% if form.instance.pk %}{% url 'projects:rel_detail' form.instance.pk %}{% else %}{% url 'projects:rel_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+  </div>
+</div>
+
+<div class="card" style="max-width: 800px;">
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.project.id_for_label }}">Project *</label>
+          {{ form.project }}
+          {% if form.project.errors %}<div class="form-error">{{ form.project.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.name.id_for_label }}">Release Name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.version_tag.id_for_label }}">Version Tag *</label>
+          {{ form.version_tag }}
+          {% if form.version_tag.errors %}<div class="form-error">{{ form.version_tag.errors }}</div>{% endif %}
+          <div class="text-xs text-muted mt-1">E.g. v1.0.0, v2.1-beta, Q3-Release</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.release_date.id_for_label }}">Planned Release Date</label>
+          {{ form.release_date }}
+          {% if form.release_date.errors %}<div class="form-error">{{ form.release_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.feature_flags.id_for_label }}">Feature Flags & Toggles</label>
+          {{ form.feature_flags }}
+          {% if form.feature_flags.errors %}<div class="form-error">{{ form.feature_flags.errors }}</div>{% endif %}
+          <div class="text-xs text-muted mt-1">Document active flags, environment overrides, or launch darks.</div>
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.release_notes.id_for_label }}">Release Notes / Changelog</label>
+          {{ form.release_notes }}
+          {% if form.release_notes.errors %}<div class="form-error">{{ form.release_notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 border-t pt-4">
+        <a href="{% if form.instance.pk %}{% url 'projects:rel_detail' form.instance.pk %}{% else %}{% url 'projects:rel_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Release</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
