@@ -611,6 +611,24 @@ def test_resource_rte_register_filters_narrow_to_the_orm_answer(
         assert list(resp.context["object_list"]) == []
 
 
+def test_resource_rte_register_billable_lens_narrows_both_ways(
+        client_a, tenant_a, resource_entry_draft, resource_entry_submitted):
+    """7.11's billing lens: ``?billable=1`` matches exactly the ORM's ``is_billable=True``
+    answer and ``?billable=0`` exactly the ``is_billable=False`` answer - each strictly smaller
+    than the whole register (the ``_resource_assert_narrows`` invariant)."""
+    _resource_entry(tenant_a, resource_entry_draft.resource, is_billable=True)
+    total = ResourceTimeEntry.objects.filter(tenant=tenant_a).count()
+    assert total >= 3
+    for params, lookups in (({"billable": "1"}, {"is_billable": True}),
+                            ({"billable": "0"}, {"is_billable": False})):
+        _resource_assert_narrows(client_a, "rte_list", ResourceTimeEntry, tenant_a,
+                                 params, lookups)
+    # A junk value is not a boolean - the FULL register stays at 200 (the L11 guard).
+    resp = _resource_get(client_a, "rte_list", billable="zz")
+    assert resp.status_code == 200
+    assert len(_resource_pks(resp)) == total
+
+
 def test_resource_rte_register_skips_junk_params(client_a, tenant_a, resource_entry_draft,
                                                  resource_entry_submitted):
     expected = set(ResourceTimeEntry.objects.filter(tenant=tenant_a).values_list("pk", flat=True))
@@ -1379,6 +1397,36 @@ def test_resource_rte_reject_refuses_a_draft(client_a, resource_entry_draft):
     assert resp.status_code == 302
     assert _resource_said(resp, "can be rejected")
     _resource_unchanged(obj, before)
+
+
+def test_resource_rte_relog_prefills_a_correction_and_leaves_the_rejected_row_frozen(
+        client_a, resource_entry_rejected):
+    """7.11's rejection loop: the POST verb redirects to the create form prefilled from the
+    frozen row, and the rejected row itself is UNTOUCHED (the pinned evidence ruling) - the
+    snapshot comparison catches a 're-log' that quietly mutates the evidence row instead."""
+    source = resource_entry_rejected
+    before = _resource_snapshot(source)
+    resp = _resource_post(client_a, "rte_relog", source.pk)
+    assert resp.status_code == 302
+    assert resp["Location"] == _resource_url("rte_create") + f"?relog={source.pk}"
+    _resource_unchanged(source, before)   # the rejected row stays byte-identical
+    # The prefilled form actually carries the frozen row's values.
+    follow = client_a.get(_resource_url("rte_create"), {"relog": str(source.pk)})
+    assert follow.status_code == 200
+    form = follow.context["form"]
+    assert form.initial["hours"] == source.hours
+    assert form.initial["is_billable"] == source.is_billable
+    assert form.initial["activity_code"] == source.activity_code
+
+
+def test_resource_rte_relog_refuses_every_non_rejected_status(
+        client_a, resource_entry_draft, resource_entry_submitted, resource_entry_approved):
+    for entry in (resource_entry_draft, resource_entry_submitted, resource_entry_approved):
+        before = _resource_snapshot(entry)
+        resp = _resource_post(client_a, "rte_relog", entry.pk)
+        assert resp.status_code == 302
+        assert _resource_said(resp, "Only a rejected entry can be re-logged")
+        _resource_unchanged(entry, before)
 
 
 # ==================================================================================================
