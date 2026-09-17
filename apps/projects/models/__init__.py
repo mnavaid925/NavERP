@@ -131,3 +131,11 @@ from .PortfolioProgramManagement.Programs import Program  # noqa: F401
 from .PortfolioProgramManagement.PortfolioInvestments import PortfolioInvestment  # noqa: F401
 from .PortfolioProgramManagement.ProgramDependencies import ProgramDependency  # noqa: F401
 
+# --- 7.13 Agile & Scrum Management --------------------------------------------------------------
+from .AgileScrumManagement.ProjectEpics import ProjectEpic  # noqa: F401
+from .AgileScrumManagement.ProjectReleases import ProjectRelease  # noqa: F401
+from .AgileScrumManagement.Sprints import Sprint  # noqa: F401
+from .AgileScrumManagement.SprintImpediments import SprintImpediment  # noqa: F401
+from .AgileScrumManagement.SprintRetrospectives import SprintRetrospective  # noqa: F401
+
+
