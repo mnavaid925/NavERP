@@ -19,6 +19,10 @@ from .models import (
     MeetingActionItem,
     MeetingAgendaItem,
     OvertimeRule,
+    Portfolio,
+    PortfolioInvestment,
+    Program,
+    ProgramDependency,
     Project,
     ProjectBudgetLine,
     ProjectDocument,
@@ -641,4 +645,42 @@ class ProjectOvertimeRecordAdmin(admin.ModelAdmin):
     search_fields = ("number", "notes", "decision_note")
     readonly_fields = ("number", "status", "submitted_at", "approved_by", "approved_at",
                        "created_at", "updated_at")
+
+
+# --- 7.12 Portfolio & Program Management --------------------------------------------------------
+@admin.register(Portfolio)
+class PortfolioAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "status", "strategic_theme", "budget_envelope", "owner", "tenant")
+    list_filter = ("status", "strategic_theme", "is_active")
+    list_select_related = ("tenant", "owner", "currency")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(Program)
+class ProgramAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "portfolio", "status", "manager", "budget_target", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "portfolio", "manager")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(PortfolioInvestment)
+class PortfolioInvestmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "portfolio", "program", "status", "allocated_budget", "approved_by", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project", "portfolio", "program", "approved_by")
+    search_fields = ("number", "project__name", "decision_notes")
+    readonly_fields = ("number", "approved_by", "approved_at", "created_at", "updated_at")
+
+
+@admin.register(ProgramDependency)
+class ProgramDependencyAdmin(admin.ModelAdmin):
+    list_display = ("number", "source_project", "target_project", "program", "dependency_type", "criticality", "status", "tenant")
+    list_filter = ("dependency_type", "criticality", "status")
+    list_select_related = ("tenant", "source_project", "target_project", "program", "owner")
+    search_fields = ("number", "source_project__name", "target_project__name", "description")
+    readonly_fields = ("number", "cleared_at", "created_at", "updated_at")
+
 
