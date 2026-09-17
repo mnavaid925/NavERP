@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ form.instance.name }}{% else %}New Overtime Rule{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:otr_list' %}">Overtime Rules</a>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if is_edit %}Edit Overtime Rule: {{ form.instance.name }}{% else %}New Overtime Rule{% endif %}</h1>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:otr_list' %}" class="btn btn-outline">Cancel</a>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="card">
+    <div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<small class="text-muted">{{ field.help_text }}</small>{% endif %}
+            {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-footer" style="padding:16px; border-top:1px solid var(--border-color); display:flex; gap:8px;">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Overtime Rule{% endif %}</button>
+      <a href="{% url 'projects:otr_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}
