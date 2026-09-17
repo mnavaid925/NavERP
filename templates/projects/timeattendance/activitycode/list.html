@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Activity Codes · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>Activity Codes</span>
+    </nav>
+    <h1 class="page-title">Activity Codes</h1>
+    <p class="text-muted">Standard activity catalog defining billing defaults and overhead categories.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:tac_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Activity Code</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search codes or names..." class="form-input" style="min-width:220px;">
+      </div>
+      <div class="form-group">
+        <select name="category" class="form-select">
+          <option value="">All Categories</option>
+          {% for val, lbl in category_choices %}
+            <option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="is_active" class="form-select">
+          <option value="">Any Status</option>
+          <option value="1" {% if request.GET.is_active == '1' %}selected{% endif %}>Active</option>
+          <option value="0" {% if request.GET.is_active == '0' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:tac_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Default Billing</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td><strong><a href="{% url 'projects:tac_detail' obj.pk %}">{{ obj.code }}</a></strong></td>
+            <td>{{ obj.name }}</td>
+            <td><span class="badge badge-info">{{ obj.get_category_display }}</span></td>
+            <td>
+              {% if obj.is_billable_default %}
+                <span class="badge badge-green">Billable</span>
+              {% else %}
+                <span class="badge badge-muted">Non-billable</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.is_active %}
+                <span class="badge badge-green">Active</span>
+              {% else %}
+                <span class="badge badge-slate">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:tac_detail' obj.pk %}" class="btn btn-outline btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'projects:tac_edit' obj.pk %}" class="btn btn-outline btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="tag"></i>
+                <h3>No activity codes found</h3>
+                <p>Define standard activity codes to track work and allocate overhead.</p>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
