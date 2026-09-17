@@ -18,6 +18,7 @@ urlpatterns = [
     path("time-entries/<int:pk>/edit/", views.rte_edit, name="rte_edit"),
     path("time-entries/<int:pk>/delete/", views.rte_delete, name="rte_delete"),
     path("time-entries/<int:pk>/submit/", views.rte_submit, name="rte_submit"),
+    path("time-entries/<int:pk>/relog/", views.rte_relog, name="rte_relog"),
     path("time-entries/<int:pk>/approve/", views.rte_approve, name="rte_approve"),
     path("time-entries/<int:pk>/reject/", views.rte_reject, name="rte_reject"),
 ]
