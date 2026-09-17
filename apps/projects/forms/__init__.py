@@ -1,4 +1,4 @@
-"""Forms package for the projects app (NavERP Module 7 — Project Management).
+"""Forms package for the projects app (NavERP Module 7 â€” Project Management).
 
 One sub-package per NavERP sub-module, one module per entity, mirroring models/ views/ urls/.
 Entity modules do ``from apps.projects.forms._common import *`` and the package __init__
@@ -11,7 +11,7 @@ authorization boundary).
 """
 # Re-export the shared toolkit, matching apps/accounting/forms/__init__.py and
 # apps/crm/forms/__init__.py: without it ``from apps.projects.forms import TenantUniqueMixin``
-# (or ``TenantModelForm`` / ``MAX_UPLOAD_BYTES``) raises ImportError — crm's own suite depends on
+# (or ``TenantModelForm`` / ``MAX_UPLOAD_BYTES``) raises ImportError â€” crm's own suite depends on
 # exactly this line, so the omission is a live trap for the projects test suite too.
 from ._common import *  # noqa: F401,F403
 
@@ -47,7 +47,7 @@ from .CostManagement.ProjectExpenses import ProjectExpenseForm  # noqa: F401
 # --- 7.5 Risk & Issue Management --------------------------------------------------------------
 # Six forms: the four register ModelForms plus the two plain ``forms.Form`` companions the
 # verb-driven steps need (``RiskClosureForm`` for ``rsk_close``, ``IssueResolutionForm`` for
-# ``iss_resolve``) — the closure note and the resolution evidence are written by the verb that
+# ``iss_resolve``) â€” the closure note and the resolution evidence are written by the verb that
 # also stamps the evidence fields, never by a generic edit.
 from .RiskManagement.IssueEscalations import IssueEscalationForm  # noqa: F401
 from .RiskManagement.ProjectIssues import (  # noqa: F401
@@ -60,7 +60,7 @@ from .RiskManagement.RiskResponseActions import RiskResponseActionForm  # noqa: 
 # --- 7.6 Quality Management -------------------------------------------------------------------
 # Six forms: the four register ModelForms plus the two plain ``forms.Form`` companions the
 # verb-driven gates need (``InspectionAcceptanceForm`` for ``qci_accept``'s usage decision,
-# ``DefectResolutionForm`` for ``qdf_resolve``) — the acceptance stamps and the resolution
+# ``DefectResolutionForm`` for ``qdf_resolve``) â€” the acceptance stamps and the resolution
 # evidence are written by the verb that stamps them, never by a generic edit.
 from .QualityManagement.DeliverableInspections import (  # noqa: F401
     DeliverableInspectionForm,
@@ -95,7 +95,7 @@ from .ScopeRequirements.ScopeVerifications import (  # noqa: F401
 # --- 7.8 Task & Work Management ---------------------------------------------------------------
 # FOUR re-exports (the old "three forms, no fourth" wording miscounted the block pair, review M2):
 # the checklist-item ModelForm, the execution ModelForm that carries the form-writable half of
-# ProjectTask's 7.8 fields (assignee, priority, MoSCoW, the Eisenhower pair, percent_complete —
+# ProjectTask's 7.8 fields (assignee, priority, MoSCoW, the Eisenhower pair, percent_complete â€”
 # actual_start/actual_end are verb-written and are on NO form), and the two plain ``forms.Form``
 # verb bodies of the block evidence row (a block needs a written reason AND unblock criteria; an
 # unblock, a resolution note). TaskBlock itself has no ModelForm by ruling: the row is minted by
@@ -105,7 +105,7 @@ from .TaskWorkManagement.TaskBlocks import TaskBlockForm, TaskUnblockForm  # noq
 from .TaskWorkManagement.TaskChecklistItems import TaskChecklistItemForm  # noqa: F401
 
 # --- 7.9 Collaboration & Communication ---------------------------------------------------------
-# SEVEN re-exports across FOUR modules — and deliberately none for `ProjectNotification`: a
+# SEVEN re-exports across FOUR modules â€” and deliberately none for `ProjectNotification`: a
 # notification row is minted by a trigger (msg_create/msg_edit, the seeder, later 7.17's rule
 # engine) and closed by ntf_mark_read, so it has no ModelForm and no create/edit route, which
 # means no forms module for it. `MeetingMinutesForm` is a plain `forms.Form` verb body (the
@@ -123,7 +123,7 @@ from .CollaborationCommunication.Meetings import (  # noqa: F401
 
 # --- 7.10 Document & Knowledge Management -------------------------------------------------------
 # FIVE re-exports across FOUR modules: the folder tree, the document register, the revision UPLOAD
-# form (create-path only � a revision has no edit form anywhere, because its immutability is
+# form (create-path only — a revision has no edit form anywhere, because its immutability is
 # structural), the file-backed standards library and the reusable-insight library. The revision
 # form deliberately carries NO `revision_no`/`is_approved`: the view assigns the number from
 # next_revision_no() inside the save transaction and an upload never approves itself.
@@ -132,3 +132,9 @@ from .DocumentKnowledgeManagement.Knowledge import KnowledgeEntryForm  # noqa: F
 from .DocumentKnowledgeManagement.ProjectFolders import ProjectFolderForm  # noqa: F401
 from .DocumentKnowledgeManagement.Revisions import ProjectDocumentRevisionUploadForm  # noqa: F401
 from .DocumentKnowledgeManagement.Templates import DocumentTemplateForm  # noqa: F401
+
+# --- 7.11 Time & Attendance Tracking ------------------------------------------------------------
+from .TimeAttendanceTracking.ActivityCodes import TimeActivityCodeForm  # noqa: F401
+from .TimeAttendanceTracking.OvertimeRecords import ProjectOvertimeRecordForm  # noqa: F401
+from .TimeAttendanceTracking.OvertimeRules import OvertimeRuleForm  # noqa: F401
+
