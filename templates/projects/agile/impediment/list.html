@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Impediments · Agile & Scrum · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <span>Impediments</span>
+    </nav>
+    <h1 class="page-title">Impediment & Blocker Tracking</h1>
+    <p class="text-muted">Sprint blockers, resolution workflows, impediment escalation, and obstacle tracking.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:sprint_execution' %}" class="btn btn-outline"><i data-lucide="play-circle"></i> Active Sprint</a>
+    <a href="{% url 'projects:imp_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise Impediment</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, description..." class="form-input" style="min-width:220px;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="severity" class="form-select">
+          <option value="">All Severities</option>
+          {% for val, label in severity_choices %}
+            <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="sprint" class="form-select">
+          <option value="">All Sprints</option>
+          {% for spt in sprints %}
+            <option value="{{ spt.pk }}" {% if selected_sprint_id == spt.pk %}selected{% endif %}>{{ spt.name }} ({{ spt.number }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:imp_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Impediment</th>
+          <th>Sprint</th>
+          <th>Severity</th>
+          <th>Owner</th>
+          <th>Status</th>
+          <th>Logged</th>
+          <th>Resolution</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:imp_detail' obj.pk %}">{{ obj.title }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ obj.number }}</div>
+            </td>
+            <td>
+              <a href="{% url 'projects:spt_detail' obj.sprint.pk %}" class="text-brand">{{ obj.sprint.name }}</a>
+              <div class="text-xs text-muted">{{ obj.sprint.project.name }}</div>
+            </td>
+            <td>
+              {% if obj.severity == 'critical' %}
+                <span class="badge badge-red">Critical</span>
+              {% elif obj.severity == 'high' %}
+                <span class="badge badge-amber">High</span>
+              {% elif obj.severity == 'medium' %}
+                <span class="badge badge-info">Medium</span>
+              {% else %}
+                <span class="badge badge-slate">Low</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.owner %}
+                {{ obj.owner.get_full_name|default:obj.owner.username }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.status == 'resolved' %}
+                <span class="badge badge-green">Resolved</span>
+              {% elif obj.status == 'in_progress' %}
+                <span class="badge badge-amber">In Progress</span>
+              {% else %}
+                <span class="badge badge-red">Open</span>
+              {% endif %}
+            </td>
+            <td class="text-xs text-muted">{{ obj.created_at|date:"M d, Y" }}</td>
+            <td class="text-sm">
+              {% if obj.resolution_notes %}
+                {{ obj.resolution_notes|truncatechars:50 }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:imp_detail' obj.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'projects:imp_edit' obj.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'projects:imp_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete impediment {{ obj.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="check-circle" class="empty-state-icon"></i>
+                <div class="empty-state-title">No Impediments Found</div>
+                <div class="empty-state-text">No active blockers logged across sprints. Clear runway ahead!</div>
+                <div class="empty-state-actions">
+                  <a href="{% url 'projects:imp_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise Impediment</a>
+                </div>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      <div class="pagination-links">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.sprint %}&sprint={{ request.GET.sprint }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.sprint %}&sprint={{ request.GET.sprint }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
