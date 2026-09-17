@@ -1290,6 +1290,8 @@ def _resource_entry(tenant, resource, **overrides):
         entry_date=_resource_today(),
         hours=Decimal("6.00"),
         task_description="Project implementation work",
+        is_billable=False,
+        activity_code="",
         status="draft",
         decision_note="",
         notes="",
@@ -5572,3 +5574,301 @@ def collab_notification_b(db, planning_project_b, admin_b):
     """Tenant B's notification — 404 as tenant A on detail/read/delete."""
     return _collab_notification(planning_project_b.tenant, planning_project_b, admin_b,
                                 title="Globex notice")
+
+
+# ==================================================================================================
+# ==================================================================================================
+# 7.10 Document & Knowledge Management (subslug ``docmgt``) — fixtures for
+# ``test_docmgt_{models,forms,views,security}.py``.
+# ==================================================================================================
+
+#: ``apps.projects.views.DocumentKnowledgeManagement`` default page size.
+DOCMGT_PAGE_SIZE = 15
+
+
+def _docmgt_folder(tenant, project, **overrides):
+    """Build a ``ProjectFolder`` — root or child."""
+    from apps.projects.models import ProjectFolder
+    data = dict(tenant=tenant, project=project, name="Governance", parent=None,
+                sequence=1, is_archived=False)
+    data.update(overrides)
+    obj = ProjectFolder(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _docmgt_document(tenant, project, folder, **overrides):
+    """Build a ``ProjectDocument``.  ``folder`` is required (the model does not allow null)."""
+    from apps.projects.models import ProjectDocument
+    data = dict(tenant=tenant, project=project, folder=folder, title="Charter",
+                document_type="charter", status="draft", classification="internal",
+                milestone=None, task=None, owner=None,
+                is_archived=False, is_legal_hold=False, is_checked_out=False)
+    data.update(overrides)
+    obj = ProjectDocument(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _docmgt_revision(tenant, document, **overrides):
+    """Build a ``ProjectDocumentRevision`` with a real ``SimpleUploadedFile``."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.projects.models import ProjectDocumentRevision
+    data = dict(tenant=tenant, document=document,
+                file=SimpleUploadedFile("rev.txt", b"revision body text"),
+                change_note="Initial upload.", is_approved=False)
+    data.update(overrides)
+    obj = ProjectDocumentRevision(**data)
+    obj.full_clean()
+    obj.save()
+    return obj
+
+
+def _docmgt_template(tenant, **overrides):
+    """Build a ``DocumentTemplate``."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.projects.models import DocumentTemplate
+    data = dict(tenant=tenant, name="Standard template", document_type="template",
+                category="general", is_active=True, is_format_locked=False,
+                file=SimpleUploadedFile("tmpl.txt", b"template body"))
+    data.update(overrides)
+    obj = DocumentTemplate(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _docmgt_knowledge(tenant, **overrides):
+    """Build a ``KnowledgeEntry``."""
+    from apps.projects.models import KnowledgeEntry
+    data = dict(tenant=tenant, title="Lesson learned", kind="lesson_learned",
+                status="draft", category="general",
+                body="What went wrong and why.", summary="A short summary.",
+                is_featured=False, usage_count=0, owner=None)
+    data.update(overrides)
+    obj = KnowledgeEntry(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+# --------------------------------------------------------------------------------------------------
+# Tenant A fixtures
+# --------------------------------------------------------------------------------------------------
+
+@pytest.fixture
+def docmgt_folder_root_a(db, tenant_a, planning_project_a):
+    return _docmgt_folder(tenant_a, planning_project_a, name="Governance")
+
+
+@pytest.fixture
+def docmgt_folder_child_a(db, tenant_a, planning_project_a, docmgt_folder_root_a):
+    return _docmgt_folder(tenant_a, planning_project_a, name="Sub-folder",
+                          parent=docmgt_folder_root_a, sequence=2)
+
+
+@pytest.fixture
+def docmgt_document_draft_a(db, tenant_a, planning_project_a, docmgt_folder_root_a):
+    return _docmgt_document(tenant_a, planning_project_a, docmgt_folder_root_a,
+                            title="Draft doc", status="draft")
+
+
+@pytest.fixture
+def docmgt_document_approved_a(db, tenant_a, planning_project_a, docmgt_folder_root_a, admin_user):
+    doc = _docmgt_document(tenant_a, planning_project_a, docmgt_folder_root_a,
+                           title="Approved doc", status="approved",
+                           current_revision_no=1)
+    _docmgt_revision(tenant_a, doc, is_approved=True, approved_by=admin_user)
+    return doc
+
+
+@pytest.fixture
+def docmgt_document_archived_a(db, tenant_a, planning_project_a, docmgt_folder_root_a):
+    return _docmgt_document(tenant_a, planning_project_a, docmgt_folder_root_a,
+                            title="Archived doc", status="archived", is_archived=True)
+
+
+@pytest.fixture
+def docmgt_document_held_a(db, tenant_a, planning_project_a, docmgt_folder_root_a):
+    return _docmgt_document(tenant_a, planning_project_a, docmgt_folder_root_a,
+                            title="Held doc",
+                            is_legal_hold=True, held_reason="Litigation hold.")
+
+
+@pytest.fixture
+def docmgt_revision_pending_a(db, tenant_a, docmgt_document_draft_a):
+    return _docmgt_revision(tenant_a, docmgt_document_draft_a)
+
+
+@pytest.fixture
+def docmgt_revision_approved_a(db, tenant_a, docmgt_document_approved_a, admin_user):
+    from apps.projects.models import ProjectDocumentRevision
+    return ProjectDocumentRevision.objects.get(tenant=tenant_a, document=docmgt_document_approved_a,
+                                               revision_no=1)
+
+
+@pytest.fixture
+def docmgt_template_active_a(db, tenant_a):
+    return _docmgt_template(tenant_a, name="Active standard")
+
+
+@pytest.fixture
+def docmgt_template_retired_a(db, tenant_a):
+    return _docmgt_template(tenant_a, name="Retired standard", is_active=False)
+
+
+@pytest.fixture
+def docmgt_knowledge_draft_a(db, tenant_a):
+    return _docmgt_knowledge(tenant_a, title="Draft lesson")
+
+
+@pytest.fixture
+def docmgt_knowledge_published_a(db, tenant_a):
+    return _docmgt_knowledge(tenant_a, title="Published tip", status="published",
+                             is_featured=True)
+
+
+@pytest.fixture
+def docmgt_knowledge_retired_a(db, tenant_a):
+    return _docmgt_knowledge(tenant_a, title="Retired note", status="retired")
+
+
+# --------------------------------------------------------------------------------------------------
+# Tenant B fixtures — 404 subjects
+# --------------------------------------------------------------------------------------------------
+
+@pytest.fixture
+def docmgt_folder_root_b(db, tenant_b, planning_project_b):
+    return _docmgt_folder(tenant_b, planning_project_b, name="Globex governance")
+
+
+@pytest.fixture
+def docmgt_document_draft_b(db, tenant_b, planning_project_b, docmgt_folder_root_b):
+    return _docmgt_document(tenant_b, planning_project_b, docmgt_folder_root_b,
+                            title="Globex draft", status="draft")
+
+
+@pytest.fixture
+def docmgt_knowledge_draft_b(db, tenant_b):
+    return _docmgt_knowledge(tenant_b, title="Globex lesson")
+
+
+# ==================================================================================================
+# 7.11 Time & Attendance Tracking (subslug timeattendance)
+# ==================================================================================================
+
+def _timeattendance_today():
+    return timezone.localdate()
+
+
+def _timeattendance_activity_code(tenant, **overrides):
+    from apps.projects.models import TimeActivityCode
+    data = {
+        "tenant": tenant,
+        "code": "TAC-DEV",
+        "name": "Software Development",
+        "category": "direct_project",
+        "is_billable_default": True,
+        "is_active": True,
+        "description": "Core software engineering",
+    }
+    data.update(overrides)
+    obj = TimeActivityCode(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _timeattendance_overtime_rule(tenant, **overrides):
+    from apps.projects.models import OvertimeRule
+    data = {
+        "tenant": tenant,
+        "name": "Standard Overtime Policy",
+        "standard_daily_hours": Decimal("8.00"),
+        "standard_weekly_hours": Decimal("40.00"),
+        "daily_overtime_multiplier": Decimal("1.50"),
+        "weekly_overtime_multiplier": Decimal("1.50"),
+        "weekend_multiplier": Decimal("1.50"),
+        "holiday_multiplier": Decimal("2.00"),
+        "requires_pre_approval": False,
+        "is_active": True,
+    }
+    data.update(overrides)
+    obj = OvertimeRule(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _timeattendance_overtime_record(tenant, resource, project, **overrides):
+    from apps.projects.models import ProjectOvertimeRecord
+    data = {
+        "tenant": tenant,
+        "resource": resource,
+        "project": project,
+        "date": _timeattendance_today(),
+        "overtime_hours": Decimal("2.50"),
+        "overtime_type": "daily",
+        "pay_multiplier": Decimal("1.50"),
+        "billable_multiplier": Decimal("1.00"),
+        "is_billable": True,
+        "status": "draft",
+    }
+    data.update(overrides)
+    obj = ProjectOvertimeRecord(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+@pytest.fixture
+def timeattendance_code_a(db, tenant_a):
+    return _timeattendance_activity_code(tenant_a, code="DEV", name="Development")
+
+
+@pytest.fixture
+def timeattendance_code_b(db, tenant_b):
+    return _timeattendance_activity_code(tenant_b, code="G-DEV", name="Globex Development")
+
+
+@pytest.fixture
+def timeattendance_rule_a(db, tenant_a):
+    return _timeattendance_overtime_rule(tenant_a, name="Acme Default Overtime")
+
+
+@pytest.fixture
+def timeattendance_rule_b(db, tenant_b):
+    return _timeattendance_overtime_rule(tenant_b, name="Globex Overtime")
+
+
+@pytest.fixture
+def timeattendance_record_draft_a(db, tenant_a, resource_profile_internal, resource_project):
+    return _timeattendance_overtime_record(tenant_a, resource_profile_internal, resource_project, status="draft")
+
+
+@pytest.fixture
+def timeattendance_record_submitted_a(db, tenant_a, resource_profile_internal, resource_project):
+    return _timeattendance_overtime_record(tenant_a, resource_profile_internal, resource_project,
+                                           status="submitted", submitted_at=timezone.now())
+
+
+@pytest.fixture
+def timeattendance_record_approved_a(db, tenant_a, resource_profile_internal, resource_project, admin_user):
+    return _timeattendance_overtime_record(tenant_a, resource_profile_internal, resource_project,
+                                           status="approved", approved_by=admin_user, approved_at=timezone.now())
+
+
+@pytest.fixture
+def timeattendance_record_rejected_a(db, tenant_a, resource_profile_internal, resource_project, admin_user):
+    return _timeattendance_overtime_record(tenant_a, resource_profile_internal, resource_project,
+                                           status="rejected", approved_by=admin_user, approved_at=timezone.now(),
+                                           decision_note="Exceeds weekly overtime cap")
+
+
+@pytest.fixture
+def timeattendance_record_draft_b(db, tenant_b, resource_project_b):
+    res_b = _resource_profile(tenant_b)
+    return _timeattendance_overtime_record(tenant_b, res_b, resource_project_b, status="draft")
+
