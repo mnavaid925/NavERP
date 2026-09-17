@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Sprints · Agile & Scrum · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>Agile Sprints</span>
+    </nav>
+    <h1 class="page-title">Sprint Management</h1>
+    <p class="text-muted">Sprint planning, velocity tracking, active iterations, and burndown progression.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:sprint_backlog' %}" class="btn btn-outline"><i data-lucide="layers"></i> Backlog</a>
+    <a href="{% url 'projects:sprint_execution' %}" class="btn btn-outline"><i data-lucide="play-circle"></i> Active Board</a>
+    <a href="{% url 'projects:spt_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Sprint</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search sprint name, goal..." class="form-input" style="min-width:220px;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="project" class="form-select">
+          <option value="">All Projects</option>
+          {% for prj in projects %}
+            <option value="{{ prj.pk }}" {% if selected_project_id == prj.pk %}selected{% endif %}>{{ prj.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:spt_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Sprint</th>
+          <th>Project</th>
+          <th>Dates</th>
+          <th>Points & Progress</th>
+          <th>Tasks</th>
+          <th>Scrum Master</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:spt_detail' obj.pk %}">{{ obj.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ obj.number }}</div>
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' obj.project.pk %}" class="text-brand">{{ obj.project.name }}</a>
+            </td>
+            <td>
+              <div class="text-sm">
+                {% if obj.start_date %}{{ obj.start_date|date:"M d, Y" }}{% else %}—{% endif %}
+                to
+                {% if obj.end_date %}{{ obj.end_date|date:"M d, Y" }}{% else %}—{% endif %}
+              </div>
+              {% if obj.is_overdue %}
+                <span class="badge badge-red">Overdue</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="text-xs text-muted mb-1">
+                <strong>{{ obj.completed_points }}</strong> / {{ obj.total_points }} pts ({{ obj.completion_rate }}%)
+              </div>
+              <div class="progress" style="height:6px; width:120px;">
+                <div class="progress-bar" style="width:{{ obj.completion_rate }}%;"></div>
+              </div>
+            </td>
+            <td>
+              <span class="badge badge-slate">{{ obj.completed_task_count }}/{{ obj.task_count }} done</span>
+            </td>
+            <td>
+              {% if obj.scrum_master %}
+                {{ obj.scrum_master.get_full_name|default:obj.scrum_master.username }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.status == 'active' %}
+                <span class="badge badge-amber">Active</span>
+              {% elif obj.status == 'completed' %}
+                <span class="badge badge-green">Completed</span>
+              {% elif obj.status == 'planning' %}
+                <span class="badge badge-info">Planning</span>
+              {% elif obj.status == 'cancelled' %}
+                <span class="badge badge-red">Cancelled</span>
+              {% else %}
+                <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:spt_detail' obj.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'projects:spt_edit' obj.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'projects:spt_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete sprint {{ obj.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="zap" class="empty-state-icon"></i>
+                <div class="empty-state-title">No Sprints Found</div>
+                <div class="empty-state-text">Create your first sprint to start planning tasks and tracking velocity.</div>
+                <div class="empty-state-actions">
+                  <a href="{% url 'projects:spt_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Sprint</a>
+                </div>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      <div class="pagination-links">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
