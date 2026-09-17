@@ -102,10 +102,12 @@ _RESOURCE_ALLOCATION_FIELDS = [
     "total_hours", "start_date", "end_date", "notes",
 ]
 
-#: ``ResourceTimeEntryForm.Meta.fields``, verbatim and in order - the exact 7. ``status``, the
-#: approval stamps and ``decision_note`` are the verbs' alone.
+#: ``ResourceTimeEntryForm.Meta.fields``, verbatim and in order - the exact 9 (7.11 adds the
+#: billing split and the activity code). ``status``, the approval stamps and ``decision_note``
+#: are the verbs' alone.
 _RESOURCE_TIME_ENTRY_FIELDS = [
-    "resource", "project", "project_task", "entry_date", "hours", "task_description", "notes",
+    "resource", "project", "project_task", "entry_date", "hours", "task_description",
+    "is_billable", "activity_code", "notes",
 ]
 
 #: The AS-BUILT required sets. Beyond the obviously required columns, every field carrying a
@@ -823,13 +825,14 @@ def test_resource_allocation_form_help_text_pins_the_one_magnitude_rule(resource
 # 6. ResourceTimeEntryForm - fields, scoping, the I7 join and the hours validator
 # ==================================================================================================
 
-def test_resource_time_entry_form_offers_exactly_the_seven_fields(resource_tenant):
-    """``Meta.fields`` is the exact 7-list in order. ``status`` and every approval stamp plus
+def test_resource_time_entry_form_offers_exactly_the_nine_fields(resource_tenant):
+    """``Meta.fields`` is the exact 9-list in order (7.11 appends ``is_billable`` and
+    ``activity_code`` to the seven). ``status`` and every approval stamp plus
     ``decision_note`` are the verbs' alone - the form cannot rewind or forge an approval."""
     form = ResourceTimeEntryForm(tenant=resource_tenant)
     assert ResourceTimeEntryForm.Meta.fields == _RESOURCE_TIME_ENTRY_FIELDS
     assert list(form.fields) == _RESOURCE_TIME_ENTRY_FIELDS
-    assert len(form.fields) == 7
+    assert len(form.fields) == 9
     for absent in ("tenant", "number", "status", "submitted_at", "approved_at",
                    "approved_by", "decision_note"):
         assert absent not in form.fields, absent
