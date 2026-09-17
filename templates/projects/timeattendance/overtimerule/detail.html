@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} · Overtime Rule · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:otr_list' %}">Overtime Rules</a>
+      <span>{{ obj.name }}</span>
+    </nav>
+    <h1 class="page-title">{{ obj.name }}</h1>
+    <p class="text-muted">{{ obj.number }} · {% if obj.project %}Project: {{ obj.project.name }}{% else %}Tenant Default Policy{% endif %}</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:otr_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'projects:otr_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete this overtime rule?');">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+    <a href="{% url 'projects:otr_list' %}" class="btn btn-outline">Back to List</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Rule Parameters & Multipliers</h2></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <dt>Scope</dt>
+      <dd>
+        {% if obj.project %}
+          <a href="{% url 'projects:prj_detail' obj.project.pk %}">{{ obj.project.name }}</a>
+        {% else %}
+          <span class="badge badge-slate">Tenant-Wide Default</span>
+        {% endif %}
+      </dd>
+      <dt>Status</dt>
+      <dd>
+        {% if obj.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-slate">Inactive</span>
+        {% endif %}
+      </dd>
+      <dt>Standard Daily Hours</dt><dd>{{ obj.standard_daily_hours }} hours/day</dd>
+      <dt>Standard Weekly Hours</dt><dd>{{ obj.standard_weekly_hours }} hours/week</dd>
+      <dt>Daily Overtime Rate</dt><dd><span class="badge badge-amber">{{ obj.daily_overtime_multiplier }}x</span></dd>
+      <dt>Weekly Overtime Rate</dt><dd><span class="badge badge-amber">{{ obj.weekly_overtime_multiplier }}x</span></dd>
+      <dt>Weekend Work Rate</dt><dd><span class="badge badge-amber">{{ obj.weekend_multiplier }}x</span></dd>
+      <dt>Holiday Work Rate</dt><dd><span class="badge badge-red">{{ obj.holiday_multiplier }}x</span></dd>
+      <dt>Pre-Approval Required</dt>
+      <dd>{% if obj.requires_pre_approval %}Yes{% else %}No{% endif %}</dd>
+      <dt>Notes</dt><dd>{{ obj.notes|linebreaksbr|default:"—" }}</dd>
+    </dl>
+  </div>
+</div>
+{% endblock %}
