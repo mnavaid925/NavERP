@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{% if form.instance.pk %}Edit Impediment {{ form.instance.number }}{% else %}Raise Impediment{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <a href="{% url 'projects:imp_list' %}">Impediments</a>
+      <span>{% if form.instance.pk %}Edit {{ form.instance.number }}{% else %}Raise Impediment{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if form.instance.pk %}Edit Impediment {{ form.instance.number }}{% else %}Raise Sprint Impediment{% endif %}</h1>
+  </div>
+  <div class="page-actions">
+    <a href="{% if form.instance.pk %}{% url 'projects:imp_detail' form.instance.pk %}{% else %}{% url 'projects:imp_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+  </div>
+</div>
+
+<div class="card" style="max-width: 800px;">
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.sprint.id_for_label }}">Sprint *</label>
+          {{ form.sprint }}
+          {% if form.sprint.errors %}<div class="form-error">{{ form.sprint.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.title.id_for_label }}">Impediment Title *</label>
+          {{ form.title }}
+          {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description & Impact *</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.severity.id_for_label }}">Severity *</label>
+          {{ form.severity }}
+          {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.owner.id_for_label }}">Assigned Resolver / Owner</label>
+          {{ form.owner }}
+          {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+          <div class="text-xs text-muted mt-1">Person or Scrum Master responsible for clearing this roadblock.</div>
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.resolution_notes.id_for_label }}">Resolution Notes</label>
+          {{ form.resolution_notes }}
+          {% if form.resolution_notes.errors %}<div class="form-error">{{ form.resolution_notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 border-t pt-4">
+        <a href="{% if form.instance.pk %}{% url 'projects:imp_detail' form.instance.pk %}{% else %}{% url 'projects:imp_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Impediment</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
