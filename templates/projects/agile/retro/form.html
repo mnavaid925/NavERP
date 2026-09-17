@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{% if form.instance.pk %}Edit Retrospective {{ form.instance.number }}{% else %}New Retrospective{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <a href="{% url 'projects:ret_list' %}">Retrospectives</a>
+      <span>{% if form.instance.pk %}Edit {{ form.instance.number }}{% else %}New Retrospective{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if form.instance.pk %}Edit Retrospective {{ form.instance.number }}{% else %}New Sprint Retrospective{% endif %}</h1>
+  </div>
+  <div class="page-actions">
+    <a href="{% if form.instance.pk %}{% url 'projects:ret_detail' form.instance.pk %}{% else %}{% url 'projects:ret_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+  </div>
+</div>
+
+<div class="card" style="max-width: 800px;">
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.sprint.id_for_label }}">Sprint *</label>
+          {{ form.sprint }}
+          {% if form.sprint.errors %}<div class="form-error">{{ form.sprint.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.conducted_date.id_for_label }}">Conducted Date</label>
+          {{ form.conducted_date }}
+          {% if form.conducted_date.errors %}<div class="form-error">{{ form.conducted_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.conducted_by.id_for_label }}">Facilitator</label>
+          {{ form.conducted_by }}
+          {% if form.conducted_by.errors %}<div class="form-error">{{ form.conducted_by.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.sentiment_score.id_for_label }}">Team Sentiment Rating (1.0 to 5.0) *</label>
+          {{ form.sentiment_score }}
+          {% if form.sentiment_score.errors %}<div class="form-error">{{ form.sentiment_score.errors }}</div>{% endif %}
+          <div class="text-xs text-muted mt-1">1.0 = Very Negative, 3.0 = Neutral, 5.0 = Very Positive.</div>
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.what_went_well.id_for_label }}">What Went Well</label>
+          {{ form.what_went_well }}
+          {% if form.what_went_well.errors %}<div class="form-error">{{ form.what_went_well.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.what_needs_improvement.id_for_label }}">What Needs Improvement</label>
+          {{ form.what_needs_improvement }}
+          {% if form.what_needs_improvement.errors %}<div class="form-error">{{ form.what_needs_improvement.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.action_items.id_for_label }}">Action Items & Commitments</label>
+          {{ form.action_items }}
+          {% if form.action_items.errors %}<div class="form-error">{{ form.action_items.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 border-t pt-4">
+        <a href="{% if form.instance.pk %}{% url 'projects:ret_detail' form.instance.pk %}{% else %}{% url 'projects:ret_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Retrospective</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
