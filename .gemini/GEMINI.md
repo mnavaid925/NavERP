@@ -1,0 +1,499 @@
+# NavERP Instructions & Development Guidelines (Gemini / Antigravity)
+
+> **MANDATORY**: Follow all instructions and rules below, which are the exact project standards codified in `.claude/CLAUDE.md`. All principles, package structures, commit rules, and review workflows apply to all agents.
+
+### **Working Principles**
+
+**1. Plan Mode Default**
+
+* Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
+* If something goes sideways, STOP and re-plan immediately – don't keep pushing
+* Use plan mode for verification steps, not just building
+* Write detailed specs upfront to reduce ambiguity
+
+**2. Subagent Strategy — ONE AT A TIME**
+
+* **Never run agents in parallel and never use the `Workflow` tool.** One agent runs, it reports back, you act on
+  its result, and only then does the next one start.
+* Use a subagent to keep the main context window clean — research, exploration, review, fixes — but exactly **one
+  task per subagent** and exactly **one subagent in flight**.
+* For complex problems, throw more *care* at it — a longer, better-specified single agent — not more concurrent
+  agents.
+* Never launch several `Agent` calls in one message.
+
+**3. Self-Improvement Loop**
+
+* After ANY correction from the user: update `.claude/tasks/lessons.md` with the pattern
+* Write rules for yourself that prevent the same mistake
+* Ruthlessly iterate on these lessons until mistake rate drops
+* Review lessons at session start for relevant project
+
+**4. Verification Before Done**
+
+* Never mark a task complete without proving it works
+* Diff behavior between main and your changes when relevant
+* Ask yourself: "Would a staff engineer approve this?"
+* Run tests, check logs, demonstrate correctness
+
+**5. Demand Elegance (Balanced)**
+
+* For non-trivial changes: pause and ask "is there a more elegant way?"
+* If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
+* Skip this for simple, obvious fixes – don't over-engineer
+* Challenge your own work before presenting it
+
+**6. Autonomous Bug Fixing**
+
+* When given a bug report: just fix it. Don't ask for hand-holding
+* Point at logs, errors, failing tests – then resolve them
+* Zero context switching required from the user
+* Go fix failing CI tests without being told how
+* Use the monitor tool 
+
+---
+
+### **Module Creation Sequence (MANDATORY — strictly serial)**
+
+Whenever you create a **new module or sub-module** (especially via `/next-module`), follow this exact sequence. It
+**starts with research and planning** (`research` → `todo`) so the build is driven by what the best products in the
+domain actually do, *then* writes the code, *then* **reviews it with six reviewers run one after another**, *then*
+has one `code-fixer` agent burn the findings down, *then* writes the tests. Every step ends with `git add` +
+`git commit` (**one file per commit**, PowerShell-safe). **Never run `git push` at any step** — the user pushes
+manually.
+
+> **Everything below runs ONE THING AT A TIME.** No `Workflow` tool, no parallel lanes, no fan-out. A phase's
+> agents run in sequence: agent → result → act on it → next agent. Never start a second agent while one is still
+> running, and never put two `Agent` calls in the same message.
+
+| # | Phase | How it runs |
+|---|-------|-------------|
+| 0 | Claim the tree | inline |
+| 1 | `research` agent | 1 agent |
+| 2 | `todo` agent | 1 agent |
+| 3 | Build | spec → scaffold (new app only) → entity by entity → integrate → smoke, one step at a time |
+| 4 | Review | the 6 reviewers run **one after another** → one findings `.md` |
+| 5 | `code-fixer` agent | 1 agent — fixes and commits one by one |
+| 6 | Tests | contract + `conftest.py` → the 4 test modules one at a time → 1 green unfiltered run |
+| 7 | Skill + README | inline |
+
+---
+
+**Phase 0 — Claim the tree (do not skip; it costs 2 minutes and saves an hour).**
+* `git rev-parse HEAD` → **save this sha as `BASE`**. Phase 4 reviews `BASE...HEAD`; without it the reviewers have
+  no changeset to read (the build commits as it goes, so the working tree is clean by then).
+* `git status` — a dirty tree at session start is **not yours** (L45). Leave those files alone; never commit them.
+* If another session is building in this same checkout, agree the migration number before generating one (L43).
+
+**Phase 1 — `research` agent.** Research the ~6–10 leading commercial products in the ONE target sub-module's
+(`N.M`) specific domain (not the parent module's generic domain) and write a deduplicated, prioritized feature
+catalog to `.claude/tasks/research-<slug>-<N.M>.md`, mapped to that sub-module's NavERP.md feature bullets and the
+as-built core spine, with a recommended 1–4-model build scope. Commit that file.
+
+**Phase 2 — `todo` agent.** Feed it the Phase 1 output; it turns the researched features into a checkable build
+plan in `.claude/tasks/todo.md` (models + their fields/choices **driven by the researched features**, plus
+backend/wire-up/template/verify/close-out items). Commit that file.
+
+**Phase 3 — Build (serial).** Five steps, in this order, one at a time:
+
+1. **Spec** (read-only `explorer` agent, or inline) — read `.claude/tasks/todo.md`, NavERP.md and the reference
+   apps, and freeze the **contract** in `.claude/tasks/contract-<slug>-<N.M>.md`: every model field and CHOICES
+   value, form `Meta.fields` + exclusions, url names, and — the field that decides whether the build works —
+   **every view context key**. Pin the list var, the detail and edit-mode object vars, every `*_choices`, every FK
+   filter queryset. A name left unpinned is a silently blank region or a `NoReverseMatch` (L7).
+2. **Scaffold** — **brand-new app only**; skipped when `apps/<slug>/` exists.
+3. **Build, entity by entity** — take one entity at a time and finish it completely before starting the next: its
+   four backend files (`models` / `forms` / `views` / `urls`) and then its three templates
+   (`list` / `detail` / `form.html`). Do not interleave entities, and do not touch shared files here: package
+   `__init__.py`, `admin.py`, the seeder, `navigation.py`, `settings.py` and `urls.py` all wait for Integrate.
+4. **Integrate** (single writer, only DB writer) — verify every expected file actually landed *before* wiring
+   anything, then add the `__init__.py` re-export blocks surgically, register admin, extend the seeder, add the
+   one `LIVE_LINKS["N.M"]` entry, do the `settings.py` / `urls.py` wire-up **only now that the app files exist**
+   (the check-after-edit hook blocks otherwise, L12), then `makemigrations` → `migrate` → `seed_<slug>` **twice**
+   → `manage.py check`, and commit one file per commit with explicit paths.
+5. **Smoke** (`qa-smoke-tester` agent) — the gate that catches contract drift: render every new page as
+   `admin_acme` and assert content, not just status (a mismatched context var returns 200 and renders blank, L8),
+   plus a junk-param list, page 2, and cross-tenant IDOR → 404. Fix drift against the contract. This runs so the
+   review phase spends its six passes on quality, not on a page that 500s.
+
+**Phase 4 — Review (six reviewers, ONE AFTER ANOTHER).**
+
+Run these six agents **in sequence**, each in its own `Agent` call, waiting for each to report before starting the
+next:
+
+`code-reviewer` → `explorer` → `frontend-reviewer` → `performance-reviewer` → `qa-smoke-tester` →
+`security-reviewer`
+
+Each one reviews `BASE...HEAD` (the sha you saved in Phase 0) and returns structured findings. After each agent
+reports, **append its findings to `.claude/tasks/review-<slug>-<N.M>.md`** — do not carry findings in your head
+between agents. When all six have run, dedupe the file, sort Critical → Important → Minor, and assign IDs
+(`C1`, `I3`, `M7`). Commit the file.
+
+* The reviewers are **read-only**: they never edit code and never commit. `qa-smoke-tester` is the only one that
+  touches the DB (migrate + seed + its throwaway `temp/` script) and its normal "fix what you find" behaviour is
+  overridden to "report it instead".
+* If a reviewer returns nothing usable, re-run **that one agent** — a missing pass is missing coverage, not a
+  clean bill of health.
+* Do **not** apply findings yourself in the main session; that is Phase 5's job.
+
+**Phase 5 — `code-fixer` agent.** Hand it the findings file; it fixes every finding in ID order
+(all Critical, then Important, then Minor), verifies each, and makes **one commit per file** as it goes, marking
+each finding `[x] fixed` / `[~] skipped — reason` in the file. **The main session does not apply findings itself** —
+that is what kept blowing out the context window. When it reports back, check that no finding is left `[ ] open`
+and that `manage.py check` is clean.
+
+**Phase 6 — Tests (serial).** In this order, one at a time:
+
+1. One agent pins the test contract (exact model / form / url / context names) and writes the shared
+   `tests/__init__.py` + `conftest.py`.
+2. Then a `test-writer` agent per file, **one after another**: `test_<subslug>_models.py` →
+   `test_<subslug>_forms.py` → `test_<subslug>_views.py` → `test_<subslug>_security.py`. Commit each test file on
+   its own as it lands.
+3. Finally, run the **full unfiltered** app suite and fix it green — never `-k` filtered, because a filter
+   excludes exactly the tests a shared-file change can break (L47).
+
+Tests run on SQLite in-memory. Every test function is named `test_<subslug>_*` and every module-level helper
+`_<subslug>_*`, so the *next* sub-module appending nearby cannot shadow them. `conftest.py` is owned by step 1
+alone — never edit it from a later step without re-running the full suite.
+
+**Phase 7 — Skill + README.** Update (or, on a brand-new app, author) `.claude/skills/<module-slug>/SKILL.md` with
+the new sub-module's models/routes/templates/seeder rows, and mark the sub-module complete in `README.md`. Commit
+each file on its own. (See **Per-Module Skill (MANDATORY)** below.)
+
+---
+
+**Rules for this sequence:**
+
+* Phases run **in order** — do not skip one and do not reorder. **Everywhere, one thing at a time**: one agent in
+  flight, one entity at a time, one reviewer at a time, one test file at a time.
+* **Never use the `Workflow` tool** for any of this, and never launch two agents in the same message.
+* Phase 1 produces `.claude/tasks/research-<slug>-<N.M>.md`, Phase 2 produces `.claude/tasks/todo.md`, Phase 4
+  produces `.claude/tasks/review-<slug>-<N.M>.md`. Each is committed as its own file.
+* **All review findings live in the `.md` file, never only in the transcript.** If an agent returns findings and
+  you do not write them to `.claude/tasks/`, the phase is not done.
+* Single-writer work stays in the main session or in one dedicated agent: migrations, the seeder,
+  `navigation.py`, `settings.py`, `urls.py`, package `__init__.py` re-export blocks, and app-level `conftest.py`.
+* Never **full-rewrite** a shared file from an agent — surgical `Edit` only. Another session may be building a
+  different sub-module in this same checkout (L43).
+* `git push` is **never** part of this sequence — stop at `git commit` every time.
+* If an agent reports no changes are needed, note that and move on (no empty commit required).
+
+---
+
+### **Per-Module Skill (MANDATORY)**
+
+Every time you finish a **new module** (a Django app under `apps/<slug>`), you MUST create a dedicated Claude Code skill for it. This makes future work on that module fast and consistent (the skill is the module's living "how to work on me" guide).
+
+1. **Location & name:** create `.claude/skills/<module-slug>/SKILL.md` where `<module-slug>` is the app slug (e.g. `crm`, `accounting`, `inventory`). The skill `name` is the slug (or `<slug>-module`).
+
+2. **Frontmatter** (YAML) is required:
+   * `name:` — the slug.
+   * `description:` — one line that states **what the skill covers and when to trigger it**, with explicit trigger phrases, e.g. *"Work on the CRM module (leads, opportunities, contacts). Use when the user asks to add/change/debug anything under apps/crm or templates/crm, or invokes /crm."*
+
+3. **Body** must document the **as-built** module so it can be worked on without re-reading everything:
+   * **Overview** — what the module does (mirror its `NavERP.md` section) and its app path.
+   * **Models** — each model + key fields, choices, and which **core-spine** entities it reuses (`core.Party`, `core.Item`, `JournalEntry`, etc.) vs. adds.
+   * **URLs / routes** — the `app_name` and url names (list/create/detail/edit/delete) + any custom actions.
+   * **Templates** — the `templates/<slug>/` pages and the shared patterns/partials they use.
+   * **Seeder** — the `seed_<slug>` command and the demo data it creates.
+   * **Conventions & gotchas** — tenant scoping, the context-var contract, any module-specific rules.
+   * **Common tasks** — concrete steps for "add a field", "add a new model + CRUD", "add a filter", "extend the seeder".
+   * **Sidebar wiring** — the `LIVE_LINKS` entries added in `apps/core/navigation.py` for this module.
+
+4. **Accuracy & upkeep:** the skill must reflect the real code (correct paths, url names, field names). When the module changes later, update its skill in the same change.
+
+5. **Commit it** as its own file (one file per commit, PowerShell-safe). **Never `git push`.**
+
+> Module 0 is the foundation; its reference skills already exist (`next-module`, `dump-module`, `sqa-review`, `manual-test`). Modules **1–23** each get their own skill via this rule.
+
+---
+
+### **Task Management**
+
+1. **Plan First**: Write plan to `.claude/tasks/todo.md` with checkable items
+2. **Verify Plan**: Check in before starting implementation
+3. **Track Progress**: Mark items complete as you go
+4. **Explain Changes**: High-level summary at each step
+5. **Document Results**: Add review section to `.claude/tasks/todo.md`
+6. **Capture Lessons**: Update `.claude/tasks/lessons.md` after corrections
+
+---
+
+### **Core Principles**
+
+* **Simplicity First**: Make every change as simple as possible. Impact minimal code.
+* **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
+* **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+---
+
+### GIT Commit Rule
+
+* Whenever you create a new file or update a file or delete a file. You should do a git commits.
+* git commit should be in details about new changes, update or add features in detail.
+* eg: 
+git add 'src/file.js'
+git commit -m 'some example changes'.
+
+**STRICT — ONE FILE PER COMMIT (no exceptions):**
+
+* **Never** combine multiple files into a single `git add` / `git commit` pair, **even if they're in the same folder, share a feature, or look like a "set"** (e.g. `directory/lead/list.html` + `directory/lead/form.html` + `directory/lead/detail.html` of the same model).
+* **Wrong** (this is what NOT to do):
+  ```
+  git add 'templates/crm/directory/lead/list.html' 'templates/crm/directory/lead/form.html' 'templates/crm/directory/lead/detail.html'; git commit -m 'feat(crm): lead templates'
+  ```
+* **Right** — one `git add` + one `git commit` per file, every time:
+  ```
+  git add 'templates/crm/directory/lead/list.html'; git commit -m 'feat(crm): lead list template'
+  git add 'templates/crm/directory/lead/form.html'; git commit -m 'feat(crm): lead form template'
+  git add 'templates/crm/directory/lead/detail.html'; git commit -m 'feat(crm): lead detail template with activity timeline'
+  ```
+* Each commit message should be specific to that one file's content — don't reuse the same message across multiple commits.
+* If a change spans 30+ files, the snippet block IS 30+ commits. Length is fine — bundling is not.
+* Empty `__init__.py` files still get their own commit.
+
+**Shell Compatibility (CRITICAL — user runs PowerShell on Windows):**
+
+* The user's shell is **Windows PowerShell (5.x)** — `&&` is NOT a valid statement separator and WILL fail with `ParserError`.
+* When combining commands on one line, use `;` as the separator, NEVER `&&`.
+* When providing "all commits in one copy" / "single copy" / bulk-commit output, ALWAYS output in PowerShell-compatible form:
+  * ✅ Correct: `git add 'file.py'; git commit -m 'msg'`
+  * ❌ Wrong:  `git add 'file.py' && git commit -m 'msg'`
+* Default to PowerShell-safe syntax for ALL shell snippets intended for the user to run directly (not just git).
+* Note: `;` runs the next command even if the first fails. If stop-on-failure is required, output commands on separate lines instead of chaining.
+
+---
+
+### Filter Implementation Rules (Preventing Recurring Issues)
+
+Every list page in this application MUST have working filters. When creating or modifying any list view/template, follow these mandatory steps:
+
+1. **View must pass ALL context needed by template filters:**
+   - For status dropdowns: pass `status_choices` (from `Model.STATUS_CHOICES`)
+   - For FK dropdowns (categories, items, vendors, warehouses): pass the queryset to the template
+   - For type/method dropdowns: pass the model's `CHOICES` constant
+   - Never assume the template will get data it wasn't explicitly passed in the view context
+
+2. **Template filter comparison rules:**
+   - For string fields: `{% if request.GET.status == value %}selected{% endif %}`
+   - For FK/pk fields: use `|stringformat:"d"` — NEVER use `|slugify` for pk comparison
+   - Example: `{% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}`
+
+3. **View filter logic:**
+   - Always parse GET params and apply to queryset BEFORE pagination
+   - Search: `request.GET.get('q', '').strip()` with `Q()` lookups
+   - Status: `request.GET.get('status', '')` with `qs.filter(status=value)`
+   - Active/Inactive: map `'active'`/`'inactive'` to `is_active=True/False`
+
+4. **Template variable naming must match view context:**
+   - If view passes `suggestions`, template must use `{% for r in suggestions %}`
+   - If model field is `suggested_quantity`, template must use `r.suggested_quantity` (not `r.suggested_qty`)
+   - If view passes `stats` dict, template accesses `stats.pending` (not `pending_count`)
+
+5. **Badge values must match model CHOICES:**
+   - Template badge conditions must use exact model choice values (e.g., `'weighted_avg'` not `'weighted_average'`)
+   - Always include an `{% else %}` fallback: `{{ obj.get_field_display }}`
+
+Run the `/frontend-design` skill for the full pattern reference.
+
+---
+
+### CRUD Completeness Rules (Preventing Missing Actions)
+
+Every new module MUST include all CRUD operations from the start. Never ship a module with only list/add/view — Edit and Delete are mandatory.
+
+1. **Every model that has a list page MUST have these views:**
+   - `list_view` — with search + filters
+   - `create_view` — add form
+   - `detail_view` — read-only detail page (for models with enough fields)
+   - `edit_view` — edit form (same template as create, pre-filled)
+   - `delete_view` — POST-only with confirmation, redirects to list
+
+2. **Every list template MUST have an Actions column with:**
+   - View button (eye icon) — links to detail page
+   - Edit button (pencil icon) — links to edit form
+   - Delete button (bin icon) — POST form with `onclick="return confirm('...')"` and `{% csrf_token %}`
+   - Conditional display: wrap Edit/Delete in `{% if obj.status == 'draft' %}` when status-dependent
+
+3. **Every detail template MUST have an Actions sidebar with:**
+   - Edit button — links to edit form (conditional on status)
+   - Delete button — POST form with confirm dialog (conditional on status)
+   - Back to List link
+
+4. **Delete view pattern:**
+   ```python
+   @login_required
+   def model_delete_view(request, pk):
+       obj = get_object_or_404(Model, pk=pk, tenant=request.tenant)
+       if request.method == 'POST':
+           obj.delete()
+           messages.success(request, 'Deleted successfully.')
+           return redirect('app:model_list')
+       return redirect('app:model_list')
+   ```
+
+5. **Delete URL pattern:**
+   - Always add: `path('models/<int:pk>/delete/', views.model_delete_view, name='model_delete')`
+
+---
+
+### Template Folder Structure (MANDATORY)
+
+Templates MUST be organized **one folder per sub-module, then one folder per entity** — never flat. The page
+(`list` / `detail` / `form` / a secondary action) is the **bare filename**. A model's CRUD pages live under
+`templates/<app>/<submodule>/<entity>/<page>.html`, grouped by the NavERP.md sub-module that owns the model.
+
+1. **Path shape:** `templates/<app>/<submodule>/<entity>/<page>.html` where `<page>` ∈ {`list`, `detail`, `form`,
+   … a secondary action like `import`}. e.g. `templates/hrm/offboarding/clearanceitem/detail.html`,
+   `templates/accounting/ledger/journal_entry/list.html`, `templates/crm/directory/lead/form.html`. The view's
+   `render()` / `crud_*` `template=` argument uses that full path: `render(request,
+   "hrm/offboarding/clearanceitem/detail.html", ...)`. **Never** ship a flat `<entity>_<page>.html` file inside a
+   sub-module folder (the old `clearanceitem_detail.html` shape is banned).
+
+2. **Two folder levels: sub-module → entity.** The sub-module folder uses a short slug (e.g. HRM:
+   `employee/ organization/ onboarding/ offboarding/ attendance/ leave/ holiday/` — 3.2 is the multi-entity
+   `organization/` folder: `organization/designation/ organization/jobgrade/ organization/department/
+   organization/costcenter/`; Accounting:
+   `ledger/ payable/ receivable/ cash/ assets/ costing/ payroll/ projects/ intercompany/ tax/ reports/ budget/
+   audit/ integration/`; CRM: `directory/ sales/ marketing/ service/ activities/ finance/ projects/ documents/
+   workflow/ success/ vendor/`). **Inside it, each model/entity gets its own folder** (`offboarding/separationcase/`,
+   `offboarding/exitinterview/`, `cash/bank_account/`, `cash/bank_transaction/`). The page file is just
+   `list.html` / `detail.html` / `form.html`.
+
+3. **Single-entity sub-modules: the sub-module folder doubles as the entity folder** — do NOT double-nest. When a
+   sub-module owns one main entity whose slug equals the folder (e.g. HRM `employee`; Accounting
+   `budget`, `integration`, `intercompany`), keep `employee/form.html`, `budget/detail.html`
+   — NOT `employee/employee/list.html`. A child entity added later still gets its own folder under the
+   sub-module (e.g. `budget/line/form.html` alongside the page-only `budget/list.html`). (When a single-entity
+   sub-module later grows to multiple entities it graduates to the rule-2 two-level form — e.g. HRM 3.2 moved from
+   the flat `designation/` to `organization/designation/ organization/jobgrade/ …`.)
+
+4. **Foundation apps (Module 0: core / accounts / tenants / dashboard) are flat — no sub-module level**, so the
+   entity folder sits at the app root: `templates/core/party/list.html`, `templates/accounts/user/form.html`,
+   `templates/tenants/subscription/detail.html`.
+
+5. **Secondary entity-action pages go inside the entity folder** (page = the action name):
+   `cash/bank_transaction/import.html` sits next to `cash/bank_transaction/list.html`. Fold a non-CRUD page into
+   `<entity>/<action>.html` only when it begins with `<entity>_` for an entity that already has a CRUD triple in
+   that directory (longest-entity-stem match — so `gl_account_ledger.html` is **not** folded into `glaccount/`).
+
+6. **Standalone pages stay at the sub-module / app root** (no entity folder): module landing/overview
+   (`templates/hrm/hrm_overview.html`, `templates/crm/overview.html`, `templates/accounting/dashboard.html`),
+   reports (`accounting/reports/balance_sheet.html`, `accounting/ledger/trial_balance.html`,
+   `accounting/payable/ap_aging.html`), print letters (`hrm/offboarding/relieving_letter.html`), wizards
+   (`tenants/onboarding_wizard.html`), and other single-purpose pages that aren't an entity's list/detail/form.
+
+7. **New modules (via `/next-module`)** MUST follow this from the start — create
+   `templates/<app>/<submodule>/<entity>/{list,detail,form}.html`. Never ship flat
+   `templates/<app>/<submodule>/<entity>_<page>.html` files.
+
+8. **`{% extends %}` / `{% include %}` are unaffected** by the folders — keep `{% extends "base.html" %}` and
+   `{% include "partials/..." %}` (base + partials live at the templates root, not inside a module).
+
+---
+
+### Backend Package Structure (MANDATORY)
+
+The backend mirrors the template rule: `models`, `forms`, `views` and `urls` are **Python packages**, organized
+**one folder per sub-module, then one file per entity** — never flat `.py` monoliths. `apps/crm` and
+`apps/accounting` are fully converted; **read them as the reference.**
+
+1. **Path shape:** `apps/<app>/<layer>/<SubModule>/<Entity>.py` where `<layer>` ∈ {`models`, `forms`, `views`,
+   `urls`}. `<SubModule>` is the NavERP.md sub-module title in **PascalCase** (`### 2.2 General Ledger (GL)` →
+   `GeneralLedger/`); `<Entity>` is the entity in **PascalCase** (`Leads.py`, `Invoices.py`). The four layers
+   **line up one-to-one**: `models/GeneralLedger/JournalEntries.py` ↔ `forms/…` ↔ `views/…` ↔ `urls/…`.
+
+2. **An entity file owns the primary model plus its children** — `Invoices.py` = `Invoice` + `InvoiceLine`;
+   `Cases.py` = `Case` + `CaseComment`. Do not scatter one entity's CRUD across files.
+
+3. **Every package `__init__.py` re-exports everything it owns**
+   (`from .<SubModule>.<Entity> import (A, B)`). This is what keeps `from apps.<app>.models import X`,
+   `views.<name>` in the URLconf, and `include('apps.<app>.urls')` working. **Adding a model/form/view WITHOUT
+   adding it to the re-export block is a bug** — it will `ImportError` / `AttributeError` at runtime.
+
+4. **Imports inside these packages MUST be ABSOLUTE** — `from apps.<app>.models import X`. A relative
+   `from .models import X` resolves to the wrong package one level deeper. Entity modules pull the shared toolkit
+   from `<layer>/_base.py` (models) or `<layer>/_common.py` (forms/views) via `import *`.
+
+5. **Shared modules:** `models/_base.py` (django imports + the abstract `Tenant*` base), `forms/_common.py`,
+   `views/_common.py`. Private helpers used by **more than one** sub-module go in `views/_helpers.py`; helpers used
+   by a single entity stay in that entity's module.
+
+6. **`urls/__init__.py`** sets `app_name` and concatenates each entity module's `urlpatterns`. Django resolves
+   **first-match-wins, so order is behaviour** — keep literal routes before `<int:pk>` ones, and check any new
+   greedy `<str:token>` route against the whole concatenated list, not just its own module.
+
+7. **Never create a `*_advanced.py` sidecar** (or any second flat file) for "advanced"/later features — a later
+   sub-module's models simply get their own `<SubModule>/<Entity>.py`. Accounting's `models_advanced.py` /
+   `forms_advanced.py` / `views_advanced.py` were folded away for exactly this reason.
+
+8. **`admin.py`, `apps.py`, `analytics.py`, `services.py` and other single-purpose modules stay flat** at the app
+   root. Migrations are unaffected: models sit deeper than the app root, but Django still derives `app_label` from
+   the app config — a correct split needs **no new migration** (`makemigrations --check` must say "No changes
+   detected").
+
+9. **Foundation apps (Module 0: `core` / `tenants`) have NO sub-module level** — exactly like their templates
+   (rule 4 above). Module 0 has no NavERP sub-modules, so the entity file sits FLAT at the package root:
+   `apps/core/models/Party.py`, `apps/core/views/Party.py`, `apps/tenants/models/Subscription.py` — never a
+   `<SubModule>/` folder. Shared plumbing still goes in `_base.py` / `_common.py` (e.g. `core/forms/_common.py`
+   holds **`TenantModelForm`**, the base class every other app's forms inherit, plus
+   `ALLOWED_DOC_EXTENSIONS`/`MAX_UPLOAD_BYTES`). `accounts` and `dashboard` remain flat modules.
+
+10. **Don't split a file just for symmetry — split it when it's hard to navigate.** `core/urls.py` and
+    `tenants/urls.py` are deliberately **left as flat modules**: `core/urls.py` is a 37-line `crud(slug, name)`
+    factory that generates the 5 standard routes per model, and expanding it into per-entity `urlpatterns` lists
+    would replace a good abstraction with ~45 duplicated `path()` lines. The factory IS the better structure.
+
+---
+
+### Seed Command Rules (Preventing Data Issues)
+
+1. **Idempotent by default:**
+   - Seed commands MUST be safe to run multiple times without `--flush`
+   - Use `get_or_create` for models with unique constraints
+   - For models with auto-generated numbers (PR-00001, PO-00001), check existence before creating:
+     ```python
+     existing = Model.objects.filter(tenant=tenant, number=number).first()
+     if existing:
+         results.append(existing)
+         continue
+     ```
+   - Never use bare `.save()` or `.create()` for models with unique_together constraints
+
+2. **Always skip if data exists:**
+   - Check `if Model.objects.filter(tenant=tenant).exists()` at the start
+   - Print a warning: `"Data already exists. Use --flush to re-seed."`
+
+3. **Print login instructions:**
+   - After seeding, always print which tenant admin accounts to use
+   - Always warn: `"Superuser 'admin' has no tenant — data won't appear when logged in as admin"`
+
+4. **`__init__.py` files:**
+   - When creating `management/commands/` directories, ALWAYS create both:
+     - `management/__init__.py`
+     - `management/commands/__init__.py`
+
+---
+
+### Multi-Tenancy Rules (Preventing Data Visibility Issues)
+
+1. **Superuser has no tenant:**
+   - The `admin` superuser has `tenant=None`
+   - All tenant-scoped module views filter by `tenant=request.tenant`
+   - When `request.tenant` is `None`, queries return empty results — this is BY DESIGN
+   - Always instruct users to log in as a **tenant admin** (e.g., `admin_<slug>`) to see module data
+
+2. **Every view MUST filter by tenant:**
+   - `Model.objects.filter(tenant=request.tenant)` — no exceptions
+   - Never use `Model.objects.all()` in tenant-scoped views
+
+3. **Every model MUST have a tenant FK:**
+   - Except User, Role (which have it already) and pure join/through tables
+   - Always include: `tenant = models.ForeignKey('core.Tenant', on_delete=models.CASCADE, related_name='...')`
+
+---
+
+### Vulnerability
+When you find a security vulnerability, flag it immediately with a WARNING comment and suggest a secure alternative. Never implement insecure patterns even if asked.
+
+---
+
