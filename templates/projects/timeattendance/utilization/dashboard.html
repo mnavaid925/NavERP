@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Time Reporting & Utilization Dashboard · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>Utilization Dashboard</span>
+    </nav>
+    <h1 class="page-title">Time Reporting & Utilization Dashboard</h1>
+    <p class="text-muted">Chargeability ratios, overhead allocation, client billing splits, and capacity vs. demand.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:time_calendar' %}" class="btn btn-outline"><i data-lucide="calendar"></i> Calendar Sync</a>
+    <a href="{% url 'projects:rte_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Time Entries</a>
+  </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <label class="form-label" style="margin-right:4px;">Month</label>
+        <select name="month" class="form-select">
+          {% for num, name in months_choices %}
+            <option value="{{ num }}" {% if month == num %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="margin-right:4px;">Year</label>
+        <select name="year" class="form-select">
+          {% for y in years_choices %}
+            <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="margin-right:4px;">Project</label>
+        <select name="project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if selected_project == p.pk %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="margin-right:4px;">Resource</label>
+        <select name="resource" class="form-select">
+          <option value="">All Team Members</option>
+          {% for r in resources %}
+            <option value="{{ r.pk }}" {% if selected_resource == r.pk %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'projects:utilization_dashboard' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<!-- KPI Stat Cards -->
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="percent"></i></div>
+    <div>
+      <div class="text-muted" style="font-size:0.875rem;">Chargeability Ratio</div>
+      <div style="font-size:1.5rem; font-weight:700;">{{ kpi.chargeability_ratio }}%</div>
+      <small class="text-muted">Billable / Total Hours</small>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i data-lucide="gauge"></i></div>
+    <div>
+      <div class="text-muted" style="font-size:0.875rem;">Team Utilization</div>
+      <div style="font-size:1.5rem; font-weight:700;">{{ kpi.overall_utilization }}%</div>
+      <small class="text-muted">Billable / Capacity</small>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i data-lucide="briefcase"></i></div>
+    <div>
+      <div class="text-muted" style="font-size:0.875rem;">Billable Hours</div>
+      <div style="font-size:1.5rem; font-weight:700;">{{ kpi.billable_hours }}h</div>
+      <small class="text-muted">Client billable effort</small>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon slate"><i data-lucide="clock"></i></div>
+    <div>
+      <div class="text-muted" style="font-size:0.875rem;">Non-Billable Hours</div>
+      <div style="font-size:1.5rem; font-weight:700;">{{ kpi.non_billable_hours }}h</div>
+      <small class="text-muted">Overhead & admin</small>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange"><i data-lucide="zap"></i></div>
+    <div>
+      <div class="text-muted" style="font-size:0.875rem;">Overtime Hours</div>
+      <div style="font-size:1.5rem; font-weight:700;">{{ kpi.overtime_hours }}h</div>
+      <small class="text-muted">Approved overtime</small>
+    </div>
+  </div>
+</div>
+
+<!-- Section 1: Individual Utilization Table -->
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-header">
+    <h2>Individual Resource Utilization ({{ month_name }} {{ year }})</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Resource</th>
+          <th>Role</th>
+          <th>Team / Org</th>
+          <th>Month Capacity</th>
+          <th>Total Hours</th>
+          <th>Billable Hours</th>
+          <th>Overtime</th>
+          <th>Chargeability</th>
+          <th>Actual vs Target Utilization</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in individual_rows %}
+          <tr>
+            <td><strong><a href="{% url 'projects:rsp_detail' row.resource.pk %}">{{ row.resource.name }}</a></strong></td>
+            <td>{{ row.role }}</td>
+            <td>{{ row.org_unit }}</td>
+            <td>{{ row.capacity }}h</td>
+            <td>{{ row.total_hours }}h</td>
+            <td><strong class="text-primary">{{ row.billable_hours }}h</strong></td>
+            <td>{% if row.overtime_hours > 0 %}<span class="badge badge-amber">{{ row.overtime_hours }}h</span>{% else %}—{% endif %}</td>
+            <td>{{ row.chargeability_pct }}%</td>
+            <td>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <strong>{{ row.utilization_pct }}%</strong>
+                <span class="badge {{ row.badge_class }}">{{ row.status_text }} (target {{ row.target_pct }}%)</span>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9"><div class="empty-state"><h3>No active resources found</h3></div></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Section 2: Split Columns (Client Billing Split + Overhead Allocation) -->
+<div id="billing" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap:24px; margin-bottom:24px;">
+  <!-- Client Billing Splits -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Client Billing Splits ({{ month_name }})</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Project</th>
+            <th>Billable Hours</th>
+            <th>Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in client_splits %}
+            <tr>
+              <td><strong>{{ row.client_name }}</strong></td>
+              <td>{{ row.project_name }} <span class="text-muted">({{ row.project_number }})</span></td>
+              <td>{{ row.billable_hours }}h</td>
+              <td><span class="badge badge-info">{{ row.share_pct }}%</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><p>No billable hours recorded this month.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Overhead Allocation -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Overhead Allocation ({{ month_name }})</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Category / Activity</th>
+            <th>Non-Billable Hours</th>
+            <th>Share of Overhead</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in overhead_splits %}
+            <tr>
+              <td><strong>{{ row.category }}</strong></td>
+              <td>{{ row.hours }}h</td>
+              <td><span class="badge badge-slate">{{ row.share_pct }}%</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><p>No non-billable hours logged this month.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Capacity vs Demand vs Actuals -->
+<div class="card">
+  <div class="card-header">
+    <h2>Capacity vs. Demand vs. Actuals Summary</h2>
+  </div>
+  <div class="card-body">
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px;">
+      <div>
+        <div class="text-muted">Total Available Capacity</div>
+        <div style="font-size:1.25rem; font-weight:700;">{{ capacity_demand.capacity_hours }}h</div>
+      </div>
+      <div>
+        <div class="text-muted">Planned Booking Demand</div>
+        <div style="font-size:1.25rem; font-weight:700;">{{ capacity_demand.demand_hours }}h</div>
+      </div>
+      <div>
+        <div class="text-muted">Actual Logged Hours</div>
+        <div style="font-size:1.25rem; font-weight:700;">{{ capacity_demand.actual_hours }}h</div>
+      </div>
+      <div>
+        <div class="text-muted">Actual vs. Demand Variance</div>
+        <div style="font-size:1.25rem; font-weight:700;">
+          {% if capacity_demand.variance_actual_vs_demand >= 0 %}
+            <span class="badge badge-green">+{{ capacity_demand.variance_actual_vs_demand }}h</span>
+          {% else %}
+            <span class="badge badge-amber">{{ capacity_demand.variance_actual_vs_demand }}h</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
