@@ -8412,3 +8412,39 @@ right, and **the orchestrator's own first C2 re-probe was wrong** — it passed 
 ### Review notes
 
 (filled in at the end)
+
+### 7.11 Time & Attendance Tracking (Module 7: Project Management, `projects`) — build & close-out (2026-09-17)
+
+Shipped full 7.11 Time & Attendance Tracking sub-module across all 5 NavERP capability bullets:
+1. **Timesheet Entry & Submission**: Extended `ResourceTimeEntry` with `is_billable` and `activity_code` tied to `TimeActivityCode` [TAC-] (6 standard overhead categories: direct project, client consulting, internal overhead, general admin, training, R&D).
+2. **Approval Workflows**: Re-logging loop (`rte_relog`) creating a corrected draft without mutating audited rejected evidence; maker-checker approval/rejection workflows on `ProjectOvertimeRecord` [POT-].
+3. **Billable vs. Non-Billable Hours**: Computed chargeability ratios, overhead allocations, and client billing splits.
+4. **Overtime & Leave Integration**: `OvertimeRule` [OTR-] with daily, weekly, weekend, and holiday threshold multipliers, plus unified `time_calendar` synchronizing project hours, leaves (`hrm.LeaveRequest`), public holidays (`hrm.PublicHoliday`), and overtime records.
+5. **Time Reporting & Utilization**: Comprehensive `utilization_dashboard` reporting individual resource utilization against target %, team chargeability, client billing splits, category overhead, and capacity vs demand variance.
+
+- Models: `TimeActivityCode` [TAC-], `OvertimeRule` [OTR-], `ProjectOvertimeRecord` [POT-], plus `ResourceTimeEntry` extension.
+- Forms: `TimeActivityCodeForm`, `OvertimeRuleForm`, `ProjectOvertimeRecordForm`, updated `ResourceTimeEntryForm`.
+- Views: CRUD for activity codes and overtime rules, CRUD + submit/approve/reject verbs for overtime records, `utilization_dashboard`, `time_calendar`, `rte_relog`.
+- Templates: 11 templates in `templates/projects/timeattendance/` (activitycode, overtimerule, overtimerecord, utilization, calendar) adhering to strict design system color-named badges.
+- Navigation: `LIVE_LINKS["7.11"]` mapped with all 5 bullets and 3 extra live leaves.
+- Migrations: `0017` and `0018` applied cleanly.
+- Seeder: `_time_attendance` in `seed_projects.py` seeding 8 activity codes, 2 overtime rules, 3 overtime records, updating time entries; 100% idempotent.
+- Tests: 53 tests across 4 lanes (`test_timeattendance_models.py`, `_forms.py`, `_views.py`, `_security.py`) all passing green (0 failures).
+
+---
+
+### 7.12 Portfolio & Program Management (Module 7: Project Management, `projects`) — plan (2026-09-16)
+
+- [ ] Contract: .claude/tasks/contract-projects-7.12.md (fields, choices, forms, urls, context keys)
+- [ ] models/PortfolioProgramManagement/Portfolios.py — Portfolio [PRT-]
+- [ ] models/PortfolioProgramManagement/Programs.py — Program [PGM-]
+- [ ] models/PortfolioProgramManagement/PortfolioInvestments.py — PortfolioInvestment [PIN-]
+- [ ] models/PortfolioProgramManagement/ProgramDependencies.py — ProgramDependency [PDEP-]
+- [ ] forms/ 4 files (PortfolioForm, ProgramForm, PortfolioInvestmentForm, ProgramDependencyForm)
+- [ ] views/ Portfolios/Programs/PortfolioInvestments/ProgramDependencies + PortfolioDashboard (computed)
+- [ ] urls/ pfm_* routes (portfolios/, programs/, investments/, program-dependencies/, portfolio-dashboard/)
+- [ ] templates/projects/portfolio/{portfolio,program,investment,dependency}/{list,detail,form}.html + portfolio/dashboard.html
+- [ ] __init__ re-exports x4, admin, seed _portfolio guard, LIVE_LINKS["7.12"]
+- [ ] makemigrations 0017 -> migrate -> seed_projects x2 -> check
+- [ ] Smoke: every page 200 as admin_acme + content asserts + IDOR 404
+- [ ] Review (6 serial) -> code-fixer -> tests (4 files) -> full suite green -> skill + README
