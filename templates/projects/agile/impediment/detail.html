@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{{ impediment.title }} · Impediment Details · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <a href="{% url 'projects:imp_list' %}">Impediments</a>
+      <span>{{ impediment.number }}</span>
+    </nav>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ impediment.title }}</h1>
+      {% if impediment.severity == 'critical' %}
+        <span class="badge badge-red">Critical</span>
+      {% elif impediment.severity == 'high' %}
+        <span class="badge badge-amber">High</span>
+      {% elif impediment.severity == 'medium' %}
+        <span class="badge badge-info">Medium</span>
+      {% else %}
+        <span class="badge badge-slate">Low</span>
+      {% endif %}
+      {% if impediment.status == 'resolved' %}
+        <span class="badge badge-green">Resolved</span>
+      {% elif impediment.status == 'in_progress' %}
+        <span class="badge badge-amber">In Progress</span>
+      {% else %}
+        <span class="badge badge-red">Open</span>
+      {% endif %}
+    </div>
+    <p class="text-muted font-mono text-xs">{{ impediment.number }} · Sprint: <a href="{% url 'projects:spt_detail' impediment.sprint.pk %}" class="text-brand">{{ impediment.sprint.name }}</a> ({{ impediment.sprint.project.name }})</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:imp_edit' impediment.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{% url 'projects:imp_list' %}" class="btn btn-outline">Back to Impediments</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <!-- Description & Resolution -->
+  <div class="card lg:col-span-2">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="alert-circle"></i> Blocker Description</h2>
+    </div>
+    <div class="card-body">
+      <div class="mb-6">
+        <label class="text-xs font-semibold uppercase tracking-wider text-muted">Obstacle Details</label>
+        <p class="mt-2 text-sm leading-relaxed whitespace-pre-line">{{ impediment.description }}</p>
+      </div>
+
+      <div class="border-t pt-4">
+        <label class="text-xs font-semibold uppercase tracking-wider text-muted">Resolution Notes</label>
+        {% if impediment.resolution_notes %}
+          <div class="mt-2 text-sm leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded border">
+            {{ impediment.resolution_notes }}
+          </div>
+          {% if impediment.resolved_at %}
+            <div class="text-xs text-muted mt-2">Resolved on {{ impediment.resolved_at|date:"M d, Y H:i" }}</div>
+          {% endif %}
+        {% else %}
+          <p class="mt-2 text-muted text-sm">No resolution notes logged yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Resolution Action & Sidebar Info -->
+  <div class="space-y-6">
+    {% if impediment.status != 'resolved' %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="check-circle"></i> Resolve Blocker</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'projects:imp_resolve' impediment.pk %}">
+            {% csrf_token %}
+            <div class="form-group mb-3">
+              <label class="form-label" for="id_resolution_notes">Resolution Notes</label>
+              <textarea name="resolution_notes" id="id_resolution_notes" class="form-textarea" rows="4" placeholder="Explain how the impediment was unblocked..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary w-full" onclick="return confirm('Mark impediment {{ impediment.number }} as resolved?');">
+              <i data-lucide="check"></i> Mark as Resolved
+            </button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><i data-lucide="info"></i> Blocker Metadata</h2>
+      </div>
+      <div class="card-body space-y-3">
+        <div>
+          <span class="text-xs text-muted block">Owner / Assigned To:</span>
+          <div class="text-sm font-medium">
+            {% if impediment.owner %}{{ impediment.owner.get_full_name|default:impediment.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+          </div>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Raised By:</span>
+          <div class="text-sm">
+            {% if impediment.raised_by %}{{ impediment.raised_by.get_full_name|default:impediment.raised_by.username }}{% else %}—{% endif %}
+          </div>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Logged At:</span>
+          <div class="text-sm">{{ impediment.created_at|date:"M d, Y H:i" }}</div>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Sprint:</span>
+          <a href="{% url 'projects:spt_detail' impediment.sprint.pk %}" class="text-sm text-brand font-medium">{{ impediment.sprint.name }}</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
