@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.name }}{% else %}New Portfolio{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:prt_list' %}">Portfolios</a>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if is_edit %}Edit Portfolio: {{ obj.name }}{% else %}New Investment Portfolio{% endif %}</h1>
+    <p class="text-muted">Define the strategic investment envelope, owner, theme, and budget limit.</p>
+  </div>
+</div>
+
+<div class="card max-w-3xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="p-3 bg-red-50 text-red-700 rounded text-sm mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.name.id_for_label }}">Portfolio Name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.code.id_for_label }}">Portfolio Code</label>
+          {{ form.code }}
+          {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.owner.id_for_label }}">Owner / PMO Lead</label>
+          {{ form.owner }}
+          {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.strategic_theme.id_for_label }}">Strategic Theme *</label>
+          {{ form.strategic_theme }}
+          {% if form.strategic_theme.errors %}<div class="form-error">{{ form.strategic_theme.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.budget_envelope.id_for_label }}">Budget Envelope *</label>
+          {{ form.budget_envelope }}
+          {% if form.budget_envelope.errors %}<div class="form-error">{{ form.budget_envelope.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+          {{ form.currency }}
+          {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.start_date.id_for_label }}">Start Date</label>
+          {{ form.start_date }}
+          {% if form.start_date.errors %}<div class="form-error">{{ form.start_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.end_date.id_for_label }}">End Date</label>
+          {{ form.end_date }}
+          {% if form.end_date.errors %}<div class="form-error">{{ form.end_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description & Governance Objectives</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.is_active }}
+            <span class="text-sm font-medium">Active Portfolio</span>
+          </label>
+          {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t border-slate-200">
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Portfolio{% endif %}</button>
+        <a href="{% url 'projects:prt_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
