@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Dependency{% else %}New Dependency{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:pdep_list' %}">Dependencies</a>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if is_edit %}Edit Dependency: {{ obj.number }}{% else %}New Cross-Project Dependency{% endif %}</h1>
+    <p class="text-muted">Define predecessor to successor dependencies, milestone handovers, and lead/lag constraints.</p>
+  </div>
+</div>
+
+<div class="card max-w-3xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="p-3 bg-red-50 text-red-700 rounded text-sm mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.source_project.id_for_label }}">Predecessor Project (Source) *</label>
+          {{ form.source_project }}
+          {% if form.source_project.errors %}<div class="form-error">{{ form.source_project.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.target_project.id_for_label }}">Successor Project (Target) *</label>
+          {{ form.target_project }}
+          {% if form.target_project.errors %}<div class="form-error">{{ form.target_project.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.program.id_for_label }}">Program (Optional)</label>
+          {{ form.program }}
+          {% if form.program.errors %}<div class="form-error">{{ form.program.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.dependency_type.id_for_label }}">Dependency Type *</label>
+          {{ form.dependency_type }}
+          {% if form.dependency_type.errors %}<div class="form-error">{{ form.dependency_type.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.criticality.id_for_label }}">Criticality *</label>
+          {{ form.criticality }}
+          {% if form.criticality.errors %}<div class="form-error">{{ form.criticality.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.lead_lag_days.id_for_label }}">Lead / Lag Days</label>
+          {{ form.lead_lag_days }}
+          {% if form.lead_lag_days.errors %}<div class="form-error">{{ form.lead_lag_days.errors }}</div>{% endif %}
+          <span class="text-xs text-muted">Positive = lag (days delay), negative = lead (days acceleration).</span>
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.owner.id_for_label }}">Dependency Owner / Coordinator</label>
+          {{ form.owner }}
+          {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description & Handover Requirements</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t border-slate-200">
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Dependency{% endif %}</button>
+        <a href="{% url 'projects:pdep_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
