@@ -18,6 +18,7 @@ from .models import (
     Meeting,
     MeetingActionItem,
     MeetingAgendaItem,
+    OvertimeRule,
     Project,
     ProjectBudgetLine,
     ProjectDocument,
@@ -28,6 +29,7 @@ from .models import (
     ProjectKickoff,
     ProjectMilestone,
     ProjectNotification,
+    ProjectOvertimeRecord,
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
@@ -47,6 +49,7 @@ from .models import (
     TaskBlock,
     TaskChecklistItem,
     TaskDependency,
+    TimeActivityCode,
 )
 
 
@@ -608,3 +611,34 @@ class KnowledgeEntryAdmin(admin.ModelAdmin):
     # usage_count is a CLICK COUNTER written by kne_use with an atomic F()+1 - an admin edit would
     # reset somebody's count by saving a stale copy of the row.
     readonly_fields = ("usage_count", "created_by", "created_at", "updated_at")
+
+
+# --- 7.11 Time & Attendance Tracking ------------------------------------------------------------
+@admin.register(TimeActivityCode)
+class TimeActivityCodeAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "category", "is_billable_default", "is_active", "tenant")
+    list_filter = ("category", "is_billable_default", "is_active")
+    search_fields = ("code", "name", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(OvertimeRule)
+class OvertimeRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "standard_daily_hours", "standard_weekly_hours",
+                    "daily_overtime_multiplier", "is_active", "tenant")
+    list_filter = ("is_active",)
+    list_select_related = ("tenant", "project")
+    search_fields = ("number", "name", "notes")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ProjectOvertimeRecord)
+class ProjectOvertimeRecordAdmin(admin.ModelAdmin):
+    list_display = ("number", "resource", "project", "date", "overtime_hours", "overtime_type",
+                    "status", "is_billable", "tenant")
+    list_filter = ("status", "overtime_type", "is_billable")
+    list_select_related = ("tenant", "resource", "project", "project_task", "approved_by")
+    search_fields = ("number", "notes", "decision_note")
+    readonly_fields = ("number", "status", "submitted_at", "approved_by", "approved_at",
+                       "created_at", "updated_at")
+
