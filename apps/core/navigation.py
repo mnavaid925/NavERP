@@ -1888,6 +1888,19 @@ LIVE_LINKS = {
         "Overtime Records":                      "projects:pot_list",
         "Overtime Rules":                        "projects:otr_list",
     },
+    "7.12": {
+        "Portfolio Dashboard & Heat Maps":       "projects:pfm_dashboard",
+        "Program Dependency Mapping":            "projects:pdep_list",
+        "Strategic Alignment & Scoring":         "projects:pin_list",
+        "Capacity & Pipeline Planning":          "projects:pfm_dashboard#pipeline",
+        "Portfolio Reporting & Governance":      "projects:prt_list",
+        # Extra live leaves:
+        "Portfolios":                            "projects:prt_list",
+        "Programs":                              "projects:pgm_list",
+        "Investments & Scoring":                 "projects:pin_list",
+        "Program Dependencies":                  "projects:pdep_list",
+    },
+
 
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
