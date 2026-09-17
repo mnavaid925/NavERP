@@ -67,6 +67,11 @@ from .DocumentKnowledgeManagement.RepositoryOverview import urlpatterns as _dk_r
 from .DocumentKnowledgeManagement.RetentionBoard import urlpatterns as _dk_retention
 from .DocumentKnowledgeManagement.Revisions import urlpatterns as _dk_revisions
 from .DocumentKnowledgeManagement.Templates import urlpatterns as _dk_templates
+from .TimeAttendanceTracking.ActivityCodes import urlpatterns as _ta_activitycodes
+from .TimeAttendanceTracking.OvertimeRecords import urlpatterns as _ta_overtimerecords
+from .TimeAttendanceTracking.OvertimeRules import urlpatterns as _ta_overtimerules
+from .TimeAttendanceTracking.TimeCalendar import urlpatterns as _ta_calendar
+from .TimeAttendanceTracking.UtilizationDashboard import urlpatterns as _ta_utilization
 
 app_name = "projects"
 
@@ -160,4 +165,12 @@ urlpatterns = (
     + _dk_knowledge
     + _dk_repository
     + _dk_retention
+    # 7.11 Time & Attendance Tracking — first segments (activity-codes/, overtime-rules/,
+    # overtime-records/, utilization/, time-calendar/) are disjoint literals from 7.1's–7.10's.
+    + _ta_activitycodes
+    + _ta_overtimerules
+    + _ta_overtimerecords
+    + _ta_utilization
+    + _ta_calendar
 )
+
