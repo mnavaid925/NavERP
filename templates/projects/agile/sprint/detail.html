@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block title %}{{ sprint.name }} · Sprint Details · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <span>{{ sprint.number }}</span>
+    </nav>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ sprint.name }}</h1>
+      {% if sprint.status == 'active' %}
+        <span class="badge badge-amber">Active</span>
+      {% elif sprint.status == 'completed' %}
+        <span class="badge badge-green">Completed</span>
+      {% elif sprint.status == 'planning' %}
+        <span class="badge badge-info">Planning</span>
+      {% elif sprint.status == 'cancelled' %}
+        <span class="badge badge-red">Cancelled</span>
+      {% else %}
+        <span class="badge badge-slate">{{ sprint.get_status_display }}</span>
+      {% endif %}
+      {% if sprint.is_overdue %}
+        <span class="badge badge-red">Overdue</span>
+      {% endif %}
+    </div>
+    <p class="text-muted font-mono text-xs">{{ sprint.number }} · Project: <a href="{% url 'projects:prj_detail' sprint.project.pk %}" class="text-brand">{{ sprint.project.name }}</a></p>
+  </div>
+  <div class="page-actions">
+    {% if sprint.status == 'planning' %}
+      <form method="post" action="{% url 'projects:spt_start' sprint.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Start sprint {{ sprint.number }}? Committed points will be locked at {{ sprint.total_points }} pts.');">
+          <i data-lucide="play"></i> Start Sprint
+        </button>
+      </form>
+    {% elif sprint.status == 'active' %}
+      <form method="post" action="{% url 'projects:spt_complete' sprint.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Complete sprint {{ sprint.number }}? {{ sprint.completed_points }}/{{ sprint.total_points }} points delivered.');">
+          <i data-lucide="check-circle"></i> Complete Sprint
+        </button>
+      </form>
+      <form method="post" action="{% url 'projects:spt_cancel' sprint.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-danger" onclick="return confirm('Cancel sprint {{ sprint.number }}?');">
+          <i data-lucide="x-circle"></i> Cancel
+        </button>
+      </form>
+    {% endif %}
+    <a href="{% url 'projects:spt_edit' sprint.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{% url 'projects:spt_list' %}" class="btn btn-outline">Back to Sprints</a>
+  </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Committed Points</div>
+    <div class="text-2xl font-bold mt-1">{{ sprint.committed_points|default:sprint.total_points }}</div>
+    <div class="text-xs text-muted mt-1">Snapshot at start</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Delivered / Remaining</div>
+    <div class="text-2xl font-bold mt-1 text-brand">{{ sprint.completed_points }} <span class="text-muted text-sm">/ {{ sprint.remaining_points }} rem</span></div>
+    <div class="text-xs text-muted mt-1">{{ sprint.completion_rate }}% completed</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Work Packages</div>
+    <div class="text-2xl font-bold mt-1">{{ sprint.completed_task_count }} <span class="text-muted text-sm">/ {{ sprint.task_count }}</span></div>
+    <div class="text-xs text-muted mt-1">Done vs Total Tasks</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Impediments</div>
+    <div class="text-2xl font-bold mt-1 {% if impediments.count > 0 %}text-amber-600{% endif %}">{{ impediments.count }}</div>
+    <div class="text-xs text-muted mt-1">Blockers logged</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <!-- Sprint Details & Goal -->
+  <div class="card lg:col-span-2">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="target"></i> Sprint Overview & Goal</h2>
+    </div>
+    <div class="card-body">
+      <div class="mb-4">
+        <label class="text-xs font-semibold uppercase tracking-wider text-muted">Sprint Goal</label>
+        <p class="mt-1 text-sm leading-relaxed">
+          {% if sprint.goal %}{{ sprint.goal|linebreaks }}{% else %}<span class="text-muted">No sprint goal specified.</span>{% endif %}
+        </p>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 border-t pt-4">
+        <div>
+          <span class="text-xs text-muted">Start Date:</span>
+          <div class="text-sm font-medium">{% if sprint.start_date %}{{ sprint.start_date|date:"M d, Y" }}{% else %}—{% endif %}</div>
+        </div>
+        <div>
+          <span class="text-xs text-muted">End Date:</span>
+          <div class="text-sm font-medium">{% if sprint.end_date %}{{ sprint.end_date|date:"M d, Y" }}{% else %}—{% endif %}</div>
+        </div>
+        <div>
+          <span class="text-xs text-muted">Scrum Master:</span>
+          <div class="text-sm font-medium">
+            {% if sprint.scrum_master %}{{ sprint.scrum_master.get_full_name|default:sprint.scrum_master.username }}{% else %}—{% endif %}
+          </div>
+        </div>
+        <div>
+          <span class="text-xs text-muted">Started At:</span>
+          <div class="text-sm">{% if sprint.started_at %}{{ sprint.started_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</div>
+        </div>
+        <div>
+          <span class="text-xs text-muted">Completed At:</span>
+          <div class="text-sm">{% if sprint.completed_at %}{{ sprint.completed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Standup Notes -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="message-square"></i> Standup Notes</h2>
+    </div>
+    <div class="card-body">
+      {% if sprint.standup_notes %}
+        <div class="text-sm leading-relaxed whitespace-pre-line">{{ sprint.standup_notes }}</div>
+      {% else %}
+        <p class="text-muted text-sm">No standup notes captured yet. Edit this sprint to log updates, blockers, or daily progress.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Sprint Tasks / Stories -->
+<div class="card mb-6">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="card-title"><i data-lucide="check-square"></i> Sprint Tasks & Stories ({{ tasks.count }})</h2>
+    <a href="{% url 'projects:sprint_backlog' %}?project={{ sprint.project.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add from Backlog</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Epic</th>
+          <th>Assignee</th>
+          <th>Priority</th>
+          <th>MoSCoW</th>
+          <th>Points</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tsk in tasks %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:tsk_detail' tsk.pk %}" class="text-brand">{{ tsk.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ tsk.number }}</div>
+            </td>
+            <td>
+              {% if tsk.epic %}
+                <span class="badge" style="background-color:{{ tsk.epic.color_code }}20; color:{{ tsk.epic.color_code }}; border:1px solid {{ tsk.epic.color_code }};">
+                  {{ tsk.epic.name }}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tsk.assignee %}
+                {{ tsk.assignee.get_full_name|default:tsk.assignee.username }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-slate">{{ tsk.get_priority_display }}</span>
+            </td>
+            <td>
+              {% if tsk.moscow %}
+                <span class="badge badge-info">{{ tsk.get_moscow_display }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ tsk.story_points|default:"0" }}</strong> pts
+            </td>
+            <td>
+              {% if tsk.status == 'done' %}
+                <span class="badge badge-green">Done</span>
+              {% elif tsk.status == 'in_progress' %}
+                <span class="badge badge-amber">In Progress</span>
+              {% elif tsk.status == 'planned' %}
+                <span class="badge badge-info">Planned</span>
+              {% elif tsk.status == 'cancelled' %}
+                <span class="badge badge-red">Cancelled</span>
+              {% else %}
+                <span class="badge badge-slate">{{ tsk.get_status_display }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="text-center py-6 text-muted">
+              No tasks currently assigned to this sprint. Visit the <a href="{% url 'projects:sprint_backlog' %}?project={{ sprint.project.pk }}" class="text-brand">Backlog</a> to plan tasks into this sprint.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Sprint Impediments -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="card-title"><i data-lucide="alert-triangle"></i> Sprint Impediments & Blockers ({{ impediments.count }})</h2>
+    <a href="{% url 'projects:imp_create' %}?sprint={{ sprint.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Raise Impediment</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Impediment</th>
+          <th>Severity</th>
+          <th>Owner</th>
+          <th>Status</th>
+          <th>Logged</th>
+          <th>Resolution</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for imp in impediments %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:imp_detail' imp.pk %}" class="text-brand">{{ imp.title }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ imp.number }}</div>
+            </td>
+            <td>
+              {% if imp.severity == 'critical' %}
+                <span class="badge badge-red">Critical</span>
+              {% elif imp.severity == 'high' %}
+                <span class="badge badge-amber">High</span>
+              {% elif imp.severity == 'medium' %}
+                <span class="badge badge-info">Medium</span>
+              {% else %}
+                <span class="badge badge-slate">Low</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if imp.owner %}{{ imp.owner.get_full_name|default:imp.owner.username }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if imp.status == 'resolved' %}
+                <span class="badge badge-green">Resolved</span>
+              {% elif imp.status == 'in_progress' %}
+                <span class="badge badge-amber">In Progress</span>
+              {% else %}
+                <span class="badge badge-red">Open</span>
+              {% endif %}
+            </td>
+            <td class="text-xs text-muted">{{ imp.created_at|date:"M d, Y" }}</td>
+            <td class="text-sm">{% if imp.resolution_notes %}{{ imp.resolution_notes|truncatechars:60 }}{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-4 text-muted">
+              No impediments recorded for this sprint.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

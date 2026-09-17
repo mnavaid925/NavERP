@@ -138,3 +138,13 @@ from .TimeAttendanceTracking.ActivityCodes import TimeActivityCodeForm  # noqa: 
 from .TimeAttendanceTracking.OvertimeRecords import ProjectOvertimeRecordForm  # noqa: F401
 from .TimeAttendanceTracking.OvertimeRules import OvertimeRuleForm  # noqa: F401
 
+# --- 7.12 Portfolio & Program Management --------------------------------------------------------
+from .PortfolioProgramManagement.Portfolios import PortfolioForm  # noqa: F401
+from .PortfolioProgramManagement.Programs import ProgramForm  # noqa: F401
+from .PortfolioProgramManagement.PortfolioInvestments import (  # noqa: F401
+    PortfolioInvestmentForm,
+    InvestmentDecisionForm,
+)
+from .PortfolioProgramManagement.ProgramDependencies import ProgramDependencyForm  # noqa: F401
+
+
