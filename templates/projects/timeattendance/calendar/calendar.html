@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Time & Attendance Calendar Sync · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:utilization_dashboard' %}">Utilization</a>
+      <span>Calendar Sync</span>
+    </nav>
+    <h1 class="page-title">Time & Attendance Calendar Sync</h1>
+    <p class="text-muted">Synchronized monthly calendar showing project time, leaves, holidays, and overtime.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:utilization_dashboard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Utilization Dashboard</a>
+    <a href="{% url 'projects:pot_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Claim Overtime</a>
+  </div>
+</div>
+
+<!-- Month Navigation & Filter Bar -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <a href="?month={{ prev_month }}&year={{ prev_year }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_resource %}&resource={{ selected_resource }}{% endif %}" class="btn btn-outline btn-icon"><i data-lucide="chevron-left"></i></a>
+      <h2 style="margin:0; font-size:1.25rem;">{{ month_name }} {{ year }}</h2>
+      <a href="?month={{ next_month }}&year={{ next_year }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_resource %}&resource={{ selected_resource }}{% endif %}" class="btn btn-outline btn-icon"><i data-lucide="chevron-right"></i></a>
+    </div>
+    <form method="get" class="filter-form" style="display:flex; gap:8px;">
+      <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="year" value="{{ year }}">
+      <select name="project" class="form-select" onchange="this.form.submit();">
+        <option value="">All Projects</option>
+        {% for p in projects %}
+          <option value="{{ p.pk }}" {% if selected_project == p.pk %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="resource" class="form-select" onchange="this.form.submit();">
+        <option value="">All Resources</option>
+        {% for r in resources %}
+          <option value="{{ r.pk }}" {% if selected_resource == r.pk %}selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+      {% if selected_project or selected_resource %}
+        <a href="?month={{ month }}&year={{ year }}" class="btn btn-outline">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Month Totals Summary -->
+<div style="display:flex; gap:16px; margin-bottom:16px;">
+  <span class="badge badge-info">Total Month Hours: {{ month_total_hours }}h</span>
+  <span class="badge badge-amber">Total Overtime Hours: {{ month_total_ot }}h</span>
+</div>
+
+<!-- Calendar Grid -->
+<div class="card">
+  <div class="table-wrap">
+    <table class="table" style="table-layout:fixed;">
+      <thead>
+        <tr style="text-align:center;">
+          <th style="width:14.28%;">Mon</th>
+          <th style="width:14.28%;">Tue</th>
+          <th style="width:14.28%;">Wed</th>
+          <th style="width:14.28%;">Thu</th>
+          <th style="width:14.28%;">Fri</th>
+          <th style="width:14.28%; background:rgba(0,0,0,0.02);">Sat</th>
+          <th style="width:14.28%; background:rgba(0,0,0,0.02);">Sun</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for week in month_weeks %}
+          <tr style="height:110px; vertical-align:top;">
+            {% for day in week %}
+              <td style="padding:8px; border:1px solid var(--border-color); {% if not day.is_current_month %}opacity:0.35; background:var(--bg-muted);{% elif day.is_weekend %}background:rgba(0,0,0,0.02);{% endif %} {% if day.is_today %}border:2px solid var(--primary-color);{% endif %}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                  <span style="font-weight:600; font-size:0.875rem;">{{ day.day_num }}</span>
+                  {% if day.is_today %}<span class="badge badge-green" style="font-size:0.65rem;">Today</span>{% endif %}
+                </div>
+
+                {% if day.is_current_month %}
+                  <!-- Holidays -->
+                  {% for h in day.holidays %}
+                    <div style="margin-bottom:2px;"><span class="badge badge-red" style="font-size:0.7rem;" title="{{ h.name }}"><i data-lucide="gift" style="width:10px; height:10px;"></i> {{ h.name|truncatechars:14 }}</span></div>
+                  {% endfor %}
+
+                  <!-- Leaves -->
+                  {% for lv in day.leaves %}
+                    <div style="margin-bottom:2px;"><span class="badge badge-slate" style="font-size:0.7rem;" title="{{ lv.employee.party.name }}: {{ lv.leave_type.name }}"><i data-lucide="plane" style="width:10px; height:10px;"></i> {{ lv.employee.party.name|truncatechars:10 }} (Leave)</span></div>
+                  {% endfor %}
+
+                  <!-- Time Logged -->
+                  {% if day.time_data and day.time_data.hours > 0 %}
+                    <div style="margin-bottom:2px;">
+                      <span class="badge badge-green" style="font-size:0.75rem;">
+                        <i data-lucide="clock" style="width:10px; height:10px;"></i> {{ day.time_data.hours }}h logged
+                      </span>
+                    </div>
+                  {% endif %}
+
+                  <!-- Overtime -->
+                  {% if day.ot_data and day.ot_data.hours > 0 %}
+                    <div style="margin-bottom:2px;">
+                      <span class="badge badge-amber" style="font-size:0.75rem;">
+                        <i data-lucide="zap" style="width:10px; height:10px;"></i> +{{ day.ot_data.hours }}h OT
+                      </span>
+                    </div>
+                  {% endif %}
+
+                  <!-- Discrepancy indicator -->
+                  {% if day.has_conflict %}
+                    <div style="margin-top:2px;">
+                      <span class="badge badge-amber" style="font-size:0.65rem;" title="Hours logged on leave or holiday">Holiday/Leave Log</span>
+                    </div>
+                  {% endif %}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
