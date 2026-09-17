@@ -36,7 +36,7 @@ description: >-
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
   library (usage counter + featured shelf, no FileField), and the three computed pages (repository
-  overview, retention & archiving board with its idempotent reminder Run, and knowledge search).
+  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar)).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
   seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.10), work on
@@ -55,7 +55,7 @@ description: >-
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10.** 7.11–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11.** 7.12–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -71,7 +71,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), and `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -857,6 +857,22 @@ here verbatim: 7.10 declares its own `ProjectDocument` with **real link FKs** (`
 `projects.ProjectTask`), no import of `core.Document`, no FK to it and no migration against it. 7.9's
 `DocumentShare` (which *does* FK `core.Document`) keeps working untouched and is shown on the
 document detail page as a **read-only lens** linking out to `?project=`.
+
+### `TimeActivityCode` [TAC-] — standard activities and overhead classification
+Choices: `CATEGORY_CHOICES` (direct_project, client_service, internal_overhead, general_admin, training, research_dev).
+Carries `code` (uppercased in `clean()`), `name`, `category`, `is_billable_default`, `is_active`, `description`. Unique on `(tenant, code)`.
+
+### `OvertimeRule` [OTR-] — project and tenant overtime policies
+Optional `project` FK (null = tenant-wide policy).
+Thresholds: `standard_daily_hours` (8.00), `standard_weekly_hours` (40.00).
+Multipliers: `daily_overtime_multiplier` (1.50), `weekly_overtime_multiplier` (1.50), `weekend_multiplier` (1.50), `holiday_multiplier` (2.00).
+`requires_pre_approval`, `is_active`, `notes`.
+
+### `ProjectOvertimeRecord` [POT-] — overtime claims and rate splits
+Linked to `resource` (`ResourceProfile`), `project` (`Project`), optional `project_task`, optional `time_entry`.
+Carries `date`, `overtime_hours`, `overtime_type` (daily, weekly, weekend, holiday), `pay_multiplier`, `billable_multiplier`, `is_billable`.
+Workflow: `draft` -> `submitted` -> `approved` / `rejected`. Approved/rejected records are locked against edit/delete.
+Derived properties: `pay_equivalent_hours`, `billable_equivalent_hours`.
 
 ### `ProjectFolder` [PFD-] — the per-project tree
 
@@ -1670,6 +1686,20 @@ Bullet 1's messaging half has its own register, hence the extra leaf.
     "Document Retention & Archiving":        "projects:doc_retention",
 }
 ```
+
+```python
+"7.11": {
+    "Timesheet Entry & Submission":          "projects:rte_list",
+    "Approval Workflows":                    "projects:pot_list?status=submitted",
+    "Billable vs. Non-Billable Hours":       "projects:utilization_dashboard",
+    "Overtime & Leave Integration":          "projects:time_calendar",
+    "Time Reporting & Utilization":          "projects:utilization_dashboard",
+    "Activity Codes Register":               "projects:tac_list",                  # extra live leaf
+    "Overtime Rules":                        "projects:otr_list",                  # extra live leaf
+    "Overtime Records Register":             "projects:pot_list",                  # extra live leaf
+}
+```
+Bullet 1 points at the extended `ResourceTimeEntry` register; bullet 2 maps to the pending overtime approval queue (`pot_list?status=submitted`); bullet 3 and bullet 5 map to the computed `utilization_dashboard` (chargeability ratios, client billing splits, category allocations, capacity vs demand); bullet 4 maps to `time_calendar` synchronizing project hours, leaves, holidays, and overtime claims. Activity codes, overtime rules, and the full overtime claims register are registered as extra live leaves.
 Bullet 1 has two halves and both are live pages: the **register** is the bullet, and the **folder
 tree** takes the extra leaf — 7.9's own sidebar comment settled that ("the file store, **the
 folders** and the VERSION HISTORY are 7.10's"). Bullet 2 maps to the standards library, **file-backed
