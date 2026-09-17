@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.name }}{% else %}New Program{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:pgm_list' %}">Programs</a>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if is_edit %}Edit Program: {{ obj.name }}{% else %}New Delivery Program{% endif %}</h1>
+    <p class="text-muted">Set up a delivery program under a strategic portfolio to coordinate projects and dependencies.</p>
+  </div>
+</div>
+
+<div class="card max-w-3xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="p-3 bg-red-50 text-red-700 rounded text-sm mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.portfolio.id_for_label }}">Portfolio *</label>
+          {{ form.portfolio }}
+          {% if form.portfolio.errors %}<div class="form-error">{{ form.portfolio.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.name.id_for_label }}">Program Name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.code.id_for_label }}">Program Code</label>
+          {{ form.code }}
+          {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.manager.id_for_label }}">Program Manager</label>
+          {{ form.manager }}
+          {% if form.manager.errors %}<div class="form-error">{{ form.manager.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.budget_target.id_for_label }}">Budget Target</label>
+          {{ form.budget_target }}
+          {% if form.budget_target.errors %}<div class="form-error">{{ form.budget_target.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.target_start_date.id_for_label }}">Target Start Date</label>
+          {{ form.target_start_date }}
+          {% if form.target_start_date.errors %}<div class="form-error">{{ form.target_start_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.target_end_date.id_for_label }}">Target End Date</label>
+          {{ form.target_end_date }}
+          {% if form.target_end_date.errors %}<div class="form-error">{{ form.target_end_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.objectives.id_for_label }}">Program Objectives (OKRs / Goals)</label>
+          {{ form.objectives }}
+          {% if form.objectives.errors %}<div class="form-error">{{ form.objectives.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description & Delivery Scope</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t border-slate-200">
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Program{% endif %}</button>
+        <a href="{% url 'projects:pgm_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
