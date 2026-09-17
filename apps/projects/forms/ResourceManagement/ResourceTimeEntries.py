@@ -15,7 +15,7 @@ class ResourceTimeEntryForm(TenantUniqueMixin, TenantModelForm):
         model = ResourceTimeEntry
         fields = [
             "resource", "project", "project_task", "entry_date", "hours",
-            "task_description", "notes",
+            "task_description", "is_billable", "activity_code", "notes",
         ]
         help_texts = {
             "hours": "Hours logged this day — positive only.",
