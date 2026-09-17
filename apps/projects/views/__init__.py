@@ -461,3 +461,40 @@ from .TimeAttendanceTracking.OvertimeRules import (  # noqa: F401
 from .TimeAttendanceTracking.TimeCalendar import time_calendar  # noqa: F401
 from .TimeAttendanceTracking.UtilizationDashboard import utilization_dashboard  # noqa: F401
 
+# --- 7.12 Portfolio & Program Management --------------------------------------------------------
+from .PortfolioProgramManagement.Portfolios import (  # noqa: F401
+    prt_create,
+    prt_delete,
+    prt_detail,
+    prt_edit,
+    prt_list,
+)
+from .PortfolioProgramManagement.Programs import (  # noqa: F401
+    pgm_create,
+    pgm_delete,
+    pgm_detail,
+    pgm_edit,
+    pgm_list,
+)
+from .PortfolioProgramManagement.PortfolioInvestments import (  # noqa: F401
+    pin_create,
+    pin_defer,
+    pin_delete,
+    pin_detail,
+    pin_edit,
+    pin_fund,
+    pin_list,
+    pin_reject,
+)
+from .PortfolioProgramManagement.ProgramDependencies import (  # noqa: F401
+    pdep_clear,
+    pdep_create,
+    pdep_delete,
+    pdep_detail,
+    pdep_edit,
+    pdep_list,
+    pdep_reopen,
+)
+from .PortfolioProgramManagement.PortfolioDashboard import pfm_dashboard  # noqa: F401
+
+

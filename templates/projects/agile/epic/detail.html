@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}{{ epic.name }} · Epic Details · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:epc_list' %}">Epics</a>
+      <span>{{ epic.number }}</span>
+    </nav>
+    <div class="flex items-center gap-3">
+      <span class="inline-block w-4 h-4 rounded-full" style="background-color:{{ epic.color_code }};"></span>
+      <h1 class="page-title">{{ epic.name }}</h1>
+      {% if epic.status == 'in_progress' %}
+        <span class="badge badge-amber">In Progress</span>
+      {% elif epic.status == 'completed' %}
+        <span class="badge badge-green">Completed</span>
+      {% elif epic.status == 'draft' %}
+        <span class="badge badge-info">Draft</span>
+      {% elif epic.status == 'cancelled' %}
+        <span class="badge badge-red">Cancelled</span>
+      {% else %}
+        <span class="badge badge-slate">{{ epic.get_status_display }}</span>
+      {% endif %}
+    </div>
+    <p class="text-muted font-mono text-xs">{{ epic.number }} · Project: <a href="{% url 'projects:prj_detail' epic.project.pk %}" class="text-brand">{{ epic.project.name }}</a></p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:epc_edit' epic.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{% url 'projects:epc_list' %}" class="btn btn-outline">Back to Epics</a>
+  </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Total Story Points</div>
+    <div class="text-2xl font-bold mt-1">{{ epic.total_points }}</div>
+    <div class="text-xs text-muted mt-1">Across all member tasks</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Completed Points</div>
+    <div class="text-2xl font-bold mt-1 text-brand">{{ epic.completed_points }}</div>
+    <div class="text-xs text-muted mt-1">{{ epic.progress_percent }}% complete</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Task Breakdown</div>
+    <div class="text-2xl font-bold mt-1">{{ epic.done_task_count }} <span class="text-muted text-sm">/ {{ epic.task_count }}</span></div>
+    <div class="text-xs text-muted mt-1">Done vs Total tasks</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Target Timeline</div>
+    <div class="text-sm font-semibold mt-1">
+      {% if epic.target_start %}{{ epic.target_start|date:"M d" }}{% else %}—{% endif %}
+      to
+      {% if epic.target_end %}{{ epic.target_end|date:"M d, Y" }}{% else %}—{% endif %}
+    </div>
+    <div class="text-xs text-muted mt-1">Target delivery window</div>
+  </div>
+</div>
+
+<!-- Summary Card -->
+<div class="card mb-6">
+  <div class="card-header">
+    <h2 class="card-title"><i data-lucide="file-text"></i> Epic Summary & Scope</h2>
+  </div>
+  <div class="card-body">
+    <div class="mb-4">
+      {% if epic.summary %}
+        <div class="text-sm leading-relaxed whitespace-pre-line">{{ epic.summary }}</div>
+      {% else %}
+        <p class="text-muted text-sm">No summary provided for this epic.</p>
+      {% endif %}
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t pt-4">
+      <div>
+        <span class="text-xs text-muted">Owner:</span>
+        <div class="text-sm font-medium">
+          {% if epic.owner %}{{ epic.owner.get_full_name|default:epic.owner.username }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div>
+        <span class="text-xs text-muted">Color Code:</span>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="inline-block w-4 h-4 rounded-full" style="background-color:{{ epic.color_code }};"></span>
+          <span class="text-xs font-mono">{{ epic.color_code }}</span>
+        </div>
+      </div>
+      <div>
+        <span class="text-xs text-muted">Created:</span>
+        <div class="text-sm">{{ epic.created_at|date:"M d, Y" }}</div>
+      </div>
+      <div>
+        <span class="text-xs text-muted">Progress:</span>
+        <div class="text-sm font-semibold">{{ epic.progress_percent }}%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Member Tasks -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="card-title"><i data-lucide="check-square"></i> Stories & Tasks under this Epic ({{ tasks.count }})</h2>
+    <a href="{% url 'projects:sprint_backlog' %}?project={{ epic.project.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Plan in Backlog</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Sprint</th>
+          <th>Assignee</th>
+          <th>Priority</th>
+          <th>Points</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tsk in tasks %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:tsk_detail' tsk.pk %}" class="text-brand">{{ tsk.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ tsk.number }}</div>
+            </td>
+            <td>
+              {% if tsk.sprint %}
+                <a href="{% url 'projects:spt_detail' tsk.sprint.pk %}"><span class="badge badge-info">{{ tsk.sprint.name }}</span></a>
+              {% else %}
+                <span class="badge badge-slate">Backlog</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tsk.assignee %}
+                {{ tsk.assignee.get_full_name|default:tsk.assignee.username }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-slate">{{ tsk.get_priority_display }}</span>
+            </td>
+            <td>
+              <strong>{{ tsk.story_points|default:"0" }}</strong> pts
+            </td>
+            <td>
+              {% if tsk.status == 'done' %}
+                <span class="badge badge-green">Done</span>
+              {% elif tsk.status == 'in_progress' %}
+                <span class="badge badge-amber">In Progress</span>
+              {% elif tsk.status == 'planned' %}
+                <span class="badge badge-info">Planned</span>
+              {% elif tsk.status == 'cancelled' %}
+                <span class="badge badge-red">Cancelled</span>
+              {% else %}
+                <span class="badge badge-slate">{{ tsk.get_status_display }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-6 text-muted">
+              No tasks currently linked to this epic. Link tasks to this epic to view cross-sprint progress.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
