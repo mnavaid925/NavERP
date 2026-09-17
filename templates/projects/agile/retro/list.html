@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Retrospectives · Agile & Scrum · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <span>Retrospectives</span>
+    </nav>
+    <h1 class="page-title">Sprint Retrospectives & Team Health</h1>
+    <p class="text-muted">Retrospective boards, team sentiment surveys, continuous improvement, and action item tracking.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:velocity_report' %}" class="btn btn-outline"><i data-lucide="activity"></i> Team Health & Velocity</a>
+    <a href="{% url 'projects:ret_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Retrospective</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search highlights, improvements..." class="form-input" style="min-width:220px;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="sprint" class="form-select">
+          <option value="">All Sprints</option>
+          {% for spt in sprints %}
+            <option value="{{ spt.pk }}" {% if selected_sprint_id == spt.pk %}selected{% endif %}>{{ spt.name }} ({{ spt.number }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:ret_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Retrospective</th>
+          <th>Sprint</th>
+          <th>Conducted Date</th>
+          <th>Facilitator</th>
+          <th>Team Sentiment</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:ret_detail' obj.pk %}">Retro for {{ obj.sprint.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ obj.number }}</div>
+            </td>
+            <td>
+              <a href="{% url 'projects:spt_detail' obj.sprint.pk %}" class="text-brand">{{ obj.sprint.name }}</a>
+              <div class="text-xs text-muted">{{ obj.sprint.project.name }}</div>
+            </td>
+            <td>
+              {% if obj.conducted_date %}{{ obj.conducted_date|date:"M d, Y" }}{% else %}—{% endif %}
+            </td>
+            <td>
+              {% if obj.conducted_by %}
+                {{ obj.conducted_by.get_full_name|default:obj.conducted_by.username }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.sentiment_score >= 4.0 %}
+                <span class="badge badge-green"><i data-lucide="smile"></i> {{ obj.sentiment_score }} / 5.0</span>
+              {% elif obj.sentiment_score >= 3.0 %}
+                <span class="badge badge-info"><i data-lucide="meh"></i> {{ obj.sentiment_score }} / 5.0</span>
+              {% elif obj.sentiment_score >= 2.0 %}
+                <span class="badge badge-amber"><i data-lucide="frown"></i> {{ obj.sentiment_score }} / 5.0</span>
+              {% else %}
+                <span class="badge badge-red"><i data-lucide="alert-octagon"></i> {{ obj.sentiment_score }} / 5.0</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.status == 'closed' %}
+                <span class="badge badge-green">Closed</span>
+              {% elif obj.status == 'open' %}
+                <span class="badge badge-amber">Open / In Review</span>
+              {% elif obj.status == 'draft' %}
+                <span class="badge badge-info">Draft</span>
+              {% else %}
+                <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:ret_detail' obj.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'projects:ret_edit' obj.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'projects:ret_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Delete retrospective {{ obj.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="refresh-cw" class="empty-state-icon"></i>
+                <div class="empty-state-title">No Retrospectives Found</div>
+                <div class="empty-state-text">Conduct your first sprint retrospective to capture team sentiment, victories, and continuous improvement items.</div>
+                <div class="empty-state-actions">
+                  <a href="{% url 'projects:ret_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Retrospective</a>
+                </div>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      <div class="pagination-links">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.sprint %}&sprint={{ request.GET.sprint }}{% endif %}" class="btn btn-outline btn-sm">Prev</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.sprint %}&sprint={{ request.GET.sprint }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
