@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Backlog Grooming · Agile & Scrum · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Agile Sprints</a>
+      <span>Backlog Grooming</span>
+    </nav>
+    <h1 class="page-title">Sprint Backlog & Grooming</h1>
+    <p class="text-muted">Prioritize unassigned stories, estimate Fibonacci story points, and commit backlog items to target sprint iterations.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:spt_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Sprint Register</a>
+    <a href="{% url 'projects:sprint_execution' %}" class="btn btn-outline"><i data-lucide="play-circle"></i> Active Board</a>
+    <a href="{% url 'projects:spt_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Plan New Sprint</a>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <div class="stat-label">Backlog Stories</div>
+    <div class="stat-value">{{ backlog_tasks|length }}</div>
+    <div class="stat-meta text-muted">Unscheduled tasks</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Backlog Points</div>
+    <div class="stat-value">{{ total_backlog_points }}</div>
+    <div class="stat-meta text-muted">Estimated story points</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Active Sprints</div>
+    <div class="stat-value">{{ active_sprints|length }}</div>
+    <div class="stat-meta text-muted">Currently running</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Planned Sprints</div>
+    <div class="stat-value">{{ future_sprints|length }}</div>
+    <div class="stat-meta text-muted">Upcoming backlog targets</div>
+  </div>
+</div>
+
+<!-- Project Filter -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <label class="form-label" style="margin-right: 0.5rem;">Project Scope:</label>
+        <select name="project" class="form-select" onchange="this.form.submit()">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if selected_project and selected_project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if selected_project %}
+        <a href="{% url 'projects:sprint_backlog' %}" class="btn btn-outline btn-sm">Clear Filter</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Backlog Table -->
+<div class="card">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 class="card-title"><i data-lucide="layers"></i> Unassigned Product Backlog</h2>
+    <span class="badge badge-info">{{ backlog_tasks|length }} Stories</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Story / Task</th>
+          <th>Project</th>
+          <th>Epic</th>
+          <th>Story Points</th>
+          <th>Assignee</th>
+          <th>Priority</th>
+          <th>Allocate to Sprint</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tsk in backlog_tasks %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:tsk_detail' tsk.pk %}">{{ tsk.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ tsk.number }}</div>
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' tsk.project.pk %}" class="text-brand">{{ tsk.project.name }}</a>
+            </td>
+            <td>
+              {% if tsk.epic %}
+                <span class="badge badge-slate" style="border-left: 3px solid {{ tsk.epic.color_code }};">
+                  <a href="{% url 'projects:epc_detail' tsk.epic.pk %}">{{ tsk.epic.name }}</a>
+                </span>
+              {% else %}
+                <form method="post" style="display:inline-flex; gap:0.25rem;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="assign_epic">
+                  <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                  <select name="epic_id" class="form-select" style="font-size:0.75rem; padding:0.2rem 0.4rem; height:auto;" onchange="this.form.submit()">
+                    <option value="">No Epic</option>
+                    {% for ep in epics %}
+                      {% if ep.project_id == tsk.project_id %}
+                        <option value="{{ ep.pk }}">{{ ep.name }}</option>
+                      {% endif %}
+                    {% endfor %}
+                  </select>
+                </form>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" style="display:inline-flex; align-items:center; gap:0.25rem;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_points">
+                <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                <input type="number" name="story_points" value="{{ tsk.story_points|default_if_none:'' }}" min="0" max="100" class="form-input" style="width:60px; font-size:0.8rem; padding:0.2rem 0.4rem;" placeholder="Pts">
+                <button type="submit" class="btn btn-outline btn-sm" title="Save Points"><i data-lucide="check"></i></button>
+              </form>
+            </td>
+            <td>
+              {% if tsk.assignee %}
+                <span class="text-sm">{{ tsk.assignee.get_full_name|default:tsk.assignee.username }}</span>
+              {% else %}
+                <span class="text-muted text-xs">Unassigned</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tsk.priority == 'critical' %}
+                <span class="badge badge-red">Critical</span>
+              {% elif tsk.priority == 'high' %}
+                <span class="badge badge-amber">High</span>
+              {% elif tsk.priority == 'medium' %}
+                <span class="badge badge-info">Medium</span>
+              {% else %}
+                <span class="badge badge-muted">Low</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" style="display:inline-flex; gap:0.25rem;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="assign_sprint">
+                <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                <select name="sprint_id" class="form-select" style="font-size:0.75rem; padding:0.2rem 0.4rem; height:auto;">
+                  <option value="">Select Sprint...</option>
+                  {% for sp in active_sprints %}
+                    {% if sp.project_id == tsk.project_id %}
+                      <option value="{{ sp.pk }}">Active: {{ sp.name }} ({{ sp.number }})</option>
+                    {% endif %}
+                  {% endfor %}
+                  {% for sp in future_sprints %}
+                    {% if sp.project_id == tsk.project_id %}
+                      <option value="{{ sp.pk }}">Planning: {{ sp.name }} ({{ sp.number }})</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="arrow-right"></i> Move</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="text-center py-6 text-muted">
+              <i data-lucide="check-circle" style="width:36px; height:36px; stroke-width:1.5; margin:0 auto 0.5rem; display:block;" class="text-green"></i>
+              No backlog items pending. All tasks are currently assigned to active or planned sprints!
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Planned Sprints Preview -->
+<div class="card" style="margin-top: 1.5rem;">
+  <div class="card-header">
+    <h2 class="card-title"><i data-lucide="calendar"></i> Target Sprint Horizons</h2>
+  </div>
+  <div class="card-body">
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+      {% for sp in active_sprints %}
+        <div style="border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; padding: 1rem; background: var(--bg-card, #fff);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem;">
+            <strong><a href="{% url 'projects:spt_detail' sp.pk %}">{{ sp.name }}</a></strong>
+            <span class="badge badge-amber">Active</span>
+          </div>
+          <div class="text-xs text-muted font-mono" style="margin-bottom:0.5rem;">{{ sp.number }} · {{ sp.project.name }}</div>
+          <div class="text-xs" style="margin-bottom:0.5rem;">
+            Points: <strong>{{ sp.completed_points }}/{{ sp.total_points }}</strong> ({{ sp.completion_rate }}%)
+          </div>
+          <div class="progress" style="height: 6px; margin-bottom: 0.75rem;">
+            <div class="progress-bar" style="width: {{ sp.completion_rate }}%;"></div>
+          </div>
+          <a href="{% url 'projects:spt_detail' sp.pk %}" class="btn btn-outline btn-sm w-full">View Sprint Detail</a>
+        </div>
+      {% endfor %}
+      {% for sp in future_sprints %}
+        <div style="border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; padding: 1rem; background: var(--bg-card, #fff);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem;">
+            <strong><a href="{% url 'projects:spt_detail' sp.pk %}">{{ sp.name }}</a></strong>
+            <span class="badge badge-info">Planning</span>
+          </div>
+          <div class="text-xs text-muted font-mono" style="margin-bottom:0.5rem;">{{ sp.number }} · {{ sp.project.name }}</div>
+          <div class="text-xs" style="margin-bottom:0.5rem;">
+            Target Points: <strong>{{ sp.total_points }}</strong> · Tasks: <strong>{{ sp.task_count }}</strong>
+          </div>
+          <a href="{% url 'projects:spt_detail' sp.pk %}" class="btn btn-outline btn-sm w-full">Plan Capacity</a>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
