@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Strategic Investments & Scoring · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:prt_list' %}">Portfolios</a>
+      <span>Investments & Scoring</span>
+    </nav>
+    <h1 class="page-title">Strategic Investments & Scoring</h1>
+    <p class="text-muted">Multi-criteria scoring model, OKR alignment, and portfolio investment funding decisions.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pin_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Investment</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search project, code, number..." class="form-input" style="min-width:200px;">
+      </div>
+      <div class="form-group">
+        <select name="portfolio" class="form-select">
+          <option value="">All Portfolios</option>
+          {% for prt in portfolios %}
+            <option value="{{ prt.pk }}" {% if request.GET.portfolio == prt.pk|stringformat:"d" %}selected{% endif %}>{{ prt.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="program" class="form-select">
+          <option value="">All Programs</option>
+          {% for pgm in programs %}
+            <option value="{{ pgm.pk }}" {% if request.GET.program == pgm.pk|stringformat:"d" %}selected{% endif %}>{{ pgm.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:pin_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Project / Investment</th>
+          <th>Portfolio</th>
+          <th>Program</th>
+          <th>Weighted Score</th>
+          <th>Criteria (Fit / Ret / Risk / Cap)</th>
+          <th>Allocated Budget</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:pin_detail' obj.pk %}">{{ obj.project.name }}</a></strong>
+              <div class="text-xs text-muted font-mono">{{ obj.number }} · {{ obj.project.number }}</div>
+            </td>
+            <td>
+              <a href="{% url 'projects:prt_detail' obj.portfolio.pk %}" class="font-medium text-blue-600 hover:underline">
+                {{ obj.portfolio.name }}
+              </a>
+            </td>
+            <td>
+              {% if obj.program %}
+                <a href="{% url 'projects:pgm_detail' obj.program.pk %}" class="badge badge-info">{{ obj.program.name }}</a>
+              {% else %}
+                <span class="badge badge-slate">Standalone</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="flex items-center gap-2">
+                <span class="text-base font-bold">{{ obj.weighted_score|floatformat:1 }}</span>
+                <span class="text-xs text-muted">/ 100</span>
+              </div>
+            </td>
+            <td>
+              <div class="text-xs space-x-1">
+                <span class="badge badge-slate" title="Strategic Fit">Fit: {{ obj.strategic_fit }}</span>
+                <span class="badge badge-slate" title="Financial Return">Ret: {{ obj.financial_return }}</span>
+                <span class="badge badge-slate" title="Delivery Risk (100 = low risk)">Risk: {{ obj.delivery_risk }}</span>
+                <span class="badge badge-slate" title="Capacity Fit">Cap: {{ obj.capacity_fit }}</span>
+              </div>
+            </td>
+            <td><strong>{{ obj.allocated_budget|floatformat:2 }}</strong></td>
+            <td>
+              {% if obj.status == 'funded' %}
+                <span class="badge badge-green">Funded</span>
+              {% elif obj.status == 'under_review' %}
+                <span class="badge badge-info">Under Review</span>
+              {% elif obj.status == 'proposed' %}
+                <span class="badge badge-slate">Proposed</span>
+              {% elif obj.status == 'deferred' %}
+                <span class="badge badge-amber">Deferred</span>
+              {% elif obj.status == 'rejected' %}
+                <span class="badge badge-red">Rejected</span>
+              {% else %}
+                <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:pin_detail' obj.pk %}" class="btn btn-outline btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'projects:pin_edit' obj.pk %}" class="btn btn-outline btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'projects:pin_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this investment?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline btn-icon text-red-600" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <i data-lucide="award"></i>
+                <h3>No portfolio investments found</h3>
+                <p>Add projects to a portfolio and score them using the multi-criteria prioritization model.</p>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
