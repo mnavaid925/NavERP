@@ -131,6 +131,24 @@ class ProjectTask(TenantNumbered):
         null=True, blank=True, editable=False,
         help_text="VERB-WRITTEN by tsk_complete only (which also stamps percent_complete=100).")
 
+    # -- 7.13 Agile & Scrum fields (in-place extension) --------------------------------------------
+    story_points = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Agile story points estimation (Fibonacci / numeric).")
+    sprint = models.ForeignKey(
+        "projects.Sprint", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="tasks",
+        help_text="Active or planned sprint. Null indicates a backlog item.")
+    epic = models.ForeignKey(
+        "projects.ProjectEpic", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="tasks",
+        help_text="Parent epic/feature for cross-sprint tracking.")
+    release = models.ForeignKey(
+        "projects.ProjectRelease", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="tasks",
+        help_text="Target release train or version milestone.")
+
     sequence = models.PositiveSmallIntegerField(
         default=0, help_text="Order among siblings in the WBS.")
     created_by = models.ForeignKey(
@@ -149,10 +167,19 @@ class ProjectTask(TenantNumbered):
             # filter and the priority-ranked columns.
             models.Index(fields=["tenant", "assignee"], name="tsk_tnt_assignee_idx"),
             models.Index(fields=["tenant", "priority"], name="tsk_tnt_priority_idx"),
+            # 7.13 agile & scrum lenses
+            models.Index(fields=["tenant", "sprint"], name="tsk_tnt_sprint_idx"),
+            models.Index(fields=["tenant", "epic"], name="tsk_tnt_epic_idx"),
+            models.Index(fields=["tenant", "release"], name="tsk_tnt_release_idx"),
         ]
 
     def __str__(self):
         return f"{self.number} — {self.name}"
+
+    @property
+    def is_in_backlog(self):
+        """Task is unassigned to any sprint — derived, never stored."""
+        return self.sprint_id is None
 
     @property
     def duration_days(self):
