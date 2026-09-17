@@ -44,6 +44,8 @@ class ResourceTimeEntry(TenantNumbered):
         max_digits=5, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))],
         help_text="Positive — 0.01 is the smallest loggable unit.")
     task_description = models.CharField(max_length=255, blank=True)
+    is_billable = models.BooleanField(default=False)
+    activity_code = models.CharField(max_length=40, blank=True)
     status = models.CharField(
         max_length=12, choices=STATUS_CHOICES, default="draft",
         help_text="Verb-driven — submit/approve/reject are the only writers.")
