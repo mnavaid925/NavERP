@@ -1877,6 +1877,18 @@ LIVE_LINKS = {
         # idempotent reminder Run. 7.10 deletes nothing on a schedule — enforcement is 13.9/13.14's.
         "Document Retention & Archiving":        "projects:doc_retention",
     },
+    "7.11": {
+        "Timesheet Entry & Submission":          "projects:rte_list",
+        "Approval Workflows":                    "projects:rte_list?status=submitted",
+        "Billable vs. Non-Billable Hours":       "projects:utilization_dashboard#billing",
+        "Overtime & Leave Integration":          "projects:time_calendar",
+        "Time Reporting & Utilization":          "projects:utilization_dashboard",
+        # Extra live leaves:
+        "Activity Codes":                        "projects:tac_list",
+        "Overtime Records":                      "projects:pot_list",
+        "Overtime Rules":                        "projects:otr_list",
+    },
+
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
