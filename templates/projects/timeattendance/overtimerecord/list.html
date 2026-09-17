@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Project Overtime Records · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>Overtime Records</span>
+    </nav>
+    <h1 class="page-title">Project Overtime Records</h1>
+    <p class="text-muted">Dedicated overtime claims, approvals, and client billing multipliers.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pot_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Log Overtime Claim</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, person, notes..." class="form-input" style="min-width:200px;">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, lbl in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="resource" class="form-select">
+          <option value="">All Resources</option>
+          {% for r in resources %}
+            <option value="{{ r.pk }}" {% if request.GET.resource == r.pk|stringformat:"d" %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="overtime_type" class="form-select">
+          <option value="">All Overtime Types</option>
+          {% for val, lbl in overtime_type_choices %}
+            <option value="{{ val }}" {% if request.GET.overtime_type == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:pot_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Date</th>
+          <th>Resource</th>
+          <th>Project</th>
+          <th>Hours</th>
+          <th>Type</th>
+          <th>Pay / Bill Multiplier</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td><strong><a href="{% url 'projects:pot_detail' obj.pk %}">{{ obj.number }}</a></strong></td>
+            <td>{{ obj.date|date:"Y-m-d" }}</td>
+            <td>{{ obj.resource.name }}</td>
+            <td>{{ obj.project.name }}</td>
+            <td><strong>{{ obj.overtime_hours }}h</strong></td>
+            <td><span class="badge badge-info">{{ obj.get_overtime_type_display }}</span></td>
+            <td>{{ obj.pay_multiplier }}x pay / {{ obj.billable_multiplier }}x bill</td>
+            <td>
+              {% if obj.status == 'draft' %}<span class="badge badge-muted">Draft</span>
+              {% elif obj.status == 'submitted' %}<span class="badge badge-amber">Submitted</span>
+              {% elif obj.status == 'approved' %}<span class="badge badge-green">Approved</span>
+              {% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:pot_detail' obj.pk %}" class="btn btn-outline btn-icon" title="View"><i data-lucide="eye"></i></a>
+              {% if obj.status == 'draft' or obj.status == 'submitted' %}
+                <a href="{% url 'projects:pot_edit' obj.pk %}" class="btn btn-outline btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="clock"></i>
+                <h3>No overtime records match</h3>
+                <p>Submit project overtime claims with approval routing.</p>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
