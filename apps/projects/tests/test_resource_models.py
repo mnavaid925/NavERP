@@ -895,6 +895,24 @@ def test_resource_time_entry_week_properties_are_derived_never_columns():
         assert isinstance(getattr(ResourceTimeEntry, name), property), name
 
 
+def test_resource_time_entry_billable_and_activity_fields_exist(db, resource_entry_draft):
+    """7.11's billing split: ``is_billable`` defaults False (non-billable until someone says
+    otherwise) and ``activity_code`` is a 40-char free text code; both persist through the
+    factory override path."""
+    billable_field = ResourceTimeEntry._meta.get_field("is_billable")
+    assert billable_field.get_default() is False
+    code_field = ResourceTimeEntry._meta.get_field("activity_code")
+    assert code_field.max_length == 40
+    assert code_field.blank
+    row = _resource_entry(resource_entry_draft.tenant, resource_entry_draft.resource,
+                          is_billable=True, activity_code="DEV-IMPL")
+    assert row.is_billable is True
+    assert row.activity_code == "DEV-IMPL"
+    row.refresh_from_db()
+    assert row.is_billable is True
+    assert row.activity_code == "DEV-IMPL"
+
+
 # ==================================================================================================
 # ResourceTimeEntry - FK behavior, stamps, ordering
 # ==================================================================================================
