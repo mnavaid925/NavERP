@@ -116,6 +116,7 @@ from .ResourceManagement.ResourceTimeEntries import (  # noqa: F401
     rte_edit,
     rte_list,
     rte_reject,
+    rte_relog,
     rte_submit,
 )
 
@@ -431,3 +432,32 @@ from .DocumentKnowledgeManagement.Templates import (  # noqa: F401
     dtm_list,
     dtm_publish,
 )
+
+# --- 7.11 Time & Attendance Tracking ------------------------------------------------------------
+from .TimeAttendanceTracking.ActivityCodes import (  # noqa: F401
+    tac_create,
+    tac_delete,
+    tac_detail,
+    tac_edit,
+    tac_list,
+)
+from .TimeAttendanceTracking.OvertimeRecords import (  # noqa: F401
+    pot_approve,
+    pot_create,
+    pot_delete,
+    pot_detail,
+    pot_edit,
+    pot_list,
+    pot_reject,
+    pot_submit,
+)
+from .TimeAttendanceTracking.OvertimeRules import (  # noqa: F401
+    otr_create,
+    otr_delete,
+    otr_detail,
+    otr_edit,
+    otr_list,
+)
+from .TimeAttendanceTracking.TimeCalendar import time_calendar  # noqa: F401
+from .TimeAttendanceTracking.UtilizationDashboard import utilization_dashboard  # noqa: F401
+
