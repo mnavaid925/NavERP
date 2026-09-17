@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.project.name }} · Investment Scoring · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:prt_list' %}">Portfolios</a>
+      <a href="{% url 'projects:prt_detail' obj.portfolio.pk %}">{{ obj.portfolio.name }}</a>
+      <a href="{% url 'projects:pin_list' %}">Investments</a>
+      <span>{{ obj.number }}</span>
+    </nav>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ obj.project.name }}</h1>
+      {% if obj.status == 'funded' %}
+        <span class="badge badge-green">Funded</span>
+      {% elif obj.status == 'under_review' %}
+        <span class="badge badge-info">Under Review</span>
+      {% elif obj.status == 'proposed' %}
+        <span class="badge badge-slate">Proposed</span>
+      {% elif obj.status == 'deferred' %}
+        <span class="badge badge-amber">Deferred</span>
+      {% elif obj.status == 'rejected' %}
+        <span class="badge badge-red">Rejected</span>
+      {% else %}
+        <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+      {% endif %}
+    </div>
+    <p class="text-muted text-sm font-mono">{{ obj.number }} · Project: <a href="{% url 'projects:prj_detail' obj.project.pk %}" class="text-blue-600 hover:underline">{{ obj.project.name }} ({{ obj.project.number }})</a></p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pin_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit Scoring / Weights</a>
+    <form method="post" action="{% url 'projects:pin_delete' obj.pk %}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this investment record?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+  <div class="stat-card">
+    <div class="stat-icon purple"><i data-lucide="award"></i></div>
+    <div>
+      <div class="stat-value">{{ obj.weighted_score|floatformat:1 }} <span class="text-xs text-muted font-normal">/ 100</span></div>
+      <div class="stat-label">Weighted Score</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="compass"></i></div>
+    <div>
+      <div class="stat-value">{{ obj.strategic_fit }} <span class="text-xs text-muted font-normal">(w: {{ obj.weight_strategic }}%)</span></div>
+      <div class="stat-label">Strategic Fit (OKR)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i data-lucide="trending-up"></i></div>
+    <div>
+      <div class="stat-value">{{ obj.financial_return }} <span class="text-xs text-muted font-normal">(w: {{ obj.weight_financial }}%)</span></div>
+      <div class="stat-label">Financial Return (ROI)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange"><i data-lucide="shield-alert"></i></div>
+    <div>
+      <div class="stat-value">{{ obj.delivery_risk }} <span class="text-xs text-muted font-normal">(w: {{ obj.weight_risk }}%)</span></div>
+      <div class="stat-label">Delivery Risk (Low=100)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon slate"><i data-lucide="users"></i></div>
+    <div>
+      <div class="stat-value">{{ obj.capacity_fit }} <span class="text-xs text-muted font-normal">(w: {{ obj.weight_capacity }}%)</span></div>
+      <div class="stat-label">Capacity & Skill Fit</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="text-base font-semibold">Prioritization Criteria Breakdown</h2>
+      </div>
+      <div class="card-body space-y-5">
+        <div>
+          <div class="flex justify-between text-sm mb-1">
+            <span class="font-medium">Strategic Fit (Weight: {{ obj.weight_strategic }}%)</span>
+            <span class="font-bold">{{ obj.strategic_fit }} / 100</span>
+          </div>
+          <div class="progress">
+            <div class="progress-bar bg-blue-600" style="width: {{ obj.strategic_fit }}%;"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between text-sm mb-1">
+            <span class="font-medium">Financial Return & Value (Weight: {{ obj.weight_financial }}%)</span>
+            <span class="font-bold">{{ obj.financial_return }} / 100</span>
+          </div>
+          <div class="progress">
+            <div class="progress-bar bg-green-600" style="width: {{ obj.financial_return }}%;"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between text-sm mb-1">
+            <span class="font-medium">Delivery Risk Rating (Weight: {{ obj.weight_risk }}%)</span>
+            <span class="font-bold">{{ obj.delivery_risk }} / 100</span>
+          </div>
+          <div class="progress">
+            <div class="progress-bar bg-orange-500" style="width: {{ obj.delivery_risk }}%;"></div>
+          </div>
+          <p class="text-xs text-muted mt-1">Higher score represents lower execution complexity and manageable risk.</p>
+        </div>
+
+        <div>
+          <div class="flex justify-between text-sm mb-1">
+            <span class="font-medium">Resource Capacity Fit (Weight: {{ obj.weight_capacity }}%)</span>
+            <span class="font-bold">{{ obj.capacity_fit }} / 100</span>
+          </div>
+          <div class="progress">
+            <div class="progress-bar bg-purple-600" style="width: {{ obj.capacity_fit }}%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Governance Decision Panel -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="text-base font-semibold">Governance & Funding Decision</h2>
+      </div>
+      <div class="card-body">
+        <div class="mb-6 p-4 rounded bg-slate-50 border border-slate-200">
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-muted">Allocated Budget:</span>
+              <div class="text-lg font-bold">{{ obj.allocated_budget|floatformat:2 }}</div>
+            </div>
+            <div>
+              <span class="text-muted">Decision Authority:</span>
+              <div class="font-medium">
+                {% if obj.approved_by %}
+                  {{ obj.approved_by.get_full_name|default:obj.approved_by.username }}
+                  {% if obj.approved_at %}<span class="text-xs text-muted">({{ obj.approved_at|date:"M d, Y H:i" }})</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">Pending decision</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% if obj.decision_notes %}
+            <div class="mt-3 pt-3 border-t border-slate-200 text-sm">
+              <span class="text-muted">Decision Notes:</span>
+              <p class="mt-1 text-slate-700 whitespace-pre-line">{{ obj.decision_notes }}</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          {% if obj.status != 'funded' %}
+            <form method="post" action="{% url 'projects:pin_fund' obj.pk %}" class="inline-flex items-center gap-2">
+              {% csrf_token %}
+              <input type="hidden" name="allocated_budget" value="{{ obj.allocated_budget }}">
+              <button type="submit" class="btn btn-primary"><i data-lucide="check-circle-2"></i> Approve & Fund</button>
+            </form>
+          {% endif %}
+          {% if obj.status != 'deferred' %}
+            <form method="post" action="{% url 'projects:pin_defer' obj.pk %}" class="inline-flex items-center gap-2">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline text-amber-600"><i data-lucide="clock"></i> Defer Investment</button>
+            </form>
+          {% endif %}
+          {% if obj.status != 'rejected' %}
+            <form method="post" action="{% url 'projects:pin_reject' obj.pk %}" class="inline-flex items-center gap-2">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline text-red-600"><i data-lucide="x-circle"></i> Reject</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="text-base font-semibold">Portfolio Context</h2>
+      </div>
+      <div class="card-body space-y-4 text-sm">
+        <div>
+          <div class="text-muted">Portfolio</div>
+          <div class="font-medium"><a href="{% url 'projects:prt_detail' obj.portfolio.pk %}" class="text-blue-600 hover:underline">{{ obj.portfolio.name }}</a></div>
+        </div>
+        <div>
+          <div class="text-muted">Delivery Program</div>
+          <div class="font-medium">
+            {% if obj.program %}
+              <a href="{% url 'projects:pgm_detail' obj.program.pk %}" class="text-blue-600 hover:underline">{{ obj.program.name }}</a>
+            {% else %}
+              <span class="text-muted">Standalone Investment</span>
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-muted">Linked Master Project</div>
+          <div class="font-medium"><a href="{% url 'projects:prj_detail' obj.project.pk %}" class="text-blue-600 hover:underline">{{ obj.project.name }} ({{ obj.project.number }})</a></div>
+        </div>
+        <div>
+          <div class="text-muted">Project Methodology</div>
+          <div><span class="badge badge-info">{{ obj.project.get_methodology_display }}</span></div>
+        </div>
+        <div>
+          <div class="text-muted">Project Stage</div>
+          <div><span class="badge badge-slate">{{ obj.project.get_status_display }}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
