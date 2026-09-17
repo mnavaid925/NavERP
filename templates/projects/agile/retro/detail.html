@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Retrospective for {{ retrospective.sprint.name }} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Sprints</a>
+      <a href="{% url 'projects:ret_list' %}">Retrospectives</a>
+      <span>{{ retrospective.number }}</span>
+    </nav>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">Retro: {{ retrospective.sprint.name }}</h1>
+      {% if retrospective.status == 'closed' %}
+        <span class="badge badge-green">Closed</span>
+      {% elif retrospective.status == 'open' %}
+        <span class="badge badge-amber">Open / In Review</span>
+      {% elif retrospective.status == 'draft' %}
+        <span class="badge badge-info">Draft</span>
+      {% else %}
+        <span class="badge badge-slate">{{ retrospective.get_status_display }}</span>
+      {% endif %}
+    </div>
+    <p class="text-muted font-mono text-xs">{{ retrospective.number }} · Sprint: <a href="{% url 'projects:spt_detail' retrospective.sprint.pk %}" class="text-brand">{{ retrospective.sprint.name }}</a> ({{ retrospective.sprint.project.name }})</p>
+  </div>
+  <div class="page-actions">
+    {% if retrospective.status == 'draft' %}
+      <form method="post" action="{% url 'projects:ret_open' retrospective.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Open retrospective {{ retrospective.number }} for team review?');">
+          <i data-lucide="unlock"></i> Open for Review
+        </button>
+      </form>
+    {% elif retrospective.status == 'open' %}
+      <form method="post" action="{% url 'projects:ret_close' retrospective.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Close retrospective {{ retrospective.number }}?');">
+          <i data-lucide="lock"></i> Close Retrospective
+        </button>
+      </form>
+    {% endif %}
+    <a href="{% url 'projects:ret_edit' retrospective.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{% url 'projects:ret_list' %}" class="btn btn-outline">Back to Retros</a>
+  </div>
+</div>
+
+<!-- Sentiment Card & Info Banner -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Team Sentiment Rating</div>
+    <div class="text-3xl font-bold mt-1 {% if retrospective.sentiment_score >= 4.0 %}text-green-600{% elif retrospective.sentiment_score >= 3.0 %}text-blue-600{% else %}text-amber-600{% endif %}">
+      {{ retrospective.sentiment_score }} <span class="text-muted text-sm font-normal">/ 5.0</span>
+    </div>
+    <div class="text-xs text-muted mt-1">Average morale score</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Facilitator</div>
+    <div class="text-base font-semibold mt-1">
+      {% if retrospective.conducted_by %}{{ retrospective.conducted_by.get_full_name|default:retrospective.conducted_by.username }}{% else %}<span class="text-muted">Unspecified</span>{% endif %}
+    </div>
+    <div class="text-xs text-muted mt-1">Scrum Master / Agile Coach</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Conducted Date</div>
+    <div class="text-base font-semibold mt-1">
+      {% if retrospective.conducted_date %}{{ retrospective.conducted_date|date:"M d, Y" }}{% else %}—{% endif %}
+    </div>
+    <div class="text-xs text-muted mt-1">End of iteration ceremony</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-xs text-muted font-medium uppercase tracking-wider">Sprint Delivery</div>
+    <div class="text-base font-semibold mt-1">
+      {{ retrospective.sprint.completed_points }} / {{ retrospective.sprint.total_points }} pts
+    </div>
+    <div class="text-xs text-muted mt-1">{{ retrospective.sprint.completion_rate }}% story points completed</div>
+  </div>
+</div>
+
+<!-- Retrospective 3-Column Board -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <!-- What Went Well -->
+  <div class="card border-t-4 border-t-green-500">
+    <div class="card-header flex items-center gap-2">
+      <i data-lucide="thumbs-up" class="text-green-600"></i>
+      <h2 class="card-title text-green-800">What Went Well</h2>
+    </div>
+    <div class="card-body">
+      {% if retrospective.what_went_well %}
+        <div class="text-sm leading-relaxed whitespace-pre-line bg-green-50/50 p-4 rounded border border-green-100">
+          {{ retrospective.what_went_well }}
+        </div>
+      {% else %}
+        <p class="text-muted text-sm">No highlights recorded yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- What Needs Improvement -->
+  <div class="card border-t-4 border-t-amber-500">
+    <div class="card-header flex items-center gap-2">
+      <i data-lucide="alert-triangle" class="text-amber-600"></i>
+      <h2 class="card-title text-amber-800">What Needs Improvement</h2>
+    </div>
+    <div class="card-body">
+      {% if retrospective.what_needs_improvement %}
+        <div class="text-sm leading-relaxed whitespace-pre-line bg-amber-50/50 p-4 rounded border border-amber-100">
+          {{ retrospective.what_needs_improvement }}
+        </div>
+      {% else %}
+        <p class="text-muted text-sm">No improvement points recorded yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Action Items -->
+  <div class="card border-t-4 border-t-blue-500">
+    <div class="card-header flex items-center gap-2">
+      <i data-lucide="check-circle" class="text-blue-600"></i>
+      <h2 class="card-title text-blue-800">Action Items & Commitments</h2>
+    </div>
+    <div class="card-body">
+      {% if retrospective.action_items %}
+        <div class="text-sm leading-relaxed whitespace-pre-line bg-blue-50/50 p-4 rounded border border-blue-100">
+          {{ retrospective.action_items }}
+        </div>
+      {% else %}
+        <p class="text-muted text-sm">No concrete action items documented yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
