@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Overtime Rules · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>Overtime Rules</span>
+    </nav>
+    <h1 class="page-title">Overtime Rules</h1>
+    <p class="text-muted">Thresholds and multipliers governing project overtime calculations.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:otr_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Overtime Rule</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search rule name..." class="form-input" style="min-width:200px;">
+      </div>
+      <div class="form-group">
+        <select name="project" class="form-select">
+          <option value="">All Scopes (Tenant & Projects)</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="is_active" class="form-select">
+          <option value="">Any Status</option>
+          <option value="1" {% if request.GET.is_active == '1' %}selected{% endif %}>Active</option>
+          <option value="0" {% if request.GET.is_active == '0' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:otr_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Rule</th>
+          <th>Scope</th>
+          <th>Daily / Weekly Threshold</th>
+          <th>Daily Multiplier</th>
+          <th>Weekend / Holiday Multiplier</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td><strong><a href="{% url 'projects:otr_detail' obj.pk %}">{{ obj.name }}</a></strong></td>
+            <td>
+              {% if obj.project %}
+                <span class="badge badge-info">{{ obj.project.name }}</span>
+              {% else %}
+                <span class="badge badge-slate">Tenant Default</span>
+              {% endif %}
+            </td>
+            <td>{{ obj.standard_daily_hours }}h/day · {{ obj.standard_weekly_hours }}h/wk</td>
+            <td><span class="badge badge-amber">{{ obj.daily_overtime_multiplier }}x</span></td>
+            <td>{{ obj.weekend_multiplier }}x / {{ obj.holiday_multiplier }}x</td>
+            <td>
+              {% if obj.is_active %}
+                <span class="badge badge-green">Active</span>
+              {% else %}
+                <span class="badge badge-slate">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <a href="{% url 'projects:otr_detail' obj.pk %}" class="btn btn-outline btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'projects:otr_edit' obj.pk %}" class="btn btn-outline btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="clock-alert"></i>
+                <h3>No overtime rules configured</h3>
+                <p>Configure standard daily and weekly thresholds and holiday multiplier rates.</p>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% endblock %}
