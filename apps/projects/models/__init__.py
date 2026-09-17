@@ -125,3 +125,9 @@ from .TimeAttendanceTracking.ActivityCodes import TimeActivityCode  # noqa: F401
 from .TimeAttendanceTracking.OvertimeRecords import ProjectOvertimeRecord  # noqa: F401
 from .TimeAttendanceTracking.OvertimeRules import OvertimeRule  # noqa: F401
 
+# --- 7.12 Portfolio & Program Management --------------------------------------------------------
+from .PortfolioProgramManagement.Portfolios import Portfolio  # noqa: F401
+from .PortfolioProgramManagement.Programs import Program  # noqa: F401
+from .PortfolioProgramManagement.PortfolioInvestments import PortfolioInvestment  # noqa: F401
+from .PortfolioProgramManagement.ProgramDependencies import ProgramDependency  # noqa: F401
+
