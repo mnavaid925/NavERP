@@ -93,6 +93,11 @@ from apps.projects.models import (
     Meeting,
     MeetingActionItem,
     MeetingAgendaItem,
+    OvertimeRule,
+    Portfolio,
+    PortfolioInvestment,
+    Program,
+    ProgramDependency,
     Project,
     ProjectBudgetLine,
     ProjectDocument,
@@ -123,7 +128,6 @@ from apps.projects.models import (
     TaskChecklistItem,
     TaskDependency,
     TimeActivityCode,
-    OvertimeRule,
     ProjectOvertimeRecord,
 )
 
@@ -440,6 +444,10 @@ class Command(BaseCommand):
         # activity codes, overtime calculation policies, project overtime records, and
         # activity/billable updates on time entries.
         self._time_attendance(tenant, now)
+        # 7.12 Portfolio & Program Management: investment portfolios, delivery programs,
+        # weighted multi-criteria investment scoring, and cross-project program dependencies.
+        self._portfolio_management(tenant, now)
+
 
     # -- 7.2 planning ---------------------------------------------------------------------------
 
@@ -3001,6 +3009,214 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.11 seeded: {len(activity_specs)} activity codes, "
             f"2 overtime rules, 3 overtime records, time entries updated."))
+
+    def _portfolio_management(self, tenant, now):
+        """7.12 Portfolio & Program Management: portfolios, programs, investments, dependencies."""
+        if Portfolio.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.12 portfolio & program management already seeded.")
+            return
+
+        projects_qs = Project.objects.filter(tenant=tenant).order_by("id")
+        if not projects_qs.exists():
+            return
+
+        projects_list = list(projects_qs)
+        active_proj = projects_list[0]
+        second_proj = projects_list[1] if len(projects_list) > 1 else active_proj
+        third_proj = projects_list[2] if len(projects_list) > 2 else active_proj
+
+        User = get_user_model()
+        users = list(User.objects.filter(tenant=tenant).order_by("id"))
+        owner = users[0] if users else None
+        manager = users[1] if len(users) > 1 else owner
+        currency = self._currency()
+
+        with transaction.atomic():
+            # 1. Portfolios
+            prt1 = Portfolio(
+                tenant=tenant,
+                name="Digital Transformation & Modernization",
+                code="DTM-2026",
+                description="Core portfolio governing cloud ERP transition, platform modernization, and process automation.",
+                status="active",
+                owner=owner,
+                strategic_theme="transformation",
+                budget_envelope=Decimal("2500000.00"),
+                currency=currency,
+                start_date=timezone.localdate() - timezone.timedelta(days=90),
+                end_date=timezone.localdate() + timezone.timedelta(days=275),
+                is_active=True,
+            )
+            prt1.save()
+
+            prt2 = Portfolio(
+                tenant=tenant,
+                name="Operational Excellence & Growth",
+                code="OEG-2026",
+                description="Strategic expansion into new operational territories and customer experience enhancement.",
+                status="active",
+                owner=owner,
+                strategic_theme="growth",
+                budget_envelope=Decimal("1200000.00"),
+                currency=currency,
+                start_date=timezone.localdate() - timezone.timedelta(days=60),
+                end_date=timezone.localdate() + timezone.timedelta(days=300),
+                is_active=True,
+            )
+            prt2.save()
+
+            # 2. Programs
+            pgm1 = Program(
+                tenant=tenant,
+                portfolio=prt1,
+                name="Core Enterprise Cloud Modernization",
+                code="PGM-CLOUD",
+                description="Consolidated program rolling out infrastructure, microservices, and ERP foundational layers.",
+                manager=manager,
+                status="active",
+                target_start_date=timezone.localdate() - timezone.timedelta(days=90),
+                target_end_date=timezone.localdate() + timezone.timedelta(days=180),
+                objectives="Migrate 100% of monolithic workloads to multi-tenant cloud; reduce incident response time by 40%.",
+                budget_target=Decimal("1500000.00"),
+            )
+            pgm1.save()
+
+            pgm2 = Program(
+                tenant=tenant,
+                portfolio=prt1,
+                name="Intelligent Automation & AI Enablement",
+                code="PGM-AUTO",
+                description="Integration of automated workflows, ML pipelines, and customer self-service portals.",
+                manager=manager,
+                status="planning",
+                target_start_date=timezone.localdate(),
+                target_end_date=timezone.localdate() + timezone.timedelta(days=270),
+                objectives="Automate top 15 repetitive operational workflows; improve throughput by 25%.",
+                budget_target=Decimal("800000.00"),
+            )
+            pgm2.save()
+
+            pgm3 = Program(
+                tenant=tenant,
+                portfolio=prt2,
+                name="Regional Operations Expansion",
+                code="PGM-ROX",
+                description="Scaling logistics hubs, regional supply chain presence, and local onboarding.",
+                manager=owner,
+                status="active",
+                target_start_date=timezone.localdate() - timezone.timedelta(days=45),
+                target_end_date=timezone.localdate() + timezone.timedelta(days=300),
+                objectives="Establish 3 regional delivery centers and achieve full compliance.",
+                budget_target=Decimal("950000.00"),
+            )
+            pgm3.save()
+
+            # 3. Portfolio Investments & Multi-Criteria Scoring
+            pin1 = PortfolioInvestment(
+                tenant=tenant,
+                portfolio=prt1,
+                project=active_proj,
+                program=pgm1,
+                status="funded",
+                strategic_fit=90,
+                financial_return=85,
+                delivery_risk=80,
+                capacity_fit=85,
+                weight_strategic=30,
+                weight_financial=30,
+                weight_risk=20,
+                weight_capacity=20,
+                allocated_budget=Decimal("750000.00"),
+                approved_by=owner,
+                approved_at=now - timezone.timedelta(days=60),
+                decision_notes="Priority 1 strategic foundation project. Fully funded with executive sponsorship.",
+            )
+            pin1.save()
+
+            pin2 = PortfolioInvestment(
+                tenant=tenant,
+                portfolio=prt1,
+                project=second_proj,
+                program=pgm2,
+                status="under_review",
+                strategic_fit=80,
+                financial_return=75,
+                delivery_risk=70,
+                capacity_fit=65,
+                weight_strategic=25,
+                weight_financial=25,
+                weight_risk=25,
+                weight_capacity=25,
+                allocated_budget=Decimal("400000.00"),
+                decision_notes="High ROI potential; awaiting final Q3 resource allocation review before full funding.",
+            )
+            pin2.save()
+
+            if third_proj != active_proj and third_proj != second_proj:
+                pin3 = PortfolioInvestment(
+                    tenant=tenant,
+                    portfolio=prt2,
+                    project=third_proj,
+                    program=pgm3,
+                    status="funded",
+                    strategic_fit=85,
+                    financial_return=80,
+                    delivery_risk=75,
+                    capacity_fit=80,
+                    allocated_budget=Decimal("500000.00"),
+                    approved_by=owner,
+                    approved_at=now - timezone.timedelta(days=30),
+                    decision_notes="Approved for expansion wave 1.",
+                )
+                pin3.save()
+
+            # 4. Program Dependencies
+            if second_proj != active_proj:
+                dep1 = ProgramDependency(
+                    tenant=tenant,
+                    source_project=active_proj,
+                    target_project=second_proj,
+                    program=pgm1,
+                    dependency_type="finish_to_start",
+                    criticality="critical",
+                    status="open",
+                    lead_lag_days=7,
+                    description="Cloud architecture baseline and authentication layer must land before AI API integration begins.",
+                    owner=owner,
+                )
+                dep1.save()
+
+                dep2 = ProgramDependency(
+                    tenant=tenant,
+                    source_project=active_proj,
+                    target_project=second_proj,
+                    program=pgm1,
+                    dependency_type="shared_resource",
+                    criticality="high",
+                    status="mitigated",
+                    lead_lag_days=0,
+                    description="Lead database architect shared across foundation and data ingestion work packages.",
+                    owner=manager,
+                )
+                dep2.save()
+
+            if third_proj != active_proj:
+                dep3 = ProgramDependency(
+                    tenant=tenant,
+                    source_project=active_proj,
+                    target_project=third_proj,
+                    program=None,
+                    dependency_type="deliverable_handover",
+                    criticality="medium",
+                    status="cleared",
+                    cleared_at=now - timezone.timedelta(days=10),
+                    description="Core API integration endpoints handed over for regional branch testing.",
+                    owner=owner,
+                )
+                dep3.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.12 seeded: 2 portfolios, 3 programs, investments & dependencies."))
 
 
     def _client(self, tenant):
