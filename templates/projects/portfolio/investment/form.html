@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.project.name }}{% else %}New Investment{% endif %} · NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:prt_list' %}">Portfolios</a>
+      <a href="{% url 'projects:pin_list' %}">Investments</a>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </nav>
+    <h1 class="page-title">{% if is_edit %}Edit Investment Scoring: {{ obj.project.name }}{% else %}New Portfolio Investment{% endif %}</h1>
+    <p class="text-muted">Link a project to a portfolio/program and score it against the 4-criterion prioritization framework.</p>
+  </div>
+</div>
+
+<div class="card max-w-4xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="p-3 bg-red-50 text-red-700 rounded text-sm mb-4">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="border-b border-slate-200 pb-4">
+        <h2 class="text-base font-semibold mb-3">Portfolio & Project Association</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.portfolio.id_for_label }}">Portfolio *</label>
+            {{ form.portfolio }}
+            {% if form.portfolio.errors %}<div class="form-error">{{ form.portfolio.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.project.id_for_label }}">Project *</label>
+            {{ form.project }}
+            {% if form.project.errors %}<div class="form-error">{{ form.project.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.program.id_for_label }}">Program (Optional)</label>
+            {{ form.program }}
+            {% if form.program.errors %}<div class="form-error">{{ form.program.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.status.id_for_label }}">Investment Status *</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group md:col-span-2">
+            <label class="form-label" for="{{ form.allocated_budget.id_for_label }}">Allocated Budget</label>
+            {{ form.allocated_budget }}
+            {% if form.allocated_budget.errors %}<div class="form-error">{{ form.allocated_budget.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-b border-slate-200 pb-4">
+        <h2 class="text-base font-semibold mb-1">Multi-Criteria Scoring (0 – 100 Scale & Weights %)</h2>
+        <p class="text-xs text-muted mb-4">Enter ratings between 0 and 100 and respective weights. Delivery risk is inverted (100 = minimal risk / highest feasibility).</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="p-3 bg-slate-50 rounded border border-slate-200 space-y-3">
+            <h3 class="text-sm font-semibold text-blue-700">1. Strategic Fit (OKR Alignment)</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="form-group">
+                <label class="form-label">Score (0-100)</label>
+                {{ form.strategic_fit }}
+                {% if form.strategic_fit.errors %}<div class="form-error">{{ form.strategic_fit.errors }}</div>{% endif %}
+              </div>
+              <div class="form-group">
+                <label class="form-label">Weight (%)</label>
+                {{ form.weight_strategic }}
+                {% if form.weight_strategic.errors %}<div class="form-error">{{ form.weight_strategic.errors }}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-50 rounded border border-slate-200 space-y-3">
+            <h3 class="text-sm font-semibold text-green-700">2. Financial Return (ROI / Value)</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="form-group">
+                <label class="form-label">Score (0-100)</label>
+                {{ form.financial_return }}
+                {% if form.financial_return.errors %}<div class="form-error">{{ form.financial_return.errors }}</div>{% endif %}
+              </div>
+              <div class="form-group">
+                <label class="form-label">Weight (%)</label>
+                {{ form.weight_financial }}
+                {% if form.weight_financial.errors %}<div class="form-error">{{ form.weight_financial.errors }}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-50 rounded border border-slate-200 space-y-3">
+            <h3 class="text-sm font-semibold text-orange-700">3. Delivery Risk (100 = Low Risk)</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="form-group">
+                <label class="form-label">Score (0-100)</label>
+                {{ form.delivery_risk }}
+                {% if form.delivery_risk.errors %}<div class="form-error">{{ form.delivery_risk.errors }}</div>{% endif %}
+              </div>
+              <div class="form-group">
+                <label class="form-label">Weight (%)</label>
+                {{ form.weight_risk }}
+                {% if form.weight_risk.errors %}<div class="form-error">{{ form.weight_risk.errors }}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-50 rounded border border-slate-200 space-y-3">
+            <h3 class="text-sm font-semibold text-purple-700">4. Capacity & Skills Fit</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="form-group">
+                <label class="form-label">Score (0-100)</label>
+                {{ form.capacity_fit }}
+                {% if form.capacity_fit.errors %}<div class="form-error">{{ form.capacity_fit.errors }}</div>{% endif %}
+              </div>
+              <div class="form-group">
+                <label class="form-label">Weight (%)</label>
+                {{ form.weight_capacity }}
+                {% if form.weight_capacity.errors %}<div class="form-error">{{ form.weight_capacity.errors }}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.decision_notes.id_for_label }}">Governance & Steering Committee Notes</label>
+        {{ form.decision_notes }}
+        {% if form.decision_notes.errors %}<div class="form-error">{{ form.decision_notes.errors }}</div>{% endif %}
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t border-slate-200">
+        <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Investment{% endif %}</button>
+        <a href="{% url 'projects:pin_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
