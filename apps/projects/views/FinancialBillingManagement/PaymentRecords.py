@@ -1,11 +1,14 @@
 """Projects 7.15 Financial & Billing Management — ProjectPaymentRecord views.
 """
+from decimal import Decimal
 from django.contrib import messages
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from apps.core.crud import as_db_int, crud_create, crud_delete, crud_edit, crud_list
+from apps.accounting.models import PaymentAllocation
+from apps.core.crud import apply_search, as_db_int, crud_create, crud_delete, crud_edit, crud_list, paginate
 from apps.core.utils import write_audit_log
 from apps.projects.forms.FinancialBillingManagement.PaymentRecords import (
     ContactLogForm,
@@ -21,7 +24,7 @@ from apps.projects.views._common import login_required
 def ppr_list(request):
     qs = (
         ProjectPaymentRecord.objects.filter(tenant=request.tenant)
-        .select_related("project", "client", "billing_run", "accounting_invoice", "assigned_collector")
+        .select_related("project", "client", "billing_run", "accounting_invoice__currency", "assigned_collector")
     )
     project_id = as_db_int(request.GET.get("project"))
     if project_id:
@@ -35,25 +38,44 @@ def ppr_list(request):
     if dunning_filter:
         qs = qs.filter(dunning_level=dunning_filter)
 
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = apply_search(qs, q, ["number", "project__name", "client__name", "accounting_invoice__number", "notes"])
+
+    page_obj = paginate(request, qs, 15)
+
+    invoice_ids = [r.accounting_invoice_id for r in page_obj.object_list if r.accounting_invoice_id]
+    if invoice_ids:
+        allocations = (
+            PaymentAllocation.objects.filter(
+                invoice_id__in=invoice_ids,
+                payment__status="confirmed",
+            )
+            .values("invoice_id")
+            .annotate(paid=Sum("allocated_amount"))
+        )
+        paid_by_inv = {a["invoice_id"]: a["paid"] for a in allocations}
+        for r in page_obj.object_list:
+            if r.accounting_invoice:
+                paid = paid_by_inv.get(r.accounting_invoice_id, Decimal("0.00"))
+                r.accounting_invoice.balance_due = r.accounting_invoice.total - paid
+
     projects = Project.objects.filter(tenant=request.tenant).order_by("name")
 
-    return crud_list(
+    return render(
         request,
-        qs,
         "projects/financialbilling/paymentrecord/list.html",
-        search_fields=["number", "project__name", "client__name", "accounting_invoice__number", "notes"],
-        filters=[
-            ("stage", "stage", False),
-            ("dunning_level", "dunning_level", False),
-        ],
-        extra_context={
+        {
+            "object_list": page_obj.object_list,
+            "page_obj": page_obj,
+            "q": q,
             "projects": projects,
             "project_filter": project_id,
             "stage_choices": ProjectPaymentRecord.STAGE_CHOICES,
             "stage_filter": stage_filter,
             "dunning_choices": ProjectPaymentRecord.DUNNING_LEVEL_CHOICES,
             "dunning_filter": dunning_filter,
-            "total_count": qs.count(),
+            "total_count": page_obj.paginator.count,
         },
     )
 
@@ -73,7 +95,7 @@ def ppr_create(request):
 def ppr_detail(request, pk):
     payment_record = get_object_or_404(
         ProjectPaymentRecord.objects.select_related(
-            "project", "client", "billing_run", "accounting_invoice", "assigned_collector"
+            "project", "client", "billing_run", "accounting_invoice__currency", "assigned_collector"
         ),
         pk=pk,
         tenant=request.tenant,
