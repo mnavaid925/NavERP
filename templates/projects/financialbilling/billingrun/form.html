@@ -8,7 +8,7 @@
   <div>
     <h1 class="page-title">{% if is_edit %}Edit Billing Run: {{ billing_run.number }}{% else %}Start Client Billing Run{% endif %}</h1>
     <div class="breadcrumb">
-      <a href="{% url 'dashboard:index' %}">Home</a>
+      <a href="{% url 'dashboard:home' %}">Home</a>
       <span>/</span>
       <a href="{% url 'projects:prj_list' %}">Projects</a>
       <span>/</span>
