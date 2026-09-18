@@ -223,7 +223,7 @@ def ar_aging(request):
         inv = rec.accounting_invoice
         due_date = inv.due_date or inv.issue_date or today
         days_overdue = (today - due_date).days if today > due_date else 0
-        bal = inv.balance_due
+        bal = inv.balance_due() if callable(getattr(inv, "balance_due", None)) else (inv.balance_due or Decimal("0.00"))
 
         b_current = Decimal("0.00")
         b_1_30 = Decimal("0.00")
@@ -312,7 +312,7 @@ def cash_flow_forecast(request):
 
     for inv in inflows_qs:
         dt = inv.due_date or today
-        bal = inv.balance_due
+        bal = inv.balance_due() if callable(getattr(inv, "balance_due", None)) else (inv.balance_due or Decimal("0.00"))
         if dt <= p30:
             in_30 += bal
         elif dt <= p60:
