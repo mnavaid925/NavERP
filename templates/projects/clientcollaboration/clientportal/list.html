@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Client Portal Access — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Client Portal Access</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <span>Client Portal Access</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:cpa_create' %}" class="btn btn-primary">
+      <i data-lucide="plus"></i> Grant Client Access
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, client, project, notes…">
+      </div>
+      <div class="form-group">
+        <select name="project" aria-label="Project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="is_active" aria-label="Status" class="form-select">
+          <option value="">All Statuses</option>
+          <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+          <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:cpa_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Access ID</th>
+          <th>Client Contact</th>
+          <th>Project</th>
+          <th>Permissions</th>
+          <th>Status</th>
+          <th>Expires</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">
+              <a href="{% url 'projects:cpa_detail' obj.pk %}">{{ obj.number }}</a>
+            </td>
+            <td>
+              <div class="fw-600">{{ obj.client_contact.name }}</div>
+              {% if obj.portal_user %}<span class="text-muted text-sm">User: {{ obj.portal_user.username }}</span>{% endif %}
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' obj.project.pk %}">{{ obj.project.name }}</a>
+            </td>
+            <td>
+              <div class="text-sm">
+                {% if obj.can_view_progress %}<span class="badge badge-info">Progress</span>{% endif %}
+                {% if obj.can_view_milestones %}<span class="badge badge-info">Milestones</span>{% endif %}
+                {% if obj.can_view_deliverables %}<span class="badge badge-info">Deliverables</span>{% endif %}
+                {% if obj.can_view_financials %}<span class="badge badge-amber">Financials</span>{% endif %}
+                {% if obj.can_submit_feedback %}<span class="badge badge-slate">Feedback</span>{% endif %}
+              </div>
+            </td>
+            <td>
+              {% if obj.is_active and not obj.is_expired %}
+                <span class="badge badge-green">Active</span>
+              {% elif obj.is_expired %}
+                <span class="badge badge-amber">Expired</span>
+              {% else %}
+                <span class="badge badge-muted">Inactive</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.expires_at %}{{ obj.expires_at|date:"M d, Y" }}{% else %}<span class="text-muted">Never</span>{% endif %}
+            </td>
+            <td class="table-actions">
+              <div class="flex items-center gap-1">
+                <a href="{% url 'projects:cpa_detail' obj.pk %}" class="btn btn-icon btn-sm" title="View details">
+                  <i data-lucide="eye"></i>
+                </a>
+                <a href="{% url 'projects:cpa_edit' obj.pk %}" class="btn btn-icon btn-sm" title="Edit">
+                  <i data-lucide="pencil"></i>
+                </a>
+                <form method="post" action="{% url 'projects:cpa_delete' obj.pk %}" onsubmit="return confirm('Revoke this client portal access record?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-sm text-danger" title="Delete">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="shield-check"></i>
+                <p>No client portal access records found.</p>
+                <a href="{% url 'projects:cpa_create' %}" class="btn btn-primary btn-sm">Grant Client Access</a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.is_active %}&is_active={{ request.GET.is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Previous</span>
+      {% endif %}
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.is_active %}&is_active={{ request.GET.is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Next</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
