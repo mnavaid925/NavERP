@@ -41,7 +41,7 @@ def sprint_execution(request):
             notes = request.POST.get("standup_notes", "").strip()
             active_sprint.standup_notes = notes
             active_sprint.save(update_fields=["standup_notes", "updated_at"])
-            write_audit_log(request.user, "update", active_sprint, {"standup_notes": "updated"})
+            write_audit_log(request.user, active_sprint, "update", {"standup_notes": "updated"})
             messages.success(request, "Daily standup notes updated successfully.")
         elif action == "update_task_status":
             task_id = as_db_int(request.POST.get("task_id"))
@@ -54,7 +54,7 @@ def sprint_execution(request):
                 elif new_status == "in_progress" and task.percent_complete == 0:
                     task.percent_complete = 25
                 task.save(update_fields=["status", "percent_complete", "updated_at"])
-                write_audit_log(request.user, "update", task, {"status": new_status})
+                write_audit_log(request.user, task, "update", {"status": new_status})
                 messages.success(request, f"Task {task.number} moved to {task.get_status_display()}.")
         elif action == "quick_impediment":
             title = request.POST.get("title", "").strip()
@@ -70,7 +70,7 @@ def sprint_execution(request):
                     status="open",
                     raised_by=request.user,
                 )
-                write_audit_log(request.user, "create", imp, {"title": title, "severity": severity})
+                write_audit_log(request.user, imp, "create", {"title": title, "severity": severity})
                 messages.success(request, f"Impediment {imp.number} logged for sprint.")
 
         return redirect(f"{request.path}?sprint={active_sprint.pk}")
