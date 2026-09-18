@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Client Billing & Invoicing — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Client Billing & Invoicing</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <span>Client Invoices</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pci_create' %}" class="btn btn-primary">
+      <i data-lucide="plus"></i> New Billing Schedule
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, project, notes…">
+      </div>
+      <div class="form-group">
+        <select name="project" aria-label="Project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" aria-label="Status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:pci_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Billing ID</th>
+          <th>Project</th>
+          <th>Billing Model</th>
+          <th>Milestone / SOW</th>
+          <th>Billing Date</th>
+          <th>Total Amount</th>
+          <th>Status</th>
+          <th>Customer Invoice</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">
+              <a href="{% url 'projects:pci_detail' obj.pk %}">{{ obj.number }}</a>
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' obj.project.pk %}">{{ obj.project.name }}</a>
+              {% if obj.project.client %}<div class="text-muted text-sm">{{ obj.project.client.name }}</div>{% endif %}
+            </td>
+            <td>{{ obj.get_billing_type_display }}</td>
+            <td>
+              {% if obj.milestone %}
+                <a href="{% url 'projects:mst_detail' obj.milestone.pk %}">{{ obj.milestone.name }}</a>
+              {% elif obj.sow %}
+                <a href="{% url 'projects:sow_detail' obj.sow.pk %}">{{ obj.sow.title }}</a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>{{ obj.billing_date|date:"M d, Y" }}</td>
+            <td class="fw-600">
+              {{ obj.total_amount|floatformat:2 }} {% if obj.currency %}{{ obj.currency.code }}{% endif %}
+            </td>
+            <td>
+              {% if obj.status == 'invoiced' %}
+                <span class="badge badge-green">Invoiced</span>
+              {% elif obj.status == 'ready_to_bill' %}
+                <span class="badge badge-amber">Ready to Bill</span>
+              {% elif obj.status == 'cancelled' %}
+                <span class="badge badge-red">Cancelled</span>
+              {% else %}
+                <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.accounting_invoice %}
+                <a href="{% url 'accounting:invoice_detail' obj.accounting_invoice.pk %}" class="fw-600 text-brand">
+                  {{ obj.accounting_invoice.number }}
+                </a>
+              {% else %}
+                <span class="text-muted text-sm">Not yet billed</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <div class="flex items-center gap-1">
+                <a href="{% url 'projects:pci_detail' obj.pk %}" class="btn btn-icon btn-sm" title="View details">
+                  <i data-lucide="eye"></i>
+                </a>
+                <a href="{% url 'projects:pci_edit' obj.pk %}" class="btn btn-icon btn-sm" title="Edit">
+                  <i data-lucide="pencil"></i>
+                </a>
+                <form method="post" action="{% url 'projects:pci_delete' obj.pk %}" onsubmit="return confirm('Delete this billing record?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-sm text-danger" title="Delete">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="receipt"></i>
+                <p>No client billing or invoice records found.</p>
+                <a href="{% url 'projects:pci_create' %}" class="btn btn-primary btn-sm">New Billing Schedule</a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Previous</span>
+      {% endif %}
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Next</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
