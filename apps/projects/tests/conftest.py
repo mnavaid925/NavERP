@@ -5872,3 +5872,144 @@ def timeattendance_record_draft_b(db, tenant_b, resource_project_b):
     res_b = _resource_profile(tenant_b)
     return _timeattendance_overtime_record(tenant_b, res_b, resource_project_b, status="draft")
 
+
+# ==================================================================================================
+# 7.12 Portfolio & Program Management (subslug ``portfolio``)
+# ==================================================================================================
+
+def _portfolio_today():
+    return timezone.localdate()
+
+
+def _portfolio_portfolio(tenant, **overrides):
+    from apps.projects.models import Portfolio
+    data = {
+        "tenant": tenant,
+        "name": "Digital Transformation Portfolio",
+        "code": "PORT-DT",
+        "description": "Enterprise digital initiatives",
+        "status": "active",
+        "strategic_theme": "transformation",
+        "budget_envelope": Decimal("5000000.00"),
+        "is_active": True,
+    }
+    data.update(overrides)
+    obj = Portfolio(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _portfolio_program(tenant, portfolio, **overrides):
+    from apps.projects.models import Program
+    data = {
+        "tenant": tenant,
+        "portfolio": portfolio,
+        "name": "Core Modernization Program",
+        "code": "PGM-CMP",
+        "description": "Modernizing core processing modules",
+        "status": "active",
+        "budget_target": Decimal("2000000.00"),
+    }
+    data.update(overrides)
+    obj = Program(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _portfolio_investment(tenant, portfolio, project, **overrides):
+    from apps.projects.models import PortfolioInvestment
+    data = {
+        "tenant": tenant,
+        "portfolio": portfolio,
+        "project": project,
+        "status": "proposed",
+        "strategic_fit": 80,
+        "financial_return": 75,
+        "delivery_risk": 70,
+        "capacity_fit": 85,
+        "weight_strategic": 25,
+        "weight_financial": 25,
+        "weight_risk": 25,
+        "weight_capacity": 25,
+        "allocated_budget": Decimal("500000.00"),
+    }
+    data.update(overrides)
+    obj = PortfolioInvestment(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _portfolio_dependency(tenant, source_project, target_project, **overrides):
+    from apps.projects.models import ProgramDependency
+    data = {
+        "tenant": tenant,
+        "source_project": source_project,
+        "target_project": target_project,
+        "dependency_type": "finish_to_start",
+        "criticality": "high",
+        "status": "open",
+        "lead_lag_days": 5,
+        "description": "API handover dependency",
+    }
+    data.update(overrides)
+    obj = ProgramDependency(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+@pytest.fixture
+def portfolio_a(db, tenant_a):
+    return _portfolio_portfolio(tenant_a, name="Acme Digital Portfolio")
+
+
+@pytest.fixture
+def portfolio_b(db, tenant_b):
+    return _portfolio_portfolio(tenant_b, name="Globex Global Portfolio")
+
+
+@pytest.fixture
+def program_a(db, tenant_a, portfolio_a):
+    return _portfolio_program(tenant_a, portfolio_a, name="Acme Cloud Migration")
+
+
+@pytest.fixture
+def program_b(db, tenant_b, portfolio_b):
+    return _portfolio_program(tenant_b, portfolio_b, name="Globex ERP Rollout")
+
+
+@pytest.fixture
+def portfolio_investment_a(db, tenant_a, portfolio_a, resource_project, program_a):
+    return _portfolio_investment(tenant_a, portfolio_a, resource_project, program=program_a, status="proposed")
+
+
+@pytest.fixture
+def portfolio_investment_funded_a(db, tenant_a, portfolio_a, resource_project, admin_user):
+    return _portfolio_investment(
+        tenant_a,
+        portfolio_a,
+        resource_project,
+        status="funded",
+        allocated_budget=Decimal("750000.00"),
+        approved_by=admin_user,
+        approved_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def program_dependency_a(db, tenant_a, program_a, resource_project, resource_project_b):
+    # For a valid dependency within tenant_a, we need two projects in tenant_a
+    from apps.projects.tests.conftest import _projectinitiation_project
+    proj2 = _projectinitiation_project(tenant_a, name="Depot Secondary Project", code="DSP-02")
+    return _portfolio_dependency(
+        tenant_a,
+        resource_project,
+        proj2,
+        program=program_a,
+        status="open",
+    )
+
+
