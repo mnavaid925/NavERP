@@ -173,6 +173,7 @@ def pbr_generate_invoice(request, pk):
                 description=f"Professional Services (Labor): {billing_run.total_time_hours} hrs up to {billing_run.cutoff_date}",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.labor_amount,
+                tax_rate_pct=billing_run.tax_rate_pct,
             )
 
         if billing_run.expense_amount > Decimal("0.00"):
@@ -181,6 +182,7 @@ def pbr_generate_invoice(request, pk):
                 description=f"Direct Reimbursable Project Expenses up to {billing_run.cutoff_date}",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.expense_amount,
+                tax_rate_pct=billing_run.tax_rate_pct,
             )
 
         if billing_run.fee_amount > Decimal("0.00"):
@@ -189,6 +191,7 @@ def pbr_generate_invoice(request, pk):
                 description=f"Fixed Milestone / Contract Fees ({billing_run.get_billing_type_display()})",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.fee_amount,
+                tax_rate_pct=billing_run.tax_rate_pct,
             )
 
         if billing_run.labor_amount == 0 and billing_run.expense_amount == 0 and billing_run.fee_amount == 0:
@@ -197,6 +200,7 @@ def pbr_generate_invoice(request, pk):
                 description=f"Project Billing: {billing_run.project.name} ({billing_run.get_billing_type_display()})",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.subtotal,
+                tax_rate_pct=billing_run.tax_rate_pct,
             )
 
         invoice.recalc_totals()
