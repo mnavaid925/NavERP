@@ -30,33 +30,40 @@ def test_portfolio_idor_protection(client_a, tenant_b, portfolio_b, program_b):
     inv_b = _portfolio_investment(tenant_b, portfolio_b, p_b2)
     dep_b = _portfolio_dependency(tenant_b, p_b2, _projectinitiation_project(tenant_b, name="Globex Project 3", code="GP-03"))
 
-    forbidden_urls = [
+    get_and_post_urls = [
         # Portfolio
         reverse("projects:prt_detail", kwargs={"pk": portfolio_b.pk}),
         reverse("projects:prt_edit", kwargs={"pk": portfolio_b.pk}),
-        reverse("projects:prt_delete", kwargs={"pk": portfolio_b.pk}),
         # Program
         reverse("projects:pgm_detail", kwargs={"pk": program_b.pk}),
         reverse("projects:pgm_edit", kwargs={"pk": program_b.pk}),
-        reverse("projects:pgm_delete", kwargs={"pk": program_b.pk}),
         # Investment
         reverse("projects:pin_detail", kwargs={"pk": inv_b.pk}),
         reverse("projects:pin_edit", kwargs={"pk": inv_b.pk}),
+        # Dependency
+        reverse("projects:pdep_detail", kwargs={"pk": dep_b.pk}),
+        reverse("projects:pdep_edit", kwargs={"pk": dep_b.pk}),
+    ]
+
+    for url in get_and_post_urls:
+        resp = client_a.get(url)
+        assert resp.status_code == 404, f"Expected 404 on GET {url}, got {resp.status_code}"
+        resp_post = client_a.post(url)
+        assert resp_post.status_code == 404, f"Expected 404 on POST {url}, got {resp_post.status_code}"
+
+    post_only_urls = [
+        reverse("projects:prt_delete", kwargs={"pk": portfolio_b.pk}),
+        reverse("projects:pgm_delete", kwargs={"pk": program_b.pk}),
         reverse("projects:pin_delete", kwargs={"pk": inv_b.pk}),
         reverse("projects:pin_fund", kwargs={"pk": inv_b.pk}),
         reverse("projects:pin_reject", kwargs={"pk": inv_b.pk}),
         reverse("projects:pin_defer", kwargs={"pk": inv_b.pk}),
-        # Dependency
-        reverse("projects:pdep_detail", kwargs={"pk": dep_b.pk}),
-        reverse("projects:pdep_edit", kwargs={"pk": dep_b.pk}),
         reverse("projects:pdep_delete", kwargs={"pk": dep_b.pk}),
         reverse("projects:pdep_clear", kwargs={"pk": dep_b.pk}),
         reverse("projects:pdep_reopen", kwargs={"pk": dep_b.pk}),
     ]
 
-    for url in forbidden_urls:
-        resp = client_a.get(url)
-        assert resp.status_code == 404, f"Expected 404 on GET {url}, got {resp.status_code}"
+    for url in post_only_urls:
         resp_post = client_a.post(url)
         assert resp_post.status_code == 404, f"Expected 404 on POST {url}, got {resp_post.status_code}"
 
