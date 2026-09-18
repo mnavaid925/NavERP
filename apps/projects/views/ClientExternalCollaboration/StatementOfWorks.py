@@ -128,9 +128,8 @@ def sow_activate(request, pk):
 
     write_audit_log(
         request.user,
-        action="activate",
-        model_name="StatementOfWork",
-        object_id=sow.pk,
+        sow,
+        "activate",
         changes={"status": "active", "activated_at": str(sow.activated_at)},
     )
     messages.success(request, f"Statement of Work {sow.number} is now active.")
@@ -161,9 +160,8 @@ def sow_amendment_create(request, pk):
 
             write_audit_log(
                 request.user,
-                action="create",
-                model_name="SOWAmendment",
-                object_id=amendment.pk,
+                amendment,
+                "create",
                 changes={"number": amendment.number, "sow": sow.number},
             )
             messages.success(request, f"Amendment #{amendment.amendment_number} created for SOW {sow.number}.")
