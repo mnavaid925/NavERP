@@ -147,4 +147,12 @@ from .PortfolioProgramManagement.PortfolioInvestments import (  # noqa: F401
 )
 from .PortfolioProgramManagement.ProgramDependencies import ProgramDependencyForm  # noqa: F401
 
+# --- 7.13 Agile & Scrum Management --------------------------------------------------------------
+from .AgileScrumManagement.ProjectEpics import ProjectEpicForm  # noqa: F401
+from .AgileScrumManagement.ProjectReleases import ProjectReleaseForm  # noqa: F401
+from .AgileScrumManagement.SprintImpediments import SprintImpedimentForm  # noqa: F401
+from .AgileScrumManagement.SprintRetrospectives import SprintRetrospectiveForm  # noqa: F401
+from .AgileScrumManagement.Sprints import SprintForm  # noqa: F401
+
+
 
