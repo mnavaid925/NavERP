@@ -3527,11 +3527,14 @@ class Command(BaseCommand):
         if not client_party:
             return
 
+        other_parties = list(Party.objects.filter(tenant=tenant).exclude(id=client_party.id)[:5])
+        second_contact = other_parties[0] if other_parties else client_party
+        third_contact = other_parties[1] if len(other_parties) > 1 else client_party
+
         vendor_party = (
             Party.objects.filter(tenant=tenant, roles__role="supplier").first()
             or Party.objects.filter(tenant=tenant, roles__role="vendor").first()
-            or Party.objects.filter(tenant=tenant).exclude(id=client_party.id).first()
-            or client_party
+            or second_contact
         )
 
         milestone = ProjectMilestone.objects.filter(tenant=tenant, project=active_proj).first()
@@ -3559,7 +3562,7 @@ class Command(BaseCommand):
             cpa2 = ClientPortalAccess(
                 tenant=tenant,
                 project=active_proj,
-                client_contact=client_party,
+                client_contact=second_contact,
                 portal_user=None,
                 can_view_progress=True,
                 can_view_milestones=True,
@@ -3574,7 +3577,7 @@ class Command(BaseCommand):
             cpa3 = ClientPortalAccess(
                 tenant=tenant,
                 project=second_proj,
-                client_contact=client_party,
+                client_contact=third_contact,
                 portal_user=None,
                 can_view_progress=False,
                 can_view_milestones=False,
@@ -3585,6 +3588,7 @@ class Command(BaseCommand):
                 notes="Former auditor account - access revoked.",
             )
             cpa3.save()
+
 
             # 2. Client Approval Requests
             cfb1 = ClientApprovalRequest(
