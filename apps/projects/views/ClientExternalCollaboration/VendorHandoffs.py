@@ -129,9 +129,8 @@ def vhd_accept(request, pk):
 
     write_audit_log(
         request.user,
-        action="approve",
-        model_name="VendorHandoff",
-        object_id=handoff.pk,
+        handoff,
+        "approve",
         changes={"status": "accepted", "scorecard_rating": handoff.scorecard_rating},
     )
     messages.success(request, f"Vendor handoff {handoff.number} marked as accepted.")
@@ -157,9 +156,8 @@ def vhd_reject(request, pk):
 
     write_audit_log(
         request.user,
-        action="reject",
-        model_name="VendorHandoff",
-        object_id=handoff.pk,
+        handoff,
+        "reject",
         changes={"status": "rejected", "deficiency_notes": notes},
     )
     messages.success(request, f"Vendor handoff {handoff.number} rejected.")
