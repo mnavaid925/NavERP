@@ -1900,6 +1900,18 @@ LIVE_LINKS = {
         "Investments & Scoring":                 "projects:pin_list",
         "Program Dependencies":                  "projects:pdep_list",
     },
+    "7.13": {
+        "Sprint Planning & Backlog Grooming":    "projects:sprint_backlog",
+        "Sprint Execution & Daily Standups":     "projects:sprint_execution",
+        "Release & Version Planning":            "projects:rel_list",
+        "Epic & Feature Management":             "projects:epc_list",
+        "Retrospectives & Team Health":          "projects:ret_list",
+        # Extra live leaves:
+        "Sprint Register":                       "projects:spt_list",
+        "Impediment Register":                   "projects:imp_list",
+        "Velocity & Health":                     "projects:velocity_report",
+        "Release Roadmap":                       "projects:release_roadmap",
+    },
 
 
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
