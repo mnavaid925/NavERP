@@ -598,13 +598,14 @@ from .FinancialBillingManagement.RateCards import (  # noqa: F401
     rtc_list,
 )
 from .FinancialBillingManagement.BillingRuns import (  # noqa: F401
+    pbr_approve,
     pbr_create,
     pbr_delete,
     pbr_detail,
+    pbr_dispatch,
     pbr_edit,
-    pbr_generate_invoices,
+    pbr_generate_invoice,
     pbr_list,
-    pbr_lock,
     pbr_preview_pdf,
 )
 from .FinancialBillingManagement.RevenueSchedules import (  # noqa: F401
@@ -624,8 +625,9 @@ from .FinancialBillingManagement.PaymentRecords import (  # noqa: F401
     ppr_edit,
     ppr_escalate,
     ppr_list,
-    ppr_record_payment,
-    ppr_send_reminder,
+    ppr_log_contact,
+    ppr_record_promise,
+    ppr_resolve,
 )
 from .FinancialBillingManagement.FinancialBoards import (  # noqa: F401
     ar_aging,
