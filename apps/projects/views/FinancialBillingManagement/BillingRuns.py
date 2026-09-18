@@ -45,7 +45,6 @@ def pbr_list(request):
             ("status", "status", False),
         ],
         extra_context={
-            "billing_runs": qs,
             "projects": projects,
             "project_filter": project_id,
             "status_choices": ProjectBillingRun.STATUS_CHOICES,
