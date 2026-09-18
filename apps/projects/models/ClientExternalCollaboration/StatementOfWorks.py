@@ -87,13 +87,13 @@ class StatementOfWork(TenantNumbered):
 
     @property
     def total_amendments(self):
-        return self.amendments.filter(status="approved").count()
+        return sum(1 for a in self.amendments.all() if a.status == "approved")
 
     @property
     def effective_value(self):
         base = self.contract_value or Decimal("0.00")
         approved_delta = sum(
-            (a.value_change for a in self.amendments.filter(status="approved")),
+            (a.value_change for a in self.amendments.all() if a.status == "approved"),
             Decimal("0.00"),
         )
         return q2(base + approved_delta)
