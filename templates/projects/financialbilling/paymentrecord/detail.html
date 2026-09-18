@@ -24,12 +24,14 @@
     <button type="button" onclick="document.getElementById('promise-modal').classList.remove('hidden');" class="btn btn-outline">
       <i data-lucide="calendar" class="w-4 h-4 mr-1"></i> Record Promise
     </button>
+    {% if payment_record.stage != "settled" and payment_record.stage != "written_off" and payment_record.status != "resolved" and payment_record.status != "closed" %}
     <form method="post" action="{% url 'projects:ppr_escalate' payment_record.pk %}" onsubmit="return confirm('Escalate dunning level for this overdue collection?');" class="inline">
       {% csrf_token %}
       <button type="submit" class="btn btn-outline text-amber-700 hover:text-amber-800">
         <i data-lucide="alert-triangle" class="w-4 h-4 mr-1"></i> Escalate
       </button>
     </form>
+    {% endif %}
     {% if payment_record.stage != "settled" %}
     <form method="post" action="{% url 'projects:ppr_resolve' payment_record.pk %}" onsubmit="return confirm('Mark this collection as fully settled?');" class="inline">
       {% csrf_token %}
