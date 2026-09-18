@@ -42,8 +42,8 @@ def sprint_backlog(request):
             task.save(update_fields=["sprint", "updated_at"])
             write_audit_log(
                 request.user,
-                "update",
                 task,
+                "update",
                 {"sprint_id": target_sprint.pk if target_sprint else None},
             )
             messages.success(
@@ -55,7 +55,7 @@ def sprint_backlog(request):
             pts = int(raw_pts) if raw_pts.isdigit() else None
             task.story_points = pts
             task.save(update_fields=["story_points", "updated_at"])
-            write_audit_log(request.user, "update", task, {"story_points": pts})
+            write_audit_log(request.user, task, "update", {"story_points": pts})
             messages.success(request, f"Updated story points for {task.number} to {pts or 0}.")
         elif action == "assign_epic":
             epic_id = as_db_int(request.POST.get("epic_id"))
@@ -66,8 +66,8 @@ def sprint_backlog(request):
             task.save(update_fields=["epic", "updated_at"])
             write_audit_log(
                 request.user,
-                "update",
                 task,
+                "update",
                 {"epic_id": target_epic.pk if target_epic else None},
             )
             messages.success(
