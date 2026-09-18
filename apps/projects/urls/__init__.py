@@ -91,6 +91,11 @@ from .ClientExternalCollaboration.ClientFeedbacks import urlpatterns as _cec_fee
 from .ClientExternalCollaboration.StatementOfWorks import urlpatterns as _cec_sow
 from .ClientExternalCollaboration.VendorHandoffs import urlpatterns as _cec_handoffs
 from .ClientExternalCollaboration.ClientInvoices import urlpatterns as _cec_invoices
+from .FinancialBillingManagement.RateCards import urlpatterns as _fbm_ratecards
+from .FinancialBillingManagement.BillingRuns import urlpatterns as _fbm_billingruns
+from .FinancialBillingManagement.RevenueSchedules import urlpatterns as _fbm_revenueschedules
+from .FinancialBillingManagement.PaymentRecords import urlpatterns as _fbm_paymentrecords
+from .FinancialBillingManagement.FinancialBoards import urlpatterns as _fbm_financialboards
 
 app_name = "projects"
 
@@ -222,6 +227,15 @@ urlpatterns = (
     + _cec_sow
     + _cec_handoffs
     + _cec_invoices
+    # 7.15 Financial & Billing Management — first segments (rate-cards/,
+    # billing-runs/, revenue-schedules/, payment-records/, financial-pnl/,
+    # financial-variance/, ar-aging/, cash-flow-forecast/) are completely disjoint
+    # literals from earlier sub-modules and from each other.
+    + _fbm_ratecards
+    + _fbm_billingruns
+    + _fbm_revenueschedules
+    + _fbm_paymentrecords
+    + _fbm_financialboards
 )
 
 
