@@ -27,6 +27,7 @@ from .models import (
     ProjectBudgetLine,
     ProjectDocument,
     ProjectDocumentRevision,
+    ProjectEpic,
     ProjectFolder,
     ProjectExpense,
     ProjectIssue,
@@ -34,6 +35,7 @@ from .models import (
     ProjectMilestone,
     ProjectNotification,
     ProjectOvertimeRecord,
+    ProjectRelease,
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
@@ -50,6 +52,9 @@ from .models import (
     ScopeChangeRequest,
     ScopeItem,
     ScopeVerification,
+    Sprint,
+    SprintImpediment,
+    SprintRetrospective,
     TaskBlock,
     TaskChecklistItem,
     TaskDependency,
@@ -682,5 +687,52 @@ class ProgramDependencyAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "source_project", "target_project", "program", "owner")
     search_fields = ("number", "source_project__name", "target_project__name", "description")
     readonly_fields = ("number", "cleared_at", "created_at", "updated_at")
+
+
+# --- 7.13 Agile & Scrum Management --------------------------------------------------------------
+@admin.register(Sprint)
+class SprintAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "status", "start_date", "end_date", "committed_points", "scrum_master", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project", "scrum_master")
+    search_fields = ("number", "name", "goal", "standup_notes")
+    readonly_fields = ("number", "started_at", "completed_at", "created_at", "updated_at")
+
+
+@admin.register(ProjectEpic)
+class ProjectEpicAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "status", "owner", "target_start", "target_end", "color_code", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project", "owner")
+    search_fields = ("number", "name", "summary")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ProjectRelease)
+class ProjectReleaseAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "version_tag", "project", "status", "release_date", "released_by", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project", "released_by")
+    search_fields = ("number", "name", "version_tag", "release_notes")
+    readonly_fields = ("number", "released_at", "released_by", "created_at", "updated_at")
+
+
+@admin.register(SprintImpediment)
+class SprintImpedimentAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "sprint", "severity", "status", "owner", "raised_by", "tenant")
+    list_filter = ("severity", "status")
+    list_select_related = ("tenant", "sprint", "owner", "raised_by")
+    search_fields = ("number", "title", "description", "resolution_notes")
+    readonly_fields = ("number", "resolved_at", "created_at", "updated_at")
+
+
+@admin.register(SprintRetrospective)
+class SprintRetrospectiveAdmin(admin.ModelAdmin):
+    list_display = ("number", "sprint", "status", "conducted_date", "conducted_by", "sentiment_score", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "sprint", "conducted_by")
+    search_fields = ("number", "what_went_well", "what_needs_improvement", "action_items")
+    readonly_fields = ("number", "closed_at", "created_at", "updated_at")
+
 
 
