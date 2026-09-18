@@ -18,8 +18,8 @@
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
     <div class="card card-body"><div class="text-muted text-sm">Retention due</div><div class="text-2xl font-semibold">{{ figures.retention_due }}</div></div>
     <div class="card card-body"><div class="text-muted text-sm">Review due</div><div class="text-2xl font-semibold">{{ figures.review_due }}</div></div>
-    <div class="card card-body"><div class="text-muted text-sm">Under legal hold</div><div class="text-2xl font-semibold">{{ figures.held }}</div></div>
-    <div class="card card-body"><div class="text-muted text-sm">Archived</div><div class="text-2xl font-semibold">{{ figures.archived }}</div></div>
+    <div class="card card-body"><a href="{% url 'projects:pdm_list' %}?held=True"><div class="text-muted text-sm">Under legal hold</div><div class="text-2xl font-semibold">{{ figures.held }}</div></a></div>
+    <div class="card card-body"><a href="{% url 'projects:pdm_list' %}?archived=True"><div class="text-muted text-sm">Archived</div><div class="text-2xl font-semibold">{{ figures.archived }}</div></a></div>
     <div class="card card-body"><div class="text-muted text-sm">In the live register</div><div class="text-2xl font-semibold">{{ figures.live }}</div></div>
     <div class="card card-body"><div class="text-muted text-sm">With a retention window</div><div class="text-2xl font-semibold">{{ figures.with_window }}</div></div>
   </div>
@@ -82,7 +82,7 @@
         same window state cannot raise twice, while a genuinely changed date raises a fresh row. The
         authoritative re-check happens inside the document's row lock.
       {% endcomment %}
-      <p class="text-muted">The <strong>Run reminders</strong> button raises one in-app notification per in-window record into the project inbox. It is a button, not a schedule: this repository has no scheduler and no mail worker, so nothing is sent by email and nothing runs while nobody is looking. Pressing it twice changes nothing &mdash; the reminder's title carries the document number and its date, so an unchanged window cannot raise a second time.</p>
+      <p class="text-muted">The <strong>Run reminders</strong> button raises one in-app notification per in-window record into the project inbox. It is a button, not a schedule: this repository has no scheduler and no mail worker, so nothing is sent by email and nothing runs while nobody is looking. Pressing it twice changes nothing &mdash; the reminder's title carries the document number and its date, so an unchanged window cannot raise a second time while the reminder remains unread in the inbox.</p>
     </div>
   </div>
 

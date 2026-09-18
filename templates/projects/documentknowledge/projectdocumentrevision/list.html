@@ -92,6 +92,7 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'projects:pdm_detail' rev.document_id %}" class="btn-icon" title="View the document and compare its revisions"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:pdv_upload' rev.document_id %}" class="btn-icon" title="Upload a new revision"><i data-lucide="upload"></i></a>
                   {% if not rev.is_approved %}
                     {% if request.user.is_superuser or request.user.is_tenant_admin %}
                     <form method="post" action="{% url 'projects:pdv_approve' rev.pk %}" onsubmit="return confirm('Approve revision {{ rev.revision_no }} of {{ rev.document.number }}? It becomes the current version and the pointer moves forward.');">

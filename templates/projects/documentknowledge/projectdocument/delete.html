@@ -22,7 +22,7 @@
       <div class="form-actions">
         <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete document</button>
         <a href="{% url 'projects:pdm_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
-        <a href="{% url 'projects:doc_retention' %}" class="btn btn-outline">Archive it instead</a>
+        <a href="{% url 'projects:pdm_detail' obj.pk %}" class="btn btn-outline">Archive it instead</a>
       </div>
     </form>
   </div></div>

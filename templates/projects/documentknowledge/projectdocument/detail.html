@@ -8,7 +8,7 @@
       <p class="text-muted">Controlled project document. Only the latest <strong>APPROVED</strong> revision is the current one &mdash; an upload lands unapproved behind the pointer until somebody approves it.</p>
     </div>
     <div class="page-actions">
-      {% if obj.status != 'archived' %}<a href="{% url 'projects:pdm_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+      <a href="{% url 'projects:pdm_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <a href="{% url 'projects:pdm_list' %}?project={{ obj.project_id }}" class="btn btn-outline">Back to register</a>
     </div>
   </div>
@@ -250,6 +250,7 @@
           check-out lock.
         {% endcomment %}
         {% for e in upload_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        {% for e in upload_form.document.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
         <div class="form-group">
           <label class="form-label" for="{{ upload_form.file.id_for_label }}">File <span class="req">*</span></label>
           {{ upload_form.file }}

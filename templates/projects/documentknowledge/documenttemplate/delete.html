@@ -9,7 +9,7 @@
   <div class="card"><div class="card-body">
     <h2 class="text-lg font-semibold">Delete {{ obj.number }} &mdash; {{ obj.name }} v{{ obj.version }}?</h2>
     <p>This removes the standard from the organisation's library. It is not attached to any project, so nothing else changes &mdash; projects that already copied the format keep their own documents.</p>
-    <p class="text-muted">If the intent is to take it off the active list rather than destroy it, <strong>retire</strong> it instead: a retired standard stays readable and leaves the "start from this" list. Retiring is reversible; this is not.</p>
+    <p class="text-muted">If the intent is to take it off the active list rather than destroy it, <strong>retire</strong> it instead: a retired standard stays readable and leaves the active list on the Standards register. Retiring is reversible; this is not.</p>
     <form method="post">
       {% csrf_token %}
       <div class="form-actions">

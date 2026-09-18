@@ -20,8 +20,7 @@
   <div class="card">
     <div class="card-header">
       <h2>Folder</h2>
-      {% if obj.is_archived %}<span class="badge badge-muted">Archived</span>
-      {% else %}<span class="badge badge-green">Live</span>{% endif %}
+      <span class="badge {{ obj.status_css }}">{% if obj.is_archived %}Archived{% else %}Live{% endif %}</span>
       {% if obj.is_root %}<span class="badge badge-slate">Root folder</span>{% endif %}
     </div>
     <div class="card-body">

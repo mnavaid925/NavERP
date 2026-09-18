@@ -69,7 +69,7 @@
         </div>
         <div class="form-group">
           <select name="archived" aria-label="Archive lens" class="form-select">
-            <option value="">Live register</option>
+            <option value="">Any state</option>
             <option value="True" {% if request.GET.archived == 'True' %}selected{% endif %}>Archived only</option>
             <option value="False" {% if request.GET.archived == 'False' %}selected{% endif %}>Not archived</option>
           </select>

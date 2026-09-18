@@ -71,7 +71,7 @@
                 <i data-lucide="search-x"></i>
                 <h3>Nothing in the library matches</h3>
                 <p>
-                  {% if q %}No entry has <strong>{{ q }}</strong> in its title, summary, body, tags or category{% if kind_filter %}, within the {{ kind_filter }} kind{% endif %}. Try a shorter word, drop the kind lens, or widen the search.{% else %}No entry of that kind exists yet.{% endif %}
+                  {% if q %}No entry has <strong>{{ q }}</strong> in its title, summary, body, tags or category{% if kind_filter %}, within the {{ kind_label|default:kind_filter }} kind{% endif %}. Try a shorter word, drop the kind lens, or widen the search.{% else %}No entry of that kind exists yet.{% endif %}
                 </p>
                 <p class="text-muted">A lesson recorded with only a title and a tag matches on those two fields and nothing else &mdash; the library searches what was written, not what a file contains.</p>
               </div></td></tr>

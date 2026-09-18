@@ -28,6 +28,14 @@
           </select>
         </div>
         <div class="form-group">
+          <select name="document_type" aria-label="Document type" class="form-select">
+            <option value="">Any document type</option>
+            {% for value, label in doc_type_choices %}
+              <option value="{{ value }}" {% if request.GET.document_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="is_active" aria-label="Publish state" class="form-select">
             <option value="">Any state</option>
             <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Published</option>
