@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Client Portal Access{% else %}Grant Client Portal Access{% endif %} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Client Portal Access ({{ obj.number }}){% else %}Grant Client Portal Access{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:cpa_list' %}">Client Portal Access</a>
+      <span class="sep">›</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-3xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_project">Project *</label>
+          {{ form.project }}
+          {% if form.project.errors %}<div class="form-error">{{ form.project.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_client_contact">Client Contact (Party) *</label>
+          {{ form.client_contact }}
+          {% if form.client_contact.errors %}<div class="form-error">{{ form.client_contact.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_portal_user">Portal User Account (Optional)</label>
+          {{ form.portal_user }}
+          {% if form.portal_user.errors %}<div class="form-error">{{ form.portal_user.errors.0 }}</div>{% endif %}
+          <span class="text-muted text-sm">Assign an internal/portal user account if authenticated login is required.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_expires_at">Expiration Date & Time (Optional)</label>
+          <input type="datetime-local" name="expires_at" id="id_expires_at" class="form-input" value="{% if form.expires_at.value %}{{ form.expires_at.value|date:'Y-m-d\TH:i' }}{% endif %}">
+          {% if form.expires_at.errors %}<div class="form-error">{{ form.expires_at.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="card p-4 bg-light">
+        <h3 class="font-semibold text-sm mb-3">Permissions & Visibility Toggles</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="flex items-center gap-2">
+            {{ form.can_view_progress }}
+            <span>Can View Progress & WBS</span>
+          </label>
+          <label class="flex items-center gap-2">
+            {{ form.can_view_milestones }}
+            <span>Can View Milestones</span>
+          </label>
+          <label class="flex items-center gap-2">
+            {{ form.can_view_deliverables }}
+            <span>Can View Deliverables</span>
+          </label>
+          <label class="flex items-center gap-2">
+            {{ form.can_view_financials }}
+            <span>Can View Financials & Budget</span>
+          </label>
+          <label class="flex items-center gap-2">
+            {{ form.can_submit_feedback }}
+            <span>Can Submit Feedback & Approvals</span>
+          </label>
+          <label class="flex items-center gap-2">
+            {{ form.is_active }}
+            <span class="fw-600">Access Active</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_notes">Access Notes</label>
+        {{ form.notes }}
+        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="save"></i> Save Portal Access
+        </button>
+        <a href="{% url 'projects:cpa_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
