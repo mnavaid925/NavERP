@@ -171,42 +171,34 @@ def pbr_generate_invoice(request, pk):
 
         if billing_run.labor_amount > Decimal("0.00"):
             InvoiceLine.objects.create(
-                tenant=request.tenant,
                 invoice=invoice,
                 description=f"Professional Services (Labor): {billing_run.total_time_hours} hrs up to {billing_run.cutoff_date}",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.labor_amount,
-                amount=billing_run.labor_amount,
             )
 
         if billing_run.expense_amount > Decimal("0.00"):
             InvoiceLine.objects.create(
-                tenant=request.tenant,
                 invoice=invoice,
                 description=f"Direct Reimbursable Project Expenses up to {billing_run.cutoff_date}",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.expense_amount,
-                amount=billing_run.expense_amount,
             )
 
         if billing_run.fee_amount > Decimal("0.00"):
             InvoiceLine.objects.create(
-                tenant=request.tenant,
                 invoice=invoice,
                 description=f"Fixed Milestone / Contract Fees ({billing_run.get_billing_type_display()})",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.fee_amount,
-                amount=billing_run.fee_amount,
             )
 
         if billing_run.labor_amount == 0 and billing_run.expense_amount == 0 and billing_run.fee_amount == 0:
             InvoiceLine.objects.create(
-                tenant=request.tenant,
                 invoice=invoice,
                 description=f"Project Billing: {billing_run.project.name} ({billing_run.get_billing_type_display()})",
                 quantity=Decimal("1.00"),
                 unit_price=billing_run.subtotal,
-                amount=billing_run.subtotal,
             )
 
         invoice.recalc_totals()
