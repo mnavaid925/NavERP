@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Release Roadmap · Agile & Scrum · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:rel_list' %}">Releases</a>
+      <span>Roadmap</span>
+    </nav>
+    <h1 class="page-title">Release & Version Roadmap</h1>
+    <p class="text-muted">Multi-project release train schedule, version milestones, feature rollout flags, and deployment readiness.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:rel_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Release Register</a>
+    <a href="{% url 'projects:spt_list' %}" class="btn btn-outline"><i data-lucide="layers"></i> Sprints</a>
+    <a href="{% url 'projects:rel_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Release</a>
+  </div>
+</div>
+
+<!-- Stats Strip -->
+<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <div class="stat-label">Total Releases</div>
+    <div class="stat-value">{{ total_count }}</div>
+    <div class="stat-meta text-muted">All tracked trains</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Upcoming / Planned</div>
+    <div class="stat-value text-info">{{ upcoming_count }}</div>
+    <div class="stat-meta text-muted">Scheduled milestones</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">In Progress Trains</div>
+    <div class="stat-value text-amber">{{ in_progress_count }}</div>
+    <div class="stat-meta text-muted">Active stabilization</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Shipped Releases</div>
+    <div class="stat-value text-green">{{ released_count }}</div>
+    <div class="stat-meta text-muted">Production deployed</div>
+  </div>
+</div>
+
+<!-- Project Filter -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header">
+    <form method="get" class="filter-form">
+      <div class="form-group">
+        <label class="form-label" style="margin-right: 0.5rem; font-weight:600;">Project Scope:</label>
+        <select name="project" class="form-select" onchange="this.form.submit()">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if selected_project and selected_project.pk == p.pk %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if selected_project %}
+        <a href="{% url 'projects:release_roadmap' %}" class="btn btn-outline btn-sm">Clear Filter</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Roadmap Timeline Cards -->
+<div class="card">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 class="card-title"><i data-lucide="calendar"></i> Version Delivery Schedule</h2>
+    <span class="badge badge-info">{{ releases|length }} Releases</span>
+  </div>
+  <div class="card-body">
+    {% if not releases %}
+      <div class="text-center py-12 text-muted">
+        <i data-lucide="tag" style="width:48px; height:48px; stroke-width:1.5; margin:0 auto 1rem; display:block;" class="text-muted"></i>
+        <h3 style="margin-bottom:0.5rem;">No Releases Planned</h3>
+        <p style="margin-bottom:1.5rem;">Define release trains and version milestones to visualize the deployment roadmap.</p>
+        <a href="{% url 'projects:rel_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Plan First Release</a>
+      </div>
+    {% else %}
+      <div style="display:flex; flex-direction:column; gap:1.25rem;">
+        {% for rel in releases %}
+          <div style="border:1px solid var(--border-color, #e2e8f0); border-radius:8px; padding:1.25rem; background:var(--bg-card, #fff); {% if rel.status == 'released' %}border-left:4px solid #10b981;{% elif rel.status == 'in_progress' %}border-left:4px solid #f59e0b;{% elif rel.is_overdue %}border-left:4px solid #ef4444;{% else %}border-left:4px solid #3b82f6;{% endif %}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+              <div>
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem;">
+                  <span class="badge badge-slate font-mono" style="font-size:0.85rem;">{{ rel.version_tag }}</span>
+                  <h3 style="margin:0; font-size:1.1rem;">
+                    <a href="{% url 'projects:rel_detail' rel.pk %}">{{ rel.name }}</a>
+                  </h3>
+                </div>
+                <div class="text-xs text-muted">
+                  <span class="font-mono">{{ rel.number }}</span> · Project: <strong><a href="{% url 'projects:prj_detail' rel.project.pk %}" class="text-brand">{{ rel.project.name }}</a></strong>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                {% if rel.status == 'released' %}
+                  <span class="badge badge-green">Released</span>
+                {% elif rel.status == 'in_progress' %}
+                  <span class="badge badge-amber">In Progress</span>
+                {% elif rel.status == 'archived' %}
+                  <span class="badge badge-slate">Archived</span>
+                {% else %}
+                  <span class="badge badge-info">Unreleased</span>
+                {% endif %}
+                {% if rel.is_overdue %}
+                  <span class="badge badge-red">Overdue</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Meta details row -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1rem; padding:0.75rem; background:var(--bg-muted, #f8fafc); border-radius:6px; font-size:0.85rem;">
+              <div>
+                <span class="text-muted block text-xs">Target Date:</span>
+                <strong>{% if rel.release_date %}{{ rel.release_date|date:"F d, Y" }}{% else %}Unscheduled{% endif %}</strong>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Stories / Scope:</span>
+                <strong>{{ rel.completed_stories }} / {{ rel.total_stories }} done</strong> ({{ rel.progress_percent }}%)
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Published At:</span>
+                <strong>{% if rel.released_at %}{{ rel.released_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</strong>
+              </div>
+              <div>
+                <span class="text-muted block text-xs">Published By:</span>
+                <strong>{% if rel.released_by %}{{ rel.released_by.get_full_name|default:rel.released_by.username }}{% else %}—{% endif %}</strong>
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div style="margin-bottom:1rem;">
+              <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted, #64748b); margin-bottom:0.25rem;">
+                <span>Release Story Completion</span>
+                <span>{{ rel.progress_percent }}%</span>
+              </div>
+              <div class="progress" style="height: 8px;">
+                <div class="progress-bar {% if rel.status == 'released' %}bg-green{% elif rel.progress_percent > 75 %}bg-green{% else %}bg-brand{% endif %}" style="width: {{ rel.progress_percent }}%;"></div>
+              </div>
+            </div>
+
+            {% if rel.feature_flags %}
+              <div style="margin-bottom: 0.75rem; font-size: 0.8rem;">
+                <strong class="text-muted"><i data-lucide="toggle-right"></i> Feature Toggles:</strong>
+                <code style="display:inline-block; margin-left:0.5rem; padding:0.2rem 0.5rem; border-radius:4px; background:var(--bg-muted, #f1f5f9);">{{ rel.feature_flags }}</code>
+              </div>
+            {% endif %}
+
+            {% if rel.release_notes %}
+              <div class="text-xs text-muted" style="margin-bottom:1rem; max-height:45px; overflow:hidden; text-overflow:ellipsis;">
+                <strong>Release Notes:</strong> {{ rel.release_notes|truncatewords:40 }}
+              </div>
+            {% endif %}
+
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; align-items:center;">
+              {% if rel.status != 'released' and rel.status != 'archived' %}
+                <form method="post" action="{% url 'projects:rel_publish' rel.pk %}" style="margin:0;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="upload-cloud"></i> Publish Release</button>
+                </form>
+              {% endif %}
+              <a href="{% url 'projects:rel_edit' rel.pk %}" class="btn btn-outline btn-sm"><i data-lucide="edit"></i> Edit</a>
+              <a href="{% url 'projects:rel_detail' rel.pk %}" class="btn btn-outline btn-sm"><i data-lucide="arrow-right"></i> Details</a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
