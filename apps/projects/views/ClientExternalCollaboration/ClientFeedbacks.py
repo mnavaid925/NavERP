@@ -56,9 +56,8 @@ def cfb_create(request):
             req_obj.save()
             write_audit_log(
                 request.user,
-                action="create",
-                model_name="ClientApprovalRequest",
-                object_id=req_obj.pk,
+                req_obj,
+                "create",
                 changes={"number": req_obj.number, "deliverable": req_obj.deliverable_name},
             )
             messages.success(request, f"Client approval request {req_obj.number} created.")
@@ -143,9 +142,8 @@ def cfb_approve(request, pk):
 
     write_audit_log(
         request.user,
-        action="approve",
-        model_name="ClientApprovalRequest",
-        object_id=approval.pk,
+        approval,
+        "approve",
         changes={"status": "approved", "signed_by": signer},
     )
     messages.success(request, f"Approval request {approval.number} approved successfully.")
@@ -171,9 +169,8 @@ def cfb_reject(request, pk):
 
     write_audit_log(
         request.user,
-        action="reject",
-        model_name="ClientApprovalRequest",
-        object_id=approval.pk,
+        approval,
+        "reject",
         changes={"status": "rejected", "reason": reason},
     )
     messages.success(request, f"Approval request {approval.number} marked as rejected.")
