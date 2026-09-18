@@ -112,7 +112,7 @@ def rel_publish(request, pk):
     release.released_by = request.user
     release.save(update_fields=["status", "released_at", "released_by", "updated_at"])
 
-    write_audit_log(request.user, "publish", release)
+    write_audit_log(request.user, release, "publish")
     messages.success(
         request,
         f"Release {release.version_tag} ({release.name}) published successfully.",
