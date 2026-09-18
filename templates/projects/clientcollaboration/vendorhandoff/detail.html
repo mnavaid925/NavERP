@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Vendor Handoff: {{ handoff.number }} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ handoff.number }} — {{ handoff.title }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:vhd_list' %}">Vendor Handoffs</a>
+      <span class="sep">›</span>
+      <span>{{ handoff.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    {% if handoff.status != 'accepted' %}
+      <button type="button" class="btn btn-primary" onclick="document.getElementById('acceptModal').style.display='block';">
+        <i data-lucide="check-circle"></i> Accept Deliverable
+      </button>
+    {% endif %}
+
+    {% if handoff.status != 'rejected' %}
+      <button type="button" class="btn btn-outline text-danger" onclick="document.getElementById('rejectModal').style.display='block';">
+        <i data-lucide="x-circle"></i> Reject
+      </button>
+    {% endif %}
+
+    <a href="{% url 'projects:vhd_edit' handoff.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:vhd_delete' handoff.pk %}" onsubmit="return confirm('Delete this vendor handoff?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:vhd_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left"></i> Back to List
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Handoff & Work Package Details</h2>
+      </div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm text-muted">Project</dt>
+            <dd class="fw-600"><a href="{% url 'projects:prj_detail' handoff.project.pk %}">{{ handoff.project.name }}</a></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Vendor (Party)</dt>
+            <dd class="fw-600">{{ handoff.vendor.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Linked Task / Work Package</dt>
+            <dd>{% if handoff.task %}<a href="{% url 'projects:tsk_detail' handoff.task.pk %}">{{ handoff.task.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Status</dt>
+            <dd>
+              {% if handoff.status == 'accepted' %}
+                <span class="badge badge-green">Accepted</span>
+              {% elif handoff.status == 'rejected' %}
+                <span class="badge badge-red">Rejected</span>
+              {% elif handoff.status == 'delivered' %}
+                <span class="badge badge-info">Delivered</span>
+              {% elif handoff.status == 'in_progress' %}
+                <span class="badge badge-amber">In Progress</span>
+              {% else %}
+                <span class="badge badge-muted">{{ handoff.get_status_display }}</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Handoff Date</dt>
+            <dd>{{ handoff.handoff_date|date:"M d, Y" }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Due Date</dt>
+            <dd>{% if handoff.due_date %}{{ handoff.due_date|date:"M d, Y" }}{% else %}<span class="text-muted">No deadline</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Deliverable Link</dt>
+            <dd>{% if handoff.deliverable_link %}<a href="{{ handoff.deliverable_link }}" target="_blank" class="text-brand break-all">{{ handoff.deliverable_link }} ↗</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Vendor Scorecard Rating</dt>
+            <dd>{% if handoff.scorecard_rating %}<span class="fw-600 text-amber">{{ handoff.scorecard_rating }} of 5 Stars ★</span>{% else %}<span class="text-muted">Not evaluated yet</span>{% endif %}</dd>
+          </div>
+        </dl>
+
+        {% if handoff.description %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Handoff Description & Requirements</h3>
+            <p class="mt-1">{{ handoff.description|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+
+        {% if handoff.performance_notes %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Vendor Evaluation & Performance Notes</h3>
+            <p class="mt-1">{{ handoff.performance_notes|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+
+        {% if handoff.deficiency_notes %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-danger">Rejection & Deficiency Notes</h3>
+            <p class="mt-1 text-danger">{{ handoff.deficiency_notes|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Acceptance Sign-Off</h2>
+      </div>
+      <div class="card-body">
+        <dl class="space-y-3">
+          <div>
+            <dt class="text-sm text-muted">Accepted By</dt>
+            <dd>{% if handoff.accepted_by %}{{ handoff.accepted_by.username }}{% else %}<span class="text-muted">Pending</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Accepted Timestamp</dt>
+            <dd>{% if handoff.accepted_at %}{{ handoff.accepted_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Created Timestamp</dt>
+            <dd>{{ handoff.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="acceptModal" class="card p-6 max-w-lg mx-auto mt-6" style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); z-index:1000; box-shadow:0 10px 25px rgba(0,0,0,0.3); background:white;">
+  <h3 class="card-title text-success mb-3">Accept Vendor Deliverable</h3>
+  <form method="post" action="{% url 'projects:vhd_accept' handoff.pk %}">
+    {% csrf_token %}
+    <div class="form-group mb-3">
+      <label class="form-label" for="scorecard_rating">Vendor Scorecard Rating (1 to 5 Stars)</label>
+      <select name="scorecard_rating" id="scorecard_rating" class="form-select">
+        <option value="">No rating</option>
+        <option value="5">5 — Excellent</option>
+        <option value="4">4 — Good</option>
+        <option value="3">3 — Satisfactory</option>
+        <option value="2">2 — Needs Improvement</option>
+        <option value="1">1 — Unsatisfactory</option>
+      </select>
+    </div>
+    <div class="form-group mb-4">
+      <label class="form-label" for="performance_notes">Evaluation Notes</label>
+      <textarea name="performance_notes" id="performance_notes" rows="3" class="form-textarea" placeholder="Feedback on deliverable quality, timeliness, and communication..."></textarea>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('acceptModal').style.display='none';">Cancel</button>
+      <button type="submit" class="btn btn-primary">Confirm Acceptance</button>
+    </div>
+  </form>
+</div>
+
+<div id="rejectModal" class="card p-6 max-w-lg mx-auto mt-6" style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); z-index:1000; box-shadow:0 10px 25px rgba(0,0,0,0.3); background:white;">
+  <h3 class="card-title text-danger mb-3">Reject Vendor Deliverable</h3>
+  <form method="post" action="{% url 'projects:vhd_reject' handoff.pk %}">
+    {% csrf_token %}
+    <div class="form-group mb-4">
+      <label class="form-label" for="deficiency_notes">Deficiency / Correction Notes *</label>
+      <textarea name="deficiency_notes" id="deficiency_notes" rows="4" class="form-textarea" required placeholder="Specify what deficiencies or issues must be resolved..."></textarea>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('rejectModal').style.display='none';">Cancel</button>
+      <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
