@@ -145,5 +145,12 @@ from .ClientExternalCollaboration.StatementOfWorks import StatementOfWork, SOWAm
 from .ClientExternalCollaboration.VendorHandoffs import VendorHandoff  # noqa: F401
 from .ClientExternalCollaboration.ClientInvoices import ProjectClientInvoice  # noqa: F401
 
+# --- 7.15 Financial & Billing Management --------------------------------------------------------
+from .FinancialBillingManagement.RateCards import ProjectRateCard  # noqa: F401
+from .FinancialBillingManagement.BillingRuns import ProjectBillingRun  # noqa: F401
+from .FinancialBillingManagement.RevenueSchedules import ProjectRevenueSchedule  # noqa: F401
+from .FinancialBillingManagement.PaymentRecords import ProjectPaymentRecord  # noqa: F401
+
+
 
 
