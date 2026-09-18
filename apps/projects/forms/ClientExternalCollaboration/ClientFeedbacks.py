@@ -31,7 +31,7 @@ class ClientApprovalRequestForm(TenantUniqueMixin, TenantModelForm):
             ).order_by("name")
             self.fields["document"].queryset = Document.objects.filter(
                 tenant=self.tenant
-            ).order_by("-created_at")
+            ).order_by("-uploaded_at")
             self.fields["milestone"].queryset = ProjectMilestone.objects.filter(
                 tenant=self.tenant
             ).order_by("target_date")
