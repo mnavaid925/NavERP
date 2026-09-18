@@ -58,7 +58,7 @@ Per tenant it builds one honest end-to-end chain:
   existing projects — a 12-folder tree across two projects (including an ARCHIVED branch), 22
   controlled documents spanning every doc type and every status (one ``expected`` placeholder, one
   checked-out row, one under legal hold, two archived, one superseded, two whose retention window
-  has closed), 25 revisions whose numbers, checksums and extracted text are produced by the same
+  has closed), 23 revisions whose numbers, checksums and extracted text are produced by the same
   helpers the upload verb uses (two superseded pairs, four rows left pending approval), 16
   standards covering every category with both publish states, and 17 knowledge entries covering
   every kind and every status with three on the featured shelf. It reuses the workspace's existing
@@ -2371,7 +2371,7 @@ class Command(BaseCommand):
         Coverage per tenant: a 12-folder tree across two projects, including an ARCHIVED branch so
         the archive lens and both badge states have rows; 22 documents spanning every doc type and
         every status — one ``expected`` placeholder, one checked-out row, one under legal hold, two
-        archived, one superseded, and two whose retention window has already closed; 25 revisions,
+        archived, one superseded, and two whose retention window has already closed; 23 revisions,
         two of them superseded pairs (v1 and v2 both approved, the pointer on v2) and four left
         pending approval; 16 standards covering every category with both publish states; and 17
         knowledge entries covering every kind and every status, three of them on the featured
