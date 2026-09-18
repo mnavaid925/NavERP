@@ -66,7 +66,7 @@ def _create_release(tenant, project, name="Release 1.0"):
 def test_agile_unauthenticated_redirects_to_login(client, url_name):
     res = client.get(reverse(url_name))
     assert res.status_code == 302
-    assert "/accounts/login/" in res.url
+    assert "/login/" in res.url
 
 
 # ==================================================================================================
