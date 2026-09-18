@@ -36,7 +36,6 @@ def rtc_list(request):
         search_fields=["number", "name", "role_name", "activity_code", "project__name"],
         filters=[],
         extra_context={
-            "rate_cards": qs,
             "projects": projects,
             "project_filter": project_id,
             "is_active_filter": is_active_val,
