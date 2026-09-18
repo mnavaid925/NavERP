@@ -82,7 +82,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for r in payment_records %}
+        {% for r in object_list %}
         <tr>
           <td>
             <a href="{% url 'projects:ppr_detail' r.pk %}" class="font-medium text-brand hover:underline">
@@ -180,12 +180,12 @@
       </tbody>
     </table>
   </div>
-  {% if page_obj and paginator.num_pages > 1 %}
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
   <div class="card-footer flex justify-between items-center py-3">
-    <span class="text-sm text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+    <span class="text-sm text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
     <div class="pagination flex gap-1">
       <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">Previous</a>
-      <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">Next</a>
+      <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">Next</a>
     </div>
   </div>
   {% endif %}
