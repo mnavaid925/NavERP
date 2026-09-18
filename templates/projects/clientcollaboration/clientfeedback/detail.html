@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Client Approval: {{ approval.number }} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ approval.number }} — {{ approval.deliverable_name }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:cfb_list' %}">Client Feedback & Approvals</a>
+      <span class="sep">›</span>
+      <span>{{ approval.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    {% if approval.status != 'approved' %}
+      <form method="post" action="{% url 'projects:cfb_approve' approval.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="signed_by_name" value="{{ request.user.get_full_name|default:request.user.username }}">
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Confirm formal client approval and sign-off?');">
+          <i data-lucide="check-circle"></i> Approve Sign-Off
+        </button>
+      </form>
+    {% endif %}
+
+    {% if approval.status != 'rejected' %}
+      <button type="button" class="btn btn-outline text-danger" onclick="document.getElementById('rejectModal').style.display='block';">
+        <i data-lucide="x-circle"></i> Reject / Revisions
+      </button>
+    {% endif %}
+
+    <a href="{% url 'projects:cfb_edit' approval.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:cfb_delete' approval.pk %}" onsubmit="return confirm('Delete this approval request?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:cfb_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left"></i> Back to List
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Deliverable & Request Details</h2>
+      </div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm text-muted">Project</dt>
+            <dd class="fw-600"><a href="{% url 'projects:prj_detail' approval.project.pk %}">{{ approval.project.name }}</a></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Deliverable</dt>
+            <dd class="fw-600">{{ approval.deliverable_name }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Milestone</dt>
+            <dd>{% if approval.milestone %}<a href="{% url 'projects:mst_detail' approval.milestone.pk %}">{{ approval.milestone.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Associated Document</dt>
+            <dd>{% if approval.document %}<a href="{{ approval.document.file.url }}" target="_blank">{{ approval.document.title }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Requested By</dt>
+            <dd>{% if approval.requested_by %}{{ approval.requested_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Assigned Client Contact</dt>
+            <dd>{% if approval.assigned_contact %}{{ approval.assigned_contact.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Status</dt>
+            <dd>
+              {% if approval.status == 'approved' %}
+                <span class="badge badge-green">Approved</span>
+              {% elif approval.status == 'rejected' %}
+                <span class="badge badge-red">Rejected</span>
+              {% elif approval.status == 'pending_review' %}
+                <span class="badge badge-amber">Pending Review</span>
+              {% elif approval.status == 'revision_requested' %}
+                <span class="badge badge-info">Revision Requested</span>
+              {% else %}
+                <span class="badge badge-muted">{{ approval.get_status_display }}</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Due Date</dt>
+            <dd>{% if approval.due_date %}{{ approval.due_date|date:"M d, Y" }}{% else %}<span class="text-muted">No deadline</span>{% endif %}</dd>
+          </div>
+        </dl>
+
+        {% if approval.review_notes %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Review Instructions & Context</h3>
+            <p class="mt-1">{{ approval.review_notes|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+
+        {% if approval.client_feedback %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Client Feedback / Annotations</h3>
+            <p class="mt-1">{{ approval.client_feedback|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+
+        {% if approval.rejection_reason %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-danger">Rejection / Revision Reason</h3>
+            <p class="mt-1 text-danger">{{ approval.rejection_reason|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Sign-Off Evidence</h2>
+      </div>
+      <div class="card-body">
+        <dl class="space-y-3">
+          <div>
+            <dt class="text-sm text-muted">Signed By</dt>
+            <dd class="fw-600">{% if approval.signed_by_name %}{{ approval.signed_by_name }}{% else %}<span class="text-muted">Pending signature</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Signed Timestamp</dt>
+            <dd>{% if approval.signed_at %}{{ approval.signed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Created Timestamp</dt>
+            <dd>{{ approval.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rejectModal" class="card p-6 max-w-lg mx-auto mt-6" style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); z-index:1000; box-shadow:0 10px 25px rgba(0,0,0,0.3); background:white;">
+  <h3 class="card-title text-danger mb-3">Reject / Request Revisions</h3>
+  <form method="post" action="{% url 'projects:cfb_reject' approval.pk %}">
+    {% csrf_token %}
+    <div class="form-group mb-4">
+      <label class="form-label" for="rejection_reason">Reason for rejection or requested changes *</label>
+      <textarea name="rejection_reason" id="rejection_reason" rows="4" class="form-textarea" required placeholder="Describe what revisions are needed..."></textarea>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('rejectModal').style.display='none';">Cancel</button>
+      <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
