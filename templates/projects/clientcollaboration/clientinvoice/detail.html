@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Client Billing: {{ invoice_record.number }} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ invoice_record.number }} — {{ invoice_record.project.name }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:pci_list' %}">Client Invoices</a>
+      <span class="sep">›</span>
+      <span>{{ invoice_record.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    {% if invoice_record.status != 'invoiced' %}
+      <form method="post" action="{% url 'projects:pci_generate_invoice' invoice_record.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Generate an official customer draft invoice in Accounting?');">
+          <i data-lucide="receipt"></i> Generate Customer Invoice
+        </button>
+      </form>
+    {% endif %}
+
+    <a href="{% url 'projects:pci_edit' invoice_record.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:pci_delete' invoice_record.pk %}" onsubmit="return confirm('Delete this billing schedule record?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:pci_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left"></i> Back to List
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Billing Schedule & Scope</h2>
+      </div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm text-muted">Project</dt>
+            <dd class="fw-600"><a href="{% url 'projects:prj_detail' invoice_record.project.pk %}">{{ invoice_record.project.name }}</a></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Client</dt>
+            <dd class="fw-600">{% if invoice_record.project.client %}{{ invoice_record.project.client.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Billing Model</dt>
+            <dd><span class="fw-600">{{ invoice_record.get_billing_type_display }}</span></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Status</dt>
+            <dd>
+              {% if invoice_record.status == 'invoiced' %}
+                <span class="badge badge-green">Invoiced</span>
+              {% elif invoice_record.status == 'ready_to_bill' %}
+                <span class="badge badge-amber">Ready to Bill</span>
+              {% elif invoice_record.status == 'cancelled' %}
+                <span class="badge badge-red">Cancelled</span>
+              {% else %}
+                <span class="badge badge-muted">{{ invoice_record.get_status_display }}</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Statement of Work (SOW)</dt>
+            <dd>{% if invoice_record.sow %}<a href="{% url 'projects:sow_detail' invoice_record.sow.pk %}">{{ invoice_record.sow.title }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Linked Milestone</dt>
+            <dd>{% if invoice_record.milestone %}<a href="{% url 'projects:mst_detail' invoice_record.milestone.pk %}">{{ invoice_record.milestone.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Billing Date</dt>
+            <dd>{{ invoice_record.billing_date|date:"M d, Y" }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Due Date</dt>
+            <dd>{% if invoice_record.due_date %}{{ invoice_record.due_date|date:"M d, Y" }}{% else %}<span class="text-muted">Immediate / Net 0</span>{% endif %}</dd>
+          </div>
+        </dl>
+
+        {% if invoice_record.notes %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Billing Notes & Line Item Breakdown</h3>
+            <p class="mt-1">{{ invoice_record.notes|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Financial Summary</h2>
+      </div>
+      <div class="card-body">
+        <dl class="space-y-3">
+          <div class="flex justify-between">
+            <dt class="text-sm text-muted">Base Amount</dt>
+            <dd class="fw-600">{{ invoice_record.amount|floatformat:2 }} {% if invoice_record.currency %}{{ invoice_record.currency.code }}{% endif %}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-sm text-muted">Tax Amount</dt>
+            <dd class="fw-600">{{ invoice_record.tax_amount|floatformat:2 }} {% if invoice_record.currency %}{{ invoice_record.currency.code }}{% endif %}</dd>
+          </div>
+          <div class="flex justify-between pt-2 border-t">
+            <dt class="fw-600">Total Billed</dt>
+            <dd class="fw-600 text-lg text-brand">{{ invoice_record.total_amount|floatformat:2 }} {% if invoice_record.currency %}{{ invoice_record.currency.code }}{% endif %}</dd>
+          </div>
+        </dl>
+
+        <div class="mt-4 pt-4 border-t">
+          <h3 class="text-sm font-semibold text-muted mb-2">Accounting AR Ledger Integration</h3>
+          {% if invoice_record.accounting_invoice %}
+            <div class="p-3 bg-light rounded flex items-center justify-between">
+              <div>
+                <span class="text-xs text-muted block">AR Invoice Reference</span>
+                <a href="{% url 'accounting:invoice_detail' invoice_record.accounting_invoice.pk %}" class="fw-600 text-brand">
+                  {{ invoice_record.accounting_invoice.number }}
+                </a>
+              </div>
+              <span class="badge badge-green">{{ invoice_record.accounting_invoice.get_status_display }}</span>
+            </div>
+            <span class="text-xs text-muted mt-2 block">Invoiced at: {{ invoice_record.invoiced_at|date:"M d, Y H:i" }}</span>
+          {% else %}
+            <p class="text-sm text-muted">Not yet generated in the accounting AR ledger.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
