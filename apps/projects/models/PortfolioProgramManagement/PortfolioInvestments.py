@@ -118,3 +118,16 @@ class PortfolioInvestment(TenantNumbered):
             + Decimal(self.capacity_fit * self.weight_capacity)
         ) / Decimal(total_w)
         return score.quantize(Decimal("0.1"))
+
+    def clean(self):
+        super().clean()
+        if self.tenant_id:
+            if self.project_id and self.project.tenant_id != self.tenant_id:
+                raise ValidationError("Project belongs to a different workspace.")
+            if self.portfolio_id and self.portfolio.tenant_id != self.tenant_id:
+                raise ValidationError("Portfolio belongs to a different workspace.")
+            if self.program_id:
+                if self.program.tenant_id != self.tenant_id:
+                    raise ValidationError("Program belongs to a different workspace.")
+                if self.portfolio_id and self.program.portfolio_id != self.portfolio_id:
+                    raise ValidationError("Selected program does not belong to the selected portfolio.")
