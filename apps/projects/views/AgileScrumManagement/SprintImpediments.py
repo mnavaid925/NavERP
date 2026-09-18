@@ -113,6 +113,6 @@ def imp_resolve(request, pk):
     impediment.save(
         update_fields=["status", "resolved_at", "resolution_notes", "updated_at"]
     )
-    write_audit_log(request, "resolve", impediment)
+    write_audit_log(request.user, "resolve", impediment)
     messages.success(request, f"Impediment {impediment.number} resolved successfully.")
     return redirect("projects:imp_detail", pk=pk)
