@@ -3234,7 +3234,7 @@ class Command(BaseCommand):
             return
 
         today = now.date()
-        active_proj = Project.objects.filter(tenant=tenant, stage="active").order_by("id").first()
+        active_proj = Project.objects.filter(tenant=tenant, status="active").order_by("id").first()
         if not active_proj:
             active_proj = Project.objects.filter(tenant=tenant).order_by("id").first()
         if not active_proj:
