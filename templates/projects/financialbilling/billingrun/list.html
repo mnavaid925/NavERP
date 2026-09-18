@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Billing Runs — Financial & Billing Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Client Billing Runs</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:index' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:prs_list' %}">Financial & Billing</a>
+      <span>/</span>
+      <span>Billing Runs</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pbr_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Billing Run
+    </a>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ request.GET.q|default:'' }}" class="form-input" placeholder="Number, project, client, notes...">
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_status" class="form-label">Billing Status</label>
+        <select name="status" id="id_status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+          <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:pbr_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">Billing Runs ({{ total_count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Run Number</th>
+          <th>Project / Client</th>
+          <th>Type</th>
+          <th>Run / Cutoff Date</th>
+          <th>Subtotal</th>
+          <th>Tax</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th>Invoice</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for br in billing_runs %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:pbr_detail' br.pk %}" class="font-medium text-brand hover:underline">
+              {{ br.number }}
+            </a>
+          </td>
+          <td>
+            <a href="{% url 'projects:prj_detail' br.project.pk %}" class="font-medium text-slate-900 hover:underline block">
+              {{ br.project.name|truncatechars:24 }}
+            </a>
+            <span class="text-xs text-muted">{{ br.client.name|truncatechars:24 }}</span>
+          </td>
+          <td>
+            <span class="badge badge-info">{{ br.get_billing_type_display }}</span>
+          </td>
+          <td class="text-xs text-slate-700">
+            <div>{{ br.run_date }}</div>
+            <div class="text-muted">Cutoff: {{ br.cutoff_date }}</div>
+          </td>
+          <td>{{ br.subtotal }} {{ br.currency.code }}</td>
+          <td>{{ br.tax_amount }} {{ br.currency.code }}</td>
+          <td>
+            <span class="font-bold text-slate-900">{{ br.total_amount }} {{ br.currency.code }}</span>
+          </td>
+          <td>
+            {% if br.status == "draft" %}
+              <span class="badge badge-slate">Draft</span>
+            {% elif br.status == "approved" %}
+              <span class="badge badge-info">Approved</span>
+            {% elif br.status == "invoiced" %}
+              <span class="badge badge-green">Invoiced</span>
+            {% elif br.status == "cancelled" %}
+              <span class="badge badge-red">Cancelled</span>
+            {% else %}
+              <span class="badge badge-muted">{{ br.get_status_display }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if br.accounting_invoice %}
+              <a href="{% url 'accounting:invoice_detail' br.accounting_invoice.pk %}" class="badge badge-green hover:underline" title="View GL Invoice">
+                {{ br.accounting_invoice.number }}
+              </a>
+            {% else %}
+              <span class="text-xs text-muted">Uninvoiced</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            <div class="table-actions flex justify-end gap-1">
+              <a href="{% url 'projects:pbr_detail' br.pk %}" class="btn btn-icon" title="View details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              {% if br.status == "draft" or br.status == "approved" %}
+              <a href="{% url 'projects:pbr_edit' br.pk %}" class="btn btn-icon" title="Edit">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              {% endif %}
+              {% if br.status != "invoiced" %}
+              <form method="post" action="{% url 'projects:pbr_delete' br.pk %}" onsubmit="return confirm('Are you sure you want to delete this billing run?');" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="10">
+            <div class="empty-state text-center py-8">
+              <i data-lucide="receipt" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+              <p class="text-slate-500 font-medium">No billing runs found.</p>
+              <a href="{% url 'projects:pbr_create' %}" class="btn btn-primary mt-3">Start Billing Run</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj and paginator.num_pages > 1 %}
+  <div class="card-footer flex justify-between items-center py-3">
+    <span class="text-sm text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+    <div class="pagination flex gap-1">
+      <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">Previous</a>
+      <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">Next</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
