@@ -51,17 +51,11 @@ def imp_list(request):
 
 @login_required
 def imp_create(request):
-    initial = {}
-    sprint_id = as_db_int(request.GET.get("sprint"))
-    if sprint_id:
-        initial["sprint"] = sprint_id
-
     return crud_create(
         request,
         form_class=SprintImpedimentForm,
         template="projects/agile/impediment/form.html",
         success_url="projects:imp_list",
-        initial=initial,
     )
 
 
