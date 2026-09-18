@@ -65,6 +65,10 @@ from .models import (
     TaskDependency,
     TimeActivityCode,
     VendorHandoff,
+    ProjectRateCard,
+    ProjectBillingRun,
+    ProjectRevenueSchedule,
+    ProjectPaymentRecord,
 )
 
 
@@ -795,6 +799,45 @@ class ProjectClientInvoiceAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "project", "sow", "milestone", "currency", "accounting_invoice")
     search_fields = ("number", "notes")
     readonly_fields = ("number", "invoiced_at", "created_at", "updated_at")
+
+
+# --- 7.15 Financial & Billing Management --------------------------------------------------------
+
+@admin.register(ProjectRateCard)
+class ProjectRateCardAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "client", "role_name", "hourly_rate", "currency", "is_active", "tenant")
+    list_filter = ("is_active", "is_default")
+    list_select_related = ("tenant", "project", "client", "user", "currency")
+    search_fields = ("number", "name", "role_name", "notes")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ProjectBillingRun)
+class ProjectBillingRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "client", "billing_type", "total_hours", "total_amount", "currency", "status", "is_locked", "tenant")
+    list_filter = ("billing_type", "status", "is_locked")
+    list_select_related = ("tenant", "project", "client", "currency", "tax_code", "accounting_invoice")
+    search_fields = ("number", "name", "notes")
+    readonly_fields = ("number", "locked_at", "locked_by", "generated_at", "created_at", "updated_at")
+
+
+@admin.register(ProjectRevenueSchedule)
+class ProjectRevenueScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "recognition_method", "contract_amount", "recognized_amount", "percent_complete", "status", "currency", "tenant")
+    list_filter = ("recognition_method", "status")
+    list_select_related = ("tenant", "project", "sow", "milestone", "currency", "approved_by")
+    search_fields = ("number", "name", "notes")
+    readonly_fields = ("number", "approved_at", "approved_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectPaymentRecord)
+class ProjectPaymentRecordAdmin(admin.ModelAdmin):
+    list_display = ("record_number", "project", "client", "accounting_invoice", "amount", "currency", "payment_date", "stage", "tenant")
+    list_filter = ("stage", "payment_method")
+    list_select_related = ("tenant", "project", "client", "accounting_invoice", "sow", "currency")
+    search_fields = ("record_number", "payment_reference", "notes")
+    readonly_fields = ("record_number", "created_at", "updated_at")
+
 
 
 
