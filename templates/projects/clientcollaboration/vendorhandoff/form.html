@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Vendor Handoff{% else %}New Vendor Handoff{% endif %} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Vendor Handoff ({{ obj.number }}){% else %}New Vendor Handoff{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:vhd_list' %}">Vendor Handoffs</a>
+      <span class="sep">›</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-3xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_project">Project *</label>
+          {{ form.project }}
+          {% if form.project.errors %}<div class="form-error">{{ form.project.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_vendor">Vendor / Subcontractor (Party) *</label>
+          {{ form.vendor }}
+          {% if form.vendor.errors %}<div class="form-error">{{ form.vendor.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_title">Work Package / Deliverable Title *</label>
+          {{ form.title }}
+          {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_task">Linked Project Task (Optional)</label>
+          {{ form.task }}
+          {% if form.task.errors %}<div class="form-error">{{ form.task.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_handoff_date">Handoff Date *</label>
+          <input type="date" name="handoff_date" id="id_handoff_date" class="form-input" required value="{% if form.handoff_date.value %}{{ form.handoff_date.value|date:'Y-m-d' }}{% endif %}">
+          {% if form.handoff_date.errors %}<div class="form-error">{{ form.handoff_date.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_due_date">Due Date</label>
+          <input type="date" name="due_date" id="id_due_date" class="form-input" value="{% if form.due_date.value %}{{ form.due_date.value|date:'Y-m-d' }}{% endif %}">
+          {% if form.due_date.errors %}<div class="form-error">{{ form.due_date.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_status">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_deliverable_link">Deliverable URL / Asset Link</label>
+          {{ form.deliverable_link }}
+          {% if form.deliverable_link.errors %}<div class="form-error">{{ form.deliverable_link.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_scorecard_rating">Scorecard Rating (1 to 5 Stars)</label>
+          {{ form.scorecard_rating }}
+          {% if form.scorecard_rating.errors %}<div class="form-error">{{ form.scorecard_rating.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_description">Handoff Scope & Requirements</label>
+        {{ form.description }}
+        {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_performance_notes">Evaluation & Performance Notes</label>
+        {{ form.performance_notes }}
+        {% if form.performance_notes.errors %}<div class="form-error">{{ form.performance_notes.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="save"></i> Save Vendor Handoff
+        </button>
+        <a href="{% url 'projects:vhd_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
