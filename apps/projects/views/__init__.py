@@ -589,6 +589,52 @@ from .ClientExternalCollaboration.ClientInvoices import (  # noqa: F401
     pci_list,
 )
 
+# --- 7.15 Financial & Billing Management --------------------------------------------------------
+from .FinancialBillingManagement.RateCards import (  # noqa: F401
+    rtc_create,
+    rtc_delete,
+    rtc_detail,
+    rtc_edit,
+    rtc_list,
+)
+from .FinancialBillingManagement.BillingRuns import (  # noqa: F401
+    pbr_create,
+    pbr_delete,
+    pbr_detail,
+    pbr_edit,
+    pbr_generate_invoices,
+    pbr_list,
+    pbr_lock,
+    pbr_preview_pdf,
+)
+from .FinancialBillingManagement.RevenueSchedules import (  # noqa: F401
+    prs_approve,
+    prs_create,
+    prs_delete,
+    prs_detail,
+    prs_edit,
+    prs_list,
+    prs_lock,
+    prs_recognize,
+)
+from .FinancialBillingManagement.PaymentRecords import (  # noqa: F401
+    ppr_create,
+    ppr_delete,
+    ppr_detail,
+    ppr_edit,
+    ppr_escalate,
+    ppr_list,
+    ppr_record_payment,
+    ppr_send_reminder,
+)
+from .FinancialBillingManagement.FinancialBoards import (  # noqa: F401
+    ar_aging,
+    cash_flow_forecast,
+    financial_pnl,
+    financial_variance,
+)
+
+
 
 
 
