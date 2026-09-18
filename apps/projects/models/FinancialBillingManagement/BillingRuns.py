@@ -183,7 +183,7 @@ class ProjectBillingRun(TenantNumbered):
         self.fee_amount = q2(self.fee_amount)
         self.subtotal = q2(self.labor_amount + self.expense_amount + self.fee_amount)
         if self.tax_code and not self.tax_rate_pct:
-            self.tax_rate_pct = self.tax_code.rate
+            self.tax_rate_pct = getattr(self.tax_code, "rate_pct", Decimal("0.000"))
         if self.tax_rate_pct:
             self.tax_amount = q2(self.subtotal * (self.tax_rate_pct / Decimal("100.0")))
         else:
