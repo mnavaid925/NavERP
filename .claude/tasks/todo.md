@@ -1,3 +1,96 @@
+# Build Plan — Projects 7.15 Financial & Billing Management
+
+Source of truth: `.claude/tasks/research-projects-7.15.md`.
+BASE = `6082e563`. Next migration: `0022`.
+App package folder: `FinancialBillingManagement/` in `apps/projects/{models,forms,views,urls}/`.
+Template folder: `templates/projects/financialbilling/`. Test subslug: `financialbilling`.
+Coexistence: solo builder in `apps/projects/` extending `FinancialBillingManagement`.
+
+## Models (`apps/projects/models/FinancialBillingManagement/`)
+- [ ] `RateCards.py` — `ProjectRateCard` [RTC-]: Governs role/activity billing rate cards and direct expense markups with multi-tier overrides (Global Standard -> Client Custom -> Project Override).
+  - Fields: `name` (CharField 120), `project` (FK `projects.Project`, null=True, blank=True, SET_NULL, related_name="rate_cards"), `client` (FK `core.Party`, null=True, blank=True, SET_NULL, related_name="project_rate_cards"), `role_name` (CharField 100), `activity_code` (CharField 40, blank=True), `hourly_rate` (DecimalField 10,2 >= 0), `expense_markup_pct` (DecimalField 5,2 >= 0, default=0.00), `currency` (FK `accounting.Currency`, PROTECT, related_name="+"), `effective_from` (DateField, null=True, blank=True), `effective_to` (DateField, null=True, blank=True), `is_active` (BooleanField, default=True), `notes` (TextField, blank=True).
+  - Constraints: Unique `("tenant", "number")`, indexes on `("tenant", "project", "is_active")` and `("tenant", "client", "is_active")`. Clean asserts `effective_to >= effective_from`.
+  - Excluded from form: `tenant`, auto `number`, `created_at`, `updated_at`.
+- [ ] `BillingRuns.py` — `ProjectBillingRun` [PBR-]: Batch billing session aggregating unbilled approved timesheets (`ResourceTimeEntry`) and expenses (`ProjectExpense`), calculating taxes/markups, generating canonical `accounting.Invoice` rows, and handling PDF dispatch.
+  - Fields: `project` (FK `projects.Project`, CASCADE, related_name="billing_runs"), `client` (FK `core.Party`, PROTECT, related_name="project_billing_runs"), `sow` (FK `projects.StatementOfWork`, null=True, blank=True, SET_NULL, related_name="billing_runs"), `milestone` (FK `projects.ProjectMilestone`, null=True, blank=True, SET_NULL, related_name="billing_runs"), `billing_type` (CharField 24, choices: time_and_materials, fixed_fee, milestone, progress_percent, retainer), `run_date` (DateField, default localdate), `cutoff_date` (DateField), `total_time_hours` (DecimalField 8,2, default 0), `labor_amount` (DecimalField 14,2, default 0), `expense_amount` (DecimalField 14,2, default 0), `fee_amount` (DecimalField 14,2, default 0), `subtotal` (DecimalField 14,2, default 0), `tax_code` (FK `accounting.TaxCode`, null=True, blank=True, SET_NULL, related_name="+"), `tax_rate_pct` (DecimalField 6,3, default 0), `tax_amount` (DecimalField 14,2, default 0), `total_amount` (DecimalField 14,2, default 0), `currency` (FK `accounting.Currency`, PROTECT, related_name="+"), `exchange_rate` (DecimalField 18,8, default 1.0), `status` (CharField 15, choices: draft, approved, invoiced, cancelled, default "draft"), `accounting_invoice` (FK `accounting.Invoice`, null=True, blank=True, SET_NULL, related_name="project_billing_runs"), `delivery_channel` (CharField 12, choices: email, portal, download, default "email"), `recipient_email` (CharField 255, blank=True), `dispatched_at` (DateTimeField, null=True, blank=True, editable=False), `dispatched_by` (FK `AUTH_USER_MODEL`, null=True, blank=True, SET_NULL, editable=False, related_name="+"), `notes` (TextField, blank=True).
+  - Verbs: `pbr_approve` (POST-only status draft -> approved), `pbr_generate_invoice` (POST-only atomic creation of `accounting.Invoice` + `InvoiceLine` rows, status -> invoiced, links `accounting_invoice`), `pbr_dispatch` (POST-only stamps dispatched_at/by, logs `core.AuditLog`).
+  - Excluded from form: `tenant`, auto `number`, `status`, `accounting_invoice`, `total_time_hours`, `labor_amount`, `expense_amount`, `subtotal`, `tax_amount`, `total_amount`, `dispatched_at`, `dispatched_by`, `created_at`, `updated_at`.
+- [ ] `RevenueSchedules.py` — `ProjectRevenueSchedule` [PRS-]: Governs ASC 606 / IFRS 15 revenue recognition plans, cost center allocations, and unbilled vs deferred revenue balances.
+  - Fields: `project` (FK `projects.Project`, CASCADE, related_name="revenue_schedules"), `milestone` (FK `projects.ProjectMilestone`, null=True, blank=True, SET_NULL, related_name="revenue_schedules"), `recognition_date` (DateField, default localdate), `fiscal_period` (FK `accounting.FiscalPeriod`, null=True, blank=True, SET_NULL, related_name="project_revenue_schedules"), `method` (CharField 24, choices: percent_complete, milestone, as_billed, straight_line, manual), `contract_amount` (DecimalField 14,2, default 0), `completion_percent` (DecimalField 5,2, default 0), `recognized_amount` (DecimalField 14,2, default 0), `deferred_amount` (DecimalField 14,2, default 0), `unbilled_amount` (DecimalField 14,2, default 0), `cost_center` (FK `core.OrgUnit`, null=True, blank=True, SET_NULL, related_name="project_revenue_schedules"), `gl_account` (FK `accounting.GLAccount`, null=True, blank=True, PROTECT, related_name="project_revenue_schedules"), `journal_entry` (FK `accounting.JournalEntry`, null=True, blank=True, SET_NULL, editable=False, related_name="project_revenue_schedules"), `status` (CharField 12, choices: draft, approved, recognized, locked, void, default "draft"), `recognized_by` (FK `AUTH_USER_MODEL`, null=True, blank=True, SET_NULL, editable=False, related_name="+"), `recognized_at` (DateTimeField, null=True, blank=True, editable=False), `notes` (TextField, blank=True).
+  - Verbs: `prs_approve` (POST-only status draft -> approved), `prs_recognize` (POST-only status -> recognized, creates optional `accounting.JournalEntry`, logs `core.AuditLog`), `prs_lock` (POST-only administrative lock freezing historical audit numbers).
+  - Excluded from form: `tenant`, auto `number`, `status`, `journal_entry`, `recognized_by`, `recognized_at`, `created_at`, `updated_at`.
+- [ ] `PaymentRecords.py` — `ProjectPaymentRecord` [PPR-]: Manages project-level accounts receivable collections workflow, dunning stages, promise-to-pay commitments, and dispute tracking.
+  - Fields: `project` (FK `projects.Project`, CASCADE, related_name="payment_records"), `client` (FK `core.Party`, PROTECT, related_name="project_payment_records"), `billing_run` (FK `projects.ProjectBillingRun`, null=True, blank=True, SET_NULL, related_name="payment_records"), `accounting_invoice` (FK `accounting.Invoice`, CASCADE, related_name="project_collections"), `stage` (CharField 20, choices: current, reminder_sent, overdue, promise_to_pay, in_dispute, settled, written_off, default "current"), `dunning_level` (CharField 20, choices: friendly_reminder, first_notice, second_notice, final_demand, legal, default "friendly_reminder"), `last_contact_date` (DateField, null=True, blank=True), `next_follow_up_date` (DateField, null=True, blank=True), `promised_payment_date` (DateField, null=True, blank=True), `promised_amount` (DecimalField 14,2, null=True, blank=True), `dispute_reason` (TextField, blank=True), `assigned_collector` (FK `AUTH_USER_MODEL`, null=True, blank=True, SET_NULL, related_name="assigned_project_collections"), `status` (CharField 12, choices: open, escalated, resolved, closed, default "open"), `notes` (TextField, blank=True).
+  - Verbs: `ppr_log_contact` (POST-only updates last_contact_date, notes), `ppr_record_promise` (POST-only sets promised_payment_date, promised_amount, stage=promise_to_pay), `ppr_escalate` (POST-only advances dunning_level, status=escalated), `ppr_resolve` (POST-only stage=settled, status=resolved).
+  - Excluded from form: `tenant`, auto `number`, `stage`, `status`, `created_at`, `updated_at`.
+
+## Backend layers (`apps/projects/{models,forms,views,urls}/FinancialBillingManagement/`)
+- [ ] Models: `RateCards.py`, `BillingRuns.py`, `RevenueSchedules.py`, `PaymentRecords.py`.
+- [ ] Forms: `RateCards.py` (`ProjectRateCardForm`), `BillingRuns.py` (`ProjectBillingRunForm`, `BillingRunDispatchForm`), `RevenueSchedules.py` (`ProjectRevenueScheduleForm`, `RevenueScheduleRecognizeForm`), `PaymentRecords.py` (`ProjectPaymentRecordForm`, `PaymentPromiseForm`, `ContactLogForm`).
+- [ ] Views: Function-based, `@login_required`, tenant-scoped, audit-logged via `write_audit_log`:
+  - `RateCards.py` (`rtc_list`, `rtc_detail`, `rtc_create`, `rtc_edit`, `rtc_delete`).
+  - `BillingRuns.py` (`pbr_list`, `pbr_detail`, `pbr_create`, `pbr_edit`, `pbr_delete`, `pbr_approve`, `pbr_generate_invoice`, `pbr_dispatch`, `pbr_preview_pdf`).
+  - `RevenueSchedules.py` (`prs_list`, `prs_detail`, `prs_create`, `prs_edit`, `prs_delete`, `prs_approve`, `prs_recognize`, `prs_lock`).
+  - `PaymentRecords.py` (`ppr_list`, `ppr_detail`, `ppr_create`, `ppr_edit`, `ppr_delete`, `ppr_log_contact`, `ppr_record_promise`, `ppr_escalate`, `ppr_resolve`).
+  - `FinancialBoards.py` (Computed dashboards on read over verified spine entities):
+    - `financial_pnl`: Real-time project P&L (Contract Value, Recognized Revenue, Direct Labor, Expenses, Gross Margin).
+    - `financial_variance`: Triple-constraint variance & EVM integration (BAC, AC, EV, CPI, SPI, EAC).
+    - `ar_aging`: Accounts Receivable aging buckets (Current, 1-30, 31-60, 61-90, 90+ days).
+    - `cash_flow_forecast`: Forward-looking 30/60/90-day cash inflows vs outflows.
+- [ ] URLs: Literal routes ordered before `<int:pk>/` routes in `urls/FinancialBillingManagement/`:
+  - `RateCards.py`: `rate-cards/`, `rate-cards/create/`, `rate-cards/<int:pk>/`, `rate-cards/<int:pk>/edit/`, `rate-cards/<int:pk>/delete/`.
+  - `BillingRuns.py`: `billing-runs/`, `billing-runs/create/`, `billing-runs/<int:pk>/`, `billing-runs/<int:pk>/edit/`, `billing-runs/<int:pk>/delete/`, `billing-runs/<int:pk>/approve/`, `billing-runs/<int:pk>/generate-invoice/`, `billing-runs/<int:pk>/dispatch/`, `billing-runs/<int:pk>/preview-pdf/`.
+  - `RevenueSchedules.py`: `revenue-schedules/`, `revenue-schedules/create/`, `revenue-schedules/<int:pk>/`, `revenue-schedules/<int:pk>/edit/`, `revenue-schedules/<int:pk>/delete/`, `revenue-schedules/<int:pk>/approve/`, `revenue-schedules/<int:pk>/recognize/`, `revenue-schedules/<int:pk>/lock/`.
+  - `PaymentRecords.py`: `payment-records/`, `payment-records/create/`, `payment-records/<int:pk>/`, `payment-records/<int:pk>/edit/`, `payment-records/<int:pk>/delete/`, `payment-records/<int:pk>/log-contact/`, `payment-records/<int:pk>/record-promise/`, `payment-records/<int:pk>/escalate/`, `payment-records/<int:pk>/resolve/`.
+  - `FinancialBoards.py`: `financial/pnl/`, `financial/variance/`, `financial/ar-aging/`, `financial/cash-flow/`.
+
+## Shared files & Integration
+- [ ] Re-export blocks in `apps/projects/{models,forms,views}/__init__.py`.
+- [ ] Concatenate `urlpatterns` in `apps/projects/urls/__init__.py` with disjoint literals (`_fbm_ratecards`, `_fbm_billingruns`, `_fbm_revenueschedules`, `_fbm_paymentrecords`, `_fbm_boards`).
+- [ ] Admin registration in `apps/projects/admin.py` with `list_select_related`, `list_filter`, `search_fields`, `readonly_fields`.
+- [ ] Extend `apps/projects/management/commands/seed_projects.py` with idempotent `_seed_715_financial_billing_management(self, tenant)`.
+- [ ] Navigation wiring: `LIVE_LINKS["7.15"]` in `apps/core/navigation.py`:
+  - "Project Accounting & Cost Centers" -> `projects:prs_list`
+  - "Invoice Generation & Delivery" -> `projects:pbr_list`
+  - "Payment Tracking & Reconciliation" -> `projects:ppr_list`
+  - "Budget vs. Actual Analysis" -> `projects:financial_variance`
+  - "Multi-Currency & Tax Handling" -> `projects:rtc_list`
+  - Extra live leaves: Rate Card Register (`projects:rtc_list`), Billing Runs (`projects:pbr_list`), Revenue Schedules (`projects:prs_list`), Collections & Payment Records (`projects:ppr_list`), Project P&L (`projects:financial_pnl`), A/R Aging Dashboard (`projects:ar_aging`), Cash Flow Forecast (`projects:cash_flow_forecast`).
+- [ ] Migration: `makemigrations projects` -> `0022_...`, run `migrate`, verify `seed_projects` twice (idempotent).
+- [ ] `manage.py check` passes with 0 errors.
+
+## Templates (`templates/projects/financialbilling/`)
+- [ ] `ratecard/`: `list.html` (filter bar by project/is_active, rate cards table, action buttons), `detail.html`, `form.html`.
+- [ ] `billingrun/`: `list.html` (filter bar by status/billing_type, summary KPI cards, billing runs table), `detail.html` (line breakdowns, canonical invoice link, approval/invoice/dispatch action buttons), `form.html`.
+- [ ] `revenueschedule/`: `list.html` (filter bar by method/status, period selector, recognition table), `detail.html` (recognition calculation, cost center allocation, journal entry link), `form.html`.
+- [ ] `paymentrecord/`: `list.html` (filter bar by stage/dunning_level, collections table), `detail.html` (invoice balance, contact log, promise-to-pay commitment card, action buttons), `form.html`.
+- [ ] Computed boards:
+  - `pnl.html`: Real-time project P&L statement (Revenue vs Direct Labor vs Expenses vs Margin).
+  - `variance.html`: Triple-constraint variance & EVM metrics board (BAC, AC, EV, CPI, SPI, EAC).
+  - `aging.html`: Accounts Receivable aging buckets dashboard (Current, 1-30, 31-60, 61-90, 90+ days).
+  - `cashflow.html`: 30/60/90-day forward cash flow forecast board (inflows vs outflows).
+- [ ] Theme badges: strictly palette classes `.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-slate`.
+
+## Verification, Review & Tests
+- [ ] Smoke tests: status 200/302 as `admin_acme` / `password`, no leaked comment tokens, IDOR 404.
+- [ ] Multi-agent review wave (6 reviewers) -> `.claude/tasks/review-projects-7.15.md`.
+- [ ] Fix findings via `code-fixer`.
+- [ ] Test wave (`apps/projects/tests/`):
+  - `test_financialbilling_models.py` (model creation, validation, auto-numbering, state transitions, FK integrity).
+  - `test_financialbilling_forms.py` (field validation, form exclusions, required field checks).
+  - `test_financialbilling_views.py` (CRUD routes, filters, pagination, computed boards pnl/variance/aging/cashflow, POST verbs).
+  - `test_financialbilling_security.py` (login required, tenant isolation, cross-tenant IDOR 404, CSRF protection).
+- [ ] Update documentation: `README.md` (roadmap update) and `apps/projects/` skill/notes if applicable.
+
+## Later passes / deferred
+- Automated live FX feed sync (xe.com / Fixer API) -> 7.18 Integration & API Hub.
+- Payment gateway webhooks (Stripe / PayPal / Adyen) -> 7.18.
+- SMTP / background mail worker for client invoice email delivery -> 7.17 Workflow & Automation.
+- Complex standalone selling price (SSP) proportional allocation -> Advanced Accounting.
+- AI credit scoring and payment default risk prediction -> Module 10 / Module 23 AI.
+
+---
+
 # Build Plan — Projects 7.14 Client & External Collaboration
 
 Source of truth: `.claude/tasks/research-projects-7.14.md` (committed 661dff57).
