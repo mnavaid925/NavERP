@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Add Amendment — {{ sow.number }} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Add Amendment to {{ sow.number }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:sow_list' %}">Statements of Work</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:sow_detail' sow.pk %}">{{ sow.number }}</a>
+      <span class="sep">›</span>
+      <span>Add Amendment</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-2xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_amendment_number">Amendment Number *</label>
+          {{ form.amendment_number }}
+          {% if form.amendment_number.errors %}<div class="form-error">{{ form.amendment_number.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_effective_date">Effective Date *</label>
+          <input type="date" name="effective_date" id="id_effective_date" class="form-input" required value="{% if form.effective_date.value %}{{ form.effective_date.value|date:'Y-m-d' }}{% endif %}">
+          {% if form.effective_date.errors %}<div class="form-error">{{ form.effective_date.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_title">Amendment Title *</label>
+        {{ form.title }}
+        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_value_change">Contract Value Delta (+/-)</label>
+          {{ form.value_change }}
+          {% if form.value_change.errors %}<div class="form-error">{{ form.value_change.errors.0 }}</div>{% endif %}
+          <span class="text-muted text-sm">Enter positive for addition, negative for reduction.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_status">Status</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_revised_scope">Revised Scope</label>
+        {{ form.revised_scope }}
+        {% if form.revised_scope.errors %}<div class="form-error">{{ form.revised_scope.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_justification">Business Justification</label>
+        {{ form.justification }}
+        {% if form.justification.errors %}<div class="form-error">{{ form.justification.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="save"></i> Save Amendment
+        </button>
+        <a href="{% url 'projects:sow_detail' sow.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
