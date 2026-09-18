@@ -1,6 +1,7 @@
 """Projects 7.14 Client & External Collaboration — VendorHandoff views.
 """
 from django.contrib import messages
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -122,17 +123,18 @@ def vhd_accept(request, pk):
     if notes:
         handoff.performance_notes = notes
 
-    handoff.status = "accepted"
-    handoff.accepted_at = timezone.now()
-    handoff.accepted_by = request.user
-    handoff.save()
+    with transaction.atomic():
+        handoff.status = "accepted"
+        handoff.accepted_at = timezone.now()
+        handoff.accepted_by = request.user
+        handoff.save()
 
-    write_audit_log(
-        request.user,
-        handoff,
-        "approve",
-        changes={"status": "accepted", "scorecard_rating": handoff.scorecard_rating},
-    )
+        write_audit_log(
+            request.user,
+            handoff,
+            "approve",
+            changes={"status": "accepted", "scorecard_rating": handoff.scorecard_rating},
+        )
     messages.success(request, f"Vendor handoff {handoff.number} marked as accepted.")
     return redirect("projects:vhd_detail", pk=pk)
 
@@ -150,15 +152,16 @@ def vhd_reject(request, pk):
         return redirect("projects:vhd_detail", pk=pk)
 
     notes = request.POST.get("deficiency_notes", "").strip()
-    handoff.status = "rejected"
-    handoff.deficiency_notes = notes
-    handoff.save()
+    with transaction.atomic():
+        handoff.status = "rejected"
+        handoff.deficiency_notes = notes
+        handoff.save()
 
-    write_audit_log(
-        request.user,
-        handoff,
-        "reject",
-        changes={"status": "rejected", "deficiency_notes": notes},
-    )
+        write_audit_log(
+            request.user,
+            handoff,
+            "reject",
+            changes={"status": "rejected", "deficiency_notes": notes},
+        )
     messages.success(request, f"Vendor handoff {handoff.number} rejected.")
     return redirect("projects:vhd_detail", pk=pk)
