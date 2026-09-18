@@ -118,7 +118,7 @@ class KnowledgeEntry(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "kind"], name="kne_tnt_kind_idx"),
             models.Index(fields=["tenant", "status"], name="kne_tnt_status_idx"),
-            # Serves the shelf query (tenant + is_featured + status) and the featured facet.
+            # Serves the filtered ?is_featured= facet.
             models.Index(fields=["tenant", "is_featured"], name="kne_tnt_feat_idx"),
         ]
 
@@ -169,6 +169,9 @@ class KnowledgeEntry(TenantNumbered):
             # FIRST so an unset FK cannot raise RelatedObjectDoesNotExist.
             if getattr(self.document, "tenant_id", None) != tenant_id:
                 errors["document"] = "That document belongs to another workspace."
+
+        if self.status == "retired" and self.is_featured:
+            errors["is_featured"] = "A retired entry may not be featured."
 
         if errors:
             raise ValidationError(errors)

@@ -130,6 +130,13 @@ class ProjectDocumentRevision(TenantOwned):
                 # change what the hold is holding.
                 errors["is_approved"] = ("This document is under legal hold — a new revision may "
                                          "not be approved onto it.")
+            elif self.is_approved and getattr(self.document, "is_archived", False):
+                errors["is_approved"] = ("This document is archived — unarchive it before approving "
+                                         "a revision onto it.")
+            elif not self.pk and getattr(self.document, "is_checked_out", False):
+                errors["document"] = (
+                    f"That document is checked out by {self.document.checked_out_by or 'another member'}."
+                )
 
         if errors:
             raise ValidationError(errors)

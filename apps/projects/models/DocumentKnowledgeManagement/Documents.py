@@ -175,14 +175,13 @@ class ProjectDocument(TenantNumbered):
         ("confidential", "Confidential"),
     ]
 
-    #: Statuses in which a document is still live work. The register's default lens and the
-    #: retention board both read this rather than repeating the tuple.
+    #: Statuses in which a document is still live work (not superseded or archived).
     LIVE_STATUSES = ("draft", "expected", "in_review", "approved")
     OPEN_STATUSES = LIVE_STATUSES
 
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="documents")
-    #: PROTECT — deleting a folder that still holds a document is refused (the 6.19 container rule),
+    #: PROTECT — deleting a folder that still holds a document is refused,
     #: so a document can never be orphaned out of the repository by a folder delete.
     folder = models.ForeignKey(
         "projects.ProjectFolder", on_delete=models.PROTECT, related_name="documents")
@@ -283,7 +282,7 @@ class ProjectDocument(TenantNumbered):
     @property
     def is_locked(self):
         """"Somebody is editing this right now" — the cooperative check-out."""
-        return self.is_checked_out and self.checked_out_at is not None
+        return bool(self.is_checked_out)
 
     @property
     def is_live(self):
@@ -324,6 +323,16 @@ class ProjectDocument(TenantNumbered):
             return None
         return self.revisions.filter(is_approved=True,
                                      revision_no=self.current_revision_no).first()
+
+    @property
+    def latest_revision(self):
+        """The revision with the highest revision_no, regardless of approval."""
+        return self.revisions.order_by("-revision_no", "-id").first()
+
+    @property
+    def share_register_url(self):
+        """Read-only link to the 7.9 DocumentShare register for this project."""
+        return f"/projects/shared-documents/?project={self.project_id}"
 
     # -- validation ------------------------------------------------------------------------------
 

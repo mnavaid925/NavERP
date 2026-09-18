@@ -79,7 +79,9 @@ class ProjectFolder(TenantNumbered):
 
     @property
     def status_css(self):
-        return "badge-muted" if self.is_archived else "badge-info"
+        return "badge-muted" if self.is_archived else "badge-green"
+
+    MAX_DEPTH = 20
 
     def ancestor_chain(self):
         """The ancestors, root-first, walking ``parent``.
@@ -89,7 +91,7 @@ class ProjectFolder(TenantNumbered):
         view decorates paths in memory from the prefetched rows instead).
         """
         chain, seen, node = [], {self.pk}, self.parent
-        while node is not None and node.pk not in seen:
+        while node is not None and node.pk not in seen and len(chain) < self.MAX_DEPTH:
             chain.append(node)
             seen.add(node.pk)
             node = node.parent
@@ -127,6 +129,8 @@ class ProjectFolder(TenantNumbered):
                 errors["parent"] = "The parent folder belongs to another project."
             elif self.pk and self._is_descendant_of(parent):
                 errors["parent"] = "That would move the folder inside its own subtree."
+            elif len(self.ancestor_chain()) >= self.MAX_DEPTH:
+                errors["parent"] = f"Folder hierarchy cannot exceed {self.MAX_DEPTH} levels."
         elif getattr(self, "project_id", None):
             # Two ROOT folders with the same name are refused here because a MySQL unique index
             # treats NULL parents as distinct (the `unique_together` above cannot catch them).
