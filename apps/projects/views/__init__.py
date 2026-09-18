@@ -497,4 +497,53 @@ from .PortfolioProgramManagement.ProgramDependencies import (  # noqa: F401
 )
 from .PortfolioProgramManagement.PortfolioDashboard import pfm_dashboard  # noqa: F401
 
+# --- 7.13 Agile & Scrum Management --------------------------------------------------------------
+from .AgileScrumManagement.ProjectEpics import (  # noqa: F401
+    epc_create,
+    epc_delete,
+    epc_detail,
+    epc_edit,
+    epc_list,
+)
+from .AgileScrumManagement.ProjectReleases import (  # noqa: F401
+    rel_create,
+    rel_delete,
+    rel_detail,
+    rel_edit,
+    rel_list,
+    rel_publish,
+)
+from .AgileScrumManagement.ReleaseRoadmap import release_roadmap  # noqa: F401
+from .AgileScrumManagement.SprintBacklog import sprint_backlog  # noqa: F401
+from .AgileScrumManagement.SprintExecution import sprint_execution  # noqa: F401
+from .AgileScrumManagement.SprintImpediments import (  # noqa: F401
+    imp_create,
+    imp_delete,
+    imp_detail,
+    imp_edit,
+    imp_list,
+    imp_resolve,
+)
+from .AgileScrumManagement.SprintRetrospectives import (  # noqa: F401
+    ret_close,
+    ret_create,
+    ret_delete,
+    ret_detail,
+    ret_edit,
+    ret_list,
+    ret_open,
+)
+from .AgileScrumManagement.Sprints import (  # noqa: F401
+    spt_cancel,
+    spt_complete,
+    spt_create,
+    spt_delete,
+    spt_detail,
+    spt_edit,
+    spt_list,
+    spt_start,
+)
+from .AgileScrumManagement.VelocityReport import velocity_report  # noqa: F401
+
+
 
