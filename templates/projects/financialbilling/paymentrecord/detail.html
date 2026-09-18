@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ payment_record.number }} — Collection Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ payment_record.number }} — {{ payment_record.client.name }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:index' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:ppr_list' %}">Payment Records</a>
+      <span>/</span>
+      <span>{{ payment_record.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex flex-wrap gap-2">
+    <button type="button" onclick="document.getElementById('contact-modal').classList.remove('hidden');" class="btn btn-primary">
+      <i data-lucide="phone-call" class="w-4 h-4 mr-1"></i> Log Contact
+    </button>
+    <button type="button" onclick="document.getElementById('promise-modal').classList.remove('hidden');" class="btn btn-outline">
+      <i data-lucide="calendar" class="w-4 h-4 mr-1"></i> Record Promise
+    </button>
+    <form method="post" action="{% url 'projects:ppr_escalate' payment_record.pk %}" onsubmit="return confirm('Escalate dunning level for this overdue collection?');" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline text-amber-700 hover:text-amber-800">
+        <i data-lucide="alert-triangle" class="w-4 h-4 mr-1"></i> Escalate
+      </button>
+    </form>
+    {% if payment_record.stage != "settled" %}
+    <form method="post" action="{% url 'projects:ppr_resolve' payment_record.pk %}" onsubmit="return confirm('Mark this collection as fully settled?');" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Mark Settled
+      </button>
+    </form>
+    {% endif %}
+    <a href="{% url 'projects:ppr_edit' payment_record.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:ppr_delete' payment_record.pk %}" onsubmit="return confirm('Are you sure you want to delete this record?');" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:ppr_list' %}" class="btn btn-outline">Back to List</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Main Details Card -->
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Collection Workflow Status</h3>
+        <div class="flex gap-2 items-center">
+          <span class="badge badge-info">{{ payment_record.get_stage_display }}</span>
+          <span class="badge badge-amber">{{ payment_record.get_dunning_level_display }}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Project</span>
+            <a href="{% url 'projects:prj_detail' payment_record.project.pk %}" class="font-medium text-brand hover:underline">
+              {{ payment_record.project.number }} — {{ payment_record.project.name }}
+            </a>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Client</span>
+            <span class="font-medium text-slate-900">{{ payment_record.client.name }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Canonical GL Invoice</span>
+            <a href="{% url 'accounting:invoice_detail' payment_record.accounting_invoice.pk %}" class="font-mono text-sm text-brand hover:underline">
+              {{ payment_record.accounting_invoice.number }}
+            </a>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Invoice Total</span>
+            <span class="font-medium text-slate-800">{{ payment_record.accounting_invoice.total_amount }} {{ payment_record.accounting_invoice.currency.code }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Outstanding Balance Due</span>
+            <span class="text-lg font-bold text-red-600">{{ payment_record.accounting_invoice.balance_due }} {{ payment_record.accounting_invoice.currency.code }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Invoice Status</span>
+            <span class="font-semibold">{{ payment_record.accounting_invoice.get_status_display }}</span>
+          </div>
+        </div>
+
+        {% if payment_record.dispute_reason %}
+        <div class="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+          <span class="text-xs font-bold text-red-900 block uppercase tracking-wider mb-1">Invoice Dispute Reported</span>
+          <p class="text-sm text-red-800">{{ payment_record.dispute_reason }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Contact & Collection Log -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Collection Activity & Contact History</h3>
+      </div>
+      <div class="card-body">
+        {% if payment_record.notes %}
+        <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 font-mono text-xs whitespace-pre-line text-slate-800 leading-relaxed">
+          {{ payment_record.notes }}
+        </div>
+        {% else %}
+        <p class="text-sm text-muted py-4 text-center">No contact activity recorded yet. Click "Log Contact" to add notes.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar: Promise to Pay & Collector Assignment -->
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Promise to Pay Commitment</h3>
+      </div>
+      <div class="card-body space-y-3">
+        {% if payment_record.promised_payment_date %}
+        <div class="p-4 bg-green-50 rounded-lg border border-green-200">
+          <div class="text-xs text-green-800 uppercase font-semibold">Active Payment Commitment</div>
+          <div class="text-xl font-bold text-green-900 mt-1">{{ payment_record.promised_amount }} {{ payment_record.accounting_invoice.currency.code }}</div>
+          <div class="text-xs text-green-700 mt-1">Promised Date: <strong>{{ payment_record.promised_payment_date }}</strong></div>
+        </div>
+        {% else %}
+        <div class="text-sm text-slate-500 py-2">No active promise-to-pay date on file.</div>
+        {% endif %}
+
+        <div class="pt-2 border-t border-slate-100">
+          <span class="text-xs text-muted block uppercase tracking-wider">Next Follow-Up Date</span>
+          <span class="font-medium text-slate-800 mt-0.5 block">{{ payment_record.next_follow_up_date|default:"Not scheduled" }}</span>
+        </div>
+
+        <div>
+          <span class="text-xs text-muted block uppercase tracking-wider">Last Contact Date</span>
+          <span class="font-medium text-slate-800 mt-0.5 block">{{ payment_record.last_contact_date|default:"Never" }}</span>
+        </div>
+
+        <div>
+          <span class="text-xs text-muted block uppercase tracking-wider">Assigned Collector</span>
+          <span class="text-sm font-medium mt-0.5 block">
+            {% if payment_record.assigned_collector %}
+              {{ payment_record.assigned_collector.get_full_name|default:payment_record.assigned_collector.username }}
+            {% else %}
+              <span class="text-muted">Unassigned</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log Contact Modal -->
+<div id="contact-modal" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center hidden">
+  <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+    <div class="flex justify-between items-center border-b pb-3">
+      <h3 class="text-lg font-bold text-slate-900">Log Contact Activity</h3>
+      <button type="button" onclick="document.getElementById('contact-modal').classList.add('hidden');" class="text-slate-400 hover:text-slate-600">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <form method="post" action="{% url 'projects:ppr_log_contact' payment_record.pk %}">
+      {% csrf_token %}
+      <div class="space-y-4">
+        <div class="form-group">
+          <label class="form-label text-xs">Contact Date</label>
+          {{ contact_form.contact_date }}
+        </div>
+        <div class="form-group">
+          <label class="form-label text-xs">Activity Details & Response</label>
+          {{ contact_form.notes }}
+        </div>
+        <div class="form-group">
+          <label class="form-label text-xs">Next Follow-Up Date (Optional)</label>
+          {{ contact_form.next_follow_up_date }}
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('contact-modal').classList.add('hidden');" class="btn btn-outline">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Contact Log</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Record Promise Modal -->
+<div id="promise-modal" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center hidden">
+  <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+    <div class="flex justify-between items-center border-b pb-3">
+      <h3 class="text-lg font-bold text-slate-900">Record Promise to Pay</h3>
+      <button type="button" onclick="document.getElementById('promise-modal').classList.add('hidden');" class="text-slate-400 hover:text-slate-600">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <form method="post" action="{% url 'projects:ppr_record_promise' payment_record.pk %}">
+      {% csrf_token %}
+      <div class="space-y-4">
+        <div class="form-group">
+          <label class="form-label text-xs">Promised Payment Date</label>
+          {{ promise_form.promised_payment_date }}
+        </div>
+        <div class="form-group">
+          <label class="form-label text-xs">Promised Amount</label>
+          {{ promise_form.promised_amount }}
+        </div>
+        <div class="form-group">
+          <label class="form-label text-xs">Commitment Notes</label>
+          {{ promise_form.notes }}
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('promise-modal').classList.add('hidden');" class="btn btn-outline">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Commitment</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
