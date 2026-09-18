@@ -141,11 +141,33 @@ def financial_variance(request):
 
     ccas_qs = (
         CostControlAccount.objects.filter(tenant=request.tenant)
-        .select_related("project")
+        .select_related("project", "wbs_node")
         .order_by("project__name", "code")
     )
     if project_id:
         ccas_qs = ccas_qs.filter(project_id=project_id)
+
+    ccas_list = list(ccas_qs)
+    cca_ids = [cca.pk for cca in ccas_list]
+
+    if cca_ids:
+        expense_aggregates = (
+            ProjectExpense.objects.filter(
+                tenant=request.tenant,
+                control_account_id__in=cca_ids,
+                status="posted",
+            )
+            .values("control_account_id")
+            .annotate(
+                ac_total=Sum("amount", filter=Q(entry_type__in=["actual", "accrual"])),
+                committed_total=Sum("amount", filter=Q(entry_type="commitment")),
+            )
+        )
+        expenses_by_cca = {e["control_account_id"]: e for e in expense_aggregates}
+        for cca in ccas_list:
+            exp = expenses_by_cca.get(cca.pk, {})
+            cca.__dict__["ac"] = (exp.get("ac_total") or Decimal("0.00")).quantize(Decimal("0.01"))
+            cca.__dict__["committed"] = (exp.get("committed_total") or Decimal("0.00")).quantize(Decimal("0.01"))
 
     variance_rows = []
     tot_bac = Decimal("0.00")
@@ -156,7 +178,7 @@ def financial_variance(request):
     tot_sv = Decimal("0.00")
     tot_eac = Decimal("0.00")
 
-    for cca in ccas_qs:
+    for cca in ccas_list:
         bac = cca.bac
         pv = cca.pv
         ev = cca.ev
