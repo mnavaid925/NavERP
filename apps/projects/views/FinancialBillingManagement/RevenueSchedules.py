@@ -46,7 +46,6 @@ def prs_list(request):
             ("method", "method", False),
         ],
         extra_context={
-            "revenue_schedules": qs,
             "projects": projects,
             "project_filter": project_id,
             "status_choices": ProjectRevenueSchedule.STATUS_CHOICES,
