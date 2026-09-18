@@ -212,6 +212,10 @@ def ppr_record_promise(request, pk):
 @require_POST
 def ppr_escalate(request, pk):
     record = get_object_or_404(ProjectPaymentRecord, pk=pk, tenant=request.tenant)
+    if record.stage in ("settled", "written_off") or record.status in ("resolved", "closed"):
+        messages.error(request, f"Collection record {record.number} cannot be escalated because it is already {record.get_stage_display()} ({record.get_status_display()}).")
+        return redirect("projects:ppr_detail", pk=record.pk)
+
     dunning_ladder = ["friendly_reminder", "first_notice", "second_notice", "final_demand", "legal"]
     curr_idx = dunning_ladder.index(record.dunning_level) if record.dunning_level in dunning_ladder else 0
 
