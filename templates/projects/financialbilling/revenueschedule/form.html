@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Revenue Schedule — {{ schedule.number }}{% else %}New Revenue Schedule{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Revenue Schedule: {{ schedule.number }}{% else %}Create Revenue Recognition Schedule{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:index' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:prs_list' %}">Revenue Schedules</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-4xl">
+  <div class="card-header">
+    <h3 class="card-title">Recognition Plan Settings</h3>
+  </div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.project.id_for_label }}" class="form-label">Project *</label>
+          {{ form.project }}
+          {% if form.project.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.project.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.method.id_for_label }}" class="form-label">Recognition Method *</label>
+          {{ form.method }}
+          {% if form.method.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.method.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.milestone.id_for_label }}" class="form-label">Milestone Trigger</label>
+          {{ form.milestone }}
+          <span class="text-xs text-muted">For milestone-based revenue recognition</span>
+          {% if form.milestone.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.milestone.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.recognition_date.id_for_label }}" class="form-label">Recognition Date *</label>
+          {{ form.recognition_date }}
+          {% if form.recognition_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recognition_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.fiscal_period.id_for_label }}" class="form-label">Fiscal Period</label>
+          {{ form.fiscal_period }}
+          {% if form.fiscal_period.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.fiscal_period.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.cost_center.id_for_label }}" class="form-label">Cost Center / Org Unit</label>
+          {{ form.cost_center }}
+          <span class="text-xs text-muted">For divisional margin & cost allocation</span>
+          {% if form.cost_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.cost_center.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.contract_amount.id_for_label }}" class="form-label">Total Contract Baseline Value</label>
+          {{ form.contract_amount }}
+          {% if form.contract_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.contract_amount.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.completion_percent.id_for_label }}" class="form-label">Completion Progress %</label>
+          {{ form.completion_percent }}
+          {% if form.completion_percent.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.completion_percent.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.recognized_amount.id_for_label }}" class="form-label">Recognized Revenue Amount</label>
+          {{ form.recognized_amount }}
+          <span class="text-xs text-muted">Auto-calculated if % complete is given, or specify exact</span>
+          {% if form.recognized_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.recognized_amount.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.gl_account.id_for_label }}" class="form-label">Revenue Account</label>
+          {{ form.gl_account }}
+          {% if form.gl_account.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.gl_account.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.deferred_amount.id_for_label }}" class="form-label">Deferred Revenue Amount (Liability)</label>
+          {{ form.deferred_amount }}
+          {% if form.deferred_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.deferred_amount.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.unbilled_amount.id_for_label }}" class="form-label">Unbilled Revenue Amount (WIP Asset)</label>
+          {{ form.unbilled_amount }}
+          {% if form.unbilled_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.unbilled_amount.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.notes.id_for_label }}" class="form-label">Audit Notes & Method Explanation</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-2">
+        <a href="{% url 'projects:prs_list' %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_edit %}Save Changes{% else %}Create Revenue Schedule{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
