@@ -138,4 +138,12 @@ from .AgileScrumManagement.Sprints import Sprint  # noqa: F401
 from .AgileScrumManagement.SprintImpediments import SprintImpediment  # noqa: F401
 from .AgileScrumManagement.SprintRetrospectives import SprintRetrospective  # noqa: F401
 
+# --- 7.14 Client & External Collaboration -------------------------------------------------------
+from .ClientExternalCollaboration.ClientPortals import ClientPortalAccess  # noqa: F401
+from .ClientExternalCollaboration.ClientFeedbacks import ClientApprovalRequest  # noqa: F401
+from .ClientExternalCollaboration.StatementOfWorks import StatementOfWork, SOWAmendment  # noqa: F401
+from .ClientExternalCollaboration.VendorHandoffs import VendorHandoff  # noqa: F401
+from .ClientExternalCollaboration.ClientInvoices import ProjectClientInvoice  # noqa: F401
+
+
 
