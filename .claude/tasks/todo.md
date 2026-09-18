@@ -8433,73 +8433,86 @@ Shipped full 7.11 Time & Attendance Tracking sub-module across all 5 NavERP capa
 
 ---
 
-### 7.12 Portfolio & Program Management (Module 7: Project Management, `projects`) — plan (2026-09-17)
+### 7.12 Portfolio & Program Management (Module 7: Project Management, `projects`) — build & close-out (2026-09-18)
 
-Claimed Migration: **0019** (0001–0018 exist in `apps/projects/migrations/`).
-Base SHA: `c47901e175c33c5b29aa785162510935479b9480`.
+Shipped full 7.12 Portfolio & Program Management sub-module across all 5 NavERP capability bullets:
+1. **Portfolio Dashboard & Heat Maps**: Multi-project health rollups, investment allocation by theme, and 4-quadrant strategic alignment heat map matrix on `pfm_dashboard`.
+2. **Program Dependency Mapping**: Cross-project dependency register `ProgramDependency` [PDEP-] with lead/lag days, criticality, and `pdep_clear`/`pdep_reopen` lifecycle verbs.
+3. **Strategic Alignment & Scoring**: `PortfolioInvestment` [PIN-] evaluating projects against 4-criterion weighted model (strategic fit, financial return, delivery risk, capacity fit) with derived composite `weighted_score`.
+4. **Capacity & Pipeline Planning**: Intake pipeline progression visualization over 7.1 `ProjectRequest`s and allocation demand vs available capacity.
+5. **Portfolio Reporting & Governance**: Strategic investment envelopes via `Portfolio` [PRT-], coordinated delivery clusters via `Program` [PGM-], and executive decision verbs (`pin_fund`, `pin_reject`, `pin_defer`).
 
-- [ ] Spec: freeze contract in `.claude/tasks/contract-projects-7.12.md`
-- [ ] Entity 1: Portfolio [PRT-]
-  - [ ] `models/PortfolioProgramManagement/Portfolios.py`
-  - [ ] `forms/PortfolioProgramManagement/Portfolios.py`
-  - [ ] `views/PortfolioProgramManagement/Portfolios.py` (prt_list, prt_create, prt_detail, prt_edit, prt_delete)
-  - [ ] `urls/PortfolioProgramManagement/Portfolios.py`
-  - [ ] `templates/projects/portfolio/portfolio/{list,detail,form}.html`
-- [ ] Entity 2: Program [PGM-]
-  - [ ] `models/PortfolioProgramManagement/Programs.py`
-  - [ ] `forms/PortfolioProgramManagement/Programs.py`
-  - [ ] `views/PortfolioProgramManagement/Programs.py` (pgm_list, pgm_create, pgm_detail, pgm_edit, pgm_delete)
-  - [ ] `urls/PortfolioProgramManagement/Programs.py`
-  - [ ] `templates/projects/portfolio/program/{list,detail,form}.html`
-- [ ] Entity 3: PortfolioInvestment [PIN-]
-  - [ ] `models/PortfolioProgramManagement/PortfolioInvestments.py`
-  - [ ] `forms/PortfolioProgramManagement/PortfolioInvestments.py`
-  - [ ] `views/PortfolioProgramManagement/PortfolioInvestments.py` (pin_list, pin_create, pin_detail, pin_edit, pin_delete, pin_fund, pin_reject, pin_defer)
-  - [ ] `urls/PortfolioProgramManagement/PortfolioInvestments.py`
-  - [ ] `templates/projects/portfolio/investment/{list,detail,form}.html`
-- [ ] Entity 4: ProgramDependency [PDEP-]
-  - [ ] `models/PortfolioProgramManagement/ProgramDependencies.py`
-  - [ ] `forms/PortfolioProgramManagement/ProgramDependencies.py`
-  - [ ] `views/PortfolioProgramManagement/ProgramDependencies.py` (pdep_list, pdep_create, pdep_detail, pdep_edit, pdep_delete, pdep_clear, pdep_reopen)
-  - [ ] `urls/PortfolioProgramManagement/ProgramDependencies.py`
-  - [ ] `templates/projects/portfolio/dependency/{list,detail,form}.html`
-- [ ] Computed Page 5: Portfolio Dashboard & Heat Maps (`pfm_dashboard`)
-  - [ ] `views/PortfolioProgramManagement/PortfolioDashboard.py`
-  - [ ] `urls/PortfolioProgramManagement/PortfolioDashboard.py`
-  - [ ] `templates/projects/portfolio/dashboard.html`
-- [ ] Package __init__.py files:
-  - [ ] `models/PortfolioProgramManagement/__init__.py`
-  - [ ] `forms/PortfolioProgramManagement/__init__.py`
-  - [ ] `views/PortfolioProgramManagement/__init__.py`
-  - [ ] `urls/PortfolioProgramManagement/__init__.py`
-- [ ] Integrate (solo writer):
-  - [ ] Re-exports in `models/__init__.py`, `forms/__init__.py`, `views/__init__.py`
-  - [ ] URLconf wiring in `urls/__init__.py`
-  - [ ] Register 4 models in `admin.py`
-  - [ ] Seeder `_portfolio_management` in `seed_projects.py` (idempotent guard)
-  - [ ] Navigation `LIVE_LINKS["7.12"]` in `apps/core/navigation.py`
-  - [ ] `makemigrations projects` -> `0019_...` -> `migrate` -> `seed_projects` twice -> `manage.py check`
-- [ ] Smoke:
-  - [ ] `temp/smoke_712.py` renders every new URL as `admin_acme` (200/302), checks content, checks IDOR (404)
-- [ ] Review (6 serial passes):
-  - [ ] `code-reviewer`
-  - [ ] `explorer`
-  - [ ] `frontend-reviewer`
-  - [ ] `performance-reviewer`
-  - [ ] `qa-smoke-tester`
-  - [ ] `security-reviewer`
-  - [ ] Deduplicate & commit `.claude/tasks/review-projects-7.12.md`
-- [ ] Fixer:
-  - [ ] `code-fixer` resolves findings in ID order, commits per file
-- [ ] Tests (serial):
-  - [ ] `test_portfolio_models.py`
-  - [ ] `test_portfolio_forms.py`
-  - [ ] `test_portfolio_views.py`
-  - [ ] `test_portfolio_security.py`
-  - [ ] Full unfiltered test suite passes green
-- [ ] Skill & README:
-  - [ ] Update `.claude/skills/projects/SKILL.md`
-  - [ ] Update `README.md`
+- Models: `Portfolio` [PRT-], `Program` [PGM-], `PortfolioInvestment` [PIN-], `ProgramDependency` [PDEP-].
+- Forms: `PortfolioForm`, `ProgramForm`, `PortfolioInvestmentForm`, `InvestmentDecisionForm`, `ProgramDependencyForm`.
+- Views: CRUD for portfolios, programs, investments, and dependencies, plus executive decision verbs and `pfm_dashboard`.
+- Templates: 13 templates in `templates/projects/portfolio/` (portfolio, program, investment, dependency, dashboard).
+- Navigation: `LIVE_LINKS["7.12"]` mapped with all 5 bullets and 3 extra live leaves.
+- Migrations: `0019_portfolio_program_portfolioinvestment_and_more.py` applied cleanly.
+- Seeder: `_portfolio_management` in `seed_projects.py` seeding portfolios, programs, investments, and cross-project dependencies; 100% idempotent.
+- Tests: 45 tests across 4 lanes (`test_portfolio_models.py`, `_forms.py`, `_views.py`, `_security.py`).
+
+- [x] Spec: freeze contract in `.claude/tasks/contract-projects-7.12.md`
+- [x] Entity 1: Portfolio [PRT-]
+  - [x] `models/PortfolioProgramManagement/Portfolios.py`
+  - [x] `forms/PortfolioProgramManagement/Portfolios.py`
+  - [x] `views/PortfolioProgramManagement/Portfolios.py` (prt_list, prt_create, prt_detail, prt_edit, prt_delete)
+  - [x] `urls/PortfolioProgramManagement/Portfolios.py`
+  - [x] `templates/projects/portfolio/portfolio/{list,detail,form}.html`
+- [x] Entity 2: Program [PGM-]
+  - [x] `models/PortfolioProgramManagement/Programs.py`
+  - [x] `forms/PortfolioProgramManagement/Programs.py`
+  - [x] `views/PortfolioProgramManagement/Programs.py` (pgm_list, pgm_create, pgm_detail, pgm_edit, pgm_delete)
+  - [x] `urls/PortfolioProgramManagement/Programs.py`
+  - [x] `templates/projects/portfolio/program/{list,detail,form}.html`
+- [x] Entity 3: PortfolioInvestment [PIN-]
+  - [x] `models/PortfolioProgramManagement/PortfolioInvestments.py`
+  - [x] `forms/PortfolioProgramManagement/PortfolioInvestments.py`
+  - [x] `views/PortfolioProgramManagement/PortfolioInvestments.py` (pin_list, pin_create, pin_detail, pin_edit, pin_delete, pin_fund, pin_reject, pin_defer)
+  - [x] `urls/PortfolioProgramManagement/PortfolioInvestments.py`
+  - [x] `templates/projects/portfolio/investment/{list,detail,form}.html`
+- [x] Entity 4: ProgramDependency [PDEP-]
+  - [x] `models/PortfolioProgramManagement/ProgramDependencies.py`
+  - [x] `forms/PortfolioProgramManagement/ProgramDependencies.py`
+  - [x] `views/PortfolioProgramManagement/ProgramDependencies.py` (pdep_list, pdep_create, pdep_detail, pdep_edit, pdep_delete, pdep_clear, pdep_reopen)
+  - [x] `urls/PortfolioProgramManagement/ProgramDependencies.py`
+  - [x] `templates/projects/portfolio/dependency/{list,detail,form}.html`
+- [x] Computed Page 5: Portfolio Dashboard & Heat Maps (`pfm_dashboard`)
+  - [x] `views/PortfolioProgramManagement/PortfolioDashboard.py`
+  - [x] `urls/PortfolioProgramManagement/PortfolioDashboard.py`
+  - [x] `templates/projects/portfolio/dashboard.html`
+- [x] Package __init__.py files:
+  - [x] `models/PortfolioProgramManagement/__init__.py`
+  - [x] `forms/PortfolioProgramManagement/__init__.py`
+  - [x] `views/PortfolioProgramManagement/__init__.py`
+  - [x] `urls/PortfolioProgramManagement/__init__.py`
+- [x] Integrate (solo writer):
+  - [x] Re-exports in `models/__init__.py`, `forms/__init__.py`, `views/__init__.py`
+  - [x] URLconf wiring in `urls/__init__.py`
+  - [x] Register 4 models in `admin.py`
+  - [x] Seeder `_portfolio_management` in `seed_projects.py` (idempotent guard)
+  - [x] Navigation `LIVE_LINKS["7.12"]` in `apps/core/navigation.py`
+  - [x] `makemigrations projects` -> `0019_...` -> `migrate` -> `seed_projects` twice -> `manage.py check`
+- [x] Smoke:
+  - [x] `temp/smoke_712.py` renders every new URL as `admin_acme` (200/302), checks content, checks IDOR (404)
+- [x] Review (6 serial passes):
+  - [x] `code-reviewer`
+  - [x] `explorer`
+  - [x] `frontend-reviewer`
+  - [x] `performance-reviewer`
+  - [x] `qa-smoke-tester`
+  - [x] `security-reviewer`
+  - [x] Deduplicate & commit `.claude/tasks/review-projects-7.12.md`
+- [x] Fixer:
+  - [x] `code-fixer` resolves findings in ID order, commits per file
+- [x] Tests (serial):
+  - [x] `test_portfolio_models.py`
+  - [x] `test_portfolio_forms.py`
+  - [x] `test_portfolio_views.py`
+  - [x] `test_portfolio_security.py`
+  - [x] Full test suite (45 tests across 4 lanes) passes green
+- [x] Skill & README:
+  - [x] Update `.claude/skills/projects/SKILL.md`
+  - [x] Update `README.md`
 
 ---
 
