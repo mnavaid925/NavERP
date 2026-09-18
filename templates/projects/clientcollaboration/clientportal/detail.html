@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Client Portal Access: {{ access.number }} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ access.number }} — {{ access.client_contact.name }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:cpa_list' %}">Client Portal Access</a>
+      <span class="sep">›</span>
+      <span>{{ access.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:cpa_edit' access.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:cpa_delete' access.pk %}" onsubmit="return confirm('Revoke this client portal access?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:cpa_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left"></i> Back to List
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Portal Configuration</h2>
+      </div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm text-muted">Project</dt>
+            <dd class="fw-600"><a href="{% url 'projects:prj_detail' access.project.pk %}">{{ access.project.name }}</a></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Client Contact</dt>
+            <dd class="fw-600">{{ access.client_contact.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Portal User</dt>
+            <dd>{% if access.portal_user %}{{ access.portal_user.username }} ({{ access.portal_user.email }}){% else %}<span class="text-muted">Direct Token Only</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Access Token</dt>
+            <dd><code>{{ access.access_token }}</code></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Status</dt>
+            <dd>
+              {% if access.is_active and not access.is_expired %}
+                <span class="badge badge-green">Active</span>
+              {% elif access.is_expired %}
+                <span class="badge badge-amber">Expired</span>
+              {% else %}
+                <span class="badge badge-muted">Inactive</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Expiration Date</dt>
+            <dd>{% if access.expires_at %}{{ access.expires_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">No Expiration</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Last Accessed</dt>
+            <dd>{% if access.last_accessed_at %}{{ access.last_accessed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Created At</dt>
+            <dd>{{ access.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+        </dl>
+
+        {% if access.notes %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Access Notes</h3>
+            <p class="mt-1">{{ access.notes|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Permissions & Visibility</h2>
+      </div>
+      <div class="card-body">
+        <ul class="space-y-3">
+          <li class="flex items-center justify-between">
+            <span>View Progress & WBS</span>
+            {% if access.can_view_progress %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+          </li>
+          <li class="flex items-center justify-between">
+            <span>View Milestones</span>
+            {% if access.can_view_milestones %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+          </li>
+          <li class="flex items-center justify-between">
+            <span>View Deliverables</span>
+            {% if access.can_view_deliverables %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+          </li>
+          <li class="flex items-center justify-between">
+            <span>View Financials & Budget</span>
+            {% if access.can_view_financials %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+          </li>
+          <li class="flex items-center justify-between">
+            <span>Submit Feedback & Approvals</span>
+            {% if access.can_submit_feedback %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-muted">Disabled</span>{% endif %}
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
