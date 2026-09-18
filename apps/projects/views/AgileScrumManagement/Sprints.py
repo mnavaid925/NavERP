@@ -128,7 +128,7 @@ def spt_start(request, pk):
     sprint.save(
         update_fields=["status", "started_at", "committed_points", "updated_at"]
     )
-    write_audit_log(request, "start", sprint)
+    write_audit_log(request.user, "start", sprint)
     messages.success(
         request,
         f"Sprint {sprint.number} started with {sprint.committed_points} committed points.",
@@ -150,7 +150,7 @@ def spt_complete(request, pk):
     sprint.status = "completed"
     sprint.completed_at = timezone.now()
     sprint.save(update_fields=["status", "completed_at", "updated_at"])
-    write_audit_log(request, "complete", sprint)
+    write_audit_log(request.user, "complete", sprint)
     messages.success(
         request,
         f"Sprint {sprint.number} marked completed ({sprint.completed_points}/{sprint.total_points} pts delivered).",
@@ -164,6 +164,6 @@ def spt_cancel(request, pk):
     sprint = get_object_or_404(Sprint, pk=pk, tenant=request.tenant)
     sprint.status = "cancelled"
     sprint.save(update_fields=["status", "updated_at"])
-    write_audit_log(request, "cancel", sprint)
+    write_audit_log(request.user, "cancel", sprint)
     messages.warning(request, f"Sprint {sprint.number} was cancelled.")
     return redirect("projects:spt_detail", pk=pk)
