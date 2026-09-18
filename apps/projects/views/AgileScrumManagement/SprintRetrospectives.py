@@ -108,7 +108,7 @@ def ret_open(request, pk):
     )
     retrospective.status = "open"
     retrospective.save(update_fields=["status", "updated_at"])
-    write_audit_log(request.user, "open", retrospective)
+    write_audit_log(request.user, retrospective, "open")
     messages.success(
         request,
         f"Retrospective {retrospective.number} opened for team contributions.",
@@ -125,6 +125,6 @@ def ret_close(request, pk):
     retrospective.status = "closed"
     retrospective.closed_at = timezone.now()
     retrospective.save(update_fields=["status", "closed_at", "updated_at"])
-    write_audit_log(request.user, "close", retrospective)
+    write_audit_log(request.user, retrospective, "close")
     messages.success(request, f"Retrospective {retrospective.number} closed.")
     return redirect("projects:ret_detail", pk=pk)
