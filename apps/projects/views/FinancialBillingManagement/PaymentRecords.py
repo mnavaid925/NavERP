@@ -47,7 +47,6 @@ def ppr_list(request):
             ("dunning_level", "dunning_level", False),
         ],
         extra_context={
-            "payment_records": qs,
             "projects": projects,
             "project_filter": project_id,
             "stage_choices": ProjectPaymentRecord.STAGE_CHOICES,
