@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Statements of Work — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Statements of Work</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <span>Statements of Work</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:sow_create' %}" class="btn btn-primary">
+      <i data-lucide="plus"></i> New SOW
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, code, client…">
+      </div>
+      <div class="form-group">
+        <select name="project" aria-label="Project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" aria-label="Status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:sow_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>SOW ID</th>
+          <th>Title</th>
+          <th>Project</th>
+          <th>Client</th>
+          <th>Billing Type</th>
+          <th>Base Value</th>
+          <th>Effective Value</th>
+          <th>Status</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">
+              <a href="{% url 'projects:sow_detail' obj.pk %}">{{ obj.number }}</a>
+              {% if obj.sow_code %}<div class="text-muted text-sm">{{ obj.sow_code }}</div>{% endif %}
+            </td>
+            <td>
+              <div class="fw-600">{{ obj.title }}</div>
+              <span class="text-muted text-sm">{{ obj.start_date|date:"M d, Y" }} – {{ obj.end_date|date:"M d, Y" }}</span>
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' obj.project.pk %}">{{ obj.project.name }}</a>
+            </td>
+            <td>{{ obj.client.name }}</td>
+            <td>{{ obj.get_billing_type_display }}</td>
+            <td>
+              {{ obj.contract_value|floatformat:2 }} {% if obj.currency %}{{ obj.currency.code }}{% endif %}
+            </td>
+            <td>
+              <span class="fw-600">{{ obj.effective_value|floatformat:2 }}</span>
+              {% if obj.total_amendments > 0 %}
+                <span class="badge badge-info text-xs">{{ obj.total_amendments }} amend</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.status == 'active' %}
+                <span class="badge badge-green">Active</span>
+              {% elif obj.status == 'amended' %}
+                <span class="badge badge-info">Amended</span>
+              {% elif obj.status == 'under_review' %}
+                <span class="badge badge-amber">Under Review</span>
+              {% elif obj.status == 'completed' %}
+                <span class="badge badge-slate">Completed</span>
+              {% elif obj.status == 'terminated' %}
+                <span class="badge badge-red">Terminated</span>
+              {% else %}
+                <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="table-actions">
+              <div class="flex items-center gap-1">
+                <a href="{% url 'projects:sow_detail' obj.pk %}" class="btn btn-icon btn-sm" title="View details">
+                  <i data-lucide="eye"></i>
+                </a>
+                <a href="{% url 'projects:sow_edit' obj.pk %}" class="btn btn-icon btn-sm" title="Edit">
+                  <i data-lucide="pencil"></i>
+                </a>
+                <form method="post" action="{% url 'projects:sow_delete' obj.pk %}" onsubmit="return confirm('Delete this Statement of Work?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-sm text-danger" title="Delete">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9">
+              <div class="empty-state">
+                <i data-lucide="file-text"></i>
+                <p>No statements of work found.</p>
+                <a href="{% url 'projects:sow_create' %}" class="btn btn-primary btn-sm">New SOW</a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Previous</span>
+      {% endif %}
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Next</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
