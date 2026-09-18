@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}EVM & Cost Variance Analysis · Financial & Billing · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:pbr_list' %}">Financial & Billing</a>
+      <span>Variance &amp; EVM</span>
+    </nav>
+    <h1 class="page-title">Earned Value Management (EVM) &amp; Variance Analysis</h1>
+    <p class="text-muted">Real-time triple constraint monitoring: Budget at Completion, Planned Value, Earned Value, Actual Cost, and Index indicators.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:financial_pnl' %}" class="btn btn-outline"><i data-lucide="file-spreadsheet"></i> Profit &amp; Loss</a>
+    <a href="{% url 'projects:ar_aging' %}" class="btn btn-outline"><i data-lucide="clock"></i> A/R Aging</a>
+    <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Cash Flow</a>
+    <a href="{% url 'projects:pbr_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Billing Run</a>
+  </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
+  <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-ghost">Rate Cards</a>
+  <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-ghost">Billing Runs</a>
+  <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-ghost">Revenue Schedules</a>
+  <a href="{% url 'projects:ppr_list' %}" class="btn btn-sm btn-ghost">Payment Records</a>
+  <a href="{% url 'projects:financial_pnl' %}" class="btn btn-sm btn-ghost">P&amp;L Analysis</a>
+  <a href="{% url 'projects:financial_variance' %}" class="btn btn-sm btn-primary">EVM Variance</a>
+  <a href="{% url 'projects:ar_aging' %}" class="btn btn-sm btn-ghost">A/R Aging</a>
+  <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-sm btn-ghost">Cash Flow</a>
+</div>
+
+<!-- Filter Bar -->
+<div class="card filter-card" style="margin-bottom:1.5rem;">
+  <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
+    <div style="flex:1; min-width:240px;">
+      <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
+      <select name="project" id="id_project" class="form-control" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+        <option value="">All Active Projects</option>
+        {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="align-self:flex-end; display:flex; gap:0.5rem;">
+      <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filter</button>
+      {% if project_filter %}
+        <a href="{% url 'projects:financial_variance' %}" class="btn btn-outline">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- KPI Summary Strip -->
+<div class="stats-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Budget at Comp. (BAC)</div>
+    <div class="stat-value" style="font-size:1.4rem; font-weight:700;">${{ totals.bac|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Total approved baseline</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Earned Value (EV)</div>
+    <div class="stat-value text-green" style="font-size:1.4rem; font-weight:700;">${{ totals.ev|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">PV: ${{ totals.pv|default:"0.00" }}</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Actual Cost (AC)</div>
+    <div class="stat-value text-red" style="font-size:1.4rem; font-weight:700;">${{ totals.ac|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Actual incurred spend</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Cost Variance (CV)</div>
+    <div class="stat-value {% if totals.cv >= 0 %}text-green{% else %}text-red{% endif %}" style="font-size:1.4rem; font-weight:700;">
+      ${{ totals.cv|default:"0.00" }}
+    </div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">EV minus AC</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">CPI / SPI Indices</div>
+    <div class="stat-value" style="font-size:1.4rem; font-weight:700;">
+      <span class="{% if totals.cpi >= 1.0 %}text-green{% else %}text-red{% endif %}">{{ totals.cpi }}</span> /
+      <span class="{% if totals.spi >= 1.0 %}text-green{% else %}text-red{% endif %}">{{ totals.spi }}</span>
+    </div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Cost (CPI) / Sched (SPI)</div>
+  </div>
+</div>
+
+<!-- Detailed EVM Variance Table -->
+<div class="card">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem; border-bottom:1px solid var(--border-color, #e2e8f0);">
+    <h2 class="card-title" style="font-size:1.1rem; font-weight:600; margin:0;"><i data-lucide="activity"></i> Control Account EVM Breakdown</h2>
+    <span class="badge badge-info">{{ variance_rows|length }} Control Accounts</span>
+  </div>
+  <div class="table-wrap" style="overflow-x:auto;">
+    <table class="table" style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border-color, #cbd5e1); text-align:left;">
+          <th style="padding:0.75rem;">Control Account</th>
+          <th style="padding:0.75rem;">Project</th>
+          <th style="padding:0.75rem; text-align:right;">BAC</th>
+          <th style="padding:0.75rem; text-align:right;">PV</th>
+          <th style="padding:0.75rem; text-align:right;">EV</th>
+          <th style="padding:0.75rem; text-align:right;">AC</th>
+          <th style="padding:0.75rem; text-align:right;">Cost Var (CV)</th>
+          <th style="padding:0.75rem; text-align:right;">Sched Var (SV)</th>
+          <th style="padding:0.75rem; text-align:center;">CPI</th>
+          <th style="padding:0.75rem; text-align:center;">SPI</th>
+          <th style="padding:0.75rem; text-align:right;">EAC</th>
+          <th style="padding:0.75rem; text-align:center;">Health</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in variance_rows %}
+          <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
+            <td style="padding:0.75rem;">
+              <span style="font-weight:600;">{{ row.code }}</span>
+              <div class="text-muted" style="font-size:0.75rem;">{{ row.name }}</div>
+            </td>
+            <td style="padding:0.75rem;">
+              <a href="{% url 'projects:prj_detail' row.project.pk %}" style="font-weight:600; text-decoration:none; color:var(--primary, #2563eb);">
+                {{ row.project.name }}
+              </a>
+            </td>
+            <td style="padding:0.75rem; text-align:right;">${{ row.bac }}</td>
+            <td style="padding:0.75rem; text-align:right;">${{ row.pv }}</td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-green">${{ row.ev }}</td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-red">${{ row.ac }}</td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.cv >= 0 %}text-green{% else %}text-red{% endif %}">
+              ${{ row.cv }}
+            </td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.sv >= 0 %}text-green{% else %}text-red{% endif %}">
+              ${{ row.sv }}
+            </td>
+            <td style="padding:0.75rem; text-align:center;">
+              <span class="badge {% if row.cpi >= 1.0 %}badge-green{% elif row.cpi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
+                {{ row.cpi }}
+              </span>
+            </td>
+            <td style="padding:0.75rem; text-align:center;">
+              <span class="badge {% if row.spi >= 1.0 %}badge-green{% elif row.spi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
+                {{ row.spi }}
+              </span>
+            </td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;">${{ row.eac }}</td>
+            <td style="padding:0.75rem; text-align:center;">
+              {% if row.health == 'on_track' %}
+                <span class="badge badge-green">On Track</span>
+              {% elif row.health == 'warning' %}
+                <span class="badge badge-amber">Warning</span>
+              {% elif row.health == 'critical' %}
+                <span class="badge badge-red">Critical</span>
+              {% else %}
+                <span class="badge badge-slate">{{ row.health|title }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="12" style="padding:2rem; text-align:center;" class="text-muted">
+              <i data-lucide="info" style="width:32px; height:32px; margin-bottom:0.5rem;"></i>
+              <p>No Cost Control Accounts found matching the selected project criteria.</p>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      {% if variance_rows %}
+        <tfoot style="background-color:var(--bg-muted, #f8fafc); font-weight:700; border-top:2px solid var(--border-color, #cbd5e1);">
+          <tr>
+            <td colspan="2" style="padding:0.75rem;">Portfolio EVM Totals</td>
+            <td style="padding:0.75rem; text-align:right;">${{ totals.bac }}</td>
+            <td style="padding:0.75rem; text-align:right;">${{ totals.pv }}</td>
+            <td style="padding:0.75rem; text-align:right;" class="text-green">${{ totals.ev }}</td>
+            <td style="padding:0.75rem; text-align:right;" class="text-red">${{ totals.ac }}</td>
+            <td style="padding:0.75rem; text-align:right;" class="{% if totals.cv >= 0 %}text-green{% else %}text-red{% endif %}">
+              ${{ totals.cv }}
+            </td>
+            <td style="padding:0.75rem; text-align:right;" class="{% if totals.sv >= 0 %}text-green{% else %}text-red{% endif %}">
+              ${{ totals.sv }}
+            </td>
+            <td style="padding:0.75rem; text-align:center;">
+              <span class="badge {% if totals.cpi >= 1.0 %}badge-green{% elif totals.cpi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
+                {{ totals.cpi }}
+              </span>
+            </td>
+            <td style="padding:0.75rem; text-align:center;">
+              <span class="badge {% if totals.spi >= 1.0 %}badge-green{% elif totals.spi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
+                {{ totals.spi }}
+              </span>
+            </td>
+            <td style="padding:0.75rem; text-align:right;">${{ totals.eac }}</td>
+            <td style="padding:0.75rem; text-align:center;">—</td>
+          </tr>
+        </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}
