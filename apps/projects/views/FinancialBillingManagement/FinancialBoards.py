@@ -7,11 +7,11 @@ Holds NO duplicate snapshot tables, adhering strictly to L31 and 7.4 rulings.
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Q, Sum
+from django.db.models import Case, DecimalField, Q, Sum, When
 from django.shortcuts import render
 from django.utils import timezone
 
-from apps.accounting.models import Invoice
+from apps.accounting.models import Invoice, PaymentAllocation
 from apps.core.crud import as_db_int
 from apps.projects.models.CostManagement.CostControlAccounts import CostControlAccount
 from apps.projects.models.CostManagement.ProjectExpenses import ProjectExpense
@@ -265,11 +265,26 @@ def ar_aging(request):
     tot_over_90 = Decimal("0.00")
     tot_balance = Decimal("0.00")
 
-    for rec in records_qs:
+    records_list = list(records_qs)
+    invoice_ids = [rec.accounting_invoice_id for rec in records_list if rec.accounting_invoice_id]
+    alloc_map = {}
+    if invoice_ids:
+        alloc_data = (
+            PaymentAllocation.objects.filter(
+                invoice_id__in=invoice_ids,
+                payment__status="confirmed",
+            )
+            .values("invoice_id")
+            .annotate(paid=Sum("allocated_amount"))
+        )
+        alloc_map = {a["invoice_id"]: (a["paid"] or Decimal("0.00")) for a in alloc_data}
+
+    for rec in records_list:
         inv = rec.accounting_invoice
         due_date = inv.due_date or inv.issue_date or today
         days_overdue = (today - due_date).days if today > due_date else 0
-        bal = inv.balance_due() if callable(getattr(inv, "balance_due", None)) else (inv.balance_due or Decimal("0.00"))
+        paid = alloc_map.get(inv.pk, Decimal("0.00"))
+        bal = inv.total - paid
 
         b_current = Decimal("0.00")
         b_1_30 = Decimal("0.00")
@@ -352,13 +367,28 @@ def cash_flow_forecast(request):
     if project_id:
         inflows_qs = inflows_qs.filter(project_billing_runs__project_id=project_id)
 
+    inflows_list = list(inflows_qs)
+    inv_ids = [inv.pk for inv in inflows_list]
+    inflows_alloc_map = {}
+    if inv_ids:
+        inflows_alloc = (
+            PaymentAllocation.objects.filter(
+                invoice_id__in=inv_ids,
+                payment__status="confirmed",
+            )
+            .values("invoice_id")
+            .annotate(paid=Sum("allocated_amount"))
+        )
+        inflows_alloc_map = {a["invoice_id"]: (a["paid"] or Decimal("0.00")) for a in inflows_alloc}
+
     in_30 = Decimal("0.00")
     in_60 = Decimal("0.00")
     in_90 = Decimal("0.00")
 
-    for inv in inflows_qs:
+    for inv in inflows_list:
         dt = inv.due_date or today
-        bal = inv.balance_due() if callable(getattr(inv, "balance_due", None)) else (inv.balance_due or Decimal("0.00"))
+        paid = inflows_alloc_map.get(inv.pk, Decimal("0.00"))
+        bal = inv.total - paid
         if dt <= p30:
             in_30 += bal
         elif dt <= p60:
@@ -371,19 +401,32 @@ def cash_flow_forecast(request):
     if project_id:
         outflows_qs = outflows_qs.filter(project_id=project_id)
 
-    out_30 = Decimal("0.00")
-    out_60 = Decimal("0.00")
-    out_90 = Decimal("0.00")
-
-    for exp in outflows_qs:
-        dt = exp.entry_date
-        amt = exp.amount
-        if dt <= p30:
-            out_30 += amt
-        elif dt <= p60:
-            out_60 += amt
-        elif dt <= p90:
-            out_90 += amt
+    outflow_aggs = outflows_qs.aggregate(
+        p30=Sum(
+            Case(
+                When(entry_date__lte=p30, then="amount"),
+                default=Decimal("0.00"),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            )
+        ),
+        p60=Sum(
+            Case(
+                When(entry_date__gt=p30, entry_date__lte=p60, then="amount"),
+                default=Decimal("0.00"),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            )
+        ),
+        p90=Sum(
+            Case(
+                When(entry_date__gt=p60, entry_date__lte=p90, then="amount"),
+                default=Decimal("0.00"),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            )
+        ),
+    )
+    out_30 = outflow_aggs["p30"] or Decimal("0.00")
+    out_60 = outflow_aggs["p60"] or Decimal("0.00")
+    out_90 = outflow_aggs["p90"] or Decimal("0.00")
 
     net_30 = in_30 - out_30
     net_60 = in_60 - out_60
