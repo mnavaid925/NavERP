@@ -8259,34 +8259,34 @@ substitutes for them.
 
 ### Shared files (Integrate step only — surgical Edits with a re-read anchor)
 
-- [ ] `navigation.py` → `LIVE_LINKS["7.10"]` with the five bullet keys **character-for-character**, plus
+- [x] `navigation.py` → `LIVE_LINKS["7.10"]` with the five bullet keys **character-for-character**, plus
       the extra live leaf: bullet 1 → `projects:pdm_list`, extra leaf **Folders** → `projects:pfd_list`,
       bullet 2 → `projects:dtm_list`, bullet 3 → `projects:pdv_list`, bullet 4 → `projects:kne_list`,
       bullet 5 → `projects:doc_retention`. Add the module's usual comment explaining any deliberate
       omission (e.g. why `kne_search`/`doc_repository` are lenses rather than bullets).
-- [ ] `apps/projects/management/commands/seed_projects.py` → a `_docmgt` block **under its own guard,
+- [x] `apps/projects/management/commands/seed_projects.py` → a `_docmgt` block **under its own guard,
       dispatched after `_collab`**, idempotent per tenant, seeded off the EXISTING projects/parties/tasks
       (never a new project): a folder tree, documents across several doc types and statuses (including
       one `expected` placeholder and one held/archived row), a revision chain with at least one
       superseded + one approved revision, templates, and knowledge rows — **deliberately crossing the
       15-row page so the paginator has a genuine page 2** (the 7.9 C-D lesson), with mixed ticks so the
       retention board's figures are non-trivial. `--flush` must remain safe.
-- [ ] `templates/projects/documentknowledge/<entity>/{list,detail,form}.html` ×5 + the three computed
+- [x] `templates/projects/documentknowledge/<entity>/{list,detail,form}.html` ×5 + the three computed
       pages + the overview tiles; badges use the colour-named `theme.css` classes
       (`badge-green/red/amber/info/muted/slate` — semantic `-success/-danger` names do not exist, L33).
-- [ ] `makemigrations projects` → inspect the generated `0014` → `migrate` → `seed_projects` ×2
+- [x] `makemigrations projects` → inspect the generated `0014` → `migrate` → `seed_projects` ×2
       (idempotency) → `manage.py check`.
 
 ### Verify
 
-- [ ] `manage.py check` clean; `makemigrations --check --dry-run` reports **no** changes after `0014`.
-- [ ] `seed_projects --flush` then `seed_projects` again → identical row counts (idempotent), and the
+- [x] `manage.py check` clean; `makemigrations --check --dry-run` reports **no** changes after `0014`.
+- [x] `seed_projects --flush` then `seed_projects` again → identical row counts (idempotent), and the
       register has a real page 2.
-- [ ] A `temp/` smoke sweep as `admin_acme` / **`password`**: every new `projects:*` URL 200/302, page
+- [x] A `temp/` smoke sweep as `admin_acme` / **`password`**: every new `projects:*` URL 200/302, page
       titles and a seeded record present, no `{#` / `{% comment` leaks, cross-tenant IDOR → 404 for
       **both** actors, and the empty/junk-param probes above.
-- [ ] Sidebar shows **7.10 Document & Knowledge Management** Live with all five bullets + the extra leaf.
-- [ ] The chain invariants are asserted by hand once: upload → pointer unmoved; approve → pointer moves
+- [x] Sidebar shows **7.10 Document & Knowledge Management** Live with all five bullets + the extra leaf.
+- [x] The chain invariants are asserted by hand once: upload → pointer unmoved; approve → pointer moves
       and the parent's search copy updates; a second upload while checked out → refused.
 
 ### Close-out
@@ -8298,12 +8298,12 @@ substitutes for them.
       re-verified by the orchestrator with an independent probe before filing.
 - [x] `code-fixer` burns down the findings file in ID order, one file per commit, then a `# FIX LOG`
       accounting for every disposition. **Pass 1 done 2026-09-16: C1–C5 + I1–I22 = 26 fixed, 1
-      skipped (I12, a review-integrity note rather than a code defect), 0 refuted.** `M1–M26` are
-      **left unticked for a second pass** (see the carried list below).
-- [ ] Tests: pin `.claude/tasks/test-contract-projects-7.10.md` first (fixtures + the computed figures),
+      skipped (I12, a review-integrity note rather than a code defect), 0 refuted.** `M1–M26`
+      **burned down in Pass 2 (all 26 minor findings fixed & verified).**
+- [x] Tests: pin `.claude/tasks/test-contract-projects-7.10.md` first (fixtures + the computed figures),
       then the **append-only** `docmgt_*` conftest block (L43), then
       `test_docmgt_{models,forms,views,security}.py` one file per commit, then the **full unfiltered**
-      app suite (never `-k`, L47).
+      app suite (never `-k`, L47). **Done: 120 passed in 29.37s with 0 failures.**
 - [x] **Update** `.claude/skills/projects/SKILL.md` (add the `## 7.10` section + refresh
       Routes/Templates/Seeder/Tests/Sidebar/As-built), `README.md` (**9 → 10 of 19**), and `todo.md`
       with a `### Projects 7.10 — … (close-out <date>)` note. Each committed on its own.
