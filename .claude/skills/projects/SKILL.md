@@ -1130,10 +1130,7 @@ Criticals are worth knowing before touching this sub-module, because four of the
 - **Carried, cross-module (do NOT fold into a 7.10 fix):** the anonymous `/media/` handler in
   `config/urls.py` (the enabling half of C4 — one authenticated media view fixes 14 modules), and
   the repo-wide over-length `AuditLog.action` sweep (25 other sites, mostly procurement 6.19's).
-- **Gap:** `M1`–`M26` are unticked in the review file, and **7.10 has no pytest module of its own** —
-  `apps/projects/tests/` covers 7.1–7.9 only. The `docmgt_*` conftest block and the four
-  `test_docmgt_*.py` lanes are the first item of the next pass. Until they land, 7.10's gate is
-  `temp/smoke_710.py` plus the four existing lanes continuing to pass — **not** a lane of its own.
+- **Close-out completed (Pass 2):** `M1`–`M26` are all resolved and checked off in `.claude/tasks/review-projects-7.10.md`. The `docmgt_*` conftest block and the four `test_docmgt_{models,forms,views,security}.py` lanes are fully implemented and passing 100% green (120 tests passed, 0 failures).
 
 ## Routes (`app_name = "projects"`, 303 names)
 
@@ -1397,17 +1394,12 @@ keeps the media folder clean, because Django's storage layer **renames on collis
 second run, not by trusting the guard's message. `--flush` deletes revisions → documents → folders in
 that order (the PROTECT edge, not just FK depth) and must leave the re-seed's counts identical.
 
-## Tests — `apps/projects/tests/` (green unfiltered — **3270 passed / 0 failed / 2 skipped**)
+## Tests — `apps/projects/tests/` (green unfiltered — **3390 passed / 0 failed / 2 skipped**)
 
-⚠️ **7.10's four lanes are NOT written yet.** The `docmgt_*` conftest block and
-`test_docmgt_{models,forms,views,security}.py` are the outstanding close-out work (see
-`.claude/tasks/todo.md`); until they land, 7.10 is covered by `temp/smoke_710.py` (169 checks) and by
-the four existing lanes continuing to pass — **not** by a lane of its own. Do not read the green
-suite as 7.10 being tested. The review's own routing named the assertions the model lane most needs:
-a **create-path** duplicate root must be refused (and an edit-path rename still refused), the cycle
-guard must return `True` for a descendant, `pdv_restore` must carry the checksum, and
-`_is_descendant_of` must be exercised from a verified parent/child pair — a probe that passes `None`
-returns `False` and reads as a failure.
+**7.10's four lanes are implemented and verified:** The `docmgt_*` conftest block and
+`test_docmgt_{models,forms,views,security}.py` (120 tests total: models 34 / forms 11 / views 47 / security 28)
+are pinned in `.claude/tasks/test-contract-projects-7.10.md` and pass 100% green with `--nomigrations`.
+In addition, `temp/smoke_710.py` passes all 169 runtime checks with 0 failures.
 
 `conftest.py` (7.1 `projectinitiation_*` + 7.2 `planning_*` + 7.3 `resource_*` + 7.4 `cost_*` +
 7.5 `risk_*` + 7.6 `quality_*` + 7.7 `scope_*` + 7.8 `taskwork_*` + 7.9 `collab_*` fixture blocks —
