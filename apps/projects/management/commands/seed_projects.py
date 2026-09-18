@@ -84,7 +84,10 @@ from apps.projects.models import (
     BudgetRevision,
     Channel,
     ChannelMessage,
+    ClientApprovalRequest,
+    ClientPortalAccess,
     CostControlAccount,
+
     DeliverableInspection,
     DocumentShare,
     DocumentTemplate,
@@ -100,6 +103,7 @@ from apps.projects.models import (
     ProgramDependency,
     Project,
     ProjectBudgetLine,
+    ProjectClientInvoice,
     ProjectDocument,
     ProjectDocumentRevision,
     ProjectEpic,
@@ -126,14 +130,17 @@ from apps.projects.models import (
     ScopeChangeRequest,
     ScopeItem,
     ScopeVerification,
+    SOWAmendment,
+    Sprint,
+    SprintImpediment,
+    SprintRetrospective,
+    StatementOfWork,
     TaskBlock,
     TaskChecklistItem,
     TaskDependency,
     TimeActivityCode,
     ProjectOvertimeRecord,
-    Sprint,
-    SprintImpediment,
-    SprintRetrospective,
+    VendorHandoff,
 )
 
 
@@ -337,7 +344,14 @@ class Command(BaseCommand):
             # apps/projects, so nothing outside 7.10 lives in either subtree.
             purged = self._purge_docmgt_files()
             self.stdout.write(f"  removed {purged} stored 7.10 file(s) from MEDIA_ROOT")
+            ProjectClientInvoice.objects.all().delete()
+            VendorHandoff.objects.all().delete()
+            SOWAmendment.objects.all().delete()
+            StatementOfWork.objects.all().delete()
+            ClientApprovalRequest.objects.all().delete()
+            ClientPortalAccess.objects.all().delete()
             TaskChecklistItem.objects.all().delete()
+
             TaskBlock.objects.all().delete()
             QualityDefect.objects.all().delete()
             DeliverableInspection.objects.all().delete()
@@ -455,6 +469,10 @@ class Command(BaseCommand):
         # 7.13 Agile & Scrum Management: sprints, epics, release trains, impediments,
         # retrospectives, and in-place story point assignments.
         self._agile_scrum(tenant, now)
+        # 7.14 Client & External Collaboration: client portal access, approval requests,
+        # SOWs & amendments, vendor handoffs, and client billing schedules.
+        self._client_collaboration(tenant, now)
+
 
 
     # -- 7.2 planning ---------------------------------------------------------------------------
@@ -3483,6 +3501,291 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.13 seeded: 4 sprints, 3 epics, 3 releases, 2 impediments, 3 retrospectives, updated agile tasks."))
 
+    def _client_collaboration(self, tenant, now):
+        """7.14 Client & External Collaboration: client portal access, approval requests,
+        SOWs & amendments, vendor handoffs, and client billing schedules."""
+        if ClientPortalAccess.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.14 Client & External Collaboration already seeded — skipping.")
+            return
+
+        today = now.date()
+        active_proj = Project.objects.filter(tenant=tenant, status="active").order_by("id").first()
+        if not active_proj:
+            active_proj = Project.objects.filter(tenant=tenant).order_by("id").first()
+        if not active_proj:
+            return
+
+        second_proj = Project.objects.filter(tenant=tenant).exclude(id=active_proj.id).first() or active_proj
+
+        manager = (
+            active_proj.project_manager
+            or active_proj.created_by
+            or get_user_model().objects.filter(tenant=tenant, is_superuser=False).first()
+        )
+
+        client_party = self._client(tenant)
+        if not client_party:
+            return
+
+        vendor_party = (
+            Party.objects.filter(tenant=tenant, roles__role="supplier").first()
+            or Party.objects.filter(tenant=tenant, roles__role="vendor").first()
+            or Party.objects.filter(tenant=tenant).exclude(id=client_party.id).first()
+            or client_party
+        )
+
+        milestone = ProjectMilestone.objects.filter(tenant=tenant, project=active_proj).first()
+        task = ProjectTask.objects.filter(tenant=tenant, project=active_proj).first()
+        doc = Document.objects.filter(tenant=tenant).first()
+        currency = self._currency()
+
+        with transaction.atomic():
+            # 1. Client Portal Access
+            cpa1 = ClientPortalAccess(
+                tenant=tenant,
+                project=active_proj,
+                client_contact=client_party,
+                portal_user=None,
+                access_level="standard",
+                can_view_tasks=True,
+                can_view_milestones=True,
+                can_view_documents=True,
+                can_approve_deliverables=True,
+                can_view_invoices=True,
+                is_active=True,
+                notes="Primary client delivery lead portal profile.",
+            )
+            cpa1.save()
+
+            cpa2 = ClientPortalAccess(
+                tenant=tenant,
+                project=active_proj,
+                client_contact=client_party,
+                portal_user=None,
+                access_level="restricted",
+                can_view_tasks=False,
+                can_view_milestones=True,
+                can_view_documents=True,
+                can_approve_deliverables=False,
+                can_view_invoices=False,
+                is_active=True,
+                notes="Executive sponsor read-only visibility.",
+            )
+            cpa2.save()
+
+            cpa3 = ClientPortalAccess(
+                tenant=tenant,
+                project=second_proj,
+                client_contact=client_party,
+                portal_user=None,
+                access_level="read_only",
+                can_view_tasks=True,
+                can_view_milestones=True,
+                can_view_documents=False,
+                can_approve_deliverables=False,
+                can_view_invoices=False,
+                is_active=False,
+                notes="Former auditor account - access revoked.",
+            )
+            cpa3.save()
+
+            # 2. Client Approval Requests
+            cfb1 = ClientApprovalRequest(
+                tenant=tenant,
+                project=active_proj,
+                deliverable_name="System Architecture & Cloud Threat Model",
+                document=doc,
+                milestone=milestone,
+                requested_by=manager,
+                assigned_contact=client_party,
+                status="approved",
+                due_date=today - timedelta(days=10),
+                signed_by_name="Jane Client",
+                signed_at=now - timedelta(days=12),
+                review_notes="Comprehensive architecture document reviewed with external security team.",
+                client_feedback="Approved without reservations. Clean threat boundary definitions.",
+            )
+            cfb1.save()
+
+            cfb2 = ClientApprovalRequest(
+                tenant=tenant,
+                project=active_proj,
+                deliverable_name="Sprint 1 Functional Deliverables & Acceptance Demo",
+                document=None,
+                milestone=milestone,
+                requested_by=manager,
+                assigned_contact=client_party,
+                status="submitted",
+                due_date=today + timedelta(days=5),
+                review_notes="Please verify end-to-end checkout flow on staging before Friday.",
+                client_feedback="",
+            )
+            cfb2.save()
+
+            cfb3 = ClientApprovalRequest(
+                tenant=tenant,
+                project=second_proj,
+                deliverable_name="Draft UI Design System & Component Guidelines",
+                document=None,
+                milestone=None,
+                requested_by=manager,
+                assigned_contact=client_party,
+                status="rejected",
+                due_date=today - timedelta(days=2),
+                rejection_reason="Color palette in high-contrast mode does not comply with WCAG 2.1 AA.",
+                review_notes="Initial design token export for client brand review.",
+                client_feedback="Requires color contrast revisions on warning and error states.",
+            )
+            cfb3.save()
+
+            # 3. Statement of Work & Amendments
+            sow1 = StatementOfWork(
+                tenant=tenant,
+                project=active_proj,
+                client=client_party,
+                title="Enterprise Platform Core Implementation",
+                sow_code="SOW-2026-001",
+                billing_type="milestone",
+                contract_value=Decimal("185000.00"),
+                currency=currency,
+                start_date=today - timedelta(days=60),
+                end_date=today + timedelta(days=120),
+                status="amended",
+                scope_summary="Full delivery of backend ERP services, data ingestion pipelines, and client portal.",
+                terms_and_conditions="Net 30 payment terms upon milestone acceptance signoff.",
+                activated_at=now - timedelta(days=60),
+                activated_by=manager,
+            )
+            sow1.save()
+
+            swa1 = SOWAmendment(
+                tenant=tenant,
+                sow=sow1,
+                amendment_number=1,
+                title="Mobile Companion Application Addendum",
+                effective_date=today - timedelta(days=15),
+                value_change=Decimal("35000.00"),
+                revised_scope="Include iOS and Android responsive companion shells with push notification services.",
+                justification="Client executive request to support warehouse field staff on handheld tablets.",
+                status="approved",
+                approved_by=manager,
+                approved_at=now - timedelta(days=15),
+            )
+            swa1.save()
+
+            sow2 = StatementOfWork(
+                tenant=tenant,
+                project=second_proj,
+                client=client_party,
+                title="Cloud Infrastructure Optimization & Security Hardening",
+                sow_code="SOW-2026-002",
+                billing_type="time_and_materials",
+                contract_value=Decimal("75000.00"),
+                currency=currency,
+                start_date=today + timedelta(days=15),
+                end_date=today + timedelta(days=180),
+                status="draft",
+                scope_summary="Multi-region disaster recovery setup and automated Kubernetes scaling policies.",
+                terms_and_conditions="Bi-weekly T&M invoices with attached verified consultant timesheets.",
+            )
+            sow2.save()
+
+            # 4. Vendor Handoffs
+            vhd1 = VendorHandoff(
+                tenant=tenant,
+                project=active_proj,
+                vendor=vendor_party,
+                task=task,
+                title="Third-Party Penetration Testing & Vulnerability Assessment",
+                handoff_date=today - timedelta(days=30),
+                target_completion_date=today - timedelta(days=10),
+                deliverables_description="OWASP Top 10 penetration testing report with verified remediation steps.",
+                status="accepted",
+                scorecard_rating=5,
+                performance_notes="Delivered 3 days ahead of schedule with zero missed critical items.",
+                accepted_at=now - timedelta(days=8),
+                accepted_by=manager,
+            )
+            vhd1.save()
+
+            vhd2 = VendorHandoff(
+                tenant=tenant,
+                project=active_proj,
+                vendor=vendor_party,
+                task=task,
+                title="External Load & Performance Stress Testing",
+                handoff_date=today - timedelta(days=5),
+                target_completion_date=today + timedelta(days=10),
+                deliverables_description="Distributed JMeter stress testing up to 50,000 simulated concurrent users.",
+                status="in_progress",
+            )
+            vhd2.save()
+
+            vhd3 = VendorHandoff(
+                tenant=tenant,
+                project=second_proj,
+                vendor=vendor_party,
+                task=None,
+                title="Legacy Customer Data Scrubbing Pipeline",
+                handoff_date=today - timedelta(days=20),
+                target_completion_date=today - timedelta(days=5),
+                deliverables_description="ETL script extracting historical purchase records to UTF-8 CSV.",
+                status="rejected",
+                deficiency_notes="Scripts failed on accented characters and invalid tax identifiers.",
+            )
+            vhd3.save()
+
+            # 5. Project Client Invoices
+            pci1 = ProjectClientInvoice(
+                tenant=tenant,
+                project=active_proj,
+                sow=sow1,
+                milestone=milestone,
+                billing_type="milestone",
+                billing_date=today - timedelta(days=15),
+                due_date=today + timedelta(days=15),
+                currency=currency,
+                amount=Decimal("50000.00"),
+                tax_amount=Decimal("5000.00"),
+                status="ready_to_bill",
+                notes="Milestone 1 completion billing: Architecture design and baseline schemas signed off.",
+            )
+            pci1.save()
+
+            pci2 = ProjectClientInvoice(
+                tenant=tenant,
+                project=active_proj,
+                sow=sow1,
+                milestone=None,
+                billing_type="fixed_fee",
+                billing_date=today + timedelta(days=15),
+                due_date=today + timedelta(days=45),
+                currency=currency,
+                amount=Decimal("40000.00"),
+                tax_amount=Decimal("4000.00"),
+                status="draft",
+                notes="Project kickoff retainer fee and initial platform configuration allowance.",
+            )
+            pci2.save()
+
+            pci3 = ProjectClientInvoice(
+                tenant=tenant,
+                project=second_proj,
+                sow=sow2,
+                milestone=None,
+                billing_type="time_and_materials",
+                billing_date=today + timedelta(days=30),
+                due_date=today + timedelta(days=60),
+                currency=currency,
+                amount=Decimal("22500.00"),
+                tax_amount=Decimal("2250.00"),
+                status="draft",
+                notes="Estimated month 1 engineering sprint hours (150 hours @ 150/hr).",
+            )
+            pci3.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.14 seeded: 3 portal access rows, 3 approval requests, 2 SOWs (+1 amendment), 3 vendor handoffs, 3 billing schedules."))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
