@@ -198,7 +198,7 @@ def test_agile_sprint_impediment_lifecycle(tenant_a):
     )
     imp.save()
     assert imp.status == "open"
-    assert str(imp) == f"{imp.number} — CI Runner Out of Memory [critical]"
+    assert str(imp) == f"{imp.number} — CI Runner Out of Memory"
 
 
 def test_agile_sprint_retrospective_score_validation(tenant_a):
