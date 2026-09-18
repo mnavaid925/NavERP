@@ -117,11 +117,11 @@
           <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
             <td style="padding:0.75rem;">
               <a href="{% url 'projects:ppr_detail' row.record.pk %}" style="font-weight:600; text-decoration:none; color:var(--primary, #2563eb);">
-                {{ row.record.record_number }}
+                {{ row.record.number }}
               </a>
             </td>
             <td style="padding:0.75rem; font-weight:600;">
-              {{ row.invoice.invoice_number|default:"INV-DRAFT" }}
+              {{ row.invoice.number|default:"INV-DRAFT" }}
             </td>
             <td style="padding:0.75rem;">
               <a href="{% url 'projects:prj_detail' row.project.pk %}" style="text-decoration:none; color:inherit;">
