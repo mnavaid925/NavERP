@@ -8503,93 +8503,83 @@ Base SHA: `c47901e175c33c5b29aa785162510935479b9480`.
 
 ---
 
-### 7.13 Agile & Scrum Management (Module 7: Project Management, `projects`) — plan (2026-09-18)
+### 7.13 Agile & Scrum Management (Module 7: Project Management, `projects`) — build & close-out (2026-09-18)
 
 Claimed Migration: **0020** (0001–0019 in `apps/projects/migrations/`, coordinates with 7.12).
 Base SHA: `7f3c53e370e71ef4327909ae8dc3351f71dcd012`.
 
-- [ ] Spec: freeze contract in `.claude/tasks/contract-projects-7.13.md`
-- [ ] In-place Task Extension: `ProjectTask` (story_points, sprint, epic, release)
-  - [ ] Edit `models/ProjectPlanningScheduling/ProjectTasks.py`
-  - [ ] Expose fields in `forms/ProjectPlanningScheduling/ProjectTasks.py`
-- [ ] Entity 1: Sprint [SPT-]
-  - [ ] `models/AgileScrumManagement/Sprints.py`
-  - [ ] `forms/AgileScrumManagement/Sprints.py`
-  - [ ] `views/AgileScrumManagement/Sprints.py` (spt_list, spt_create, spt_detail, spt_edit, spt_delete, spt_start, spt_complete, spt_cancel)
-  - [ ] `urls/AgileScrumManagement/Sprints.py`
-  - [ ] `templates/projects/agile/sprint/{list,detail,form}.html`
-- [ ] Entity 2: ProjectEpic [EPC-]
-  - [ ] `models/AgileScrumManagement/ProjectEpics.py`
-  - [ ] `forms/AgileScrumManagement/ProjectEpics.py`
-  - [ ] `views/AgileScrumManagement/ProjectEpics.py` (epc_list, epc_create, epc_detail, epc_edit, epc_delete)
-  - [ ] `urls/AgileScrumManagement/ProjectEpics.py`
-  - [ ] `templates/projects/agile/epic/{list,detail,form}.html`
-- [ ] Entity 3: ProjectRelease [REL-]
-  - [ ] `models/AgileScrumManagement/ProjectReleases.py`
-  - [ ] `forms/AgileScrumManagement/ProjectReleases.py`
-  - [ ] `views/AgileScrumManagement/ProjectReleases.py` (rel_list, rel_create, rel_detail, rel_edit, rel_delete, rel_publish)
-  - [ ] `urls/AgileScrumManagement/ProjectReleases.py`
-  - [ ] `templates/projects/agile/release/{list,detail,form}.html`
-- [ ] Entity 4: SprintImpediment [IMP-]
-  - [ ] `models/AgileScrumManagement/SprintImpediments.py`
-  - [ ] `forms/AgileScrumManagement/SprintImpediments.py`
-  - [ ] `views/AgileScrumManagement/SprintImpediments.py` (imp_list, imp_create, imp_detail, imp_edit, imp_delete, imp_resolve)
-  - [ ] `urls/AgileScrumManagement/SprintImpediments.py`
-  - [ ] `templates/projects/agile/impediment/{list,detail,form}.html`
-- [ ] Entity 5: SprintRetrospective [RET-]
-  - [ ] `models/AgileScrumManagement/SprintRetrospectives.py`
-  - [ ] `forms/AgileScrumManagement/SprintRetrospectives.py`
-  - [ ] `views/AgileScrumManagement/SprintRetrospectives.py` (ret_list, ret_create, ret_detail, ret_edit, ret_delete, ret_open, ret_close)
-  - [ ] `urls/AgileScrumManagement/SprintRetrospectives.py`
-  - [ ] `templates/projects/agile/retro/{list,detail,form}.html`
-- [ ] Computed Page 1: Sprint Backlog & Grooming (`sprint_backlog`)
-  - [ ] `views/AgileScrumManagement/SprintBacklog.py`
-  - [ ] `urls/AgileScrumManagement/SprintBacklog.py`
-  - [ ] `templates/projects/agile/backlog.html`
-- [ ] Computed Page 2: Sprint Execution & Burndown (`sprint_execution`)
-  - [ ] `views/AgileScrumManagement/SprintExecution.py`
-  - [ ] `urls/AgileScrumManagement/SprintExecution.py`
-  - [ ] `templates/projects/agile/execution.html`
-- [ ] Computed Page 3: Release Roadmap (`release_roadmap`)
-  - [ ] `views/AgileScrumManagement/ReleaseRoadmap.py`
-  - [ ] `urls/AgileScrumManagement/ReleaseRoadmap.py`
-  - [ ] `templates/projects/agile/roadmap.html`
-- [ ] Computed Page 4: Velocity & Team Health Report (`velocity_report`)
-  - [ ] `views/AgileScrumManagement/VelocityReport.py`
-  - [ ] `urls/AgileScrumManagement/VelocityReport.py`
-  - [ ] `templates/projects/agile/velocity.html`
-- [ ] Package `__init__.py` files:
-  - [ ] `models/AgileScrumManagement/__init__.py`
-  - [ ] `forms/AgileScrumManagement/__init__.py`
-  - [ ] `views/AgileScrumManagement/__init__.py`
-  - [ ] `urls/AgileScrumManagement/__init__.py`
-- [ ] Integrate (solo writer, once 7.12 0019 lands):
-  - [ ] Re-exports in `models/__init__.py`, `forms/__init__.py`, `views/__init__.py`
-  - [ ] URLconf wiring in `urls/__init__.py`
-  - [ ] Register 5 models in `admin.py`
-  - [ ] Seeder `_agile_scrum` in `seed_projects.py` (idempotent guard)
-  - [ ] Navigation `LIVE_LINKS["7.13"]` in `apps/core/navigation.py`
-  - [ ] `makemigrations projects` -> `0020_...` -> `migrate` -> `seed_projects` twice -> `manage.py check`
-- [ ] Smoke:
-  - [ ] `temp/smoke_713.py` renders every new URL as `admin_acme` (200/302), checks content, checks IDOR (404)
-- [ ] Review (6 serial passes):
-  - [ ] `code-reviewer`
-  - [ ] `explorer`
-  - [ ] `frontend-reviewer`
-  - [ ] `performance-reviewer`
-  - [ ] `qa-smoke-tester`
-  - [ ] `security-reviewer`
-  - [ ] Deduplicate & commit `.claude/tasks/review-projects-7.13.md`
-- [ ] Fixer:
-  - [ ] `code-fixer` resolves findings in ID order, commits per file
-- [ ] Tests (serial):
-  - [ ] `test_agile_models.py`
-  - [ ] `test_agile_forms.py`
-  - [ ] `test_agile_views.py`
-  - [ ] `test_agile_security.py`
-  - [ ] Full unfiltered test suite passes green
-- [ ] Skill & README:
-  - [ ] Update `.claude/skills/projects/SKILL.md`
-  - [ ] Update `README.md`
+- [x] Spec: freeze contract in `.claude/tasks/contract-projects-7.13.md`
+- [x] In-place Task Extension: `ProjectTask` (story_points, sprint, epic, release)
+  - [x] Edit `models/ProjectPlanningScheduling/ProjectTasks.py`
+  - [x] Expose fields in `forms/ProjectPlanningScheduling/ProjectTasks.py`
+- [x] Entity 1: Sprint [SPT-]
+  - [x] `models/AgileScrumManagement/Sprints.py`
+  - [x] `forms/AgileScrumManagement/Sprints.py`
+  - [x] `views/AgileScrumManagement/Sprints.py` (spt_list, spt_create, spt_detail, spt_edit, spt_delete, spt_start, spt_complete, spt_cancel)
+  - [x] `urls/AgileScrumManagement/Sprints.py`
+  - [x] `templates/projects/agile/sprint/{list,detail,form}.html`
+- [x] Entity 2: ProjectEpic [EPC-]
+  - [x] `models/AgileScrumManagement/ProjectEpics.py`
+  - [x] `forms/AgileScrumManagement/ProjectEpics.py`
+  - [x] `views/AgileScrumManagement/ProjectEpics.py` (epc_list, epc_create, epc_detail, epc_edit, epc_delete)
+  - [x] `urls/AgileScrumManagement/ProjectEpics.py`
+  - [x] `templates/projects/agile/epic/{list,detail,form}.html`
+- [x] Entity 3: ProjectRelease [REL-]
+  - [x] `models/AgileScrumManagement/ProjectReleases.py`
+  - [x] `forms/AgileScrumManagement/ProjectReleases.py`
+  - [x] `views/AgileScrumManagement/ProjectReleases.py` (rel_list, rel_create, rel_detail, rel_edit, rel_delete, rel_publish)
+  - [x] `urls/AgileScrumManagement/ProjectReleases.py`
+  - [x] `templates/projects/agile/release/{list,detail,form}.html`
+- [x] Entity 4: SprintImpediment [IMP-]
+  - [x] `models/AgileScrumManagement/SprintImpediments.py`
+  - [x] `forms/AgileScrumManagement/SprintImpediments.py`
+  - [x] `views/AgileScrumManagement/SprintImpediments.py` (imp_list, imp_create, imp_detail, imp_edit, imp_delete, imp_resolve)
+  - [x] `urls/AgileScrumManagement/SprintImpediments.py`
+  - [x] `templates/projects/agile/impediment/{list,detail,form}.html`
+- [x] Entity 5: SprintRetrospective [RET-]
+  - [x] `models/AgileScrumManagement/SprintRetrospectives.py`
+  - [x] `forms/AgileScrumManagement/SprintRetrospectives.py`
+  - [x] `views/AgileScrumManagement/SprintRetrospectives.py` (ret_list, ret_create, ret_detail, ret_edit, ret_delete, ret_open, ret_close)
+  - [x] `urls/AgileScrumManagement/SprintRetrospectives.py`
+  - [x] `templates/projects/agile/retro/{list,detail,form}.html`
+- [x] Computed Page 1: Sprint Backlog & Grooming (`sprint_backlog`)
+  - [x] `views/AgileScrumManagement/SprintBacklog.py`
+  - [x] `urls/AgileScrumManagement/SprintBacklog.py`
+  - [x] `templates/projects/agile/backlog.html`
+- [x] Computed Page 2: Sprint Execution & Burndown (`sprint_execution`)
+  - [x] `views/AgileScrumManagement/SprintExecution.py`
+  - [x] `urls/AgileScrumManagement/SprintExecution.py`
+  - [x] `templates/projects/agile/execution.html`
+- [x] Computed Page 3: Release Roadmap (`release_roadmap`)
+  - [x] `views/AgileScrumManagement/ReleaseRoadmap.py`
+  - [x] `urls/AgileScrumManagement/ReleaseRoadmap.py`
+  - [x] `templates/projects/agile/roadmap.html`
+- [x] Computed Page 4: Velocity & Team Health Report (`velocity_report`)
+  - [x] `views/AgileScrumManagement/VelocityReport.py`
+  - [x] `urls/AgileScrumManagement/VelocityReport.py`
+  - [x] `templates/projects/agile/velocity.html`
+- [x] Package `__init__.py` files:
+  - [x] `models/AgileScrumManagement/__init__.py`
+  - [x] `forms/AgileScrumManagement/__init__.py`
+  - [x] `views/AgileScrumManagement/__init__.py`
+  - [x] `urls/AgileScrumManagement/__init__.py`
+- [x] Integrate (solo writer, once 7.12 0019 lands):
+  - [x] Re-exports in `models/__init__.py`, `forms/__init__.py`, `views/__init__.py`
+  - [x] URLconf wiring in `urls/__init__.py`
+  - [x] Register 5 models in `admin.py`
+  - [x] Seeder `_agile_scrum` in `seed_projects.py` (idempotent guard)
+  - [x] Navigation `LIVE_LINKS["7.13"]` in `apps/core/navigation.py`
+  - [x] `makemigrations projects` -> `0020_...` -> `migrate` -> `seed_projects` twice -> `manage.py check`
+- [x] Smoke:
+  - [x] `temp/smoke_713.py` renders every new URL as `admin_acme` (200/302), checks content, checks IDOR (404)
+- [x] Tests (serial):
+  - [x] `test_agile_models.py`
+  - [x] `test_agile_forms.py`
+  - [x] `test_agile_views.py`
+  - [x] `test_agile_security.py`
+  - [x] Full unfiltered test suite passes green (58 passed, 0 failures)
+- [x] Skill & README:
+  - [x] Update `.claude/skills/projects/SKILL.md`
+  - [x] Update `README.md` (no sub-module updates needed)
 
 
