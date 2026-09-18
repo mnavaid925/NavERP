@@ -5616,8 +5616,13 @@ def _docmgt_revision(tenant, document, **overrides):
     """Build a ``ProjectDocumentRevision`` with a real ``SimpleUploadedFile``."""
     from django.core.files.uploadedfile import SimpleUploadedFile
     from apps.projects.models import ProjectDocumentRevision
-    data = dict(tenant=tenant, document=document,
-                file=SimpleUploadedFile("rev.txt", b"revision body text"),
+    from apps.projects.models.DocumentKnowledgeManagement.Revisions import (
+        file_sha256, next_revision_no)
+    uploaded_file = overrides.pop("file", SimpleUploadedFile("rev.txt", b"revision body text"))
+    chk = file_sha256(uploaded_file)
+    rev_no = overrides.pop("revision_no", next_revision_no(document))
+    data = dict(tenant=tenant, document=document, file=uploaded_file,
+                revision_no=rev_no, checksum=chk,
                 change_note="Initial upload.", is_approved=False)
     data.update(overrides)
     obj = ProjectDocumentRevision(**data)
@@ -5630,8 +5635,8 @@ def _docmgt_template(tenant, **overrides):
     """Build a ``DocumentTemplate``."""
     from django.core.files.uploadedfile import SimpleUploadedFile
     from apps.projects.models import DocumentTemplate
-    data = dict(tenant=tenant, name="Standard template", document_type="template",
-                category="general", is_active=True, is_format_locked=False,
+    data = dict(tenant=tenant, name="Standard template", document_type="charter",
+                category="other", is_active=True, is_format_locked=False,
                 file=SimpleUploadedFile("tmpl.txt", b"template body"))
     data.update(overrides)
     obj = DocumentTemplate(**data)
@@ -5694,7 +5699,7 @@ def docmgt_document_archived_a(db, tenant_a, planning_project_a, docmgt_folder_r
 def docmgt_document_held_a(db, tenant_a, planning_project_a, docmgt_folder_root_a):
     return _docmgt_document(tenant_a, planning_project_a, docmgt_folder_root_a,
                             title="Held doc",
-                            is_legal_hold=True, held_reason="Litigation hold.")
+                            is_legal_hold=True, hold_reason="Litigation hold.")
 
 
 @pytest.fixture
@@ -5753,6 +5758,11 @@ def docmgt_document_draft_b(db, tenant_b, planning_project_b, docmgt_folder_root
 @pytest.fixture
 def docmgt_knowledge_draft_b(db, tenant_b):
     return _docmgt_knowledge(tenant_b, title="Globex lesson")
+
+
+@pytest.fixture
+def docmgt_revision_pending_b(db, tenant_b, docmgt_document_draft_b):
+    return _docmgt_revision(tenant_b, docmgt_document_draft_b)
 
 
 # ==================================================================================================
