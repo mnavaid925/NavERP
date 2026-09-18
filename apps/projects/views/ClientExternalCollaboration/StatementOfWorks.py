@@ -1,6 +1,7 @@
 """Projects 7.14 Client & External Collaboration — StatementOfWork views.
 """
 from django.contrib import messages
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -121,17 +122,18 @@ def sow_activate(request, pk):
         messages.warning(request, f"SOW {sow.number} is already active.")
         return redirect("projects:sow_detail", pk=pk)
 
-    sow.status = "active"
-    sow.activated_at = timezone.now()
-    sow.activated_by = request.user
-    sow.save()
+    with transaction.atomic():
+        sow.status = "active"
+        sow.activated_at = timezone.now()
+        sow.activated_by = request.user
+        sow.save()
 
-    write_audit_log(
-        request.user,
-        sow,
-        "activate",
-        changes={"status": "active", "activated_at": str(sow.activated_at)},
-    )
+        write_audit_log(
+            request.user,
+            sow,
+            "activate",
+            changes={"status": "active", "activated_at": str(sow.activated_at)},
+        )
     messages.success(request, f"Statement of Work {sow.number} is now active.")
     return redirect("projects:sow_detail", pk=pk)
 
@@ -146,24 +148,25 @@ def sow_amendment_create(request, pk):
     if request.method == "POST":
         form = SOWAmendmentForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            amendment = form.save(commit=False)
-            amendment.tenant = request.tenant
-            amendment.sow = sow
-            if amendment.status == "approved":
-                amendment.approved_by = request.user
-                amendment.approved_at = timezone.now()
-            amendment.save()
+            with transaction.atomic():
+                amendment = form.save(commit=False)
+                amendment.tenant = request.tenant
+                amendment.sow = sow
+                if amendment.status == "approved":
+                    amendment.approved_by = request.user
+                    amendment.approved_at = timezone.now()
+                amendment.save()
 
-            if amendment.status == "approved" and sow.status == "active":
-                sow.status = "amended"
-                sow.save(update_fields=["status"])
+                if amendment.status == "approved" and sow.status == "active":
+                    sow.status = "amended"
+                    sow.save(update_fields=["status"])
 
-            write_audit_log(
-                request.user,
-                amendment,
-                "create",
-                changes={"number": amendment.number, "sow": sow.number},
-            )
+                write_audit_log(
+                    request.user,
+                    amendment,
+                    "create",
+                    changes={"number": amendment.number, "sow": sow.number},
+                )
             messages.success(request, f"Amendment #{amendment.amendment_number} created for SOW {sow.number}.")
             return redirect("projects:sow_detail", pk=sow.pk)
     else:
