@@ -141,6 +141,10 @@ from apps.projects.models import (
     TimeActivityCode,
     ProjectOvertimeRecord,
     VendorHandoff,
+    ProjectRateCard,
+    ProjectBillingRun,
+    ProjectRevenueSchedule,
+    ProjectPaymentRecord,
 )
 
 
@@ -472,6 +476,9 @@ class Command(BaseCommand):
         # 7.14 Client & External Collaboration: client portal access, approval requests,
         # SOWs & amendments, vendor handoffs, and client billing schedules.
         self._client_collaboration(tenant, now)
+        # 7.15 Financial & Billing Management: rate cards, billing runs,
+        # ASC 606 revenue schedules, payment records & collection workflows.
+        self._financial_billing(tenant, now)
 
 
 
@@ -3787,6 +3794,324 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.14 seeded: 3 portal access rows, 3 approval requests, 2 SOWs (+1 amendment), 3 vendor handoffs, 3 billing schedules."))
+
+    def _financial_billing(self, tenant, now):
+        """7.15 Financial & Billing Management: rate cards, billing runs,
+        ASC 606 revenue schedules, payment records & collection workflows."""
+        if ProjectRateCard.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.15 Financial & Billing Management already seeded — skipping.")
+            return
+
+        today = now.date()
+        active_proj = Project.objects.filter(tenant=tenant, status="active").order_by("id").first()
+        if not active_proj:
+            active_proj = Project.objects.filter(tenant=tenant).order_by("id").first()
+        if not active_proj:
+            return
+
+        second_proj = Project.objects.filter(tenant=tenant).exclude(id=active_proj.id).first() or active_proj
+
+        manager = (
+            active_proj.project_manager
+            or active_proj.created_by
+            or get_user_model().objects.filter(tenant=tenant, is_superuser=False).first()
+        )
+
+        client_party = self._client(tenant)
+        if not client_party:
+            return
+
+        currency = self._currency()
+
+        tax_code = None
+        try:
+            from apps.accounting.models import TaxCode
+            tax_code = TaxCode.objects.filter(tenant=tenant).first()
+        except ImportError:
+            pass
+
+        sow1 = StatementOfWork.objects.filter(tenant=tenant, project=active_proj).first()
+        sow2 = StatementOfWork.objects.filter(tenant=tenant, project=second_proj).first()
+        milestone1 = ProjectMilestone.objects.filter(tenant=tenant, project=active_proj).first()
+
+        # 1. ProjectRateCards (4 rate cards)
+        rtc1 = ProjectRateCard.objects.create(
+            tenant=tenant,
+            name="Standard Project Management Rate",
+            project=active_proj,
+            client=client_party,
+            role_name="Senior Project Manager",
+            user=manager,
+            hourly_rate=Decimal("175.00"),
+            currency=currency,
+            effective_start=today - timedelta(days=90),
+            effective_end=today + timedelta(days=275),
+            is_active=True,
+            is_default=True,
+            notes="Standard professional rate card for enterprise project management services.",
+        )
+
+        rtc2 = ProjectRateCard.objects.create(
+            tenant=tenant,
+            name="Principal Enterprise Architect Rate",
+            project=active_proj,
+            client=client_party,
+            role_name="Enterprise Solution Architect",
+            user=None,
+            hourly_rate=Decimal("220.00"),
+            currency=currency,
+            effective_start=today - timedelta(days=90),
+            effective_end=today + timedelta(days=275),
+            is_active=True,
+            is_default=False,
+            notes="Specialized technical architecture and cloud modernization rate.",
+        )
+
+        rtc3 = ProjectRateCard.objects.create(
+            tenant=tenant,
+            name="Senior Full-Stack Engineer Rate",
+            project=active_proj,
+            client=client_party,
+            role_name="Senior Software Engineer",
+            user=None,
+            hourly_rate=Decimal("145.00"),
+            currency=currency,
+            effective_start=today - timedelta(days=60),
+            effective_end=today + timedelta(days=300),
+            is_active=True,
+            is_default=False,
+            notes="Core backend and API microservices delivery rate.",
+        )
+
+        rtc4 = ProjectRateCard.objects.create(
+            tenant=tenant,
+            name="QA & Validation Consultant Rate",
+            project=second_proj,
+            client=client_party,
+            role_name="QA Automation Lead",
+            user=None,
+            hourly_rate=Decimal("110.00"),
+            currency=currency,
+            effective_start=today - timedelta(days=30),
+            effective_end=today + timedelta(days=180),
+            is_active=True,
+            is_default=False,
+            notes="Automated regression and acceptance test execution rate.",
+        )
+
+        # 2. Accounting Invoices for Billing Runs & Payment Records
+        inv1 = None
+        inv2 = None
+        inv3 = None
+        try:
+            from apps.accounting.models import Invoice
+            inv1 = Invoice.objects.create(
+                tenant=tenant,
+                party=client_party,
+                issue_date=today - timedelta(days=25),
+                due_date=today + timedelta(days=5),
+                currency=currency,
+                total_amount=Decimal("28000.00"),
+                balance_due=Decimal("28000.00"),
+                status="sent",
+                notes="Project monthly billing cycle run PBR-0001",
+            )
+            inv2 = Invoice.objects.create(
+                tenant=tenant,
+                party=client_party,
+                issue_date=today - timedelta(days=45),
+                due_date=today - timedelta(days=15),
+                currency=currency,
+                total_amount=Decimal("15500.00"),
+                balance_due=Decimal("15500.00"),
+                status="sent",
+                notes="Architecture baseline milestone invoice",
+            )
+            inv3 = Invoice.objects.create(
+                tenant=tenant,
+                party=client_party,
+                issue_date=today - timedelta(days=75),
+                due_date=today - timedelta(days=45),
+                currency=currency,
+                total_amount=Decimal("22000.00"),
+                balance_due=Decimal("22000.00"),
+                status="sent",
+                notes="Discovery deliverables & technical prototype",
+            )
+        except Exception:
+            pass
+
+        # 3. ProjectBillingRuns (3 billing runs)
+        pbr1 = ProjectBillingRun.objects.create(
+            tenant=tenant,
+            name="Sprint 1-2 T&M Billing Cycle",
+            project=active_proj,
+            client=client_party,
+            billing_period_start=today - timedelta(days=30),
+            billing_period_end=today,
+            billing_type="time_and_materials",
+            cutoff_date=today,
+            status="completed",
+            total_hours=Decimal("160.00"),
+            total_amount=Decimal("28000.00"),
+            currency=currency,
+            tax_code=tax_code,
+            accounting_invoice=inv1,
+            is_locked=True,
+            locked_at=now - timedelta(days=1),
+            locked_by=manager,
+            generated_at=now - timedelta(days=1),
+            notes="Completed billing run with linked generated invoice in accounting.",
+        )
+
+        pbr2 = ProjectBillingRun.objects.create(
+            tenant=tenant,
+            name="Milestone 1 Deliverables Billing",
+            project=active_proj,
+            client=client_party,
+            billing_period_start=today,
+            billing_period_end=today + timedelta(days=30),
+            billing_type="milestone",
+            cutoff_date=today + timedelta(days=15),
+            status="approved",
+            total_hours=Decimal("0.00"),
+            total_amount=Decimal("35000.00"),
+            currency=currency,
+            tax_code=tax_code,
+            accounting_invoice=None,
+            is_locked=False,
+            notes="Approved milestone billing run ready for invoice dispatch.",
+        )
+
+        pbr3 = ProjectBillingRun.objects.create(
+            tenant=tenant,
+            name="Ad-Hoc Consulting Services Run",
+            project=second_proj,
+            client=client_party,
+            billing_period_start=today,
+            billing_period_end=today + timedelta(days=14),
+            billing_type="time_and_materials",
+            cutoff_date=today + timedelta(days=7),
+            status="draft",
+            total_hours=Decimal("45.00"),
+            total_amount=Decimal("6300.00"),
+            currency=currency,
+            tax_code=tax_code,
+            accounting_invoice=None,
+            is_locked=False,
+            notes="Open drafting cycle for ad-hoc advisory timesheet entries.",
+        )
+
+        # 4. ProjectRevenueSchedules (3 revenue schedules)
+        prs1 = ProjectRevenueSchedule.objects.create(
+            tenant=tenant,
+            name="Milestone 1 Architecture Revenue Schedule",
+            project=active_proj,
+            sow=sow1,
+            milestone=milestone1,
+            recognition_method="milestone",
+            contract_amount=Decimal("50000.00"),
+            recognized_amount=Decimal("50000.00"),
+            period_start=today - timedelta(days=60),
+            period_end=today - timedelta(days=10),
+            percent_complete=Decimal("100.00"),
+            status="recognized",
+            currency=currency,
+            approved_at=now - timedelta(days=10),
+            approved_by=manager,
+            notes="Full revenue recognized following successful completion and signoff of milestone 1.",
+        )
+
+        prs2 = ProjectRevenueSchedule.objects.create(
+            tenant=tenant,
+            name="Phase 2 Implementation POC Schedule",
+            project=active_proj,
+            sow=sow1,
+            milestone=None,
+            recognition_method="percent_complete",
+            contract_amount=Decimal("120000.00"),
+            recognized_amount=Decimal("72000.00"),
+            period_start=today - timedelta(days=30),
+            period_end=today + timedelta(days=60),
+            percent_complete=Decimal("60.00"),
+            status="approved",
+            currency=currency,
+            approved_at=now - timedelta(days=5),
+            approved_by=manager,
+            notes="Percentage-of-completion revenue recognition based on verified engineering effort.",
+        )
+
+        prs3 = ProjectRevenueSchedule.objects.create(
+            tenant=tenant,
+            name="Q3 Advisory Straight-Line Schedule",
+            project=second_proj,
+            sow=sow2,
+            milestone=None,
+            recognition_method="straight_line",
+            contract_amount=Decimal("36000.00"),
+            recognized_amount=Decimal("12000.00"),
+            period_start=today,
+            period_end=today + timedelta(days=90),
+            percent_complete=Decimal("33.33"),
+            status="draft",
+            currency=currency,
+            notes="Equal straight-line monthly recognition schedule across 90-day engagement.",
+        )
+
+        # 5. ProjectPaymentRecords (3 payment records for A/R aging & collection workflow)
+        if inv1:
+            ProjectPaymentRecord.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                client=client_party,
+                accounting_invoice=inv1,
+                sow=sow1,
+                payment_reference="ACH-ACK-88219",
+                payment_method="ach",
+                amount=Decimal("28000.00"),
+                payment_date=today + timedelta(days=5),
+                currency=currency,
+                stage="promise_to_pay",
+                promise_date=today + timedelta(days=5),
+                notes="Client AP department confirmed payment scheduled via ACH run on Friday.",
+            )
+
+        if inv2:
+            ProjectPaymentRecord.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                client=client_party,
+                accounting_invoice=inv2,
+                sow=sow1,
+                payment_reference="REM-2026-0901",
+                payment_method="wire",
+                amount=Decimal("15500.00"),
+                payment_date=today - timedelta(days=15),
+                currency=currency,
+                stage="reminder_sent",
+                promise_date=today + timedelta(days=3),
+                notes="Second payment reminder dispatched with updated statement of account.",
+            )
+
+        if inv3:
+            ProjectPaymentRecord.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                client=client_party,
+                accounting_invoice=inv3,
+                sow=sow1,
+                payment_reference="ESC-44019",
+                payment_method="wire",
+                amount=Decimal("22000.00"),
+                payment_date=today - timedelta(days=45),
+                currency=currency,
+                stage="escalated",
+                promise_date=None,
+                notes="Account escalated to Client Relationship Director due to 45-day overdue balance.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.15 seeded: 4 rate cards, 3 billing runs, 3 revenue schedules, 3 payment records."))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
