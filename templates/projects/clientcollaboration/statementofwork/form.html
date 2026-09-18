@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Statement of Work{% else %}New Statement of Work{% endif %} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Statement of Work ({{ obj.number }}){% else %}New Statement of Work{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:sow_list' %}">Statements of Work</a>
+      <span class="sep">›</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-3xl">
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_project">Project *</label>
+          {{ form.project }}
+          {% if form.project.errors %}<div class="form-error">{{ form.project.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_client">Client (Party) *</label>
+          {{ form.client }}
+          {% if form.client.errors %}<div class="form-error">{{ form.client.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_title">SOW Title *</label>
+          {{ form.title }}
+          {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_sow_code">SOW Code / Identifier</label>
+          {{ form.sow_code }}
+          {% if form.sow_code.errors %}<div class="form-error">{{ form.sow_code.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_billing_type">Billing Model *</label>
+          {{ form.billing_type }}
+          {% if form.billing_type.errors %}<div class="form-error">{{ form.billing_type.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_contract_value">Base Contract Value *</label>
+          {{ form.contract_value }}
+          {% if form.contract_value.errors %}<div class="form-error">{{ form.contract_value.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_currency">Currency</label>
+          {{ form.currency }}
+          {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label class="form-label" for="id_start_date">Start Date *</label>
+          <input type="date" name="start_date" id="id_start_date" class="form-input" required value="{% if form.start_date.value %}{{ form.start_date.value|date:'Y-m-d' }}{% endif %}">
+          {% if form.start_date.errors %}<div class="form-error">{{ form.start_date.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_end_date">End Date *</label>
+          <input type="date" name="end_date" id="id_end_date" class="form-input" required value="{% if form.end_date.value %}{{ form.end_date.value|date:'Y-m-d' }}{% endif %}">
+          {% if form.end_date.errors %}<div class="form-error">{{ form.end_date.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_status">Status *</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_scope_summary">Scope Summary</label>
+        {{ form.scope_summary }}
+        {% if form.scope_summary.errors %}<div class="form-error">{{ form.scope_summary.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_terms_and_conditions">Terms and Conditions</label>
+        {{ form.terms_and_conditions }}
+        {% if form.terms_and_conditions.errors %}<div class="form-error">{{ form.terms_and_conditions.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="flex items-center gap-3 pt-4 border-t">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="save"></i> Save Statement of Work
+        </button>
+        <a href="{% url 'projects:sow_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
