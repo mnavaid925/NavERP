@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Velocity & Team Health · Agile & Scrum · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Agile Sprints</a>
+      <span>Velocity & Health</span>
+    </nav>
+    <h1 class="page-title">Velocity & Team Health Analytics</h1>
+    <p class="text-muted">Historical story point delivery throughput, sprint predictability, and team sentiment survey trends.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:ret_list' %}" class="btn btn-outline"><i data-lucide="smile"></i> Retrospectives</a>
+    <a href="{% url 'projects:spt_list' %}" class="btn btn-outline"><i data-lucide="layers"></i> Sprints</a>
+    <a href="{% url 'projects:ret_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Conduct Retrospective</a>
+  </div>
+</div>
+
+<!-- KPI Summary Strip -->
+<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <div class="stat-label">Average Team Velocity</div>
+    <div class="stat-value text-green">{{ avg_velocity }} <span style="font-size:0.9rem; font-weight:normal;">pts / sprint</span></div>
+    <div class="stat-meta text-muted">Sprint-over-sprint baseline</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Delivered Points</div>
+    <div class="stat-value">{{ total_delivered_points }}</div>
+    <div class="stat-meta text-muted">Completed story throughput</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Completed Iterations</div>
+    <div class="stat-value">{{ sprint_count }}</div>
+    <div class="stat-meta text-muted">Analyzed sprint cycles</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Team Sentiment Index</div>
+    <div class="stat-value {% if avg_sentiment >= 4.0 %}text-green{% elif avg_sentiment >= 3.0 %}text-amber{% else %}text-red{% endif %}">
+      {{ avg_sentiment }} <span style="font-size:0.9rem; font-weight:normal;">/ 5.0</span>
+    </div>
+    <div class="stat-meta text-muted">From {{ retro_count }} retrospectives</div>
+  </div>
+</div>
+
+<!-- Sprint Velocity History -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 class="card-title"><i data-lucide="trending-up"></i> Sprint Velocity History</h2>
+    <span class="badge badge-info">{{ completed_sprints|length }} Completed Sprints</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Sprint</th>
+          <th>Project</th>
+          <th>Completed Date</th>
+          <th>Committed Points</th>
+          <th>Delivered Velocity</th>
+          <th>Predictability Ratio</th>
+          <th>Status</th>
+          <th class="table-actions">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sp in completed_sprints %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:spt_detail' sp.pk %}">{{ sp.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ sp.number }}</div>
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' sp.project.pk %}" class="text-brand">{{ sp.project.name }}</a>
+            </td>
+            <td>
+              <span class="text-sm">{% if sp.completed_at %}{{ sp.completed_at|date:"M d, Y" }}{% else %}{{ sp.end_date|date:"M d, Y" }}{% endif %}</span>
+            </td>
+            <td>
+              <span class="font-mono text-sm">{{ sp.committed_points|default:sp.total_points }} pts</span>
+            </td>
+            <td>
+              <strong class="font-mono text-green">{{ sp.completed_points }} pts</strong>
+            </td>
+            <td>
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div class="progress" style="width:70px; height:6px;">
+                  <div class="progress-bar {% if sp.completion_rate >= 90 %}bg-green{% elif sp.completion_rate >= 70 %}bg-brand{% else %}bg-amber{% endif %}" style="width: {{ sp.completion_rate }}%;"></div>
+                </div>
+                <span class="text-xs font-mono">{{ sp.completion_rate }}%</span>
+              </div>
+            </td>
+            <td>
+              <span class="badge badge-green">Completed</span>
+            </td>
+            <td>
+              <a href="{% url 'projects:spt_detail' sp.pk %}" class="btn btn-outline btn-sm">Report</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="text-center py-6 text-muted">
+              <i data-lucide="bar-chart-2" style="width:36px; height:36px; stroke-width:1.5; margin:0 auto 0.5rem; display:block;" class="text-muted"></i>
+              No completed sprints yet. Velocity averages will compute as sprints reach completion.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Team Sentiment Survey & Retrospective Health -->
+<div class="card">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 class="card-title"><i data-lucide="heart"></i> Team Sentiment & Retrospective Logs</h2>
+    <span class="badge badge-info">{{ sentiment_history|length }} Surveys</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Retrospective / Sprint</th>
+          <th>Date</th>
+          <th>Conducted By</th>
+          <th>Sentiment Score</th>
+          <th>Highlights & What Went Well</th>
+          <th>Action Items</th>
+          <th>Status</th>
+          <th class="table-actions">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ret in sentiment_history %}
+          <tr>
+            <td>
+              <strong><a href="{% url 'projects:ret_detail' ret.pk %}">{{ ret.sprint.name }}</a></strong>
+              <div class="text-muted text-xs font-mono">{{ ret.number }} · {{ ret.sprint.project.name }}</div>
+            </td>
+            <td>
+              <span class="text-sm">{{ ret.conducted_date|date:"M d, Y" }}</span>
+            </td>
+            <td>
+              {% if ret.conducted_by %}
+                <span class="text-sm">{{ ret.conducted_by.get_full_name|default:ret.conducted_by.username }}</span>
+              {% else %}
+                <span class="text-muted text-xs">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ret.sentiment_score >= 4.0 %}
+                <span class="badge badge-green">{{ ret.sentiment_score }} / 5.0</span>
+              {% elif ret.sentiment_score >= 3.0 %}
+                <span class="badge badge-amber">{{ ret.sentiment_score }} / 5.0</span>
+              {% else %}
+                <span class="badge badge-red">{{ ret.sentiment_score }} / 5.0</span>
+              {% endif %}
+            </td>
+            <td style="max-width: 260px;">
+              {% if ret.what_went_well %}
+                <div class="text-xs text-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  {{ ret.what_went_well|truncatewords:15 }}
+                </div>
+              {% else %}
+                <span class="text-muted text-xs">—</span>
+              {% endif %}
+            </td>
+            <td style="max-width: 220px;">
+              {% if ret.action_items %}
+                <div class="text-xs text-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  {{ ret.action_items|truncatewords:10 }}
+                </div>
+              {% else %}
+                <span class="text-muted text-xs">None logged</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ret.status == 'closed' %}
+                <span class="badge badge-green">Closed</span>
+              {% elif ret.status == 'open' %}
+                <span class="badge badge-amber">Open</span>
+              {% else %}
+                <span class="badge badge-info">Draft</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'projects:ret_detail' ret.pk %}" class="btn btn-outline btn-sm">View Board</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="text-center py-6 text-muted">
+              <i data-lucide="smile" style="width:36px; height:36px; stroke-width:1.5; margin:0 auto 0.5rem; display:block;" class="text-muted"></i>
+              No retrospective sentiment entries logged yet. Record retrospectives to track team morale and health.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
