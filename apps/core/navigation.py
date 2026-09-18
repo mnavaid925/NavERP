@@ -1912,6 +1912,18 @@ LIVE_LINKS = {
         "Velocity & Health":                     "projects:velocity_report",
         "Release Roadmap":                       "projects:release_roadmap",
     },
+    "7.14": {
+        "Client Portal & Visibility":            "projects:cpa_list",
+        "Client Feedback & Approvals":           "projects:cfb_list",
+        "Contract & SOW Management":             "projects:sow_list",
+        "External Vendor Coordination":          "projects:vhd_list",
+        "Billing & Invoicing to Clients":        "projects:pci_list",
+        # Extra live leaves:
+        "Statement of Work Register":            "projects:sow_list",
+        "Vendor Coordination":                   "projects:vhd_list",
+        "Client Billing & Invoices":             "projects:pci_list",
+    },
+
 
 
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
