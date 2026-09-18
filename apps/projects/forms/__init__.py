@@ -166,9 +166,19 @@ from .ClientExternalCollaboration.ClientInvoices import ProjectClientInvoiceForm
 
 # --- 7.15 Financial & Billing Management --------------------------------------------------------
 from .FinancialBillingManagement.RateCards import ProjectRateCardForm  # noqa: F401
-from .FinancialBillingManagement.BillingRuns import ProjectBillingRunForm  # noqa: F401
-from .FinancialBillingManagement.RevenueSchedules import ProjectRevenueScheduleForm  # noqa: F401
-from .FinancialBillingManagement.PaymentRecords import ProjectPaymentRecordForm  # noqa: F401
+from .FinancialBillingManagement.BillingRuns import (  # noqa: F401
+    BillingRunDispatchForm,
+    ProjectBillingRunForm,
+)
+from .FinancialBillingManagement.RevenueSchedules import (  # noqa: F401
+    ProjectRevenueScheduleForm,
+    RevenueScheduleRecognizeForm,
+)
+from .FinancialBillingManagement.PaymentRecords import (  # noqa: F401
+    ContactLogForm,
+    PaymentPromiseForm,
+    ProjectPaymentRecordForm,
+)
 
 
 
