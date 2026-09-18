@@ -7,7 +7,7 @@ Holds NO duplicate snapshot tables, adhering strictly to L31 and 7.4 rulings.
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -41,26 +41,50 @@ def financial_pnl(request):
     tot_cost = Decimal("0.00")
     tot_margin = Decimal("0.00")
 
-    for prj in target_projects:
-        rev = (
-            ProjectRevenueSchedule.objects.filter(tenant=request.tenant, project=prj, status__in=["approved", "recognized", "locked"])
-            .aggregate(s=Sum("recognized_amount"))["s"] or Decimal("0.00")
+    rev_stats = (
+        ProjectRevenueSchedule.objects.filter(
+            tenant=request.tenant,
+            project__in=target_projects,
         )
-        contract_val = (
-            ProjectRevenueSchedule.objects.filter(tenant=request.tenant, project=prj)
-            .aggregate(s=Sum("contract_amount"))["s"] or Decimal("0.00")
+        .values("project_id")
+        .annotate(
+            contract_val=Sum("contract_amount"),
+            recognized_rev=Sum("recognized_amount", filter=Q(status__in=["approved", "recognized", "locked"])),
         )
+    )
+    rev_by_prj = {r["project_id"]: r for r in rev_stats}
 
-        hours = (
-            ResourceTimeEntry.objects.filter(tenant=request.tenant, project=prj, status__in=["approved", "submitted"])
-            .aggregate(s=Sum("hours"))["s"] or Decimal("0.00")
+    hours_stats = (
+        ResourceTimeEntry.objects.filter(
+            tenant=request.tenant,
+            project__in=target_projects,
+            status__in=["approved", "submitted"],
         )
+        .values("project_id")
+        .annotate(hours=Sum("hours"))
+    )
+    hours_by_prj = {h["project_id"]: (h["hours"] or Decimal("0.00")) for h in hours_stats}
+
+    expense_stats = (
+        ProjectExpense.objects.filter(
+            tenant=request.tenant,
+            project__in=target_projects,
+            entry_type__in=["actual", "commitment"],
+        )
+        .values("project_id")
+        .annotate(expense=Sum("amount"))
+    )
+    expense_by_prj = {e["project_id"]: (e["expense"] or Decimal("0.00")) for e in expense_stats}
+
+    for prj in target_projects:
+        rev_data = rev_by_prj.get(prj.pk, {})
+        rev = rev_data.get("recognized_rev") or Decimal("0.00")
+        contract_val = rev_data.get("contract_val") or Decimal("0.00")
+
+        hours = hours_by_prj.get(prj.pk, Decimal("0.00"))
         labor_cost = (hours * Decimal("75.00")).quantize(Decimal("0.01"))
 
-        expense_cost = (
-            ProjectExpense.objects.filter(tenant=request.tenant, project=prj, entry_type__in=["actual", "commitment"])
-            .aggregate(s=Sum("amount"))["s"] or Decimal("0.00")
-        )
+        expense_cost = expense_by_prj.get(prj.pk, Decimal("0.00"))
 
         total_cost = labor_cost + expense_cost
         gross_margin = rev - total_cost
