@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}Sprint Execution · Agile & Scrum · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:spt_list' %}">Agile Sprints</a>
+      <span>Sprint Execution</span>
+    </nav>
+    <h1 class="page-title">Sprint Execution & Standup Board</h1>
+    <p class="text-muted">Live burndown progress, story execution board, impediment tracking, and daily standup notes.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:sprint_backlog' %}" class="btn btn-outline"><i data-lucide="layers"></i> Backlog Grooming</a>
+    {% if active_sprint %}
+      <a href="{% url 'projects:spt_detail' active_sprint.pk %}" class="btn btn-outline"><i data-lucide="info"></i> Sprint Details</a>
+    {% endif %}
+    <a href="{% url 'projects:spt_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Sprint</a>
+  </div>
+</div>
+
+<!-- Sprint Selector & Status Bar -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+    <form method="get" class="filter-form" style="margin:0;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label" style="margin-right: 0.5rem; font-weight:600;">Active Sprint:</label>
+        <select name="sprint" class="form-select" onchange="this.form.submit()" style="min-width:260px;">
+          {% for sp in sprints %}
+            <option value="{{ sp.pk }}" {% if active_sprint and active_sprint.pk == sp.pk %}selected{% endif %}>
+              [{{ sp.get_status_display }}] {{ sp.name }} ({{ sp.project.name }})
+            </option>
+          {% empty %}
+            <option value="">No Sprints Available</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+    {% if active_sprint %}
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        {% if active_sprint.status == 'active' %}
+          <span class="badge badge-amber">In Progress</span>
+        {% elif active_sprint.status == 'completed' %}
+          <span class="badge badge-green">Completed</span>
+        {% elif active_sprint.status == 'planning' %}
+          <span class="badge badge-info">Planning</span>
+        {% else %}
+          <span class="badge badge-slate">{{ active_sprint.get_status_display }}</span>
+        {% endif %}
+        <span class="text-sm text-muted">
+          {{ active_sprint.start_date|date:"M d" }} – {{ active_sprint.end_date|date:"M d, Y" }}
+        </span>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if not active_sprint %}
+  <div class="card">
+    <div class="card-body text-center py-12 text-muted">
+      <i data-lucide="activity" style="width:48px; height:48px; stroke-width:1.5; margin:0 auto 1rem; display:block;" class="text-muted"></i>
+      <h3 style="margin-bottom:0.5rem;">No Active Sprint Selected</h3>
+      <p style="margin-bottom:1.5rem;">Create a sprint or switch to an existing sprint from the backlog to track live execution.</p>
+      <a href="{% url 'projects:spt_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Create Sprint</a>
+    </div>
+  </div>
+{% else %}
+
+  <!-- Burndown & Velocity KPI Strip -->
+  <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 1.5rem;">
+    <div class="stat-card">
+      <div class="stat-label">Total Points</div>
+      <div class="stat-value">{{ burndown_data.total_points }}</div>
+      <div class="stat-meta text-muted">Sprint Scope</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Committed Points</div>
+      <div class="stat-value">{{ burndown_data.committed_points }}</div>
+      <div class="stat-meta text-muted">Planned at Start</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Completed Points</div>
+      <div class="stat-value text-green">{{ burndown_data.completed_points }}</div>
+      <div class="stat-meta text-muted">Done stories</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Remaining Points</div>
+      <div class="stat-value {% if burndown_data.remaining_points > 0 %}text-amber{% else %}text-green{% endif %}">{{ burndown_data.remaining_points }}</div>
+      <div class="stat-meta text-muted">Burndown to zero</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Completion Rate</div>
+      <div class="stat-value">{{ burndown_data.completion_rate }}%</div>
+      <div class="progress" style="height: 6px; margin-top: 0.5rem;">
+        <div class="progress-bar" style="width: {{ burndown_data.completion_rate }}%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive 3-Column Story Board -->
+  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;">
+    <!-- Column 1: To Do -->
+    <div class="card" style="background: var(--bg-muted, #f8fafc);">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="card-title text-sm"><i data-lucide="circle"></i> To Do / Ready</h3>
+        <span class="badge badge-info">{{ todo_tasks|length }}</span>
+      </div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:0.75rem; min-height: 250px;">
+        {% for tsk in todo_tasks %}
+          <div style="border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; padding: 0.75rem; background: var(--bg-card, #fff);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.25rem;">
+              <span class="text-xs font-mono text-muted">{{ tsk.number }}</span>
+              <span class="badge badge-slate">{{ tsk.story_points|default:"0" }} pts</span>
+            </div>
+            <strong style="font-size:0.9rem; display:block; margin-bottom:0.5rem;">
+              <a href="{% url 'projects:tsk_detail' tsk.pk %}">{{ tsk.name }}</a>
+            </strong>
+            {% if tsk.epic %}
+              <div style="margin-bottom:0.5rem;">
+                <span class="badge badge-slate" style="border-left: 3px solid {{ tsk.epic.color_code }}; font-size:0.7rem;">
+                  {{ tsk.epic.name }}
+                </span>
+              </div>
+            {% endif %}
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid #f1f5f9;">
+              <span class="text-xs text-muted">
+                {% if tsk.assignee %}{{ tsk.assignee.get_full_name|default:tsk.assignee.username }}{% else %}Unassigned{% endif %}
+              </span>
+              <form method="post" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_task_status">
+                <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                <input type="hidden" name="new_status" value="in_progress">
+                <button type="submit" class="btn btn-outline btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;">
+                  Start <i data-lucide="arrow-right"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <div class="text-center py-6 text-muted text-xs">No pending stories in To Do</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Column 2: In Progress -->
+    <div class="card" style="background: var(--bg-muted, #f8fafc);">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="card-title text-sm"><i data-lucide="loader"></i> In Progress</h3>
+        <span class="badge badge-amber">{{ in_progress_tasks|length }}</span>
+      </div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:0.75rem; min-height: 250px;">
+        {% for tsk in in_progress_tasks %}
+          <div style="border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; padding: 0.75rem; background: var(--bg-card, #fff); border-left: 3px solid #f59e0b;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.25rem;">
+              <span class="text-xs font-mono text-muted">{{ tsk.number }}</span>
+              <span class="badge badge-amber">{{ tsk.story_points|default:"0" }} pts</span>
+            </div>
+            <strong style="font-size:0.9rem; display:block; margin-bottom:0.5rem;">
+              <a href="{% url 'projects:tsk_detail' tsk.pk %}">{{ tsk.name }}</a>
+            </strong>
+            {% if tsk.epic %}
+              <div style="margin-bottom:0.5rem;">
+                <span class="badge badge-slate" style="border-left: 3px solid {{ tsk.epic.color_code }}; font-size:0.7rem;">
+                  {{ tsk.epic.name }}
+                </span>
+              </div>
+            {% endif %}
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid #f1f5f9;">
+              <span class="text-xs text-muted">
+                {% if tsk.assignee %}{{ tsk.assignee.get_full_name|default:tsk.assignee.username }}{% else %}Unassigned{% endif %}
+              </span>
+              <div style="display:flex; gap:0.25rem;">
+                <form method="post" style="margin:0;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="update_task_status">
+                  <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                  <input type="hidden" name="new_status" value="planned">
+                  <button type="submit" class="btn btn-outline btn-sm" title="Move back to To Do" style="font-size:0.75rem; padding:0.2rem 0.4rem;">
+                    <i data-lucide="arrow-left"></i>
+                  </button>
+                </form>
+                <form method="post" style="margin:0;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="update_task_status">
+                  <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                  <input type="hidden" name="new_status" value="done">
+                  <button type="submit" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:0.2rem 0.5rem;">
+                    Done <i data-lucide="check"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="text-center py-6 text-muted text-xs">No tasks currently in progress</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Column 3: Done -->
+    <div class="card" style="background: var(--bg-muted, #f8fafc);">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="card-title text-sm"><i data-lucide="check-circle"></i> Completed</h3>
+        <span class="badge badge-green">{{ done_tasks|length }}</span>
+      </div>
+      <div class="card-body" style="display:flex; flex-direction:column; gap:0.75rem; min-height: 250px;">
+        {% for tsk in done_tasks %}
+          <div style="border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; padding: 0.75rem; background: var(--bg-card, #fff); border-left: 3px solid #10b981;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.25rem;">
+              <span class="text-xs font-mono text-muted">{{ tsk.number }}</span>
+              <span class="badge badge-green">{{ tsk.story_points|default:"0" }} pts</span>
+            </div>
+            <strong style="font-size:0.9rem; display:block; margin-bottom:0.5rem; text-decoration:line-through; color:var(--text-muted, #64748b);">
+              <a href="{% url 'projects:tsk_detail' tsk.pk %}" style="color:inherit;">{{ tsk.name }}</a>
+            </strong>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid #f1f5f9;">
+              <span class="text-xs text-muted">
+                {% if tsk.assignee %}{{ tsk.assignee.get_full_name|default:tsk.assignee.username }}{% else %}Unassigned{% endif %}
+              </span>
+              <form method="post" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_task_status">
+                <input type="hidden" name="task_id" value="{{ tsk.pk }}">
+                <input type="hidden" name="new_status" value="in_progress">
+                <button type="submit" class="btn btn-outline btn-sm" title="Reopen Story" style="font-size:0.75rem; padding:0.2rem 0.4rem;">
+                  <i data-lucide="rotate-ccw"></i> Reopen
+                </button>
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <div class="text-center py-6 text-muted text-xs">No completed stories yet</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Strip: Daily Standup Capture & Impediments Register -->
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    <!-- Standup Notes -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title"><i data-lucide="message-square"></i> Daily Standup Notes</h3>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_standup">
+          <div class="form-group" style="margin-bottom: 0.75rem;">
+            <textarea name="standup_notes" rows="6" class="form-input" style="width:100%;" placeholder="Capture daily standup updates: what was done yesterday, what is planned today, blockers, announcements...">{{ standup_notes }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save Standup Notes</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Sprint Impediments -->
+    <div class="card">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="card-title"><i data-lucide="alert-triangle"></i> Sprint Impediments</h3>
+        <span class="badge badge-red">{{ impediments|length }} Tracked</span>
+      </div>
+      <div class="card-body">
+        <!-- Quick Log Impediment -->
+        <form method="post" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="quick_impediment">
+          <input type="text" name="title" placeholder="Log new impediment..." required class="form-input" style="flex:1;">
+          <select name="severity" class="form-select" style="width:110px;">
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Add</button>
+        </form>
+
+        <div class="table-wrap" style="max-height:220px; overflow-y:auto;">
+          <table class="table" style="font-size:0.85rem;">
+            <thead>
+              <tr>
+                <th>Impediment</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for imp in impediments %}
+                <tr>
+                  <td>
+                    <strong><a href="{% url 'projects:imp_detail' imp.pk %}">{{ imp.title }}</a></strong>
+                    <div class="text-muted text-xs font-mono">{{ imp.number }}</div>
+                  </td>
+                  <td>
+                    {% if imp.severity == 'critical' %}
+                      <span class="badge badge-red">Critical</span>
+                    {% elif imp.severity == 'high' %}
+                      <span class="badge badge-amber">High</span>
+                    {% elif imp.severity == 'medium' %}
+                      <span class="badge badge-info">Medium</span>
+                    {% else %}
+                      <span class="badge badge-muted">Low</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if imp.status == 'resolved' %}
+                      <span class="badge badge-green">Resolved</span>
+                    {% else %}
+                      <span class="badge badge-amber">{{ imp.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if imp.status != 'resolved' %}
+                      <form method="post" action="{% url 'projects:imp_resolve' imp.pk %}" style="margin:0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="resolution_notes" value="Resolved via Daily Standup Board">
+                        <button type="submit" class="btn btn-outline btn-sm" title="Resolve"><i data-lucide="check"></i></button>
+                      </form>
+                    {% else %}
+                      <span class="text-xs text-muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="4" class="text-center py-4 text-muted text-xs">
+                    No open impediments. Team is unblocked!
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+{% endif %}
+{% endblock %}
