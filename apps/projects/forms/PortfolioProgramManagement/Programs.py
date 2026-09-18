@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import _reject_foreign
+from apps.projects.models.PortfolioProgramManagement.Portfolios import Portfolio
 from apps.projects.models.PortfolioProgramManagement.Programs import Program
 
 
@@ -26,6 +27,9 @@ class ProgramForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
+            self.fields["portfolio"].queryset = Portfolio.objects.filter(
+                tenant=self.tenant
+            ).order_by("name")
             User = get_user_model()
             self.fields["manager"].queryset = User.objects.filter(
                 tenant=self.tenant
