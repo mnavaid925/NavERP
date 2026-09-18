@@ -1923,6 +1923,19 @@ LIVE_LINKS = {
         "Vendor Coordination":                   "projects:vhd_list",
         "Client Billing & Invoices":             "projects:pci_list",
     },
+    "7.15": {
+        "Project Accounting & Cost Centers":     "projects:financial_pnl",
+        "Invoice Generation & Delivery":         "projects:pbr_list",
+        "Payment Tracking & Reconciliation":     "projects:ar_aging",
+        "Budget vs. Actual Analysis":             "projects:financial_variance",
+        "Multi-Currency & Tax Handling":         "projects:rtc_list",
+        # Extra live leaves:
+        "Rate Cards":                            "projects:rtc_list",
+        "Billing Runs":                          "projects:pbr_list",
+        "Revenue Schedules":                     "projects:prs_list",
+        "Payment Records":                       "projects:ppr_list",
+        "Cash Flow Forecast":                    "projects:cash_flow_forecast",
+    },
 
 
 
