@@ -36,10 +36,10 @@ description: >-
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
   library (usage counter + featured shelf, no FileField), and the three computed pages (repository
-  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar); and 7.12 Portfolio & Program Management: multi-project portfolios [PRT-] with strategic themes and budget envelopes, sub-portfolio programs [PGM-] with target dates and budget targets, portfolio investment scoring [PIN-] with 4-criterion weighted models (strategic, financial, risk, capacity) and decision verbs (fund, reject, defer), cross-project program dependencies [PDEP-] with lead/lag days and clear/reopen verbs, and the executive portfolio dashboard (pfm_dashboard) with scatter heat maps and demand pipeline funnel; and 7.13 Agile & Scrum Management: sprints [SPT-] with start/complete/cancel lifecycle verbs, project epics [EPC-] with derived progress rollups, project releases [REL-] with version tags and publish verb, sprint impediments [IMP-] with severity bands and resolve verb, sprint retrospectives [RET-] with sentiment score and open/close verbs, in-place ProjectTask agile extensions (story_points, sprint, epic, release, is_in_backlog), and the four computed workbenches: sprint backlog grooming (sprint_backlog), active sprint execution burndown (sprint_execution), release roadmap (release_roadmap), and team velocity & health report (velocity_report)).
+  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar); and 7.12 Portfolio & Program Management: multi-project portfolios [PRT-] with strategic themes and budget envelopes, sub-portfolio programs [PGM-] with target dates and budget targets, portfolio investment scoring [PIN-] with 4-criterion weighted models (strategic, financial, risk, capacity) and decision verbs (fund, reject, defer), cross-project program dependencies [PDEP-] with lead/lag days and clear/reopen verbs, and the executive portfolio dashboard (pfm_dashboard) with scatter heat maps and demand pipeline funnel; and 7.13 Agile & Scrum Management: sprints [SPT-] with start/complete/cancel lifecycle verbs, project epics [EPC-] with derived progress rollups, project releases [REL-] with version tags and publish verb, sprint impediments [IMP-] with severity bands and resolve verb, sprint retrospectives [RET-] with sentiment score and open/close verbs, in-place ProjectTask agile extensions (story_points, sprint, epic, release, is_in_backlog), and the four computed workbenches: sprint backlog grooming (sprint_backlog), active sprint execution burndown (sprint_execution), release roadmap (release_roadmap), and team velocity & health report (velocity_report); and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.13), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.14), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -52,13 +52,14 @@ description: >-
   ProjectFolder/ProjectDocument/ProjectDocumentRevision/DocumentTemplate/KnowledgeEntry/
   TimeActivityCode/OvertimeRule/ProjectOvertimeRecord/
   Portfolio/Program/PortfolioInvestment/ProgramDependency/
-  Sprint/ProjectEpic/ProjectRelease/SprintImpediment/SprintRetrospective,
+  Sprint/ProjectEpic/ProjectRelease/SprintImpediment/SprintRetrospective/
+  ClientPortalAccess/ClientApprovalRequest/StatementOfWork/SOWAmendment/VendorHandoff/ProjectClientInvoice,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13.** 7.14–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14.** 7.15–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -74,7 +75,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), and `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), and `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1778,6 +1779,40 @@ Covers sprint planning & grooming, sprint execution with burndown & daily standu
   - `sprint_execution` (`agile/execution/`): Active sprint dashboard featuring day-by-day burndown chart (ideal vs actual points), standup notes logger, and open blockers panel.
   - `release_roadmap` (`agile/roadmap/`): Release calendar and feature delivery timeline across unreleased, in-progress, and released version trains.
   - `velocity_report` (`agile/velocity/`): Historical sprint velocity analysis (points committed vs completed), rolling velocity average, and team sentiment trend.
+
+```python
+"7.14": {
+    "Client Portal & Visibility":            "projects:cpa_list",
+    "Client Feedback & Approvals":           "projects:cfb_list",
+    "Contract & SOW Management":             "projects:sow_list",
+    "External Vendor Coordination":          "projects:vhd_list",
+    "Billing & Invoicing to Clients":        "projects:pci_list",
+    # Extra live leaves:
+    "Statement of Work Register":            "projects:sow_list",
+    "Vendor Coordination":                   "projects:vhd_list",
+    "Client Billing & Invoices":             "projects:pci_list",
+}
+```
+Bullet 1 maps to `cpa_list` client portal access & visibility management; bullet 2 maps to `cfb_list` review cycles & approval requests; bullet 3 maps to `sow_list` statements of work and amendment tracking; bullet 4 maps to `vhd_list` external vendor coordination and scorecards; bullet 5 maps to `pci_list` client billing schedules and AR invoice generation. Extra live leaves provide direct access to `sow_list`, `vhd_list`, and `pci_list`.
+
+### 7.14 Client & External Collaboration — Reference
+
+Covers client portal access control, formal client review & approval workflows, statement of work (SOW) authoring with amendment rollup, external vendor coordination with scorecard ratings, and project delivery billing schedules with 1-click accounting AR invoice generation:
+
+#### Models (`apps/projects/models/ClientExternalCollaboration/`)
+- **`ClientPortalAccess`** [`CPA-`] (`ClientPortals.py`): Client external visibility and token management. Fields: `project`, `client_contact` (Party person), `portal_user`, `access_token` (UUID), `can_view_progress`, `can_view_milestones`, `can_view_deliverables`, `can_view_financials`, `can_submit_feedback`, `is_active`, `expires_at`, `notes`. Property: `is_expired`. Unique on `(tenant, project, client_contact)`.
+- **`ClientApprovalRequest`** [`CFB-`] (`ClientFeedbacks.py`): Formal review cycle and deliverable sign-off. Fields: `project`, `deliverable_name`, `document`, `milestone`, `requested_by`, `assigned_contact` (Party person), `status` (draft/pending_review/approved/rejected/revision_requested), `due_date`, `review_notes`, `client_feedback`, `signed_by_name`, `signed_at`, `rejection_reason`. Verbs: `cfb_approve`, `cfb_reject`.
+- **`StatementOfWork`** [`SOW-`] (`StatementOfWorks.py`): Master project delivery contract and scope terms. Fields: `project`, `client` (Party organization), `title`, `sow_code`, `billing_type` (fixed_fee/time_and_materials/milestone_based/retainer), `contract_value`, `currency`, `start_date`, `end_date`, `status` (draft/under_review/active/amended/completed/terminated), `scope_summary`, `terms_and_conditions`, `activated_at`, `activated_by`. Properties: `total_amendments` (count of approved amendments), `effective_value` (contract_value + approved amendment deltas). Verb: `sow_activate`.
+- **`SOWAmendment`** [`SWA-`] (`StatementOfWorks.py`): Contract scope/value change order. Fields: `sow`, `amendment_number`, `title`, `effective_date`, `value_change`, `revised_scope`, `justification`, `status` (draft/approved/rejected), `approved_by`, `approved_at`.
+- **`VendorHandoff`** [`VHD-`] (`VendorHandoffs.py`): External subcontractor task/deliverable handover. Fields: `project`, `vendor` (Party organization), `task`, `title`, `description`, `handoff_date`, `due_date`, `status` (assigned/in_progress/delivered/accepted/rejected), `deliverable_link`, `scorecard_rating` (1–5), `performance_notes`, `deficiency_notes`, `accepted_at`, `accepted_by`. Verbs: `vhd_accept`, `vhd_reject`.
+- **`ProjectClientInvoice`** [`PCI-`] (`ClientInvoices.py`): Client billing schedule linking delivery directly to canonical `accounting.Invoice` ledger. Fields: `project`, `sow`, `milestone`, `billing_type` (fixed_fee/time_and_materials/milestone/retainer), `billing_date`, `due_date`, `currency`, `amount`, `tax_amount`, `total_amount`, `status` (draft/ready_to_bill/invoiced/cancelled), `accounting_invoice` (FK `accounting.Invoice`), `invoiced_at`, `notes`. Verb: `pci_generate_invoice` (atomic creation of customer invoice + invoice lines in AR ledger).
+
+#### Views & Routes (`apps/projects/views/ClientExternalCollaboration/`, `apps/projects/urls/ClientExternalCollaboration/`)
+- **ClientPortalAccess**: `cpa_list` (`client-portal-access/`), `cpa_create` (`client-portal-access/add/`), `cpa_detail` (`client-portal-access/<int:pk>/`), `cpa_edit` (`client-portal-access/<int:pk>/edit/`), `cpa_delete` (`client-portal-access/<int:pk>/delete/`).
+- **ClientApprovalRequest**: `cfb_list` (`client-approvals/`), `cfb_create` (`client-approvals/add/`), `cfb_detail` (`client-approvals/<int:pk>/`), `cfb_edit` (`client-approvals/<int:pk>/edit/`), `cfb_delete` (`client-approvals/<int:pk>/delete/`), `cfb_approve` (`client-approvals/<int:pk>/approve/`), `cfb_reject` (`client-approvals/<int:pk>/reject/`).
+- **StatementOfWork**: `sow_list` (`statements-of-work/`), `sow_create` (`statements-of-work/add/`), `sow_detail` (`statements-of-work/<int:pk>/`), `sow_edit` (`statements-of-work/<int:pk>/edit/`), `sow_delete` (`statements-of-work/<int:pk>/delete/`), `sow_activate` (`statements-of-work/<int:pk>/activate/`), `sow_amendment_create` (`statements-of-work/<int:pk>/amendments/add/`).
+- **VendorHandoff**: `vhd_list` (`vendor-handoffs/`), `vhd_create` (`vendor-handoffs/add/`), `vhd_detail` (`vendor-handoffs/<int:pk>/`), `vhd_edit` (`vendor-handoffs/<int:pk>/edit/`), `vhd_delete` (`vendor-handoffs/<int:pk>/delete/`), `vhd_accept` (`vendor-handoffs/<int:pk>/accept/`), `vhd_reject` (`vendor-handoffs/<int:pk>/reject/`).
+- **ProjectClientInvoice**: `pci_list` (`client-invoices/`), `pci_create` (`client-invoices/add/`), `pci_detail` (`client-invoices/<int:pk>/`), `pci_edit` (`client-invoices/<int:pk>/edit/`), `pci_delete` (`client-invoices/<int:pk>/delete/`), `pci_generate_invoice` (`client-invoices/<int:pk>/generate-invoice/`).
 
 ## Common tasks
 
