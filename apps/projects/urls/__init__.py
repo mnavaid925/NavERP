@@ -86,11 +86,17 @@ from .AgileScrumManagement.SprintImpediments import urlpatterns as _asm_impedime
 from .AgileScrumManagement.SprintRetrospectives import urlpatterns as _asm_retrospectives
 from .AgileScrumManagement.Sprints import urlpatterns as _asm_sprints
 from .AgileScrumManagement.VelocityReport import urlpatterns as _asm_velocity
+from .ClientExternalCollaboration.ClientPortals import urlpatterns as _cec_portals
+from .ClientExternalCollaboration.ClientFeedbacks import urlpatterns as _cec_feedbacks
+from .ClientExternalCollaboration.StatementOfWorks import urlpatterns as _cec_sow
+from .ClientExternalCollaboration.VendorHandoffs import urlpatterns as _cec_handoffs
+from .ClientExternalCollaboration.ClientInvoices import urlpatterns as _cec_invoices
 
 app_name = "projects"
 
 
 urlpatterns = (
+
     _pi_overview
     + _pi_projectrequests
     + _pi_projects
@@ -208,7 +214,16 @@ urlpatterns = (
     + _asm_execution
     + _asm_roadmap
     + _asm_velocity
+    # 7.14 Client & External Collaboration — first segments (client-portals/,
+    # client-feedbacks/, statement-of-works/, vendor-handoffs/, client-invoices/)
+    # are completely disjoint literals from earlier sub-modules and from each other.
+    + _cec_portals
+    + _cec_feedbacks
+    + _cec_sow
+    + _cec_handoffs
+    + _cec_invoices
 )
+
 
 
 
