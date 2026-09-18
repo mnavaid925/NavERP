@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ billing_run.number }} — Billing Run Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ billing_run.number }} — {{ billing_run.project.name }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:index' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:pbr_list' %}">Billing Runs</a>
+      <span>/</span>
+      <span>{{ billing_run.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex flex-wrap gap-2">
+    {% if billing_run.status == "draft" %}
+    <form method="post" action="{% url 'projects:pbr_approve' billing_run.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i data-lucide="check" class="w-4 h-4 mr-1"></i> Approve Run
+      </button>
+    </form>
+    <a href="{% url 'projects:pbr_edit' billing_run.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+    </a>
+    {% endif %}
+
+    {% if billing_run.status == "approved" or billing_run.status == "draft" %}
+    <form method="post" action="{% url 'projects:pbr_generate_invoice' billing_run.pk %}" onsubmit="return confirm('Generate canonical AR accounting invoice for this run?');" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i data-lucide="file-plus" class="w-4 h-4 mr-1"></i> Generate Invoice
+      </button>
+    </form>
+    {% endif %}
+
+    <a href="{% url 'projects:pbr_preview_pdf' billing_run.pk %}" target="_blank" class="btn btn-outline">
+      <i data-lucide="printer" class="w-4 h-4 mr-1"></i> View / Print Document
+    </a>
+
+    {% if billing_run.status != "invoiced" %}
+    <form method="post" action="{% url 'projects:pbr_delete' billing_run.pk %}" onsubmit="return confirm('Are you sure you want to delete this billing run?');" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+    {% endif %}
+    <a href="{% url 'projects:pbr_list' %}" class="btn btn-outline">Back to List</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Main Run Summary -->
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Billing Run Overview</h3>
+        <div>
+          {% if billing_run.status == "draft" %}
+            <span class="badge badge-slate">Draft</span>
+          {% elif billing_run.status == "approved" %}
+            <span class="badge badge-info">Approved</span>
+          {% elif billing_run.status == "invoiced" %}
+            <span class="badge badge-green">Invoiced</span>
+          {% elif billing_run.status == "cancelled" %}
+            <span class="badge badge-red">Cancelled</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Project</span>
+            <a href="{% url 'projects:prj_detail' billing_run.project.pk %}" class="font-medium text-brand hover:underline">
+              {{ billing_run.project.number }} — {{ billing_run.project.name }}
+            </a>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Client</span>
+            <span class="font-medium text-slate-900">{{ billing_run.client.name }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Billing Type</span>
+            <span class="badge badge-info">{{ billing_run.get_billing_type_display }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Run Date</span>
+            <span class="font-medium text-slate-800">{{ billing_run.run_date }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Cutoff Date</span>
+            <span class="font-medium text-slate-800">{{ billing_run.cutoff_date }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Currency</span>
+            <span class="font-bold text-slate-900">{{ billing_run.currency.code }} (Rate: {{ billing_run.exchange_rate }})</span>
+          </div>
+        </div>
+
+        {% if billing_run.sow or billing_run.milestone %}
+        <div class="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+          {% if billing_run.sow %}
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Statement of Work</span>
+            <a href="{% url 'projects:sow_detail' billing_run.sow.pk %}" class="font-medium text-brand hover:underline">
+              {{ billing_run.sow.number }} — {{ billing_run.sow.title }}
+            </a>
+          </div>
+          {% endif %}
+          {% if billing_run.milestone %}
+          <div>
+            <span class="text-xs text-muted block uppercase tracking-wider">Milestone</span>
+            <span class="font-medium text-slate-900">{{ billing_run.milestone.name }}</span>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if billing_run.notes %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+          <span class="text-xs text-muted block uppercase tracking-wider mb-1">Run Notes</span>
+          <p class="text-sm text-slate-700 whitespace-pre-line">{{ billing_run.notes }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Financial Breakdown Table -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Commercial Charges & Totals</h3>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Charge Component</th>
+              <th>Quantity / Basis</th>
+              <th class="text-right">Amount ({{ billing_run.currency.code }})</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="font-medium text-slate-900">Professional Services (Labor)</div>
+                <div class="text-xs text-muted">Aggregated approved billable timesheets</div>
+              </td>
+              <td>{{ billing_run.total_time_hours }} billable hrs</td>
+              <td class="text-right font-medium text-slate-800">{{ billing_run.labor_amount }}</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="font-medium text-slate-900">Direct Reimbursable Expenses</div>
+                <div class="text-xs text-muted">Pass-through project expenses with markup</div>
+              </td>
+              <td>Direct pass-through</td>
+              <td class="text-right font-medium text-slate-800">{{ billing_run.expense_amount }}</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="font-medium text-slate-900">Fixed Fee / Milestone / Retainer</div>
+                <div class="text-xs text-muted">Fixed deliverables and recurring retainer drawdowns</div>
+              </td>
+              <td>Fixed charge</td>
+              <td class="text-right font-medium text-slate-800">{{ billing_run.fee_amount }}</td>
+            </tr>
+            <tr class="border-t-2 border-slate-200">
+              <td colspan="2" class="font-semibold text-slate-800 text-right">Subtotal:</td>
+              <td class="text-right font-semibold text-slate-900">{{ billing_run.subtotal }}</td>
+            </tr>
+            <tr>
+              <td colspan="2" class="text-right text-slate-700">
+                Tax: {% if billing_run.tax_code %}{{ billing_run.tax_code.name }} ({{ billing_run.tax_rate_pct }}%){% else %}{{ billing_run.tax_rate_pct }}%{% endif %}
+              </td>
+              <td class="text-right text-slate-800">{{ billing_run.tax_amount }}</td>
+            </tr>
+            <tr class="bg-slate-50 font-bold text-base text-slate-900">
+              <td colspan="2" class="text-right">Grand Total Due:</td>
+              <td class="text-right text-brand">{{ billing_run.total_amount }} {{ billing_run.currency.code }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar: Canonical Invoice & Dispatch -->
+  <div class="space-y-6">
+    <!-- Canonical Accounting Invoice Link -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Canonical Accounting Invoice</h3>
+      </div>
+      <div class="card-body">
+        {% if billing_run.accounting_invoice %}
+          <div class="p-4 bg-green-50 rounded-lg border border-green-200 space-y-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="check-circle-2" class="w-5 h-5 text-green-600"></i>
+              <span class="font-bold text-green-900">Invoice Generated</span>
+            </div>
+            <div>
+              <span class="text-xs text-green-800 block">GL Invoice Number</span>
+              <a href="{% url 'accounting:invoice_detail' billing_run.accounting_invoice.pk %}" class="text-base font-bold text-brand hover:underline">
+                {{ billing_run.accounting_invoice.number }}
+              </a>
+            </div>
+            <div class="text-xs text-green-700">
+              Status: <span class="font-semibold">{{ billing_run.accounting_invoice.get_status_display }}</span>
+            </div>
+            <div class="pt-2">
+              <a href="{% url 'accounting:invoice_detail' billing_run.accounting_invoice.pk %}" class="btn btn-outline btn-sm w-full text-center">
+                Open Accounting Invoice
+              </a>
+            </div>
+          </div>
+        {% else %}
+          <div class="p-4 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-800 space-y-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="alert-circle" class="w-5 h-5 text-amber-600"></i>
+              <span class="font-bold text-amber-900">No Invoice Generated</span>
+            </div>
+            <p class="text-xs">
+              This billing run has not drafted an official accounting invoice yet. Click <strong>Generate Invoice</strong> above to post to the canonical AR ledger.
+            </p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Client Dispatch Section -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Client Dispatch & Delivery</h3>
+      </div>
+      <div class="card-body space-y-4">
+        <div>
+          <span class="text-xs text-muted block uppercase tracking-wider">Delivery Channel</span>
+          <span class="badge badge-info mt-1">{{ billing_run.get_delivery_channel_display }}</span>
+        </div>
+
+        {% if billing_run.dispatched_at %}
+        <div class="p-3 bg-slate-50 rounded border border-slate-200 space-y-1 text-xs">
+          <div class="font-semibold text-slate-800">Last Dispatched:</div>
+          <div>To: <span class="font-medium">{{ billing_run.recipient_email }}</span></div>
+          <div>At: {{ billing_run.dispatched_at|date:"M d, Y H:i" }}</div>
+          {% if billing_run.dispatched_by %}
+          <div>By: {{ billing_run.dispatched_by.get_full_name|default:billing_run.dispatched_by.username }}</div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'projects:pbr_dispatch' billing_run.pk %}" class="space-y-3 pt-2">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label text-xs">Recipient Email</label>
+            {{ dispatch_form.recipient_email }}
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs">Dispatch Note</label>
+            {{ dispatch_form.notes }}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-full">
+            <i data-lucide="send" class="w-3.5 h-3.5 mr-1"></i> Send / Dispatch Invoice
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
