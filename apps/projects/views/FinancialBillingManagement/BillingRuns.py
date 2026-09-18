@@ -149,16 +149,15 @@ def pbr_approve(request, pk):
 @login_required
 @require_POST
 def pbr_generate_invoice(request, pk):
-    billing_run = get_object_or_404(
-        ProjectBillingRun.objects.select_related("project", "client", "currency", "tax_code"),
-        pk=pk,
-        tenant=request.tenant,
-    )
-    if billing_run.status not in ("draft", "approved"):
-        messages.error(request, f"Billing run {billing_run.number} cannot generate an invoice because status is {billing_run.get_status_display()}.")
-        return redirect("projects:pbr_detail", pk=billing_run.pk)
-
     with transaction.atomic():
+        billing_run = get_object_or_404(
+            ProjectBillingRun.objects.select_for_update().select_related("project", "client", "currency", "tax_code"),
+            pk=pk,
+            tenant=request.tenant,
+        )
+        if billing_run.status not in ("draft", "approved"):
+            messages.error(request, f"Billing run {billing_run.number} cannot generate an invoice because status is {billing_run.get_status_display()}.")
+            return redirect("projects:pbr_detail", pk=billing_run.pk)
         invoice = Invoice.objects.create(
             tenant=request.tenant,
             party=billing_run.client,
