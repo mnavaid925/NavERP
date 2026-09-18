@@ -21,7 +21,7 @@ from apps.projects.views._common import login_required
 def pci_list(request):
     qs = (
         ProjectClientInvoice.objects.filter(tenant=request.tenant)
-        .select_related("project", "sow", "milestone", "currency", "accounting_invoice")
+        .select_related("project__client", "sow", "milestone", "currency", "accounting_invoice")
     )
     project_id = as_db_int(request.GET.get("project"))
     if project_id:
