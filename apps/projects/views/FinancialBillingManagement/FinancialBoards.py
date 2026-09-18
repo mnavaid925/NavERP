@@ -330,7 +330,7 @@ def cash_flow_forecast(request):
     out_90 = Decimal("0.00")
 
     for exp in outflows_qs:
-        dt = exp.expense_date
+        dt = exp.entry_date
         amt = exp.amount
         if dt <= p30:
             out_30 += amt
