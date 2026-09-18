@@ -8449,7 +8449,7 @@ Shipped full 7.12 Portfolio & Program Management sub-module across all 5 NavERP 
 - Navigation: `LIVE_LINKS["7.12"]` mapped with all 5 bullets and 3 extra live leaves.
 - Migrations: `0019_portfolio_program_portfolioinvestment_and_more.py` applied cleanly.
 - Seeder: `_portfolio_management` in `seed_projects.py` seeding portfolios, programs, investments, and cross-project dependencies; 100% idempotent.
-- Tests: 45 tests across 4 lanes (`test_portfolio_models.py`, `_forms.py`, `_views.py`, `_security.py`).
+- Tests: 43 tests across 4 lanes (`test_portfolio_models.py`, `_forms.py`, `_views.py`, `_security.py`).
 
 - [x] Spec: freeze contract in `.claude/tasks/contract-projects-7.12.md`
 - [x] Entity 1: Portfolio [PRT-]
@@ -8509,7 +8509,7 @@ Shipped full 7.12 Portfolio & Program Management sub-module across all 5 NavERP 
   - [x] `test_portfolio_forms.py`
   - [x] `test_portfolio_views.py`
   - [x] `test_portfolio_security.py`
-  - [x] Full test suite (45 tests across 4 lanes) passes green
+  - [x] Full test suite (43 tests across 4 lanes) passes green
 - [x] Skill & README:
   - [x] Update `.claude/skills/projects/SKILL.md`
   - [x] Update `README.md`
