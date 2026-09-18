@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Payment Record — {{ payment_record.number }}{% else %}New Collection Record{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Collection Record: {{ payment_record.number }}{% else %}Create Collection Record{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:index' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:ppr_list' %}">Payment Records</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-4xl">
+  <div class="card-header">
+    <h3 class="card-title">Collection & Payment Tracking Parameters</h3>
+  </div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.project.id_for_label }}" class="form-label">Project *</label>
+          {{ form.project }}
+          {% if form.project.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.project.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.client.id_for_label }}" class="form-label">Client *</label>
+          {{ form.client }}
+          {% if form.client.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.client.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.accounting_invoice.id_for_label }}" class="form-label">Canonical Accounting Invoice *</label>
+          {{ form.accounting_invoice }}
+          <span class="text-xs text-muted">Select GL client invoice to track</span>
+          {% if form.accounting_invoice.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.accounting_invoice.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.billing_run.id_for_label }}" class="form-label">Source Billing Run (Optional)</label>
+          {{ form.billing_run }}
+          {% if form.billing_run.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.billing_run.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.dunning_level.id_for_label }}" class="form-label">Dunning Stage</label>
+          {{ form.dunning_level }}
+          {% if form.dunning_level.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.dunning_level.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.assigned_collector.id_for_label }}" class="form-label">Assigned Collector / Account Manager</label>
+          {{ form.assigned_collector }}
+          {% if form.assigned_collector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.assigned_collector.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.next_follow_up_date.id_for_label }}" class="form-label">Next Follow-Up Date</label>
+          {{ form.next_follow_up_date }}
+          {% if form.next_follow_up_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.next_follow_up_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.promised_payment_date.id_for_label }}" class="form-label">Promised Payment Date</label>
+          {{ form.promised_payment_date }}
+          {% if form.promised_payment_date.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.promised_payment_date.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="{{ form.promised_amount.id_for_label }}" class="form-label">Promised Amount</label>
+          {{ form.promised_amount }}
+          {% if form.promised_amount.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.promised_amount.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.dispute_reason.id_for_label }}" class="form-label">Dispute Details (if disputed)</label>
+          {{ form.dispute_reason }}
+          {% if form.dispute_reason.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.dispute_reason.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.notes.id_for_label }}" class="form-label">Collection History & Notes</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-2">
+        <a href="{% url 'projects:ppr_list' %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_edit %}Save Changes{% else %}Create Record{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
