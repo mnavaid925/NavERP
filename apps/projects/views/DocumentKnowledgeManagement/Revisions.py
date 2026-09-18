@@ -38,6 +38,9 @@ from apps.projects.views._helpers import projects
 def pdv_upload(request, document_pk):
     """Upload the next revision of one document. GET renders the form, POST writes the row."""
     document = get_object_or_404(ProjectDocument, pk=document_pk, tenant=request.tenant)
+    if document.is_archived:
+        messages.error(request, f"{document.number} is archived — unarchive it before uploading a new revision.")
+        return redirect("projects:pdm_detail", pk=document.pk)
     if request.method == "POST":
         form = ProjectDocumentRevisionUploadForm(request.POST, request.FILES,
                                                  tenant=request.tenant, document=document)
@@ -89,6 +92,9 @@ def pdv_approve(request, pk):
                                     f"below the current pointer ({document.current_revision_no}) — "
                                     f"the chain only moves forward.")
             return redirect("projects:pdm_detail", pk=document.pk)
+        if document.is_archived:
+            messages.error(request, f"{document.number} is archived — unarchive it before approving a revision onto it.")
+            return redirect("projects:pdm_detail", pk=document.pk)
         if document.is_legal_hold:
             messages.error(request, f"{document.number} is under legal hold — a new revision may "
                                     f"not be approved onto it.")
@@ -128,6 +134,9 @@ def pdv_restore(request, pk):
     with transaction.atomic():
         document = (ProjectDocument.objects.select_for_update()
                     .get(pk=revision.document_id, tenant=request.tenant))
+        if document.is_archived:
+            messages.error(request, f"{document.number} is archived — unarchive it before restoring a revision.")
+            return redirect("projects:pdm_detail", pk=document.pk)
         if document.is_legal_hold:
             messages.error(request, f"{document.number} is under legal hold — a restore would "
                                     f"change what the hold is holding.")
@@ -219,8 +228,11 @@ def pdv_compare(request):
     a_pk, b_pk = as_db_int(request.GET.get("a", "")), as_db_int(request.GET.get("b", ""))
     a = b = None
     if a_pk and b_pk:
-        a = ProjectDocumentRevision.objects.filter(tenant=request.tenant, pk=a_pk).first()
-        b = ProjectDocumentRevision.objects.filter(tenant=request.tenant, pk=b_pk).first()
+        rev_qs = ProjectDocumentRevision.objects.filter(tenant=request.tenant).select_related(
+            "document", "document__project", "uploaded_by", "approved_by"
+        )
+        a = rev_qs.filter(pk=a_pk).first()
+        b = rev_qs.filter(pk=b_pk).first()
         if a and b and a.document_id != b.document_id:
             messages.error(request, "Those two revisions belong to different documents — a "
                                     "comparison has to stay inside one document's chain.")

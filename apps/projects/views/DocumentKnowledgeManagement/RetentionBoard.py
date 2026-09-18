@@ -87,21 +87,21 @@ def doc_retention(request):
 @login_required
 @require_POST
 def doc_retention_run(request):
-    """Raise one idempotent in-app reminder per in-window document into the 7.9 inbox."""
+    """Raise one idempotent in-app reminder per in-window document (deduped while reminders remain unread) into the 7.9 inbox."""
     tenant = request.tenant
     if tenant is None:
         messages.error(request, "Select a tenant workspace before running reminders.")
         return redirect("dashboard:home")
     rows = _due_rows(tenant, _window())
     raised = skipped = 0
-    for row in rows:
-        document = row["document"]
-        when = row["when"]
-        timing = (f"{abs(row['days_left'])} day(s) overdue"
-                  if row["days_left"] < 0 else f"in {row['days_left']} day(s)")
-        title = f"{document.number} {row['reason']} due {when:%d %b %Y} ({timing})"
-        recipient = document.owner or request.user
-        with transaction.atomic():
+    with transaction.atomic():
+        for row in rows:
+            document = row["document"]
+            when = row["when"]
+            timing = (f"{abs(row['days_left'])} day(s) overdue"
+                      if row["days_left"] < 0 else f"in {row['days_left']} day(s)")
+            title = f"{document.number} {row['reason']} due {when:%d %b %Y} ({timing})"
+            recipient = document.owner or request.user
             locked = (ProjectDocument.objects.select_for_update()
                       .get(pk=document.pk, tenant=tenant))
             # The authoritative dedupe, INSIDE the lock: same tenant, same kind, same recipient,

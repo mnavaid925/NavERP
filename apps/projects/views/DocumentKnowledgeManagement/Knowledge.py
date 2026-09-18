@@ -83,12 +83,16 @@ def kne_search(request):
         "searched_fields": searched,
         "kind_choices": KnowledgeEntry.KIND_CHOICES,
         "kind_filter": kind_filter,
+        "kind_label": dict(KnowledgeEntry.KIND_CHOICES).get(kind_filter, ""),
     })
 
 
 @login_required
 def kne_detail(request, pk):
-    obj = get_object_or_404(KnowledgeEntry, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        KnowledgeEntry.objects.select_related("source_project", "document", "owner"),
+        pk=pk, tenant=request.tenant,
+    )
     return render(request, "projects/documentknowledge/knowledgeentry/detail.html", {"obj": obj})
 
 

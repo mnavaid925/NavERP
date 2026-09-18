@@ -42,6 +42,8 @@ def _decorate(tenant, rows):
     decorated = []
 
     def walk(parent_id, depth, ancestors):
+        if depth > 20:
+            return
         for folder in sorted(by_parent.get(parent_id, []),
                              key=lambda f: (f.sequence, f.name.lower(), -f.pk)):
             decorated.append({

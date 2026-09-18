@@ -5,7 +5,7 @@ pass ``extracted_text`` to ``crud_list``'s ``search_fields``: a 1-3 character ``
 TextField twice per matching search (Paginator's COUNT, then the page) for results nobody wanted.
 Instead the view applies its own search BEFORE ``crud_list`` — title/number/tags always, the text
 copy only from 4 characters — and passes ``search_fields=[]`` (``apply_search`` no-ops on an empty
-field list), so the sweep runs at most once per page render and only when it can plausibly help.
+field list), so the TextField is only swept when a search is 4+ characters and can plausibly help.
 Everything else on the filter bar (``?project=``/``?folder=``/``?document_type=``/``?status=``/
 ``?classification=``/``?owner=``/``?archived=``) goes through ``crud_list``'s own ``filters`` spec,
 which is where the L11 guards live.
@@ -77,7 +77,7 @@ def pdm_list(request):
         filters=[("project", "project_id", True), ("folder", "folder_id", True),
                  ("document_type", "document_type", False), ("status", "status", False),
                  ("classification", "classification", False), ("owner", "owner_id", True),
-                 ("archived", "is_archived", False)],
+                 ("archived", "is_archived", False), ("held", "is_legal_hold", False)],
         extra_context={
             "projects": projects(request.tenant),
             "folders": _folder_choices(request),
@@ -99,12 +99,13 @@ def _folder_choices(request):
 @login_required
 def pdm_detail(request, pk):
     obj = get_object_or_404(ProjectDocument, pk=pk, tenant=request.tenant)
-    revisions = (obj.revisions.select_related("approved_by", "uploaded_by")
-                 .order_by("-revision_no", "-id"))
+    revisions = list(obj.revisions.select_related("approved_by", "uploaded_by")
+                     .order_by("-revision_no", "-id"))
+    current = next((r for r in revisions if r.is_approved and r.revision_no == obj.current_revision_no), None)
     return render(request, "projects/documentknowledge/projectdocument/detail.html", {
         "obj": obj,
         "revisions": revisions,
-        "current": obj.current_revision,
+        "current": current,
         "upload_form": ProjectDocumentRevisionUploadForm(tenant=request.tenant, document=obj),
         "share_register_url": f"/projects/shared-documents/?project={obj.project_id}",
     })
@@ -352,6 +353,11 @@ def pdm_reindex(request, pk):
         messages.info(request, f"{obj.number} has no approved revision yet — nothing to index.")
         return redirect("projects:pdm_detail", pk=obj.pk)
     text, note = extract_text(current.file)
+    if not text and note and obj.extracted_text:
+        write_audit_log(request.user, obj, "update",
+                        changes={"verb": "pdm_reindex", "chars": len(obj.extracted_text), "note": note})
+        messages.warning(request, f"Re-index note: {note} Existing search text was preserved.")
+        return redirect("projects:pdm_detail", pk=obj.pk)
     obj.extracted_text = text
     obj.save(update_fields=["extracted_text", "updated_at"])
     write_audit_log(request.user, obj, "update",

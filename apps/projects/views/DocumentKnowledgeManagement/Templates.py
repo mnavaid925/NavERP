@@ -11,7 +11,7 @@ verb this pass ships is the download link on the detail page.
 """
 from apps.core.crud import as_db_int
 from apps.projects.forms import DocumentTemplateForm
-from apps.projects.models import DocumentTemplate
+from apps.projects.models import DocumentTemplate, ProjectDocument
 from apps.projects.models.DocumentKnowledgeManagement.Documents import purge_stored_files
 from apps.projects.views._common import *  # noqa: F401,F403
 from apps.projects.views._common import (get_object_or_404, login_required, messages,
@@ -27,13 +27,19 @@ def dtm_list(request):
         search_fields=["number", "name", "description", "version"],
         filters=[("category", "category", False), ("is_active", "is_active", False),
                  ("document_type", "document_type", False)],
-        extra_context={"category_choices": DocumentTemplate.CATEGORY_CHOICES},
+        extra_context={
+            "category_choices": DocumentTemplate.CATEGORY_CHOICES,
+            "doc_type_choices": ProjectDocument.DOC_TYPE_CHOICES,
+        },
     )
 
 
 @login_required
 def dtm_detail(request, pk):
-    obj = get_object_or_404(DocumentTemplate, pk=pk, tenant=request.tenant)
+    obj = get_object_or_404(
+        DocumentTemplate.objects.select_related("owner", "created_by"),
+        pk=pk, tenant=request.tenant,
+    )
     return render(request, "projects/documentknowledge/documenttemplate/detail.html", {"obj": obj})
 
 
