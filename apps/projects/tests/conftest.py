@@ -6023,3 +6023,200 @@ def program_dependency_a(db, tenant_a, program_a, resource_project, resource_pro
     )
 
 
+# ==================================================================================================
+# 7.14 Client & External Collaboration (subslug ``clientcollab``)
+# ==================================================================================================
+
+CLIENTCOLLAB_PAGE_SIZE = 15
+
+
+def _clientcollab_today():
+    return timezone.localdate()
+
+
+def _clientcollab_portal_access(tenant, project, client_contact, **overrides):
+    from apps.projects.models import ClientPortalAccess
+    data = dict(
+        tenant=tenant,
+        project=project,
+        client_contact=client_contact,
+        access_level="read_only",
+        status="active",
+        grant_date=_clientcollab_today(),
+        expiry_date=None,
+        custom_message="Welcome to your client portal.",
+        allow_feedback=True,
+        allow_document_download=True,
+        allow_financial_summary=False,
+    )
+    data.update(overrides)
+    obj = ClientPortalAccess(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _clientcollab_approval_request(tenant, project, **overrides):
+    from apps.projects.models import ClientApprovalRequest
+    data = dict(
+        tenant=tenant,
+        project=project,
+        client_contact=None,
+        title="Sprint 1 Deliverable Approval",
+        description="Please review and approve sprint 1 deliverable.",
+        deliverable_name="Architecture Blueprint v1",
+        document=None,
+        status="pending",
+        due_date=_clientcollab_today() + datetime.timedelta(days=7),
+        signed_by_name="",
+        signed_at=None,
+        feedback_notes="",
+    )
+    data.update(overrides)
+    obj = ClientApprovalRequest(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _clientcollab_sow(tenant, project, client, **overrides):
+    from apps.projects.models import StatementOfWork
+    data = dict(
+        tenant=tenant,
+        project=project,
+        client=client,
+        title="Master Services SOW #1",
+        sow_type="fixed_price",
+        status="draft",
+        baseline_value=Decimal("50000.00"),
+        start_date=_clientcollab_today(),
+        end_date=_clientcollab_today() + datetime.timedelta(days=90),
+        scope_narrative="Full implementation scope.",
+        key_deliverables="Phase 1, Phase 2, Phase 3.",
+        terms_and_conditions="Net 30 payment terms.",
+        signed_at=None,
+    )
+    data.update(overrides)
+    obj = StatementOfWork(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _clientcollab_amendment(tenant, sow, **overrides):
+    from apps.projects.models import SOWAmendment
+    data = dict(
+        tenant=tenant,
+        sow=sow,
+        amendment_number=1,
+        title="Scope Extension Amendment",
+        change_summary="Add mobile app support.",
+        value_adjustment=Decimal("15000.00"),
+        extended_end_date=_clientcollab_today() + datetime.timedelta(days=120),
+        effective_date=_clientcollab_today(),
+        approved_by_client=False,
+    )
+    data.update(overrides)
+    obj = SOWAmendment(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _clientcollab_vendor_handoff(tenant, project, vendor, **overrides):
+    from apps.projects.models import VendorHandoff
+    data = dict(
+        tenant=tenant,
+        project=project,
+        vendor=vendor,
+        task=None,
+        title="UI Design Package Handoff",
+        description="External design package handover.",
+        handoff_date=_clientcollab_today(),
+        expected_completion_date=_clientcollab_today() + datetime.timedelta(days=14),
+        status="prepared",
+        scorecard_rating=None,
+        performance_notes="",
+        deficiency_notes="",
+        accepted_at=None,
+        accepted_by=None,
+    )
+    data.update(overrides)
+    obj = VendorHandoff(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+def _clientcollab_client_invoice(tenant, project, **overrides):
+    from apps.projects.models import ProjectClientInvoice
+    data = dict(
+        tenant=tenant,
+        project=project,
+        sow=None,
+        milestone=None,
+        accounting_invoice=None,
+        billing_type="milestone",
+        status="draft",
+        invoice_date=_clientcollab_today(),
+        due_date=_clientcollab_today() + datetime.timedelta(days=30),
+        amount=Decimal("20000.00"),
+        tax_amount=Decimal("2000.00"),
+        paid_amount=Decimal("0.00"),
+        notes="Invoice for milestone 1.",
+        payment_reference="",
+    )
+    data.update(overrides)
+    obj = ProjectClientInvoice(**data)
+    obj.full_clean(exclude=["number"])
+    obj.save()
+    return obj
+
+
+@pytest.fixture
+def clientcollab_project_a(db, tenant_a):
+    return _projectinitiation_project(tenant_a, name="Client Collab Project A", code="CCP-01")
+
+
+@pytest.fixture
+def clientcollab_project_b(db, tenant_b):
+    return _projectinitiation_project(tenant_b, name="Client Collab Project B", code="CCP-02")
+
+
+@pytest.fixture
+def clientcollab_client_org_a(db, tenant_a):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="organization", name="Acme Client Corp")
+
+
+@pytest.fixture
+def clientcollab_client_org_b(db, tenant_b):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="organization", name="Globex Client Corp")
+
+
+@pytest.fixture
+def clientcollab_vendor_org_a(db, tenant_a):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="organization", name="Vendor Partner A")
+
+
+@pytest.fixture
+def clientcollab_vendor_org_b(db, tenant_b):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="organization", name="Vendor Partner B")
+
+
+@pytest.fixture
+def clientcollab_contact_person_a(db, tenant_a):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="person", name="Alice Client")
+
+
+@pytest.fixture
+def clientcollab_contact_person_b(db, tenant_b):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="person", name="Bob Client")
+
+
+
