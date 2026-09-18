@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Statement of Work: {{ sow.number }} — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ sow.number }} — {{ sow.title }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <a href="{% url 'projects:sow_list' %}">Statements of Work</a>
+      <span class="sep">›</span>
+      <span>{{ sow.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    {% if sow.status != 'active' and sow.status != 'amended' and sow.status != 'completed' %}
+      <form method="post" action="{% url 'projects:sow_activate' sow.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Activate this Statement of Work?');">
+          <i data-lucide="check-circle"></i> Activate SOW
+        </button>
+      </form>
+    {% endif %}
+
+    <a href="{% url 'projects:sow_amendment_create' sow.pk %}" class="btn btn-outline">
+      <i data-lucide="plus-circle"></i> Add Amendment
+    </a>
+
+    <a href="{% url 'projects:sow_edit' sow.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:sow_delete' sow.pk %}" onsubmit="return confirm('Delete this Statement of Work?');" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:sow_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left"></i> Back to List
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Contract & Statement of Work Overview</h2>
+      </div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-sm text-muted">Project</dt>
+            <dd class="fw-600"><a href="{% url 'projects:prj_detail' sow.project.pk %}">{{ sow.project.name }}</a></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Client</dt>
+            <dd class="fw-600">{{ sow.client.name }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">SOW Code / Ref</dt>
+            <dd>{{ sow.sow_code|default:"—" }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Billing Model</dt>
+            <dd><span class="fw-600">{{ sow.get_billing_type_display }}</span></dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Contract Base Value</dt>
+            <dd class="fw-600">{{ sow.contract_value|floatformat:2 }} {% if sow.currency %}{{ sow.currency.code }}{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Effective Value (with Amendments)</dt>
+            <dd class="fw-600 text-brand">{{ sow.effective_value|floatformat:2 }} {% if sow.currency %}{{ sow.currency.code }}{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Effective Dates</dt>
+            <dd>{{ sow.start_date|date:"M d, Y" }} – {{ sow.end_date|date:"M d, Y" }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Status</dt>
+            <dd>
+              {% if sow.status == 'active' %}
+                <span class="badge badge-green">Active</span>
+              {% elif sow.status == 'amended' %}
+                <span class="badge badge-info">Amended</span>
+              {% elif sow.status == 'under_review' %}
+                <span class="badge badge-amber">Under Review</span>
+              {% elif sow.status == 'completed' %}
+                <span class="badge badge-slate">Completed</span>
+              {% elif sow.status == 'terminated' %}
+                <span class="badge badge-red">Terminated</span>
+              {% else %}
+                <span class="badge badge-muted">{{ sow.get_status_display }}</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+
+        {% if sow.scope_summary %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Scope of Work Summary</h3>
+            <p class="mt-1">{{ sow.scope_summary|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+
+        {% if sow.terms_and_conditions %}
+          <div class="mt-4 pt-4 border-t">
+            <h3 class="text-sm font-semibold text-muted">Terms & Conditions</h3>
+            <p class="mt-1">{{ sow.terms_and_conditions|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Scope & Value Amendments ({{ amendments.count }})</h2>
+        <a href="{% url 'projects:sow_amendment_create' sow.pk %}" class="btn btn-outline btn-sm">
+          <i data-lucide="plus"></i> Add Amendment
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Amendment #</th>
+              <th>Title</th>
+              <th>Effective Date</th>
+              <th>Value Change</th>
+              <th>Status</th>
+              <th>Approved By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in amendments %}
+              <tr>
+                <td class="fw-600">#{{ a.amendment_number }}</td>
+                <td>
+                  <div class="fw-600">{{ a.title }}</div>
+                  {% if a.justification %}<span class="text-muted text-sm">{{ a.justification|truncatechars:60 }}</span>{% endif %}
+                </td>
+                <td>{{ a.effective_date|date:"M d, Y" }}</td>
+                <td class="fw-600 {% if a.value_change >= 0 %}text-green{% else %}text-red{% endif %}">
+                  {% if a.value_change >= 0 %}+{% endif %}{{ a.value_change|floatformat:2 }}
+                </td>
+                <td>
+                  {% if a.status == 'approved' %}
+                    <span class="badge badge-green">Approved</span>
+                  {% elif a.status == 'rejected' %}
+                    <span class="badge badge-red">Rejected</span>
+                  {% else %}
+                    <span class="badge badge-amber">Draft</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if a.approved_by %}{{ a.approved_by.username }} ({{ a.approved_at|date:"M d, Y" }}){% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">No amendments recorded for this Statement of Work.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Lifecycle & Activation</h2>
+      </div>
+      <div class="card-body">
+        <dl class="space-y-3">
+          <div>
+            <dt class="text-sm text-muted">Created Timestamp</dt>
+            <dd>{{ sow.created_at|date:"M d, Y H:i" }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Activation Timestamp</dt>
+            <dd>{% if sow.activated_at %}{{ sow.activated_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not activated</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-muted">Activated By</dt>
+            <dd>{% if sow.activated_by %}{{ sow.activated_by.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
