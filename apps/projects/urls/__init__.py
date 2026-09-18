@@ -77,6 +77,15 @@ from .PortfolioProgramManagement.Programs import urlpatterns as _pfm_programs
 from .PortfolioProgramManagement.PortfolioInvestments import urlpatterns as _pfm_investments
 from .PortfolioProgramManagement.ProgramDependencies import urlpatterns as _pfm_dependencies
 from .PortfolioProgramManagement.PortfolioDashboard import urlpatterns as _pfm_dashboard
+from .AgileScrumManagement.ProjectEpics import urlpatterns as _asm_epics
+from .AgileScrumManagement.ProjectReleases import urlpatterns as _asm_releases
+from .AgileScrumManagement.ReleaseRoadmap import urlpatterns as _asm_roadmap
+from .AgileScrumManagement.SprintBacklog import urlpatterns as _asm_backlog
+from .AgileScrumManagement.SprintExecution import urlpatterns as _asm_execution
+from .AgileScrumManagement.SprintImpediments import urlpatterns as _asm_impediments
+from .AgileScrumManagement.SprintRetrospectives import urlpatterns as _asm_retrospectives
+from .AgileScrumManagement.Sprints import urlpatterns as _asm_sprints
+from .AgileScrumManagement.VelocityReport import urlpatterns as _asm_velocity
 
 app_name = "projects"
 
@@ -186,6 +195,20 @@ urlpatterns = (
     + _pfm_investments
     + _pfm_dependencies
     + _pfm_dashboard
+    # 7.13 Agile & Scrum Management — first segments (agile/sprints/, agile/epics/,
+    # agile/releases/, agile/impediments/, agile/retrospectives/, agile/backlog/,
+    # agile/execution/, agile/roadmap/, agile/velocity/) are prefixed with agile/ and
+    # are completely disjoint literals from earlier sub-modules and from each other.
+    + _asm_sprints
+    + _asm_epics
+    + _asm_releases
+    + _asm_impediments
+    + _asm_retrospectives
+    + _asm_backlog
+    + _asm_execution
+    + _asm_roadmap
+    + _asm_velocity
 )
+
 
 
