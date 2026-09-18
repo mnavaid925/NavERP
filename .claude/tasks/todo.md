@@ -5,40 +5,40 @@ BASE = `c3ccc923bf123c6db9ce35de9717794f83a4d01e`. Next migration: `0021`.
 Coexistence: solo builder in `apps/projects/` extending `ClientExternalCollaboration`.
 
 ## Models (`apps/projects/models/ClientExternalCollaboration/`)
-- [ ] `ClientPortals.py` — `ClientPortalAccess` [CPA-]: project FK `projects.Project`, client_contact `core.Party`, portal_user FK `settings.AUTH_USER_MODEL` (optional), access_token (uuid), can_view_progress, can_view_milestones, can_view_deliverables, can_view_financials, can_submit_feedback, is_active, expires_at, last_accessed_at.
-- [ ] `ClientFeedbacks.py` — `ClientApprovalRequest` [CFB-]: project FK, deliverable_name, document FK `core.Document` (optional), milestone FK `projects.ProjectMilestone` (optional), requested_by FK `settings.AUTH_USER_MODEL`, assigned_contact FK `core.Party`, status (draft/pending_review/approved/rejected/revision_requested), review_notes, client_feedback, signed_by_name, signed_at, rejection_reason. Verbs: cfb_approve, cfb_reject.
-- [ ] `StatementOfWorks.py` — `StatementOfWork` [SOW-]: project FK, client FK `core.Party`, title, sow_number, billing_type (fixed_fee/time_and_materials/milestone_based/retainer), contract_value q2, currency FK `accounting.Currency`, start_date, end_date, status (draft/under_review/active/amended/completed/terminated), scope_summary, terms_and_conditions. Verb: sow_activate.
-  - [ ] Child `SOWAmendment` [SWA-]: sow FK, amendment_number, effective_date, value_change q2, revised_scope, justification, status (draft/approved/rejected), approved_by, approved_at.
-- [ ] `VendorHandoffs.py` — `VendorHandoff` [VHD-]: project FK, vendor FK `core.Party`, task FK `projects.ProjectTask` (optional), title, description, handoff_date, due_date, status (assigned/in_progress/delivered/accepted/rejected), deliverable_link, scorecard_rating (1-5), performance_notes, accepted_at, accepted_by. Verbs: vhd_accept, vhd_reject.
-- [ ] `ClientInvoices.py` — `ProjectClientInvoice` [PCI-]: project FK, sow FK (optional), milestone FK (optional), billing_type (fixed_fee/time_and_materials/milestone/retainer), billing_date, due_date, currency FK `accounting.Currency`, amount q2, tax_amount q2, total_amount q2, status (draft/ready_to_bill/invoiced/cancelled), notes, invoice FK `accounting.Invoice` (optional). Verb: pci_generate_invoice.
+- [x] `ClientPortals.py` — `ClientPortalAccess` [CPA-]: project FK `projects.Project`, client_contact `core.Party`, portal_user FK `settings.AUTH_USER_MODEL` (optional), access_token (uuid), can_view_progress, can_view_milestones, can_view_deliverables, can_view_financials, can_submit_feedback, is_active, expires_at, last_accessed_at.
+- [x] `ClientFeedbacks.py` — `ClientApprovalRequest` [CFB-]: project FK, deliverable_name, document FK `core.Document` (optional), milestone FK `projects.ProjectMilestone` (optional), requested_by FK `settings.AUTH_USER_MODEL`, assigned_contact FK `core.Party`, status (draft/pending_review/approved/rejected/revision_requested), review_notes, client_feedback, signed_by_name, signed_at, rejection_reason. Verbs: cfb_approve, cfb_reject.
+- [x] `StatementOfWorks.py` — `StatementOfWork` [SOW-]: project FK, client FK `core.Party`, title, sow_number, billing_type (fixed_fee/time_and_materials/milestone_based/retainer), contract_value q2, currency FK `accounting.Currency`, start_date, end_date, status (draft/under_review/active/amended/completed/terminated), scope_summary, terms_and_conditions. Verb: sow_activate.
+  - [x] Child `SOWAmendment` [SWA-]: sow FK, amendment_number, effective_date, value_change q2, revised_scope, justification, status (draft/approved/rejected), approved_by, approved_at.
+- [x] `VendorHandoffs.py` — `VendorHandoff` [VHD-]: project FK, vendor FK `core.Party`, task FK `projects.ProjectTask` (optional), title, description, handoff_date, due_date, status (assigned/in_progress/delivered/accepted/rejected), deliverable_link, scorecard_rating (1-5), performance_notes, accepted_at, accepted_by. Verbs: vhd_accept, vhd_reject.
+- [x] `ClientInvoices.py` — `ProjectClientInvoice` [PCI-]: project FK, sow FK (optional), milestone FK (optional), billing_type (fixed_fee/time_and_materials/milestone/retainer), billing_date, due_date, currency FK `accounting.Currency`, amount q2, tax_amount q2, total_amount q2, status (draft/ready_to_bill/invoiced/cancelled), notes, invoice FK `accounting.Invoice` (optional). Verb: pci_generate_invoice.
 
 ## Backend layers
-- [ ] `forms/ClientExternalCollaboration/` (ClientPortals, ClientFeedbacks, StatementOfWorks, VendorHandoffs, ClientInvoices).
-- [ ] `views/ClientExternalCollaboration/` (CRUD + search/filter/pagination + action verbs + audit logging).
-- [ ] `urls/ClientExternalCollaboration/` (literal routes before <int:pk>/ routes).
+- [x] `forms/ClientExternalCollaboration/` (ClientPortals, ClientFeedbacks, StatementOfWorks, VendorHandoffs, ClientInvoices).
+- [x] `views/ClientExternalCollaboration/` (CRUD + search/filter/pagination + action verbs + audit logging).
+- [x] `urls/ClientExternalCollaboration/` (literal routes before <int:pk>/ routes).
 
 ## Shared files & Integration
-- [ ] Re-export blocks in `apps/projects/{models,forms,views}/__init__.py`.
-- [ ] Concatenate `urlpatterns` in `apps/projects/urls/__init__.py`.
-- [ ] Admin registration in `apps/projects/admin.py`.
-- [ ] Extend `apps/projects/management/commands/seed_projects.py` with 7.14 demo data.
-- [ ] Navigation wiring: `LIVE_LINKS["7.14"]` in `apps/core/navigation.py`.
-- [ ] Migration: `makemigrations projects` -> `0021_...`, run `migrate`, verify `seed_projects` twice.
-- [ ] `manage.py check` passes with 0 errors.
+- [x] Re-export blocks in `apps/projects/{models,forms,views}/__init__.py`.
+- [x] Concatenate `urlpatterns` in `apps/projects/urls/__init__.py`.
+- [x] Admin registration in `apps/projects/admin.py`.
+- [x] Extend `apps/projects/management/commands/seed_projects.py` with 7.14 demo data.
+- [x] Navigation wiring: `LIVE_LINKS["7.14"]` in `apps/core/navigation.py`.
+- [x] Migration: `makemigrations projects` -> `0021_...`, run `migrate`, verify `seed_projects` twice.
+- [x] `manage.py check` passes with 0 errors.
 
 ## Templates (`templates/projects/clientcollaboration/`)
-- [ ] `clientportal/`: `list.html`, `detail.html`, `form.html`
-- [ ] `clientfeedback/`: `list.html`, `detail.html`, `form.html`
-- [ ] `statementofwork/`: `list.html`, `detail.html`, `form.html`
-- [ ] `vendorhandoff/`: `list.html`, `detail.html`, `form.html`
-- [ ] `clientinvoice/`: `list.html`, `detail.html`, `form.html`
+- [x] `clientportal/`: `list.html`, `detail.html`, `form.html`
+- [x] `clientfeedback/`: `list.html`, `detail.html`, `form.html`
+- [x] `statementofwork/`: `list.html`, `detail.html`, `form.html`, `amendment_form.html`
+- [x] `vendorhandoff/`: `list.html`, `detail.html`, `form.html`
+- [x] `clientinvoice/`: `list.html`, `detail.html`, `form.html`
 
 ## Verification, Review & Tests
-- [ ] Smoke tests: status 200/302, no leaked comment tokens, IDOR 404.
-- [ ] Multi-agent review wave (6 reviewers) -> `.claude/tasks/review-projects-7.14.md`.
-- [ ] Fix findings via `code-fixer`.
-- [ ] Test wave: `test_clientcollab_{models,forms,views,security}.py` -> full suite green.
-- [ ] Update `SKILL.md` and `README.md`.
+- [x] Smoke tests: status 200/302, no leaked comment tokens, IDOR 404.
+- [x] Multi-agent review wave (6 reviewers) -> `.claude/tasks/review-projects-7.14.md`.
+- [x] Fix findings via `code-fixer`.
+- [x] Test wave: `test_clientcollab_{models,forms,views,security}.py` -> full suite green (37 tests).
+- [x] Update `SKILL.md` and `README.md`.
 
 ---
 
