@@ -102,7 +102,7 @@
           </td>
           <td>
             <div class="font-bold text-slate-900">{{ r.accounting_invoice.balance_due }} {{ r.accounting_invoice.currency.code }}</div>
-            <div class="text-xs text-muted">Total: {{ r.accounting_invoice.total_amount }}</div>
+            <div class="text-xs text-muted">Total: {{ r.accounting_invoice.total }}</div>
           </td>
           <td>
             {% if r.stage == "current" %}
