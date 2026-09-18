@@ -154,5 +154,16 @@ from .AgileScrumManagement.SprintImpediments import SprintImpedimentForm  # noqa
 from .AgileScrumManagement.SprintRetrospectives import SprintRetrospectiveForm  # noqa: F401
 from .AgileScrumManagement.Sprints import SprintForm  # noqa: F401
 
+# --- 7.14 Client & External Collaboration -------------------------------------------------------
+from .ClientExternalCollaboration.ClientPortals import ClientPortalAccessForm  # noqa: F401
+from .ClientExternalCollaboration.ClientFeedbacks import ClientApprovalRequestForm  # noqa: F401
+from .ClientExternalCollaboration.StatementOfWorks import (  # noqa: F401
+    SOWAmendmentForm,
+    StatementOfWorkForm,
+)
+from .ClientExternalCollaboration.VendorHandoffs import VendorHandoffForm  # noqa: F401
+from .ClientExternalCollaboration.ClientInvoices import ProjectClientInvoiceForm  # noqa: F401
+
+
 
 
