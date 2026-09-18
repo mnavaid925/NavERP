@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}A/R Aging & Collections · Financial & Billing · NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <a href="{% url 'projects:ppr_list' %}">Financial & Billing</a>
+      <span>A/R Aging &amp; Collections</span>
+    </nav>
+    <h1 class="page-title">Accounts Receivable (A/R) Aging &amp; Collections</h1>
+    <p class="text-muted">Overdue invoice aging buckets, collection stages, and credit risk exposure for active project billings.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:financial_pnl' %}" class="btn btn-outline"><i data-lucide="file-spreadsheet"></i> Profit &amp; Loss</a>
+    <a href="{% url 'projects:financial_variance' %}" class="btn btn-outline"><i data-lucide="bar-chart-2"></i> EVM Variance</a>
+    <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Cash Flow</a>
+    <a href="{% url 'projects:ppr_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Payment Record</a>
+  </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
+  <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-ghost">Rate Cards</a>
+  <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-ghost">Billing Runs</a>
+  <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-ghost">Revenue Schedules</a>
+  <a href="{% url 'projects:ppr_list' %}" class="btn btn-sm btn-ghost">Payment Records</a>
+  <a href="{% url 'projects:financial_pnl' %}" class="btn btn-sm btn-ghost">P&amp;L Analysis</a>
+  <a href="{% url 'projects:financial_variance' %}" class="btn btn-sm btn-ghost">EVM Variance</a>
+  <a href="{% url 'projects:ar_aging' %}" class="btn btn-sm btn-primary">A/R Aging</a>
+  <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-sm btn-ghost">Cash Flow</a>
+</div>
+
+<!-- Filter Bar -->
+<div class="card filter-card" style="margin-bottom:1.5rem;">
+  <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
+    <div style="flex:1; min-width:240px;">
+      <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
+      <select name="project" id="id_project" class="form-control" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+        <option value="">All Active Projects</option>
+        {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="align-self:flex-end; display:flex; gap:0.5rem;">
+      <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply Filter</button>
+      {% if project_filter %}
+        <a href="{% url 'projects:ar_aging' %}" class="btn btn-outline">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- KPI Summary Strip: Aging Buckets -->
+<div class="stats-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Total Outstanding A/R</div>
+    <div class="stat-value" style="font-size:1.4rem; font-weight:700;">${{ bucket_totals.total_balance|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Active unpaid balances</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Current (Not Due)</div>
+    <div class="stat-value text-green" style="font-size:1.4rem; font-weight:700;">${{ bucket_totals.current|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Within payment terms</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">1–30 Days Overdue</div>
+    <div class="stat-value text-amber" style="font-size:1.4rem; font-weight:700;">${{ bucket_totals.b_1_30|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Early follow-up</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">31–60 Days Overdue</div>
+    <div class="stat-value text-amber" style="font-size:1.4rem; font-weight:700;">${{ bucket_totals.b_31_60|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Reminder notice stage</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">61–90 Days Overdue</div>
+    <div class="stat-value text-red" style="font-size:1.4rem; font-weight:700;">${{ bucket_totals.b_61_90|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Escalation required</div>
+  </div>
+  <div class="stat-card card" style="padding:1rem;">
+    <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Over 90 Days</div>
+    <div class="stat-value text-red" style="font-size:1.4rem; font-weight:700;">${{ bucket_totals.b_over_90|default:"0.00" }}</div>
+    <div class="stat-meta text-muted" style="font-size:0.75rem;">Default/Legal risk</div>
+  </div>
+</div>
+
+<!-- Detailed A/R Aging Table -->
+<div class="card">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem; border-bottom:1px solid var(--border-color, #e2e8f0);">
+    <h2 class="card-title" style="font-size:1.1rem; font-weight:600; margin:0;"><i data-lucide="layers"></i> Outstanding Invoice Aging Schedule</h2>
+    <span class="badge badge-info">{{ aging_buckets|length }} Outstanding Records</span>
+  </div>
+  <div class="table-wrap" style="overflow-x:auto;">
+    <table class="table" style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border-color, #cbd5e1); text-align:left;">
+          <th style="padding:0.75rem;">Record</th>
+          <th style="padding:0.75rem;">Invoice #</th>
+          <th style="padding:0.75rem;">Project</th>
+          <th style="padding:0.75rem;">Client</th>
+          <th style="padding:0.75rem;">Due Date</th>
+          <th style="padding:0.75rem; text-align:right;">Balance</th>
+          <th style="padding:0.75rem; text-align:right;">Current</th>
+          <th style="padding:0.75rem; text-align:right;">1–30d</th>
+          <th style="padding:0.75rem; text-align:right;">31–60d</th>
+          <th style="padding:0.75rem; text-align:right;">61–90d</th>
+          <th style="padding:0.75rem; text-align:right;">&gt;90d</th>
+          <th style="padding:0.75rem; text-align:center;">Collection Stage</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in aging_buckets %}
+          <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
+            <td style="padding:0.75rem;">
+              <a href="{% url 'projects:ppr_detail' row.record.pk %}" style="font-weight:600; text-decoration:none; color:var(--primary, #2563eb);">
+                {{ row.record.record_number }}
+              </a>
+            </td>
+            <td style="padding:0.75rem; font-weight:600;">
+              {{ row.invoice.invoice_number|default:"INV-DRAFT" }}
+            </td>
+            <td style="padding:0.75rem;">
+              <a href="{% url 'projects:prj_detail' row.project.pk %}" style="text-decoration:none; color:inherit;">
+                {{ row.project.name }}
+              </a>
+            </td>
+            <td style="padding:0.75rem;">{{ row.client.name }}</td>
+            <td style="padding:0.75rem;">{{ row.due_date|date:"Y-m-d" }}</td>
+            <td style="padding:0.75rem; text-align:right; font-weight:700;">${{ row.balance }}</td>
+            <td style="padding:0.75rem; text-align:right;">{% if row.current > 0 %}${{ row.current }}{% else %}—{% endif %}</td>
+            <td style="padding:0.75rem; text-align:right; {% if row.b_1_30 > 0 %}color:var(--warning, #d97706); font-weight:600;{% endif %}">
+              {% if row.b_1_30 > 0 %}${{ row.b_1_30 }}{% else %}—{% endif %}
+            </td>
+            <td style="padding:0.75rem; text-align:right; {% if row.b_31_60 > 0 %}color:var(--warning, #d97706); font-weight:600;{% endif %}">
+              {% if row.b_31_60 > 0 %}${{ row.b_31_60 }}{% else %}—{% endif %}
+            </td>
+            <td style="padding:0.75rem; text-align:right; {% if row.b_61_90 > 0 %}color:var(--danger, #dc2626); font-weight:600;{% endif %}">
+              {% if row.b_61_90 > 0 %}${{ row.b_61_90 }}{% else %}—{% endif %}
+            </td>
+            <td style="padding:0.75rem; text-align:right; {% if row.b_over_90 > 0 %}color:var(--danger, #dc2626); font-weight:700;{% endif %}">
+              {% if row.b_over_90 > 0 %}${{ row.b_over_90 }}{% else %}—{% endif %}
+            </td>
+            <td style="padding:0.75rem; text-align:center;">
+              {% if row.stage == 'promise_to_pay' %}
+                <span class="badge badge-info">{{ row.stage_display }}</span>
+              {% elif row.stage == 'reminder_sent' %}
+                <span class="badge badge-amber">{{ row.stage_display }}</span>
+              {% elif row.stage == 'escalated' %}
+                <span class="badge badge-red">{{ row.stage_display }}</span>
+              {% elif row.stage == 'disputed' %}
+                <span class="badge badge-slate">{{ row.stage_display }}</span>
+              {% elif row.stage == 'legal_hold' %}
+                <span class="badge badge-red">{{ row.stage_display }}</span>
+              {% else %}
+                <span class="badge badge-muted">{{ row.stage_display }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="12" style="padding:2rem; text-align:center;" class="text-muted">
+              <i data-lucide="check-circle" style="width:32px; height:32px; margin-bottom:0.5rem; color:var(--success, #16a34a);"></i>
+              <p>No outstanding receivable invoices found. All collections are settled or within terms.</p>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      {% if aging_buckets %}
+        <tfoot style="background-color:var(--bg-muted, #f8fafc); font-weight:700; border-top:2px solid var(--border-color, #cbd5e1);">
+          <tr>
+            <td colspan="5" style="padding:0.75rem;">Total Portfolio A/R</td>
+            <td style="padding:0.75rem; text-align:right;">${{ bucket_totals.total_balance }}</td>
+            <td style="padding:0.75rem; text-align:right;">${{ bucket_totals.current }}</td>
+            <td style="padding:0.75rem; text-align:right; color:var(--warning, #d97706);">${{ bucket_totals.b_1_30 }}</td>
+            <td style="padding:0.75rem; text-align:right; color:var(--warning, #d97706);">${{ bucket_totals.b_31_60 }}</td>
+            <td style="padding:0.75rem; text-align:right; color:var(--danger, #dc2626);">${{ bucket_totals.b_61_90 }}</td>
+            <td style="padding:0.75rem; text-align:right; color:var(--danger, #dc2626);">${{ bucket_totals.b_over_90 }}</td>
+            <td style="padding:0.75rem; text-align:center;">—</td>
+          </tr>
+        </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}
