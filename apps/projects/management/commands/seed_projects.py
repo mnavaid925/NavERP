@@ -102,12 +102,14 @@ from apps.projects.models import (
     ProjectBudgetLine,
     ProjectDocument,
     ProjectDocumentRevision,
+    ProjectEpic,
     ProjectExpense,
     ProjectFolder,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
     ProjectNotification,
+    ProjectRelease,
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
@@ -129,6 +131,9 @@ from apps.projects.models import (
     TaskDependency,
     TimeActivityCode,
     ProjectOvertimeRecord,
+    Sprint,
+    SprintImpediment,
+    SprintRetrospective,
 )
 
 
@@ -447,6 +452,9 @@ class Command(BaseCommand):
         # 7.12 Portfolio & Program Management: investment portfolios, delivery programs,
         # weighted multi-criteria investment scoring, and cross-project program dependencies.
         self._portfolio_management(tenant, now)
+        # 7.13 Agile & Scrum Management: sprints, epics, release trains, impediments,
+        # retrospectives, and in-place story point assignments.
+        self._agile_scrum(tenant, now)
 
 
     # -- 7.2 planning ---------------------------------------------------------------------------
@@ -3217,6 +3225,263 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.12 seeded: 2 portfolios, 3 programs, investments & dependencies."))
+
+
+    def _agile_scrum(self, tenant, now):
+        """7.13 Agile & Scrum Management: sprints, epics, releases, impediments, and retrospectives."""
+        if Sprint.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.13 Agile & Scrum Management already seeded — skipping.")
+            return
+
+        today = now.date()
+        active_proj = Project.objects.filter(tenant=tenant, stage="active").order_by("id").first()
+        if not active_proj:
+            active_proj = Project.objects.filter(tenant=tenant).order_by("id").first()
+        if not active_proj:
+            return
+
+        second_proj = Project.objects.filter(tenant=tenant).exclude(id=active_proj.id).first() or active_proj
+
+        manager = (
+            active_proj.project_manager
+            or active_proj.created_by
+            or get_user_model().objects.filter(tenant=tenant, is_superuser=False).first()
+        )
+
+        with transaction.atomic():
+            # 1. Epics
+            epc1 = ProjectEpic(
+                tenant=tenant,
+                project=active_proj,
+                name="Customer Onboarding & Authentication",
+                summary="Unified SSO, OAuth 2.0 gateway, and responsive profile registration flows.",
+                status="completed",
+                owner=manager,
+                target_start=today - timedelta(days=60),
+                target_end=today - timedelta(days=35),
+                color_code="#10b981",
+            )
+            epc1.save()
+
+            epc2 = ProjectEpic(
+                tenant=tenant,
+                project=active_proj,
+                name="Core Transaction & Checkout Flow",
+                summary="Self-service ordering API, interactive cart UI, and payment gateway integration.",
+                status="in_progress",
+                owner=manager,
+                target_start=today - timedelta(days=35),
+                target_end=today + timedelta(days=25),
+                color_code="#3b82f6",
+            )
+            epc2.save()
+
+            epc3 = ProjectEpic(
+                tenant=tenant,
+                project=second_proj,
+                name="Self-Service Returns & Refunds",
+                summary="Customer return request portal, RMA workflow, and automated ledger refund reconciliation.",
+                status="draft",
+                owner=manager,
+                target_start=today + timedelta(days=20),
+                target_end=today + timedelta(days=75),
+                color_code="#8b5cf6",
+            )
+            epc3.save()
+
+            # 2. Releases
+            rel1 = ProjectRelease(
+                tenant=tenant,
+                project=active_proj,
+                name="v1.0-GA Core Platform Release",
+                version_tag="v1.0.0",
+                status="released",
+                release_date=today - timedelta(days=30),
+                released_at=now - timedelta(days=30),
+                released_by=manager,
+                release_notes="Initial General Availability release delivering customer authentication and order API foundations.",
+                feature_flags="AUTH_SSO=true, ORDER_API_V1=true, CART_V1=true",
+            )
+            rel1.save()
+
+            rel2 = ProjectRelease(
+                tenant=tenant,
+                project=active_proj,
+                name="v1.1-Beta Cart & Checkout Stream",
+                version_tag="v1.1.0-beta",
+                status="in_progress",
+                release_date=today + timedelta(days=25),
+                release_notes="Public beta introducing modernized shopping cart and checkout integrations.",
+                feature_flags="CART_STREAM=true, CHECKOUT_V2=false, PAYMENTS_SANDBOX=true",
+            )
+            rel2.save()
+
+            rel3 = ProjectRelease(
+                tenant=tenant,
+                project=second_proj,
+                name="v2.0-Alpha Customer Portal & Returns",
+                version_tag="v2.0.0-alpha",
+                status="unreleased",
+                release_date=today + timedelta(days=90),
+                release_notes="Major version release with self-service customer returns portal.",
+                feature_flags="RETURNS_PORTAL=false, AUTOMATED_REFUNDS=false",
+            )
+            rel3.save()
+
+            # 3. Sprints
+            spt1 = Sprint(
+                tenant=tenant,
+                project=active_proj,
+                name="Sprint 1 — Discovery & Authentication Spike",
+                goal="Establish requirements baseline and deliver operational SSO authentication spike.",
+                status="completed",
+                start_date=today - timedelta(days=60),
+                end_date=today - timedelta(days=46),
+                committed_points=34,
+                scrum_master=manager,
+                standup_notes="Sprint goal achieved 100%. Authentication spike integrated ahead of schedule.",
+                started_at=now - timedelta(days=60),
+                completed_at=now - timedelta(days=46),
+            )
+            spt1.save()
+
+            spt2 = Sprint(
+                tenant=tenant,
+                project=active_proj,
+                name="Sprint 2 — Order API & UX Wireframing",
+                goal="Design cart interface and build robust high-throughput order intake endpoints.",
+                status="completed",
+                start_date=today - timedelta(days=45),
+                end_date=today - timedelta(days=31),
+                committed_points=21,
+                scrum_master=manager,
+                standup_notes="Order API contracts signed off; UX design prototypes validated by client stakeholders.",
+                started_at=now - timedelta(days=45),
+                completed_at=now - timedelta(days=31),
+            )
+            spt2.save()
+
+            spt3 = Sprint(
+                tenant=tenant,
+                project=active_proj,
+                name="Sprint 3 — Cart Engine & Checkout Integration",
+                goal="Implement stateful cart engine and connect payment gateway checkout flow.",
+                status="active",
+                start_date=today - timedelta(days=14),
+                end_date=today + timedelta(days=14),
+                committed_points=34,
+                scrum_master=manager,
+                standup_notes="Daily standup: Checkout integration underway. 1 critical impediment resolved on SSL renewal.",
+                started_at=now - timedelta(days=14),
+            )
+            spt3.save()
+
+            spt4 = Sprint(
+                tenant=tenant,
+                project=active_proj,
+                name="Sprint 4 — Returns Module & Stabilization",
+                goal="Begin returns portal groundwork and perform end-to-end regression stabilization.",
+                status="planning",
+                start_date=today + timedelta(days=15),
+                end_date=today + timedelta(days=35),
+                committed_points=0,
+                scrum_master=manager,
+                standup_notes="Backlog grooming in progress. Story point estimates pending final team sizing.",
+            )
+            spt4.save()
+
+            # 4. Link existing tasks on active_proj to sprints, epics, releases, and story points
+            task_mapping = [
+                ("Requirements workshops", 8, spt1, epc1, rel1),
+                ("UX design: ordering", 13, spt1, epc1, rel1),
+                ("Technical spike: SSO", 13, spt1, epc1, rel1),
+                ("Order API", 21, spt2, epc2, rel1),
+                ("Cart UI", 13, spt3, epc2, rel2),
+                ("Checkout integration", 21, spt3, epc2, rel2),
+                ("Returns portal UI", 13, spt4, epc3, rel3),
+                ("Refund service hooks", 8, None, epc3, rel3),
+            ]
+
+            for tname, pts, sp, ep, rel in task_mapping:
+                t = ProjectTask.objects.filter(tenant=tenant, project=active_proj, name=tname).first()
+                if t:
+                    t.story_points = pts
+                    t.sprint = sp
+                    t.epic = ep
+                    t.release = rel
+                    t.save(update_fields=["story_points", "sprint", "epic", "release"])
+
+            # 5. Sprint Impediments
+            imp1 = SprintImpediment(
+                tenant=tenant,
+                sprint=spt3,
+                title="Payment gateway sandbox latency spikes",
+                description="Simulated checkout responses intermittently timing out during automated test sweeps.",
+                severity="high",
+                status="open",
+                owner=manager,
+                raised_by=manager,
+            )
+            imp1.save()
+
+            imp2 = SprintImpediment(
+                tenant=tenant,
+                sprint=spt3,
+                title="Third-party SSL certificate renewal pending",
+                description="Sandbox webhook callback endpoint SSL certificate expiring within 48 hours.",
+                severity="critical",
+                status="resolved",
+                owner=manager,
+                raised_by=manager,
+                resolved_at=now - timedelta(days=2),
+                resolution_notes="Renewed wildcard SSL certificate and verified TLS 1.3 handshake across all callbacks.",
+            )
+            imp2.save()
+
+            # 6. Sprint Retrospectives
+            ret1 = SprintRetrospective(
+                tenant=tenant,
+                sprint=spt1,
+                conducted_date=today - timedelta(days=45),
+                conducted_by=manager,
+                status="closed",
+                sentiment_score=Decimal("4.2"),
+                what_went_well="Strong team alignment on discovery goals. SSO technical spike delivered earlier than planned.",
+                what_needs_improvement="Spike acceptance criteria had slight ambiguity during mid-sprint review.",
+                action_items="Adopt formal spike contract template for upcoming technical proofs.",
+                closed_at=now - timedelta(days=45),
+            )
+            ret1.save()
+
+            ret2 = SprintRetrospective(
+                tenant=tenant,
+                sprint=spt2,
+                conducted_date=today - timedelta(days=30),
+                conducted_by=manager,
+                status="closed",
+                sentiment_score=Decimal("4.6"),
+                what_went_well="Order API delivered with 100% automated test coverage. Flawless stakeholder demo.",
+                what_needs_improvement="Deployment notifications between backend and UI devs were inconsistent.",
+                action_items="Configure automated CI/CD Slack notification bot on staging deployment completions.",
+                closed_at=now - timedelta(days=30),
+            )
+            ret2.save()
+
+            ret3 = SprintRetrospective(
+                tenant=tenant,
+                sprint=spt3,
+                conducted_date=today,
+                conducted_by=manager,
+                status="open",
+                sentiment_score=Decimal("3.8"),
+                what_went_well="Solid velocity on cart UI components and responsive checkout views.",
+                what_needs_improvement="Payment sandbox instability created testing delays.",
+                action_items="Escalate sandbox provider SLA and configure mock payment adapter for unit test suite.",
+            )
+            ret3.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.13 seeded: 4 sprints, 3 epics, 3 releases, 2 impediments, 3 retrospectives, updated agile tasks."))
 
 
     def _client(self, tenant):
