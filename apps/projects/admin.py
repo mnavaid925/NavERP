@@ -9,6 +9,8 @@ from .models import (
     BudgetRevision,
     Channel,
     ChannelMessage,
+    ClientApprovalRequest,
+    ClientPortalAccess,
     CostControlAccount,
     DeliverableInspection,
     DocumentShare,
@@ -25,6 +27,7 @@ from .models import (
     ProgramDependency,
     Project,
     ProjectBudgetLine,
+    ProjectClientInvoice,
     ProjectDocument,
     ProjectDocumentRevision,
     ProjectEpic,
@@ -52,13 +55,16 @@ from .models import (
     ScopeChangeRequest,
     ScopeItem,
     ScopeVerification,
+    SOWAmendment,
     Sprint,
     SprintImpediment,
     SprintRetrospective,
+    StatementOfWork,
     TaskBlock,
     TaskChecklistItem,
     TaskDependency,
     TimeActivityCode,
+    VendorHandoff,
 )
 
 
@@ -733,6 +739,62 @@ class SprintRetrospectiveAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "sprint", "conducted_by")
     search_fields = ("number", "what_went_well", "what_needs_improvement", "action_items")
     readonly_fields = ("number", "closed_at", "created_at", "updated_at")
+
+
+# --- 7.14 Client & External Collaboration -------------------------------------------------------
+@admin.register(ClientPortalAccess)
+class ClientPortalAccessAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "client_contact", "portal_user", "access_level", "is_active", "tenant")
+    list_filter = ("access_level", "is_active")
+    list_select_related = ("tenant", "project", "client_contact", "portal_user")
+    search_fields = ("number", "client_contact__name", "project__name", "notes")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ClientApprovalRequest)
+class ClientApprovalRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "deliverable_name", "status", "due_date", "signed_by_name", "signed_at", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "project", "assigned_contact", "document", "milestone")
+    search_fields = ("number", "deliverable_name", "review_notes", "client_feedback", "signed_by_name")
+    readonly_fields = ("number", "signed_at", "created_at", "updated_at")
+
+
+@admin.register(StatementOfWork)
+class StatementOfWorkAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "sow_code", "project", "client", "billing_type", "contract_value", "currency", "status", "tenant")
+    list_filter = ("billing_type", "status")
+    list_select_related = ("tenant", "project", "client", "currency")
+    search_fields = ("number", "title", "sow_code", "scope_summary")
+    readonly_fields = ("number", "activated_at", "activated_by", "created_at", "updated_at")
+
+
+@admin.register(SOWAmendment)
+class SOWAmendmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "sow", "amendment_number", "title", "effective_date", "value_change", "status", "tenant")
+    list_filter = ("status",)
+    list_select_related = ("tenant", "sow", "approved_by")
+    search_fields = ("number", "title", "revised_scope", "justification")
+    readonly_fields = ("number", "approved_at", "approved_by", "created_at", "updated_at")
+
+
+@admin.register(VendorHandoff)
+class VendorHandoffAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "vendor", "title", "handoff_date", "target_completion_date", "status", "scorecard_rating", "tenant")
+    list_filter = ("status", "scorecard_rating")
+    list_select_related = ("tenant", "project", "vendor", "task")
+    search_fields = ("number", "title", "deliverables_description", "performance_notes")
+    readonly_fields = ("number", "accepted_at", "accepted_by", "created_at", "updated_at")
+
+
+@admin.register(ProjectClientInvoice)
+class ProjectClientInvoiceAdmin(admin.ModelAdmin):
+    list_display = ("number", "project", "sow", "billing_type", "billing_date", "due_date", "amount", "tax_amount", "status", "accounting_invoice", "tenant")
+    list_filter = ("billing_type", "status")
+    list_select_related = ("tenant", "project", "sow", "milestone", "currency", "accounting_invoice")
+    search_fields = ("number", "notes")
+    readonly_fields = ("number", "invoiced_at", "created_at", "updated_at")
+
 
 
 
