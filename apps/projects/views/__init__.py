@@ -545,5 +545,50 @@ from .AgileScrumManagement.Sprints import (  # noqa: F401
 )
 from .AgileScrumManagement.VelocityReport import velocity_report  # noqa: F401
 
+# --- 7.14 Client & External Collaboration -------------------------------------------------------
+from .ClientExternalCollaboration.ClientPortals import (  # noqa: F401
+    cpa_create,
+    cpa_delete,
+    cpa_detail,
+    cpa_edit,
+    cpa_list,
+)
+from .ClientExternalCollaboration.ClientFeedbacks import (  # noqa: F401
+    cfb_approve,
+    cfb_create,
+    cfb_delete,
+    cfb_detail,
+    cfb_edit,
+    cfb_list,
+    cfb_reject,
+)
+from .ClientExternalCollaboration.StatementOfWorks import (  # noqa: F401
+    sow_activate,
+    sow_amendment_create,
+    sow_create,
+    sow_delete,
+    sow_detail,
+    sow_edit,
+    sow_list,
+)
+from .ClientExternalCollaboration.VendorHandoffs import (  # noqa: F401
+    vhd_accept,
+    vhd_create,
+    vhd_delete,
+    vhd_detail,
+    vhd_edit,
+    vhd_list,
+    vhd_reject,
+)
+from .ClientExternalCollaboration.ClientInvoices import (  # noqa: F401
+    pci_create,
+    pci_delete,
+    pci_detail,
+    pci_edit,
+    pci_generate_invoice,
+    pci_list,
+)
+
+
 
 
