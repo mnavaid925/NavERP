@@ -36,10 +36,10 @@ description: >-
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
   library (usage counter + featured shelf, no FileField), and the three computed pages (repository
-  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar); and 7.12 Portfolio & Program Management: multi-project portfolios [PRT-] with strategic themes and budget envelopes, sub-portfolio programs [PGM-] with target dates and budget targets, portfolio investment scoring [PIN-] with 4-criterion weighted models (strategic, financial, risk, capacity) and decision verbs (fund, reject, defer), cross-project program dependencies [PDEP-] with lead/lag days and clear/reopen verbs, and the executive portfolio dashboard (pfm_dashboard) with scatter heat maps and demand pipeline funnel).
+  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar); and 7.12 Portfolio & Program Management: multi-project portfolios [PRT-] with strategic themes and budget envelopes, sub-portfolio programs [PGM-] with target dates and budget targets, portfolio investment scoring [PIN-] with 4-criterion weighted models (strategic, financial, risk, capacity) and decision verbs (fund, reject, defer), cross-project program dependencies [PDEP-] with lead/lag days and clear/reopen verbs, and the executive portfolio dashboard (pfm_dashboard) with scatter heat maps and demand pipeline funnel; and 7.13 Agile & Scrum Management: sprints [SPT-] with start/complete/cancel lifecycle verbs, project epics [EPC-] with derived progress rollups, project releases [REL-] with version tags and publish verb, sprint impediments [IMP-] with severity bands and resolve verb, sprint retrospectives [RET-] with sentiment score and open/close verbs, in-place ProjectTask agile extensions (story_points, sprint, epic, release, is_in_backlog), and the four computed workbenches: sprint backlog grooming (sprint_backlog), active sprint execution burndown (sprint_execution), release roadmap (release_roadmap), and team velocity & health report (velocity_report)).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.12), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.13), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -51,13 +51,14 @@ description: >-
   ProjectNotification/
   ProjectFolder/ProjectDocument/ProjectDocumentRevision/DocumentTemplate/KnowledgeEntry/
   TimeActivityCode/OvertimeRule/ProjectOvertimeRecord/
-  Portfolio/Program/PortfolioInvestment/ProgramDependency,
+  Portfolio/Program/PortfolioInvestment/ProgramDependency/
+  Sprint/ProjectEpic/ProjectRelease/SprintImpediment/SprintRetrospective,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12.** 7.13–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13.** 7.14–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -73,7 +74,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), and `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), and `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1744,7 +1745,47 @@ Covers multi-project portfolio governance, program decomposition, 4-criterion in
 - **Program**: `pgm_list` (`programs/`), `pgm_create` (`programs/add/`), `pgm_detail` (`programs/<int:pk>/`), `pgm_edit` (`programs/<int:pk>/edit/`), `pgm_delete` (`programs/<int:pk>/delete/`).
 - **Investment**: `pin_list` (`investments/`), `pin_create` (`investments/add/`), `pin_detail` (`investments/<int:pk>/`), `pin_edit` (`investments/<int:pk>/edit/`), `pin_delete` (`investments/<int:pk>/delete/`), `pin_fund` (`investments/<int:pk>/fund/`), `pin_reject` (`investments/<int:pk>/reject/`), `pin_defer` (`investments/<int:pk>/defer/`).
 - **Dependency**: `pdep_list` (`program-dependencies/`), `pdep_create` (`program-dependencies/add/`), `pdep_detail` (`program-dependencies/<int:pk>/`), `pdep_edit` (`program-dependencies/<int:pk>/edit/`), `pdep_delete` (`program-dependencies/<int:pk>/delete/`), `pdep_clear` (`program-dependencies/<int:pk>/clear/`), `pdep_reopen` (`program-dependencies/<int:pk>/reopen/`).
-- **Dashboard**: `pfm_dashboard` (`portfolio-dashboard/`): Multi-project health summary, capacity & pipeline intake funnel (from 7.1 requests), 4-quadrant strategic alignment heat map matrix, executive committee investment ranking table.
+#### Dashboard: `pfm_dashboard` (`portfolio-dashboard/`): Multi-project health summary, capacity & pipeline intake funnel (from 7.1 requests), 4-quadrant strategic alignment heat map matrix, executive committee investment ranking table.
+
+```python
+"7.13": {
+    "Sprint Planning & Backlog Grooming":    "projects:sprint_backlog",
+    "Sprint Execution & Daily Standups":     "projects:sprint_execution",
+    "Release & Version Planning":            "projects:rel_list",
+    "Epic & Feature Management":             "projects:epc_list",
+    "Retrospectives & Team Health":          "projects:ret_list",
+    # Extra live leaves:
+    "Sprint Register":                       "projects:spt_list",
+    "Impediment Register":                   "projects:imp_list",
+    "Velocity & Health":                     "projects:velocity_report",
+    "Release Roadmap":                       "projects:release_roadmap",
+}
+```
+Bullet 1 maps to the `sprint_backlog` grooming workbench; bullet 2 maps to the `sprint_execution` active sprint workbench with burndown chart, daily standup notes, and impediments; bullet 3 maps to `rel_list` release register; bullet 4 maps to `epc_list` epic hierarchy register; bullet 5 maps to `ret_list` sprint retrospective board. Extra live leaves provide direct access to `spt_list`, `imp_list`, `velocity_report`, and `release_roadmap`.
+
+### 7.13 Agile & Scrum Management — Reference
+
+Covers sprint planning & grooming, sprint execution with burndown & daily standups, release & version planning, epic hierarchy with progress rollups, sprint retrospectives, and velocity reporting:
+
+#### Models (`apps/projects/models/AgileScrumManagement/` & in-place extensions)
+- **`ProjectTask` Agile Extensions** (`ProjectTasks.py`): In-place extensions on the canonical task model. Fields: `story_points` (PositiveSmallIntegerField, 0-100), `sprint` (FK `Sprint`, null=True), `epic` (FK `ProjectEpic`, null=True), `release` (FK `ProjectRelease`, null=True). Property: `is_in_backlog` (True when `sprint_id is None`).
+- **`Sprint`** [`SPT-`] (`Sprints.py`): Timeboxed sprint iteration container. Fields: `project`, `name`, `goal`, `status` (planning/active/completed/cancelled), `start_date`, `end_date`, `committed_points`, `standup_notes`. Properties: `total_points`, `completed_points`, `remaining_points`, `completion_rate`, `task_count`, `completed_task_count`, `is_overdue`. Verbs: `spt_start`, `spt_complete`, `spt_cancel`.
+- **`ProjectEpic`** [`EPC-`] (`ProjectEpics.py`): High-level feature/epic hierarchy container. Fields: `project`, `name`, `summary`, `status` (planned/in_progress/completed/cancelled), `owner`, `target_start`, `target_end`, `color_code`. Properties: `total_points`, `completed_points`, `progress_percent`, `task_count`, `done_task_count`.
+- **`ProjectRelease`** [`REL-`] (`ProjectReleases.py`): Release train and version deploy tracker. Fields: `project`, `name`, `version_tag`, `status` (unreleased/in_progress/released/archived), `release_date`, `release_notes`, `feature_flags`, `released_at`, `released_by`. Properties: `total_stories`, `completed_stories`, `progress_percent`, `is_overdue`. Verb: `rel_publish`.
+- **`SprintImpediment`** [`IMP-`] (`SprintImpediments.py`): Team blocker and impediment tracker. Fields: `sprint`, `title`, `description`, `severity` (low/medium/high/critical), `status` (open/in_progress/resolved), `owner`, `raised_by`, `resolved_at`, `resolution_notes`. Property: `is_active`. Verb: `imp_resolve`.
+- **`SprintRetrospective`** [`RET-`] (`SprintRetrospectives.py`): Post-sprint review & sentiment survey. Fields: `sprint`, `conducted_date`, `conducted_by`, `status` (draft/open/closed), `sentiment_score` (Decimal 1.0-5.0), `what_went_well`, `what_needs_improvement`, `action_items`, `closed_at`. Verbs: `ret_open`, `ret_close`.
+
+#### Views & Routes (`apps/projects/views/AgileScrumManagement/`, `apps/projects/urls/AgileScrumManagement/`)
+- **Sprint**: `spt_list` (`agile/sprints/`), `spt_create` (`agile/sprints/add/`), `spt_detail` (`agile/sprints/<int:pk>/`), `spt_edit` (`agile/sprints/<int:pk>/edit/`), `spt_delete` (`agile/sprints/<int:pk>/delete/`), `spt_start` (`agile/sprints/<int:pk>/start/`), `spt_complete` (`agile/sprints/<int:pk>/complete/`), `spt_cancel` (`agile/sprints/<int:pk>/cancel/`).
+- **ProjectEpic**: `epc_list` (`agile/epics/`), `epc_create` (`agile/epics/add/`), `epc_detail` (`agile/epics/<int:pk>/`), `epc_edit` (`agile/epics/<int:pk>/edit/`), `epc_delete` (`agile/epics/<int:pk>/delete/`).
+- **ProjectRelease**: `rel_list` (`agile/releases/`), `rel_create` (`agile/releases/add/`), `rel_detail` (`agile/releases/<int:pk>/`), `rel_edit` (`agile/releases/<int:pk>/edit/`), `rel_delete` (`agile/releases/<int:pk>/delete/`), `rel_publish` (`agile/releases/<int:pk>/publish/`).
+- **SprintImpediment**: `imp_list` (`agile/impediments/`), `imp_create` (`agile/impediments/add/`), `imp_detail` (`agile/impediments/<int:pk>/`), `imp_edit` (`agile/impediments/<int:pk>/edit/`), `imp_delete` (`agile/impediments/<int:pk>/delete/`), `imp_resolve` (`agile/impediments/<int:pk>/resolve/`).
+- **SprintRetrospective**: `ret_list` (`agile/retrospectives/`), `ret_create` (`agile/retrospectives/add/`), `ret_detail` (`agile/retrospectives/<int:pk>/`), `ret_edit` (`agile/retrospectives/<int:pk>/edit/`), `ret_delete` (`agile/retrospectives/<int:pk>/delete/`), `ret_open` (`agile/retrospectives/<int:pk>/open/`), `ret_close` (`agile/retrospectives/<int:pk>/close/`).
+- **Computed Workbenches**:
+  - `sprint_backlog` (`agile/backlog/`): Backlog grooming workbench with project filter, sprint allocation, story point assignment, and epic breakdown.
+  - `sprint_execution` (`agile/execution/`): Active sprint dashboard featuring day-by-day burndown chart (ideal vs actual points), standup notes logger, and open blockers panel.
+  - `release_roadmap` (`agile/roadmap/`): Release calendar and feature delivery timeline across unreleased, in-progress, and released version trains.
+  - `velocity_report` (`agile/velocity/`): Historical sprint velocity analysis (points committed vs completed), rolling velocity average, and team sentiment trend.
 
 ## Common tasks
 
