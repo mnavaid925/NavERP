@@ -160,9 +160,8 @@ def pci_generate_invoice(request, pk):
 
         write_audit_log(
             request.user,
-            action="bill",
-            model_name="ProjectClientInvoice",
-            object_id=pci.pk,
+            pci,
+            "bill",
             changes={"status": "invoiced", "accounting_invoice": acc_invoice.number},
         )
 
