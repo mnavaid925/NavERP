@@ -805,32 +805,32 @@ Six lanes, **53 distinct findings** after dedupe: **5 Critical, 22 Important, 26
 
 ### Minor
 
-- [ ] **M1** — `LIVE_STATUSES`/`OPEN_STATUSES`/`is_live` have no reader, yet the comment asserts the register and the retention board both use them. *(L1-M1.)*
-- [ ] **M2** — The register's archive lens labels its empty value **"Live register"**, but the empty value applies no `is_archived` filter, so archived rows appear under that label. *(L1-M2; lane 3 adds that the retention tile's "live" is a different set.)*
-- [ ] **M3** — The claim that a checked-out parent refuses an upload **in the model layer** is stated in three places (the revision docstring, `SKILL.md`, the todo plan); the only implementation is the form. *(L1-M3 + L2-M5.)*
-- [ ] **M4** — A **fileless** standard can be created although the plan says the file is required on create and the boundary ruling keeps prose in `KnowledgeEntry`; `_docmgt` itself ships 8 of 16 standards without a file. *(L1-M4.)*
-- [ ] **M5** — On edit the folder form's `parent` queryset excludes only `self`, not the subtree, although the plan pins "self + descendants" — the user only learns after submitting. *(L1-M5; the UI half of C2.)*
-- [ ] **M6** — `ProjectFolder.status_css` and `ProjectDocumentRevision.is_editable` have no reader. *(L2-M2.)*
-- [ ] **M7** — The Run's idempotency is absolute only while the reminders are **unread** (the dedupe key includes `is_read=False`), but the docstring and the page copy state it without that condition. *(L2-M1; reproduced.)*
-- [ ] **M8** — `_docmgt`'s docstring says **25 revisions** (two places); the block mints **23**. *(L2-M3; verified.)*
-- [ ] **M9** — `DocumentTemplate.document_type` has **no `choices`**, so "the same vocabulary as `ProjectDocument`" is unenforced; and `dtm_list` declares a `document_type` filter **no control sends**. *(L2-M4.)*
-- [ ] **M10** — The retention board's own parenthetical names "held rows, archived rows", but only the due rows are rendered — the two states are figures with no list and no lens link. *(L2-M6.)*
-- [ ] **M11** — `ProjectDocument.folder`'s comment cites "the 6.19 container rule"; 6.19 has no folder/container concept. *(L2-M7; verified.)*
-- [ ] **M12** — `pdv_upload`'s GET page is **orphaned** — no template links to it, so the standalone form is reachable only by typing the URL. *(L3-M1.)*
-- [ ] **M13** — The register always offers Edit; the detail page hides it for archived rows; and nothing refuses it — so the two siblings disagree and the server is the one that is permissive. *(L3-M2.)*
-- [ ] **M14** — `pdm_delete`'s **"Archive it instead"** button links to the retention board, which has no archive action at all. *(L3-M3.)*
-- [ ] **M15** — "leaves the **'start from this' list**" names a list that does not exist; `dtm_detail` states the opposite ruling. *(L3-M4.)*
-- [ ] **M16** — The knowledge search empty state prints the **raw** `kind_filter` value ("within the lesson_learned kind"). *(L3-M5.)*
-- [ ] **M17** — `pdv_compare`, `kne_detail` and `dtm_detail` have no `select_related` (compare = 15 queries where 2 would do; `kne_detail`/`dtm_detail` 3 FKs each). *(L4-M1.)*
-- [ ] **M18** — `pdm_detail`'s `obj.current_revision` is a `.filter()` and so **bypasses the already-loaded `revisions`** — the recorded house class (7.8's 31→13). *(L4-M2.)*
-- [ ] **M19** — Index audit: `pfd_tnt_archived_idx` has **no reader**; `classification` and `ProjectDocumentRevision.is_approved` are **unindexed** although each is a live lens. *(L4-M3; verified.)*
-- [ ] **M20** — `ancestor_chain()` costs **1 query per ancestor level** and the model imposes **no depth cap**, so a deep chain raises `RecursionError` on `pfd_list`. *(L4-M4.)*
-- [ ] **M21** — Two comments measurement contradicts: "the sweep runs **at most once** per page render" (it is twice), and `kne_tnt_feat_idx` "serves the shelf query" (it serves only the filtered facet). *(L4-M5.)*
-- [ ] **M22** — `doc_retention_run` opens a `transaction.atomic()` **per row** (~3 statements + 2 transaction round-trips per document). *(L4-M6; code-derived, not measured.)*
-- [ ] **M23** — Both upload surfaces render `file`/`change_note`/non-field errors but **never `form.document.errors`**, so every `document`-field refusal is invisible. *(L5-M1.)*
-- [ ] **M24** — An **archived** document accepts a new revision and an approval and stays Archived. *(L5-M2.)*
-- [ ] **M25** — `pdm_reindex` — the verb advertised as the repair — can **wipe** a good search copy when the file is transiently unreachable. *(L5-M3.)*
-- [ ] **M26** — `pdm_hold` accepts an **empty reason**, and the audit row then records `"to": "held"`. *(L6-M1.)*
+- [x] fixed **M1** — `LIVE_STATUSES`/`OPEN_STATUSES`/`is_live` have no reader, yet the comment asserts the register and the retention board both use them. *(L1-M1.)*
+- [x] fixed **M2** — The register's archive lens labels its empty value **"Live register"**, but the empty value applies no `is_archived` filter, so archived rows appear under that label. *(L1-M2; lane 3 adds that the retention tile's "live" is a different set.)*
+- [x] fixed **M3** — The claim that a checked-out parent refuses an upload **in the model layer** is stated in three places (the revision docstring, `SKILL.md`, the todo plan); the only implementation is the form. *(L1-M3 + L2-M5.)*
+- [x] fixed **M4** — A **fileless** standard can be created although the plan says the file is required on create and the boundary ruling keeps prose in `KnowledgeEntry`; `_docmgt` itself ships 8 of 16 standards without a file. *(L1-M4.)*
+- [x] fixed **M5** — On edit the folder form's `parent` queryset excludes only `self`, not the subtree, although the plan pins "self + descendants" — the user only learns after submitting. *(L1-M5; the UI half of C2.)*
+- [x] fixed **M6** — `ProjectFolder.status_css` and `ProjectDocumentRevision.is_editable` have no reader. *(L2-M2.)*
+- [x] fixed **M7** — The Run's idempotency is absolute only while the reminders are **unread** (the dedupe key includes `is_read=False`), but the docstring and the page copy state it without that condition. *(L2-M1; reproduced.)*
+- [x] fixed **M8** — `_docmgt`'s docstring says **25 revisions** (two places); the block mints **23**. *(L2-M3; verified.)*
+- [x] fixed **M9** — `DocumentTemplate.document_type` has **no `choices`**, so "the same vocabulary as `ProjectDocument`" is unenforced; and `dtm_list` declares a `document_type` filter **no control sends**. *(L2-M4.)*
+- [x] fixed **M10** — The retention board's own parenthetical names "held rows, archived rows", but only the due rows are rendered — the two states are figures with no list and no lens link. *(L2-M6.)*
+- [x] fixed **M11** — `ProjectDocument.folder`'s comment cites "the 6.19 container rule"; 6.19 has no folder/container concept. *(L2-M7; verified.)*
+- [x] fixed **M12** — `pdv_upload`'s GET page is **orphaned** — no template links to it, so the standalone form is reachable only by typing the URL. *(L3-M1.)*
+- [x] fixed **M13** — The register always offers Edit; the detail page hides it for archived rows; and nothing refuses it — so the two siblings disagree and the server is the one that is permissive. *(L3-M2.)*
+- [x] fixed **M14** — `pdm_delete`'s **"Archive it instead"** button links to the retention board, which has no archive action at all. *(L3-M3.)*
+- [x] fixed **M15** — "leaves the **'start from this' list**" names a list that does not exist; `dtm_detail` states the opposite ruling. *(L3-M4.)*
+- [x] fixed **M16** — The knowledge search empty state prints the **raw** `kind_filter` value ("within the lesson_learned kind"). *(L3-M5.)*
+- [x] fixed **M17** — `pdv_compare`, `kne_detail` and `dtm_detail` have no `select_related` (compare = 15 queries where 2 would do; `kne_detail`/`dtm_detail` 3 FKs each). *(L4-M1.)*
+- [x] fixed **M18** — `pdm_detail`'s `obj.current_revision` is a `.filter()` and so **bypasses the already-loaded `revisions`** — the recorded house class (7.8's 31→13). *(L4-M2.)*
+- [x] fixed **M19** — Index audit: `pfd_tnt_archived_idx` has **no reader**; `classification` and `ProjectDocumentRevision.is_approved` are **unindexed** although each is a live lens. *(L4-M3; verified.)*
+- [x] fixed **M20** — `ancestor_chain()` costs **1 query per ancestor level** and the model imposes **no depth cap**, so a deep chain raises `RecursionError` on `pfd_list`. *(L4-M4.)*
+- [x] fixed **M21** — Two comments measurement contradicts: "the sweep runs **at most once** per page render" (it is twice), and `kne_tnt_feat_idx` "serves the shelf query" (it serves only the filtered facet). *(L4-M5.)*
+- [x] fixed **M22** — `doc_retention_run` opens a `transaction.atomic()` **per row** (~3 statements + 2 transaction round-trips per document). *(L4-M6; code-derived, not measured.)*
+- [x] fixed **M23** — Both upload surfaces render `file`/`change_note`/non-field errors but **never `form.document.errors`**, so every `document`-field refusal is invisible. *(L5-M1.)*
+- [x] fixed **M24** — An **archived** document accepts a new revision and an approval and stays Archived. *(L5-M2.)*
+- [x] fixed **M25** — `pdm_reindex` — the verb advertised as the repair — can **wipe** a good search copy when the file is transiently unreachable. *(L5-M3.)*
+- [x] fixed **M26** — `pdm_hold` accepts an **empty reason**, and the audit row then records `"to": "held"`. *(L6-M1.)*
 
 ### Recorded no-action (spec-pinned or deliberate — NOT findings)
 
