@@ -3904,40 +3904,57 @@ class Command(BaseCommand):
         inv2 = None
         inv3 = None
         try:
-            from apps.accounting.models import Invoice
+            from apps.accounting.models import Invoice, InvoiceLine
             inv1 = Invoice.objects.create(
                 tenant=tenant,
                 party=client_party,
                 issue_date=today - timedelta(days=25),
                 due_date=today + timedelta(days=5),
                 currency=currency,
-                total_amount=Decimal("28000.00"),
-                balance_due=Decimal("28000.00"),
                 status="sent",
                 notes="Project monthly billing cycle run PBR-0001",
             )
+            InvoiceLine.objects.create(
+                invoice=inv1,
+                description="Consulting Services",
+                quantity=Decimal("1.00"),
+                unit_price=Decimal("28000.00"),
+            )
+            inv1.recalc_totals()
+
             inv2 = Invoice.objects.create(
                 tenant=tenant,
                 party=client_party,
                 issue_date=today - timedelta(days=45),
                 due_date=today - timedelta(days=15),
                 currency=currency,
-                total_amount=Decimal("15500.00"),
-                balance_due=Decimal("15500.00"),
                 status="sent",
                 notes="Architecture baseline milestone invoice",
             )
+            InvoiceLine.objects.create(
+                invoice=inv2,
+                description="Architecture Milestone",
+                quantity=Decimal("1.00"),
+                unit_price=Decimal("15500.00"),
+            )
+            inv2.recalc_totals()
+
             inv3 = Invoice.objects.create(
                 tenant=tenant,
                 party=client_party,
                 issue_date=today - timedelta(days=75),
                 due_date=today - timedelta(days=45),
                 currency=currency,
-                total_amount=Decimal("22000.00"),
-                balance_due=Decimal("22000.00"),
                 status="sent",
                 notes="Discovery deliverables & technical prototype",
             )
+            InvoiceLine.objects.create(
+                invoice=inv3,
+                description="Discovery & Prototype",
+                quantity=Decimal("1.00"),
+                unit_price=Decimal("22000.00"),
+            )
+            inv3.recalc_totals()
         except Exception:
             pass
 
