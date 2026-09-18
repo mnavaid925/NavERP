@@ -36,10 +36,10 @@ description: >-
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
   library (usage counter + featured shelf, no FileField), and the three computed pages (repository
-  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar)).
+  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar); and 7.12 Portfolio & Program Management: multi-project portfolios [PRT-] with strategic themes and budget envelopes, sub-portfolio programs [PGM-] with target dates and budget targets, portfolio investment scoring [PIN-] with 4-criterion weighted models (strategic, financial, risk, capacity) and decision verbs (fund, reject, defer), cross-project program dependencies [PDEP-] with lead/lag days and clear/reopen verbs, and the executive portfolio dashboard (pfm_dashboard) with scatter heat maps and demand pipeline funnel).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.10), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.12), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -49,13 +49,15 @@ description: >-
   TaskChecklistItem/TaskBlock/
   Channel/ChannelMessage/DocumentShare/Meeting/MeetingAgendaItem/MeetingActionItem/
   ProjectNotification/
-  ProjectFolder/ProjectDocument/ProjectDocumentRevision/DocumentTemplate/KnowledgeEntry,
+  ProjectFolder/ProjectDocument/ProjectDocumentRevision/DocumentTemplate/KnowledgeEntry/
+  TimeActivityCode/OvertimeRule/ProjectOvertimeRecord/
+  Portfolio/Program/PortfolioInvestment/ProgramDependency,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11.** 7.12–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12.** 7.13–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -71,7 +73,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), and `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), and `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1710,6 +1712,39 @@ document's detail page, where upload/approve/restore are its verbs — and it is
 (redlining is 13.2's). Bullet 5 is the one computed page of the five. `kne_search` and
 `doc_repository` are **lenses**, not bullets, and each has a justification comment in
 `navigation.py` saying so.
+
+```python
+"7.12": {
+    "Portfolio Dashboard & Heat Maps":       "projects:pfm_dashboard",
+    "Program Dependency Mapping":            "projects:pdep_list",
+    "Strategic Alignment & Scoring":         "projects:pin_list",
+    "Capacity & Pipeline Planning":          "projects:pfm_dashboard#pipeline",
+    "Portfolio Reporting & Governance":      "projects:prt_list",
+    # Extra live leaves:
+    "Portfolios":                            "projects:prt_list",
+    "Programs":                              "projects:pgm_list",
+    "Investments & Scoring":                 "projects:pin_list",
+    "Program Dependencies":                  "projects:pdep_list",
+}
+```
+Bullet 1 maps to the executive `pfm_dashboard` with bubble scatter heat maps; bullet 2 maps to cross-project `pdep_list` register; bullet 3 maps to the multi-criteria `pin_list` scoring register; bullet 4 maps to the computed pipeline funnel over 7.1 intake requests (`pfm_dashboard#pipeline`); bullet 5 maps to `prt_list` governance overview and investment funding decisions.
+
+### 7.12 Portfolio & Program Management — Reference
+
+Covers multi-project portfolio governance, program decomposition, 4-criterion investment scoring, cross-project dependencies, and executive portfolio reporting:
+
+#### Models (`apps/projects/models/PortfolioProgramManagement/`)
+- **`Portfolio`** [`PRT-`] (`Portfolios.py`): Top-level strategic investment container. Fields: `name`, `code`, `description`, `status` (draft/active/on_hold/closed/archived), `strategic_theme` (growth/efficiency/transformation/compliance/innovation/customer_experience), `budget_envelope`, `currency`, `start_date`, `end_date`, `owner`, `is_active`. Properties: `total_programs`, `total_investments`, `allocated_budget`, `budget_variance`.
+- **`Program`** [`PGM-`] (`Programs.py`): Sub-portfolio coordinated delivery cluster. Fields: `portfolio`, `name`, `code`, `description`, `manager`, `status` (proposed/planning/active/on_hold/completed/cancelled), `target_start_date`, `target_end_date`, `objectives`, `budget_target`. Properties: `total_projects`, `allocated_budget`. Unique on `(tenant, portfolio, name)`.
+- **`PortfolioInvestment`** [`PIN-`] (`PortfolioInvestments.py`): Investment scoring & governance link between `Portfolio` and `Project`. Fields: `portfolio`, `project`, `program` (optional), `status` (proposed/under_review/funded/deferred/rejected), `strategic_fit` (0-100), `financial_return` (0-100), `delivery_risk` (0-100), `capacity_fit` (0-100), criterion weights (`weight_strategic`, `weight_financial`, `weight_risk`, `weight_capacity`), `allocated_budget`, `approved_by`, `approved_at`, `decision_notes`. Property: `weighted_score` (computed 0-100). Verbs: `pin_fund`, `pin_reject`, `pin_defer`.
+- **`ProgramDependency`** [`PDEP-`] (`ProgramDependencies.py`): Cross-project inter-dependency edge. Fields: `source_project`, `target_project`, `program` (optional), `dependency_type` (finish_to_start/start_to_start/shared_resource/deliverable_handover/governance_gate), `criticality` (low/medium/high/critical), `status` (open/mitigated/cleared/waived), `lead_lag_days`, `description`, `owner`, `cleared_at`. Verbs: `pdep_clear`, `pdep_reopen`.
+
+#### Views & Routes (`apps/projects/views/PortfolioProgramManagement/`, `apps/projects/urls/PortfolioProgramManagement/`)
+- **Portfolio**: `prt_list` (`portfolios/`), `prt_create` (`portfolios/add/`), `prt_detail` (`portfolios/<int:pk>/`), `prt_edit` (`portfolios/<int:pk>/edit/`), `prt_delete` (`portfolios/<int:pk>/delete/`).
+- **Program**: `pgm_list` (`programs/`), `pgm_create` (`programs/add/`), `pgm_detail` (`programs/<int:pk>/`), `pgm_edit` (`programs/<int:pk>/edit/`), `pgm_delete` (`programs/<int:pk>/delete/`).
+- **Investment**: `pin_list` (`investments/`), `pin_create` (`investments/add/`), `pin_detail` (`investments/<int:pk>/`), `pin_edit` (`investments/<int:pk>/edit/`), `pin_delete` (`investments/<int:pk>/delete/`), `pin_fund` (`investments/<int:pk>/fund/`), `pin_reject` (`investments/<int:pk>/reject/`), `pin_defer` (`investments/<int:pk>/defer/`).
+- **Dependency**: `pdep_list` (`program-dependencies/`), `pdep_create` (`program-dependencies/add/`), `pdep_detail` (`program-dependencies/<int:pk>/`), `pdep_edit` (`program-dependencies/<int:pk>/edit/`), `pdep_delete` (`program-dependencies/<int:pk>/delete/`), `pdep_clear` (`program-dependencies/<int:pk>/clear/`), `pdep_reopen` (`program-dependencies/<int:pk>/reopen/`).
+- **Dashboard**: `pfm_dashboard` (`portfolio-dashboard/`): Multi-project health summary, capacity & pipeline intake funnel (from 7.1 requests), 4-quadrant strategic alignment heat map matrix, executive committee investment ranking table.
 
 ## Common tasks
 
