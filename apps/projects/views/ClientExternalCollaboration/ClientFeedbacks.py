@@ -1,6 +1,7 @@
 """Projects 7.14 Client & External Collaboration — ClientApprovalRequest views.
 """
 from django.contrib import messages
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -49,17 +50,18 @@ def cfb_create(request):
     if request.method == "POST":
         form = ClientApprovalRequestForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            req_obj = form.save(commit=False)
-            req_obj.tenant = request.tenant
-            if not req_obj.requested_by:
-                req_obj.requested_by = request.user
-            req_obj.save()
-            write_audit_log(
-                request.user,
-                req_obj,
-                "create",
-                changes={"number": req_obj.number, "deliverable": req_obj.deliverable_name},
-            )
+            with transaction.atomic():
+                req_obj = form.save(commit=False)
+                req_obj.tenant = request.tenant
+                if not req_obj.requested_by:
+                    req_obj.requested_by = request.user
+                req_obj.save()
+                write_audit_log(
+                    request.user,
+                    req_obj,
+                    "create",
+                    changes={"number": req_obj.number, "deliverable": req_obj.deliverable_name},
+                )
             messages.success(request, f"Client approval request {req_obj.number} created.")
             return redirect("projects:cfb_detail", pk=req_obj.pk)
     else:
@@ -135,17 +137,18 @@ def cfb_approve(request, pk):
     if not signer:
         signer = request.user.get_full_name() or request.user.username
 
-    approval.status = "approved"
-    approval.signed_by_name = signer
-    approval.signed_at = timezone.now()
-    approval.save()
+    with transaction.atomic():
+        approval.status = "approved"
+        approval.signed_by_name = signer
+        approval.signed_at = timezone.now()
+        approval.save()
 
-    write_audit_log(
-        request.user,
-        approval,
-        "approve",
-        changes={"status": "approved", "signed_by": signer},
-    )
+        write_audit_log(
+            request.user,
+            approval,
+            "approve",
+            changes={"status": "approved", "signed_by": signer},
+        )
     messages.success(request, f"Approval request {approval.number} approved successfully.")
     return redirect("projects:cfb_detail", pk=pk)
 
@@ -163,15 +166,16 @@ def cfb_reject(request, pk):
         return redirect("projects:cfb_detail", pk=pk)
 
     reason = request.POST.get("rejection_reason", "").strip()
-    approval.status = "rejected"
-    approval.rejection_reason = reason
-    approval.save()
+    with transaction.atomic():
+        approval.status = "rejected"
+        approval.rejection_reason = reason
+        approval.save()
 
-    write_audit_log(
-        request.user,
-        approval,
-        "reject",
-        changes={"status": "rejected", "reason": reason},
-    )
+        write_audit_log(
+            request.user,
+            approval,
+            "reject",
+            changes={"status": "rejected", "reason": reason},
+        )
     messages.success(request, f"Approval request {approval.number} marked as rejected.")
     return redirect("projects:cfb_detail", pk=pk)
