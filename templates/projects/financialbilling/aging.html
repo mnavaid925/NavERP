@@ -145,16 +145,20 @@
               {% if row.b_over_90 > 0 %}${{ row.b_over_90 }}{% else %}—{% endif %}
             </td>
             <td style="padding:0.75rem; text-align:center;">
-              {% if row.stage == 'promise_to_pay' %}
+              {% if row.stage == 'current' %}
                 <span class="badge badge-info">{{ row.stage_display }}</span>
               {% elif row.stage == 'reminder_sent' %}
-                <span class="badge badge-amber">{{ row.stage_display }}</span>
-              {% elif row.stage == 'escalated' %}
-                <span class="badge badge-red">{{ row.stage_display }}</span>
-              {% elif row.stage == 'disputed' %}
                 <span class="badge badge-slate">{{ row.stage_display }}</span>
-              {% elif row.stage == 'legal_hold' %}
+              {% elif row.stage == 'overdue' %}
+                <span class="badge badge-amber">{{ row.stage_display }}</span>
+              {% elif row.stage == 'promise_to_pay' %}
+                <span class="badge badge-info">{{ row.stage_display }}</span>
+              {% elif row.stage == 'in_dispute' %}
                 <span class="badge badge-red">{{ row.stage_display }}</span>
+              {% elif row.stage == 'settled' %}
+                <span class="badge badge-green">{{ row.stage_display }}</span>
+              {% elif row.stage == 'written_off' %}
+                <span class="badge badge-muted">{{ row.stage_display }}</span>
               {% else %}
                 <span class="badge badge-muted">{{ row.stage_display }}</span>
               {% endif %}
