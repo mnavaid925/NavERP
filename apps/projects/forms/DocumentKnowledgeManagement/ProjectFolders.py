@@ -30,23 +30,33 @@ class ProjectFolderForm(TenantUniqueMixin, TenantModelForm):
         model = ProjectFolder
         fields = ["project", "parent", "name", "description", "sequence"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, project_id=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if project_id and not self.initial.get("project"):
+            self.initial["project"] = project_id
 
-        project_id = None
-        if self.instance and self.instance.pk:
-            project_id = self.instance.project_id
-        elif self.data.get("project"):
-            project_id = self.data.get("project")
-        elif self.initial.get("project") is not None:
-            initial = self.initial["project"]
-            project_id = getattr(initial, "pk", initial)
+        if not project_id:
+            if self.instance and self.instance.pk:
+                project_id = self.instance.project_id
+            elif self.data.get("project"):
+                project_id = self.data.get("project")
+            elif self.initial.get("project") is not None:
+                initial = self.initial["project"]
+                project_id = getattr(initial, "pk", initial)
 
         queryset = self.fields["parent"].queryset
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         if self.instance and self.instance.pk:
-            queryset = queryset.exclude(pk=self.instance.pk)
+            descendant_pks = {self.instance.pk}
+            to_check = [self.instance.pk]
+            all_pairs = list(ProjectFolder.objects.filter(project_id=project_id).values_list("pk", "parent_id"))
+            while to_check:
+                curr = to_check.pop()
+                children = [pk for pk, pid in all_pairs if pid == curr and pk not in descendant_pks]
+                descendant_pks.update(children)
+                to_check.extend(children)
+            queryset = queryset.exclude(pk__in=descendant_pks)
             # A folder does not move between projects, and the field is not even offered (the
             # `ProjectDocumentForm` ruling, restated). Two reasons: the `parent` queryset above is
             # narrowed from the INSTANCE's project, so a posted change of `project` would leave

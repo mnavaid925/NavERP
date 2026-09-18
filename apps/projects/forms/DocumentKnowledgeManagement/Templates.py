@@ -15,11 +15,16 @@ same ``validate_upload`` rules apply as everywhere else in this sub-module.
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
-from apps.projects.models import DocumentTemplate
+from apps.projects.models import DocumentTemplate, ProjectDocument
 from apps.projects.models.DocumentKnowledgeManagement.Documents import validate_upload
 
 
 class DocumentTemplateForm(TenantUniqueMixin, TenantModelForm):
+    document_type = forms.ChoiceField(
+        choices=[("", "---")] + list(ProjectDocument.DOC_TYPE_CHOICES),
+        required=False,
+    )
+
     class Meta:
         model = DocumentTemplate
         fields = [
@@ -29,7 +34,9 @@ class DocumentTemplateForm(TenantUniqueMixin, TenantModelForm):
 
     def clean_file(self):
         uploaded = self.cleaned_data.get("file")
-        # Optional on edit: a prose standard is a legitimate row, so only validate what is there.
+        # File is required on create (content-only standards belong in KnowledgeEntry); optional on edit.
+        if (not self.instance or not self.instance.pk) and not uploaded:
+            raise ValidationError("A template file is required to create a standard.")
         if not uploaded:
             return uploaded
         message = validate_upload(uploaded)

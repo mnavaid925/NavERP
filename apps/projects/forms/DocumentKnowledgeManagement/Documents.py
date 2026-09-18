@@ -38,8 +38,10 @@ class ProjectDocumentForm(TenantUniqueMixin, TenantModelForm):
             "description", "status", "milestone", "task", "retention_months", "review_on",
         ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, project_id=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if project_id and not self.initial.get("project"):
+            self.initial["project"] = project_id
 
         # Narrow `status` to the states a human may type. On EDIT the row's OWN status is added
         # back so the widget renders it selected: without that the browser would fall back to the
@@ -54,14 +56,14 @@ class ProjectDocumentForm(TenantUniqueMixin, TenantModelForm):
         # The project this document belongs to drives every narrowed queryset. On EDIT it is the
         # instance's own project and the field is not even offered (a document never moves between
         # projects — its number and its revisions belong to one).
-        project_id = None
-        if self.instance and self.instance.pk:
-            project_id = self.instance.project_id
-        elif self.data.get("project"):
-            project_id = self.data.get("project")
-        elif self.initial.get("project") is not None:
-            initial = self.initial["project"]
-            project_id = getattr(initial, "pk", initial)
+        if not project_id:
+            if self.instance and self.instance.pk:
+                project_id = self.instance.project_id
+            elif self.data.get("project"):
+                project_id = self.data.get("project")
+            elif self.initial.get("project") is not None:
+                initial = self.initial["project"]
+                project_id = getattr(initial, "pk", initial)
 
         # `TenantModelForm` already scoped each of these to the tenant; this adds the project, so a
         # folder/milestone/task from a sister project cannot be attached to this document.

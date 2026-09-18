@@ -47,6 +47,13 @@ class ProjectDocumentRevisionUploadForm(TenantUniqueMixin, TenantModelForm):
         # NOT read from the POST — see the module docstring (the confused deputy).
         self.document = kwargs.pop("document", None)
         super().__init__(*args, **kwargs)
+        if not self.document and getattr(self, "data", None) and self.data.get("document"):
+            from apps.projects.models import ProjectDocument
+            try:
+                self.document = ProjectDocument.objects.filter(
+                    tenant=self.tenant, pk=self.data.get("document")).first()
+            except Exception:
+                pass
 
     def clean_file(self):
         uploaded = self.cleaned_data.get("file")
@@ -61,11 +68,10 @@ class ProjectDocumentRevisionUploadForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
 
         document = self.document
-        if document is not None and document.is_locked:
+        if document is not None and (document.is_locked or getattr(document, "is_checked_out", False)):
             holder = document.checked_out_by.get_username() if document.checked_out_by else "somebody"
-            self.add_error(
-                "file",
-                f"That document is checked out by {holder} — check it in first, then upload the "
-                f"next revision.")
+            msg = (f"That document is checked out by {holder} — check it in first, then upload the "
+                   f"next revision.")
+            self.add_error("file", msg)
 
         return cleaned
