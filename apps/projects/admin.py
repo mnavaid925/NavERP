@@ -744,8 +744,8 @@ class SprintRetrospectiveAdmin(admin.ModelAdmin):
 # --- 7.14 Client & External Collaboration -------------------------------------------------------
 @admin.register(ClientPortalAccess)
 class ClientPortalAccessAdmin(admin.ModelAdmin):
-    list_display = ("number", "project", "client_contact", "portal_user", "access_level", "is_active", "tenant")
-    list_filter = ("access_level", "is_active")
+    list_display = ("number", "project", "client_contact", "portal_user", "is_active", "can_view_milestones", "can_view_financials", "tenant")
+    list_filter = ("is_active", "can_view_milestones", "can_view_financials")
     list_select_related = ("tenant", "project", "client_contact", "portal_user")
     search_fields = ("number", "client_contact__name", "project__name", "notes")
     readonly_fields = ("number", "created_at", "updated_at")
@@ -780,11 +780,12 @@ class SOWAmendmentAdmin(admin.ModelAdmin):
 
 @admin.register(VendorHandoff)
 class VendorHandoffAdmin(admin.ModelAdmin):
-    list_display = ("number", "project", "vendor", "title", "handoff_date", "target_completion_date", "status", "scorecard_rating", "tenant")
+    list_display = ("number", "project", "vendor", "title", "handoff_date", "due_date", "status", "scorecard_rating", "tenant")
     list_filter = ("status", "scorecard_rating")
     list_select_related = ("tenant", "project", "vendor", "task")
-    search_fields = ("number", "title", "deliverables_description", "performance_notes")
+    search_fields = ("number", "title", "description", "performance_notes")
     readonly_fields = ("number", "accepted_at", "accepted_by", "created_at", "updated_at")
+
 
 
 @admin.register(ProjectClientInvoice)
