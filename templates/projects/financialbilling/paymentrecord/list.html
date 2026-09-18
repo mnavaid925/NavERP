@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Collections & Payment Tracking — Financial & Billing Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Payment Tracking & A/R Collections</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:index' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:prs_list' %}">Financial & Billing</a>
+      <span>/</span>
+      <span>Payment Records</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:ppr_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Collection Record
+    </a>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ request.GET.q|default:'' }}" class="form-input" placeholder="Number, project, client, invoice...">
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_stage" class="form-label">Collection Stage</label>
+        <select name="stage" id="id_stage" class="form-select">
+          <option value="">All Stages</option>
+          {% for val, label in stage_choices %}
+          <option value="{{ val }}" {% if stage_filter == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:ppr_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">A/R Collection Records ({{ total_count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Record #</th>
+          <th>Project / Client</th>
+          <th>GL Invoice</th>
+          <th>Invoice Balance</th>
+          <th>Stage</th>
+          <th>Dunning Level</th>
+          <th>Last Contact</th>
+          <th>Promise / Next Follow-up</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in payment_records %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:ppr_detail' r.pk %}" class="font-medium text-brand hover:underline">
+              {{ r.number }}
+            </a>
+          </td>
+          <td>
+            <a href="{% url 'projects:prj_detail' r.project.pk %}" class="font-medium text-slate-900 hover:underline block">
+              {{ r.project.name|truncatechars:24 }}
+            </a>
+            <span class="text-xs text-muted">{{ r.client.name|truncatechars:24 }}</span>
+          </td>
+          <td>
+            <a href="{% url 'accounting:invoice_detail' r.accounting_invoice.pk %}" class="font-mono text-xs text-brand hover:underline">
+              {{ r.accounting_invoice.number }}
+            </a>
+          </td>
+          <td>
+            <div class="font-bold text-slate-900">{{ r.accounting_invoice.balance_due }} {{ r.accounting_invoice.currency.code }}</div>
+            <div class="text-xs text-muted">Total: {{ r.accounting_invoice.total_amount }}</div>
+          </td>
+          <td>
+            {% if r.stage == "current" %}
+              <span class="badge badge-info">Current</span>
+            {% elif r.stage == "reminder_sent" %}
+              <span class="badge badge-slate">Reminder Sent</span>
+            {% elif r.stage == "overdue" %}
+              <span class="badge badge-amber">Overdue</span>
+            {% elif r.stage == "promise_to_pay" %}
+              <span class="badge badge-info">Promise to Pay</span>
+            {% elif r.stage == "in_dispute" %}
+              <span class="badge badge-red">In Dispute</span>
+            {% elif r.stage == "settled" %}
+              <span class="badge badge-green">Settled</span>
+            {% elif r.stage == "written_off" %}
+              <span class="badge badge-muted">Written Off</span>
+            {% else %}
+              <span class="badge badge-muted">{{ r.get_stage_display }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="text-xs font-medium text-slate-700">{{ r.get_dunning_level_display }}</span>
+          </td>
+          <td class="text-xs text-muted">
+            {{ r.last_contact_date|default:"—" }}
+          </td>
+          <td class="text-xs">
+            {% if r.promised_payment_date %}
+              <div class="font-semibold text-green-700">Promised: {{ r.promised_amount }} on {{ r.promised_payment_date }}</div>
+            {% endif %}
+            {% if r.next_follow_up_date %}
+              <div class="text-muted">Follow-up: {{ r.next_follow_up_date }}</div>
+            {% endif %}
+            {% if not r.promised_payment_date and not r.next_follow_up_date %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.status == "open" %}
+              <span class="badge badge-slate">Open</span>
+            {% elif r.status == "escalated" %}
+              <span class="badge badge-amber">Escalated</span>
+            {% elif r.status == "resolved" or r.status == "closed" %}
+              <span class="badge badge-green">{{ r.get_status_display }}</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            <div class="table-actions flex justify-end gap-1">
+              <a href="{% url 'projects:ppr_detail' r.pk %}" class="btn btn-icon" title="View details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'projects:ppr_edit' r.pk %}" class="btn btn-icon" title="Edit">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              <form method="post" action="{% url 'projects:ppr_delete' r.pk %}" onsubmit="return confirm('Are you sure you want to delete this payment record?');" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="10">
+            <div class="empty-state text-center py-8">
+              <i data-lucide="banknote" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+              <p class="text-slate-500 font-medium">No payment collection records found.</p>
+              <a href="{% url 'projects:ppr_create' %}" class="btn btn-primary mt-3">Add Collection Record</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj and paginator.num_pages > 1 %}
+  <div class="card-footer flex justify-between items-center py-3">
+    <span class="text-sm text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+    <div class="pagination flex gap-1">
+      <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">Previous</a>
+      <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ paginator.num_pages }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">Next</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
