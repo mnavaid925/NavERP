@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Client Feedback & Approvals — NavERP{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Client Feedback & Approvals</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">›</span>
+      <span>Client Feedback & Approvals</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:cfb_create' %}" class="btn btn-primary">
+      <i data-lucide="plus"></i> Request Client Sign-Off
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, deliverable, feedback, notes…">
+      </div>
+      <div class="form-group">
+        <select name="project" aria-label="Project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+            <option value="{{ p.pk }}" {% if request.GET.project == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" aria-label="Status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'projects:cfb_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Request ID</th>
+          <th>Deliverable</th>
+          <th>Project</th>
+          <th>Assigned Contact</th>
+          <th>Status</th>
+          <th>Due Date</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">
+              <a href="{% url 'projects:cfb_detail' obj.pk %}">{{ obj.number }}</a>
+            </td>
+            <td>
+              <div class="fw-600">{{ obj.deliverable_name }}</div>
+              {% if obj.milestone %}<span class="text-muted text-sm">Milestone: {{ obj.milestone.name }}</span>{% endif %}
+            </td>
+            <td>
+              <a href="{% url 'projects:prj_detail' obj.project.pk %}">{{ obj.project.name }}</a>
+            </td>
+            <td>
+              {% if obj.assigned_contact %}{{ obj.assigned_contact.name }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.status == 'approved' %}
+                <span class="badge badge-green">Approved</span>
+              {% elif obj.status == 'rejected' %}
+                <span class="badge badge-red">Rejected</span>
+              {% elif obj.status == 'pending_review' %}
+                <span class="badge badge-amber">Pending Review</span>
+              {% elif obj.status == 'revision_requested' %}
+                <span class="badge badge-info">Revision Requested</span>
+              {% else %}
+                <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if obj.due_date %}{{ obj.due_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="table-actions">
+              <div class="flex items-center gap-1">
+                <a href="{% url 'projects:cfb_detail' obj.pk %}" class="btn btn-icon btn-sm" title="View details">
+                  <i data-lucide="eye"></i>
+                </a>
+                <a href="{% url 'projects:cfb_edit' obj.pk %}" class="btn btn-icon btn-sm" title="Edit">
+                  <i data-lucide="pencil"></i>
+                </a>
+                <form method="post" action="{% url 'projects:cfb_delete' obj.pk %}" onsubmit="return confirm('Delete this approval request?');" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-sm text-danger" title="Delete">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <i data-lucide="file-check"></i>
+                <p>No client approval requests found.</p>
+                <a href="{% url 'projects:cfb_create' %}" class="btn btn-primary btn-sm">Request Client Sign-Off</a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="pagination">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Previous</span>
+      {% endif %}
+      <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% else %}
+        <span class="btn btn-outline btn-sm disabled">Next</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
