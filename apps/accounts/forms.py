@@ -11,6 +11,7 @@ from .models import (
     AccessReview,
     AccessReviewItem,
     ElevationGrant,
+    PasswordPolicy,
     Role,
     User,
     UserInvite,
@@ -256,3 +257,40 @@ class UserImportForm(forms.Form):
         if not (upload.name or "").lower().endswith(".csv"):
             raise forms.ValidationError("Only .csv files are accepted.")
         return upload
+
+
+# ==================================================== 0.4 forms
+class MfaChallengeForm(forms.Form):
+    """The step-up code, or a backup code."""
+
+    code = forms.CharField(
+        label="Verification code",
+        widget=forms.TextInput(attrs={"class": "form-input", "autofocus": True,
+                                      "autocomplete": "one-time-code",
+                                      "placeholder": "123456"}),
+        help_text="Enter the 6-digit code from your authenticator app, or a backup code.",
+    )
+
+
+class MfaSetupForm(forms.Form):
+    """Names the device. The secret itself is generated server-side, never chosen by the user."""
+
+    name = forms.CharField(
+        required=False, max_length=120, label="Device name",
+        widget=forms.TextInput(attrs={"class": "form-input", "placeholder": "iPhone"}),
+    )
+
+
+class PasswordPolicyForm(TenantModelForm):
+    """The per-tenant credential policy. `is_enforced` is the switch that starts applying it."""
+
+    class Meta:
+        model = PasswordPolicy
+        fields = ["is_enforced", "min_length", "require_upper", "require_lower", "require_digit",
+                  "require_symbol", "max_age_days", "prevent_reuse_count"]
+
+    def clean_min_length(self):
+        value = self.cleaned_data["min_length"]
+        if value < 8:
+            raise forms.ValidationError("A minimum length below 8 is not a policy.")
+        return value
