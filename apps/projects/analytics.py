@@ -97,7 +97,7 @@ SIBLING_BOARDS = [
     {"label": "AR aging", "url_name": "projects:ar_aging", "module": "7.15"},
     {"label": "Cash flow forecast", "url_name": "projects:cash_flow_forecast", "module": "7.15"},
     {"label": "Risk analysis", "url_name": "projects:risk_analysis", "module": "7.5"},
-    {"label": "Quality value report", "url_name": "projects:qrv_report", "module": "7.6"},
+    {"label": "Improvement register", "url_name": "projects:quality_improvement", "module": "7.6"},
     {"label": "Task board", "url_name": "projects:task_board", "module": "7.2"},
     {"label": "Gantt timeline", "url_name": "projects:gantt_timeline", "module": "7.2"},
     {"label": "Sprint execution", "url_name": "projects:sprint_execution", "module": "7.13"},
@@ -496,6 +496,14 @@ def _slip_days(actual, planned):
 # =================================================================================================
 # Register loaders — each flattens its source rows into the shared fact dict
 # =================================================================================================
+def _project_key(model):
+    """The column a scope's project-id set filters on: ``project_id`` on every register but the project
+    register itself, whose rows ARE projects. Deriving it here is what keeps the two helpers that scope a
+    queryset from each assuming the other's model — ``Project`` has no ``project_id`` column and a wrong
+    guess is a FieldError, not an empty page."""
+    return "pk" if model is Project else "project_id"
+
+
 def _scoped(qs, tenant, start, end, scope, date_field=None):
     """The two filters every register shares: the tenant, and (when it declares one) the window."""
     qs = qs.filter(tenant=tenant)
@@ -503,7 +511,7 @@ def _scoped(qs, tenant, start, end, scope, date_field=None):
         qs = qs.filter(**_within(date_field, start, end))
     project_ids = scope.get("project_ids")
     if project_ids is not None:
-        qs = qs.filter(project_id__in=project_ids)
+        qs = qs.filter(**{f"{_project_key(qs.model)}__in": project_ids})
     return qs
 
 
@@ -569,8 +577,13 @@ def _load_facts(subject, tenant, start, end, as_of, scope):
     portfolios = _portfolio_names(tenant)
 
     if subject == "project":
+        # No window on purpose: a project spans windows, so a narrowed window still lists every project in
+        # scope. The caveat is what stops the page reading as if those rows had been date-filtered.
+        if start or end:
+            caveats.append(
+                "Projects are listed in full — a project spans a window, it does not fall inside one."
+            )
         rows = _scoped(Project.objects.select_related("client", "org_unit"), tenant, None, None, scope)
-        rows = rows.filter(pk__in=scope["project_ids"]) if scope.get("project_ids") is not None else rows
         for project in rows:
             facts.append(_fact(
                 project, project=project.name, project_id=project.pk,
@@ -664,7 +677,9 @@ def _load_facts(subject, tenant, start, end, as_of, scope):
     elif subject == "change_order":
         rows = _scoped(
             ScopeChangeRequest.objects.select_related("project"),
-            tenant, start, end, scope, "created_at",
+            # created_at is a DateTimeField; `__date` is what makes a date-bounded window mean calendar
+            # days. The bare lookup would compare a naive midnight against tz-aware storage.
+            tenant, start, end, scope, "created_at__date",
         )
         for change in rows:
             facts.append(_fact(
@@ -1141,45 +1156,140 @@ def _summary_cards(rows, measures, facts):
     return cards
 
 
-#: The 15 canned answers. Each is AXES over the one engine — there is deliberately no per-kind
-#: ``computer`` callable, because a second arithmetic for each report is how two reports end up
-#: disagreeing about the same number. ``custom`` is absent by contract: it is the builder's own kind.
+#: The canned kinds (B3.3) — the 15 ``REPORT_TYPE_CHOICES`` keys except ``custom``, which is the builder's
+#: own kind and has no canned answer. Each row is AXES over the one engine: there is deliberately no
+#: per-kind ``computer`` callable, because a second arithmetic per report is how two reports end up
+#: disagreeing about the same number. ``axes`` is the whole compute spec, so a canned page and a saved
+#: report reach :func:`_compute` the same way. ``description``/``sections``/``drill_url_name`` are page
+#: metadata and never enter the engine.
 STANDARD_REPORTS = {
-    "status_report": {"subject": "project", "measures": ["completed_count", "open_count"],
-                      "dimension_1": "project", "chart_type": "table"},
-    "milestone_summary": {"subject": "milestone", "measures": ["on_time_pct", "completed_count"],
-                          "dimension_1": "milestone_status", "chart_type": "bar"},
-    "schedule_variance": {"subject": "task", "measures": ["slip_days", "on_time_pct"],
-                          "dimension_1": "project", "chart_type": "bar"},
-    "risk_register": {"subject": "risk", "measures": ["exposure_value", "open_count"],
-                      "dimension_1": "risk_category", "chart_type": "table"},
-    "issue_log": {"subject": "issue", "measures": ["open_count", "aging_days"],
-                  "dimension_1": "severity", "chart_type": "bar"},
-    "quality_defect_summary": {"subject": "defect", "measures": ["open_count", "task_count"],
-                               "dimension_1": "defect_severity", "chart_type": "doughnut"},
-    "scope_change_summary": {"subject": "change_order", "measures": ["task_count", "exposure_value"],
-                             "dimension_1": "status", "chart_type": "table"},
-    "cost_variance": {"subject": "cost", "measures": ["cv", "cv_pct"],
-                      "dimension_1": "project", "chart_type": "bar"},
-    "earned_value": {"subject": "cost", "measures": ["planned_value", "earned_value", "actual_cost"],
-                     "dimension_1": "project", "chart_type": "line"},
-    "resource_utilization": {"subject": "resource_allocation",
-                             "measures": ["hours", "billable_pct"], "dimension_1": "resource",
-                             "chart_type": "bar"},
-    "time_entry": {"subject": "time_entry", "measures": ["hours", "billable_pct"],
-                   "dimension_1": "activity_code", "chart_type": "bar"},
-    "billing_summary": {"subject": "invoice", "measures": ["invoiced_amount", "unbilled_amount"],
-                        "dimension_1": "status", "chart_type": "table"},
-    "agile_throughput": {"subject": "sprint", "measures": ["completed_count", "task_count"],
-                         "dimension_1": "month", "chart_type": "line"},
-    "portfolio_health": {"subject": "project", "measures": ["open_count", "on_time_pct"],
-                         "dimension_1": "portfolio", "chart_type": "heat"},
-    "steering_pack": {"subject": "project", "measures": ["cpi", "spi", "on_time_pct"],
-                      "dimension_1": "project", "chart_type": "table"},
+    "status_report": {
+        "subject": "project",
+        "description": "What each project finished this window and what it still has open.",
+        "axes": {"measures": ["completed_count", "open_count"], "dimension_1": "project",
+                 "chart_type": "table"},
+        "sections": [{"area": "schedule", "title": "Completed vs open by project"}],
+        "drill_url_name": "projects:prj_list",
+    },
+    "milestone_summary": {
+        "subject": "milestone",
+        "description": "Milestones grouped by where they stand, scored on the ones that landed on date.",
+        "axes": {"measures": ["on_time_pct", "completed_count"], "dimension_1": "milestone_status",
+                 "chart_type": "bar"},
+        "sections": [{"area": "schedule", "title": "Milestones by status"}],
+        "drill_url_name": "projects:mst_list",
+    },
+    "schedule_variance": {
+        "subject": "task",
+        "description": "How many days each project's finished work slipped past its planned date.",
+        "axes": {"measures": ["slip_days", "on_time_pct"], "dimension_1": "project",
+                 "chart_type": "bar"},
+        "sections": [{"area": "schedule", "title": "Slip days by project"}],
+        "drill_url_name": "projects:tsk_list",
+    },
+    "risk_register": {
+        "subject": "risk",
+        "description": "Open risks by category with their exposure, worst first — 7.5's own EMV, not a re-do.",
+        "axes": {"measures": ["exposure_value", "open_count"], "dimension_1": "risk_category",
+                 "chart_type": "table"},
+        "sections": [{"area": "risk", "title": "Exposure by risk category"}],
+        "drill_url_name": "projects:rsk_list",
+    },
+    "issue_log": {
+        "subject": "issue",
+        "description": "Issues still open, counted by severity and how long each has been sitting.",
+        "axes": {"measures": ["open_count", "aging_days"], "dimension_1": "severity",
+                 "chart_type": "bar"},
+        "sections": [{"area": "risk", "title": "Open issues by severity"}],
+        "drill_url_name": "projects:iss_list",
+    },
+    "quality_defect_summary": {
+        "subject": "defect",
+        "description": "Defects raised in the window by severity, against the task count that produced them.",
+        "axes": {"measures": ["open_count", "task_count"], "dimension_1": "defect_severity",
+                 "chart_type": "doughnut"},
+        "sections": [{"area": "quality", "title": "Defects by severity"}],
+        "drill_url_name": "projects:qdf_list",
+    },
+    "scope_change_summary": {
+        "subject": "change_order",
+        "description": "Scope changes by status, with the cost exposure each one carries.",
+        "axes": {"measures": ["task_count", "exposure_value"], "dimension_1": "status",
+                 "chart_type": "table"},
+        "sections": [{"area": "scope", "title": "Change orders by status"}],
+        "drill_url_name": "projects:scr_list",
+    },
+    "cost_variance": {
+        "subject": "cost",
+        "description": "Budget minus actuals per project — the money column of the weekly review.",
+        "axes": {"measures": ["cv", "cv_pct"], "dimension_1": "project", "chart_type": "bar"},
+        "sections": [{"area": "cost", "title": "Cost variance by project"}],
+        "drill_url_name": "projects:financial_variance",
+    },
+    "earned_value": {
+        "subject": "cost",
+        "description": "Planned, earned and actual cost side by side — the EVM curve without a plug-in.",
+        "axes": {"measures": ["planned_value", "earned_value", "actual_cost"],
+                 "dimension_1": "project", "chart_type": "line"},
+        "sections": [{"area": "cost", "title": "Earned value by project"}],
+        "drill_url_name": "projects:financial_pnl",
+    },
+    "resource_utilization": {
+        "subject": "resource_allocation",
+        "description": "Hours booked per resource against the billable share of those hours.",
+        "axes": {"measures": ["hours", "billable_pct"], "dimension_1": "resource",
+                 "chart_type": "bar"},
+        "sections": [{"area": "resource", "title": "Hours by resource"}],
+        "drill_url_name": "projects:utilization_dashboard",
+    },
+    "time_entry": {
+        "subject": "time_entry",
+        "description": "Every logged hour in the window, grouped by the activity code it was booked to.",
+        "axes": {"measures": ["hours", "billable_pct"], "dimension_1": "activity_code",
+                 "chart_type": "bar"},
+        "sections": [{"area": "resource", "title": "Hours by activity code"}],
+        "drill_url_name": "projects:rte_list",
+    },
+    "billing_summary": {
+        "subject": "invoice",
+        "description": "What has been invoiced in the window and what is worked-but-unbilled, by status.",
+        "axes": {"measures": ["invoiced_amount", "unbilled_amount"], "dimension_1": "status",
+                 "chart_type": "table"},
+        "sections": [{"area": "cost", "title": "Invoiced vs unbilled by status"}],
+        "drill_url_name": "projects:ar_aging",
+    },
+    "agile_throughput": {
+        "subject": "sprint",
+        "description": "Completed items per sprint month — the team's throughput, not a story-point guess.",
+        "axes": {"measures": ["completed_count", "task_count"], "dimension_1": "month",
+                 "chart_type": "line"},
+        "sections": [{"area": "agile", "title": "Throughput by month"}],
+        "drill_url_name": "projects:velocity_report",
+    },
+    "portfolio_health": {
+        "subject": "project",
+        "description": "Every portfolio's open workload shaded green, amber or red on its own on-time rate.",
+        "axes": {"measures": ["open_count", "on_time_pct"], "dimension_1": "portfolio",
+                 "chart_type": "heat"},
+        "sections": [{"area": "trend", "title": "Health bands by portfolio"}],
+        "drill_url_name": "projects:pfm_dashboard",
+    },
+    "steering_pack": {
+        "subject": "project",
+        "description": "The committee page: index scores and on-time rate per project, one row each.",
+        "axes": {"measures": ["cpi", "spi", "on_time_pct"], "dimension_1": "project",
+                 "chart_type": "table"},
+        "sections": [{"area": "trend", "title": "RAG by project"}],
+        "drill_url_name": "projects:pfm_dashboard",
+    },
 }
 for _key, _entry in STANDARD_REPORTS.items():
     _entry["label"] = dict(REPORT_TYPE_CHOICES).get(_key, _key)
 del _key, _entry
+
+#: What a junk ``?type=`` falls back to. Public because ``report_standard`` resolves its own fallback
+#: from it — the literal in two layers is how the view and the engine start answering different questions.
+CANNED_FALLBACK = "status_report"
 
 #: What a caller may narrow a canned report by. Axes are NOT in this list on purpose — the registry owns
 #: them, so a query string cannot make a shared report ask a different question (L11's cousin).
@@ -1188,13 +1298,23 @@ REPORT_PARAM_KEYS = (
 )
 
 
+def canned_axes():
+    """``{kind: axes}`` — the builder's "start from a canned kind" prefill (context key `canned_axes`).
+
+    ``subject`` rides along because the builder's step 1 picks the register the rows come out of, not just
+    the grouping. The row is a copy: a form that wrote back into it would rewrite the registry.
+    """
+    return {key: {"subject": entry["subject"], **entry["axes"]} for key, entry in STANDARD_REPORTS.items()}
+
+
 def standard_report(kind, tenant, params=None):
     """Render one canned kind. ``params`` is filtered to :data:`REPORT_PARAM_KEYS` before it is merged,
     so the axes always come from the registry — the same reason ``report_type`` is not a query param."""
     entry = STANDARD_REPORTS.get(kind)
-    spec = dict(entry or STANDARD_REPORTS["status_report"])
-    spec.pop("label", None)
-    spec["report_type"] = kind if entry else "status_report"
+    row = entry or STANDARD_REPORTS[CANNED_FALLBACK]
+    # subject + axes only. The row's metadata (label, description, sections, drill) is page material and
+    # must never reach the engine, which is what a flat ``dict(entry)`` used to let through.
+    spec = {"subject": row["subject"], "report_type": kind if entry else CANNED_FALLBACK, **row["axes"]}
     for key in REPORT_PARAM_KEYS:
         value = (params or {}).get(key)
         if value is not None:
@@ -1262,7 +1382,7 @@ def _tile_qs(model, tenant, project_ids=None):
     resolved set rather than the FK keeps a portfolio-scoped tile honest without a second join.
     """
     qs = model.objects.filter(tenant=tenant)
-    return qs if project_ids is None else qs.filter(project_id__in=project_ids)
+    return qs if project_ids is None else qs.filter(**{f"{_project_key(model)}__in": project_ids})
 
 
 def _windowed(qs, field, start, end):
