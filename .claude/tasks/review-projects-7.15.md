@@ -159,6 +159,6 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Location**: `BillingRuns.py`, `PaymentRecords.py`, `RevenueSchedules.py` forms.
   - **Fix**: Validate that milestone and sow belong to the selected project.
 
-- **[ ] M8: Update Checkboxes in `.claude/tasks/todo.md`**
+- **[x] fixed — docs(tasks): mark 7.15 build plan items as completed in todo.md**
   - **Location**: `.claude/tasks/todo.md`
   - **Fix**: Mark 7.15 checkboxes completed during closeout.
