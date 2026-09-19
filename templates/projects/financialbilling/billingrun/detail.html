@@ -257,6 +257,7 @@
         </div>
         {% endif %}
 
+        {% if billing_run.status == "invoiced" %}
         <form method="post" action="{% url 'projects:pbr_dispatch' billing_run.pk %}" class="space-y-3 pt-2">
           {% csrf_token %}
           <div class="form-group">
@@ -271,6 +272,9 @@
             <i data-lucide="send" class="w-3.5 h-3.5 mr-1"></i> Send / Dispatch Invoice
           </button>
         </form>
+        {% else %}
+        <p class="text-xs text-muted pt-2">Invoice dispatch is available once an accounting invoice is generated.</p>
+        {% endif %}
       </div>
     </div>
   </div>
