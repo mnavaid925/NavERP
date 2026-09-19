@@ -161,6 +161,7 @@ def prs_recognize(request, pk):
         rec_date = form.cleaned_data["recognition_date"]
         notes = form.cleaned_data.get("notes", "")
 
+        initial_status = schedule.status
         schedule.recognition_date = rec_date
         schedule.status = "recognized"
         schedule.recognized_at = timezone.now()
@@ -174,7 +175,7 @@ def prs_recognize(request, pk):
             user=request.user,
             action="recognize",
             obj=schedule,
-            changes={"status": ["approved", "recognized"], "recognized_amount": str(schedule.recognized_amount)},
+            changes={"status": [initial_status, "recognized"], "recognized_amount": str(schedule.recognized_amount)},
         )
         messages.success(request, f"Revenue schedule {schedule.number} successfully marked as recognized.")
     else:
