@@ -225,6 +225,9 @@ def pbr_generate_invoice(request, pk):
 @require_POST
 def pbr_dispatch(request, pk):
     billing_run = get_object_or_404(ProjectBillingRun, pk=pk, tenant=request.tenant)
+    if billing_run.status != "invoiced":
+        messages.error(request, "Only invoiced billing runs can be dispatched.")
+        return redirect("projects:pbr_detail", pk=billing_run.pk)
     form = BillingRunDispatchForm(request.POST)
     if form.is_valid():
         email = form.cleaned_data["recipient_email"]
