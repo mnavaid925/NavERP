@@ -6,6 +6,7 @@ from .models import (
     HealthMetric,
     Subscription,
     SubscriptionInvoice,
+    UsageRecord,
 )
 
 
@@ -41,3 +42,14 @@ class EncryptionKeyAdmin(admin.ModelAdmin):
 class HealthMetricAdmin(admin.ModelAdmin):
     list_display = ["metric", "value", "status", "tenant", "created_at"]
     list_filter = ["metric", "status", "tenant"]
+
+
+@admin.register(UsageRecord)
+class UsageRecordAdmin(admin.ModelAdmin):
+    list_display = ["metric", "quantity", "tenant", "period_start", "period_end",
+                    "is_billed", "billed_at"]
+    list_filter = ["metric", "is_billed", "tenant"]
+    search_fields = ["metric", "notes"]
+    list_select_related = ["tenant", "subscription", "subscription_invoice"]
+    # Evidence stamps: written only by usagerecord_mark_billed, never hand-edited here.
+    readonly_fields = ["is_billed", "billed_at", "created_at"]
