@@ -24,7 +24,7 @@ from apps.projects import analytics
 from apps.projects.models import Portfolio, ProjectReport
 from apps.projects.models.ReportingBusinessIntelligence._choices import CANVAS_CHARTS
 from apps.projects.views._common import login_required, render, timezone
-from apps.projects.views._helpers import SECTION_AREAS, chart_config, chart_rows
+from apps.projects.views._helpers import DASHBOARD_ORDER, SECTION_AREAS, chart_config, chart_rows
 from apps.projects.views._helpers import clients as client_choices
 from apps.projects.views._helpers import org_units as org_unit_choices
 from apps.projects.views._helpers import projects as project_choices
@@ -217,7 +217,10 @@ def rbi_home(request):
         ),
         "my_dashboard": analytics.home_dashboard(request),
         "recent_runs": runs.select_related("report", "generated_by")[:10],
-        "dashboards": dashboards.annotate(annotation_count=Count("widgets"))[:6],
+        # The explicit order is not decoration: ``annotation_count``'s GROUP BY drops the model's
+        # ``Meta.ordering``, so an un-ordered ``[:6]`` would be six rows the database felt like.
+        "dashboards": dashboards.annotate(annotation_count=Count("widgets")).order_by(
+            *DASHBOARD_ORDER)[:6],
         "sibling_boards": _sibling_boards(),
         "library": _quick_library(),
         "counts": {
