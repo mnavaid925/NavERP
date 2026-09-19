@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Webhook Diagnostics — Workflow & Automation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Webhook Diagnostics</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">&rsaquo;</span>
+      <a href="{% url 'projects:automation_overview' %}">Automation</a>
+      <span class="sep">&rsaquo;</span>
+      <span>Webhook Diagnostics</span>
+    </div>
+    <p class="text-muted">Real-time health monitoring, delivery success rate, latency metrics, and failure diagnostics for external iPaaS endpoints.</p>
+  </div>
+  <div class="page-actions flex flex-wrap gap-2">
+    <a href="{% url 'projects:automation_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Cockpit</a>
+    <a href="{% url 'projects:pwh_delivery_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Delivery Logs</a>
+    <a href="{% url 'projects:pwh_list' %}" class="btn btn-outline"><i data-lucide="webhook"></i> Endpoints</a>
+    <a href="{% url 'projects:pwh_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Endpoint</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card card-body">
+    <div class="text-muted text-sm">Configured Endpoints</div>
+    <div class="text-2xl font-semibold">{{ stats.total_endpoints }}</div>
+    <div class="text-xs text-muted mt-1">{{ stats.active_endpoints }} active</div>
+  </div>
+  <div class="card card-body">
+    <div class="text-muted text-sm">Delivery Success Rate</div>
+    <div class="text-2xl font-semibold {% if stats.success_rate_pct >= 95 %}text-green-600{% elif stats.success_rate_pct >= 80 %}text-amber-600{% else %}text-red-600{% endif %}">
+      {{ stats.success_rate_pct }}%
+    </div>
+    <div class="text-xs text-muted mt-1">All recorded attempts</div>
+  </div>
+  <div class="card card-body">
+    <div class="text-muted text-sm">Average Latency</div>
+    <div class="text-2xl font-semibold">{{ stats.avg_latency_ms }} ms</div>
+    <div class="text-xs text-muted mt-1">Round-trip response</div>
+  </div>
+  <div class="card card-body">
+    <div class="text-muted text-sm">Recent Failures</div>
+    <div class="text-2xl font-semibold {% if recent_failures %}text-red-600{% endif %}">
+      {{ recent_failures|length }}
+    </div>
+    <div class="text-xs text-muted mt-1">Requiring inspection</div>
+  </div>
+</div>
+
+<!-- Endpoints Health Table -->
+<div class="card mb-6">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="network" class="w-5 h-5 text-blue-500"></i>
+      Active Integrations & Endpoints
+    </h2>
+    <a href="{% url 'projects:pwh_list' %}" class="text-xs text-primary hover:underline">Manage All</a>
+  </div>
+  <div class="card-body p-0">
+    {% if endpoints %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Project</th>
+              <th>Target URL</th>
+              <th>Events</th>
+              <th>Status</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ep in endpoints %}
+              <tr>
+                <td>
+                  <a href="{% url 'projects:pwh_detail' ep.pk %}" class="font-medium hover:underline">{{ ep.name }}</a>
+                  <div class="text-xs text-muted font-mono">{{ ep.number }}</div>
+                </td>
+                <td>
+                  {% if ep.project %}
+                    <a href="{% url 'projects:project_detail' ep.project.pk %}" class="text-xs text-muted hover:underline">{{ ep.project.name }}</a>
+                  {% else %}
+                    <span class="text-xs text-muted">All Projects</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="text-xs font-mono truncate max-w-xs inline-block" title="{{ ep.target_url }}">{{ ep.target_url }}</span>
+                </td>
+                <td>
+                  <span class="text-xs text-muted">{{ ep.event_types|length }} registered</span>
+                </td>
+                <td>
+                  {% if ep.is_active %}
+                    <span class="badge badge-green text-xs">Active</span>
+                  {% else %}
+                    <span class="badge badge-slate text-xs">Inactive</span>
+                  {% endif %}
+                </td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <form method="post" action="{% url 'projects:pwh_test_ping' ep.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-outline" title="Send test ping">
+                        Ping
+                      </button>
+                    </form>
+                    <a href="{% url 'projects:pwh_detail' ep.pk %}" class="btn btn-xs btn-outline">Details</a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-muted">
+        <i data-lucide="webhook" class="w-10 h-10 mx-auto text-slate-400 mb-2"></i>
+        <p class="font-medium">No webhook endpoints configured.</p>
+        <p class="text-xs">Add an endpoint to start delivering project event notifications.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Recent Failures Table -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i>
+      Recent Delivery Failures & Diagnostics
+    </h2>
+    <a href="{% url 'projects:pwh_delivery_list' %}?status=failed" class="text-xs text-primary hover:underline">All Failed Logs</a>
+  </div>
+  <div class="card-body p-0">
+    {% if recent_failures %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Delivery ID</th>
+              <th>Endpoint</th>
+              <th>Event</th>
+              <th>Status Code</th>
+              <th>Duration</th>
+              <th>Attempted At</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fail in recent_failures %}
+              <tr>
+                <td>
+                  <a href="{% url 'projects:pwh_delivery_detail' fail.pk %}" class="font-mono text-xs font-medium hover:underline">#{{ fail.pk }}</a>
+                </td>
+                <td>
+                  <a href="{% url 'projects:pwh_detail' fail.webhook.pk %}" class="text-xs hover:underline">{{ fail.webhook.name }}</a>
+                </td>
+                <td>
+                  <span class="badge badge-slate text-xs font-mono">{{ fail.event }}</span>
+                </td>
+                <td>
+                  {% if fail.status_code %}
+                    <span class="badge badge-red text-xs font-mono">HTTP {{ fail.status_code }}</span>
+                  {% else %}
+                    <span class="badge badge-red text-xs">Error</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="text-xs font-mono">{{ fail.duration_ms }} ms</span>
+                </td>
+                <td>
+                  <span class="text-xs text-muted font-mono">{{ fail.attempted_at|date:"Y-m-d H:i:s" }}</span>
+                </td>
+                <td class="text-right">
+                  <a href="{% url 'projects:pwh_delivery_detail' fail.pk %}" class="btn btn-xs btn-outline">Inspect</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-muted">
+        <i data-lucide="shield-check" class="w-10 h-10 mx-auto text-green-500 mb-2"></i>
+        <p class="font-medium">No recent failures!</p>
+        <p class="text-xs">All recent webhook deliveries succeeded without error.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
