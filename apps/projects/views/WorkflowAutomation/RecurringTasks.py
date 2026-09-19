@@ -2,7 +2,7 @@
 from datetime import timedelta
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.views.decorators.http import require_POST
 
 from apps.projects.forms.WorkflowAutomation.RecurringTasks import RecurringTaskScheduleForm
@@ -35,15 +35,15 @@ def rts_list(request):
     if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
-    total_count = RecurringTaskSchedule.objects.filter(tenant=request.tenant).count()
-    active_count = RecurringTaskSchedule.objects.filter(tenant=request.tenant, is_active=True).count()
     today = timezone.localdate()
-    due_this_week = RecurringTaskSchedule.objects.filter(
-        tenant=request.tenant,
-        is_active=True,
-        next_run_date__gte=today,
-        next_run_date__lte=today + timedelta(days=7),
-    ).count()
+    schedule_counts = RecurringTaskSchedule.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+        due_this_week=Count("id", filter=Q(is_active=True, next_run_date__gte=today, next_run_date__lte=today + timedelta(days=7))),
+    )
+    total_count = schedule_counts["total"] or 0
+    active_count = schedule_counts["active"] or 0
+    due_this_week = schedule_counts["due_this_week"] or 0
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
