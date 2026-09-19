@@ -64,7 +64,7 @@
                 </td>
                 <td>
                   {% if gate.project %}
-                    <a href="{% url 'projects:project_detail' gate.project.pk %}" class="text-xs text-muted hover:underline">{{ gate.project.name }}</a>
+                    <a href="{% url 'projects:prj_detail' gate.project.pk %}" class="text-xs text-muted hover:underline">{{ gate.project.name }}</a>
                   {% else %}
                     <span class="text-xs text-muted">All Projects</span>
                   {% endif %}
@@ -141,7 +141,7 @@
                 </td>
                 <td>
                   {% if gate.project %}
-                    <a href="{% url 'projects:project_detail' gate.project.pk %}" class="text-xs text-muted hover:underline">{{ gate.project.name }}</a>
+                    <a href="{% url 'projects:prj_detail' gate.project.pk %}" class="text-xs text-muted hover:underline">{{ gate.project.name }}</a>
                   {% else %}
                     <span class="text-xs text-muted">All Projects</span>
                   {% endif %}
