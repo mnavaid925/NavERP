@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Disposal Records{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Disposal Records</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Disposal Records</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:retention_board' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Retention board</a>
+      <a href="{% url 'core:disposal_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record disposal</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">The EVIDENCE that a disposal happened, written by hand because the act is out of band. A disposal with no reference is not defensible, which is why the evidence field exists.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="method" class="form-select">
+          <option value="">Any method</option>
+          {% for val, label in method_choices %}<option value="{{ val }}" {% if request.GET.method == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:disposal_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Model</th><th>Policy</th><th>Records</th><th>Method</th><th>Performed</th><th>Evidence</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.model_label|default:"—" }}</td>
+            <td>{% if obj.policy %}{{ obj.policy.name }}{% else %}—{% endif %}</td>
+            <td>{{ obj.record_count }}</td>
+            <td>{{ obj.get_method_display }}</td>
+            <td>{{ obj.performed_at|date:"M d, Y" }}</td>
+            <td>{{ obj.evidence|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="file-check"></i><h3>No disposals recorded</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
