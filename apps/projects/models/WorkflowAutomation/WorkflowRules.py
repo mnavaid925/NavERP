@@ -104,6 +104,7 @@ class WorkflowExecutionLog(TenantOwned):
         ordering = ["-fired_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "rule", "status"], name="pwf_log_tnt_rule_stat_idx"),
+            models.Index(fields=["tenant", "-fired_at"], name="pwf_log_tnt_fired_idx"),
         ]
 
     def __str__(self):
