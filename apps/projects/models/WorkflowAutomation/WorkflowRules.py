@@ -108,7 +108,8 @@ class WorkflowExecutionLog(TenantOwned):
         ]
 
     def __str__(self):
-        return f"Log for {self.rule.number} ({self.status}) at {self.fired_at}"
+        rule_label = self.rule.number if "rule" in self._state.fields_cache else f"Rule #{self.rule_id}"
+        return f"Log for {rule_label} ({self.status}) at {self.fired_at}"
 
     @property
     def status_badge(self):
