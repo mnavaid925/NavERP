@@ -448,3 +448,68 @@ A consent-expiry assertion failed because the probe back-dated an expired grant 
 latest event was already a withdrawal — so the check read the withdrawal, not the expiry. **A
 derived-from-latest query needs its own isolated fixture**; reusing a purpose with other events tests
 the ordering, not the rule.
+
+---
+
+## 0.10 System Configuration & Settings — CLOSED OUT 2026-09-19
+
+**Verdict: 0 of 5 bullets mapped and no configuration layer existed.** Migration `core.0008`.
+
+| bullet | what ships |
+|---|---|
+| 1 Global & Tenant Settings | `SettingDefinition` (registry + default) + `SettingValue` (per-tenant override) + a computed overview that shows each value WITH its source |
+| 2 Feature Flags & Toggles | `FeatureFlag` — the row is the per-tenant toggle, `applies_to_plan` the plan scope, `exempt_roles` the user-group scope |
+| 3 Numbering & Sequence Management | `NumberingScheme` (config) + a computed **reconciliation board** |
+| 4 Business Calendar & Fiscal Periods | `BusinessCalendar` + `Holiday` + a computed calendar board |
+| 5 Custom Fields & Form Builder | `CustomFieldDefinition` + `CustomFieldValue` + per-type validation |
+
+### The two L36 boundaries this sub-module had to respect
+
+1. **`next_number()` owns allocation.** Every document number in the repo is minted by it, and
+   `TenantNumbered` calls it for every PO/PR/RFQ/GRN/SO/… A second allocator would be a second source
+   of truth for the same counter. So 0.10 CONFIGURES prefixes and RECONCILES them against what models
+   actually mint — it never mints anything.
+2. **`accounting.FiscalPeriod` owns periods and period-close.** The business calendar board owns the
+   WORKING WEEK and links out to the accounting periods rather than re-declaring them; a second period
+   table would split the ledger's calendar from the business one.
+
+### The four decisions that make it honest
+
+1. **`get_setting()` reports WHICH it read.** A tenant with no override row is not missing a setting —
+   it is taking the default. The overview shows a "Default" vs "Overridden" badge, because a page that
+   shows a value without its source cannot answer the only question an operator has.
+2. **Clearing an override DELETES the row** rather than storing an empty string, so the workspace goes
+   back to inheriting instead of reading as an explicit empty value.
+3. **An unknown feature key resolves to OFF.** Defaulting to True would mean a typo in a template
+   silently ships a half-built feature.
+4. **The numbering board states its own blind spot on the page.** It reads the `NUMBER_PREFIX` class
+   attribute, so a model minting through its own `save()` with a hardcoded literal is invisible.
+
+### A false negative found by probing the board
+
+The board reported **SINV as "configured but nothing mints it"** — which was wrong.
+`tenants.SubscriptionInvoice` predates `TenantNumbered` and its `save()` calls
+`next_number(SubscriptionInvoice, self.tenant, "SINV")` directly. `LITERAL_PREFIX_MODELS` now merges
+that case in, so the board reports `SINV` as **in use**, and the page names the model behind it.
+Remaining configured-only: only the deliberately-unused `ZZZ` the seeder plants.
+
+### A trap that made two forms unusable (caught by the smoke probe, three times)
+
+**A model `JSONField` gets a `forms.JSONField`, which validates the input as JSON in `to_python` —
+BEFORE any `clean_<field>` or `clean()` runs.** So an operator typing `a, b` for `choices`, or `a` as a
+custom value, failed validation and the conversion code never executed. `choices` on both definition
+forms and `value` on the value form are now redeclared as `CharField`. **When you add a `clean_*` for a
+JSONField, redeclare the form field or the clean never runs.**
+
+### Verification
+
+`temp/smoke_10.py` — **80 checks, 0 failures**, re-entrant. `apps/core apps/accounts apps/tenants
+apps/crm` — **2455 passed, 0 failed**.
+
+### Declared NOT built (on the pages, not just here)
+
+Settings are not a `django.conf.settings` replacement — `get_setting()` only resolves registered keys,
+so a typo returns the caller's default rather than inventing a value. Numbering configures but never
+allocates. Fiscal periods and period-close live in accounting. Custom-field values are keyed without a
+foreign key (a deleted parent leaves an orphan) and **no module renders them yet** — a module must opt
+in, the same shape 0.6's data scoping uses.
