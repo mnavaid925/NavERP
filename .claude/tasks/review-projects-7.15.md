@@ -147,7 +147,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Location**: `billingrun/detail.html`, `revenueschedule/detail.html`, `paymentrecord/detail.html` modals.
   - **Fix**: Add `for="{{ form.field.id_for_label }}"`.
 
-- **[ ] M5: Cash Flow Forecast Inflows Query Missing `.distinct()`**
+- **[x] fixed — fix(projects): append distinct to cash flow forecast inflows queryset**
   - **Location**: `FinancialBoards.py:307`
   - **Fix**: Append `.distinct()` to `inflows_qs`.
 
