@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.file_name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.file_name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'accounts:user_import_list' %}">Import Batches</a><span class="sep">›</span><span>{{ obj.file_name }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'validated' and obj.staged_rows %}
+        <form method="post" action="{% url 'accounts:user_import_commit' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Commit {{ obj.staged_rows|length }} member(s)</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'accounts:user_import' %}" class="btn btn-outline"><i data-lucide="upload"></i> New import</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Rows read</dt><dd>{{ obj.row_count }}</dd></div>
+      <div class="detail-item"><dt>Staged</dt><dd>{{ obj.staged_rows|length }}</dd></div>
+      <div class="detail-item"><dt>Errors</dt><dd>{{ obj.error_count }}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_count }}</dd></div>
+      <div class="detail-item"><dt>Uploaded by</dt><dd>{% if obj.uploaded_by %}{{ obj.uploaded_by }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Committed</dt><dd>{% if obj.committed_at %}{{ obj.committed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if obj.status == 'validated' %}
+      <p class="text-muted">Nothing has been created yet. Committing writes the staged rows as members with an unusable password — they must complete the invite or password-reset flow before they can sign in.</p>
+    {% endif %}
+  </div></div>
+
+  {% if obj.errors %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Rejected rows</h2><span class="badge badge-red">{{ obj.error_count }}</span></div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Line</th><th>Problem</th></tr></thead>
+            <tbody>
+              {% for e in obj.errors %}
+                <tr><td class="fw-600">{{ e.line }}</td><td>{{ e.error }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Staged rows</h2><span class="badge badge-info">{{ obj.staged_rows|length }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Email</th><th>Username</th><th>First name</th><th>Last name</th><th>Role</th></tr></thead>
+        <tbody>
+          {% for row in obj.staged_rows %}
+            <tr>
+              <td class="fw-600">{{ row.email }}</td>
+              <td>{{ row.username }}</td>
+              <td>{{ row.first_name }}</td>
+              <td>{{ row.last_name }}</td>
+              <td>{% if row.role_id %}set{% else %}<span class="badge badge-slate">none</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="upload"></i><h3>No valid rows</h3><p>Every row in this file was rejected.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounts:user_import_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to batches</a>
+{% endblock %}
