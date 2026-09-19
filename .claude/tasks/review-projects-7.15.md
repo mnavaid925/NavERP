@@ -120,7 +120,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: Hardcodes initial status as "approved" in audit log even if transitioned directly from "draft".
   - **Fix**: Use `initial_status = obj.status`.
 
-- **[ ] I14: Unposted Expenses Filter Missing in Financial Boards**
+- **[x] fixed — fix(projects): filter ProjectExpense by status='posted' in financial boards**
   - **Location**: `apps/projects/views/FinancialBillingManagement/FinancialBoards.py:61, 324`
   - **Problem**: `ProjectExpense` queries omit `status="posted"`.
   - **Fix**: Add `status="posted"` to expense queries.
