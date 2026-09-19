@@ -32,5 +32,17 @@ urlpatterns = (
         # Global header search
         path("search/", views.global_search, name="search"),
         path("search/suggest/", views.global_search_suggest, name="search_suggest"),
+        # 0.6 module access scope — literal segments BEFORE the <int:pk> routes
+        path("module-scopes/", views.module_scope_list, name="module_scope_list"),
+        path("module-scopes/sync/", views.module_scope_sync, name="module_scope_sync"),
+        path("module-scopes/add/", views.module_scope_create, name="module_scope_create"),
+        path("module-scopes/<int:pk>/", views.module_scope_detail, name="module_scope_detail"),
+        path("module-scopes/<int:pk>/edit/", views.module_scope_edit, name="module_scope_edit"),
+        path("module-scopes/<int:pk>/delete/", views.module_scope_delete, name="module_scope_delete"),
+        path("field-masks/", views.field_mask_list, name="field_mask_list"),
+        path("field-masks/add/", views.field_mask_create, name="field_mask_create"),
+        path("field-masks/<int:pk>/edit/", views.field_mask_edit, name="field_mask_edit"),
+        path("field-masks/<int:pk>/delete/", views.field_mask_delete, name="field_mask_delete"),
+        path("access-matrix/", views.access_matrix, name="access_matrix"),
     ]
 )
