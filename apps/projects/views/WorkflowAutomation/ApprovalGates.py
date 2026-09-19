@@ -198,6 +198,15 @@ def par_approve(request, pk):
         messages.error(request, f"Gate {gate.number} is already in state '{gate.status}'.")
         return redirect("projects:par_detail", pk=gate.pk)
 
+    is_admin = getattr(request.user, "is_tenant_admin", False) or request.user.is_superuser
+    if not (request.user in (gate.approver, gate.delegate_approver) or is_admin):
+        messages.error(request, "You are not authorized to approve this gate.")
+        return redirect("projects:par_detail", pk=gate.pk)
+
+    if gate.requested_by == request.user and not is_admin:
+        messages.error(request, "Requesters cannot approve their own approval gates.")
+        return redirect("projects:par_detail", pk=gate.pk)
+
     notes = request.POST.get("decision_notes", "").strip()
     gate.status = "approved"
     gate.decided_at = timezone.now()
@@ -223,6 +232,11 @@ def par_reject(request, pk):
     gate = get_object_or_404(ProjectApprovalGate, pk=pk, tenant=request.tenant)
     if gate.is_terminal:
         messages.error(request, f"Gate {gate.number} is already in state '{gate.status}'.")
+        return redirect("projects:par_detail", pk=gate.pk)
+
+    is_admin = getattr(request.user, "is_tenant_admin", False) or request.user.is_superuser
+    if not (request.user in (gate.approver, gate.delegate_approver) or is_admin):
+        messages.error(request, "You are not authorized to reject this gate.")
         return redirect("projects:par_detail", pk=gate.pk)
 
     notes = request.POST.get("decision_notes", "").strip()
@@ -251,6 +265,11 @@ def par_escalate(request, pk):
         messages.error(request, f"Cannot escalate gate in state '{gate.status}'.")
         return redirect("projects:par_detail", pk=gate.pk)
 
+    is_admin = getattr(request.user, "is_tenant_admin", False) or request.user.is_superuser
+    if not (request.user in (gate.approver, gate.delegate_approver) or is_admin):
+        messages.error(request, "You are not authorized to escalate this gate.")
+        return redirect("projects:par_detail", pk=gate.pk)
+
     gate.status = "escalated"
     gate.escalated_at = timezone.now()
     gate.save(update_fields=["status", "escalated_at", "updated_at"])
@@ -273,6 +292,11 @@ def par_delegate(request, pk):
     gate = get_object_or_404(ProjectApprovalGate, pk=pk, tenant=request.tenant)
     if gate.is_terminal:
         messages.error(request, f"Cannot delegate gate in state '{gate.status}'.")
+        return redirect("projects:par_detail", pk=gate.pk)
+
+    is_admin = getattr(request.user, "is_tenant_admin", False) or request.user.is_superuser
+    if not (request.user in (gate.approver, gate.delegate_approver) or is_admin):
+        messages.error(request, "You are not authorized to delegate this gate.")
         return redirect("projects:par_detail", pk=gate.pk)
 
     form = ApprovalDelegateForm(request.POST, tenant=request.tenant)
