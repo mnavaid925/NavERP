@@ -23,14 +23,14 @@
 
 <!-- Navigation Tabs -->
 <div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
-  <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-ghost">Rate Cards</a>
-  <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-ghost">Billing Runs</a>
-  <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-ghost">Revenue Schedules</a>
-  <a href="{% url 'projects:ppr_list' %}" class="btn btn-sm btn-ghost">Payment Records</a>
+  <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-outline">Rate Cards</a>
+  <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-outline">Billing Runs</a>
+  <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-outline">Revenue Schedules</a>
+  <a href="{% url 'projects:ppr_list' %}" class="btn btn-sm btn-outline">Payment Records</a>
   <a href="{% url 'projects:financial_pnl' %}" class="btn btn-sm btn-primary">P&amp;L Analysis</a>
-  <a href="{% url 'projects:financial_variance' %}" class="btn btn-sm btn-ghost">EVM Variance</a>
-  <a href="{% url 'projects:ar_aging' %}" class="btn btn-sm btn-ghost">A/R Aging</a>
-  <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-sm btn-ghost">Cash Flow</a>
+  <a href="{% url 'projects:financial_variance' %}" class="btn btn-sm btn-outline">EVM Variance</a>
+  <a href="{% url 'projects:ar_aging' %}" class="btn btn-sm btn-outline">A/R Aging</a>
+  <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-sm btn-outline">Cash Flow</a>
 </div>
 
 <!-- Filter Bar -->
@@ -38,7 +38,7 @@
   <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
     <div style="flex:1; min-width:240px;">
       <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
-      <select name="project" id="id_project" class="form-control" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+      <select name="project" id="id_project" class="form-select" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
         <option value="">All Active Projects</option>
         {% for p in projects %}
           <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
@@ -55,7 +55,7 @@
 </div>
 
 <!-- KPI Summary Strip -->
-<div class="stats-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+<div class="stat-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Total Contract Value</div>
     <div class="stat-value" style="font-size:1.5rem; font-weight:700;">${{ totals.contract_value|default:"0.00" }}</div>
@@ -63,7 +63,7 @@
   </div>
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Recognized Revenue</div>
-    <div class="stat-value text-green" style="font-size:1.5rem; font-weight:700;">${{ totals.recognized_revenue|default:"0.00" }}</div>
+    <div class="stat-value text-ok" style="font-size:1.5rem; font-weight:700;">${{ totals.recognized_revenue|default:"0.00" }}</div>
     <div class="stat-meta text-muted" style="font-size:0.75rem;">ASC 606 recognized value</div>
   </div>
   <div class="stat-card card" style="padding:1rem;">
@@ -73,7 +73,7 @@
   </div>
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Total Gross Margin</div>
-    <div class="stat-value {% if totals.gross_margin >= 0 %}text-green{% else %}text-red{% endif %}" style="font-size:1.5rem; font-weight:700;">
+    <div class="stat-value {% if totals.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}" style="font-size:1.5rem; font-weight:700;">
       ${{ totals.gross_margin|default:"0.00" }}
     </div>
     <div class="stat-meta text-muted" style="font-size:0.75rem;">Average Margin: {{ totals.margin_pct }}%</div>
@@ -111,12 +111,12 @@
               <div class="text-muted" style="font-size:0.75rem;">{{ row.project.code }}</div>
             </td>
             <td style="padding:0.75rem; text-align:right;">${{ row.contract_value }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-green">${{ row.recognized_revenue }}</td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ row.recognized_revenue }}</td>
             <td style="padding:0.75rem; text-align:right;">{{ row.labor_hours }} hrs</td>
             <td style="padding:0.75rem; text-align:right;">${{ row.labor_cost }}</td>
             <td style="padding:0.75rem; text-align:right;">${{ row.expense_cost }}</td>
             <td style="padding:0.75rem; text-align:right; font-weight:600;">${{ row.total_cost }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:700;" class="{% if row.gross_margin >= 0 %}text-green{% else %}text-red{% endif %}">
+            <td style="padding:0.75rem; text-align:right; font-weight:700;" class="{% if row.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ row.gross_margin }}
             </td>
             <td style="padding:0.75rem; text-align:right;">
@@ -139,12 +139,12 @@
           <tr>
             <td style="padding:0.75rem;">Portfolio Totals</td>
             <td style="padding:0.75rem; text-align:right;">${{ totals.contract_value }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="text-green">${{ totals.recognized_revenue }}</td>
+            <td style="padding:0.75rem; text-align:right;" class="text-ok">${{ totals.recognized_revenue }}</td>
             <td style="padding:0.75rem; text-align:right;">—</td>
             <td style="padding:0.75rem; text-align:right;">${{ totals.labor_cost }}</td>
             <td style="padding:0.75rem; text-align:right;">${{ totals.expense_cost }}</td>
             <td style="padding:0.75rem; text-align:right;">${{ totals.total_cost }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="{% if totals.gross_margin >= 0 %}text-green{% else %}text-red{% endif %}">
+            <td style="padding:0.75rem; text-align:right;" class="{% if totals.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ totals.gross_margin }}
             </td>
             <td style="padding:0.75rem; text-align:right;">
