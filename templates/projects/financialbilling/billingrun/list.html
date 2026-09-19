@@ -168,8 +168,8 @@
   <div class="card-footer flex justify-between items-center py-3">
     <span class="text-sm text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
     <div class="pagination flex gap-1">
-      <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">Previous</a>
-      <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">Next</a>
+      <a href="?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_previous %}disabled{% endif %}">Previous</a>
+      <a href="?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.project %}&project={{ request.GET.project }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm {% if not page_obj.has_next %}disabled{% endif %}">Next</a>
     </div>
   </div>
   {% endif %}
