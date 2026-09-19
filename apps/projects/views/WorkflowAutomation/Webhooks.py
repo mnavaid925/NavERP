@@ -3,7 +3,7 @@ import json
 import time
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.views.decorators.http import require_POST
 
 from apps.projects.forms.WorkflowAutomation.Webhooks import (
@@ -37,13 +37,19 @@ def pwh_list(request):
     if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
-    total_count = ProjectWebhookEndpoint.objects.filter(tenant=request.tenant).count()
-    active_count = ProjectWebhookEndpoint.objects.filter(tenant=request.tenant, is_active=True).count()
+    endpoint_counts = ProjectWebhookEndpoint.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    total_count = endpoint_counts["total"] or 0
+    active_count = endpoint_counts["active"] or 0
     today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    deliveries_today = ProjectWebhookDelivery.objects.filter(tenant=request.tenant, attempted_at__gte=today_start).count()
-    failed_today = ProjectWebhookDelivery.objects.filter(
-        tenant=request.tenant, attempted_at__gte=today_start, status="failed"
-    ).count()
+    delivery_today_counts = ProjectWebhookDelivery.objects.filter(tenant=request.tenant, attempted_at__gte=today_start).aggregate(
+        total=Count("id"),
+        failed=Count("id", filter=Q(status="failed")),
+    )
+    deliveries_today = delivery_today_counts["total"] or 0
+    failed_today = delivery_today_counts["failed"] or 0
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
