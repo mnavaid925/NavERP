@@ -22,7 +22,7 @@
 </div>
 
 <!-- Navigation Tabs -->
-<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
+<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border); margin-bottom:1.5rem; padding-bottom:0.5rem;">
   <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-outline">Rate Cards</a>
   <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-outline">Billing Runs</a>
   <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-outline">Revenue Schedules</a>
@@ -38,7 +38,7 @@
   <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
     <div style="flex:1; min-width:240px;">
       <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
-      <select name="project" id="id_project" class="form-select" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+      <select name="project" id="id_project" class="form-select">
         <option value="">All Active Projects</option>
         {% for p in projects %}
           <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
@@ -88,56 +88,56 @@
 
 <!-- Forecast Breakdown Matrix -->
 <div class="card">
-  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem; border-bottom:1px solid var(--border-color, #e2e8f0);">
-    <h2 class="card-title" style="font-size:1.1rem; font-weight:600; margin:0;"><i data-lucide="trending-up"></i> Projected Cash Matrix (Next 90 Days)</h2>
+  <div class="card-header">
+    <h2 class="card-title"><i data-lucide="trending-up"></i> Projected Cash Matrix (Next 90 Days)</h2>
     <span class="badge badge-info">30 / 60 / 90 Horizon</span>
   </div>
-  <div class="table-wrap" style="overflow-x:auto;">
-    <table class="table" style="width:100%; border-collapse:collapse;">
+  <div class="table-wrap">
+    <table class="table">
       <thead>
-        <tr style="border-bottom:2px solid var(--border-color, #cbd5e1); text-align:left;">
-          <th style="padding:0.75rem;">Cash Category</th>
-          <th style="padding:0.75rem; text-align:right;">1–30 Days</th>
-          <th style="padding:0.75rem; text-align:right;">31–60 Days</th>
-          <th style="padding:0.75rem; text-align:right;">61–90 Days</th>
-          <th style="padding:0.75rem; text-align:right;">Total Projected</th>
+        <tr>
+          <th>Cash Category</th>
+          <th style="text-align:right;">1–30 Days</th>
+          <th style="text-align:right;">31–60 Days</th>
+          <th style="text-align:right;">61–90 Days</th>
+          <th style="text-align:right;">Total Projected</th>
         </tr>
       </thead>
       <tbody>
-        <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
-          <td style="padding:0.75rem;">
-            <div style="font-weight:600;" class="text-ok"><i data-lucide="arrow-down-left"></i> Projected Cash Inflows</div>
+        <tr>
+          <td>
+            <div class="fw-600 text-ok"><i data-lucide="arrow-down-left"></i> Projected Cash Inflows</div>
             <div class="text-muted" style="font-size:0.75rem;">Outstanding sent/partial client invoices maturing in window</div>
           </td>
-          <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ inflows.p30 }}</td>
-          <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ inflows.p60 }}</td>
-          <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ inflows.p90 }}</td>
-          <td style="padding:0.75rem; text-align:right; font-weight:700;" class="text-ok">${{ inflows.total }}</td>
+          <td style="text-align:right; font-weight:600;" class="text-ok">${{ inflows.p30 }}</td>
+          <td style="text-align:right; font-weight:600;" class="text-ok">${{ inflows.p60 }}</td>
+          <td style="text-align:right; font-weight:600;" class="text-ok">${{ inflows.p90 }}</td>
+          <td style="text-align:right; font-weight:700;" class="text-ok">${{ inflows.total }}</td>
         </tr>
-        <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
-          <td style="padding:0.75rem;">
-            <div style="font-weight:600;" class="text-red"><i data-lucide="arrow-up-right"></i> Projected Cash Outflows</div>
+        <tr>
+          <td>
+            <div class="fw-600 text-red"><i data-lucide="arrow-up-right"></i> Projected Cash Outflows</div>
             <div class="text-muted" style="font-size:0.75rem;">Committed project expenses, subcontracts, and procurement POs</div>
           </td>
-          <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-red">${{ outflows.p30 }}</td>
-          <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-red">${{ outflows.p60 }}</td>
-          <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-red">${{ outflows.p90 }}</td>
-          <td style="padding:0.75rem; text-align:right; font-weight:700;" class="text-red">${{ outflows.total }}</td>
+          <td style="text-align:right; font-weight:600;" class="text-red">${{ outflows.p30 }}</td>
+          <td style="text-align:right; font-weight:600;" class="text-red">${{ outflows.p60 }}</td>
+          <td style="text-align:right; font-weight:600;" class="text-red">${{ outflows.p90 }}</td>
+          <td style="text-align:right; font-weight:700;" class="text-red">${{ outflows.total }}</td>
         </tr>
       </tbody>
-      <tfoot style="background-color:var(--bg-muted, #f8fafc); font-weight:700; border-top:2px solid var(--border-color, #cbd5e1);">
+      <tfoot style="background:var(--page-bg); font-weight:700; border-top:2px solid var(--border);">
         <tr>
-          <td style="padding:0.75rem;">Net Cash Position</td>
-          <td style="padding:0.75rem; text-align:right;" class="{% if net_cash_periods.p30 >= 0 %}text-ok{% else %}text-red{% endif %}">
+          <td>Net Cash Position</td>
+          <td style="text-align:right;" class="{% if net_cash_periods.p30 >= 0 %}text-ok{% else %}text-red{% endif %}">
             ${{ net_cash_periods.p30 }}
           </td>
-          <td style="padding:0.75rem; text-align:right;" class="{% if net_cash_periods.p60 >= 0 %}text-ok{% else %}text-red{% endif %}">
+          <td style="text-align:right;" class="{% if net_cash_periods.p60 >= 0 %}text-ok{% else %}text-red{% endif %}">
             ${{ net_cash_periods.p60 }}
           </td>
-          <td style="padding:0.75rem; text-align:right;" class="{% if net_cash_periods.p90 >= 0 %}text-ok{% else %}text-red{% endif %}">
+          <td style="text-align:right;" class="{% if net_cash_periods.p90 >= 0 %}text-ok{% else %}text-red{% endif %}">
             ${{ net_cash_periods.p90 }}
           </td>
-          <td style="padding:0.75rem; text-align:right; font-size:1.1rem;" class="{% if net_cash_periods.total >= 0 %}text-ok{% else %}text-red{% endif %}">
+          <td style="text-align:right; font-size:1.1rem;" class="{% if net_cash_periods.total >= 0 %}text-ok{% else %}text-red{% endif %}">
             ${{ net_cash_periods.total }}
           </td>
         </tr>
