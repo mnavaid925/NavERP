@@ -139,7 +139,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: `"total_count": qs.count()` evaluates duplicate count query.
   - **Fix**: Remove `"total_count"` from `extra_context`, use `page_obj.paginator.count` in templates.
 
-- **[ ] M3: Query Parameter Preservation in Pagination Links**
+- **[x] fixed — fix(projects): preserve query parameters in pagination links**
   - **Location**: List templates pagination links.
   - **Fix**: Preserve `q` and filter params in pagination links.
 
