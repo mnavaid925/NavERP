@@ -41,8 +41,15 @@ LIVE_LINKS = {
         "Tenant Onboarding": "tenants:onboarding",          # bullet
         "Subscription & Billing": "tenants:subscription_list",   # bullet
         "Subscription Invoices": "tenants:subscriptioninvoice_list",  # extra (part of billing)
+        # Extra live leaf: the metered half of bullet 2. The subscription is a flat plan + seat
+        # count and cannot express metered consumption, so usage metering is its own register.
+        "Usage Metering": "tenants:usagerecord_list",       # extra (part of billing)
         "Custom Branding": "tenants:brandingsetting_list",  # bullet
         "Tenant Health Monitoring": "tenants:healthmetric_list",  # bullet
+        # Bullet 3. The isolation model is architectural and the encryption-key register is 0.7's,
+        # so this points at a COMPUTED overview that reports the actual posture (isolation strategy,
+        # key status, which tables carry a tenant FK) instead of aliasing a sibling's leaf.
+        "Tenant Isolation & Security": "tenants:isolation_overview",  # bullet
     },
     # 0.2 Identity & Access Management (IAM)
     "0.2": {
