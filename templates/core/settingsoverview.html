@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Workspace Settings{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Workspace Settings</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Workspace Settings</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:setting_definition_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Definitions</a>
+      <a href="{% url 'core:config_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Configuration</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Every setting with <strong>this workspace's resolved value</strong> and whether it was set here or inherited. A page that shows a value without saying where it came from cannot answer the only question an operator has: did someone change this?</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Settings defined</dt><dd>{{ definition_count }}</dd></div>
+      <div class="detail-item"><dt>Overridden here</dt><dd>{{ overridden_count }}</dd></div>
+      <div class="detail-item"><dt>Locked (not overridable)</dt><dd>{{ locked_count }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Setting</th><th>Module</th><th>Value</th><th>Source</th><th>Default</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">{{ row.definition.label }}<div class="form-help"><code>{{ row.definition.key }}</code></div></td>
+              <td>{{ row.definition.module_slug|default:"—" }}</td>
+              <td>{{ row.result.value|default:"—" }}</td>
+              <td>
+                {% if row.result.is_default %}<span class="badge badge-slate">Default</span>
+                {% else %}<span class="badge badge-green">Overridden</span>{% endif %}
+              </td>
+              <td>{{ row.definition.default_value|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  {% if row.definition.is_locked %}
+                    <span class="text-muted">locked</span>
+                  {% else %}
+                    <a href="{% url 'core:setting_value_edit' row.definition.pk %}" class="btn-icon" title="Override"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="sliders"></i><h3>No settings defined</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
