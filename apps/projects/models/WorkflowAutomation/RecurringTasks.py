@@ -127,17 +127,25 @@ class RecurringTaskSchedule(TenantNumbered):
         elif self.assignee_strategy == "project_manager":
             assigned_to = self.project.project_manager
 
+        priority_map = {
+            "urgent": "critical",
+            "high": "high",
+            "medium": "medium",
+            "low": "low",
+        }
+        task_priority = priority_map.get(self.priority, "medium")
+
         task = ProjectTask.objects.create(
             tenant=self.tenant,
             project=self.project,
-            name=title[:200],
+            name=title[:255],
             description=desc,
-            priority=self.priority,
-            estimated_hours=self.effort_hours,
-            assigned_to=assigned_to,
-            start_date=self.next_run_date,
-            due_date=self.next_run_date + timedelta(days=5),
-            status="todo",
+            priority=task_priority,
+            effort_hours=self.effort_hours,
+            assignee=assigned_to,
+            planned_start=self.next_run_date,
+            planned_end=self.next_run_date + timedelta(days=5),
+            status="planned",
         )
 
         self.last_run_date = today
