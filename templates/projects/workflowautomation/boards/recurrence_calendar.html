@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Recurrence Calendar — Workflow & Automation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Recurrence Calendar</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">&rsaquo;</span>
+      <a href="{% url 'projects:automation_overview' %}">Automation</a>
+      <span class="sep">&rsaquo;</span>
+      <span>Recurrence Calendar</span>
+    </div>
+    <p class="text-muted">Forward projection of scheduled recurring tasks across all active projects over the next 30 days.</p>
+  </div>
+  <div class="page-actions flex flex-wrap gap-2">
+    <a href="{% url 'projects:automation_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Cockpit</a>
+    <a href="{% url 'projects:rts_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All Schedules</a>
+    <a href="{% url 'projects:rts_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Schedule</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card card-body">
+    <div class="text-muted text-sm">Active Schedules</div>
+    <div class="text-2xl font-semibold">{{ stats.total_recurring }}</div>
+    <div class="text-xs text-muted mt-1">Currently automated</div>
+  </div>
+  <div class="card card-body">
+    <div class="text-muted text-sm">Runs Projected This Month</div>
+    <div class="text-2xl font-semibold text-blue-600">{{ stats.runs_this_month }}</div>
+    <div class="text-xs text-muted mt-1">Next 30 days</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="calendar-clock" class="w-5 h-5 text-blue-500"></i>
+      Scheduled Recurrence Timeline
+    </h2>
+  </div>
+  <div class="card-body p-0">
+    {% if upcoming_schedules %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Schedule</th>
+              <th>Project</th>
+              <th>Frequency</th>
+              <th>Priority</th>
+              <th>Next Run Date</th>
+              <th>Assignee</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in upcoming_schedules %}
+              <tr>
+                <td>
+                  <a href="{% url 'projects:rts_detail' s.pk %}" class="font-medium hover:underline">{{ s.number }}</a>
+                  <div class="text-xs text-muted">{{ s.title_template }}</div>
+                </td>
+                <td>
+                  <a href="{% url 'projects:project_detail' s.project.pk %}" class="text-xs text-muted hover:underline">{{ s.project.name }}</a>
+                </td>
+                <td>
+                  <span class="badge badge-slate text-xs">{{ s.get_frequency_display }}</span>
+                </td>
+                <td>
+                  {% if s.priority == "urgent" %}
+                    <span class="badge badge-red text-xs">Urgent</span>
+                  {% elif s.priority == "high" %}
+                    <span class="badge badge-amber text-xs">High</span>
+                  {% elif s.priority == "medium" %}
+                    <span class="badge badge-info text-xs">Medium</span>
+                  {% else %}
+                    <span class="badge badge-slate text-xs">Low</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="text-sm font-semibold font-mono">{{ s.next_run_date|date:"Y-m-d"|default:"&mdash;" }}</span>
+                </td>
+                <td>
+                  <span class="text-xs">{{ s.default_assignee.get_full_name|default:s.default_assignee.username|default:"Unassigned" }}</span>
+                </td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href="{% url 'projects:rts_detail' s.pk %}" class="btn btn-xs btn-outline">Details</a>
+                    <form method="post" action="{% url 'projects:rts_generate_task' s.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-outline" title="Generate task instance now">
+                        Run Now
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'projects:rts_skip_next' s.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-outline text-amber-600" title="Skip next scheduled run" onclick="return confirm('Skip next run date for {{ s.number }}?');">
+                        Skip
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-muted">
+        <i data-lucide="calendar-x" class="w-10 h-10 mx-auto text-slate-400 mb-2"></i>
+        <p class="font-medium">No active recurring schedules</p>
+        <p class="text-xs">Create a recurring task schedule to project upcoming automated work items.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
