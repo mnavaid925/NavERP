@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Confirm Your Authenticator{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Confirm Your Authenticator</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Confirm Your Authenticator</span></div>
+    </div>
+    <div class="page-actions">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">1. Add this secret to your app</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Add the account manually using this secret, or open the URI if your app accepts one.
+        There is no QR image: generating one would need a QR library, and this repo does not add a dependency to
+        the login path.</p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Secret</dt><dd><code>{{ secret }}</code></dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>TOTP · SHA1 · 6 digits · 30 seconds</dd></div>
+        <div class="detail-item"><dt>Account</dt><dd>{{ request.user.email }}</dd></div>
+      </dl>
+      <div class="form-help" style="word-break:break-all;">URI: <code>{{ uri }}</code></div>
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> This secret is shown once and stored encrypted. If you lose
+        it before confirming, start again.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">2. Enter a code to confirm</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Two-factor is not active until a code verifies — so a mistyped secret cannot lock you out.</p>
+      <form method="post" action="{% url 'accounts:mfa_confirm' %}" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+      {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Confirm and enable</button>
+          <a href="{% url 'accounts:mfa_setup' %}" class="btn btn-outline">Start over</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
