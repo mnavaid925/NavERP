@@ -6,9 +6,9 @@ registers; ``resource_profiles`` and ``project_requests`` are 7.3's demand-lens 
 request builder has one consumer today but is kept beside the pool builder it mirrors);
 ``critical_path_ids`` is 7.2's critical-chain pass over dependency edges; ``owners`` is 7.5's
 owner/approver/escalation-target dropdown, shared by all four of that sub-module's registers; and
-``csv_safe`` / ``redirect_back_or`` / ``csv_response`` are 7.16's, each read by more than one of that
-sub-module's five view modules. Same rule for all eleven: if only one consumer ever needs a helper, it
-moves to that consumer's module.
+``csv_safe`` / ``redirect_back_or`` / ``csv_response`` and ``chart_config`` / ``chart_rows`` are 7.16's,
+each read by more than one of that sub-module's five view modules. Same rule for all thirteen: if only
+one consumer ever needs a helper, it moves to that consumer's module.
 
 The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
 superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
@@ -26,6 +26,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from apps.core.models import OrgUnit, Party
 from apps.projects import analytics
 from apps.projects.models import Project, ProjectRequest, Requirement, ResourceProfile
+from apps.projects.models.ReportingBusinessIntelligence._choices import CANVAS_CHARTS
 
 
 def org_units(tenant):
@@ -206,9 +207,12 @@ def critical_path_ids(project):
 
 
 # ---------------------------------------------------------------------------------------------
-# 7.16 Reporting & Business Intelligence. Both helpers are read by MORE THAN ONE entity module of
+# 7.16 Reporting & Business Intelligence. Every helper below is read by MORE THAN ONE entity module of
 # that sub-module (Backend rule 5): every CSV route in 7.16 writes user-authored text into a cell,
-# and five POST verbs across three modules must return the user to the page they were on.
+# five POST verbs across three modules must return the user to the page they were on, and the canned
+# report page, a saved report and a frozen run all render the SAME result partials — so the two chart
+# builders and the two layout constants they read are one source, not three copies that can disagree
+# about which sections a kind has.
 # ``csv_safe`` is a deliberate local copy of ``apps/procurement/views/_helpers.py:323`` — peer apps
 # never import each other's internals, the same reason ``forms/_common.py`` is its own copy.
 # ---------------------------------------------------------------------------------------------
@@ -266,3 +270,30 @@ def csv_response(filename, columns, rows):
     for row in rows[:analytics.MAX_EXPORT_ROWS]:
         writer.writerow([cell(value) for value in row])
     return response
+
+
+#: The canvas id on a one-chart page: its canvas element is ``wchart`` plus this id, the same shape a
+#: board uses with real widget pks. A canned page, a saved report and a frozen run each show one chart,
+#: so the id is a constant rather than a per-row value — and it is ONE constant, because those three
+#: pages share ``_result_chart.html``.
+SINGLE_CHART_ID = 0
+
+#: The areas with a ``_standard_section_<area>.html`` partial on disk. A registry row naming any other
+#: area is dropped here rather than raising while the page renders.
+SECTION_AREAS = ("schedule", "cost", "risk", "quality", "resource", "scope", "agile", "trend")
+
+
+def chart_config(chart_type, labels, data):
+    """The one-entry canvas payload, or no entry at all.
+
+    An HTML chart kind (kpi, gauge, table, heat) renders markup and gets no canvas — a blank canvas
+    still answers 200, which is the failure nobody notices. No labels is nothing to plot.
+    """
+    if chart_type not in CANVAS_CHARTS or not labels:
+        return []
+    return [{"id": SINGLE_CHART_ID, "type": chart_type, "labels": labels, "data": data}]
+
+
+def chart_rows(labels, data):
+    """Label/value pairs for the HTML bar table a non-canvas kind renders instead."""
+    return [{"label": label, "value": value} for label, value in zip(labels, data)]
