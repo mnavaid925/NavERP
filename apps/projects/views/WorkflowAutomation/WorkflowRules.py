@@ -198,6 +198,35 @@ def pwf_toggle_active(request, pk):
     return redirect("projects:pwf_detail", pk=rule.pk)
 
 
+def _resolve_target_record(tenant, trigger_entity, target_id):
+    """Validate and return the target record ensuring it belongs to the tenant."""
+    from django.apps import apps
+
+    model_mapping = {
+        "project": "Project",
+        "task": "ProjectTask",
+        "milestone": "ProjectMilestone",
+        "risk": "ProjectRisk",
+        "issue": "ProjectIssue",
+        "budget": "ProjectBudgetLine",
+        "scope_change": "ScopeChangeRequest",
+        "inspection": "DeliverableInspection",
+    }
+    model_name = model_mapping.get(trigger_entity)
+    if not model_name:
+        return None
+    try:
+        model = apps.get_model("projects", model_name)
+        if model:
+            has_tenant = any(f.name == "tenant" for f in model._meta.fields)
+            if has_tenant:
+                return model.objects.filter(tenant=tenant, pk=target_id).first()
+            return model.objects.filter(pk=target_id).first()
+    except Exception:
+        pass
+    return None
+
+
 @login_required
 @require_POST
 def pwf_test_run(request, pk):
@@ -207,6 +236,11 @@ def pwf_test_run(request, pk):
 
     if form.is_valid():
         target_id = form.cleaned_data["target_id"]
+        target = _resolve_target_record(request.tenant, rule.trigger_entity, target_id)
+        if not target:
+            messages.error(request, f"Target {rule.get_trigger_entity_display()} #{target_id} not found in this tenant.")
+            return redirect("projects:pwf_detail", pk=rule.pk)
+
         start_time = time.time()
         # Simulated run log
         duration_ms = int((time.time() - start_time) * 1000)
@@ -245,6 +279,11 @@ def pwf_execute_now(request, pk):
 
     if form.is_valid():
         target_id = form.cleaned_data["target_id"]
+        target = _resolve_target_record(request.tenant, rule.trigger_entity, target_id)
+        if not target:
+            messages.error(request, f"Target {rule.get_trigger_entity_display()} #{target_id} not found in this tenant.")
+            return redirect("projects:pwf_detail", pk=rule.pk)
+
         start_time = time.time()
         # Execute actions
         duration_ms = int((time.time() - start_time) * 1000)
