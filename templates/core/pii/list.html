@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}PII Data Map{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PII Data Map</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>PII Data Map</span></div>
+    </div>
+    <div class="page-actions">
+      <form method="post" action="{% url 'core:pii_scan' %}">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="scan-search"></i> Run scan</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">A DATA MAP, not a scanner. The scan reads model field <strong>names</strong> only — no row values — and every row it creates is marked <strong>suggested</strong> until a human confirms it. A compliance report that presents a name-matching guess as a finding is worse than none. Re-running the scan never touches a row a human has confirmed or dismissed.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search model or field…">
+      </div>
+      <div class="form-group">
+        <select name="category" class="form-select">
+          <option value="">Any category</option>
+          {% for val, label in category_choices %}<option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="sensitivity" class="form-select">
+          <option value="">Any sensitivity</option>
+          {% for val, label in sensitivity_choices %}<option value="{{ val }}" {% if request.GET.sensitivity == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="confirmation" class="form-select">
+          <option value="">Any status</option>
+          {% for val, label in confirmation_choices %}<option value="{{ val }}" {% if request.GET.confirmation == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:pii_map' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Model</th><th>Field</th><th>Category</th><th>Sensitivity</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.model_label }}</td>
+            <td><code>{{ obj.field_name }}</code></td>
+            <td>{{ obj.get_category_display }}</td>
+            <td>{% if obj.sensitivity == 'high' %}<span class="badge badge-red">High</span>{% elif obj.sensitivity == 'medium' %}<span class="badge badge-amber">Medium</span>{% else %}<span class="badge badge-slate">Low</span>{% endif %}</td>
+            <td>
+              {% if obj.confirmation == 'confirmed' %}<span class="badge badge-green">Confirmed</span>
+              {% elif obj.confirmation == 'dismissed' %}<span class="badge badge-slate">Dismissed</span>
+              {% else %}<span class="badge badge-info">Suggested</span>{% endif %}
+            </td>
+            <td><div class="table-actions"><a href="{% url 'core:pii_classify' obj.pk %}" class="btn-icon" title="Classify"><i data-lucide="pencil"></i></a></div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="scan-search"></i><h3>No classifications yet — run the scan</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
