@@ -55,6 +55,15 @@ LIVE_LINKS = {
     "0.2": {
         "Centralized User Directory": "accounts:user_list",       # bullet
         "Provisioning & De-Provisioning": "accounts:invite_list",  # bullet (user provisioning)
+        # Extra live leaf: the bulk half of bullet 2 — import/export of the directory.
+        "Bulk Import & Export": "accounts:user_import_list",   # extra (part of provisioning)
+        "Access Request & Approval": "accounts:access_request_list",  # bullet
+        # Extra live leaf: the self-service half of bullet 3, scoped to the signed-in member.
+        "My Access Requests": "accounts:access_request_mine",  # extra (self-service)
+        "Access Certification & Reviews": "accounts:access_review_list",  # bullet
+        # Extra live leaf: bullet 4's third capability, a COMPUTED board (no table).
+        "Orphan Account Detection": "accounts:orphan_accounts",  # extra (part of certification)
+        "Privileged Access Management (PAM)": "accounts:elevation_list",  # bullet
     },
     # 0.3 RBAC & Permissions
     "0.3": {
