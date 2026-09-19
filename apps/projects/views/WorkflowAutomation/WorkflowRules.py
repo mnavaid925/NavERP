@@ -36,7 +36,7 @@ def pwf_list(request):
         qs = qs.filter(is_active=False)
 
     project_id = request.GET.get("project", "").strip()
-    if project_id:
+    if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
     total_count = ProjectWorkflowRule.objects.filter(tenant=request.tenant).count()
