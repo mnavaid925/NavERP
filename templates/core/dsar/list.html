@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Data Subject Requests{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Data Subject Requests</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Data Subject Requests</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:regulatory_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Frameworks</a>
+      <a href="{% url 'core:dsar_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Log request</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">The statutory clock is the point: due_at is stamped at creation from the STRICTEST enabled framework, because a workspace cannot be compliant with one regime by missing another's deadline.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select">
+          <option value="">Any status</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="kind" class="form-select">
+          <option value="">Any kind</option>
+          {% for val, label in kind_choices %}
+            <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:dsar_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Subject</th><th>Kind</th><th>Status</th><th>Verified</th><th>Due</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'core:dsar_detail' obj.pk %}" class="fw-600">{{ obj.subject }}</a></td>
+            <td>{{ obj.get_kind_display }}</td>
+            <td>
+              {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>
+              {% elif obj.status == 'completed' %}<span class="badge badge-green">Completed</span>
+              {% elif obj.status == 'refused' %}<span class="badge badge-slate">Refused</span>
+              {% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.identity_verified %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">No</span>{% endif %}</td>
+            <td>{% if obj.due_at %}{{ obj.due_at|date:"M d, Y" }}{% else %}<span class="text-warn">no clock</span>{% endif %}</td>
+            <td><div class="table-actions"><a href="{% url 'core:dsar_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><h3>No data subject requests</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
