@@ -203,6 +203,7 @@ def pbr_generate_invoice(request, pk):
                 tax_rate_pct=billing_run.tax_rate_pct,
             )
 
+        initial_status = billing_run.status
         invoice.recalc_totals()
 
         billing_run.accounting_invoice = invoice
@@ -214,7 +215,7 @@ def pbr_generate_invoice(request, pk):
             user=request.user,
             action="generate",
             obj=billing_run,
-            changes={"accounting_invoice": str(invoice.pk), "status": ["approved", "invoiced"]},
+            changes={"accounting_invoice": str(invoice.pk), "status": [initial_status, "invoiced"]},
         )
 
     messages.success(request, f"Canonical accounting Invoice {invoice.number} successfully created for Billing Run {billing_run.number}.")
