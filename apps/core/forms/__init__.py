@@ -32,3 +32,7 @@ from .Activity import (
 from .Document import (
     DocumentForm,
 )  # noqa: F401
+from .ModuleAccessScope import (
+    ModuleAccessScopeForm,
+    SensitiveFieldMaskForm,
+)  # noqa: F401
