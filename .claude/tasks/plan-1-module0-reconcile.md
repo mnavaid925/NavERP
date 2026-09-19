@@ -241,3 +241,66 @@ builds, not nav additions. Two boundaries to respect when building:
 - **0.5 guest/external access** vs the four existing per-module portal tables (unify or point, never add a fifth).
 - **0.7 tenant isolation** — 0.1 now owns that leaf; decide the owner before duplicating.
 - **0.14 shared reference data** — index the owning modules' masters, never re-declare them (L36).
+
+---
+
+## 0.4 Authentication & Single Sign-On (SSO) — CLOSED OUT 2026-09-19
+
+**Verdict: 0 of 5 bullets mapped, and the feature set was entirely absent** — no MFA, no federation,
+no credential policy, no session register, no risk scoring. Session idle/absolute timeouts DID exist
+(settings + `SessionTimeoutMiddleware`), but there was no way to see or kill a session.
+
+| bullet | verdict |
+|---|---|
+| Multi-Factor Authentication (MFA) | **partial → built**: TOTP implemented; SMS/email OTP, push and FIDO2/WebAuthn **declared not built** |
+| SSO & Federation | **NOT built — and left UNMAPPED on purpose.** SAML 2.0 / OAuth-OIDC need an IdP library and a configured IdP. The bullet renders as the roadmap pill it actually is; pointing it at the MFA page would have marked federation "live" by aliasing an unrelated feature. |
+| Password & Credential Policies | **partial → built**: complexity + rotation; breach-corpus check and passwordless **declared not built** |
+| Session Management | **built** — timeouts existed; the register and revocation are new |
+| Adaptive & Risk-Based Auth | **partial → built**: IP/device/recent-failure heuristic; geo-IP and behavioural analysis **declared not built** |
+
+### What was built
+
+`MfaDevice` (TOTP, secret stored via `core.crypto` Fernet — reversible because verification needs the
+real bytes), `PasswordPolicy` (**`is_enforced` defaults False**), `PasswordHistory`, `UserSession`,
+`LoginAttempt`; `apps/accounts/security.py` (RFC 6238 TOTP + the risk score); the login step-up; the
+session register with revocation; the risk register; the credential-policy editor; a computed security
+hub. Migration `accounts.0004`.
+
+### Verification
+
+- **TOTP verified against all six RFC 6238 Appendix B test vectors — 6/6 match**, before anything was
+  built on it. A TOTP bug is a lockout bug.
+- `temp/smoke_04.py` — **70 checks, 0 failures**, re-entrant. The two checks that matter most: a user
+  WITHOUT a device signs in exactly as before, and a user WITH one is **not** signed in by their
+  password alone.
+- **`apps/accounts/tests apps/core/tests apps/tenants/tests` — 340 passed, 0 failed.** This is the
+  regression gate that matters, because the change touches the login path for every module.
+
+### Two bugs the smoke probe caught (both would have shipped)
+
+1. **`login(request, user)` raised `ValueError: You have multiple authentication backends configured`**
+   — a user fetched from the DB has no `.backend` attribute; only `authenticate()` sets it. The
+   authenticating backend is now carried in the session.
+2. **Every failed login was written with `tenant=NULL`** and therefore never appeared in any
+   workspace's risk register — precisely the case the register exists to show. `authenticate()` returns
+   `None` for both "no such account" and "wrong password", so the identifier is now resolved back to an
+   account to attribute the attempt. An identifier matching NO account is still recorded, just
+   unattributed — honest, since a shared-schema design cannot guess the tenant.
+
+### Probe-vs-code discipline worth carrying
+
+Three smoke failures looked like code bugs and were probe bugs — and one looked like a probe bug and was
+a code bug. Specifically: **`203.0.113.x` / `198.51.100.x` are TEST-NET documentation ranges that
+Python's `ipaddress` classifies as PRIVATE**, so `is_public_ip()` correctly rejected them and the probe's
+"risky" client scored zero. Use a genuinely routable address (e.g. `8.8.8.8`) to exercise risk scoring.
+
+### Design decisions that keep this safe on a foundation app
+
+- The step-up triggers on the **existence of a confirmed device**, so a user without one is untouched.
+- A device is **unconfirmed until a code verifies**, so a mistyped secret cannot lock anyone out.
+- `PasswordPolicy.is_enforced` is **False** by default; enabling it is an explicit admin act.
+- A `UserSession` with **no row is never touched**, so sessions predating the model keep working.
+- Session revocation **deletes the Django session row** (`SESSION_ENGINE` is the db backend) rather than
+  adding a per-request middleware to the hot path.
+- **No MFA device is seeded** — a confirmed device on a demo account would make it unable to sign in
+  without a code nobody can tell the user.
