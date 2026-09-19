@@ -101,8 +101,7 @@ def par_create(request):
         if form.is_valid():
             gate = form.save(commit=False)
             gate.tenant = request.tenant
-            if not gate.requested_by_id:
-                gate.requested_by = request.user
+            gate.requested_by = request.user
             # Check auto-approval tolerance
             if (
                 gate.threshold_amount
