@@ -79,6 +79,22 @@ class RecurringTaskSchedule(TenantNumbered):
     def __str__(self):
         return f"{self.number} — {self.title_template} ({self.get_frequency_display()})"
 
+    @property
+    def is_active_badge(self):
+        return "badge-green" if self.is_active else "badge-slate"
+
+    @property
+    def frequency_badge(self):
+        badges = {
+            "daily": "badge-blue",
+            "weekly": "badge-purple",
+            "biweekly": "badge-indigo",
+            "monthly": "badge-amber",
+            "quarterly": "badge-emerald",
+            "sprint_cadence": "badge-cyan",
+        }
+        return badges.get(self.frequency, "badge-slate")
+
     def clean(self):
         super().clean()
         if self.end_date and self.start_date and self.end_date < self.start_date:
