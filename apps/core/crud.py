@@ -112,8 +112,23 @@ def _enum_values(model, lookup):
     return values
 
 
-def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_context=None, per_page=15):
-    """``filters`` = iterable of ``(get_param, orm_lookup, is_int)`` tuples."""
+def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_context=None, per_page=15,
+              scope_module=None, scope_owner_field=None):
+    """``filters`` = iterable of ``(get_param, orm_lookup, is_int)`` tuples.
+
+    ``scope_module`` opts this list into 0.6's module data scoping: pass the module slug (e.g.
+    ``"crm"``) together with ``scope_owner_field`` — the ORM lookup naming the acting user on this
+    model (``"owner"``, ``"assigned_to"``, ``"created_by"``, …) — and the queryset is narrowed to
+    what the actor may see under the tenant's configured scope.
+
+    Opt-in on purpose. A blanket change here would silently empty every register whose model has no
+    such field, so a module asks for scoping explicitly. `apply_data_scope` is a no-op when no scope
+    row exists, when the scope is disabled, or when `data_scope="all"` — i.e. until an admin
+    configures something, every existing list behaves exactly as before.
+    """
+    if scope_module and scope_owner_field:
+        from apps.core.scoping import apply_data_scope
+        qs = apply_data_scope(qs, request, scope_module, scope_owner_field)
     q = request.GET.get("q", "").strip()
     qs = apply_search(qs, q, search_fields)
     for param, lookup, is_int in filters:
