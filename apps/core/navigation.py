@@ -1945,6 +1945,23 @@ LIVE_LINKS = {
         "A/R Aging Dashboard":               "projects:ar_aging",
         "Cash Flow Forecast":                "projects:cash_flow_forecast",
     },
+    "7.17": {
+        "Visual Workflow Designer":          "projects:pwf_list",
+        "Approval Automation":               "projects:par_list",
+        "Notification & Reminder Rules":     "projects:pwf_list",
+        "Recurring Task Automation":         "projects:rts_list",
+        "Integration Automation (iPaaS)":    "projects:pwh_list",
+        # Extra live leaves:
+        "Automation Cockpit":                "projects:automation_overview",
+        "Approval Inbox":                    "projects:approval_inbox",
+        "Recurrence Calendar":               "projects:recurrence_calendar",
+        "Webhook Diagnostics":               "projects:webhook_diagnostics",
+        "Workflow Rules":                    "projects:pwf_list",
+        "Approval Gates":                    "projects:par_list",
+        "Recurring Schedules":               "projects:rts_list",
+        "Webhook Endpoints":                 "projects:pwh_list",
+        "Webhook Deliveries":                "projects:pwh_delivery_list",
+    },
 
 
 
