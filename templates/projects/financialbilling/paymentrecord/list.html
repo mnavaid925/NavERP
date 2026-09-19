@@ -147,6 +147,8 @@
               <span class="badge badge-amber">Escalated</span>
             {% elif r.status == "resolved" or r.status == "closed" %}
               <span class="badge badge-green">{{ r.get_status_display }}</span>
+            {% else %}
+              <span class="badge badge-muted">{{ r.get_status_display }}</span>
             {% endif %}
           </td>
           <td class="text-right">
