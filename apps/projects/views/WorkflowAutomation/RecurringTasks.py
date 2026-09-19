@@ -81,7 +81,7 @@ def rts_detail(request, pk):
         tenant=request.tenant,
         project=schedule.project,
         description__icontains=schedule.number,
-    ).order_by("-created_at")[:10]
+    ).select_related("assignee").order_by("-created_at")[:10]
 
     return render(
         request,
