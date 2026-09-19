@@ -145,6 +145,12 @@ from apps.projects.models import (
     ProjectBillingRun,
     ProjectRevenueSchedule,
     ProjectPaymentRecord,
+    ProjectWorkflowRule,
+    WorkflowExecutionLog,
+    ProjectApprovalGate,
+    RecurringTaskSchedule,
+    ProjectWebhookEndpoint,
+    ProjectWebhookDelivery,
 )
 
 
@@ -348,6 +354,16 @@ class Command(BaseCommand):
             # apps/projects, so nothing outside 7.10 lives in either subtree.
             purged = self._purge_docmgt_files()
             self.stdout.write(f"  removed {purged} stored 7.10 file(s) from MEDIA_ROOT")
+            ProjectWebhookDelivery.objects.all().delete()
+            ProjectWebhookEndpoint.objects.all().delete()
+            RecurringTaskSchedule.objects.all().delete()
+            ProjectApprovalGate.objects.all().delete()
+            WorkflowExecutionLog.objects.all().delete()
+            ProjectWorkflowRule.objects.all().delete()
+            ProjectPaymentRecord.objects.all().delete()
+            ProjectRevenueSchedule.objects.all().delete()
+            ProjectBillingRun.objects.all().delete()
+            ProjectRateCard.objects.all().delete()
             ProjectClientInvoice.objects.all().delete()
             VendorHandoff.objects.all().delete()
             SOWAmendment.objects.all().delete()
@@ -479,6 +495,8 @@ class Command(BaseCommand):
         # 7.15 Financial & Billing Management: rate cards, billing runs,
         # ASC 606 revenue schedules, payment records & collection workflows.
         self._financial_billing(tenant, now)
+        # 7.17 Workflow & Automation: workflow rules, approval gates, recurring tasks, webhooks.
+        self._workflow_automation(tenant, now)
 
 
 
@@ -4116,6 +4134,286 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.15 seeded: 4 rate cards, 3 billing runs, 3 revenue schedules, 3 payment records."))
+
+    def _workflow_automation(self, tenant, now):
+        """Workflow rules, approval gates, recurring tasks, and webhooks (7.17).
+
+        Guarded per tenant so a re-run is a no-op unless --flush is passed.
+        """
+        if ProjectWorkflowRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.17 workflow automation already seeded. Skipping.")
+            return
+
+        projects = list(Project.objects.filter(tenant=tenant))
+        if not projects:
+            self.stdout.write(self.style.WARNING(f"  {tenant.name}: no projects found for 7.17 seeding."))
+            return
+
+        active_proj = next((p for p in projects if p.status == "active"), projects[0])
+        second_proj = next((p for p in projects if p.id != active_proj.id), active_proj)
+
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        manager = users[0] if users else None
+        approver = users[1] if len(users) > 1 else manager
+        delegate = users[2] if len(users) > 2 else manager
+        today = timezone.localdate()
+
+        with transaction.atomic():
+            # 1. ProjectWorkflowRules
+            rule1 = ProjectWorkflowRule.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                name="Auto-assign High Priority Tasks",
+                description="Automatically assign urgent and high-priority tasks to the engineering lead and emit in-app alerts.",
+                trigger_entity="task",
+                trigger_event="task.created",
+                conditions={"priority": "high"},
+                actions=[
+                    {"action": "assign_to", "user_id": manager.id if manager else None},
+                    {"action": "send_notification", "message": "High priority task created"},
+                ],
+                is_active=True,
+                execution_count=12,
+                last_run_at=now - timedelta(hours=2),
+                created_by=manager,
+            )
+
+            rule2 = ProjectWorkflowRule.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                name="Milestone Phase Gate Notification",
+                description="Broadcast notifications across Slack and in-app when milestone phase gates achieve completion.",
+                trigger_entity="milestone",
+                trigger_event="milestone.achieved",
+                conditions={"is_gate": True},
+                actions=[
+                    {"action": "send_notification", "channel": "in_app", "template": "Phase gate achieved"},
+                ],
+                is_active=True,
+                execution_count=3,
+                last_run_at=now - timedelta(days=1),
+                created_by=manager,
+            )
+
+            rule3 = ProjectWorkflowRule.objects.create(
+                tenant=tenant,
+                project=second_proj,
+                name="Overdue Task Auto-Escalation",
+                description="Escalate tasks past due date by 3 days directly to project sponsor.",
+                trigger_entity="task",
+                trigger_event="task.overdue",
+                conditions={"days_overdue_gte": 3},
+                actions=[
+                    {"action": "change_priority", "to": "urgent"},
+                    {"action": "notify_sponsor"},
+                ],
+                is_active=True,
+                execution_count=5,
+                last_run_at=now - timedelta(days=3),
+                created_by=manager,
+            )
+
+            # 2. WorkflowExecutionLogs
+            WorkflowExecutionLog.objects.create(
+                tenant=tenant,
+                rule=rule1,
+                trigger_entity="task",
+                trigger_event="task.created",
+                trigger_record_id="101",
+                status="success",
+                conditions_evaluated={"priority": "high", "matched": True},
+                actions_taken=[{"action": "assign_to", "status": "ok"}],
+                duration_ms=45,
+                executed_at=now - timedelta(hours=2),
+            )
+            WorkflowExecutionLog.objects.create(
+                tenant=tenant,
+                rule=rule2,
+                trigger_entity="milestone",
+                trigger_event="milestone.achieved",
+                trigger_record_id="205",
+                status="success",
+                conditions_evaluated={"is_gate": True, "matched": True},
+                actions_taken=[{"action": "send_notification", "status": "delivered"}],
+                duration_ms=32,
+                executed_at=now - timedelta(days=1),
+            )
+            WorkflowExecutionLog.objects.create(
+                tenant=tenant,
+                rule=rule3,
+                trigger_entity="task",
+                trigger_event="task.overdue",
+                trigger_record_id="99",
+                status="failed",
+                conditions_evaluated={"days_overdue_gte": 3, "matched": True},
+                error_message="Recipient user notification failed: address unreachable",
+                duration_ms=120,
+                executed_at=now - timedelta(days=3),
+            )
+
+            # 3. ProjectApprovalGates
+            gate1 = ProjectApprovalGate.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                name="Design Phase Gate Approval",
+                description="Formal authorization required before progressing from Discovery into active Build sprint.",
+                gate_type="phase_gate",
+                target_model="ProjectMilestone",
+                target_object_id="1",
+                threshold_amount=None,
+                approver=approver,
+                delegate_approver=delegate,
+                requested_by=manager,
+                status="pending",
+                notes="Review deliverables before moving into build phase.",
+            )
+
+            gate2 = ProjectApprovalGate.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                name="Cloud Infrastructure Expansion Override",
+                description="Approval for unforeseen staging cloud cluster scale-up exceeding initial budget.",
+                gate_type="budget_override",
+                target_model="ProjectExpense",
+                target_object_id="42",
+                threshold_amount=Decimal("15000.00"),
+                approver=approver,
+                delegate_approver=None,
+                requested_by=manager,
+                status="approved",
+                decision_note="Approved based on revised load test capacity requirements.",
+                decided_at=now - timedelta(days=2),
+                notes="Capacity required for load test spike.",
+            )
+
+            gate3 = ProjectApprovalGate.objects.create(
+                tenant=tenant,
+                project=second_proj,
+                name="Mobile Responsive Portal Add-On",
+                description="Scope expansion request to add native mobile views for client portal.",
+                gate_type="scope_change",
+                target_model="ScopeChangeRequest",
+                target_object_id="12",
+                threshold_amount=Decimal("25000.00"),
+                approver=approver,
+                delegate_approver=None,
+                requested_by=manager,
+                status="pending",
+                notes="Additional SOW requirement requested by client sponsor.",
+            )
+
+            # 4. RecurringTaskSchedules
+            RecurringTaskSchedule.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                title_template="Weekly Architecture & Tech Debt Sync - Week {week}",
+                description_template="Review engineering impediments, security scan results, and open PRs.",
+                frequency="weekly",
+                priority="medium",
+                default_assignee=manager,
+                is_active=True,
+                next_run_date=today + timedelta(days=3),
+                total_generated=8,
+                last_generated_at=now - timedelta(days=4),
+                created_by=manager,
+            )
+
+            RecurringTaskSchedule.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                title_template="Monthly Compliance & ISO 27001 Audit",
+                description_template="Verify access logs, encryption key rotations, and vendor compliance records.",
+                frequency="monthly",
+                priority="high",
+                default_assignee=manager,
+                is_active=True,
+                next_run_date=today + timedelta(days=12),
+                total_generated=2,
+                last_generated_at=now - timedelta(days=18),
+                created_by=manager,
+            )
+
+            RecurringTaskSchedule.objects.create(
+                tenant=tenant,
+                project=second_proj,
+                title_template="Daily Standup Impediment Check",
+                description_template="Follow up on any reported blockers from daily standup.",
+                frequency="daily",
+                priority="urgent",
+                default_assignee=approver,
+                is_active=True,
+                next_run_date=today + timedelta(days=1),
+                total_generated=15,
+                last_generated_at=now - timedelta(days=1),
+                created_by=manager,
+            )
+
+            # 5. ProjectWebhookEndpoints
+            ep1 = ProjectWebhookEndpoint.objects.create(
+                tenant=tenant,
+                project=active_proj,
+                name="Engineering Slack Channel Webhook",
+                target_url="https://hooks.slack.com/services/T00000000/B00000000/XXXXX",
+                event_types=["task.created", "milestone.achieved", "gate.approved"],
+                custom_headers={"User-Agent": "NavERP-Automation/1.0"},
+                is_active=True,
+                delivery_count=42,
+                failure_count=1,
+                last_delivery_at=now - timedelta(minutes=45),
+                created_by=manager,
+            )
+
+            ep2 = ProjectWebhookEndpoint.objects.create(
+                tenant=tenant,
+                project=second_proj,
+                name="Jira Cloud Two-Way Sync Connector",
+                target_url="https://api.make.com/v2/webhooks/naverk-sync-endpoint",
+                event_types=["task.status_changed", "issue.created"],
+                custom_headers={"X-Partner-Token": "test-demo-token"},
+                is_active=True,
+                delivery_count=18,
+                failure_count=0,
+                last_delivery_at=now - timedelta(hours=3),
+                created_by=manager,
+            )
+
+            # 6. ProjectWebhookDeliveries
+            ProjectWebhookDelivery.objects.create(
+                tenant=tenant,
+                webhook=ep1,
+                event="task.created",
+                payload={"task_id": 101, "title": "Implement Webhook Engine", "project": active_proj.name},
+                status="success",
+                status_code=200,
+                response_body='{"ok": true}',
+                attempted_at=now - timedelta(minutes=45),
+                duration_ms=85,
+            )
+            ProjectWebhookDelivery.objects.create(
+                tenant=tenant,
+                webhook=ep1,
+                event="gate.approved",
+                payload={"gate_id": gate2.id, "name": gate2.name, "status": "approved"},
+                status="success",
+                status_code=200,
+                response_body='{"ok": true}',
+                attempted_at=now - timedelta(days=1),
+                duration_ms=62,
+            )
+            ProjectWebhookDelivery.objects.create(
+                tenant=tenant,
+                webhook=ep1,
+                event="task.created",
+                payload={"task_id": 99, "title": "Stale Payload Test"},
+                status="failed",
+                status_code=504,
+                response_body="504 Gateway Timeout",
+                attempted_at=now - timedelta(days=2),
+                duration_ms=5012,
+            )
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.17 seeded: 3 workflow rules, 3 execution logs, 3 approval gates, 3 recurring schedules, 2 webhook endpoints, 3 deliveries."))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
