@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Privacy & Data Protection{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Privacy &amp; Data Protection</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Privacy &amp; Data Protection</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:consent_matrix' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Consent matrix</a>
+      <a href="{% url 'core:dsar_list' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Requests</a>
+      <a href="{% url 'core:retention_board' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Retention</a>
+      <a href="{% url 'core:pii_map' %}" class="btn btn-outline"><i data-lucide="scan-search"></i> PII map</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Posture</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Active consent purposes</dt><dd>{{ purpose_count }}</dd></div>
+        <div class="detail-item"><dt>Consent events recorded</dt><dd>{{ consent_events }}</dd></div>
+        <div class="detail-item"><dt>Open data-subject requests</dt><dd>{{ open_dsars }} of {{ total_dsars }}</dd></div>
+        <div class="detail-item"><dt>Overdue requests</dt><dd>{% if overdue_dsars %}<span class="badge badge-red">{{ overdue_dsars }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Active retention policies</dt><dd>{{ policy_count }}</dd></div>
+        <div class="detail-item"><dt>Disposals recorded</dt><dd>{{ disposal_count }}</dd></div>
+        <div class="detail-item"><dt>Fields on the PII map</dt><dd>{{ pii_total }} ({{ pii_confirmed }} confirmed, {{ pii_dismissed }} dismissed)</dd></div>
+        <div class="detail-item"><dt>High-sensitivity fields</dt><dd>{{ pii_high }}</dd></div>
+        <div class="detail-item"><dt>Enabled frameworks</dt><dd>{% for f in frameworks %}<span class="badge badge-info">{{ f.get_code_display }}</span> {% empty %}<span class="badge badge-amber">None</span>{% endfor %}</dd></div>
+        <div class="detail-item"><dt>Strictest DSAR window</dt><dd>{% if strictest_window %}{{ strictest_window }} days{% else %}<span class="text-warn">no clock</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted">Nothing on this page is stored: every figure is derived on read.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent requests</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Subject</th><th>Kind</th><th>Status</th><th>Due</th></tr></thead>
+        <tbody>
+          {% for d in recent_dsars %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:dsar_detail' d.pk %}">{{ d.subject }}</a></td>
+              <td>{{ d.get_kind_display }}</td>
+              <td>{% if d.is_overdue %}<span class="badge badge-red">Overdue</span>{% else %}<span class="badge badge-info">{{ d.get_status_display }}</span>{% endif %}</td>
+              <td>{% if d.due_at %}{{ d.due_at|date:"M d, Y" }}{% else %}<span class="text-warn">no clock</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="inbox"></i><h3>No requests logged</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this module does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted">No automatic personal-data collation across modules, so a DSAR access or portability request is driven
+        to completion but the bundle is assembled by hand. <strong>No destruction of any kind</strong> — the retention board
+        identifies and the disposal register evidences, and the act is out of band. No data-residency <strong>enforcement</strong>
+        (the region is recorded only). No consent-enforcement middleware: recording a withdrawal does not by itself stop a module
+        from mailing someone. No encryption at rest (that is 0.7). Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
