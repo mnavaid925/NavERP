@@ -22,7 +22,6 @@ class ProjectApprovalGateForm(TenantModelForm):
             "target_model",
             "target_id",
             "target_label",
-            "requested_by",
             "approver",
             "delegate_approver",
             "escalate_to",
