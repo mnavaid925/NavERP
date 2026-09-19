@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Recurring Tasks — Workflow & Automation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Recurring Task Schedules</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <span>Recurring Tasks</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:recurrence_calendar' %}" class="btn btn-outline">
+      <i data-lucide="calendar" class="w-4 h-4 mr-1"></i> Recurrence Calendar
+    </a>
+    <a href="{% url 'projects:rts_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Recurring Schedule
+    </a>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="stat-card">
+    <div class="stat-icon purple">
+      <i data-lucide="repeat" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Total Schedules</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">
+      <i data-lucide="check-circle" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Active Cadences</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange">
+      <i data-lucide="calendar" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Due Next 7 Days</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.due_this_week }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, title, description...">
+      </div>
+      <div class="form-group">
+        <label for="id_frequency" class="form-label">Frequency</label>
+        <select name="frequency" id="id_frequency" class="form-select">
+          <option value="">All Frequencies</option>
+          {% for val, label in frequency_choices %}
+          <option value="{{ val }}" {% if frequency == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">Status</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All</option>
+          <option value="active" {% if is_active == "active" or is_active == "true" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" or is_active == "false" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:rts_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">Recurring Task Schedules ({{ page_obj.paginator.count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Title Template</th>
+          <th>Project</th>
+          <th>Frequency</th>
+          <th>Priority</th>
+          <th>Next Run Date</th>
+          <th>Tasks Minted</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in schedules %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:rts_detail' s.pk %}" class="font-medium text-brand hover:underline">
+              {{ s.number }}
+            </a>
+          </td>
+          <td>
+            <div class="font-medium text-slate-900">{{ s.title_template }}</div>
+            {% if s.default_assignee %}
+            <div class="text-xs text-muted">Assignee: {{ s.default_assignee.get_full_name|default:s.default_assignee.username }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'projects:prj_detail' s.project.pk %}" class="badge badge-info hover:underline">
+              {{ s.project.name|truncatechars:20 }}
+            </a>
+          </td>
+          <td>
+            <span class="badge badge-slate">{{ s.get_frequency_display }}</span>
+          </td>
+          <td>
+            {% if s.priority == "urgent" %}
+              <span class="badge badge-red">Urgent</span>
+            {% elif s.priority == "high" %}
+              <span class="badge badge-amber">High</span>
+            {% elif s.priority == "medium" %}
+              <span class="badge badge-info">Medium</span>
+            {% else %}
+              <span class="badge badge-slate">Low</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="text-sm font-medium text-slate-800">{{ s.next_run_date|date:"M d, Y" }}</span>
+          </td>
+          <td>
+            <span class="font-mono text-xs font-semibold">{{ s.tasks_created_count }}</span>
+          </td>
+          <td>
+            {% if s.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-slate">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:rts_detail' s.pk %}" class="btn btn-icon" title="View Details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'projects:rts_edit' s.pk %}" class="btn btn-icon" title="Edit Schedule">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              <form method="post" action="{% url 'projects:rts_generate_task' s.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-purple-600" title="Generate Task Now">
+                  <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'projects:rts_toggle_active' s.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="{% if s.is_active %}Deactivate{% else %}Activate{% endif %}">
+                  <i data-lucide="power" class="w-4 h-4 {% if s.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'projects:rts_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete recurring schedule {{ s.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9">
+            <div class="empty-state py-12 text-center">
+              <i data-lucide="repeat" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+              <h4 class="text-lg font-medium text-slate-800">No Recurring Schedules Found</h4>
+              <p class="text-muted text-sm mt-1">Automate routine project ceremonies, status checks, and deliverables.</p>
+              <div class="mt-4">
+                <a href="{% url 'projects:rts_create' %}" class="btn btn-primary">
+                  <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Schedule
+                </a>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">
+      Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if frequency %}&frequency={{ frequency }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if frequency %}&frequency={{ frequency }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
