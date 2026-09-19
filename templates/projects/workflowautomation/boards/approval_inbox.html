@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Approval Inbox — Workflow & Automation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Approval Inbox</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'projects:overview' %}">Projects</a>
+      <span class="sep">&rsaquo;</span>
+      <a href="{% url 'projects:automation_overview' %}">Automation</a>
+      <span class="sep">&rsaquo;</span>
+      <span>Approval Inbox</span>
+    </div>
+    <p class="text-muted">Review and decide on project phase gates, budget overrides, scope changes, and deliverables awaiting your authorization.</p>
+  </div>
+  <div class="page-actions flex flex-wrap gap-2">
+    <a href="{% url 'projects:automation_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Cockpit</a>
+    <a href="{% url 'projects:par_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All Gates</a>
+    <a href="{% url 'projects:par_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Request Approval</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card card-body">
+    <div class="text-muted text-sm">Directly Assigned to Me</div>
+    <div class="text-2xl font-semibold {% if stats.my_pending > 0 %}text-amber-600{% endif %}">{{ stats.my_pending }}</div>
+    <div class="text-xs text-muted mt-1">Awaiting your sign-off</div>
+  </div>
+  <div class="card card-body">
+    <div class="text-muted text-sm">Delegated to Me</div>
+    <div class="text-2xl font-semibold {% if stats.delegated_pending > 0 %}text-blue-600{% endif %}">{{ stats.delegated_pending }}</div>
+    <div class="text-xs text-muted mt-1">Delegated authority</div>
+  </div>
+</div>
+
+<!-- Section 1: My Pending Approvals -->
+<div class="card mb-6">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="user-check" class="w-5 h-5 text-amber-500"></i>
+      Pending My Decision ({{ stats.my_pending }})
+    </h2>
+  </div>
+  <div class="card-body p-0">
+    {% if gates %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Gate</th>
+              <th>Project</th>
+              <th>Type</th>
+              <th>Requested By</th>
+              <th>Requested Date</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for gate in gates %}
+              <tr>
+                <td>
+                  <a href="{% url 'projects:par_detail' gate.pk %}" class="font-medium hover:underline">{{ gate.number }}</a>
+                  <div class="text-xs text-muted">{{ gate.name }}</div>
+                </td>
+                <td>
+                  {% if gate.project %}
+                    <a href="{% url 'projects:project_detail' gate.project.pk %}" class="text-xs text-muted hover:underline">{{ gate.project.name }}</a>
+                  {% else %}
+                    <span class="text-xs text-muted">All Projects</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge badge-info text-xs">{{ gate.get_gate_type_display }}</span>
+                </td>
+                <td>
+                  <span class="text-xs">{{ gate.requested_by.get_full_name|default:gate.requested_by.username|default:"System" }}</span>
+                </td>
+                <td>
+                  <span class="text-xs text-muted font-mono">{{ gate.created_at|date:"Y-m-d H:i" }}</span>
+                </td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-xs btn-outline">Review</a>
+                    <form method="post" action="{% url 'projects:par_approve' gate.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-primary bg-green-600 hover:bg-green-700 text-white" onclick="return confirm('Approve gate {{ gate.number }}?');">
+                        Approve
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'projects:par_reject' gate.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Reject gate {{ gate.number }}?');">
+                        Reject
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-muted">
+        <i data-lucide="check-circle-2" class="w-10 h-10 mx-auto text-green-500 mb-2"></i>
+        <p class="font-medium">All caught up!</p>
+        <p class="text-xs">You have no pending approval requests assigned directly to you.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Section 2: Delegated Approvals -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="users" class="w-5 h-5 text-blue-500"></i>
+      Delegated to Me ({{ stats.delegated_pending }})
+    </h2>
+  </div>
+  <div class="card-body p-0">
+    {% if delegated_gates %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Gate</th>
+              <th>Project</th>
+              <th>Type</th>
+              <th>Primary Approver</th>
+              <th>Requested By</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for gate in delegated_gates %}
+              <tr>
+                <td>
+                  <a href="{% url 'projects:par_detail' gate.pk %}" class="font-medium hover:underline">{{ gate.number }}</a>
+                  <div class="text-xs text-muted">{{ gate.name }}</div>
+                </td>
+                <td>
+                  {% if gate.project %}
+                    <a href="{% url 'projects:project_detail' gate.project.pk %}" class="text-xs text-muted hover:underline">{{ gate.project.name }}</a>
+                  {% else %}
+                    <span class="text-xs text-muted">All Projects</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge badge-info text-xs">{{ gate.get_gate_type_display }}</span>
+                </td>
+                <td>
+                  <span class="text-xs font-medium">{{ gate.approver.get_full_name|default:gate.approver.username }}</span>
+                </td>
+                <td>
+                  <span class="text-xs">{{ gate.requested_by.get_full_name|default:gate.requested_by.username|default:"System" }}</span>
+                </td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-xs btn-outline">Review</a>
+                    <form method="post" action="{% url 'projects:par_approve' gate.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-primary bg-green-600 hover:bg-green-700 text-white" onclick="return confirm('Approve delegated gate {{ gate.number }}?');">
+                        Approve
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'projects:par_reject' gate.pk %}" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-xs btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Reject delegated gate {{ gate.number }}?');">
+                        Reject
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-muted">
+        <i data-lucide="shield-check" class="w-10 h-10 mx-auto text-slate-400 mb-2"></i>
+        <p>No delegated approval requests assigned to you.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
