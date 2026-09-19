@@ -75,7 +75,6 @@ def ppr_list(request):
             "stage_filter": stage_filter,
             "dunning_choices": ProjectPaymentRecord.DUNNING_LEVEL_CHOICES,
             "dunning_filter": dunning_filter,
-            "total_count": page_obj.paginator.count,
         },
     )
 
