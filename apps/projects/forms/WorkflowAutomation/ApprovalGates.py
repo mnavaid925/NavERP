@@ -58,7 +58,7 @@ class ApprovalDelegateForm(forms.Form):
     """Form for delegating an approval gate to another user."""
 
     delegate_approver = forms.ModelChoiceField(
-        queryset=User.objects.filter(is_active=True),
+        queryset=User.objects.none(),
         required=True,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
@@ -66,3 +66,10 @@ class ApprovalDelegateForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2, "class": "form-textarea", "placeholder": "Delegation reason..."}),
         required=False,
     )
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tenant:
+            self.fields["delegate_approver"].queryset = User.objects.filter(tenant=tenant, is_active=True)
+        else:
+            self.fields["delegate_approver"].queryset = User.objects.filter(is_active=True)
