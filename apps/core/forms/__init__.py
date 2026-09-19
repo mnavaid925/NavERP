@@ -36,3 +36,14 @@ from .ModuleAccessScope import (
     ModuleAccessScopeForm,
     SensitiveFieldMaskForm,
 )  # noqa: F401
+from .Privacy import (
+    ConsentPurposeForm,
+    ConsentRecordForm,
+    DataSubjectRequestForm,
+    DsarVerificationForm,
+    DsarRefusalForm,
+    RetentionPolicyForm,
+    DisposalRecordForm,
+    PiiClassificationForm,
+    RegulatoryFrameworkForm,
+)  # noqa: F401
