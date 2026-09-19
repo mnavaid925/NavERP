@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Your Recovery Codes{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Your Recovery Codes</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Your Recovery Codes</span></div>
+    </div>
+    <div class="page-actions">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Save these now</h2></div>
+    <div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> These are shown <strong>once</strong>. Only a SHA-256 hash of
+        each is stored, so nobody — including an administrator — can show them to you again.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <tbody>
+            {% for code in codes %}
+              <tr><td class="fw-600"><code>{{ code }}</code></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted">Each code works once. Using one signs you in and consumes it.</p>
+      <div class="form-actions">
+        <a href="{% url 'accounts:mfa_manage' %}" class="btn btn-primary"><i data-lucide="check"></i> I have saved them</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
