@@ -82,7 +82,7 @@
                 <tr>
                   <td>
                     <a href="{% url 'projects:par_detail' gate.pk %}" class="font-medium hover:underline">{{ gate.number }}</a>
-                    <div class="text-xs text-muted">{{ gate.name }}</div>
+                    <div class="text-xs text-muted">{{ gate.title }}</div>
                   </td>
                   <td>
                     {% if gate.project %}
