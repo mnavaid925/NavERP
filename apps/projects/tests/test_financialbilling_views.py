@@ -127,9 +127,9 @@ def test_financialbilling_delete_requires_post(
     financialbilling_rate_card_a,
 ):
     delete_url = reverse("projects:rtc_delete", args=[financialbilling_rate_card_a.pk])
-    # GET redirects without deleting
+    # GET returns 405 Method Not Allowed without deleting
     res_get = client_a.get(delete_url)
-    assert res_get.status_code == 302
+    assert res_get.status_code == 405
     assert ProjectRateCard.objects.filter(pk=financialbilling_rate_card_a.pk).exists()
 
     # POST deletes
