@@ -173,3 +173,71 @@ on all 11 POST-only verbs.
 
 Classify 0.3, 0.5, 0.7, 0.9 and 0.14 by the same method, then build module 0's 14 unbuilt sub-modules
 per `plan-remaining-1-module0-submodules.md`.
+
+---
+
+## Step 0 COMPLETE — the remaining five classified (2026-09-19)
+
+Method: for each unmapped bullet, grep the owning app for the feature. An unmapped bullet is
+**built-but-unsurfaced** (add a leaf) or **absent** (real work) — never assume either.
+
+### 0.3 RBAC & Permissions — 1/5 mapped · **3 absent, 1 partial**
+
+| bullet | verdict |
+|---|---|
+| Roles & Role Hierarchies | **built** — `Role` with `permissions` M2M, `is_system` |
+| Granular Permission Sets | **partial** — `Permission` catalog + role bundling exist; no screen/field/action-level enforcement |
+| Row- & Field-Level Security | **ABSENT** |
+| Segregation of Duties (SoD) | **ABSENT** — no conflict rules, no toxic-combination detection |
+| Delegation & Temporary Access | **ABSENT** here. NOTE: procurement 6.3's `ApprovalDelegation` is a *different* concern (dated DOA grants stamped onto approval signatures) and must not be re-declared — L36 boundary. 0.2's new `AccessRequest.granted_until` is the time-bound-access half and could be the delegation vehicle. |
+
+### 0.5 User & Organization Management — 2/5 mapped · **3 absent**
+
+| bullet | verdict |
+|---|---|
+| Organization & Hierarchy Modeling | **built** — `core.OrgUnit` |
+| User Profiles & Preferences | **built** — `accounts:profile` |
+| Groups & Distribution Lists | **ABSENT** as a domain concept. `User.groups` exists only via Django's `PermissionsMixin` (unused by the app UI); no dynamic membership rules, no distribution lists. |
+| Employee/User Lifecycle Sync | **ABSENT** — no HRM joiners/movers/leavers sync. `User.party` + `core.Employment` are the join points. |
+| Guest & External User Access | **ABSENT** as a general concept. Several modules have their OWN portal-access tables (crm 1.4 `VendorPortalAccess`-style, scm 4.16 customer portal, 6.4 `VendorPortalAccess`, 7.14 `ClientPortalAccess`) — 0.5 must unify or explicitly point at them, not add a fifth. |
+
+### 0.7 Data Security & Encryption — 1/5 mapped · **4 absent**
+
+| bullet | verdict |
+|---|---|
+| Encryption at Rest & in Transit | **ABSENT** (infrastructure: MariaDB/TLS config, not app code) |
+| Key & Secret Management | **built** — `tenants.EncryptionKey` (prefix + SHA-256 only; plaintext never stored) |
+| Data Masking & Anonymization | **ABSENT** as a framework. There are *per-model* masks (`IntegrationConfigs.masked()`, `Webhooks.secret_masked`, HRM's `masked_account_number()`) but no generic masking/tokenization layer. |
+| Data Loss Prevention (DLP) | **ABSENT** |
+| Tenant Data Isolation | **realized** architecturally (shared schema + tenant FK + middleware) and now *surfaced* by 0.1's `tenants:isolation_overview`. Consider whether 0.7 should own that leaf instead of 0.1 — currently 0.1 does. |
+
+### 0.9 Audit Trail & Activity Logging — 1/5 mapped · **4 absent**
+
+| bullet | verdict |
+|---|---|
+| Immutable Audit Logs | **built** — `core.AuditLog` (append-only by convention; NOT tamper-evident — no hash chain) |
+| User Activity Tracking | **built** — `core:activity_list` |
+| Administrative Change Logs | **ABSENT as a lens** — the data is in `AuditLog` (role/permission/config changes are logged) but there is no admin-change-specific view |
+| Audit Search & Reporting | **partial** — `core:auditlog_list` has search/filter; no scheduled reports, no evidence export |
+| Log Retention & Forwarding | **ABSENT** — no retention policy, no SIEM forwarding |
+
+### 0.14 Master Data & Reference Configuration — 1/5 mapped · **3 absent, 1 partial**
+
+| bullet | verdict |
+|---|---|
+| Shared Reference Data | **partial / by design** — the masters exist but in their OWNING modules: `accounting.Currency`, `accounting.TaxCode`, `scm.UOM`, `inventory.UomConversion`. There is no central registry, and per L36 there should not be one — 0.14 should INDEX them, not re-declare them. |
+| Master Data Governance | **built** — `core:party_list` + roles/addresses/contacts/relationships |
+| Data Import/Export Tools | **ABSENT** as a generic tool. Per-module imports exist (6.9 catalog upload, 0.2's new `UserImportBatch`); nothing generic. |
+| Code & Picklist Management | **ABSENT** — choices are hard-coded per model, no configurable dropdowns |
+| Cross-Reference Mapping | **ABSENT** — no external-to-internal ID mapping table |
+
+## What this changes about the plan
+
+**Nothing is built-but-unsurfaced.** Every unmapped bullet in 0.3/0.5/0.7/0.9/0.14 is genuinely absent
+or only partial — unlike 0.1, where bullet 3 was realized and merely unsurfaced. So these five are real
+builds, not nav additions. Two boundaries to respect when building:
+
+- **0.3 delegation** vs procurement 6.3's `ApprovalDelegation` (L36 — do not re-declare).
+- **0.5 guest/external access** vs the four existing per-module portal tables (unify or point, never add a fifth).
+- **0.7 tenant isolation** — 0.1 now owns that leaf; decide the owner before duplicating.
+- **0.14 shared reference data** — index the owning modules' masters, never re-declare them (L36).
