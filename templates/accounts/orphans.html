@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Orphan Accounts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Orphan Accounts</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'accounts:access_review_list' %}">Access Reviews</a><span class="sep">›</span><span>Orphan Accounts</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounts:user_list' %}" class="btn btn-outline"><i data-lucide="users"></i> User directory</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Computed on read — nothing here is stored. {{ orphan_total }} account(s) need attention across the two entitlement shapes below.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Active but holds no role</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Member</th><th>Email</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for u in no_role %}
+              <tr>
+                <td class="fw-600">{{ u.get_full_name }}</td>
+                <td>{{ u.email }}</td>
+                <td><span class="badge badge-amber">No role</span></td>
+                <td><div class="table-actions"><a href="{% url 'accounts:user_edit' u.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a></div></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="check"></i><h3>None</h3><p>Every active member holds a role.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-help">These accounts can sign in but can do nothing — usually a provisioning step that never completed.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Suspended or archived but still holds a role</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Member</th><th>Email</th><th>Status</th><th>Role</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for u in stale_role %}
+              <tr>
+                <td class="fw-600">{{ u.get_full_name }}</td>
+                <td>{{ u.email }}</td>
+                <td><span class="badge badge-red">{{ u.get_status_display }}</span></td>
+                <td>{{ u.role }}</td>
+                <td><div class="table-actions"><a href="{% url 'accounts:user_edit' u.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a></div></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="check"></i><h3>None</h3><p>No suspended member still holds a role.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-help">The offboarding half that never ran. De-provisioning a user from their detail page clears the role and closes their elevations in one step.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Active but has never signed in</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Member</th><th>Email</th><th>Joined</th></tr></thead>
+          <tbody>
+            {% for u in never_signed_in %}
+              <tr><td class="fw-600">{{ u.get_full_name }}</td><td>{{ u.email }}</td><td>{{ u.date_joined|date:"M d, Y" }}</td></tr>
+            {% empty %}
+              <tr><td colspan="3"><div class="empty-state"><i data-lucide="check"></i><h3>None</h3><p>Every active member has signed in at least once.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-help">A seat that was provisioned but never used.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Expired grants whose role is still assigned</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Member</th><th>Requested role</th><th>Grant expired</th><th>Still holds</th></tr></thead>
+          <tbody>
+            {% for r in expired_grants %}
+              <tr>
+                <td class="fw-600"><a href="{% url 'accounts:access_request_detail' r.pk %}">{{ r.requester }}</a></td>
+                <td>{% if r.requested_role %}{{ r.requested_role }}{% else %}—{% endif %}</td>
+                <td><span class="badge badge-amber">{{ r.granted_until|date:"M d, Y" }}</span></td>
+                <td>{{ r.requester.role }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="check"></i><h3>None</h3><p>No time-bound grant has outlived its window.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-help">The cross-check that bullets 3 and 4 make possible together: a time-bound grant that expired while the role stayed assigned.</div>
+    </div>
+  </div>
+
+  <a href="{% url 'accounts:access_review_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to reviews</a>
+{% endblock %}
