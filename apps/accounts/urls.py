@@ -69,4 +69,20 @@ urlpatterns = [
     path("invite/<str:token>/", views.invite_accept, name="invite_accept"),
     # Profile
     path("profile/", views.profile_view, name="profile"),
+    # Authentication & SSO — 0.2/0.4. `mfa/challenge/` is deliberately reachable while ANONYMOUS:
+    # the user is mid-login and is not signed in until the challenge passes.
+    path("mfa/challenge/", views.mfa_challenge, name="mfa_challenge"),
+    path("mfa/", views.mfa_manage, name="mfa_manage"),
+    path("mfa/setup/", views.mfa_setup, name="mfa_setup"),
+    path("mfa/setup/confirm/", views.mfa_confirm, name="mfa_confirm"),
+    path("mfa/disable/", views.mfa_disable, name="mfa_disable"),
+    path("mfa/backup-codes/", views.mfa_regenerate_backup, name="mfa_regenerate_backup"),
+    # Session management — 0.4 bullet 4
+    path("sessions/", views.session_list, name="session_list"),
+    path("sessions/revoke-others/", views.session_revoke_others, name="session_revoke_others"),
+    path("sessions/<int:pk>/revoke/", views.session_revoke, name="session_revoke"),
+    # Security posture — 0.4 bullets 3 and 5
+    path("security/", views.security_overview, name="security_overview"),
+    path("security/password-policy/", views.password_policy_edit, name="password_policy_edit"),
+    path("security/login-attempts/", views.login_attempt_list, name="login_attempt_list"),
 ]
