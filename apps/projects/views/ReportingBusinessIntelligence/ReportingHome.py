@@ -24,6 +24,7 @@ from apps.projects import analytics
 from apps.projects.models import Portfolio, ProjectReport
 from apps.projects.models.ReportingBusinessIntelligence._choices import CANVAS_CHARTS
 from apps.projects.views._common import login_required, render, timezone
+from apps.projects.views._helpers import SECTION_AREAS, chart_config, chart_rows
 from apps.projects.views._helpers import clients as client_choices
 from apps.projects.views._helpers import org_units as org_unit_choices
 from apps.projects.views._helpers import projects as project_choices
@@ -33,19 +34,12 @@ TEMPLATE_LIBRARY = "projects/reporting/library.html"
 TEMPLATE_STANDARD = "projects/reporting/standard.html"
 TEMPLATE_EXEC_PACK = "projects/reporting/exec_pack.html"
 
-#: The canvas id on a one-chart page: its canvas element is ``wchart`` plus this id.
-SINGLE_CHART_ID = 0
-
 #: The params the result filter bar echoes back, in bar order.
 SCOPE_PARAMS = ("project", "portfolio", "client", "org_unit", "from", "to")
 
 #: The windows a canned page may narrow to. ``custom`` is absent: a canned kind carries no date
 #: pair of its own, so the registry alone decides its window.
 RANGE_KEYS = frozenset(key for key, _label in analytics.PRESET_RANGES)
-
-#: The areas with a ``_standard_section_<area>.html`` partial on disk. A registry row naming any
-#: other area is dropped here rather than raising while the page renders.
-SECTION_AREAS = ("schedule", "cost", "risk", "quality", "resource", "scope", "agile", "trend")
 
 #: Sub-module number -> its NavERP title, so the sibling panel groups the boards by subject. An
 #: unknown number falls back to the number itself, so a new row still renders.
@@ -106,22 +100,6 @@ def _portfolios(tenant):
     if tenant is None:
         return Portfolio.objects.none()
     return Portfolio.objects.filter(tenant=tenant).order_by("name")
-
-
-def _chart_config(chart_type, labels, data):
-    """The one-entry canvas payload, or no entry at all.
-
-    An HTML chart kind (kpi, gauge, table, heat) renders markup and gets no canvas — a blank
-    canvas still answers 200, which is the failure nobody notices. No labels is nothing to plot.
-    """
-    if chart_type not in CANVAS_CHARTS or not labels:
-        return []
-    return [{"id": SINGLE_CHART_ID, "type": chart_type, "labels": labels, "data": data}]
-
-
-def _chart_rows(labels, data):
-    """Label/value pairs for the HTML bar table a non-canvas kind renders instead."""
-    return [{"label": label, "value": value} for label, value in zip(labels, data)]
 
 
 def _sibling_boards():
@@ -317,8 +295,8 @@ def report_standard(request):
         "chart_type": chart_type,
         "chart_labels": chart_labels,
         "chart_data": chart_data,
-        "chart_config": _chart_config(chart_type, chart_labels, chart_data),
-        "chart_rows": _chart_rows(chart_labels, chart_data),
+        "chart_config": chart_config(chart_type, chart_labels, chart_data),
+        "chart_rows": chart_rows(chart_labels, chart_data),
         "canvas_charts": CANVAS_CHARTS,
         "caveats": result.get("caveats") or [],
         "truncated": result.get("truncated") or False,
@@ -369,8 +347,8 @@ def exec_pack(request):
     return render(request, TEMPLATE_EXEC_PACK, {
         "bands": bands,
         "rag_series": pack.get("rag_history") or [],
-        "chart_config": _chart_config(chart_type, chart_labels, chart_data),
-        "chart_rows": _chart_rows(chart_labels, chart_data),
+        "chart_config": chart_config(chart_type, chart_labels, chart_data),
+        "chart_rows": chart_rows(chart_labels, chart_data),
         "canvas_charts": CANVAS_CHARTS,
         "summary": summary,
         "summary_cards": analytics.summary_pairs(summary),
