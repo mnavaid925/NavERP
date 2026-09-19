@@ -15,8 +15,13 @@ from apps.projects.models.ReportingBusinessIntelligence._choices import MEASURE_
 
 
 class ProjectReportForm(TenantUniqueMixin, TenantModelForm):
-    """The report definition editor. ``number``, ``owner``, ``is_favorite`` and ``last_run_at`` are
-    deliberately absent — they are stamped by the view or moved by a verb, never typed."""
+    """The report definition editor. ``number``, ``is_favorite`` and ``last_run_at`` are
+    deliberately absent — they are stamped by the view or moved by a verb, never typed.
+
+    ``owner`` is absent for the same reason (A2.4: changing it is an ownership transfer, not a
+    dropdown) but it still has to be written on create, and ``crud_create`` builds and saves this
+    form without ever passing it a user. So the view injects one — ``partial(ProjectReportForm,
+    user=request.user)`` — and :meth:`save` below is the one method that helper always calls."""
 
     #: The one field whose FORM type differs from its COLUMN type: a JSON list asked as a checkbox set.
     #: ``MultipleChoiceField`` already hands the model a ``list``, and ``ProjectReport.clean()`` owns the
@@ -49,8 +54,9 @@ class ProjectReportForm(TenantUniqueMixin, TenantModelForm):
             "top_n": forms.NumberInput(attrs={"max": "100"}),
         }
 
-    def __init__(self, *args, tenant=None, **kwargs):
+    def __init__(self, *args, tenant=None, user=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
+        self.user = user
         if tenant is not None:
             self.fields["project"].queryset = Project.objects.filter(
                 tenant=tenant).order_by("name")
@@ -65,3 +71,12 @@ class ProjectReportForm(TenantUniqueMixin, TenantModelForm):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["project", "portfolio", "client", "org_unit"])
         return cleaned
+
+    def save(self, *args, **kwargs):
+        # Only when none is set. A private report saved with ``owner=None`` is hidden from the very
+        # person who saved it (``visible_reports`` matches ``is_shared`` OR ``owner``), so the create
+        # would read as a lost save; and guarding on "unset" is what keeps an edit from quietly
+        # handing the record to whoever pressed Save.
+        if self.instance.owner_id is None and self.user is not None:
+            self.instance.owner = self.user
+        return super().save(*args, **kwargs)
