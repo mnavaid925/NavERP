@@ -20,15 +20,17 @@
   </div>
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <div class="card card-body">
-    <div class="text-muted text-sm">Active Schedules</div>
-    <div class="text-2xl font-semibold">{{ stats.total_recurring }}</div>
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon purple"><i data-lucide="calendar"></i></div>
+    <div class="stat-value">{{ stats.total_recurring }}</div>
+    <div class="stat-label">Active Schedules</div>
     <div class="text-xs text-muted mt-1">Currently automated</div>
   </div>
-  <div class="card card-body">
-    <div class="text-muted text-sm">Runs Projected This Month</div>
-    <div class="text-2xl font-semibold text-blue-600">{{ stats.runs_this_month }}</div>
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="play-circle"></i></div>
+    <div class="stat-value text-blue-600">{{ stats.runs_this_month }}</div>
+    <div class="stat-label">Runs Projected This Month</div>
     <div class="text-xs text-muted mt-1">Next 30 days</div>
   </div>
 </div>
