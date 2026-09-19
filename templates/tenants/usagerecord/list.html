@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Usage Metering{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Usage Metering</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Usage Metering</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:usagerecord_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Usage Record</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Unbilled usage vs plan allowance</h2>
+      {% if subscription %}
+        <span class="badge badge-info">{{ subscription.get_plan_display }} plan</span>
+      {% else %}
+        <span class="badge badge-slate">No subscription</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if usage_summary %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Metric</th><th>Unbilled</th><th>Included</th><th>Overage</th></tr></thead>
+            <tbody>
+              {% for row in usage_summary %}
+                <tr>
+                  <td class="fw-600">{{ row.label }}</td>
+                  <td>{{ row.total }}</td>
+                  <td>{% if row.allowance is None %}<span class="badge badge-slate">Unmetered</span>{% else %}{{ row.allowance }}{% endif %}</td>
+                  <td>
+                    {% if row.overage > 0 %}
+                      <span class="badge badge-red">{{ row.overage }}</span>
+                    {% else %}
+                      <span class="badge badge-green">0</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help">Overage is derived from the plan allowance table, never stored — a price-list change cannot rewrite what last month consumed.</div>
+      {% else %}
+        <div class="empty-state"><i data-lucide="gauge"></i><h3>No unbilled usage</h3><p>Every recorded usage period has been billed.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+        </div>
+        <div class="form-group">
+          <select name="metric" class="form-select">
+            <option value="">All metrics</option>
+            {% for val, label in metric_choices %}
+              <option value="{{ val }}" {% if request.GET.metric == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="billed" class="form-select">
+            <option value="">All records</option>
+            {% for val, label in billed_choices %}
+              <option value="{{ val }}" {% if request.GET.billed == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'tenants:usagerecord_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Metric</th><th>Quantity</th><th>Period</th><th>Subscription</th><th>Billed</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'tenants:usagerecord_detail' obj.pk %}" class="fw-600">{{ obj.get_metric_display }}</a></td>
+              <td>{{ obj.quantity }}{% if obj.is_overage %} <span class="badge badge-amber">over</span>{% endif %}</td>
+              <td>{{ obj.period_start|date:"M d, Y" }} – {{ obj.period_end|date:"M d, Y" }}</td>
+              <td>{% if obj.subscription %}{{ obj.subscription }}{% else %}—{% endif %}</td>
+              <td>
+                {% if obj.is_billed %}
+                  <span class="badge badge-green">Billed</span>
+                {% else %}
+                  <span class="badge badge-slate">Unbilled</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'tenants:usagerecord_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_billed %}
+                    <a href="{% url 'tenants:usagerecord_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'tenants:usagerecord_delete' obj.pk %}" onsubmit="return confirm('Delete this usage record?');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="gauge"></i><h3>No usage records found</h3><p>Record metered usage to bill it against a subscription.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
