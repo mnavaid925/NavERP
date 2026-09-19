@@ -151,6 +151,18 @@ from .FinancialBillingManagement.BillingRuns import ProjectBillingRun  # noqa: F
 from .FinancialBillingManagement.RevenueSchedules import ProjectRevenueSchedule  # noqa: F401
 from .FinancialBillingManagement.PaymentRecords import ProjectPaymentRecord  # noqa: F401
 
-
-
-
+# 7.17 Workflow & Automation
+from .WorkflowAutomation.WorkflowRules import (  # noqa: F401
+    ProjectWorkflowRule,
+    WorkflowExecutionLog,
+)
+from .WorkflowAutomation.ApprovalGates import (  # noqa: F401
+    ProjectApprovalGate,
+)
+from .WorkflowAutomation.RecurringTasks import (  # noqa: F401
+    RecurringTaskSchedule,
+)
+from .WorkflowAutomation.Webhooks import (  # noqa: F401
+    ProjectWebhookEndpoint,
+    ProjectWebhookDelivery,
+)
