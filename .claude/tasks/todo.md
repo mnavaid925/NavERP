@@ -1,3 +1,12 @@
+> **How to read this file — checkboxes are only tracked for recent plans.** Plans for **7.14 and later**
+> (and the procurement plans from 6.9 on) use `- [ ]` / `- [x]` tick-boxes, newest plan first at the top.
+> Plans older than that were never ticked: their completion is recorded in a prose
+> `### <Module> N.M — <Title> (close-out YYYY-MM-DD)` section instead. **An unticked box in an old plan is
+> not evidence of missing work** — procurement 6.9's block, for example, carries 17 unticked boxes while
+> 6.9 is shipped, in `LIVE_LINKS` and closed out in prose. For ground truth on what is built, read
+> `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
+> Do not mass-tick the backlog.
+
 # Build Plan — Projects 7.15 Financial & Billing Management
 
 Source of truth: `.claude/tasks/research-projects-7.15.md`.
@@ -8740,6 +8749,69 @@ Base SHA: `7f3c53e370e71ef4327909ae8dc3351f71dcd012`.
 - [x] Skill & README:
   - [x] Update `.claude/skills/projects/SKILL.md`
   - [x] Update `README.md` (no sub-module updates needed)
+
+---
+
+### Projects 7.14 — Client & External Collaboration (close-out 2026-09-18)
+
+Migration **0021**. Seeder block `_client_collaboration` (idempotent). `LIVE_LINKS["7.14"]`.
+Six models across five entity files: `ClientPortalAccess` [CPA-], `ClientApprovalRequest` [CFB-],
+`StatementOfWork` [SOW-] + `SOWAmendment` [SWA-], `VendorHandoff` [VHD-], `ProjectClientInvoice` [PCI-].
+5 forms, 23 view endpoints, 16 templates.
+
+**Review** — six serial reviewers → `.claude/tasks/review-projects-7.14.md` (conducted 2026-09-18 against
+`c3ccc923…HEAD`). It produced **3 deduplicated action items, all Important** — a thin review relative to
+its siblings, which is itself worth noting as a coverage question rather than a clean bill of health:
+
+1. state-transition verbs in `ClientFeedbacks.py` / `StatementOfWorks.py` / `VendorHandoffs.py` not wrapped
+   in `transaction.atomic()`;
+2. `StatementOfWork.total_amendments` / `effective_value` iterating `.all()` in Python to avoid busting the
+   `prefetch_related` cache (the same derived-property-vs-prefetch trap 7.8 hit);
+3. `pci_list` missing `"project__client"` in `select_related`.
+
+All three fixed via `code-fixer`. **Tests** — 37 across four lanes
+(`test_clientcollab_{models,forms,views,security}.py`: 10 / 15 / 8 / 4).
+
+### Projects 7.15 — Financial & Billing Management (close-out 2026-09-19)
+
+Migration **0022**. Seeder block `_financial_billing` (idempotent). `LIVE_LINKS["7.15"]`.
+Four entities: `ProjectRateCard` [RTC-], `ProjectBillingRun` [PBR-], `ProjectRevenueSchedule` [PRS-],
+`ProjectPaymentRecord` [PPR-] — plus four COMPUTED boards holding no table (`financial_pnl`,
+`financial_variance`, `ar_aging`, `cash_flow_forecast`), the 7.3/7.5/7.6 precedent. 17 templates.
+
+**Review** — six serial reviewers → `.claude/tasks/review-projects-7.15.md`, verdict
+**REMEDIATION REQUIRED (5 Critical, 14 Important, 8 Minor)**. All **27 findings fixed** and marked
+`**[x] fixed`; the file has 0 open items. The five Criticals are worth naming because four are silent
+failures rather than crashes:
+
+- `pbr_generate_invoice` read the billing run **outside** `transaction.atomic()` and without
+  `select_for_update()`, so two concurrent requests could mint duplicate AR invoices and ledger lines;
+- the four list templates iterated raw unpaginated querysets from `extra_context` instead of
+  `object_list`, so every search filter (`?q=`) was **bypassed** and the full register rendered, while the
+  pagination footers tested `paginator.num_pages` (undefined) so the controls never appeared;
+- the A/R aging board read `row.record.record_number` and `row.invoice.invoice_number`, neither of which
+  exists — empty anchors and every invoice showing the "INV-DRAFT" fallback;
+- `ppr_list` triggered ~2N+1 queries (`accounting_invoice__currency` missing from `select_related`, plus
+  an in-template `balance_due` aggregate per row) and read a non-existent `total_amount` where the model
+  has `total`;
+- `financial_pnl` ran 4 `.aggregate()` queries per project in a Python loop (4N+1), replaced with 3 bulk
+  `values("project_id").annotate(...)` queries.
+
+**Tests** — 28 across four lanes (`test_financialbilling_{models,forms,views,security}.py`), green as
+`28 passed, 0 failed`. Two post-build defects were found and fixed while verifying:
+
+- the four conftest fixtures were committed against fields the models do not have (`rate_type`/`daily_rate`,
+  `date_from`/`date_to`, a `client`/`currency` on the revenue schedule, `amount_due`/`amount_paid` on the
+  payment record), so every fixture-backed test errored in setup — aligned to the committed models;
+- `test_financialbilling_billing_run_form_rejects_mismatched_project_and_sow` built its SOW with
+  `effective_date`, a `SOWAmendment` field, so `StatementOfWork` raised `TypeError` in setup and the
+  assertion never ran.
+
+**Process note — this sub-module's docs close-out was skipped and had to be recovered.** The build session
+committed the tests and moved straight on to 7.16, leaving `README.md`, `.claude/skills/projects/SKILL.md`
+and this file still reporting 7.14 as the newest. The 7.15 plan block above was ticked and the SKILL and
+README rows were brought current on 2026-09-19, and this note was added then. **Verify the docs phase
+landed before starting the next sub-module — a green test run is not a close-out.**
 
 ---
 
