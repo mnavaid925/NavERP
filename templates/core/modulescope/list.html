@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Module Access Scopes{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Module Access Scopes</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Module Access Scopes</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:access_matrix' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Access matrix</a>
+      <form method="post" action="{% url 'core:module_scope_sync' %}">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Sync from catalog</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One row per module. The registry RECORDS the policy; it narrows a register only where a
+      module's list view opts in to scoping, and only when <strong>Data scope</strong> is set to something other than
+      "All records". <strong>Access matrix</strong> shows which modules currently enforce.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search module…">
+      </div>
+      <div class="form-group">
+        <select name="module" class="form-select">
+          <option value="">All modules</option>
+          {% for slug, title in modules %}
+            <option value="{{ slug }}" {% if request.GET.module == slug %}selected{% endif %}>{{ title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="data_scope" class="form-select">
+          <option value="">Any scope</option>
+          {% for val, label in data_scope_choices %}
+            <option value="{{ val }}" {% if request.GET.data_scope == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:module_scope_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>#</th><th>Module</th><th>Data scope</th><th>Approval</th><th>Masks</th><th>Enabled</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td>{{ obj.module_number }}</td>
+            <td><a href="{% url 'core:module_scope_detail' obj.pk %}" class="fw-600">{{ obj.module_title }}</a></td>
+            <td>
+              {% if obj.enforces_scope %}<span class="badge badge-amber">{{ obj.get_data_scope_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_data_scope_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.requires_approval %}<span class="badge badge-info">Required</span>{% else %}—{% endif %}</td>
+            <td>{{ obj.masks.count }}</td>
+            <td>{% if obj.is_enabled %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-red">Disabled</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:module_scope_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:module_scope_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield"></i><h3>No module scopes</h3><p>Use "Sync from catalog" to create one row per module.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
