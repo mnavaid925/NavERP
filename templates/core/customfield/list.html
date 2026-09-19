@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Custom Fields{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Custom Fields</h1>
+      <div class="breadcrumb"><a href="{% url 'core:config_overview' %}">Configuration</a><span class="sep">›</span><span>Custom Fields</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:custom_field_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New field</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Extra fields an operator has defined for a module entity, with their values. <strong>A module renders these only if it asks for them</strong> — nothing here retrofits inputs onto the existing create/edit forms, because a generic mutator would have to guess where each field belongs on every one of them. Values are stored against <code>(entity, id)</code> with no foreign key, so a deleted parent leaves an orphan value: the link is by convention, not enforced.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search field or entity…">
+      </div>
+      <div class="form-group">
+        <select name="module" class="form-select">
+          <option value="">Any module</option>
+          {% for val, label in field_type_choices %}{% endfor %}
+          {% for obj in object_list %}{% ifchanged obj.module_slug %}<option value="{{ obj.module_slug }}" {% if request.GET.module == obj.module_slug %}selected{% endif %}>{{ obj.module_slug }}</option>{% endifchanged %}{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="field_type" class="form-select">
+          <option value="">Any type</option>
+          {% for val, label in field_type_choices %}<option value="{{ val }}" {% if request.GET.field_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:custom_field_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Entity</th><th>Field</th><th>Type</th><th>Required</th><th>Values</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.entity_label }}<div class="form-help">{{ obj.module_slug }}</div></td>
+            <td><a href="{% url 'core:custom_field_detail' obj.pk %}">{{ obj.label }}</a><div class="form-help"><code>{{ obj.field_key }}</code></div></td>
+            <td>{{ obj.get_field_type_display }}</td>
+            <td>{% if obj.is_required %}<span class="badge badge-amber">Yes</span>{% else %}—{% endif %}</td>
+            <td>{{ obj.value_count }}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:custom_field_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:custom_field_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="form-input"></i><h3>No custom fields defined</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
