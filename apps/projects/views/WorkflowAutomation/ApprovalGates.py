@@ -33,7 +33,7 @@ def par_list(request):
         qs = qs.filter(status=status)
 
     project_id = request.GET.get("project", "").strip()
-    if project_id:
+    if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
     total_count = ProjectApprovalGate.objects.filter(tenant=request.tenant).count()
