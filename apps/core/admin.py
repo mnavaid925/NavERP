@@ -21,6 +21,14 @@ from .models import (
     DisposalRecord,
     PiiClassification,
     RegulatoryFramework,
+    SettingDefinition,
+    SettingValue,
+    FeatureFlag,
+    NumberingScheme,
+    BusinessCalendar,
+    Holiday,
+    CustomFieldDefinition,
+    CustomFieldValue,
 )
 
 
@@ -182,3 +190,72 @@ class RegulatoryFrameworkAdmin(admin.ModelAdmin):
     list_filter = ["code", "is_enabled", "tenant"]
     search_fields = ["label", "data_residency_region"]
     readonly_fields = ["updated_at"]
+
+
+@admin.register(SettingDefinition)
+class SettingDefinitionAdmin(admin.ModelAdmin):
+    list_display = ["key", "label", "module_slug", "value_type", "default_value", "is_locked"]
+    list_filter = ["value_type", "module_slug", "is_locked"]
+    search_fields = ["key", "label"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(SettingValue)
+class SettingValueAdmin(admin.ModelAdmin):
+    list_display = ["tenant", "definition", "value", "updated_at"]
+    list_filter = ["tenant"]
+    search_fields = ["definition__key", "value"]
+    list_select_related = ["tenant", "definition"]
+    readonly_fields = ["updated_by", "updated_at"]
+
+
+@admin.register(FeatureFlag)
+class FeatureFlagAdmin(admin.ModelAdmin):
+    list_display = ["key", "label", "is_enabled", "applies_to_plan", "tenant"]
+    list_filter = ["is_enabled", "applies_to_plan", "tenant"]
+    search_fields = ["key", "label"]
+    list_select_related = ["tenant"]
+    filter_horizontal = ["exempt_roles"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(NumberingScheme)
+class NumberingSchemeAdmin(admin.ModelAdmin):
+    list_display = ["document_kind", "prefix", "padding_width", "reset_rule", "is_active", "tenant"]
+    list_filter = ["reset_rule", "is_active", "tenant"]
+    search_fields = ["document_kind", "prefix"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(BusinessCalendar)
+class BusinessCalendarAdmin(admin.ModelAdmin):
+    list_display = ["tenant", "timezone_name", "working_days", "updated_at"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(Holiday)
+class HolidayAdmin(admin.ModelAdmin):
+    list_display = ["date", "name", "is_recurring", "region", "tenant"]
+    list_filter = ["is_recurring", "tenant"]
+    search_fields = ["name", "region"]
+    list_select_related = ["tenant"]
+
+
+@admin.register(CustomFieldDefinition)
+class CustomFieldDefinitionAdmin(admin.ModelAdmin):
+    list_display = ["entity_label", "field_key", "label", "field_type", "is_required",
+                    "is_active", "tenant"]
+    list_filter = ["field_type", "is_required", "is_active", "tenant"]
+    search_fields = ["entity_label", "field_key", "label"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(CustomFieldValue)
+class CustomFieldValueAdmin(admin.ModelAdmin):
+    list_display = ["entity_label", "object_id", "definition", "value", "updated_at", "tenant"]
+    list_filter = ["tenant"]
+    search_fields = ["entity_label", "definition__field_key"]
+    list_select_related = ["tenant", "definition"]
+    readonly_fields = ["updated_by", "updated_at"]
