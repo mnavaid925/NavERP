@@ -70,6 +70,8 @@
             <span class="badge badge-green">Invoiced</span>
           {% elif billing_run.status == "cancelled" %}
             <span class="badge badge-red">Cancelled</span>
+          {% else %}
+            <span class="badge badge-muted">{{ billing_run.get_status_display }}</span>
           {% endif %}
         </div>
       </div>
