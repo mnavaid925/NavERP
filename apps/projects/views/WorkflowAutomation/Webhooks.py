@@ -33,7 +33,7 @@ def pwh_list(request):
         qs = qs.filter(is_active=False)
 
     project_id = request.GET.get("project", "").strip()
-    if project_id:
+    if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
     total_count = ProjectWebhookEndpoint.objects.filter(tenant=request.tenant).count()
@@ -284,7 +284,7 @@ def pwh_delivery_list(request):
     qs = ProjectWebhookDelivery.objects.filter(tenant=request.tenant).select_related("webhook")
 
     webhook_id = request.GET.get("webhook", "").strip()
-    if webhook_id:
+    if webhook_id and webhook_id.isdigit():
         qs = qs.filter(webhook_id=webhook_id)
 
     status = request.GET.get("status", "").strip()
