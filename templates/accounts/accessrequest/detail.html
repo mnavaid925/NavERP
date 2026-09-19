@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Access Request{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Access Request</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'accounts:access_request_list' %}">Access Requests</a><span class="sep">›</span><span>#{{ obj.pk }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'pending' %}
+        {% if can_decide %}
+          <form method="post" action="{% url 'accounts:access_request_approve' obj.pk %}">
+            {% csrf_token %}
+            <input type="text" name="note" class="form-input" placeholder="Decision note (optional)">
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve &amp; grant</button>
+          </form>
+          <form method="post" action="{% url 'accounts:access_request_reject' obj.pk %}">
+            {% csrf_token %}
+            <input type="text" name="note" class="form-input" placeholder="Reason (required to reject)" required>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        {% endif %}
+        {% if is_own %}
+          <form method="post" action="{% url 'accounts:access_request_cancel' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="undo-2"></i> Cancel request</button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.status == 'approved' %}
+    <div class="card"><div class="card-body">
+      {% if obj.is_active %}
+        <p class="text-ok"><i data-lucide="check"></i> This grant is ACTIVE until {{ obj.granted_until|date:"M d, Y H:i" }}.</p>
+      {% else %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> This grant EXPIRED on {{ obj.granted_until|date:"M d, Y H:i" }}. The role is still assigned — nothing rewrites access on a timer, so revoke it from the user page or via a certification review.</p>
+      {% endif %}
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Requester</dt><dd>{{ obj.requester }}</dd></div>
+      <div class="detail-item"><dt>Requested role</dt><dd>{% if obj.requested_role %}{{ obj.requested_role }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Requested duration</dt><dd>{{ obj.requested_days }} day(s)</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Granted until</dt><dd>{% if obj.granted_until %}{{ obj.granted_until|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Decided by</dt><dd>{% if obj.decided_by %}{{ obj.decided_by }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Decided at</dt><dd>{% if obj.decided_at %}{{ obj.decided_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Raised</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+    </dl>
+    <div class="detail-item" style="margin-top:1rem;"><dt>Justification</dt><dd>{{ obj.justification|linebreaksbr }}</dd></div>
+    {% if obj.decision_note %}
+      <div class="detail-item" style="margin-top:1rem;"><dt>Decision note</dt><dd>{{ obj.decision_note|linebreaksbr }}</dd></div>
+    {% endif %}
+  </div></div>
+
+  <a href="{% url 'accounts:access_request_mine' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> My requests</a>
+{% endblock %}
