@@ -4174,8 +4174,8 @@ class Command(BaseCommand):
                 ],
                 is_active=True,
                 execution_count=12,
-                last_run_at=now - timedelta(hours=2),
-                created_by=manager,
+                last_fired_at=now - timedelta(hours=2),
+                owner=manager,
             )
 
             rule2 = ProjectWorkflowRule.objects.create(
@@ -4191,8 +4191,8 @@ class Command(BaseCommand):
                 ],
                 is_active=True,
                 execution_count=3,
-                last_run_at=now - timedelta(days=1),
-                created_by=manager,
+                last_fired_at=now - timedelta(days=1),
+                owner=manager,
             )
 
             rule3 = ProjectWorkflowRule.objects.create(
@@ -4209,97 +4209,96 @@ class Command(BaseCommand):
                 ],
                 is_active=True,
                 execution_count=5,
-                last_run_at=now - timedelta(days=3),
-                created_by=manager,
+                last_fired_at=now - timedelta(days=3),
+                owner=manager,
             )
 
             # 2. WorkflowExecutionLogs
             WorkflowExecutionLog.objects.create(
                 tenant=tenant,
                 rule=rule1,
-                trigger_entity="task",
-                trigger_event="task.created",
-                trigger_record_id="101",
+                record_label="Task #101",
+                target_model="ProjectTask",
+                target_id=101,
                 status="success",
-                conditions_evaluated={"priority": "high", "matched": True},
-                actions_taken=[{"action": "assign_to", "status": "ok"}],
+                evaluated_conditions={"priority": "high", "matched": True},
+                executed_actions=[{"action": "assign_to", "status": "ok"}],
                 duration_ms=45,
-                executed_at=now - timedelta(hours=2),
             )
             WorkflowExecutionLog.objects.create(
                 tenant=tenant,
                 rule=rule2,
-                trigger_entity="milestone",
-                trigger_event="milestone.achieved",
-                trigger_record_id="205",
+                record_label="Milestone #205",
+                target_model="ProjectMilestone",
+                target_id=205,
                 status="success",
-                conditions_evaluated={"is_gate": True, "matched": True},
-                actions_taken=[{"action": "send_notification", "status": "delivered"}],
+                evaluated_conditions={"is_gate": True, "matched": True},
+                executed_actions=[{"action": "send_notification", "status": "delivered"}],
                 duration_ms=32,
-                executed_at=now - timedelta(days=1),
             )
             WorkflowExecutionLog.objects.create(
                 tenant=tenant,
                 rule=rule3,
-                trigger_entity="task",
-                trigger_event="task.overdue",
-                trigger_record_id="99",
+                record_label="Task #99",
+                target_model="ProjectTask",
+                target_id=99,
                 status="failed",
-                conditions_evaluated={"days_overdue_gte": 3, "matched": True},
-                error_message="Recipient user notification failed: address unreachable",
+                evaluated_conditions={"days_overdue_gte": 3, "matched": True},
+                error_msg="Recipient user notification failed: address unreachable",
                 duration_ms=120,
-                executed_at=now - timedelta(days=3),
             )
 
             # 3. ProjectApprovalGates
             gate1 = ProjectApprovalGate.objects.create(
                 tenant=tenant,
                 project=active_proj,
-                name="Design Phase Gate Approval",
+                title="Design Phase Gate Approval",
                 description="Formal authorization required before progressing from Discovery into active Build sprint.",
                 gate_type="phase_gate",
                 target_model="ProjectMilestone",
-                target_object_id="1",
+                target_id=1,
+                target_label="Milestone #1",
                 threshold_amount=None,
                 approver=approver,
                 delegate_approver=delegate,
                 requested_by=manager,
                 status="pending",
-                notes="Review deliverables before moving into build phase.",
+                decision_notes="Review deliverables before moving into build phase.",
             )
 
             gate2 = ProjectApprovalGate.objects.create(
                 tenant=tenant,
                 project=active_proj,
-                name="Cloud Infrastructure Expansion Override",
+                title="Cloud Infrastructure Expansion Override",
                 description="Approval for unforeseen staging cloud cluster scale-up exceeding initial budget.",
                 gate_type="budget_override",
                 target_model="ProjectExpense",
-                target_object_id="42",
+                target_id=42,
+                target_label="Expense #42",
                 threshold_amount=Decimal("15000.00"),
                 approver=approver,
                 delegate_approver=None,
                 requested_by=manager,
                 status="approved",
-                decision_note="Approved based on revised load test capacity requirements.",
+                decision_notes="Approved based on revised load test capacity requirements.",
                 decided_at=now - timedelta(days=2),
-                notes="Capacity required for load test spike.",
             )
 
             gate3 = ProjectApprovalGate.objects.create(
                 tenant=tenant,
                 project=second_proj,
-                name="Mobile Responsive Portal Add-On",
+                title="Mobile Responsive Portal Add-On",
                 description="Scope expansion request to add native mobile views for client portal.",
                 gate_type="scope_change",
                 target_model="ScopeChangeRequest",
-                target_object_id="12",
+                target_id=12,
+                target_label="ScopeChange #12",
                 threshold_amount=Decimal("25000.00"),
                 approver=approver,
                 delegate_approver=None,
                 requested_by=manager,
                 status="pending",
-                notes="Additional SOW requirement requested by client sponsor.",
+                decision_notes="Additional SOW requirement requested by client sponsor.",
             )
 
             # 4. RecurringTaskSchedules
@@ -4312,10 +4311,10 @@ class Command(BaseCommand):
                 priority="medium",
                 default_assignee=manager,
                 is_active=True,
+                start_date=today - timedelta(days=30),
                 next_run_date=today + timedelta(days=3),
-                total_generated=8,
-                last_generated_at=now - timedelta(days=4),
-                created_by=manager,
+                tasks_created_count=8,
+                last_run_date=today - timedelta(days=4),
             )
 
             RecurringTaskSchedule.objects.create(
@@ -4327,10 +4326,10 @@ class Command(BaseCommand):
                 priority="high",
                 default_assignee=manager,
                 is_active=True,
+                start_date=today - timedelta(days=60),
                 next_run_date=today + timedelta(days=12),
-                total_generated=2,
-                last_generated_at=now - timedelta(days=18),
-                created_by=manager,
+                tasks_created_count=2,
+                last_run_date=today - timedelta(days=18),
             )
 
             RecurringTaskSchedule.objects.create(
@@ -4342,10 +4341,10 @@ class Command(BaseCommand):
                 priority="urgent",
                 default_assignee=approver,
                 is_active=True,
+                start_date=today - timedelta(days=15),
                 next_run_date=today + timedelta(days=1),
-                total_generated=15,
-                last_generated_at=now - timedelta(days=1),
-                created_by=manager,
+                tasks_created_count=15,
+                last_run_date=today - timedelta(days=1),
             )
 
             # 5. ProjectWebhookEndpoints
@@ -4357,10 +4356,9 @@ class Command(BaseCommand):
                 event_types=["task.created", "milestone.achieved", "gate.approved"],
                 custom_headers={"User-Agent": "NavERP-Automation/1.0"},
                 is_active=True,
-                delivery_count=42,
+                last_status_code=200,
+                last_fired_at=now - timedelta(minutes=45),
                 failure_count=1,
-                last_delivery_at=now - timedelta(minutes=45),
-                created_by=manager,
             )
 
             ep2 = ProjectWebhookEndpoint.objects.create(
@@ -4371,10 +4369,9 @@ class Command(BaseCommand):
                 event_types=["task.status_changed", "issue.created"],
                 custom_headers={"X-Partner-Token": "test-demo-token"},
                 is_active=True,
-                delivery_count=18,
+                last_status_code=200,
+                last_fired_at=now - timedelta(hours=3),
                 failure_count=0,
-                last_delivery_at=now - timedelta(hours=3),
-                created_by=manager,
             )
 
             # 6. ProjectWebhookDeliveries
@@ -4393,7 +4390,7 @@ class Command(BaseCommand):
                 tenant=tenant,
                 webhook=ep1,
                 event="gate.approved",
-                payload={"gate_id": gate2.id, "name": gate2.name, "status": "approved"},
+                payload={"gate_id": gate2.id, "name": gate2.title, "status": "approved"},
                 status="success",
                 status_code=200,
                 response_body='{"ok": true}',
