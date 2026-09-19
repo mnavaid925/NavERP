@@ -7,7 +7,7 @@ Computed operational dashboards for Workflow & Automation:
 - webhook_diagnostics: iPaaS delivery health and failure analysis
 """
 from datetime import timedelta
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 
 from apps.projects.models.WorkflowAutomation.ApprovalGates import ProjectApprovalGate
@@ -28,8 +28,12 @@ def automation_overview(request):
     """Central operational cockpit for automation health, rules, approvals, and webhooks."""
     today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    rules_count = ProjectWorkflowRule.objects.filter(tenant=request.tenant).count()
-    active_rules = ProjectWorkflowRule.objects.filter(tenant=request.tenant, is_active=True).count()
+    rules_agg = ProjectWorkflowRule.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    rules_count = rules_agg["total"] or 0
+    active_rules = rules_agg["active"] or 0
     pending_gates_count = ProjectApprovalGate.objects.filter(tenant=request.tenant, status="pending").count()
     active_schedules = RecurringTaskSchedule.objects.filter(tenant=request.tenant, is_active=True).count()
     active_webhooks = ProjectWebhookEndpoint.objects.filter(tenant=request.tenant, is_active=True).count()
@@ -129,15 +133,20 @@ def recurrence_calendar(request):
 @login_required
 def webhook_diagnostics(request):
     """Real-time iPaaS webhook delivery health, latency chart, and failure diagnostics."""
-    endpoints = ProjectWebhookEndpoint.objects.filter(tenant=request.tenant).select_related("project")
-    total_endpoints = endpoints.count()
-    active_endpoints = endpoints.filter(is_active=True).count()
+    endpoints = list(ProjectWebhookEndpoint.objects.filter(tenant=request.tenant).select_related("project"))
+    total_endpoints = len(endpoints)
+    active_endpoints = sum(1 for ep in endpoints if ep.is_active)
 
-    total_deliveries = ProjectWebhookDelivery.objects.filter(tenant=request.tenant).count()
-    successful_deliveries = ProjectWebhookDelivery.objects.filter(tenant=request.tenant, status="success").count()
+    delivery_stats = ProjectWebhookDelivery.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        successful=Count("id", filter=Q(status="success")),
+        avg_latency=Avg("duration_ms"),
+    )
+    total_deliveries = delivery_stats["total"] or 0
+    successful_deliveries = delivery_stats["successful"] or 0
     success_rate_pct = round((successful_deliveries / total_deliveries * 100), 1) if total_deliveries else 100.0
 
-    avg_latency = ProjectWebhookDelivery.objects.filter(tenant=request.tenant).aggregate(Avg("duration_ms"))["duration_ms__avg"]
+    avg_latency = delivery_stats["avg_latency"]
     avg_latency_ms = round(avg_latency, 1) if avg_latency else 0
 
     recent_failures = ProjectWebhookDelivery.objects.filter(
