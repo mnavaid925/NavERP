@@ -8732,4 +8732,412 @@ Base SHA: `7f3c53e370e71ef4327909ae8dc3351f71dcd012`.
   - [x] Update `.claude/skills/projects/SKILL.md`
   - [x] Update `README.md` (no sub-module updates needed)
 
+---
+
+# Sub-module 7.16 — Reporting & Business Intelligence (Module 7: Project Management, `projects`) — plan from research-projects-7.16.md (2026-09-19)
+
+Source of truth: `.claude/tasks/research-projects-7.16.md` (~491 lines, committed `906b72d3`).
+**BASE for the Phase-4 diff = `906b72d3`** (claimed 2026-09-19; re-run `git rev-parse HEAD` at the start of Phase 3 and re-save).
+**The app EXISTS — this plan EXTENDS it.** No scaffold, no `config/settings.py` item, no `config/urls.py` item,
+no app-level `apps.py`/`admin.py` creation — `apps/projects/` already ships all of it (15 built sub-modules).
+
+**Folder names, verified against the siblings (not assumed).** `apps/projects/{models,forms,views,urls}/` holds
+PascalCase NavERP.md titles with `&` dropped — 7.13 `AgileScrumManagement`, 7.14 `ClientExternalCollaboration`,
+7.15 `FinancialBillingManagement`, 7.12 `PortfolioProgramManagement`. So 7.16
+`### 7.16 Reporting & Business Intelligence` → **`ReportingBusinessIntelligence/`** in all four packages.
+Templates use the SHORT slug instead (verified: `templates/projects/financialbilling/`, `agile/`, `portfolio/`) →
+**`templates/projects/reporting/`**. Test subslug **`reporting`** (every fn `test_reporting_*`, every helper `_reporting_*`).
+
+## Read this before writing a line — what 7.16 IS
+
+- [ ] 7.16 is the module's **read + save-the-view layer**, not a fourth register. Bullets 1, 3 and 5 are satisfied
+  mostly by **pages and endpoints**; a model earns its migration only for (a) a saved question, (b) a frozen
+  answer, (c) a dashboard container, (d) a tile. **4 models, one `analytics.py`, one family of report pages.**
+- [ ] **Reports read, never write money (L29).** No balance columns, no re-derived EVM, nothing written to
+  `accounting.*`. `CostControlAccount.bac/pv/ev/ac/cv/sv/cpi/spi/eac/etc/committed/available/health` are
+  **`@property` reads** (verified at `apps/projects/models/CostManagement/CostControlAccounts.py:104–232`);
+  utilization denominators come from `ResourceAllocation.planned_hours(win_start, win_end)` (verified
+  `ResourceManagement/ResourceAllocations.py:107`); week buckets from `ResourceTimeEntry.week_key` (verified
+  `ResourceManagement/ResourceTimeEntries.py:82`).
+- [ ] **Deliberately NOT in scope — do not resurrect these:** a `MetricDefinition`/semantic-layer table (the
+  frozen `*_CHOICES` + `analytics.WIDGET_METRICS` registry IS the definition layer, in-repo convention ×2), and a
+  `ReportExportLog` table (`core.AuditLog`, verified `apps/core/models/Document.py` sibling module, covers exports).
+- [ ] **Already-built report surfaces — LINK them, never rebuild:** `pfm_dashboard` (7.12),
+  `utilization_dashboard` (7.11), `velocity_report` (7.13), `financial_pnl` / `financial_variance` / `ar_aging` /
+  `cash_flow_forecast` (7.15), `risk_analysis` (7.5), `qrv_report` (7.6), `task_board`, `gantt_timeline`,
+  `sprint_execution` burndown. `rbi_home` presents them as one library; that panel is 7.16's answer to "50+
+  standard reports" without a second engine behind any of them.
+- [ ] In-repo precedents to copy (all verified present): `apps/procurement/models/SpendAnalyticsReporting/SpendReports.py`
+  (the guided-builder ruling + `SpendReportSnapshot` ordering tie-breaker + JSONField payload shape at
+  `:278–279`), `apps/crm/models/AnalyticsReporting/{Dashboards,Widgets,Reports,Snapshots,_choices}.py`,
+  `apps/crm/analytics.py` (471 lines, `_r_*` registry, `range_bounds()`, `compute_report`),
+  `apps/procurement/views/SpendAnalyticsReporting/SpendReports.py::visible_reports` (the ACL helper),
+  `templates/crm/analytics/dashboard/detail.html:59,77–94` (the Chart.js contract).
+
+## Models (4 — the research's set; `TenantNumbered`/own-tenant-FK per `apps/projects/models/_base.py`)
+
+- [ ] `models/ReportingBusinessIntelligence/ProjectReports.py` — **`ProjectReport` [REP-]** `TenantNumbered`,
+  `NUMBER_PREFIX = "REP"` (verified free in this app; `PRT`=Portfolio, `DSH`=DocumentShare). The saved question
+  (bullets 1 + 2). Fields: `name` (CharField 120), `description` (Text blank), `owner` (FK
+  `settings.AUTH_USER_MODEL` SET_NULL null related_name="project_reports"), `is_favorite` (bool),
+  `is_shared` (bool), `last_run_at` (DateTime null, `editable=False`, **system-stamped by `rep_run`/`rep_freeze`
+  ONLY — never on page open**), `report_type` (CharField 24 `REPORT_TYPE_CHOICES`), `subject` (CharField 24
+  `SUBJECT_CHOICES`), `measures` (**JSONField default=list**, 1–3 keys from `MEASURE_CHOICES` — the Teamwork
+  "add columns" step + Procore/Celoxis "calculated columns" answered by *frozen ratio keys*, not a parser),
+  `dimension_1`/`dimension_2` (CharField 20 `DIMENSION_CHOICES`, `none` allowed), `date_range` (CharField 10
+  `RANGE_CHOICES` default `last_90`), `date_from`/`date_to` (Date null), `as_of` (Date null),
+  scope FKs all SET_NULL + null + tenant-revalidated in `clean()`: `project` → `projects.Project`,
+  `portfolio` → `projects.Portfolio`, `client` → `core.Party`, `org_unit` → `core.OrgUnit`;
+  `chart_type` (CharField 10 `CHART_CHOICES` default `table`), `top_n` (PositiveInt default 20, validators
+  1..100), `sort_by` (CharField 20 blank — a measure key), `notes` (Text blank).
+  `Meta`: `ordering=["name"]`, `unique_together=("tenant","number")`, indexes `rep_tnt_type_idx`
+  (`tenant`,`report_type`), `rep_tnt_share_idx` (`tenant`,`is_shared`) — **both names grep-verified free across
+  `apps/` on 2026-09-19**. `clean()`: 1 ≤ len(measures) ≤ 3 and every key ∈ registry; window required unless
+  `date_range == "all"`; **window ≤ 730 days** (Teamwork's two-year cap); `as_of` inside the window;
+  `dimension_2 != "none"` ⇒ `dimension_1 != dimension_2`; each non-null scope FK's `tenant_id` must equal
+  `self.tenant_id`. **No money, no percentage, no count column on this table** (drivers: saved report library,
+  guided builder, as-of discipline, top-N with visible tail, share/favorite).
+  Form excludes (L22): `tenant`, `number`, `owner` (defaulted to request.user), `last_run_at`, `is_favorite`.
+- [ ] `models/ReportingBusinessIntelligence/ReportRuns.py` — **`ProjectReportRun`** (unnumbered; plain
+  `models.Model` + own `tenant` FK, verbatim `crm.ReportSnapshot` / `procurement.SpendReportSnapshot` shape —
+  *"written once and never edited"*). The frozen answer (bullets 1 + 4 + the trend requirement). Fields: `report`
+  (FK `ProjectReport` CASCADE related_name="runs"), `title` (CharField 200), `period_from`/`period_to` (Date
+  null), `as_of` (Date), `generated_by` (FK user SET_NULL null `editable=False` related_name="+"),
+  `generated_at` (`auto_now_add`, `editable=False`), `summary` (JSONField default=dict — KPI cards), `data`
+  (JSONField default=dict — `{columns, rows, chart_type, chart_labels, chart_data, caveats}`), `row_count`
+  (PositiveInt default 0), **`narrative` (Text blank)** — the steering-pack commentary authored pre-issue (the
+  honest, no-LLM version of monday/PPM Express "AI narrative"), `status` (CharField 10 `STATUS_CHOICES`
+  `draft`/`issued`/`archived` default `draft`), `issued_by` (FK user null `editable=False`), `issued_at`
+  (DateTime null `editable=False`), `document` (FK `core.Document` SET_NULL null related_name="project_report_runs"
+  — set when the issued pack is filed against a `projects.DocumentTemplate` whose `category` is `report` or
+  `status_update`, verified present in `CATEGORY_CHOICES`).
+  `Meta`: **`ordering = ["-generated_at", "-id"]`** (the tie-breaker ruling — two runs in one clock tick must not
+  make "latest" flip between renders), indexes `run_tnt_gen_idx` (`tenant`,`-generated_at`), `run_tnt_rep_idx`
+  (`tenant`,`report`). **No create/edit/delete-in-UI and no builder form**: rows appear only from `rep_freeze`;
+  the only later writes are `narrative`, `issue`, `archive`, admin-gated `delete`. RAG persistence ("amber for
+  six weeks") is computed from THIS series and nowhere else — that is the justification for the table.
+- [ ] `models/ReportingBusinessIntelligence/ProjectDashboards.py` — **`ProjectDashboard` [PDB-]** `TenantNumbered`,
+  `NUMBER_PREFIX = "PDB"` (verified free; `DSH` is taken by `DocumentShare`). The container (bullet 3): `name`
+  (120), `description` (Text blank), `owner` (FK user SET_NULL null related_name="project_dashboards" — **null =
+  a tenant-provided audience template**), `audience` (CharField 20 `AUDIENCE_CHOICES`: `pm`, `resource_manager`,
+  `finance`, `quality`, `agile_team`, `executive`, `portfolio` — the real NavERP personas, from the Dynamics
+  role-dashboard + monday/Zoho template-gallery findings), `is_default` (bool — the personalized home),
+  `is_shared` (bool), `layout` (CharField 5 `LAYOUT_CHOICES` `one`/`two`/`three` — crm vocabulary),
+  `default_range` (CharField 10 `RANGE_CHOICES` default `last_90`), `project`/`portfolio` (SET_NULL null scope FKs).
+  `Meta`: `ordering = ["-is_default", "name"]`, `unique_together=("tenant","number")`, indexes
+  `pdb_tnt_own_idx` (`tenant`,`owner`), `pdb_tnt_share_idx` (`tenant`,`is_shared`) — both names grep-verified
+  free. `widget_count` property + `annotate` in the list view. `clean()`: at most one other default per
+  `(tenant, owner)`; scope FK tenant match. Form excludes: `tenant`, `number`, `owner`, `is_default`.
+- [ ] `models/ReportingBusinessIntelligence/DashboardWidgets.py` — **`DashboardWidget`** (unnumbered child; own
+  `tenant` FK; `dashboard` FK `ProjectDashboard` CASCADE related_name="widgets"). The tile: `title` (120),
+  `metric` (CharField 40 `WIDGET_METRIC_CHOICES` — keys must match `analytics.WIDGET_METRICS` exactly),
+  `chart_type` (CharField 10 `CHART_CHOICES` default `kpi`), `date_range` (CharField 10 `RANGE_CHOICES`),
+  `size` (CharField 10 `SIZE_CHOICES` `small`/`medium`/`large`/`full`), `position` (PositiveInt default 0),
+  `target_value` (DecimalField 14,2 null — progress-to-target for KPI/gauge), `project`/`portfolio` (SET_NULL
+  null related_name="+" scope FKs), `created_at`/`updated_at`. `Meta`: `ordering=["position","id"]`, index
+  `wdg_tnt_dash_idx` (`tenant`,`dashboard`). `clean()`: the metric must support the chart (crm's rule — stops a
+  gauge asking for a multi-series), scope FKs tenant-checked. Form excludes: `tenant`, `dashboard`, `position`
+  (auto-appended), `created_at`/`updated_at`.
+  **Name note:** mirrors `crm.DashboardWidget` deliberately (different app ⇒ table `projects_dashboardwidget`);
+  it is why index names here must NOT reuse crm's `crm_widget_tnt_dash_idx` — index names are DB-global.
+- [ ] `models/ReportingBusinessIntelligence/_choices.py` — the ONE shared choices module. A per-sub-module
+  `_choices.py` is an established repo convention, not an invention: 10 exist as of 2026-09-19
+  (`apps/crm/models/AnalyticsReporting/_choices.py` — the closest precedent, it carries exactly this
+  report/widget vocabulary — plus `inventory/ThirdPartyIntegrations` and eight under `apps/scm/models/`).
+  `apps/projects` has none yet, so this is the app's first. Entity modules pull it with an **absolute** import; per
+  `apps/projects/models/_base.py`'s docstring the 7.16 files may use either `import *` or 7.15's explicit
+  `from apps.projects.models._base import TenantNumbered, q2` — **match 7.15**.
+  Freeze the vocabularies once so report tiles, widgets and the builder share one list:
+  `RANGE_CHOICES` (`last_7`,`last_30`,`last_90`,`quarter`,`year`,`all`), `CHART_CHOICES` (`kpi`,`bar`,`line`,`pie`,
+  `doughnut`,`gauge`,`table`,`heat`), `LAYOUT_CHOICES`, `SIZE_CHOICES`, `AUDIENCE_CHOICES`, `STATUS_CHOICES`,
+  `REPORT_TYPE_CHOICES` (the 16 canned kinds: `status_report`, `milestone_summary`, `schedule_variance`,
+  `risk_register`, `issue_log`, `quality_defect_summary`, `scope_change_summary`, `cost_variance`, `earned_value`,
+  `resource_utilization`, `time_entry`, `billing_summary`, `agile_throughput`, `portfolio_health`,
+  `steering_pack`, `custom`), `SUBJECT_CHOICES` (16 registers), `MEASURE_CHOICES` (≈20 incl. the ratio/variance/
+  aging keys `cv`,`sv`,`cv_pct`,`sv_pct`,`cpi`,`spi`,`eac`,`on_time_pct`,`slip_days`,`utilization_pct`,
+  `billable_pct`,`exposure_value`,`open_count`,`aging_days`,`unbilled_amount`), `DIMENSION_CHOICES` (17 incl.
+  `month`,`quarter`,`wbs_phase`), `WIDGET_METRIC_CHOICES` (≈22: scalars `kpi_active_projects`,
+  `kpi_overdue_tasks`, `kpi_open_risks`, `kpi_open_issues`, `kpi_open_defects`, `kpi_cpi`, `kpi_spi`,
+  `kpi_utilization_pct`, `kpi_billable_pct`, `kpi_unbilled_amount`, `kpi_schedule_slip_days`; series
+  `projects_by_status`, `tasks_by_status`, `risks_by_category`, `issues_by_severity`, `defects_by_severity`,
+  `hours_by_activity_code`, `cost_variance_by_project`, `ev_curve_by_month`, `utilization_by_resource`,
+  `milestones_on_time_by_month`, `health_heat_bands`; tables `top_cost_variance_projects`,
+  `top_risk_exposure_projects`, `overdue_milestones`). **The final key set is frozen in the Phase 3 contract
+  file — this list is the budget, not a licence to add keys later.**
+
+## The compute layer — `apps/projects/analytics.py` (NEW FILE, zero tables; the real substance of 7.16)
+
+- [ ] Author it mirroring `apps/crm/analytics.py` + `apps/procurement/analytics.compute_report`. Public surface
+  to pin in the contract: `MEASURES`, `DIMENSIONS`, `SUBJECTS`, `WIDGET_METRICS`, `STANDARD_REPORTS`,
+  `range_bounds()`, `resolve_window()`, `allowed_charts(metric)`, `compute_widget(widget)`,
+  `compute_report(report)`, `standard_report(kind, tenant, params)`, `exec_pack(tenant, *, portfolio, as_of)`,
+  `rag_streak(tenant, project, as_of)`, `narrative_seed(...)`; private formatters `_money/_num/_pct/_hours`.
+- [ ] **One-way import edge (verbatim 6.14 ruling):** `analytics.py` imports models; models NEVER import
+  analytics. Forms and views may import it.
+- [ ] `compute_report()`/`standard_report()` return exactly `{summary, columns, rows, chart_type, chart_labels,
+  chart_data, caveats}` and **every value must be JSON-serialisable** (the procurement contract — Decimals are
+  coerced by `_money`/`_pct`, dates ISO-str). That payload shape is also what `rep_json` serves and what 7.18's
+  future token feed hangs off.
+- [ ] `WIDGET_METRICS[key]` = `{"label", "charts": [...], "drill_url_name", "drill_params", "compute"}` —
+  `drill_url_name` must be a **verified sibling list url name** (`projects:rsk_list`, `projects:iss_list`,
+  `projects:qdf_list`, `projects:tsk_list`, `projects:mst_list`, `projects:rte_list`, `projects:ral_list`,
+  `projects:pex_list`, `projects:pci_list`) so tile drill-down is free; the heat tile deep-links
+  `projects:pfm_dashboard` rather than re-deriving health (7.12 owns it).
+- [ ] **Denominator caveat, not a divide-by-zero:** `utilization_pct` divides `ResourceTimeEntry.hours` by
+  `ResourceAllocation.planned_hours(win_start, win_end)`; an unallocated resource has no denominator and must
+  render `"(unassigned)"` (mirrors procurement's `uses_department_axis` caveat property).
+- [ ] **Row cap + honest truncation caveat** on every computed page (mirror 7.5's boards: 2000 register rows,
+  and the page says it truncated). Query discipline: aggregate/`values(...).annotate(...)` and
+  `select_related`/`prefetch_related`, never a per-row `CostControlAccount` property loop; where a property must
+  be read per account, cap the iteration and state the cap.
+- [ ] `rag_streak()` counts consecutive issued `ProjectReportRun`s carrying the same rating — the only place
+  "just turned amber" vs "amber for six weeks" is derivable (Leaplytics trust requirement).
+
+## Backend layers (`apps/projects/{models,forms,views,urls}/ReportingBusinessIntelligence/`)
+
+- [ ] Forms: `ProjectReports.py` (`ProjectReportForm` — guided dropdowns over the frozen choices, `tenant`
+  kwarg narrowing the four scope FK querysets, `clean()` re-checking FK tenancy because *"a narrowed <select> is
+  UX, not an authorization boundary"*), `ReportRuns.py` (`ProjectReportNarrativeForm` — `narrative` + `document`
+  only), `ProjectDashboards.py` (`ProjectDashboardForm`), `DashboardWidgets.py` (`DashboardWidgetForm` with the
+  metric↔chart pair rule). Base: `apps/projects/forms/_common.py` (`TenantUniqueMixin`, `_reject_foreign`).
+- [ ] Views (function-based, `@login_required`, tenant-scoped, privileged writes `@tenant_admin_required`):
+  - `ProjectReports.py` — `rep_list`, `rep_create`, `rep_detail`, `rep_edit`, `rep_delete`, `rep_run` (POST),
+    `rep_freeze` (POST), `rep_favorite` (POST), `rep_csv`, `rep_json`.
+  - `ReportRuns.py` — `run_list`, `run_detail`, `run_narrative` (POST), `run_issue` (POST), `run_archive` (POST),
+    `run_delete` (POST, admin-gated), `run_csv`.
+  - `ProjectDashboards.py` — `pdb_list`, `pdb_create`, `pdb_detail`, `pdb_edit`, `pdb_delete`, `pdb_home`.
+  - `DashboardWidgets.py` — `wdg_create`, `wdg_edit`, `wdg_delete`, `wdg_move` (POST, up/down).
+  - `ReportingHome.py` — `rbi_home`, `report_library`, `report_standard`, `exec_pack` (the standalone
+    computed pages — **precedent: `views/FinancialBillingManagement/FinancialBoards.py`, the 7.15 pattern**).
+- [ ] **Access control in ONE place each** (copy `procurement …/SpendReports.py::visible_reports`):
+  `visible_reports(request)` = `tenant` scoped ∧ (`is_shared=True` ∨ `owner=request.user`);
+  `visible_runs(request)` inherits its parent report's privacy; `visible_dashboards(request)` the same.
+  A colleague's private report/dashboard/run is a **404**, not an unlabelled row — `is_shared` is a real
+  ACL claim, and the export/JSON routes must go through the same helpers (an access rule with two definitions
+  has one that is out of date).
+- [ ] **Verb discipline:** `rep_run` stamps `last_run_at` with `ProjectReport.objects.filter(pk=…,
+  tenant=…).update(...)` so `updated_at` (`auto_now`) does not lie about the definition being edited
+  (verbatim `spendreport_run`), and `rep_freeze` writes the run + the parent stamp inside one
+  `transaction.atomic()`. `run_issue` is the only writer of `status="issued"`, `issued_by`, `issued_at`
+  (7.1's verb pattern). Delete/issue/freeze/archive/favorite/move are all `@require_POST` with
+  **`@require_POST` OUTERMOST** — 7.7's 403-vs-405 decorator-ordering bug is the cautionary precedent.
+- [ ] **Audit every read-heavy write AND every export:** `write_audit_log(request.user, obj, action)` —
+  `core.AuditLog.action` is **`varchar(10)`** (documented in `apps/projects/views/_common.py`; 7.10's fifth
+  Critical was a 23-char action silently truncated). Allowed strings here: `create`, `update`, `delete`,
+  `freeze`, `issue`, `export`, `archive`, `toggle`. **The verb goes in `changes`, never in `action`.**
+- [ ] URLs: `urls/ReportingBusinessIntelligence/{ProjectReports,ReportRuns,ProjectDashboards,DashboardWidgets,ReportingHome}.py`,
+  concatenated in `urls/__init__.py` (imports `_rbi_reports`, `_rbi_runs`, `_rbi_dashboards`, `_rbi_widgets`,
+  `_rbi_home`). **Every 7.16 route sits under the single literal first segment `reporting/`** — verified
+  2026-09-19: `grep -rn 'path("reporting/' apps/projects/urls/` returns 0 hits across all 82 existing entity url
+  modules, so the segment cannot shadow anything (same trick 7.13 used with `agile/`, 7.15 with `financial/`).
+  Literal-before-`<int:pk>` within each module (first-match-wins).
+- [ ] Re-export blocks (a missing one is an ImportError at runtime): append a `# --- 7.16 Reporting & Business
+  Intelligence` section to `apps/projects/models/__init__.py`, `forms/__init__.py`, `views/__init__.py`, and the
+  `urls/__init__.py` import + concatenation above; plus the four sub-package `__init__.py` docstring stubs
+  (per `models/FinancialBillingManagement/__init__.py`, they are *"intentionally EMPTY of re-exports"*).
+- [ ] `admin.py`: register all 4 (`ProjectReportAdmin` with `list_filter=("report_type","chart_type","is_shared","is_favorite")`,
+  `search_fields=("number","name","description")`, `readonly_fields=("number","last_run_at","created_at","updated_at")`;
+  `ProjectReportRunAdmin` read-only-ish with `has_add_permission` → False; `ProjectDashboardAdmin`;
+  `ProjectDashboardWidgetAdmin` with `list_select_related`).
+- [ ] **ONE incremental migration** — `python manage.py makemigrations projects`.
+  ⚠️ **Do NOT assume the number.** As of 2026-09-19 `apps/projects/migrations/` tops out at
+  `0023_projectpaymentrecord_ppr_tnt_dunning_idx_and_more.py` and a **concurrent session is committing 7.15 test
+  fixes in this same checkout** (L43/L51/L53). Immediately before `makemigrations`: re-run
+  `ls apps/projects/migrations/`, re-run `git rev-parse HEAD`, and after it run
+  `git status --short apps/projects/migrations/` to prove **only your one file** appeared (makemigrations in a
+  shared tree is scoped to the app REGISTRY, not to your files). Then `migrate`, and
+  `makemigrations projects --check` must say "No changes detected".
+- [ ] **Extend** (never rewrite) `apps/projects/management/commands/seed_projects.py`: add
+  `_reporting_bi(self, tenant, now)` and call it from `_seed_tenant` **after** `self._financial_billing(...)`
+  (line ~479). Idempotent guard first: `if ProjectReport.objects.filter(tenant=tenant).exists():` → write
+  `"  {tenant}: 7.16 Reporting & Business Intelligence already seeded — skipping."` and return. Seed per tenant:
+  2 dashboards (a `pm` `is_default` with 6 widgets + an `executive` `is_shared` with 5), 5 saved reports
+  (`status_report`, `earned_value`, `risk_register`, `resource_utilization`, one `custom` builder example),
+  **ZERO runs** — a frozen run must be *issued* by a human (the research's explicit ruling). Reuse the existing
+  tenant/`Project`/`core.Party`/`Portfolio`/user locals the `_financial_billing` block already resolves; never
+  mint a second project or client. Keep the existing `_print_logins()` tail pointing at `admin_<slug>`.
+
+## Wire-up (ONE entry in ONE file — the app already exists, so there is NO settings.py / config/urls.py work)
+
+- [ ] `apps/core/navigation.py`: add **one** `LIVE_LINKS["7.16"]` dict after the `"7.15"` block (7.16 key does not
+  exist yet — verified 2026-09-19; `7.12`@1891, `7.13`@1903, `7.14`@1915, `7.15`@1926). Surgical `Edit` only,
+  never a full rewrite of that shared file (L43). Keys MUST equal NavERP.md's bolded bullet label exactly — the
+  sidebar parses `^\s*-\s+\*\*(.+?)\*\*` (`_FEATURE_RE`, `apps/core/navigation.py:1964`) and matches on the
+  **bold label, not the whole line**; `?query`/`#fragment` suffixes in a value ARE supported
+  (`_safe_reverse`, `apps/core/navigation.py:2149`), which is how two bullets may share one route truthfully.
+- [ ] The five bullets → live pages:
+  - `"Standard Project Reports"` → `projects:report_library`
+  - `"Custom Report Builder"` → `projects:rep_list` (the **staff** register the builder is reached from — L32:
+    never point a sidebar bullet at a login-gated client/portal surface; client-facing report visibility is 7.14's)
+  - `"Real-Time Dashboards & Widgets"` → `projects:pdb_home` (the personalized home answers the bullet)
+  - `"Executive & Steering Committee Packs"` → `projects:exec_pack`
+  - `"Data Export & API Connectivity"` → `projects:run_list` (every download button lives on the frozen-run
+    register; the JSON feed is the honest stand-in for the OData bullet, parked → 7.18 — say so in the view
+    docstring rather than pretending the feed is external)
+- [ ] Extra live leaves (the pattern 7.12–7.15 all use): `"Reporting & BI Home"` → `projects:rbi_home`,
+  `"Saved Reports"` → `projects:rep_list`, `"Standard Report Runner"` →
+  `projects:report_standard?type=status_report`, `"Report Runs (frozen)"` → `projects:run_list`,
+  `"Dashboards"` → `projects:pdb_list`, `"Portfolio Heat Map"` → `projects:pfm_dashboard` (a LINK to 7.12's
+  engine, explicitly not a second one).
+- [ ] Follow the file's own house-comment convention: if a 7.16 object deliberately gets NO sidebar key
+  (`ProjectReportRun` has no create page; `DashboardWidget` has no list page), say why in one comment line the way
+  the 6.14/7.18 blocks do — "this dict maps bullets to pages".
+
+## Standalone report & dashboard pages (NOT entity CRUD — the five bullets live here)
+
+Template rule: CLAUDE.md's Template Folder Structure **rule 6** puts standalone reports at the **sub-module
+root** (`templates/projects/reporting/<report>.html`); entity CRUD triples stay in
+`templates/projects/reporting/<entity>/{list,detail,form}.html`. Section partials use the observed in-repo
+convention (`_`-prefixed inside the folder that includes them — cf.
+`templates/projects/taskwork/_task_blocks_panel.html`), so per-type report sections go at
+`templates/projects/reporting/_standard_section_<area>.html`.
+
+- [ ] **Reporting & BI home** — view `rbi_home` · url `projects:rbi_home` · path `reporting/` ·
+  template `templates/projects/reporting/home.html` · fed by: no heavy compute (counts + the caller's default
+  dashboard + the last 10 runs) plus the **already-built surfaces panel**. Context: `object_list` (saved
+  reports, for the "recently run" strip), `my_dashboard`, `recent_runs`, `dashboards`, `sibling_boards`,
+  `library`.
+- [ ] **Standard report library** — `report_library` · `projects:report_library` · `reporting/library/` ·
+  `templates/projects/reporting/library.html` · fed by `analytics.STANDARD_REPORTS` (one entry per
+  `REPORT_TYPE_CHOICES` kind: label, subject, the sections it renders, the drill target). This is bullet 1's
+  "50+ canned reports" answered as **one page + one family of sections**, never ten near-duplicate pages.
+- [ ] **Standard report runner** — `report_standard` · `projects:report_standard` · `reporting/standard/` ·
+  `templates/projects/reporting/standard.html` (+ the `_standard_section_*.html` partials) · fed by
+  `analytics.standard_report(kind, tenant, params)`; GET params `type`, `project`, `portfolio`, `client`,
+  `org_unit`, `from`, `to`, `as_of`; junk `?type=` falls back to `status_report` (never a 500, never an empty
+  page — L11's discipline). Context: `kind`, `kind_meta`, `sections`, `summary`, `columns`, `rows`,
+  `chart_type`, `chart_labels`, `chart_data`, `as_of`, `caveats`, `truncated`, `save_report_url`,
+  `export_urls`. **One page renders all 16 kinds.**
+- [ ] **Saved report register + builder** — `rep_list`/`rep_create`/`rep_detail`/`rep_edit`/`rep_delete` ·
+  `reporting/reports/`, `reporting/reports/add/`, `reporting/reports/<int:pk>/` (+`edit/`, `delete/`) ·
+  `templates/projects/reporting/report/{list,form}.html` and **`report/detail.html` = the live result page**
+  (the builder's Run button posts to `rep_run`; the result renders through the SAME section partials as
+  `standard.html`, so a saved report and a canned report can never disagree). Context on detail: `obj`,
+  `result` (`analytics.compute_report(obj)`), `summary`, `columns`, `rows`, `chart_*`, `caveats`, `runs`,
+  `freeze_url`, `csv_url`, `json_url`.
+- [ ] **Freeze (POST)** — `rep_freeze` · `reporting/reports/<int:pk>/freeze/` → mints `ProjectReportRun` with
+  `narrative` pre-filled from `analytics.narrative_seed()` (open `IssueEscalation` rows + the project's latest
+  `KnowledgeEntry` lesson), redirects to `run_detail`. This is the only writer of run rows.
+- [ ] **Report-run register + frozen detail** — `run_list`/`run_detail` · `reporting/runs/`,
+  `reporting/runs/<int:pk>/` · `templates/projects/reporting/reportrun/{list,detail}.html` ·
+  **`run_detail` recomputes NOTHING** (verbatim procurement rule: *"render a frozen run exactly as it was
+  stored"*) — it reads `run.summary` / `run.data`; context `obj`, `report`, `summary`, `columns`, `rows`,
+  `chart_rows` (server-side zipped pairs, never template index gymnastics), `narrative`, `is_issued`.
+- [ ] **Issue / narrative / archive / delete verbs** — `run_narrative`, `run_issue`, `run_archive`, `run_delete`
+  under `reporting/runs/<int:pk>/{narrative,issue,archive,delete}/`, all POST-only. `run_issue` optionally links
+  an EXISTING tenant `core.Document` (a `ModelChoiceField` over `core.Document.objects.filter(tenant=…)`,
+  **no upload**) and prints the `DocumentTemplate` category `report`/`status_update` it was filed against.
+- [ ] **Executive & steering pack** — `exec_pack` · `projects:exec_pack` · `reporting/exec-pack/` ·
+  `templates/projects/reporting/exec_pack.html` · fed by `analytics.exec_pack(tenant, portfolio=…, as_of=…)` +
+  `analytics.rag_streak(...)`; GET params `portfolio`, `project`, `as_of`. Renders: RAG band table **with
+  persistence** ("amber, 6 weeks"), portfolio→program→project summary rows, the latest issued `steering_pack`
+  run's `narrative`, and drill-links to `pfm_dashboard` / `financial_pnl` / `risk_analysis` /
+  `utilization_dashboard`. Print stylesheet + `window.print()` header so "PDF" means browser-print (bullet 4).
+  Context: `bands`, `rag_series`, `narrative_run`, `as_of`, `portfolio`, `print_mode`.
+- [ ] **Personalized home dashboard** — `pdb_home` · `projects:pdb_home` · `reporting/home/` ·
+  template `templates/projects/reporting/dashboard_home.html` — the caller's `is_default` dashboard, else the
+  tenant's shared default for their audience, else an empty state that offers "create your dashboard".
+  **Deferred (cross-app): no tile injection into `apps/dashboard`'s global home.**
+- [ ] **Dashboard register + live grid** — `pdb_list`/`pdb_create`/`pdb_detail`/`pdb_edit`/`pdb_delete` ·
+  `reporting/dashboards/…` · `templates/projects/reporting/dashboard/{list,detail,form}.html` ·
+  `pdb_detail` is fed by `analytics.compute_widget(w)` per tile and supports the **dashboard-level filter
+  window** `?range=last_30` overriding `default_range` for every tile (ClickUp/Wrike). Context on detail:
+  `obj`, `rendered_widgets` (`[{widget, result, span}]`), `chart_configs`, `cols`, `active_range`, `widget_add_url`.
+- [ ] **Widget add/edit/delete/move** — `wdg_create` (`reporting/dashboards/<int:pk>/widgets/add/`),
+  `wdg_edit`/`wdg_delete`/`wdg_move` (`reporting/widgets/<int:pk>/…`) ·
+  `templates/projects/reporting/widget/form.html` (three-level nesting precedent:
+  `templates/projects/collaboration/meeting/agendaitem/form.html`). Child has **no list/detail page of its own**
+  — documented exemption.
+- [ ] **Chart rendering — reuse verbatim, add NO dependency.** Chart.js 4.4.1 is already global
+  (`templates/base.html:28` — re-verify the line before writing). Ship `<canvas id="wchart{{ w.pk }}">` +
+  `{{ chart_configs|json_script:"rbi-charts" }}` + `new Chart(el, {...})` exactly as
+  `templates/crm/analytics/dashboard/detail.html:59,77–94` does. KPI/gauge/table render as **HTML**, not canvas
+  (crm's `result["kind"] == "series"` discriminator).
+- [ ] **Export endpoints** — `rep_csv` (`reporting/reports/<int:pk>/csv/`, live compute) · `rep_json`
+  (`…/json/`, the machine-readable face of the same payload, `JsonResponse`) · `run_csv`
+  (`reporting/runs/<int:pk>/csv/`, straight from the stored payload so **the file matches the page**, no
+  recompute). All three tenant-scoped through the visibility helpers and all three write an `AuditLog`
+  `export` row (the deliberate substitute for a fifth `ReportExportLog` table). CSV via a private
+  `_csv_response(filename, columns, rows)` helper copied from procurement (`text/csv` +
+  `Content-Disposition: attachment`). **Excel and server-side PDF are deferred — see Later passes.**
+- [ ] **`reporting/` first-match audit** — after wiring, assert the concatenated list resolves
+  `reporting/`, `reporting/library/`, `reporting/standard/`, `reporting/reports/add/`,
+  `reporting/dashboards/add/` to the intended views (literal before `<int:pk>`; `manage.py show_urls` is not
+  installed, so use `django.urls.reverse` in the smoke script).
+
+## Verify (Phase 3 step 4 + the smoke gate, Phase 3 step 5)
+
+- [ ] `makemigrations projects` (number **confirmed at run time**, not assumed) → `migrate` →
+  `seed_projects` **×2** (second run must print the skip line and change nothing) → `manage.py check` clean.
+- [ ] `temp/smoke_716.py` (gitignored `temp/`, L46; delete or leave it, never commit it) run as **`admin_acme` /
+  `password`** — the superuser `admin` has `tenant=None` and would see empty registers (L/multi-tenancy rule):
+  - every new `projects:*` url above returns 200/302 **AND** a content assertion: the page title, a seeded
+    record name (`REP-00001` / the seeded dashboard name), and **no `{#` / `{% comment` leaks**;
+  - **the dashboard page must assert rendered chart content, not just status** — a blank `<canvas>` still
+    returns 200 (L8). Assert `rbi-charts` (the `json_script` id) is present AND that its decoded payload has
+    ≥ 1 entry with non-empty `labels`, AND that at least one KPI tile's number appears as text;
+  - junk-param sweep on `report_standard` (`?type=nonsense`), `rep_list` (`?report_type=nope&project=0`,
+    `?project=99999999999999999999`) → 200 + the unfiltered list, never 500 and never an empty register;
+  - page 2 of `rep_list` and `run_list` (`?page=2`) — the seeder must mint enough rows that pagination has a
+    genuine page 2 (L9: `has_previous`/`has_next` guards in `partials/pagination.html`);
+  - **cross-tenant IDOR → 404** for `rep_detail`, `rep_edit`, `rep_delete`, `rep_csv`, `rep_json`, `run_detail`,
+    `run_csv`, `pdb_detail`, `pdb_edit`, `wdg_edit`, `wdg_delete` with a foreign pk;
+  - private-object check: a colleague-owned `is_shared=False` report/dashboard/run is **404** for a
+    non-owner member, not merely hidden;
+  - `GET` on a POST-only verb → 405 (both actors, per 7.7's lesson);
+  - sidebar: `7.16` renders **Live** and the module-7 group opens on a 7.16 page.
+- [ ] `manage.py check` + the existing 7.15 lanes still green (`test_financialbilling_*`) — a shared-file change
+  (`urls/__init__.py`, `views/__init__.py`, `admin.py`, `seed_projects.py`, `navigation.py`) can break a sibling.
+
+## Close-out (Phases 4–7)
+
+- [ ] Phase 4: six reviewers **one after another** on `BASE...HEAD` (`BASE` = the sha re-claimed at Phase 0),
+  appending each finding set to `.claude/tasks/review-projects-7.16.md`, then dedupe → Critical/Important/Minor
+  with IDs. Read-only reviewers; `qa-smoke-tester` reports rather than fixes.
+- [ ] Phase 5: one `code-fixer` agent fixes in ID order, one commit per file, marking each finding `[x] fixed` /
+  `[~] skipped — reason`; main session never applies findings itself.
+- [ ] Phase 6 tests (serial, one file at a time): contract + `conftest.py` helpers → `test_reporting_models.py`
+  (auto-numbering `REP-`/`PDB-`, the `clean()` rules incl. the ≤730-day window, dimension-pair refusal, scope-FK
+  tenancy, metric↔chart pairing, `-generated_at,-id` tie-break) → `test_reporting_forms.py` → `test_reporting_views.py`
+  (CRUD + filters + pagination + **every computed page + csv/json/print**) → `test_reporting_security.py`
+  (login, tenant isolation, IDOR, private-vs-shared ACL, POST-only verbs, **export audit rows**). Every fn
+  `test_reporting_*`, every module-level helper `_reporting_*`, fixtures `reporting_*`.
+  ⚠️ **`apps/projects/tests/conftest.py` is DIRTY in the working tree at `906b72d3` and belongs to the
+  concurrent 7.15 test-fix session (L45). No 7.16 plan item may touch it before Phase 6.** At Phase 6 step 1:
+  re-run `git status --short apps/projects/tests/`, and only append a `_reporting_*` helper block once that
+  session's edits are committed and the file is clean. Then a **full unfiltered** `apps/projects` suite run —
+  never `-k` (L47).
+- [ ] Phase 7: update `.claude/skills/projects/SKILL.md` (7.16 section: the 4 models, the analytics registry,
+  all url names incl. the computed pages, the template map, the `_reporting_bi` seeder rows, the
+  "read-only, never write money" rule) and mark 7.16 done in `README.md`'s module-7 row. One file per commit.
+- [ ] Git: **one file per commit**, PowerShell-safe `git add 'path'; git commit -m '…'` — `&&` is not a valid
+  separator. **Never `git push`.** Never commit the pre-existing dirty files (`apps/projects/tests/conftest.py`,
+  `.commandcode/`, `.gemini/`, `.workbuddy-ai/`, `.zcode/` — L45).
+
+## Later passes / deferred
+
+- Scheduled delivery engine, cadence/recipient config, digests, KPI-threshold alerts, nightly auto-freeze →
+  **7.17 Workflow & Automation** (no scheduler and no mail worker exists; `accounting.ScheduledReport` is the
+  config-rows-without-a-worker precedent). Manual Freeze ships now; a management command an operator can cron is
+  a one-line follow-up.
+- Client-facing report sharing / portal downloads → **7.14** (`ClientPortalAccess` owns external visibility).
+- Tokenised external feeds, OData/REST endpoint management, Power BI/Metabase connection config, webhooks →
+  **7.18 Integration & API Hub**. 7.16 only guarantees the payload is JSON-clean and serialisable.
+- Portfolio heat maps / investment scoring / program rollups → **7.12** (`pfm_dashboard`); EVM maths → **7.4**;
+  billing/aging/cash boards → **7.15**; velocity/burndown → **7.13**; utilization → **7.11**; risk exposure →
+  **7.5**; QRV → **7.6**; Gantt → **7.8**. 7.16 surfaces and exports them, always.
+- **Native Excel (.xlsx)** — `openpyxl` is NOT in `requirements.txt` (verified 2026-09-19: Django, PyMySQL,
+  python-dotenv, stripe, Pillow, cryptography, pdfplumber, pytest, pytest-django, python-barcode, qrcode).
+- **Server-side PDF** — `pdfplumber` is extraction, not generation; there is NO PDF writer in the repo. The
+  house pattern is browser print → PDF (`apps/crm/views/FinanceBilling/PaymentReceipts.py:57`). **Verify this
+  claim again before anyone adds WeasyPrint** — it is a dependency decision, not this pass's.
+- True drag-and-drop grid builder (position/size stored from day one so the JS is additive), user-authored
+  formula/calculated-column expressions (no expression sandbox; revisit with 7.19 custom fields), AI narrative /
+  NL report building (no LLM infra), `MetricDefinition` semantic layer, `EACSnapshot` period-EVM table
+  (answered by the run series), pivot with >2 axes, cross-module tenant-wide analytics, cache/materialised
+  aggregate tables, tiles in the Module 0 global home.
+
+## Review notes
+(filled in at the end)
+
 
