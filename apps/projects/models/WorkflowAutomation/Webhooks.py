@@ -129,7 +129,8 @@ class ProjectWebhookDelivery(TenantOwned):
         ]
 
     def __str__(self):
-        return f"Delivery for {self.webhook.number} ({self.status}) at {self.attempted_at}"
+        webhook_label = self.webhook.number if "webhook" in self._state.fields_cache else f"Webhook #{self.webhook_id}"
+        return f"Delivery for {webhook_label} ({self.status}) at {self.attempted_at}"
 
     @property
     def status_badge(self):
