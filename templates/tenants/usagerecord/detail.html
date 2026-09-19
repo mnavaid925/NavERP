@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.get_metric_display }} · Usage{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_metric_display }} usage</h1>
+      <div class="breadcrumb"><a href="{% url 'tenants:usagerecord_list' %}">Usage Metering</a><span class="sep">›</span><span>{{ obj.get_metric_display }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if not obj.is_billed %}
+        <a href="{% url 'tenants:usagerecord_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'tenants:usagerecord_mark_billed' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Mark billed</button>
+        </form>
+        <form method="post" action="{% url 'tenants:usagerecord_delete' obj.pk %}" onsubmit="return confirm('Delete this usage record?');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_billed %}
+    <div class="card"><div class="card-body">
+      <p class="text-muted"><i data-lucide="lock"></i>
+        This usage has been billed{% if obj.billed_at %} ({{ obj.billed_at|date:"M d, Y H:i" }}){% endif %} and is now frozen evidence &mdash; it can no longer be edited or deleted.</p>
+    </div></div>
+  {% elif not obj.subscription_invoice %}
+    <div class="card"><div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i>
+        No invoice is linked yet. Link one before marking this usage as billed.</p>
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Metric</dt><dd>{{ obj.get_metric_display }}</dd></div>
+      <div class="detail-item"><dt>Quantity</dt><dd>{{ obj.quantity }}</dd></div>
+      <div class="detail-item"><dt>Period</dt><dd>{{ obj.period_start|date:"M d, Y" }} – {{ obj.period_end|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Subscription</dt><dd>{% if obj.subscription %}<a href="{% url 'tenants:subscription_detail' obj.subscription.pk %}">{{ obj.subscription }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item">
+        <dt>Included allowance</dt>
+        <dd>{% if obj.included_allowance is None %}<span class="badge badge-slate">Unmetered</span>{% else %}{{ obj.included_allowance }}{% endif %}</dd>
+      </div>
+      <div class="detail-item">
+        <dt>Overage</dt>
+        <dd>{% if obj.is_overage %}<span class="badge badge-red">{{ obj.overage_quantity }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd>
+      </div>
+      <div class="detail-item"><dt>Invoice</dt><dd>{% if obj.subscription_invoice %}<a href="{% url 'tenants:subscriptioninvoice_detail' obj.subscription_invoice.pk %}">{{ obj.subscription_invoice }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item">
+        <dt>Billed</dt>
+        <dd>{% if obj.is_billed %}<span class="badge badge-green">Billed</span>{% else %}<span class="badge badge-slate">Unbilled</span>{% endif %}</dd>
+      </div>
+      <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y" }}</dd></div>
+    </dl>
+    {% if obj.notes %}
+      <div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>
+    {% endif %}
+  </div></div>
+
+  <a href="{% url 'tenants:usagerecord_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
