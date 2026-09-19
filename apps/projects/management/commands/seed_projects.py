@@ -4167,7 +4167,7 @@ class Command(BaseCommand):
                 description="Automatically assign urgent and high-priority tasks to the engineering lead and emit in-app alerts.",
                 trigger_entity="task",
                 trigger_event="task.created",
-                conditions={"priority": "high"},
+                conditions=[{"field": "priority", "operator": "equals", "value": "high"}],
                 actions=[
                     {"action": "assign_to", "user_id": manager.id if manager else None},
                     {"action": "send_notification", "message": "High priority task created"},
@@ -4185,7 +4185,7 @@ class Command(BaseCommand):
                 description="Broadcast notifications across Slack and in-app when milestone phase gates achieve completion.",
                 trigger_entity="milestone",
                 trigger_event="milestone.achieved",
-                conditions={"is_gate": True},
+                conditions=[{"field": "is_gate", "operator": "equals", "value": True}],
                 actions=[
                     {"action": "send_notification", "channel": "in_app", "template": "Phase gate achieved"},
                 ],
@@ -4202,7 +4202,7 @@ class Command(BaseCommand):
                 description="Escalate tasks past due date by 3 days directly to project sponsor.",
                 trigger_entity="task",
                 trigger_event="task.overdue",
-                conditions={"days_overdue_gte": 3},
+                conditions=[{"field": "days_overdue", "operator": "gte", "value": 3}],
                 actions=[
                     {"action": "change_priority", "to": "urgent"},
                     {"action": "notify_sponsor"},
@@ -4305,7 +4305,7 @@ class Command(BaseCommand):
             RecurringTaskSchedule.objects.create(
                 tenant=tenant,
                 project=active_proj,
-                title_template="Weekly Architecture & Tech Debt Sync - Week {week}",
+                title_template="Weekly Architecture & Tech Debt Sync - Week {{week}}",
                 description_template="Review engineering impediments, security scan results, and open PRs.",
                 frequency="weekly",
                 priority="medium",
