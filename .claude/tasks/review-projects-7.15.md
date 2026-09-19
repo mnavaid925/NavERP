@@ -97,7 +97,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: Undefined CSS variables `var(--border-color, #e2e8f0)` and `var(--bg-muted, #f8fafc)` create bright borders and white footers in dark mode.
   - **Fix**: Clean up inline styles and use design system classes (`.table-wrap`, `.table`, `.stat-grid`, `.stat-card`).
 
-- **[ ] I10: Missing `{% else %}` Fallback Branches on Status Badges**
+- **[x] fixed — fix(projects): add fallback badge branch on status badges in billing templates**
   - **Location**:
     - `templates/projects/financialbilling/billingrun/detail.html:65-74`
     - `templates/projects/financialbilling/revenueschedule/detail.html:67-78`
