@@ -155,7 +155,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Location**: `pnl.html:44`, `variance.html:44`, `aging.html:44`, `cashflow.html:44`
   - **Fix**: Use `{{ p.code|default:p.number }} — {{ p.name }}`.
 
-- **[ ] M7: Cross-Record Project and Milestone Validation in Forms**
+- **[x] fixed — fix(projects): validate cross-record project and milestone/sow in financial billing forms**
   - **Location**: `BillingRuns.py`, `PaymentRecords.py`, `RevenueSchedules.py` forms.
   - **Fix**: Validate that milestone and sow belong to the selected project.
 
