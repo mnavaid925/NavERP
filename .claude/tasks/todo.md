@@ -74,13 +74,22 @@ Coexistence: solo builder in `apps/projects/` extending `FinancialBillingManagem
 ## Verification, Review & Tests
 - [x] Smoke tests: status 200/302 as `admin_acme` / `password`, no leaked comment tokens, IDOR 404.
 - [x] Multi-agent review wave (6 reviewers) -> `.claude/tasks/review-projects-7.15.md`.
-- [x] Fix findings via `code-fixer`.
-- [ ] Test wave (`apps/projects/tests/`):
-  - `test_financialbilling_models.py` (model creation, validation, auto-numbering, state transitions, FK integrity).
-  - `test_financialbilling_forms.py` (field validation, form exclusions, required field checks).
-  - `test_financialbilling_views.py` (CRUD routes, filters, pagination, computed boards pnl/variance/aging/cashflow, POST verbs).
-  - `test_financialbilling_security.py` (login required, tenant isolation, cross-tenant IDOR 404, CSRF protection).
-- [ ] Update documentation: `README.md` (roadmap update) and `apps/projects/` skill/notes if applicable.
+- [x] Fix findings via `code-fixer` (27 findings resolved across C1–C5, I1–I14, M1–M8; migration 0023).
+- [x] Test wave (`apps/projects/tests/`): 28/28 tests passing (100% green).
+  - `test_financialbilling_models.py` (8/8: model creation, validation, auto-numbering, state transitions, FK integrity).
+  - `test_financialbilling_forms.py` (6/6: field validation, form exclusions, required field checks, cross-record integrity).
+  - `test_financialbilling_views.py` (6/6: CRUD routes, filters, pagination, computed boards pnl/variance/aging/cashflow, POST verbs).
+  - `test_financialbilling_security.py` (5/5: login required, tenant isolation, cross-tenant IDOR 404, CSRF protection).
+- [x] Update documentation: `README.md` (roadmap update) and `apps/projects/` skill/notes updated.
+
+## Closeout Summary — 7.15 Financial & Billing Management
+- **Models**: `ProjectRateCard` [RTC-], `ProjectBillingRun` [PBR-], `ProjectRevenueSchedule` [PRS-], `ProjectPaymentRecord` [PPR-].
+- **Computed Boards**: `financial_pnl`, `financial_variance`, `ar_aging`, `cash_flow_forecast`.
+- **Migrations**: `0022_projectbillingrun_projectpaymentrecord_and_more.py` and `0023_projectbillingrun_pbr_tnt_status_idx_and_more.py`.
+- **Seeder**: Idempotent `_seed_715_financial_billing_management` seeding rate cards, billing runs, revenue schedules, payment records, and invoice links.
+- **Review Wave**: 6 serial reviewers (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) filed 27 deduped findings (5 Critical, 14 Important, 8 Minor) — all fixed and verified by `code-fixer`.
+- **Tests**: 4 test files (`test_financialbilling_{models,forms,views,security}.py`), 28 tests passing (0 failures).
+- **System Check**: Clean (0 issues).
 
 ## Later passes / deferred
 - Automated live FX feed sync (xe.com / Fixer API) -> 7.18 Integration & API Hub.
