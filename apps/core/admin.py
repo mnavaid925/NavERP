@@ -14,6 +14,13 @@ from .models import (
     Tenant,
     ModuleAccessScope,
     SensitiveFieldMask,
+    ConsentPurpose,
+    ConsentRecord,
+    DataSubjectRequest,
+    RetentionPolicy,
+    DisposalRecord,
+    PiiClassification,
+    RegulatoryFramework,
 )
 
 
@@ -113,3 +120,65 @@ class SensitiveFieldMaskAdmin(admin.ModelAdmin):
     list_select_related = ["scope", "tenant"]
     filter_horizontal = ["exempt_roles"]
     readonly_fields = ["created_at"]
+
+
+@admin.register(ConsentPurpose)
+class ConsentPurposeAdmin(admin.ModelAdmin):
+    list_display = ["name", "code", "lawful_basis", "is_optional", "is_active", "tenant"]
+    list_filter = ["lawful_basis", "is_active", "tenant"]
+    search_fields = ["name", "code"]
+
+
+@admin.register(ConsentRecord)
+class ConsentRecordAdmin(admin.ModelAdmin):
+    list_display = ["party", "purpose", "action", "source", "occurred_at", "tenant"]
+    list_filter = ["action", "source", "tenant"]
+    search_fields = ["party__name", "purpose__name", "evidence"]
+    list_select_related = ["party", "purpose", "recorded_by"]
+    # A consent event is a record of something that happened; only the audit trail may change it.
+    readonly_fields = ["recorded_by", "created_at"]
+
+
+@admin.register(DataSubjectRequest)
+class DataSubjectRequestAdmin(admin.ModelAdmin):
+    list_display = ["subject", "kind", "status", "identity_verified", "due_at", "tenant"]
+    list_filter = ["status", "kind", "identity_verified", "tenant"]
+    search_fields = ["subject__name", "detail"]
+    list_select_related = ["subject", "handled_by"]
+    # Verb-written evidence: hand-editing these would forge a verification or a completion.
+    readonly_fields = ["identity_verified", "completed_at", "handled_by", "created_at"]
+
+
+@admin.register(RetentionPolicy)
+class RetentionPolicyAdmin(admin.ModelAdmin):
+    list_display = ["name", "data_category", "model_label", "retention_months", "action",
+                    "is_active", "tenant"]
+    list_filter = ["action", "basis", "is_active", "tenant"]
+    search_fields = ["name", "data_category", "model_label"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(DisposalRecord)
+class DisposalRecordAdmin(admin.ModelAdmin):
+    list_display = ["model_label", "policy", "record_count", "method", "performed_at", "tenant"]
+    list_filter = ["method", "tenant"]
+    search_fields = ["model_label", "evidence", "notes"]
+    list_select_related = ["policy", "performed_by"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(PiiClassification)
+class PiiClassificationAdmin(admin.ModelAdmin):
+    list_display = ["model_label", "field_name", "category", "sensitivity", "confirmation", "tenant"]
+    list_filter = ["category", "sensitivity", "confirmation", "tenant"]
+    search_fields = ["model_label", "field_name", "notes"]
+    list_select_related = ["reviewed_by", "tenant"]
+    readonly_fields = ["reviewed_by", "reviewed_at", "created_at"]
+
+
+@admin.register(RegulatoryFramework)
+class RegulatoryFrameworkAdmin(admin.ModelAdmin):
+    list_display = ["code", "label", "is_enabled", "dsar_window_days", "data_residency_region", "tenant"]
+    list_filter = ["code", "is_enabled", "tenant"]
+    search_fields = ["label", "data_residency_region"]
+    readonly_fields = ["updated_at"]
