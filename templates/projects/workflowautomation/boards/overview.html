@@ -66,7 +66,7 @@
     </div>
     <div class="card-body p-0">
       {% if pending_gates %}
-        <div class="table-responsive">
+        <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
@@ -98,7 +98,7 @@
                     <span class="text-xs">{{ gate.approver.get_full_name|default:gate.approver.username|default:"Unassigned" }}</span>
                   </td>
                   <td class="text-right">
-                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-xs btn-outline">Review</a>
+                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-sm btn-outline">Review</a>
                   </td>
                 </tr>
               {% endfor %}
@@ -125,7 +125,7 @@
     </div>
     <div class="card-body p-0">
       {% if upcoming_recurring %}
-        <div class="table-responsive">
+        <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
@@ -153,7 +153,7 @@
                     <span class="text-xs font-mono">{{ s.next_run_date|date:"Y-m-d"|default:"&mdash;" }}</span>
                   </td>
                   <td class="text-right">
-                    <a href="{% url 'projects:rts_detail' s.pk %}" class="btn btn-xs btn-outline">Details</a>
+                    <a href="{% url 'projects:rts_detail' s.pk %}" class="btn btn-sm btn-outline">Details</a>
                   </td>
                 </tr>
               {% endfor %}
@@ -181,7 +181,7 @@
   </div>
   <div class="card-body p-0">
     {% if recent_logs %}
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -221,7 +221,7 @@
                   <span class="text-xs text-muted font-mono">{{ log.fired_at|date:"Y-m-d H:i" }}</span>
                 </td>
                 <td class="text-right">
-                  <a href="{% url 'projects:pwf_detail' log.rule.pk %}" class="btn btn-xs btn-outline">View Rule</a>
+                  <a href="{% url 'projects:pwf_detail' log.rule.pk %}" class="btn btn-sm btn-outline">View Rule</a>
                 </td>
               </tr>
             {% endfor %}
