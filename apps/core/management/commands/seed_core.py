@@ -11,7 +11,9 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.navigation import parse_catalog
 from apps.core.models import (
+    ModuleAccessScope,
     Activity,
     Address,
     ContactMethod,
@@ -63,12 +65,47 @@ class Command(BaseCommand):
 
             if Party.objects.filter(tenant=tenant).exists():
                 self.stdout.write("  core spine data already present — skipping")
-                continue
+            else:
+                self._seed_tenant(tenant)
 
-            self._seed_tenant(tenant)
+            # 0.6 module scopes have their OWN guard, deliberately NOT riding on the spine guard
+            # above. A tenant-wide guard means anything added to this command later never reaches
+            # the workspaces that already exist — which is exactly what happened here on the first
+            # run: `continue` skipped the whole tenant, so no scope rows were created at all.
+            self._seed_module_scopes(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
+
+    def _seed_module_scopes(self, tenant):
+        """0.6: one access-scope row per module in the catalog.
+
+        Creates them in the DEFAULT posture (`data_scope="all"`, nothing enforcing) on purpose — a
+        seeder must not silently restrict a workspace. Two rows are deliberately narrowed so the
+        enforcing state is visible rather than theoretical, and both are read-only-ish choices a
+        demo can safely show: HRM masked (the personnel-data bullet) and Accounting period-locked.
+
+        Idempotent by slug, so re-running after the catalog changes only fills the gaps.
+        """
+        existing = set(ModuleAccessScope.objects.filter(tenant=tenant)
+                       .values_list("module_slug", flat=True))
+        narrowed = {
+            "humanresourcemanagementhrm": {"data_scope": "team", "mask_sensitive": True},
+            "accountingfinance": {"data_scope": "all", "requires_approval": True,
+                                  "period_lock_until": timezone.localdate() - datetime.timedelta(days=1)},
+        }
+        created = 0
+        for mod in parse_catalog():
+            slug = "".join(ch if ch.isalnum() else "" for ch in (mod.get("title") or "").lower())[:40]
+            if not slug or slug in existing:
+                continue
+            ModuleAccessScope.objects.create(
+                tenant=tenant, module_number=mod["num"], module_slug=slug,
+                module_title=mod["title"], **narrowed.get(slug, {}),
+            )
+            created += 1
+        if created:
+            self.stdout.write(f"  {tenant.name}: seeded {created} module access scope(s)")
 
     def _seed_tenant(self, tenant):
         company = OrgUnit.objects.create(tenant=tenant, kind="company", name=tenant.name)
