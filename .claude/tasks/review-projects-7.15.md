@@ -115,7 +115,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: Dispatch allowed on draft/cancelled runs.
   - **Fix**: Enforce `billing_run.status == "invoiced"` in view and template.
 
-- **[ ] I13: Inaccurate Audit Log Recording on Direct-from-Draft State Transitions**
+- **[x] fixed — fix(projects): record accurate initial status in state transition audit logs**
   - **Location**: `apps/projects/views/FinancialBillingManagement/BillingRuns.py:215`, `RevenueSchedules.py:178`
   - **Problem**: Hardcodes initial status as "approved" in audit log even if transitioned directly from "draft".
   - **Fix**: Use `initial_status = obj.status`.
