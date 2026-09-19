@@ -23,14 +23,14 @@
 
 <!-- Navigation Tabs -->
 <div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
-  <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-ghost">Rate Cards</a>
-  <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-ghost">Billing Runs</a>
-  <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-ghost">Revenue Schedules</a>
-  <a href="{% url 'projects:ppr_list' %}" class="btn btn-sm btn-ghost">Payment Records</a>
-  <a href="{% url 'projects:financial_pnl' %}" class="btn btn-sm btn-ghost">P&amp;L Analysis</a>
+  <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-outline">Rate Cards</a>
+  <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-outline">Billing Runs</a>
+  <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-outline">Revenue Schedules</a>
+  <a href="{% url 'projects:ppr_list' %}" class="btn btn-sm btn-outline">Payment Records</a>
+  <a href="{% url 'projects:financial_pnl' %}" class="btn btn-sm btn-outline">P&amp;L Analysis</a>
   <a href="{% url 'projects:financial_variance' %}" class="btn btn-sm btn-primary">EVM Variance</a>
-  <a href="{% url 'projects:ar_aging' %}" class="btn btn-sm btn-ghost">A/R Aging</a>
-  <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-sm btn-ghost">Cash Flow</a>
+  <a href="{% url 'projects:ar_aging' %}" class="btn btn-sm btn-outline">A/R Aging</a>
+  <a href="{% url 'projects:cash_flow_forecast' %}" class="btn btn-sm btn-outline">Cash Flow</a>
 </div>
 
 <!-- Filter Bar -->
@@ -38,7 +38,7 @@
   <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
     <div style="flex:1; min-width:240px;">
       <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
-      <select name="project" id="id_project" class="form-control" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+      <select name="project" id="id_project" class="form-select" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
         <option value="">All Active Projects</option>
         {% for p in projects %}
           <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
@@ -55,7 +55,7 @@
 </div>
 
 <!-- KPI Summary Strip -->
-<div class="stats-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+<div class="stat-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Budget at Comp. (BAC)</div>
     <div class="stat-value" style="font-size:1.4rem; font-weight:700;">${{ totals.bac|default:"0.00" }}</div>
@@ -63,7 +63,7 @@
   </div>
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Earned Value (EV)</div>
-    <div class="stat-value text-green" style="font-size:1.4rem; font-weight:700;">${{ totals.ev|default:"0.00" }}</div>
+    <div class="stat-value text-ok" style="font-size:1.4rem; font-weight:700;">${{ totals.ev|default:"0.00" }}</div>
     <div class="stat-meta text-muted" style="font-size:0.75rem;">PV: ${{ totals.pv|default:"0.00" }}</div>
   </div>
   <div class="stat-card card" style="padding:1rem;">
@@ -73,7 +73,7 @@
   </div>
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">Cost Variance (CV)</div>
-    <div class="stat-value {% if totals.cv >= 0 %}text-green{% else %}text-red{% endif %}" style="font-size:1.4rem; font-weight:700;">
+    <div class="stat-value {% if totals.cv >= 0 %}text-ok{% else %}text-red{% endif %}" style="font-size:1.4rem; font-weight:700;">
       ${{ totals.cv|default:"0.00" }}
     </div>
     <div class="stat-meta text-muted" style="font-size:0.75rem;">EV minus AC</div>
@@ -81,8 +81,8 @@
   <div class="stat-card card" style="padding:1rem;">
     <div class="stat-label text-muted" style="font-size:0.85rem; font-weight:600;">CPI / SPI Indices</div>
     <div class="stat-value" style="font-size:1.4rem; font-weight:700;">
-      <span class="{% if totals.cpi >= 1.0 %}text-green{% else %}text-red{% endif %}">{{ totals.cpi }}</span> /
-      <span class="{% if totals.spi >= 1.0 %}text-green{% else %}text-red{% endif %}">{{ totals.spi }}</span>
+      <span class="{% if totals.cpi >= 1.0 %}text-ok{% else %}text-red{% endif %}">{{ totals.cpi }}</span> /
+      <span class="{% if totals.spi >= 1.0 %}text-ok{% else %}text-red{% endif %}">{{ totals.spi }}</span>
     </div>
     <div class="stat-meta text-muted" style="font-size:0.75rem;">Cost (CPI) / Sched (SPI)</div>
   </div>
@@ -126,12 +126,12 @@
             </td>
             <td style="padding:0.75rem; text-align:right;">${{ row.bac }}</td>
             <td style="padding:0.75rem; text-align:right;">${{ row.pv }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-green">${{ row.ev }}</td>
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ row.ev }}</td>
             <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-red">${{ row.ac }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.cv >= 0 %}text-green{% else %}text-red{% endif %}">
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.cv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ row.cv }}
             </td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.sv >= 0 %}text-green{% else %}text-red{% endif %}">
+            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.sv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ row.sv }}
             </td>
             <td style="padding:0.75rem; text-align:center;">
@@ -172,12 +172,12 @@
             <td colspan="2" style="padding:0.75rem;">Portfolio EVM Totals</td>
             <td style="padding:0.75rem; text-align:right;">${{ totals.bac }}</td>
             <td style="padding:0.75rem; text-align:right;">${{ totals.pv }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="text-green">${{ totals.ev }}</td>
+            <td style="padding:0.75rem; text-align:right;" class="text-ok">${{ totals.ev }}</td>
             <td style="padding:0.75rem; text-align:right;" class="text-red">${{ totals.ac }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="{% if totals.cv >= 0 %}text-green{% else %}text-red{% endif %}">
+            <td style="padding:0.75rem; text-align:right;" class="{% if totals.cv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ totals.cv }}
             </td>
-            <td style="padding:0.75rem; text-align:right;" class="{% if totals.sv >= 0 %}text-green{% else %}text-red{% endif %}">
+            <td style="padding:0.75rem; text-align:right;" class="{% if totals.sv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ totals.sv }}
             </td>
             <td style="padding:0.75rem; text-align:center;">
