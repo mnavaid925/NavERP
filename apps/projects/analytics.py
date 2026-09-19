@@ -932,7 +932,7 @@ def _sort_rows(rows, sort_key, top_n):
 
 
 def compute_report(report, *, as_of=None):
-    """Compute one stored question into the payload a run will freeze — the nine JSON-safe keys of B3.4.
+    """Compute one stored question into the payload a run will freeze — the JSON-safe result of B3.4.
 
     ``report`` may be a saved ``ProjectReport`` or the unsaved instance a builder form just produced;
     both expose the same attributes, which is what lets the preview and a real run share one engine.
@@ -1334,9 +1334,11 @@ def standard_report(kind, tenant, params=None):
 _RAG_BANDS = [("green", "On track"), ("amber", "Watch"), ("red", "Off track")]
 _RAG_KEYS = {key for key, _label in _RAG_BANDS}
 
-#: Letter → colour-named badge class (L33). ``ProjectReportRun`` carries its own identical three lines
-#: because a model must not import this module — the same price as ``summary_pairs``/``summary_cards``.
-_RAG_CSS = {key: f"badge-{key}" for key, _label in _RAG_BANDS}
+#: Letter → colour-named badge class (L33). Public because the report and run views read THIS copy —
+#: a fourth spelling of three lines is how a badge stops matching the letter it is printed for.
+#: ``ProjectReportRun`` carries its own identical three lines because a model must not import this
+#: module — the same price as ``summary_pairs``/``summary_cards``.
+RAG_CSS = {key: f"badge-{key}" for key, _label in _RAG_BANDS}
 
 _CHART_LABELS = dict(CHART_CHOICES)
 
@@ -1802,7 +1804,7 @@ def _apply_heat_bands(payload, result, caveats):
         return
     if result and set(result) <= _RAG_KEYS:
         payload["bands"] = [
-            {"label": label, "count": int((result or {}).get(key) or 0), "css": _RAG_CSS[key]}
+            {"label": label, "count": int((result or {}).get(key) or 0), "css": RAG_CSS[key]}
             for key, label in _RAG_BANDS
         ]
         return
@@ -2039,7 +2041,7 @@ def exec_pack(tenant, *, portfolio=None, project=None, as_of=None):
             "portfolio": portfolios.get(row.pk, UNASSIGNED),
             "program": programs.get(row.pk, ""),
             "rating": streak["rating"],
-            "rag_css": _RAG_CSS.get(streak["rating"], "badge-muted"),
+            "rag_css": RAG_CSS.get(streak["rating"], "badge-muted"),
             "streak_weeks": streak["weeks"],
             "streak_label": streak["label"],
             "cpi": account.get("cpi"),
