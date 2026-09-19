@@ -1,6 +1,7 @@
 """Projects 7.17 — RecurringTaskSchedule views."""
 from datetime import timedelta
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.views.decorators.http import require_POST
 
@@ -208,15 +209,16 @@ def rts_toggle_active(request, pk):
 def rts_generate_task(request, pk):
     """Mint a task immediately from this recurring schedule."""
     schedule = get_object_or_404(RecurringTaskSchedule, pk=pk, tenant=request.tenant)
-    task = schedule.generate_task(actor=request.user)
+    with transaction.atomic():
+        task = schedule.generate_task(actor=request.user)
 
-    write_audit_log(
-        user=request.user,
-        obj=schedule,
-        action="generate",
-        changes={"description": f"Generated task {task.name} from schedule {schedule.number}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            user=request.user,
+            obj=schedule,
+            action="generate",
+            changes={"description": f"Generated task {task.name} from schedule {schedule.number}"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Task '{task.name}' successfully generated (Next run: {schedule.next_run_date}).")
     return redirect("projects:rts_detail", pk=schedule.pk)
 
