@@ -372,3 +372,79 @@ the right shape and does not depend on seed volume.
 order**, so newly created rows with no `due_at` land behind 199 seeded ones and never appear on page
 1 of a list. A probe that asserts on rendered page-1 content must narrow with `?q=` or set the sort
 field, or it will fail for a reason that has nothing to do with the code under test.
+
+---
+
+## 0.8 Privacy & Data Protection — CLOSED OUT 2026-09-19
+
+**Verdict: 0 of 5 bullets mapped and no privacy layer existed at all.** A grep for
+`consent|gdpr|dsar|retention` across `apps/` found nothing but unrelated uses of the words.
+
+### What was built (migration `core.0007`)
+
+| bullet | what ships |
+|---|---|
+| 1 Consent & Preference Management | `ConsentPurpose` (tenant-defined lawful purposes) + `ConsentRecord` (one row per EVENT) + a computed **consent matrix** |
+| 2 Data Subject Rights (DSAR) | `DataSubjectRequest` with a **real statutory clock** + verify/complete/refuse/withdraw verbs |
+| 3 Retention & Disposal Policies | `RetentionPolicy` + `DisposalRecord` + a computed **retention board** |
+| 4 PII Discovery & Classification | `PiiClassification` data map + `scan_pii_fields()` + a human confirm/dismiss step |
+| 5 Regulatory Coverage | `RegulatoryFramework` per-tenant enablement, which is what drives the DSAR window |
+
+### The four decisions that make this honest rather than decorative
+
+1. **A withdrawal ADDS a consent row; it never edits the grant.** The history IS the evidence, and
+   the effective state is DERIVED from the latest event (`current_consent()`) rather than stored as a
+   flag a withdrawal could fail to update. An expired grant reads as no consent.
+2. **A DSAR with no framework enabled gets NO due date.** `statutory_window_days()` returns `None`
+   rather than a default 30, because a deadline the workspace cannot point at a regime for is a
+   fabricated obligation. Verified: the seeded DSARs have `due_at IS NULL` because no framework is
+   enabled. Enabling GDPR (30) and CCPA (45) together yields **30** — the strictest wins.
+3. **Completion is BLOCKED until identity is verified.** Verification is a verb with a required note,
+   not a checkbox on a create form. Releasing or erasing personal data on an unverified request is the
+   failure this sub-module exists to prevent.
+4. **Automated destruction is NOT implemented, and the page says why.** Destroying data is a one-way
+   door, the repo has no scheduler, and 7.10 already established that "delete" here does not erase
+   bytes — Django never unlinks a `FileField` on row delete. A destruction feature reporting success
+   while the file survived would be actively dishonest. The board IDENTIFIES and the disposal register
+   EVIDENCES; the act is out of band.
+
+### The retention board refuses to report a misleading zero
+
+Where a policy cannot be evaluated it says **why** instead of showing `0`: a model with no
+`created_at` column, a model with no `tenant` column, a category with no model pinned, or a label that
+does not resolve. A zero that means "cannot tell" is the most dangerous number a compliance board can
+show, and the seeded "Customer contacts" policy demonstrates the case on purpose.
+
+### Two false-positive classes found by probing the PII scan (284 → 177 candidates)
+
+1. `model._meta.get_fields()` returns **reverse relations and M2M accessors** as well as fields, named
+   after the related model's `related_name` — so the first pass reported `core.Tenant.health_metrics`,
+   `core.OrgUnit.procurement_routing_rules` and 280 similar accessors that hold no data at all. Now
+   iterates `concrete_fields`; every entry is verified to be a real column.
+2. A bare `location` pattern matched **46 warehouse locations** (`qc_location`, `dock_location`,
+   `quarantine_location`, `from_location`, …). A bin is not a person's whereabouts, and a map full of
+   noise gets ignored — which is the failure mode every PII scanner ever shipped has. The pattern is
+   narrowed to genuinely personal names and `is_`/`has_` flags are skipped.
+
+The scan is also **non-destructive on re-run**: a row a human has confirmed or dismissed is never
+touched, because silently reverting a judgement is how a data map becomes untrustworthy and then
+unused. Verified by confirming one row, dismissing another, re-scanning, and asserting both survive.
+
+### Verification
+
+`temp/smoke_08.py` — **89 checks, 0 failures**, re-entrant. `apps/core apps/accounts apps/tenants
+apps/crm` — **2455 passed, 0 failed**.
+
+### Declared NOT built (on the pages, not just here)
+
+No automatic personal-data collation, so a DSAR access/portability request is driven to completion but
+the bundle is assembled by hand. No destruction of any kind. No data-residency **enforcement** (the
+region is recorded only). No consent-enforcement middleware — recording a withdrawal does not by itself
+stop a module from mailing someone. No encryption at rest (0.7).
+
+### Probe lesson
+
+A consent-expiry assertion failed because the probe back-dated an expired grant onto a purpose whose
+latest event was already a withdrawal — so the check read the withdrawal, not the expiry. **A
+derived-from-latest query needs its own isolated fixture**; reusing a purpose with other events tests
+the ordering, not the rule.
