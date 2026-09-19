@@ -105,11 +105,11 @@ def rts_create(request):
                 schedule.next_run_date = schedule.start_date
             schedule.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                schedule,
-                f"Created recurring schedule {schedule.number}: {schedule.title_template}",
+                user=request.user,
+                obj=schedule,
+                action="create",
+                changes={"description": f"Created recurring schedule {schedule.number}: {schedule.title_template}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Recurring schedule {schedule.number} created successfully.")
             return redirect("projects:rts_detail", pk=schedule.pk)
@@ -143,11 +143,11 @@ def rts_edit(request, pk):
         if form.is_valid():
             schedule = form.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                schedule,
-                f"Updated recurring schedule {schedule.number}: {schedule.title_template}",
+                user=request.user,
+                obj=schedule,
+                action="update",
+                changes={"description": f"Updated recurring schedule {schedule.number}: {schedule.title_template}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Recurring schedule {schedule.number} updated successfully.")
             return redirect("projects:rts_detail", pk=schedule.pk)
@@ -174,11 +174,11 @@ def rts_delete(request, pk):
     title = schedule.title_template
     schedule.delete()
     write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        None,
-        f"Deleted recurring schedule {number}: {title}",
+        user=request.user,
+        obj=None,
+        action="delete",
+        changes={"description": f"Deleted recurring schedule {number}: {title}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Recurring schedule {number} deleted successfully.")
     return redirect("projects:rts_list")
@@ -193,11 +193,11 @@ def rts_toggle_active(request, pk):
     schedule.save(update_fields=["is_active", "updated_at"])
     state = "activated" if schedule.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
-        request.user,
-        "toggle",
-        schedule,
-        f"{state.capitalize()} recurring schedule {schedule.number}",
+        user=request.user,
+        obj=schedule,
+        action="toggle",
+        changes={"description": f"{state.capitalize()} recurring schedule {schedule.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Recurring schedule {schedule.number} {state}.")
     return redirect("projects:rts_detail", pk=schedule.pk)
@@ -211,11 +211,11 @@ def rts_generate_task(request, pk):
     task = schedule.generate_task(actor=request.user)
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "generate",
-        schedule,
-        f"Generated task {task.name} from schedule {schedule.number}",
+        user=request.user,
+        obj=schedule,
+        action="generate",
+        changes={"description": f"Generated task {task.name} from schedule {schedule.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Task '{task.name}' successfully generated (Next run: {schedule.next_run_date}).")
     return redirect("projects:rts_detail", pk=schedule.pk)
@@ -231,11 +231,11 @@ def rts_skip_next(request, pk):
     schedule.save(update_fields=["next_run_date", "is_active", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "skip",
-        schedule,
-        f"Skipped execution for {old_date} on schedule {schedule.number} (Next: {schedule.next_run_date})",
+        user=request.user,
+        obj=schedule,
+        action="skip",
+        changes={"description": f"Skipped execution for {old_date} on schedule {schedule.number} (Next: {schedule.next_run_date})"},
+        tenant=request.tenant,
     )
     messages.info(request, f"Skipped run for {old_date}. Next execution set to {schedule.next_run_date}.")
     return redirect("projects:rts_detail", pk=schedule.pk)
