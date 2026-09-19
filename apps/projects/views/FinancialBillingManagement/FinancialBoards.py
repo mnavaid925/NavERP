@@ -364,9 +364,10 @@ def cash_flow_forecast(request):
     inflows_qs = (
         Invoice.objects.filter(tenant=request.tenant, status__in=["sent", "partial"])
         .select_related("party")
+        .distinct()
     )
     if project_id:
-        inflows_qs = inflows_qs.filter(project_billing_runs__project_id=project_id)
+        inflows_qs = inflows_qs.filter(project_billing_runs__project_id=project_id).distinct()
 
     inflows_list = list(inflows_qs)
     inv_ids = [inv.pk for inv in inflows_list]
