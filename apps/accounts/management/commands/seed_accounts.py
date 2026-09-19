@@ -5,6 +5,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.models import ModuleAccessScope, SensitiveFieldMask
+
 from apps.accounts.models import (
     AccessRequest,
     AccessReview,
@@ -109,6 +111,7 @@ class Command(BaseCommand):
             # seed_tenants).
             self._seed_access_governance(tenant, admin_role, member_role)
             self._seed_auth_security(tenant)
+            self._seed_field_masks(tenant, admin_role)
 
         self.stdout.write(self.style.SUCCESS("accounts seed complete."))
         self.stdout.write("Login as a TENANT ADMIN to see module data, e.g. admin_acme / password.")
@@ -247,3 +250,26 @@ class Command(BaseCommand):
                 tenant=tenant, user=user_obj, identifier=identifier, ip=ip, user_agent=ua,
                 success=ok, risk_score=score, risk_reasons=reasons,
             )
+
+    def _seed_field_masks(self, tenant, admin_role):
+        """0.6: two mask rules demonstrating the mechanism, one of them role-exempt.
+
+        Seeded here rather than in `seed_core` because `exempt_roles` points at `accounts.Role`, and
+        roles do not exist until this command has run (the documented order is
+        seed_core -> seed_accounts -> seed_tenants).
+        """
+        hrm = ModuleAccessScope.objects.filter(tenant=tenant, module_slug="humanresourcemanagementhrm").first()
+        if hrm is None:
+            return
+        rules = [
+            ("bank_account", "last4", [admin_role]),
+            ("national_id", "partial", []),
+        ]
+        for field_name, style, exempt in rules:
+            mask, created = SensitiveFieldMask.objects.get_or_create(
+                tenant=tenant, scope=hrm, field_name=field_name,
+                defaults={"mask_style": style,
+                          "notes": "Seeded demo mask for the HRM personnel-data bullet."},
+            )
+            if created and exempt:
+                mask.exempt_roles.set(exempt)
