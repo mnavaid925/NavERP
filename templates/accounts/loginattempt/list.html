@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Login Attempts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Login Attempts</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Login Attempts</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounts:security_overview' %}" class="btn btn-outline"><i data-lucide="shield"></i> Security overview</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Every sign-in attempt with the heuristic risk score it earned. The score is
+      <strong>not a model</strong>: it is three observable signals — an unseen public IP, an unseen device, and recent
+      failures for the same identifier. There is no geo-IP lookup and no behavioural baseline. Nothing is blocked on
+      it; a user with a second factor is challenged, and everyone else is flagged here for an admin to act on.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by identifier or IP…">
+        </div>
+        <div class="form-group">
+          <select name="risky" class="form-select">
+            <option value="">All attempts</option>
+            {% for val, label in risky_choices %}
+              <option value="{{ val }}" {% if request.GET.risky == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounts:login_attempt_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Identifier</th><th>Result</th><th>Risk</th><th>Signals</th><th>IP</th><th>MFA</th><th>When</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.identifier|default:"—" }}</td>
+              <td>{% if obj.success %}<span class="badge badge-green">Success</span>{% else %}<span class="badge badge-red">Failed</span>{% endif %}</td>
+              <td>{% if obj.is_risky %}<span class="badge badge-red">{{ obj.risk_score }}</span>{% elif obj.risk_score %}<span class="badge badge-amber">{{ obj.risk_score }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</td>
+              <td>{% if obj.risk_reasons %}{{ obj.risk_reasons|join:", " }}{% else %}—{% endif %}</td>
+              <td>{{ obj.ip|default:"—" }}</td>
+              <td>{% if obj.mfa_challenged %}<span class="badge badge-info">Yes</span>{% else %}—{% endif %}</td>
+              <td>{{ obj.created_at|date:"M d, H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield"></i><h3>No attempts recorded</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
