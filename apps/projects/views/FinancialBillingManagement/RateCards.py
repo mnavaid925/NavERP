@@ -39,7 +39,6 @@ def rtc_list(request):
             "projects": projects,
             "project_filter": project_id,
             "is_active_filter": is_active_val,
-            "total_count": qs.count(),
         },
     )
 
