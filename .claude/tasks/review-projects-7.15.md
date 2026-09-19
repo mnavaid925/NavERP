@@ -143,7 +143,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Location**: List templates pagination links.
   - **Fix**: Preserve `q` and filter params in pagination links.
 
-- **[ ] M4: Form Modal `<label>` Tags Missing `for=""` Attribute**
+- **[x] fixed — fix(projects): add for attribute to label tags in financial billing modals**
   - **Location**: `billingrun/detail.html`, `revenueschedule/detail.html`, `paymentrecord/detail.html` modals.
   - **Fix**: Add `for="{{ form.field.id_for_label }}"`.
 
