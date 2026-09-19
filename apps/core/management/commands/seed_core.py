@@ -14,6 +14,12 @@ from django.utils import timezone
 from apps.core.navigation import parse_catalog
 from apps.core.models import (
     ModuleAccessScope,
+    ConsentPurpose,
+    ConsentRecord,
+    DataSubjectRequest,
+    PiiClassification,
+    RegulatoryFramework,
+    RetentionPolicy,
     Activity,
     Address,
     ContactMethod,
@@ -73,6 +79,7 @@ class Command(BaseCommand):
             # the workspaces that already exist — which is exactly what happened here on the first
             # run: `continue` skipped the whole tenant, so no scope rows were created at all.
             self._seed_module_scopes(tenant)
+            self._seed_privacy(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -163,3 +170,76 @@ class Command(BaseCommand):
         doc.file.save("handbook.txt", ContentFile(b"NavERP demo document."), save=False)
         doc.save()
         self.stdout.write("  seeded org units, parties, employments, activities, document")
+
+    def _seed_privacy(self, tenant):
+        """0.8: consent purposes, a couple of events, DSARs, retention policies and frameworks.
+
+        Deliberately does NOT seed any PiiClassification row and does NOT run the scan: the map is
+        meant to be populated by the operator pressing Run scan on their own schema, and a seeder
+        that pre-filled 177 suggestions would make the "human confirms" step look already done.
+
+        Frameworks are created DISABLED. A workspace claiming HIPAA because a seeder said so would be
+        a compliance lie, and enabling one is what starts the DSAR clock — so the seeded DSARs carry
+        NO due date until an operator enables a regime, which is the honest state to demonstrate.
+        """
+        purposes = [
+            ("Marketing email", "marketing-email", "consent", True),
+            ("Product analytics", "product-analytics", "legitimate_interest", False),
+            ("Service communications", "service-comms", "contract", False),
+        ]
+        created_purposes = []
+        for name, code, basis, optional in purposes:
+            obj, _ = ConsentPurpose.objects.get_or_create(
+                tenant=tenant, code=code,
+                defaults={"name": name, "lawful_basis": basis, "is_optional": optional,
+                          "description": f"Seeded demo purpose: {name}."},
+            )
+            created_purposes.append(obj)
+
+        if not ConsentRecord.objects.filter(tenant=tenant).exists():
+            parties = list(Party.objects.filter(tenant=tenant).order_by("id")[:3])
+            for idx, party in enumerate(parties):
+                for jdx, purpose in enumerate(created_purposes):
+                    # A mix on purpose: granted, withdrawn and never-asked all render differently
+                    # on the matrix, and a seeder that only granted would hide two of the three.
+                    if (idx + jdx) % 3 == 1:
+                        continue
+                    action = "withdrawn" if (idx + jdx) % 3 == 2 else "granted"
+                    ConsentRecord.objects.create(
+                        tenant=tenant, party=party, purpose=purpose, action=action,
+                        source="web_form", evidence=f"seed-form-{party.pk}-{purpose.pk}",
+                    )
+
+        if not DataSubjectRequest.objects.filter(tenant=tenant).exists():
+            parties = list(Party.objects.filter(tenant=tenant).order_by("id")[:3])
+            kinds = ["access", "erasure", "rectification"]
+            for idx, party in enumerate(parties):
+                DataSubjectRequest.objects.create(
+                    tenant=tenant, subject=party, kind=kinds[idx % len(kinds)],
+                    detail="Seeded demo request: the subject asked for their data.",
+                    identity_verified=(idx == 0),
+                    verification_note="Seeded: verified by callback." if idx == 0 else "",
+                )
+
+        if not RetentionPolicy.objects.filter(tenant=tenant).exists():
+            RetentionPolicy.objects.create(
+                tenant=tenant, name="Audit trail", data_category="Audit and activity records",
+                model_label="core.AuditLog", retention_months=84, action="archive", basis="legal",
+                notes="Seeded: statutory retention for financial audit evidence.",
+            )
+            RetentionPolicy.objects.create(
+                tenant=tenant, name="Marketing consent", data_category="Consent evidence",
+                model_label="core.ConsentRecord", retention_months=36, action="review",
+                basis="consent",
+                notes="Seeded: consent evidence is kept while the relationship lasts plus a margin.",
+            )
+            RetentionPolicy.objects.create(
+                tenant=tenant, name="Customer contacts", data_category="Contact details",
+                model_label="", retention_months=24, action="review", basis="operational",
+                notes="Seeded: a category that spans tables, so it is deliberately NOT computable.",
+            )
+
+        for code, label in RegulatoryFramework.CODE_CHOICES:
+            RegulatoryFramework.objects.get_or_create(
+                tenant=tenant, code=code, defaults={"label": label, "is_enabled": False},
+            )
