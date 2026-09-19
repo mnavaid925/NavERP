@@ -28,7 +28,6 @@ class ProjectApprovalGateForm(TenantModelForm):
             "escalate_to",
             "timeout_hours",
             "threshold_amount",
-            "auto_approve_threshold",
         ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3, "class": "form-textarea"}),
