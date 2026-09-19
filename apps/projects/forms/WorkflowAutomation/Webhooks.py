@@ -28,18 +28,23 @@ class ProjectWebhookEndpointForm(TenantModelForm):
 
     def clean_event_types(self):
         val = self.cleaned_data.get("event_types")
+        parsed = []
         if isinstance(val, str):
             val = val.strip()
             if not val:
-                return []
+                raise ValidationError("At least one event type must be selected.")
             try:
                 parsed = json.loads(val)
                 if not isinstance(parsed, list):
                     raise ValidationError("Event types must be a JSON array of strings.")
-                return parsed
             except json.JSONDecodeError as e:
                 raise ValidationError(f"Invalid JSON for event types: {e}")
-        return val or []
+        elif isinstance(val, list):
+            parsed = val
+
+        if not parsed:
+            raise ValidationError("At least one event type must be selected.")
+        return parsed
 
     def clean_custom_headers(self):
         val = self.cleaned_data.get("custom_headers")
