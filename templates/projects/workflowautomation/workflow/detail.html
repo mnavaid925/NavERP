@@ -248,10 +248,13 @@
           </div>
         </form>
         <div class="border-t border-slate-100 pt-3">
-          <form method="post" action="{% url 'projects:pwf_execute_now' rule.pk %}">
+          <form method="post" action="{% url 'projects:pwf_execute_now' rule.pk %}" class="space-y-3">
             {% csrf_token %}
-            <input type="hidden" name="target_id" value="1">
-            <button type="submit" class="btn btn-primary btn-sm w-full" onclick="return confirm('Execute this automation rule immediately?');">
+            <div class="form-group">
+              <label for="id_exec_target_id" class="form-label text-xs">Target {{ rule.get_trigger_entity_display }} ID</label>
+              <input type="number" name="target_id" id="id_exec_target_id" class="form-input text-sm" placeholder="Record ID (e.g. 1)" required min="1">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-full" onclick="return confirm('Execute this automation rule immediately against the specified record?');">
               <i data-lucide="zap" class="w-4 h-4 mr-1"></i> Execute Now
             </button>
           </form>
