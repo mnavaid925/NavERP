@@ -82,7 +82,7 @@ def par_detail(request, pk):
         {
             "gate": gate,
             "decision_form": ApprovalDecisionForm(),
-            "delegate_form": ApprovalDelegateForm(),
+            "delegate_form": ApprovalDelegateForm(tenant=request.tenant),
         },
     )
 
@@ -275,9 +275,12 @@ def par_delegate(request, pk):
         messages.error(request, f"Cannot delegate gate in state '{gate.status}'.")
         return redirect("projects:par_detail", pk=gate.pk)
 
-    form = ApprovalDelegateForm(request.POST)
+    form = ApprovalDelegateForm(request.POST, tenant=request.tenant)
     if form.is_valid():
         delegate = form.cleaned_data["delegate_approver"]
+        if delegate.tenant != request.tenant:
+            messages.error(request, "Selected delegate does not belong to this tenant.")
+            return redirect("projects:par_detail", pk=gate.pk)
         gate.delegate_approver = delegate
         gate.save(update_fields=["delegate_approver", "updated_at"])
 
