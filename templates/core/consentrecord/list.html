@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Consent Events{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Consent Events</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Consent Events</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:consent_matrix' %}" class="btn btn-outline"><i data-lucide="grid-3x3"></i> Consent matrix</a>
+      <a href="{% url 'core:consent_record_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record event</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One row per consent EVENT. A withdrawal adds a row rather than editing the grant — the history is the evidence, and overwriting it would destroy the only proof of what was agreed and when. The effective state is derived from the latest event, never stored.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="action" class="form-select">
+          <option value="">Any action</option>
+          {% for val, label in action_choices %}
+            <option value="{{ val }}" {% if request.GET.action == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="source" class="form-select">
+          <option value="">Any source</option>
+          {% for val, label in source_choices %}
+            <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:consent_record_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Party</th><th>Purpose</th><th>Action</th><th>Source</th><th>Evidence</th><th>When</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.party }}</td>
+            <td>{{ obj.purpose }}</td>
+            <td>{% if obj.action == 'granted' %}<span class="badge badge-green">Granted</span>{% else %}<span class="badge badge-red">Withdrawn</span>{% endif %}</td>
+            <td>{{ obj.get_source_display }}</td>
+            <td>{{ obj.evidence|default:"—" }}</td>
+            <td>{{ obj.occurred_at|date:"M d, Y H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><h3>No consent events</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
