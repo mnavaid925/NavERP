@@ -201,7 +201,7 @@
                   <div class="text-xs text-muted font-mono">{{ log.rule.number }}</div>
                 </td>
                 <td>
-                  <span class="text-xs">{{ log.trigger_entity }} &bull; {{ log.trigger_event }}</span>
+                  <span class="text-xs">{{ log.rule.get_trigger_entity_display }} &bull; {{ log.rule.get_trigger_event_display }}</span>
                 </td>
                 <td>
                   {% if log.status == "success" %}
@@ -218,7 +218,7 @@
                   <span class="text-xs font-mono">{{ log.duration_ms }} ms</span>
                 </td>
                 <td>
-                  <span class="text-xs text-muted font-mono">{{ log.executed_at|date:"Y-m-d H:i" }}</span>
+                  <span class="text-xs text-muted font-mono">{{ log.fired_at|date:"Y-m-d H:i" }}</span>
                 </td>
                 <td class="text-right">
                   <a href="{% url 'projects:pwf_detail' log.rule.pk %}" class="btn btn-xs btn-outline">View Rule</a>
