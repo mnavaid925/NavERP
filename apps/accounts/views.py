@@ -1,5 +1,6 @@
 """Authentication, user/role/invite management, and profile views."""
 import csv
+import datetime
 import io
 
 from django.contrib import messages
@@ -35,6 +36,9 @@ from .forms import (
     ForgotPasswordForm,
     InviteAcceptForm,
     LoginForm,
+    MfaChallengeForm,
+    MfaSetupForm,
+    PasswordPolicyForm,
     ProfileForm,
     RoleForm,
     SetPasswordForm,
@@ -48,10 +52,22 @@ from .models import (
     AccessReview,
     AccessReviewItem,
     ElevationGrant,
+    LoginAttempt,
+    MfaDevice,
+    PasswordPolicy,
     Role,
     User,
     UserImportBatch,
     UserInvite,
+    UserSession,
+)
+from .security import (
+    generate_backup_codes,
+    generate_secret,
+    hash_backup_code,
+    provisioning_uri,
+    risk_score,
+    verify_totp,
 )
 
 UserModel = get_user_model()
@@ -63,14 +79,36 @@ def login_view(request):
         return redirect("dashboard:home")
     form = LoginForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        user = authenticate(request, username=form.cleaned_data["identifier"],
+        identifier = form.cleaned_data["identifier"]
+        user = authenticate(request, username=identifier,
                             password=form.cleaned_data["password"])
         if user is None:
+            _record_attempt(request, user=None, identifier=identifier, success=False)
             messages.error(request, "Invalid email/username or password.")
         elif not user.is_active or user.status != "active":
+            _record_attempt(request, user=user, identifier=identifier, success=False)
             messages.error(request, "This account is not active. Contact your administrator.")
         else:
+            # 0.4 bullet 1: step up when — and only when — the user has a confirmed second factor.
+            # A user without one follows exactly the old path, so enabling this feature cannot lock
+            # anyone out. The pending marker does NOT authenticate: Django's session stays
+            # anonymous until `login()` runs in the challenge view.
+            device = _mfa_device_for(user)
+            if device is not None:
+                request.session["_mfa_pending_user"] = user.pk
+                request.session["_mfa_pending_at"] = timezone.now().isoformat()
+                # Carry the backend that actually authenticated them. `login()` in the challenge
+                # view would otherwise raise "You have multiple authentication backends configured
+                # and therefore must provide the `backend` argument", because a user fetched from
+                # the DB has no `.backend` attribute — only `authenticate()` sets it.
+                request.session["_mfa_pending_backend"] = getattr(user, "backend", None)
+                _record_attempt(request, user=user, identifier=identifier, success=True,
+                                mfa_challenged=True)
+                return redirect("accounts:mfa_challenge")
+
             login(request, user)
+            _open_session(request, user)
+            _record_attempt(request, user=user, identifier=identifier, success=True)
             next_url = request.GET.get("next", "")
             if next_url and url_has_allowed_host_and_scheme(
                 next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
@@ -1020,3 +1058,418 @@ def user_export(request):
     write_audit_log(request.user, None, "update",
                     changes={"verb": "user_export", "rows": users.count()})
     return response
+
+
+# ==================================================== 0.4 Authentication & SSO
+def _client_ip(request):
+    """The client address. X-Forwarded-For is read ONLY when USE_X_FORWARDED_HOST-style trust is
+    configured, because an untrusted header would let anyone forge their own risk signal."""
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded and getattr(settings, "TRUST_X_FORWARDED_FOR", False):
+        return forwarded.split(",")[0].strip()[:45]
+    return (request.META.get("REMOTE_ADDR") or "")[:45] or None
+
+
+def _user_agent(request):
+    return (request.META.get("HTTP_USER_AGENT") or "")[:255]
+
+
+def _mfa_device_for(user):
+    """The user's confirmed, active second factor, if any.
+
+    Its EXISTENCE is what triggers the step-up — so a user without one is unaffected by this
+    feature entirely. That is the safety property that keeps a foundation change from locking
+    anyone out.
+    """
+    return (MfaDevice.objects.filter(user=user, is_active=True, confirmed_at__isnull=False)
+            .order_by("id").first())
+
+
+def _record_attempt(request, *, user, identifier, success, mfa_challenged=False):
+    """Write the attempt with its risk score. Never raises: an audit write must not break a login.
+
+    When `authenticate()` returns None we cannot tell "no such account" from "wrong password", so
+    `user` arrives as None either way. Resolving the identifier back to an account here is what
+    makes a failed attempt VISIBLE: `request.tenant` is None for an anonymous request, so without
+    this every failure would be written with `tenant=NULL` and never appear in any workspace's
+    register — which is precisely the case the register exists to surface. It leaks nothing new:
+    `authenticate()` already performed this same lookup.
+    """
+    ip = _client_ip(request)
+    ua = _user_agent(request)
+    try:
+        if user is None and identifier:
+            user = (UserModel.objects
+                    .filter(Q(email__iexact=identifier) | Q(username__iexact=identifier))
+                    .order_by("id").first())
+        seen_ips, seen_agents = set(), set()
+        if user is not None:
+            prior = (LoginAttempt.objects.filter(user=user, success=True)
+                     .order_by("-created_at").values_list("ip", "user_agent")[:50])
+            for p_ip, p_ua in prior:
+                if p_ip:
+                    seen_ips.add(p_ip)
+                if p_ua:
+                    seen_agents.add(p_ua)
+        failures = LoginAttempt.objects.filter(
+            identifier=identifier, success=False,
+            created_at__gte=timezone.now() - timezone.timedelta(minutes=15)).count()
+        score, reasons = risk_score(ip=ip, user_agent=ua, seen_ips=seen_ips,
+                                    seen_agents=seen_agents, recent_failure_count=failures)
+        LoginAttempt.objects.create(
+            # Attribute to the probed account's workspace so the attempt is visible there. An
+            # identifier matching NO account genuinely cannot be attributed to a tenant in a
+            # shared-schema design, and is left NULL rather than guessed at.
+            tenant=getattr(user, "tenant", None) or getattr(request, "tenant", None),
+            user=user, identifier=(identifier or "")[:255], ip=ip, user_agent=ua,
+            success=success, risk_score=score, risk_reasons=reasons,
+            mfa_challenged=mfa_challenged,
+        )
+    except Exception:  # pragma: no cover - never let telemetry break authentication
+        pass
+
+
+def _open_session(request, user):
+    """Register the sign-in so it can be seen and revoked.
+
+    Called AFTER `login()`, because `login()` cycles the session key — recording before it would
+    store a key that no longer exists.
+    """
+    try:
+        if request.session.session_key:
+            UserSession.objects.update_or_create(
+                session_key=request.session.session_key,
+                defaults={"tenant": user.tenant, "user": user,
+                          "ip": _client_ip(request), "user_agent": _user_agent(request)},
+            )
+    except Exception:  # pragma: no cover - never let telemetry break authentication
+        pass
+
+
+#: How long a pending MFA challenge stays valid. A marker left open indefinitely would let a
+#: half-finished login be resumed much later.
+MFA_PENDING_MAX_AGE = 300
+
+
+@login_required
+def mfa_setup(request):
+    """Enrol a TOTP device. Creates an UNCONFIRMED device, so it cannot lock anyone out.
+
+    The device only starts being required once a code has been verified (`mfa_confirm`), which is
+    what stops a mistyped or unscanned secret from locking the user out of their own account.
+    """
+    if request.tenant is None:
+        messages.info(request, "MFA applies to a tenant workspace.")
+        return redirect("dashboard:home")
+    device = MfaDevice.objects.filter(user=request.user, is_active=True).first()
+    if device and device.is_confirmed:
+        return redirect("accounts:mfa_manage")
+
+    if request.method == "POST":
+        form = MfaSetupForm(request.POST)
+        if form.is_valid():
+            secret = generate_secret()
+            device = device or MfaDevice(tenant=request.tenant, user=request.user)
+            device.name = form.cleaned_data.get("name", "")
+            device.is_active = True
+            device.confirmed_at = None
+            device.set_secret(secret)
+            device.save()
+            # The plaintext secret is shown ONCE here; only its encrypted form is stored.
+            return render(request, "accounts/mfa/setup_confirm.html", {
+                "device": device, "secret": secret,
+                "uri": provisioning_uri(secret, request.user.email),
+                "form": MfaChallengeForm(),
+            })
+    else:
+        form = MfaSetupForm()
+    return render(request, "accounts/mfa/setup.html", {"form": form})
+
+
+@login_required
+def mfa_confirm(request):
+    """Verify a code to activate the device. The ONLY writer of `confirmed_at`."""
+    device = MfaDevice.objects.filter(user=request.user, is_active=True,
+                                      confirmed_at__isnull=True).order_by("-id").first()
+    if device is None:
+        messages.error(request, "Start the setup again — there is no device awaiting confirmation.")
+        return redirect("accounts:mfa_setup")
+    if request.method != "POST":
+        return redirect("accounts:mfa_setup")
+
+    form = MfaChallengeForm(request.POST)
+    if not form.is_valid():
+        return render(request, "accounts/mfa/setup_confirm.html", {
+            "device": device, "secret": device.get_secret(),
+            "uri": provisioning_uri(device.get_secret(), request.user.email), "form": form,
+        })
+    counter = verify_totp(device.get_secret(), form.cleaned_data["code"])
+    if counter is None:
+        form.add_error("code", "That code is not valid. Check your device clock and try again.")
+        return render(request, "accounts/mfa/setup_confirm.html", {
+            "device": device, "secret": device.get_secret(),
+            "uri": provisioning_uri(device.get_secret(), request.user.email), "form": form,
+        })
+
+    codes = generate_backup_codes()
+    device.backup_code_hashes = [hash_backup_code(c) for c in codes]
+    device.confirmed_at = timezone.now()
+    device.last_counter = counter
+    device.save(update_fields=["backup_code_hashes", "confirmed_at", "last_counter"])
+    write_audit_log(request.user, device, "update", changes={"verb": "mfa_confirm"})
+    # Backup codes are shown exactly once — only their hashes persist.
+    return render(request, "accounts/mfa/backup_codes.html", {"codes": codes})
+
+
+@login_required
+def mfa_manage(request):
+    device = MfaDevice.objects.filter(user=request.user, is_active=True).first()
+    sessions = UserSession.objects.filter(user=request.user).select_related("revoked_by")[:20]
+    return render(request, "accounts/mfa/manage.html", {"device": device, "sessions": sessions})
+
+
+def mfa_challenge(request):
+    """The login step-up. Unauthenticated by design — the user is not signed in yet."""
+    uid = request.session.get("_mfa_pending_user")
+    issued = request.session.get("_mfa_pending_at")
+    if not uid:
+        return redirect("accounts:login")
+
+    # Expire a stale half-finished login rather than letting it be resumed later.
+    try:
+        issued_at = datetime.datetime.fromisoformat(issued)
+        if (timezone.now() - issued_at).total_seconds() > MFA_PENDING_MAX_AGE:
+            for key in ("_mfa_pending_user", "_mfa_pending_at", "_mfa_pending_backend"):
+                request.session.pop(key, None)
+            messages.error(request, "That sign-in attempt expired. Please sign in again.")
+            return redirect("accounts:login")
+    except (TypeError, ValueError):
+        return redirect("accounts:login")
+
+    user_obj = UserModel.objects.filter(pk=uid, is_active=True).first()
+    device = _mfa_device_for(user_obj) if user_obj else None
+    if user_obj is None or device is None:
+        for key in ("_mfa_pending_user", "_mfa_pending_at", "_mfa_pending_backend"):
+            request.session.pop(key, None)
+        return redirect("accounts:login")
+
+    form = MfaChallengeForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        raw = form.cleaned_data["code"].strip()
+        counter = verify_totp(device.get_secret(), raw)
+        used_backup = False
+        if counter is None:
+            # Fall back to a single-use backup code, consumed on match.
+            digest = hash_backup_code(raw)
+            if digest in (device.backup_code_hashes or []):
+                remaining = [h for h in device.backup_code_hashes if h != digest]
+                device.backup_code_hashes = remaining
+                device.save(update_fields=["backup_code_hashes"])
+                used_backup = True
+        if counter is None and not used_backup:
+            form.add_error("code", "That code is not valid.")
+            _record_attempt(request, user=user_obj, identifier=user_obj.email, success=False,
+                            mfa_challenged=True)
+            return render(request, "accounts/mfa/challenge.html", {"form": form})
+
+        if not used_backup:
+            # Refuse a replay inside the same 30s window.
+            if device.last_counter is not None and counter <= device.last_counter:
+                form.add_error("code", "That code has already been used. Wait for the next one.")
+                return render(request, "accounts/mfa/challenge.html", {"form": form})
+            device.last_counter = counter
+        device.last_used_at = timezone.now()
+        device.save(update_fields=["last_counter", "last_used_at"])
+
+        backend = request.session.get("_mfa_pending_backend") or settings.AUTHENTICATION_BACKENDS[0]
+        for key in ("_mfa_pending_user", "_mfa_pending_at", "_mfa_pending_backend"):
+            request.session.pop(key, None)
+        login(request, user_obj, backend=backend)
+        _open_session(request, user_obj)
+        _record_attempt(request, user=user_obj, identifier=user_obj.email, success=True,
+                        mfa_challenged=True)
+        if used_backup:
+            messages.warning(request, "Signed in with a backup code — it has now been used up.")
+        return redirect("dashboard:home")
+    return render(request, "accounts/mfa/challenge.html", {"form": form})
+
+
+@require_POST
+@login_required
+def mfa_disable(request):
+    """Turn MFA off for the signed-in user. Admin-gated? No — it is their own factor, but a
+    tenant admin is notified via the audit log, which is the record that matters."""
+    device = MfaDevice.objects.filter(user=request.user, is_active=True).first()
+    if device is None:
+        messages.info(request, "MFA is not enabled on your account.")
+        return redirect("accounts:mfa_manage")
+    device.is_active = False
+    device.confirmed_at = None
+    device.backup_code_hashes = []
+    device.save(update_fields=["is_active", "confirmed_at", "backup_code_hashes"])
+    write_audit_log(request.user, device, "update", changes={"verb": "mfa_disable"})
+    messages.success(request, "Two-factor authentication disabled.")
+    return redirect("accounts:mfa_manage")
+
+
+@require_POST
+@login_required
+def mfa_regenerate_backup(request):
+    """Issue a fresh set of recovery codes, invalidating the old ones."""
+    device = _mfa_device_for(request.user)
+    if device is None:
+        messages.error(request, "Enable MFA before generating recovery codes.")
+        return redirect("accounts:mfa_manage")
+    codes = generate_backup_codes()
+    device.backup_code_hashes = [hash_backup_code(c) for c in codes]
+    device.save(update_fields=["backup_code_hashes"])
+    write_audit_log(request.user, device, "update", changes={"verb": "mfa_regenerate_backup"})
+    return render(request, "accounts/mfa/backup_codes.html", {"codes": codes})
+
+
+# ---------------------------------------------------------------- sessions
+@login_required
+def session_list(request):
+    """The signed-in user's own sessions. A tenant admin additionally sees the whole workspace."""
+    if request.tenant is None:
+        messages.info(request, "Sessions belong to a tenant workspace.")
+        return redirect("dashboard:home")
+    qs = UserSession.objects.filter(tenant=request.tenant).select_related("user", "revoked_by")
+    if not _is_tenant_admin(request.user):
+        qs = qs.filter(user=request.user)
+    else:
+        user_filter = request.GET.get("user", "").strip()
+        if user_filter.isdigit():
+            qs = qs.filter(user_id=int(user_filter))
+    return crud_list(
+        request, qs, "accounts/session/list.html",
+        search_fields=["ip", "user_agent", "user__email"],
+        extra_context={"current_session_key": request.session.session_key,
+                       "members": UserModel.objects.filter(tenant=request.tenant).order_by("email")
+                       if _is_tenant_admin(request.user) else []},
+    )
+
+
+@require_POST
+@login_required
+def session_revoke(request, pk):
+    """Kill one session. Scoped to the actor: a member may only revoke their own.
+
+    Enforcement is by DELETING the Django session row, not by a middleware. `SESSION_ENGINE` is
+    `sessions.backends.db`, so the row IS the session — removing it ends that session on the
+    victim's very next request, with no per-request revocation lookup added to the hot path.
+    """
+    from django.contrib.sessions.models import Session
+
+    qs = UserSession.objects.filter(tenant=request.tenant)
+    if not _is_tenant_admin(request.user):
+        qs = qs.filter(user=request.user)
+    obj = get_object_or_404(qs, pk=pk)
+    if obj.is_revoked:
+        messages.info(request, "That session is already revoked.")
+        return redirect("accounts:session_list")
+
+    obj.revoked_at = timezone.now()
+    obj.revoked_by = request.user
+    obj.save(update_fields=["revoked_at", "revoked_by"])
+    Session.objects.filter(session_key=obj.session_key).delete()
+
+    is_own = obj.session_key == request.session.session_key
+    write_audit_log(request.user, obj, "update", changes={"verb": "session_revoke"})
+    if is_own:
+        # The actor just killed the session making this request; a redirect to a login page would
+        # be the only honest next step.
+        logout(request)
+        messages.success(request, "That session was yours and has been signed out.")
+        return redirect("accounts:login")
+    messages.success(request, "Session revoked.")
+    return redirect("accounts:session_list")
+
+
+@require_POST
+@login_required
+def session_revoke_others(request):
+    """Sign out everywhere else, keeping the current session."""
+    from django.contrib.sessions.models import Session
+
+    qs = UserSession.objects.filter(user=request.user, revoked_at__isnull=True)
+    if request.session.session_key:
+        qs = qs.exclude(session_key=request.session.session_key)
+    keys = list(qs.values_list("session_key", flat=True))
+    count = qs.update(revoked_at=timezone.now(), revoked_by=request.user)
+    # Delete the Django sessions too, so the sign-out is immediate rather than cosmetic.
+    Session.objects.filter(session_key__in=keys).delete()
+    write_audit_log(request.user, None, "update",
+                    changes={"verb": "session_revoke_others", "count": count})
+    messages.success(request, f"Signed out {count} other session(s).")
+    return redirect("accounts:session_list")
+
+
+# ---------------------------------------------------------------- risk register + policy
+@tenant_admin_required
+def login_attempt_list(request):
+    """The adaptive-auth register: every attempt with the score it earned.
+
+    This is the surface bullet 5 actually needs. Blocking on a heuristic would be worse than
+    showing it — an admin can see the pattern and act, and nothing locks a real user out.
+    """
+    qs = LoginAttempt.objects.filter(tenant=request.tenant).select_related("user")
+    only_risky = request.GET.get("risky", "").strip()
+    if only_risky in ("yes", "no"):
+        from apps.accounts.security import RISK_STEP_UP_THRESHOLD
+        if only_risky == "yes":
+            qs = qs.filter(risk_score__gte=RISK_STEP_UP_THRESHOLD)
+        else:
+            qs = qs.filter(risk_score__lt=RISK_STEP_UP_THRESHOLD)
+    return crud_list(
+        request, qs, "accounts/loginattempt/list.html",
+        search_fields=["identifier", "ip"],
+        filters=[("success", "success", False)],
+        extra_context={"risky_choices": [("yes", "Risky only"), ("no", "Normal only")]},
+    )
+
+
+@tenant_admin_required
+def password_policy_edit(request):
+    """Edit the workspace credential policy."""
+    if request.tenant is None:
+        messages.info(request, "A password policy belongs to a tenant workspace.")
+        return redirect("dashboard:home")
+    policy, _ = PasswordPolicy.objects.get_or_create(tenant=request.tenant)
+    if request.method == "POST":
+        form = PasswordPolicyForm(request.POST, instance=policy, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, policy, "update", changes={"verb": "password_policy_edit"})
+            messages.success(request, "Password policy saved.")
+            return redirect("accounts:security_overview")
+    else:
+        form = PasswordPolicyForm(instance=policy, tenant=request.tenant)
+    return render(request, "accounts/passwordpolicy/form.html", {"form": form, "obj": policy})
+
+
+@tenant_admin_required
+def security_overview(request):
+    """Computed hub for 0.4 — no table. Reports posture and says what is NOT built."""
+    if request.tenant is None:
+        messages.info(request, "Security posture applies to a tenant workspace.")
+        return redirect("dashboard:home")
+    policy = PasswordPolicy.objects.filter(tenant=request.tenant).first()
+    attempts = LoginAttempt.objects.filter(tenant=request.tenant)
+    sessions = UserSession.objects.filter(tenant=request.tenant)
+    from apps.accounts.security import RISK_STEP_UP_THRESHOLD
+    context = {
+        "policy": policy,
+        "mfa_enabled_count": (MfaDevice.objects.filter(tenant=request.tenant, is_active=True,
+                                                       confirmed_at__isnull=False)
+                              .values("user").distinct().count()),
+        "member_count": UserModel.objects.filter(tenant=request.tenant, status="active").count(),
+        "session_count": sessions.filter(revoked_at__isnull=True).count(),
+        "revoked_session_count": sessions.exclude(revoked_at__isnull=True).count(),
+        "attempt_count": attempts.count(),
+        "failed_count": attempts.filter(success=False).count(),
+        "risky_count": attempts.filter(risk_score__gte=RISK_STEP_UP_THRESHOLD).count(),
+        "recent_attempts": attempts.select_related("user")[:10],
+        "threshold": RISK_STEP_UP_THRESHOLD,
+    }
+    return render(request, "accounts/security_overview.html", context)
