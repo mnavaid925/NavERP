@@ -59,7 +59,7 @@
   </div>
   <div class="card-body p-0">
     {% if endpoints %}
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -102,11 +102,11 @@
                   <div class="flex items-center justify-end gap-2">
                     <form method="post" action="{% url 'projects:pwh_test_ping' ep.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-outline" title="Send test ping">
+                      <button type="submit" class="btn btn-sm btn-outline" title="Send test ping">
                         Ping
                       </button>
                     </form>
-                    <a href="{% url 'projects:pwh_detail' ep.pk %}" class="btn btn-xs btn-outline">Details</a>
+                    <a href="{% url 'projects:pwh_detail' ep.pk %}" class="btn btn-sm btn-outline">Details</a>
                   </div>
                 </td>
               </tr>
@@ -135,7 +135,7 @@
   </div>
   <div class="card-body p-0">
     {% if recent_failures %}
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -174,7 +174,7 @@
                   <span class="text-xs text-muted font-mono">{{ fail.attempted_at|date:"Y-m-d H:i:s" }}</span>
                 </td>
                 <td class="text-right">
-                  <a href="{% url 'projects:pwh_delivery_detail' fail.pk %}" class="btn btn-xs btn-outline">Inspect</a>
+                  <a href="{% url 'projects:pwh_delivery_detail' fail.pk %}" class="btn btn-sm btn-outline">Inspect</a>
                 </td>
               </tr>
             {% endfor %}
