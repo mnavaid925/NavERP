@@ -261,11 +261,11 @@
         <form method="post" action="{% url 'projects:pbr_dispatch' billing_run.pk %}" class="space-y-3 pt-2">
           {% csrf_token %}
           <div class="form-group">
-            <label class="form-label text-xs">Recipient Email</label>
+            <label for="{{ dispatch_form.recipient_email.id_for_label }}" class="form-label text-xs">Recipient Email</label>
             {{ dispatch_form.recipient_email }}
           </div>
           <div class="form-group">
-            <label class="form-label text-xs">Dispatch Note</label>
+            <label for="{{ dispatch_form.notes.id_for_label }}" class="form-label text-xs">Dispatch Note</label>
             {{ dispatch_form.notes }}
           </div>
           <button type="submit" class="btn btn-primary btn-sm w-full">
