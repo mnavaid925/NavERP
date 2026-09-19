@@ -69,6 +69,12 @@ from .models import (
     ProjectBillingRun,
     ProjectRevenueSchedule,
     ProjectPaymentRecord,
+    ProjectWorkflowRule,
+    WorkflowExecutionLog,
+    ProjectApprovalGate,
+    RecurringTaskSchedule,
+    ProjectWebhookEndpoint,
+    ProjectWebhookDelivery,
 )
 
 
@@ -839,7 +845,69 @@ class ProjectPaymentRecordAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "created_at", "updated_at")
 
 
+# --- 7.17 Workflow & Automation -----------------------------------------------------------------
+
+@admin.register(ProjectWorkflowRule)
+class ProjectWorkflowRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "trigger_entity", "trigger_event", "is_active", "execution_count", "last_run_at", "tenant")
+    list_filter = ("is_active", "trigger_entity", "trigger_event")
+    list_select_related = ("tenant", "project", "created_by")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "execution_count", "last_run_at", "created_at", "updated_at")
 
 
+@admin.register(WorkflowExecutionLog)
+class WorkflowExecutionLogAdmin(admin.ModelAdmin):
+    list_display = ("id", "rule", "trigger_entity", "trigger_event", "status", "duration_ms", "executed_at", "tenant")
+    list_filter = ("status", "trigger_entity", "trigger_event")
+    list_select_related = ("tenant", "rule")
+    search_fields = ("rule__name", "rule__number", "error_message")
+    readonly_fields = ("rule", "trigger_entity", "trigger_event", "trigger_record_id", "status", "conditions_evaluated", "actions_taken", "error_message", "duration_ms", "executed_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
+@admin.register(ProjectApprovalGate)
+class ProjectApprovalGateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "gate_type", "status", "approver", "delegate_approver", "decided_at", "tenant")
+    list_filter = ("gate_type", "status")
+    list_select_related = ("tenant", "project", "approver", "delegate_approver", "requested_by")
+    search_fields = ("number", "name", "description", "target_object_id", "decision_note")
+    readonly_fields = ("number", "status", "decided_at", "created_at", "updated_at")
+
+
+@admin.register(RecurringTaskSchedule)
+class RecurringTaskScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "title_template", "project", "frequency", "priority", "is_active", "next_run_date", "total_generated", "tenant")
+    list_filter = ("frequency", "priority", "is_active")
+    list_select_related = ("tenant", "project", "default_assignee", "created_by")
+    search_fields = ("number", "title_template", "description_template")
+    readonly_fields = ("number", "total_generated", "last_generated_at", "created_at", "updated_at")
+
+
+@admin.register(ProjectWebhookEndpoint)
+class ProjectWebhookEndpointAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "project", "target_url", "is_active", "delivery_count", "failure_count", "last_delivery_at", "tenant")
+    list_filter = ("is_active",)
+    list_select_related = ("tenant", "project", "created_by")
+    search_fields = ("number", "name", "target_url")
+    readonly_fields = ("number", "signing_secret", "delivery_count", "failure_count", "last_delivery_at", "created_at", "updated_at")
+
+
+@admin.register(ProjectWebhookDelivery)
+class ProjectWebhookDeliveryAdmin(admin.ModelAdmin):
+    list_display = ("id", "webhook", "event", "status", "status_code", "duration_ms", "attempted_at", "tenant")
+    list_filter = ("status", "status_code")
+    list_select_related = ("tenant", "webhook")
+    search_fields = ("webhook__name", "webhook__number", "event", "response_body")
+    readonly_fields = ("webhook", "event", "payload", "signature", "status", "status_code", "response_body", "duration_ms", "attempted_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
