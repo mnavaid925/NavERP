@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ gate.number }} — {{ gate.title }} — Approval Gates — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ gate.title }}</h1>
+      <span class="badge {{ gate.status_badge }}">{{ gate.get_status_display }}</span>
+      <span class="font-mono text-sm text-muted">[{{ gate.number }}]</span>
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <a href="{% url 'projects:par_list' %}">Approval Gates</a>
+      <span>/</span>
+      <span>{{ gate.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    {% if not gate.is_terminal %}
+    <a href="{% url 'projects:par_edit' gate.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Gate
+    </a>
+    <form method="post" action="{% url 'projects:par_cancel' gate.pk %}" class="inline" onsubmit="return confirm('Cancel this approval gate?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="x-circle" class="w-4 h-4 mr-1"></i> Cancel Gate
+      </button>
+    </form>
+    {% endif %}
+    <form method="post" action="{% url 'projects:par_delete' gate.pk %}" class="inline" onsubmit="return confirm('Delete approval gate {{ gate.number }}?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Left 2 Columns: Gate Scope, Target & Governance Decision -->
+  <div class="lg:col-span-2 space-y-6">
+    <!-- Gate Overview Card -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Governance Gate Details</h3>
+        <span class="badge badge-slate">{{ gate.get_gate_type_display }}</span>
+      </div>
+      <div class="card-body space-y-4">
+        {% if gate.description %}
+        <div>
+          <span class="text-xs text-muted block">Description / Context</span>
+          <p class="text-sm text-slate-800 mt-1">{{ gate.description }}</p>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+          <div>
+            <span class="text-xs text-muted block">Target Entity</span>
+            <span class="font-medium text-slate-900 text-sm">{{ gate.target_model }}</span>
+            {% if gate.target_label %}
+            <span class="text-xs text-muted block">{{ gate.target_label }} (#{{ gate.target_id }})</span>
+            {% else %}
+            <span class="text-xs text-muted block">Record ID #{{ gate.target_id }}</span>
+            {% endif %}
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Project</span>
+            <a href="{% url 'projects:prj_detail' gate.project.pk %}" class="font-medium text-brand hover:underline text-sm">
+              {{ gate.project.name }}
+            </a>
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Threshold Amount</span>
+            {% if gate.threshold_amount %}
+              <span class="font-mono font-semibold text-slate-800">${{ gate.threshold_amount }}</span>
+            {% else %}
+              <span class="text-muted text-sm">No monetary threshold</span>
+            {% endif %}
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Auto-Approval Tolerance</span>
+            {% if gate.auto_approve_threshold %}
+              <span class="font-mono font-semibold text-green-700">&le; ${{ gate.auto_approve_threshold }}</span>
+            {% else %}
+              <span class="text-muted text-sm">Manual approval required</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Decision & Action Panel (Active when not terminal) -->
+    {% if not gate.is_terminal %}
+    <div class="card border-amber-200 bg-amber-50/20">
+      <div class="card-header">
+        <h3 class="card-title text-amber-900">Pending Approver Action</h3>
+      </div>
+      <div class="card-body space-y-4">
+        <p class="text-sm text-slate-700">
+          Review the target record details and submit an authoritative decision.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Approve Form -->
+          <form method="post" action="{% url 'projects:par_approve' gate.pk %}" class="p-4 rounded-lg border border-green-200 bg-white space-y-3">
+            {% csrf_token %}
+            <div class="font-semibold text-green-800 text-sm flex items-center gap-1.5">
+              <i data-lucide="check-circle" class="w-4 h-4"></i> Approve Gate
+            </div>
+            <textarea name="decision_notes" rows="2" class="form-textarea text-xs" placeholder="Approval feedback or conditions (optional)..."></textarea>
+            <button type="submit" class="btn btn-primary btn-sm w-full bg-green-600 hover:bg-green-700 border-green-600">
+              Approve Now
+            </button>
+          </form>
+
+          <!-- Reject Form -->
+          <form method="post" action="{% url 'projects:par_reject' gate.pk %}" class="p-4 rounded-lg border border-red-200 bg-white space-y-3">
+            {% csrf_token %}
+            <div class="font-semibold text-red-800 text-sm flex items-center gap-1.5">
+              <i data-lucide="x-circle" class="w-4 h-4"></i> Reject Gate
+            </div>
+            <textarea name="decision_notes" rows="2" class="form-textarea text-xs" placeholder="Rejection rationale (required)..." required></textarea>
+            <button type="submit" class="btn btn-danger btn-sm w-full">
+              Reject Gate
+            </button>
+          </form>
+        </div>
+
+        <!-- Secondary Actions: Escalate & Delegate -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-amber-200/60">
+          <div>
+            <form method="post" action="{% url 'projects:par_escalate' gate.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline btn-sm w-full text-red-700 hover:bg-red-50">
+                <i data-lucide="alert-triangle" class="w-4 h-4 mr-1"></i> Escalate (Timeout)
+              </button>
+            </form>
+          </div>
+          <div>
+            <form method="post" action="{% url 'projects:par_delegate' gate.pk %}" class="flex gap-2">
+              {% csrf_token %}
+              <div class="flex-1">
+                {{ delegate_form.delegate_approver }}
+              </div>
+              <button type="submit" class="btn btn-outline btn-sm whitespace-nowrap">
+                Delegate
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <!-- Completed Decision Card -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Recorded Decision</h3>
+      </div>
+      <div class="card-body space-y-3">
+        <div class="flex items-center gap-3">
+          <span class="badge {{ gate.status_badge }} text-sm py-1 px-3">{{ gate.get_status_display }}</span>
+          {% if gate.decided_at %}
+          <span class="text-xs text-muted">Decided on {{ gate.decided_at|date:"M d, Y H:i" }}</span>
+          {% endif %}
+        </div>
+        {% if gate.decision_notes %}
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-800">
+          <span class="text-xs text-muted block font-semibold mb-1">Decision Notes:</span>
+          {{ gate.decision_notes }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right Column: Approver Routing & SLAs -->
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Routing & Governance</h3>
+      </div>
+      <div class="card-body space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-muted block">Requested By</span>
+          <span class="font-medium text-slate-800">{{ gate.requested_by.get_full_name|default:gate.requested_by.username }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Designated Approver</span>
+          <span class="font-medium text-slate-800">{{ gate.approver.get_full_name|default:gate.approver.username }}</span>
+        </div>
+        {% if gate.delegate_approver %}
+        <div>
+          <span class="text-xs text-muted block">Delegate Approver</span>
+          <span class="font-medium text-amber-800">{{ gate.delegate_approver.get_full_name|default:gate.delegate_approver.username }}</span>
+        </div>
+        {% endif %}
+        {% if gate.escalate_to %}
+        <div>
+          <span class="text-xs text-muted block">SLA Escalation Target</span>
+          <span class="font-medium text-slate-800">{{ gate.escalate_to.get_full_name|default:gate.escalate_to.username }}</span>
+        </div>
+        {% endif %}
+        <div>
+          <span class="text-xs text-muted block">Timeout SLA</span>
+          <span class="font-mono text-slate-800">{{ gate.timeout_hours }} hours</span>
+        </div>
+        {% if gate.escalated_at %}
+        <div>
+          <span class="text-xs text-red-600 block font-semibold">Escalated At</span>
+          <span class="text-red-700 text-xs">{{ gate.escalated_at|date:"M d, Y H:i" }}</span>
+        </div>
+        {% endif %}
+        <div>
+          <span class="text-xs text-muted block">Created At</span>
+          <span class="text-slate-800 text-xs">{{ gate.created_at|date:"M d, Y H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
