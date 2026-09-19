@@ -39,3 +39,7 @@ from .AuditLog import (
 from .Document import (
     Document,
 )  # noqa: F401
+from .ModuleAccessScope import (
+    ModuleAccessScope,
+    SensitiveFieldMask,
+)  # noqa: F401
