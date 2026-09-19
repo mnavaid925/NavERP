@@ -2,6 +2,7 @@
 import json
 import time
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.views.decorators.http import require_POST
 
@@ -231,29 +232,30 @@ def pwh_test_ping(request, pk):
     payload_bytes = json.dumps(payload).encode("utf-8")
     sig = webhook.compute_signature(payload_bytes)
 
-    delivery = ProjectWebhookDelivery.objects.create(
-        tenant=request.tenant,
-        webhook=webhook,
-        event=event_type,
-        payload=payload,
-        signature=sig,
-        status="simulated",
-        status_code=200,
-        response_body='{"ok": true, "simulated": true, "received": true}',
-        duration_ms=45,
-    )
+    with transaction.atomic():
+        delivery = ProjectWebhookDelivery.objects.create(
+            tenant=request.tenant,
+            webhook=webhook,
+            event=event_type,
+            payload=payload,
+            signature=sig,
+            status="simulated",
+            status_code=200,
+            response_body='{"ok": true, "simulated": true, "received": true}',
+            duration_ms=45,
+        )
 
-    webhook.last_status_code = 200
-    webhook.last_fired_at = timezone.now()
-    webhook.save(update_fields=["last_status_code", "last_fired_at", "updated_at"])
+        webhook.last_status_code = 200
+        webhook.last_fired_at = timezone.now()
+        webhook.save(update_fields=["last_status_code", "last_fired_at", "updated_at"])
 
-    write_audit_log(
-        user=request.user,
-        obj=webhook,
-        action="ping",
-        changes={"description": f"Test ping dispatched for {webhook.number} (Delivery #{delivery.pk})"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            user=request.user,
+            obj=webhook,
+            action="ping",
+            changes={"description": f"Test ping dispatched for {webhook.number} (Delivery #{delivery.pk})"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Simulated ping dispatched to {webhook.target_url} (Signature: {sig[:12]}...).")
     return redirect("projects:pwh_detail", pk=webhook.pk)
 
