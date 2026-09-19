@@ -35,11 +35,10 @@ description: >-
   per-project folder tree with a computed path and document count, the controlled-document register
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
-  library (usage counter + featured shelf, no FileField), and the three computed pages (repository
-  overview, retention & archiving board with its idempotent reminder Run, and knowledge search); and 7.11 Time & Attendance Tracking: time activity codes [TAC-] with overhead categories and billing defaults, overtime calculation rules [OTR-] with daily/weekly/weekend/holiday threshold multipliers, project overtime claims [POT-] with submit/approve/reject workflow and pay/billable calculations, ResourceTimeEntry [RTE-] billable toggle, activity code, and frozen re-logging loop (rte_relog), the utilization dashboard (utilization_dashboard), and the synchronized time/leave/holiday calendar (time_calendar); and 7.12 Portfolio & Program Management: multi-project portfolios [PRT-] with strategic themes and budget envelopes, sub-portfolio programs [PGM-] with target dates and budget targets, portfolio investment scoring [PIN-] with 4-criterion weighted models (strategic, financial, risk, capacity) and decision verbs (fund, reject, defer), cross-project program dependencies [PDEP-] with lead/lag days and clear/reopen verbs, and the executive portfolio dashboard (pfm_dashboard) with scatter heat maps and demand pipeline funnel; and 7.13 Agile & Scrum Management: sprints [SPT-] with start/complete/cancel lifecycle verbs, project epics [EPC-] with derived progress rollups, project releases [REL-] with version tags and publish verb, sprint impediments [IMP-] with severity bands and resolve verb, sprint retrospectives [RET-] with sentiment score and open/close verbs, in-place ProjectTask agile extensions (story_points, sprint, epic, release, is_in_backlog), and the four computed workbenches: sprint backlog grooming (sprint_backlog), active sprint execution burndown (sprint_execution), release roadmap (release_roadmap), and team velocity & health report (velocity_report); and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation).
+  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.14), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.15), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -53,13 +52,14 @@ description: >-
   TimeActivityCode/OvertimeRule/ProjectOvertimeRecord/
   Portfolio/Program/PortfolioInvestment/ProgramDependency/
   Sprint/ProjectEpic/ProjectRelease/SprintImpediment/SprintRetrospective/
-  ClientPortalAccess/ClientApprovalRequest/StatementOfWork/SOWAmendment/VendorHandoff/ProjectClientInvoice,
+  ClientPortalAccess/ClientApprovalRequest/StatementOfWork/SOWAmendment/VendorHandoff/ProjectClientInvoice/
+  ProjectRateCard/ProjectBillingRun/ProjectRevenueSchedule/ProjectPaymentRecord,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14.** 7.15–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14 + 7.15.** 7.16–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -75,7 +75,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), and `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), and `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1813,6 +1813,45 @@ Covers client portal access control, formal client review & approval workflows, 
 - **StatementOfWork**: `sow_list` (`statements-of-work/`), `sow_create` (`statements-of-work/add/`), `sow_detail` (`statements-of-work/<int:pk>/`), `sow_edit` (`statements-of-work/<int:pk>/edit/`), `sow_delete` (`statements-of-work/<int:pk>/delete/`), `sow_activate` (`statements-of-work/<int:pk>/activate/`), `sow_amendment_create` (`statements-of-work/<int:pk>/amendments/add/`).
 - **VendorHandoff**: `vhd_list` (`vendor-handoffs/`), `vhd_create` (`vendor-handoffs/add/`), `vhd_detail` (`vendor-handoffs/<int:pk>/`), `vhd_edit` (`vendor-handoffs/<int:pk>/edit/`), `vhd_delete` (`vendor-handoffs/<int:pk>/delete/`), `vhd_accept` (`vendor-handoffs/<int:pk>/accept/`), `vhd_reject` (`vendor-handoffs/<int:pk>/reject/`).
 - **ProjectClientInvoice**: `pci_list` (`client-invoices/`), `pci_create` (`client-invoices/add/`), `pci_detail` (`client-invoices/<int:pk>/`), `pci_edit` (`client-invoices/<int:pk>/edit/`), `pci_delete` (`client-invoices/<int:pk>/delete/`), `pci_generate_invoice` (`client-invoices/<int:pk>/generate-invoice/`).
+
+```python
+"7.15": {
+    "Project Accounting & Cost Centers":     "projects:financial_pnl",
+    "Invoice Generation & Delivery":         "projects:pbr_list",
+    "Payment Tracking & Reconciliation":     "projects:ppr_list",
+    "Budget vs. Actual Analysis":            "projects:financial_variance",
+    "Multi-Currency & Tax Handling":         "projects:rtc_list",
+    # Extra live leaves:
+    "Rate Cards":                            "projects:rtc_list",
+    "Billing Runs":                          "projects:pbr_list",
+    "Revenue Schedules":                     "projects:prs_list",
+    "Payment Records":                       "projects:ppr_list",
+    "A/R Aging Analysis":                    "projects:ar_aging",
+    "Cash Flow Forecast":                    "projects:cash_flow_forecast",
+}
+```
+Bullet 1 maps to `financial_pnl` project P&L and cost-center allocation dashboard; bullet 2 maps to `pbr_list` automated billing run register; bullet 3 maps to `ppr_list` payment tracking and collections register; bullet 4 maps to `financial_variance` real-time budget vs actual analysis; bullet 5 maps to `rtc_list` role- and activity-based rate cards. Extra live leaves provide direct access to `prs_list` revenue schedules, `ar_aging` buckets, and `cash_flow_forecast`.
+
+### 7.15 Financial & Billing Management — Reference
+
+Covers rate card configuration with role/activity rates and markup, automated billing runs with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards:
+
+#### Models (`apps/projects/models/FinancialBillingManagement/`)
+- **`ProjectRateCard`** [`RTC-`] (`RateCards.py`): Role- and activity-based project billing rate card with markup. Fields: `project` (optional, null=tenant-wide default), `client` (optional), `name`, `role_name`, `activity_code` (linked to 7.11 TAC), `hourly_rate`, `expense_markup_pct`, `currency`, `effective_from`, `effective_to`, `is_active`, `notes`. Property: `is_effective`.
+- **`ProjectBillingRun`** [`PBR-`] (`BillingRuns.py`): Automated project client billing run generating draft/posted invoices. Fields: `project`, `client` (Party organization), `sow` (optional SOW link), `billing_type` (fixed_fee/time_and_materials/milestone/retainer), `run_date`, `cutoff_date`, `labor_amount`, `expense_amount`, `fee_amount`, `subtotal`, `tax_amount`, `total_amount`, `currency`, `exchange_rate`, `status` (draft/approved/invoiced/sent/cancelled), `accounting_invoice` (FK `accounting.Invoice`), `invoiced_at`, `sent_at`, `notes`. Verbs: `pbr_preview_pdf`, `pbr_generate_invoice`, `pbr_mark_sent`.
+- **`ProjectRevenueSchedule`** [`PRS-`] (`RevenueSchedules.py`): Milestone/percentage-of-completion revenue recognition schedule complying with ASC-606 / IFRS-15. Fields: `project`, `milestone` (optional), `recognition_method` (milestone_based/percentage_of_completion/straight_line/manual), `planned_date`, `recognized_date`, `planned_amount`, `recognized_amount`, `completion_percent`, `currency`, `status` (draft/scheduled/recognized/locked/superseded), `gl_account` (FK `accounting.GLAccount`), `recognized_by`, `notes`. Verbs: `prs_recognize`, `prs_lock`.
+- **`ProjectPaymentRecord`** [`PPR-`] (`PaymentRecords.py`): Client payment tracking, DSO metrics, and collections workflow. Fields: `project`, `client` (Party organization), `accounting_invoice` (FK `accounting.Invoice`), `payment_method` (bank_transfer/credit_card/check/wire/portal/other), `reference_number`, `status` (pending/received/cleared/bounced/disputed), `payment_date`, `cleared_date`, `days_sales_outstanding` (computed DSO), `promise_to_pay_date`, `promise_amount`, `contact_notes`, `recorded_by`. Verbs: `ppr_record_promise`, `ppr_log_contact`.
+
+#### Views & Routes (`apps/projects/views/FinancialBillingManagement/`, `apps/projects/urls/FinancialBillingManagement/`)
+- **RateCard**: `rtc_list` (`rate-cards/`), `rtc_create` (`rate-cards/add/`), `rtc_detail` (`rate-cards/<int:pk>/`), `rtc_edit` (`rate-cards/<int:pk>/edit/`), `rtc_delete` (`rate-cards/<int:pk>/delete/`).
+- **BillingRun**: `pbr_list` (`billing-runs/`), `pbr_create` (`billing-runs/add/`), `pbr_detail` (`billing-runs/<int:pk>/`), `pbr_edit` (`billing-runs/<int:pk>/edit/`), `pbr_delete` (`billing-runs/<int:pk>/delete/`), `pbr_preview_pdf` (`billing-runs/<int:pk>/preview-pdf/`), `pbr_generate_invoice` (`billing-runs/<int:pk>/generate-invoice/`), `pbr_mark_sent` (`billing-runs/<int:pk>/mark-sent/`).
+- **RevenueSchedule**: `prs_list` (`revenue-schedules/`), `prs_create` (`revenue-schedules/add/`), `prs_detail` (`revenue-schedules/<int:pk>/`), `prs_edit` (`revenue-schedules/<int:pk>/edit/`), `prs_delete` (`revenue-schedules/<int:pk>/delete/`), `prs_recognize` (`revenue-schedules/<int:pk>/recognize/`), `prs_lock` (`revenue-schedules/<int:pk>/lock/`).
+- **PaymentRecord**: `ppr_list` (`payment-records/`), `ppr_create` (`payment-records/add/`), `ppr_detail` (`payment-records/<int:pk>/`), `ppr_edit` (`payment-records/<int:pk>/edit/`), `ppr_delete` (`payment-records/<int:pk>/delete/`), `ppr_record_promise` (`payment-records/<int:pk>/record-promise/`), `ppr_log_contact` (`payment-records/<int:pk>/log-contact/`).
+- **Computed Financial Boards**:
+  - `financial_pnl` (`financial/pnl/`): Project P&L statement, gross margin, labor vs expense vs fee cost-center breakdown.
+  - `financial_variance` (`financial/variance/`): Budget vs actual cost, schedule, and margin variance analysis.
+  - `ar_aging` (`financial/ar-aging/`): Accounts receivable aging buckets (current, 1-30, 31-60, 61-90, 90+ days overdue) with collections follow-up queue.
+  - `cash_flow_forecast` (`financial/cash-flow/`): 12-month rolling project cash flow projection combining scheduled revenue, billing runs, and payment receipts.
 
 ## Common tasks
 
