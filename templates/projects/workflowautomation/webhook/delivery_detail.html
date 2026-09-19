@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Delivery #{{ delivery.pk }} — Webhook Logs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">Delivery Attempt #{{ delivery.pk }}</h1>
+      <span class="badge {{ delivery.status_badge }}">{{ delivery.get_status_display }}</span>
+      <span class="badge badge-info font-mono">{{ delivery.event }}</span>
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <a href="{% url 'projects:pwh_list' %}">Webhooks</a>
+      <span>/</span>
+      <a href="{% url 'projects:pwh_delivery_list' %}">Deliveries</a>
+      <span>/</span>
+      <span>#{{ delivery.pk }}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pwh_detail' delivery.webhook.pk %}" class="btn btn-outline">
+      <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to {{ delivery.webhook.name }}
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Left 2 Columns: Payload & Response Inspector -->
+  <div class="lg:col-span-2 space-y-6">
+    <!-- Payload Inspector Card -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Outbound JSON Payload</h3>
+        <span class="text-xs text-muted">Format: JSON</span>
+      </div>
+      <div class="card-body">
+        <pre class="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto font-mono text-xs">{{ delivery.payload }}</pre>
+      </div>
+    </div>
+
+    <!-- Response Inspector Card -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Receiver HTTP Response</h3>
+        {% if delivery.status_code %}
+          <span class="badge {% if delivery.status_code == 200 %}badge-green{% else %}badge-red{% endif %} font-mono">
+            HTTP {{ delivery.status_code }}
+          </span>
+        {% else %}
+          <span class="badge badge-slate">No Response</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if delivery.response_body %}
+          <pre class="p-4 bg-slate-50 border border-slate-200 text-slate-800 rounded-lg overflow-x-auto font-mono text-xs">{{ delivery.response_body }}</pre>
+        {% else %}
+          <p class="text-xs text-muted">No response body captured.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Delivery Telemetry & Security -->
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Delivery Metadata</h3>
+      </div>
+      <div class="card-body space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-muted block">Destination Webhook</span>
+          <a href="{% url 'projects:pwh_detail' delivery.webhook.pk %}" class="font-medium text-brand hover:underline">
+            {{ delivery.webhook.name }}
+          </a>
+          <span class="text-xs text-muted block font-mono">{{ delivery.webhook.number }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Target URL</span>
+          <span class="font-mono text-xs text-slate-800 break-all">{{ delivery.webhook.target_url }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Attempt Timestamp</span>
+          <span class="text-slate-800 text-xs">{{ delivery.attempted_at|date:"M d, Y H:i:s" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Round-Trip Duration</span>
+          <span class="font-mono text-xs text-slate-800">{{ delivery.duration_ms }} ms</span>
+        </div>
+        {% if delivery.signature %}
+        <div>
+          <span class="text-xs text-muted block">HMAC-SHA256 Signature</span>
+          <span class="font-mono text-xs text-slate-800 break-all">{{ delivery.signature }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
