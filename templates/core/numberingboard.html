@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Numbering Reconciliation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Numbering Reconciliation</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Numbering Reconciliation</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:numbering_scheme_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Schemes</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Configured prefixes against the ones models actually mint. <strong>Nothing here mints anything</strong> — allocation stays in <code>next_number()</code>.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Schemes configured</dt><dd>{{ configured_count }}</dd></div>
+      <div class="detail-item"><dt>Prefixes both configured and in use</dt><dd>{{ used_count }}</dd></div>
+      <div class="detail-item"><dt>Prefixes models mint</dt><dd>{{ model_prefix_count }}</dd></div>
+    </dl>
+    {% if configured_only %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ configured_only|length }} scheme(s) configure a prefix that nothing detected minting:</strong>
+        {% for p in configured_only %}<code>{{ p }}</code> {% endfor %}
+        — a scheme that does nothing, or a model this scan cannot see.</p>
+    {% endif %}
+    {% if model_only %}
+      <p class="text-muted"><i data-lucide="info"></i> {{ model_only|length }} prefix(es) are minted with no scheme behind them — undocumented numbering. The first few:
+        {% for p in model_only|slice:":8" %}<code>{{ p }}</code> {% endfor %}…</p>
+    {% endif %}
+    <p class="text-muted"><strong>Blind spot, stated:</strong> the scan reads the <code>NUMBER_PREFIX</code> class attribute, which covers every
+      <code>TenantNumbered</code> subclass. A model minting a prefix through its own <code>save()</code> with a hardcoded literal is invisible to it —
+      {% for p in literal_prefixes %}<code>{{ p }}</code>{% if not forloop.last %}, {% endif %}{% endfor %} {{ literal_prefixes|length|pluralize:"is,are" }}
+      merged in explicitly for exactly that reason. Without it the board reported SINV as unused, which was a false negative.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Prefix</th><th>Document kind</th><th>Padding</th><th>Resets</th><th>Minted by</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600"><code>{{ row.prefix }}</code></td>
+              <td>{{ row.scheme.document_kind }}</td>
+              <td>{{ row.scheme.padding_width }}</td>
+              <td>{{ row.scheme.get_reset_rule_display }}</td>
+              <td>
+                {% if row.minted_by %}{% for m in row.minted_by %}<span class="badge badge-green">{{ m }}</span> {% endfor %}
+                {% else %}<span class="badge badge-amber">nothing detected</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="git-compare"></i><h3>No schemes configured</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
