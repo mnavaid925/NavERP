@@ -58,14 +58,14 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 
 | # | Module | Django app(s) | Status |
 |---|--------|---------------|--------|
-| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | ✅ Foundation built; sub-module **0.1 complete** |
+| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 7 of 21 built — 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.14 |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built |
-| 3 | Human Resource Management (HRM) | `hrm` | 🟦 In progress — **3.1–3.12 built** (12 of 41 sub-modules) |
-| 4 | Supply Chain Management (SCM) | `scm` | ⬜ Roadmap |
-| 5 | Inventory Management System (IMS) | `inventory` | ⬜ Roadmap |
-| 6 | Procurement Management System | `procurement` | ⬜ Roadmap |
-| 7 | Project Management | `projects` | ⬜ Roadmap |
+| 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1–3.41 built — all 41 sub-modules |
+| 4 | Supply Chain Management (SCM) | `scm` | ✅ 4.1–4.19 built — all 19 sub-modules |
+| 5 | Inventory Management System (IMS) | `inventory` | ✅ 5.1–5.20 built — all 20 sub-modules |
+| 6 | Procurement Management System | `procurement` | ✅ 6.1–6.19 built — all 19 sub-modules |
+| 7 | Project Management | `projects` | 🟦 7.1–7.15 built — 15 of 19 sub-modules |
 | 8 | Sales Management System | `sales` | ⬜ Roadmap |
 | 9 | eCommerce Management System | `ecommerce` | ⬜ Roadmap |
 | 10 | Business Intelligence (BI) | `bi` | ⬜ Roadmap (read-only over the spine) |
@@ -83,6 +83,12 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 | 22 | Sustainability, EHS & ESG Management | `esg` | ⬜ Roadmap |
 | 23 | AI & Intelligent Automation | `ai` | ⬜ Roadmap |
 
+> **This table goes stale — do not trust it as build state.** The authoritative answer to "is sub-module
+> `N.M` built?" is a `LIVE_LINKS["N.M"]` entry in `apps/core/navigation.py`. A `LIVE_LINKS` entry is also
+> not proof of a *working* sub-module: 7.10 once shipped an entry with 21 of 22 templates missing and its
+> migration unapplied. Verify with `venv\Scripts\python.exe temp\audit_integrity.py`, which checks
+> migrations-applied, route reversal, template existence, sidebar targets and seeder coverage.
+
 ---
 
 ## 0. System Admin & Security
@@ -90,11 +96,14 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 > **Implementation status (this repo).** Module 0 is realized by four Django apps — `core` (tenant spine,
 > middleware, navigation, audit, shared CRUD), `accounts` (users, RBAC, auth, invites), `tenants` (sub-module
 > **0.1**), and `dashboard` (KPIs). Sub-module **0.1 Tenant & Subscription Management is fully built**
-> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). IAM/RBAC,
-> User & Organization management, and Audit (0.2 / 0.3 / 0.5 / 0.9) are substantially realized by `accounts` +
-> `core`; the remaining sub-modules below are on the roadmap. See [`README.md`](README.md) for the as-built
-> feature list and routes, and [`NavERP-ERD.md`](NavERP-ERD.md#as-built-foundation-schema-module-0--01) for the
-> concrete schema.
+> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). **7 of the 21
+> sub-modules have a `LIVE_LINKS` entry: 0.1, 0.2, 0.3, 0.5, 0.7, 0.9 and 0.14.** Note that those seven
+> surface only part of their own bullet lists below — 0.2 maps 2 of 5 bullets, 0.5 maps 2 of 5, and 0.3 /
+> 0.7 / 0.9 / 0.14 each map just 1 of 5 — so an unmapped bullet is either realized in code without a
+> sidebar leaf or genuinely absent, and has not yet been reconciled either way. The remaining 14 sub-modules
+> (0.4, 0.6, 0.8, 0.10–0.13, 0.15–0.21) are unbuilt; see
+> [`README.md`](README.md) for the as-built feature list and routes, and
+> [`NavERP-ERD.md`](NavERP-ERD.md#as-built-foundation-schema-module-0--01) for the concrete schema.
 
 ### 0.1 Tenant & Subscription Management
 - **Tenant Onboarding** — Self-service registration, domain provisioning, and initial configuration wizard.
