@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Webhook Deliveries — Workflow & Automation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Webhook Delivery Logs</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <a href="{% url 'projects:pwh_list' %}">Webhooks</a>
+      <span>/</span>
+      <span>Deliveries</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pwh_list' %}" class="btn btn-outline">
+      <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to Endpoints
+    </a>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="form-group">
+        <label for="id_status" class="form-label">Status</label>
+        <select name="status" id="id_status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+          <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_webhook" class="form-label">Webhook ID</label>
+        <input type="text" name="webhook" id="id_webhook" value="{{ webhook_id }}" class="form-input" placeholder="Filter by endpoint ID...">
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:pwh_delivery_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">Outbound Deliveries ({{ page_obj.paginator.count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Attempt Time</th>
+          <th>Endpoint</th>
+          <th>Event</th>
+          <th>Status</th>
+          <th>HTTP Code</th>
+          <th>Duration</th>
+          <th class="text-right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in deliveries %}
+        <tr>
+          <td>
+            <span class="text-xs text-muted">{{ d.attempted_at|date:"M d, Y H:i:s" }}</span>
+          </td>
+          <td>
+            <a href="{% url 'projects:pwh_detail' d.webhook.pk %}" class="font-medium text-brand hover:underline">
+              {{ d.webhook.name }}
+            </a>
+            <span class="text-xs text-muted block font-mono">{{ d.webhook.number }}</span>
+          </td>
+          <td>
+            <span class="badge badge-info font-mono text-xs">{{ d.event }}</span>
+          </td>
+          <td>
+            <span class="badge {{ d.status_badge }}">{{ d.get_status_display }}</span>
+          </td>
+          <td>
+            {% if d.status_code %}
+              <span class="font-mono text-xs font-semibold">{{ d.status_code }}</span>
+            {% else %}
+              <span class="text-xs text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="font-mono text-xs">{{ d.duration_ms }} ms</span>
+          </td>
+          <td class="text-right">
+            <a href="{% url 'projects:pwh_delivery_detail' d.pk %}" class="btn btn-icon btn-sm" title="View Details">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state py-12 text-center">
+              <i data-lucide="send" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+              <h4 class="text-lg font-medium text-slate-800">No Webhook Deliveries Logged</h4>
+              <p class="text-muted text-sm mt-1">Delivery attempts to external endpoints will appear here.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">
+      Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if webhook_id %}&webhook={{ webhook_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if webhook_id %}&webhook={{ webhook_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
