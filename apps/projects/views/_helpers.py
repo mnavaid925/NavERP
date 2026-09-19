@@ -5,9 +5,10 @@ and ``projects`` are the filter-dropdown builders shared by more than one of 7.1
 registers; ``resource_profiles`` and ``project_requests`` are 7.3's demand-lens pair (the
 request builder has one consumer today but is kept beside the pool builder it mirrors);
 ``critical_path_ids`` is 7.2's critical-chain pass over dependency edges; ``owners`` is 7.5's
-owner/approver/escalation-target dropdown, shared by all four of that sub-module's registers.
-Same rule for all seven: if only one consumer ever needs a helper, it moves to that consumer's
-module.
+owner/approver/escalation-target dropdown, shared by all four of that sub-module's registers; and
+``csv_safe`` / ``redirect_back_or`` are 7.16's, each read by more than one of that sub-module's five
+view modules. Same rule for all nine: if only one consumer ever needs a helper, it moves to that
+consumer's module.
 
 The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
 superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
@@ -16,6 +17,8 @@ reaches it — their project dropdown is empty — and it returns an empty set f
 work packages.)
 """
 from django.contrib.auth import get_user_model
+from django.shortcuts import redirect
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.core.models import OrgUnit, Party
 from apps.projects.models import Project, ProjectRequest, Requirement, ResourceProfile
@@ -196,3 +199,42 @@ def critical_path_ids(project):
             break
         chain.add(cursor.pk)
     return chain
+
+
+# ---------------------------------------------------------------------------------------------
+# 7.16 Reporting & Business Intelligence. Both helpers are read by MORE THAN ONE entity module of
+# that sub-module (Backend rule 5): every CSV route in 7.16 writes user-authored text into a cell,
+# and five POST verbs across three modules must return the user to the page they were on.
+# ``csv_safe`` is a deliberate local copy of ``apps/procurement/views/_helpers.py:323`` — peer apps
+# never import each other's internals, the same reason ``forms/_common.py`` is its own copy.
+# ---------------------------------------------------------------------------------------------
+
+#: A cell that opens with one of these is a formula the reader's spreadsheet EXECUTES, not a value.
+#: TAB and CR are in the set because Excel strips leading whitespace BEFORE deciding what a cell is,
+#: so a value that opens ``\t=`` arrives as ``=``.
+_CSV_DANGEROUS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value):
+    """Neutralise spreadsheet formula injection: prefix a dangerous leading character.
+
+    Report titles, project names and narrative text are typed by people, and a CSV that carries
+    ``=cmd|'/c calc'!A1`` in a cell runs it on the reader's machine. The apostrophe makes the cell a
+    string and changes nothing else about the value.
+    """
+    text = str(value)
+    return f"'{text}" if text[:1] in _CSV_DANGEROUS else text
+
+
+def redirect_back_or(request, fallback_name, **kwargs):
+    """Honour a POSTed ``next`` only as a same-host target; otherwise redirect to ``fallback_name``.
+
+    ``next`` arrives from a form the client controls, so trusting it unchecked is an open redirect —
+    scheme-relative values (``//evil.example``) and absolute ones fall back here, not through.
+    """
+    candidate = request.POST.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return redirect(candidate)
+    return redirect(fallback_name, **kwargs)
