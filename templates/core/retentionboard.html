@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Retention Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Retention Board</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Retention Board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:retention_policy_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Policies</a>
+      <a href="{% url 'core:disposal_list' %}" class="btn btn-outline"><i data-lucide="file-check"></i> Disposals</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">What each active policy <strong>would</strong> dispose of. Nothing here destroys anything.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Automated destruction is deliberately not implemented.</strong>
+      Destroying data is a one-way door, and this repo has no scheduler — the only way to automate it would be to make a page
+      request destructive. Worse, the project already established that "delete" in this codebase <strong>does not erase bytes</strong>
+      (Django never unlinks a FileField on row delete), so a destruction feature that reported success while the file survived
+      would be actively dishonest. The schedule, the identification and the evidence are here; the act is out of band.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Active policies</dt><dd>{{ rows|length }}</dd></div>
+      <div class="detail-item"><dt>Computable</dt><dd>{{ computable }}</dd></div>
+      <div class="detail-item"><dt>Rows past their window</dt><dd>{{ total_due }}</dd></div>
+      <div class="detail-item"><dt>Disposals recorded</dt><dd>{{ disposals }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Policy</th><th>Model</th><th>Kept</th><th>Action</th><th>Past window</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">{{ row.policy.name }}</td>
+              <td>{% if row.policy.model_label %}<code>{{ row.policy.model_label }}</code>{% else %}—{% endif %}</td>
+              <td>{{ row.policy.retention_months }} months</td>
+              <td>{{ row.policy.get_action_display }}</td>
+              <td>{% if row.due is not None %}<span class="badge badge-amber">{{ row.due }}</span>{% else %}<span class="badge badge-slate">n/a</span>{% endif %}</td>
+              <td>{% if row.note %}<span class="text-muted">{{ row.note }}</span>{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No active policies</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
