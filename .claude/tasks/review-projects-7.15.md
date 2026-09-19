@@ -151,7 +151,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Location**: `FinancialBoards.py:307`
   - **Fix**: Append `.distinct()` to `inflows_qs`.
 
-- **[ ] M6: Project Filter Label Fallback in Dashboard Templates**
+- **[x] fixed — fix(projects): add p.number fallback to project filter label in dashboard templates**
   - **Location**: `pnl.html:44`, `variance.html:44`, `aging.html:44`, `cashflow.html:44`
   - **Fix**: Use `{{ p.code|default:p.number }} — {{ p.name }}`.
 
