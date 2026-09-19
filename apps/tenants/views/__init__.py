@@ -45,6 +45,17 @@ from .HealthMetric import (
     healthmetric_edit,
     healthmetric_delete,
 )  # noqa: F401
+from .UsageRecord import (
+    usagerecord_list,
+    usagerecord_create,
+    usagerecord_detail,
+    usagerecord_edit,
+    usagerecord_delete,
+    usagerecord_mark_billed,
+)  # noqa: F401
 from .Onboarding import (
     onboarding,
+)  # noqa: F401
+from .Isolation import (
+    isolation_overview,
 )  # noqa: F401
