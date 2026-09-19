@@ -20,6 +20,9 @@ from .EncryptionKey import (
 from .HealthMetric import (
     HealthMetricForm,
 )  # noqa: F401
+from .UsageRecord import (
+    UsageRecordForm,
+)  # noqa: F401
 from .Onboarding import (
     OnboardingForm,
 )  # noqa: F401
