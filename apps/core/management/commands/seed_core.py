@@ -14,6 +14,12 @@ from django.utils import timezone
 from apps.core.navigation import parse_catalog
 from apps.core.models import (
     ModuleAccessScope,
+    BusinessCalendar,
+    CustomFieldDefinition,
+    FeatureFlag,
+    Holiday,
+    NumberingScheme,
+    SettingDefinition,
     ConsentPurpose,
     ConsentRecord,
     DataSubjectRequest,
@@ -80,6 +86,7 @@ class Command(BaseCommand):
             # run: `continue` skipped the whole tenant, so no scope rows were created at all.
             self._seed_module_scopes(tenant)
             self._seed_privacy(tenant)
+            self._seed_configuration(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -242,4 +249,104 @@ class Command(BaseCommand):
         for code, label in RegulatoryFramework.CODE_CHOICES:
             RegulatoryFramework.objects.get_or_create(
                 tenant=tenant, code=code, defaults={"label": label, "is_enabled": False},
+            )
+
+    def _seed_configuration(self, tenant):
+        """0.10: setting definitions, feature flags, numbering schemes and a working calendar.
+
+        `SettingDefinition` rows are PLATFORM-level (no tenant FK) and are seeded once for everyone,
+        while the tenant-scoped pieces are guarded per tenant.
+
+        Numbering: seeds only a handful of the 300+ prefixes the repo actually mints. That is
+        deliberate — the reconciliation board exists to show the gap, and pre-filling every prefix
+        would hide the very thing the board is for.
+        """
+        definitions = [
+            ("accounting.default_payment_terms", "Default payment terms (days)",
+             "accounting", "integer", "30", [], "Applied to new bills and invoices.", False),
+            ("accounting.fiscal_year_start_month", "Fiscal year start month",
+             "accounting", "integer", "1", [], "1 = January.", False),
+            ("core.date_display_format", "Date display format", "core", "choice", "iso",
+             [["iso", "YYYY-MM-DD"], ["uk", "DD/MM/YYYY"], ["us", "MM/DD/YYYY"]],
+             "How dates render in lists and detail pages.", False),
+            ("core.session_idle_timeout_minutes", "Session idle timeout (minutes)",
+             "core", "integer", "30", [], "Enforced by SessionTimeoutMiddleware.", True),
+            ("crm.lead_duplicate_check", "Warn on duplicate leads",
+             "crm", "boolean", "true", [], "Shows the duplicate warning on lead create.", False),
+            ("projects.require_timesheet_approval", "Require timesheet approval",
+             "projects", "boolean", "true", [], "Approved hours only count toward billing.", False),
+        ]
+        for key, label, module_slug, value_type, default_value, choices, help_text, locked in definitions:
+            SettingDefinition.objects.get_or_create(
+                key=key,
+                defaults={"label": label, "module_slug": module_slug, "value_type": value_type,
+                          "default_value": default_value, "choices": choices,
+                          "help_text": help_text, "is_locked": locked},
+            )
+
+        flags = [
+            ("projects.gantt", "Interactive Gantt timeline", False, ""),
+            ("crm.kanban_board", "Kanban pipeline board", True, ""),
+            ("core.custom_fields", "Custom fields on forms", False, ""),
+            ("projects.ai_forecast", "AI schedule forecast", False, "enterprise"),
+        ]
+        for key, label, enabled, plan in flags:
+            FeatureFlag.objects.get_or_create(
+                tenant=tenant, key=key,
+                defaults={"label": label, "is_enabled": enabled, "applies_to_plan": plan,
+                          "description": f"Seeded demo flag: {label}."},
+            )
+
+        # A handful of the prefixes the repo really mints, plus one that NO model mints so the
+        # reconciliation board demonstrates its "configured but nothing uses it" branch.
+        schemes = [
+            ("Purchase Order", "PO", "never"),
+            ("Purchase Requisition", "PRQ", "never"),
+            ("Sales Invoice", "SINV", "yearly"),
+            ("Journal Entry", "JE", "yearly"),
+            ("Retired Document Kind", "ZZZ", "never"),
+        ]
+        for kind, prefix, reset in schemes:
+            NumberingScheme.objects.get_or_create(
+                tenant=tenant, prefix=prefix,
+                defaults={"document_kind": kind, "reset_rule": reset},
+            )
+
+        BusinessCalendar.objects.get_or_create(
+            tenant=tenant,
+            defaults={"working_days": [1, 2, 3, 4, 5], "timezone_name": "Europe/London",
+                      "notes": "Seeded demo calendar: Mon-Fri working week."},
+        )
+
+        if not Holiday.objects.filter(tenant=tenant).exists():
+            year = timezone.localdate().year
+            for name, month, day, recurring in [
+                ("New Year's Day", 1, 1, True),
+                ("Christmas Day", 12, 25, True),
+                ("Boxing Day", 12, 26, True),
+            ]:
+                Holiday.objects.create(tenant=tenant, name=name,
+                                       date=datetime.date(year, month, day),
+                                       is_recurring=recurring, region="UK")
+            # A one-off in the FUTURE so the "upcoming" list on the board is never empty.
+            Holiday.objects.create(
+                tenant=tenant, name="Company Foundation Day",
+                date=timezone.localdate() + datetime.timedelta(days=45),
+                is_recurring=False, region="UK",
+                notes="Seeded one-off so the upcoming-holidays list has content.",
+            )
+
+        if not CustomFieldDefinition.objects.filter(tenant=tenant).exists():
+            CustomFieldDefinition.objects.create(
+                tenant=tenant, module_slug="crm", entity_label="crm.Lead",
+                field_key="referral_source", label="Referral source", field_type="choice",
+                choices=["search", "referral", "event", "outbound"],
+                help_text="Seeded demo custom field.", display_order=1,
+            )
+            CustomFieldDefinition.objects.create(
+                tenant=tenant, module_slug="projects", entity_label="projects.Project",
+                field_key="cost_code", label="Internal cost code", field_type="text",
+                validation_regex="[A-Z]{2}-[0-9]{4}",
+                help_text="Seeded demo custom field with a format rule, e.g. AB-1234.",
+                display_order=2,
             )
