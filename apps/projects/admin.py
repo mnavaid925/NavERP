@@ -849,20 +849,20 @@ class ProjectPaymentRecordAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectWorkflowRule)
 class ProjectWorkflowRuleAdmin(admin.ModelAdmin):
-    list_display = ("number", "name", "project", "trigger_entity", "trigger_event", "is_active", "execution_count", "last_run_at", "tenant")
+    list_display = ("number", "name", "project", "trigger_entity", "trigger_event", "is_active", "execution_count", "last_fired_at", "tenant")
     list_filter = ("is_active", "trigger_entity", "trigger_event")
-    list_select_related = ("tenant", "project", "created_by")
+    list_select_related = ("tenant", "project", "owner")
     search_fields = ("number", "name", "description")
-    readonly_fields = ("number", "execution_count", "last_run_at", "created_at", "updated_at")
+    readonly_fields = ("number", "execution_count", "last_fired_at", "created_at", "updated_at")
 
 
 @admin.register(WorkflowExecutionLog)
 class WorkflowExecutionLogAdmin(admin.ModelAdmin):
-    list_display = ("id", "rule", "trigger_entity", "trigger_event", "status", "duration_ms", "executed_at", "tenant")
-    list_filter = ("status", "trigger_entity", "trigger_event")
+    list_display = ("id", "rule", "record_label", "target_model", "status", "duration_ms", "fired_at", "tenant")
+    list_filter = ("status", "target_model")
     list_select_related = ("tenant", "rule")
-    search_fields = ("rule__name", "rule__number", "error_message")
-    readonly_fields = ("rule", "trigger_entity", "trigger_event", "trigger_record_id", "status", "conditions_evaluated", "actions_taken", "error_message", "duration_ms", "executed_at")
+    search_fields = ("rule__name", "rule__number", "error_msg", "record_label")
+    readonly_fields = ("rule", "record_label", "target_model", "target_id", "status", "evaluated_conditions", "executed_actions", "error_msg", "duration_ms", "fired_at")
 
     def has_add_permission(self, request):
         return False
@@ -873,29 +873,29 @@ class WorkflowExecutionLogAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectApprovalGate)
 class ProjectApprovalGateAdmin(admin.ModelAdmin):
-    list_display = ("number", "name", "project", "gate_type", "status", "approver", "delegate_approver", "decided_at", "tenant")
+    list_display = ("number", "title", "project", "gate_type", "status", "approver", "delegate_approver", "decided_at", "tenant")
     list_filter = ("gate_type", "status")
     list_select_related = ("tenant", "project", "approver", "delegate_approver", "requested_by")
-    search_fields = ("number", "name", "description", "target_object_id", "decision_note")
-    readonly_fields = ("number", "status", "decided_at", "created_at", "updated_at")
+    search_fields = ("number", "title", "description", "target_label", "decision_notes")
+    readonly_fields = ("number", "status", "decided_at", "escalated_at", "created_at", "updated_at")
 
 
 @admin.register(RecurringTaskSchedule)
 class RecurringTaskScheduleAdmin(admin.ModelAdmin):
-    list_display = ("number", "title_template", "project", "frequency", "priority", "is_active", "next_run_date", "total_generated", "tenant")
+    list_display = ("number", "title_template", "project", "frequency", "priority", "is_active", "next_run_date", "tasks_created_count", "tenant")
     list_filter = ("frequency", "priority", "is_active")
-    list_select_related = ("tenant", "project", "default_assignee", "created_by")
+    list_select_related = ("tenant", "project", "default_assignee")
     search_fields = ("number", "title_template", "description_template")
-    readonly_fields = ("number", "total_generated", "last_generated_at", "created_at", "updated_at")
+    readonly_fields = ("number", "tasks_created_count", "last_run_date", "created_at", "updated_at")
 
 
 @admin.register(ProjectWebhookEndpoint)
 class ProjectWebhookEndpointAdmin(admin.ModelAdmin):
-    list_display = ("number", "name", "project", "target_url", "is_active", "delivery_count", "failure_count", "last_delivery_at", "tenant")
+    list_display = ("number", "name", "project", "target_url", "is_active", "last_status_code", "last_fired_at", "tenant")
     list_filter = ("is_active",)
-    list_select_related = ("tenant", "project", "created_by")
+    list_select_related = ("tenant", "project")
     search_fields = ("number", "name", "target_url")
-    readonly_fields = ("number", "signing_secret", "delivery_count", "failure_count", "last_delivery_at", "created_at", "updated_at")
+    readonly_fields = ("number", "secret", "last_status_code", "failure_count", "last_fired_at", "created_at", "updated_at")
 
 
 @admin.register(ProjectWebhookDelivery)
