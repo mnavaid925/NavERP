@@ -1,6 +1,7 @@
 """Projects 7.17 — ProjectWorkflowRule views."""
 import time
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.views.decorators.http import require_POST
 
@@ -243,29 +244,30 @@ def pwf_execute_now(request, pk):
         start_time = time.time()
         # Execute actions
         duration_ms = int((time.time() - start_time) * 1000)
-        rule.execution_count += 1
-        rule.last_fired_at = timezone.now()
-        rule.save(update_fields=["execution_count", "last_fired_at", "updated_at"])
+        with transaction.atomic():
+            rule.execution_count += 1
+            rule.last_fired_at = timezone.now()
+            rule.save(update_fields=["execution_count", "last_fired_at", "updated_at"])
 
-        log = WorkflowExecutionLog.objects.create(
-            tenant=request.tenant,
-            rule=rule,
-            record_label=f"Manual execution on {rule.trigger_entity} #{target_id}",
-            target_model=rule.trigger_entity,
-            target_id=target_id,
-            status="success",
-            error_msg="",
-            duration_ms=max(duration_ms, 1),
-            evaluated_conditions={"conditions": rule.conditions, "matched": True},
-            executed_actions=rule.actions,
-        )
-        write_audit_log(
-            user=request.user,
-            obj=rule,
-            action="execute",
-            changes={"description": f"Executed workflow rule {rule.number} on #{target_id}"},
-            tenant=request.tenant,
-        )
+            log = WorkflowExecutionLog.objects.create(
+                tenant=request.tenant,
+                rule=rule,
+                record_label=f"Manual execution on {rule.trigger_entity} #{target_id}",
+                target_model=rule.trigger_entity,
+                target_id=target_id,
+                status="success",
+                error_msg="",
+                duration_ms=max(duration_ms, 1),
+                evaluated_conditions={"conditions": rule.conditions, "matched": True},
+                executed_actions=rule.actions,
+            )
+            write_audit_log(
+                user=request.user,
+                obj=rule,
+                action="execute",
+                changes={"description": f"Executed workflow rule {rule.number} on #{target_id}"},
+                tenant=request.tenant,
+            )
         messages.success(request, f"Workflow rule {rule.number} executed successfully (Log #{log.pk}).")
     else:
         messages.error(request, "Please specify a valid record ID.")
