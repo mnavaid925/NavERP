@@ -49,7 +49,6 @@ def pbr_list(request):
             "project_filter": project_id,
             "status_choices": ProjectBillingRun.STATUS_CHOICES,
             "status_filter": status_filter,
-            "total_count": qs.count(),
         },
     )
 
