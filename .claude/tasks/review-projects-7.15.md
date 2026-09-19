@@ -134,7 +134,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: Missing indexes: `(tenant, is_active)` on RTC, `(tenant, method)` on PRS, `(tenant, dunning_level)` on PPR.
   - **Fix**: Add to `Meta.indexes` and generate migration.
 
-- **[ ] M2: Duplicate `COUNT(*)` Queries in List Views**
+- **[x] fixed — perf(projects): eliminate duplicate COUNT(*) queries in list views**
   - **Location**: `RateCards.py:43`, `BillingRuns.py:53`, `RevenueSchedules.py:56`, `PaymentRecords.py:57`
   - **Problem**: `"total_count": qs.count()` evaluates duplicate count query.
   - **Fix**: Remove `"total_count"` from `extra_context`, use `page_obj.paginator.count` in templates.
