@@ -6450,6 +6450,7 @@ def _workflowautomation_schedule(tenant, project, default_assignee=None, **overr
         effort_hours=Decimal("2.0"),
         assignee_strategy="fixed_user",
         default_assignee=default_assignee,
+        start_date=_workflowautomation_today(),
         next_run_date=_workflowautomation_today(),
         is_active=True,
     )
@@ -6482,10 +6483,10 @@ def _workflowautomation_delivery(tenant, webhook, **overrides):
     data = dict(
         tenant=tenant,
         webhook=webhook,
-        event_type="task.created",
+        event="task.created",
         payload={"task_id": 1, "name": "Initial Task"},
         status="success",
-        response_status=200,
+        status_code=200,
         response_body='{"status":"received"}',
         duration_ms=45,
     )
