@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}My Access Requests{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Access Requests</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>My Access Requests</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounts:access_request_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New request</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="text-muted">Request access to a role. A tenant admin approves or rejects it, and approval grants the role for the number of days you ask for.</p>
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounts:access_request_mine' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requested role</th><th>Days</th><th>Status</th><th>Grant until</th><th>Decision note</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounts:access_request_detail' obj.pk %}" class="fw-600">{% if obj.requested_role %}{{ obj.requested_role }}{% else %}—{% endif %}</a></td>
+              <td>{{ obj.requested_days }}</td>
+              <td>
+                {% if obj.is_active %}<span class="badge badge-green">Active</span>
+                {% elif obj.is_expired %}<span class="badge badge-amber">Expired</span>
+                {% elif obj.status == 'pending' %}<span class="badge badge-info">Pending</span>
+                {% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.granted_until %}{{ obj.granted_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.decision_note %}{{ obj.decision_note|truncatechars:60 }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounts:access_request_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'pending' %}
+                    <a href="{% url 'accounts:access_request_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="key-round"></i><h3>No requests yet</h3><p>Raise one to ask for a role.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
