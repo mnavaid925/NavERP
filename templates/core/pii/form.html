@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Classify Field{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Classify {{ obj.model_label }}.{{ obj.field_name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:pii_map' %}">PII Data Map</a><span class="sep">›</span><span>{{ obj.field_name }}</span></div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    <p class="text-muted">The scan suggested <strong>{{ obj.get_category_display }}</strong> at <strong>{{ obj.get_sensitivity_display }}</strong> sensitivity, from the field name alone. Confirm or dismiss it. Dismissing is a real outcome: it stops the field appearing as an open question and records that a human looked.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'core:pii_map' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+{% endblock %}
