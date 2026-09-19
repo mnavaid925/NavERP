@@ -47,3 +47,13 @@ from .Privacy import (
     PiiClassificationForm,
     RegulatoryFrameworkForm,
 )  # noqa: F401
+from .Settings import (
+    SettingDefinitionForm,
+    SettingValueForm,
+    FeatureFlagForm,
+    NumberingSchemeForm,
+    BusinessCalendarForm,
+    HolidayForm,
+    CustomFieldDefinitionForm,
+    CustomFieldValueForm,
+)  # noqa: F401
