@@ -22,7 +22,7 @@
 </div>
 
 <!-- Navigation Tabs -->
-<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
+<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border); margin-bottom:1.5rem; padding-bottom:0.5rem;">
   <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-outline">Rate Cards</a>
   <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-outline">Billing Runs</a>
   <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-outline">Revenue Schedules</a>
@@ -38,7 +38,7 @@
   <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
     <div style="flex:1; min-width:240px;">
       <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
-      <select name="project" id="id_project" class="form-select" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+      <select name="project" id="id_project" class="form-select">
         <option value="">All Active Projects</option>
         {% for p in projects %}
           <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
@@ -82,44 +82,44 @@
 
 <!-- Detailed P&L Breakdown Table -->
 <div class="card">
-  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem; border-bottom:1px solid var(--border-color, #e2e8f0);">
-    <h2 class="card-title" style="font-size:1.1rem; font-weight:600; margin:0;"><i data-lucide="file-spreadsheet"></i> Project Profitability Statement</h2>
+  <div class="card-header">
+    <h2 class="card-title"><i data-lucide="file-spreadsheet"></i> Project Profitability Statement</h2>
     <span class="badge badge-info">{{ pnl_rows|length }} Projects Analyzed</span>
   </div>
-  <div class="table-wrap" style="overflow-x:auto;">
-    <table class="table" style="width:100%; border-collapse:collapse;">
+  <div class="table-wrap">
+    <table class="table">
       <thead>
-        <tr style="border-bottom:2px solid var(--border-color, #cbd5e1); text-align:left;">
-          <th style="padding:0.75rem;">Project</th>
-          <th style="padding:0.75rem; text-align:right;">Contract Value</th>
-          <th style="padding:0.75rem; text-align:right;">Recognized Rev</th>
-          <th style="padding:0.75rem; text-align:right;">Labor Hours</th>
-          <th style="padding:0.75rem; text-align:right;">Labor Cost</th>
-          <th style="padding:0.75rem; text-align:right;">Direct Expenses</th>
-          <th style="padding:0.75rem; text-align:right;">Total Cost</th>
-          <th style="padding:0.75rem; text-align:right;">Gross Margin</th>
-          <th style="padding:0.75rem; text-align:right;">Margin %</th>
+        <tr>
+          <th>Project</th>
+          <th style="text-align:right;">Contract Value</th>
+          <th style="text-align:right;">Recognized Rev</th>
+          <th style="text-align:right;">Labor Hours</th>
+          <th style="text-align:right;">Labor Cost</th>
+          <th style="text-align:right;">Direct Expenses</th>
+          <th style="text-align:right;">Total Cost</th>
+          <th style="text-align:right;">Gross Margin</th>
+          <th style="text-align:right;">Margin %</th>
         </tr>
       </thead>
       <tbody>
         {% for row in pnl_rows %}
-          <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
-            <td style="padding:0.75rem;">
-              <a href="{% url 'projects:prj_detail' row.project.pk %}" style="font-weight:600; text-decoration:none; color:var(--primary, #2563eb);">
+          <tr>
+            <td>
+              <a href="{% url 'projects:prj_detail' row.project.pk %}" class="fw-600 text-brand">
                 {{ row.project.name }}
               </a>
               <div class="text-muted" style="font-size:0.75rem;">{{ row.project.code }}</div>
             </td>
-            <td style="padding:0.75rem; text-align:right;">${{ row.contract_value }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ row.recognized_revenue }}</td>
-            <td style="padding:0.75rem; text-align:right;">{{ row.labor_hours }} hrs</td>
-            <td style="padding:0.75rem; text-align:right;">${{ row.labor_cost }}</td>
-            <td style="padding:0.75rem; text-align:right;">${{ row.expense_cost }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;">${{ row.total_cost }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:700;" class="{% if row.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}">
+            <td style="text-align:right;">${{ row.contract_value }}</td>
+            <td style="text-align:right; font-weight:600;" class="text-ok">${{ row.recognized_revenue }}</td>
+            <td style="text-align:right;">{{ row.labor_hours }} hrs</td>
+            <td style="text-align:right;">${{ row.labor_cost }}</td>
+            <td style="text-align:right;">${{ row.expense_cost }}</td>
+            <td style="text-align:right; font-weight:600;">${{ row.total_cost }}</td>
+            <td style="text-align:right; font-weight:700;" class="{% if row.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ row.gross_margin }}
             </td>
-            <td style="padding:0.75rem; text-align:right;">
+            <td style="text-align:right;">
               <span class="badge {% if row.margin_pct >= 25 %}badge-green{% elif row.margin_pct >= 10 %}badge-amber{% else %}badge-red{% endif %}">
                 {{ row.margin_pct }}%
               </span>
@@ -127,7 +127,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="9" style="padding:2rem; text-align:center;" class="text-muted">
+            <td colspan="9" class="empty-state">
               <i data-lucide="info" style="width:32px; height:32px; margin-bottom:0.5rem;"></i>
               <p>No project profitability data available for the selected filter.</p>
             </td>
@@ -135,19 +135,19 @@
         {% endfor %}
       </tbody>
       {% if pnl_rows %}
-        <tfoot style="background-color:var(--bg-muted, #f8fafc); font-weight:700; border-top:2px solid var(--border-color, #cbd5e1);">
+        <tfoot style="background:var(--page-bg); font-weight:700; border-top:2px solid var(--border);">
           <tr>
-            <td style="padding:0.75rem;">Portfolio Totals</td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.contract_value }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="text-ok">${{ totals.recognized_revenue }}</td>
-            <td style="padding:0.75rem; text-align:right;">—</td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.labor_cost }}</td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.expense_cost }}</td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.total_cost }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="{% if totals.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}">
+            <td>Portfolio Totals</td>
+            <td style="text-align:right;">${{ totals.contract_value }}</td>
+            <td style="text-align:right;" class="text-ok">${{ totals.recognized_revenue }}</td>
+            <td style="text-align:right;">—</td>
+            <td style="text-align:right;">${{ totals.labor_cost }}</td>
+            <td style="text-align:right;">${{ totals.expense_cost }}</td>
+            <td style="text-align:right;">${{ totals.total_cost }}</td>
+            <td style="text-align:right;" class="{% if totals.gross_margin >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ totals.gross_margin }}
             </td>
-            <td style="padding:0.75rem; text-align:right;">
+            <td style="text-align:right;">
               <span class="badge {% if totals.margin_pct >= 25 %}badge-green{% elif totals.margin_pct >= 10 %}badge-amber{% else %}badge-red{% endif %}">
                 {{ totals.margin_pct }}%
               </span>
