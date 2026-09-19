@@ -5,6 +5,7 @@ never by this form — otherwise two edit forms saved one after the other could 
 """
 from django import forms
 
+from apps.projects.analytics import PRESET_RANGES
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
 from apps.projects.models.PortfolioProgramManagement.Portfolios import Portfolio
 from apps.projects.models.ProjectInitiation.Projects import Project
@@ -22,6 +23,8 @@ class ProjectDashboardForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
+        # A1.2 rule 4: a tile carries no date pair, so `custom` could only ever come back as an error.
+        self.fields["default_range"].choices = PRESET_RANGES
         if tenant is not None:
             self.fields["project"].queryset = Project.objects.filter(
                 tenant=tenant).order_by("name")
