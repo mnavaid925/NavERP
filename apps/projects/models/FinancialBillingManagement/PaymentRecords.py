@@ -106,6 +106,7 @@ class ProjectPaymentRecord(TenantNumbered):
             models.Index(fields=["tenant", "project"], name="ppr_tnt_prj_idx"),
             models.Index(fields=["tenant", "stage"], name="ppr_tnt_stage_idx"),
             models.Index(fields=["tenant", "status"], name="ppr_tnt_status_idx"),
+            models.Index(fields=["tenant", "dunning_level"], name="ppr_tnt_dunning_idx"),
         ]
 
     def __str__(self):
