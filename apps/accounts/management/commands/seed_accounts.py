@@ -5,7 +5,17 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import Permission, Role, User, UserInvite
+from apps.accounts.models import (
+    AccessRequest,
+    AccessReview,
+    AccessReviewItem,
+    ElevationGrant,
+    Permission,
+    Role,
+    User,
+    UserImportBatch,
+    UserInvite,
+)
 from apps.core.models import Tenant
 
 PERMISSIONS = [
@@ -91,8 +101,114 @@ class Command(BaseCommand):
                     expires_at=timezone.now() + timezone.timedelta(days=7),
                 )
 
+            # 0.2 access governance. Own guards per entity, NOT a tenant-wide one — a guard that
+            # skips the whole tenant would mean anything added here later never reaches the
+            # workspaces that already exist (exactly what happened to usage metering in
+            # seed_tenants).
+            self._seed_access_governance(tenant, admin_role, member_role)
+
         self.stdout.write(self.style.SUCCESS("accounts seed complete."))
         self.stdout.write("Login as a TENANT ADMIN to see module data, e.g. admin_acme / password.")
         self.stdout.write(self.style.WARNING(
             "Note: superuser 'admin' has tenant=None — module pages show NO data when logged in as admin."
         ))
+
+    def _seed_access_governance(self, tenant, admin_role, member_role):
+        """Access requests, elevations, a certification campaign and an import batch.
+
+        Seeds all four states a reviewer needs to see: an ACTIVE time-bound grant, a PENDING
+        request, an EXPIRED grant whose role is still assigned (the orphan the certification board
+        exists to catch), a LIVE elevation, and a certification campaign with one attested, one
+        revoked and one undecided line.
+        """
+        admin = User.objects.filter(tenant=tenant, username=f"admin_{tenant.slug}").first()
+        if admin is None:
+            return
+        members = list(User.objects.filter(tenant=tenant, role=member_role)
+                       .exclude(pk=admin.pk).order_by("username"))
+        if not members:
+            return
+        requester = members[0]
+        other = members[1] if len(members) > 1 else members[0]
+
+        # ---- bullet 3: one active grant, one pending, one expired-but-still-assigned
+        if not AccessRequest.objects.filter(tenant=tenant).exists():
+            AccessRequest.objects.create(
+                tenant=tenant, requester=requester, requested_role=member_role,
+                justification="Needs member access for the current project rotation.",
+                requested_days=30, status="approved", decided_by=admin,
+                decided_at=timezone.now() - timezone.timedelta(days=5),
+                decision_note="Approved for the rotation.",
+                granted_until=timezone.now() + timezone.timedelta(days=25),
+            )
+            AccessRequest.objects.create(
+                tenant=tenant, requester=other, requested_role=admin_role,
+                justification="Covering for the workspace admin while they are on leave.",
+                requested_days=10, status="pending",
+            )
+            # Expired window, role deliberately left assigned — the orphan-account cross-check.
+            expired = AccessRequest.objects.create(
+                tenant=tenant, requester=requester, requested_role=admin_role,
+                justification="Temporary admin cover for the migration weekend.",
+                requested_days=7, status="approved", decided_by=admin,
+                decided_at=timezone.now() - timezone.timedelta(days=30),
+                decision_note="Approved for the migration window only.",
+                granted_until=timezone.now() - timezone.timedelta(days=23),
+            )
+            if expired.requested_role_id:
+                requester.role = expired.requested_role
+                requester.save(update_fields=["role"])
+
+        # ---- bullet 5: one live elevation and one already revoked
+        if not ElevationGrant.objects.filter(tenant=tenant).exists():
+            ElevationGrant.objects.create(
+                tenant=tenant, user=other, scope="tenant_admin",
+                reason="Investigating a data inconsistency reported by the client.",
+                starts_at=timezone.now() - timezone.timedelta(hours=1),
+                expires_at=timezone.now() + timezone.timedelta(hours=3),
+                status="active", requested_by=admin, approved_by=admin,
+                approved_at=timezone.now() - timezone.timedelta(hours=1),
+            )
+            ElevationGrant.objects.create(
+                tenant=tenant, user=requester, scope="staff",
+                reason="Bulk-correcting migrated reference data.",
+                starts_at=timezone.now() - timezone.timedelta(days=4),
+                expires_at=timezone.now() - timezone.timedelta(days=3),
+                status="revoked", requested_by=admin, approved_by=admin,
+                approved_at=timezone.now() - timezone.timedelta(days=4),
+                revoked_by=admin, revoked_at=timezone.now() - timezone.timedelta(days=3),
+            )
+
+        # ---- bullet 4: a closed-out campaign with attested / revoked / undecided lines
+        if not AccessReview.objects.filter(tenant=tenant).exists():
+            review = AccessReview.objects.create(
+                tenant=tenant, name="Q3 entitlement certification",
+                status="open", due_on=timezone.localdate() + timezone.timedelta(days=14),
+                created_by=admin,
+            )
+            decisions = ["attest", "revoke", "pending"]
+            for idx, user_obj in enumerate(members[:3]):
+                AccessReviewItem.objects.create(
+                    tenant=tenant, review=review, user=user_obj, role=member_role,
+                    decision=decisions[idx % len(decisions)],
+                    decided_by=admin if decisions[idx % len(decisions)] != "pending" else None,
+                    decided_at=(timezone.now() - timezone.timedelta(days=1)
+                                if decisions[idx % len(decisions)] != "pending" else None),
+                    note="Confirmed with the line manager." if idx == 0 else "",
+                )
+
+        # ---- bullet 2: a validated batch, staged but NOT committed
+        if not UserImportBatch.objects.filter(tenant=tenant).exists():
+            UserImportBatch.objects.create(
+                tenant=tenant, file_name="q4-intake.csv", uploaded_by=admin,
+                status="validated", row_count=4, error_count=1,
+                errors=[{"line": 4, "error": "email already exists: invitee@%s.example" % tenant.slug}],
+                staged_rows=[
+                    {"email": f"nina.patel@{tenant.slug}.example", "username": f"nina_{tenant.slug}",
+                     "first_name": "Nina", "last_name": "Patel", "role_id": member_role.pk},
+                    {"email": f"omar.haddad@{tenant.slug}.example", "username": f"omar_{tenant.slug}",
+                     "first_name": "Omar", "last_name": "Haddad", "role_id": member_role.pk},
+                    {"email": f"pia.lindqvist@{tenant.slug}.example", "username": f"pia_{tenant.slug}",
+                     "first_name": "Pia", "last_name": "Lindqvist", "role_id": None},
+                ],
+            )
