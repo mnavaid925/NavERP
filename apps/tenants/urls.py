@@ -40,6 +40,15 @@ urlpatterns = [
     path("health/<int:pk>/", views.healthmetric_detail, name="healthmetric_detail"),
     path("health/<int:pk>/edit/", views.healthmetric_edit, name="healthmetric_edit"),
     path("health/<int:pk>/delete/", views.healthmetric_delete, name="healthmetric_delete"),
+    # Usage metering (0.1 Subscription & Billing). Literal routes BEFORE the <int:pk> routes.
+    path("usage/", views.usagerecord_list, name="usagerecord_list"),
+    path("usage/add/", views.usagerecord_create, name="usagerecord_create"),
+    path("usage/<int:pk>/", views.usagerecord_detail, name="usagerecord_detail"),
+    path("usage/<int:pk>/edit/", views.usagerecord_edit, name="usagerecord_edit"),
+    path("usage/<int:pk>/delete/", views.usagerecord_delete, name="usagerecord_delete"),
+    path("usage/<int:pk>/mark-billed/", views.usagerecord_mark_billed, name="usagerecord_mark_billed"),
     # Onboarding
     path("onboarding/", views.onboarding, name="onboarding"),
+    # Tenant isolation & security (0.1 bullet 3 — computed, no model)
+    path("isolation/", views.isolation_overview, name="isolation_overview"),
 ]
