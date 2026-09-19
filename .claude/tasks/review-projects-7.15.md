@@ -110,7 +110,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: `promised_amount` missing `min_value=Decimal("0.00")`; `assigned_collector` missing in `_reject_foreign`.
   - **Fix**: Add `min_value=Decimal("0.00")` and add `"assigned_collector"` to `_reject_foreign`.
 
-- **[ ] I12: Missing Status Guard on Billing Run Dispatch (`pbr_dispatch`)**
+- **[x] fixed — fix(projects): guard pbr_dispatch to require invoiced billing run status**
   - **Location**: `apps/projects/views/FinancialBillingManagement/BillingRuns.py:224-250`, `templates/projects/financialbilling/billingrun/detail.html:258-272`
   - **Problem**: Dispatch allowed on draft/cancelled runs.
   - **Fix**: Enforce `billing_run.status == "invoiced"` in view and template.
