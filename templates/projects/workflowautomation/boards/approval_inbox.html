@@ -43,7 +43,7 @@
   </div>
   <div class="card-body p-0">
     {% if gates %}
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -80,16 +80,16 @@
                 </td>
                 <td class="text-right">
                   <div class="flex items-center justify-end gap-2">
-                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-xs btn-outline">Review</a>
+                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-sm btn-outline">Review</a>
                     <form method="post" action="{% url 'projects:par_approve' gate.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-primary bg-green-600 hover:bg-green-700 text-white" onclick="return confirm('Approve gate {{ gate.number }}?');">
+                      <button type="submit" class="btn btn-sm btn-primary bg-green-600 hover:bg-green-700 text-white" onclick="return confirm('Approve gate {{ gate.number }}?');">
                         Approve
                       </button>
                     </form>
                     <form method="post" action="{% url 'projects:par_reject' gate.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Reject gate {{ gate.number }}?');">
+                      <button type="submit" class="btn btn-sm btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Reject gate {{ gate.number }}?');">
                         Reject
                       </button>
                     </form>
@@ -120,7 +120,7 @@
   </div>
   <div class="card-body p-0">
     {% if delegated_gates %}
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -157,16 +157,16 @@
                 </td>
                 <td class="text-right">
                   <div class="flex items-center justify-end gap-2">
-                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-xs btn-outline">Review</a>
+                    <a href="{% url 'projects:par_detail' gate.pk %}" class="btn btn-sm btn-outline">Review</a>
                     <form method="post" action="{% url 'projects:par_approve' gate.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-primary bg-green-600 hover:bg-green-700 text-white" onclick="return confirm('Approve delegated gate {{ gate.number }}?');">
+                      <button type="submit" class="btn btn-sm btn-primary bg-green-600 hover:bg-green-700 text-white" onclick="return confirm('Approve delegated gate {{ gate.number }}?');">
                         Approve
                       </button>
                     </form>
                     <form method="post" action="{% url 'projects:par_reject' gate.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Reject delegated gate {{ gate.number }}?');">
+                      <button type="submit" class="btn btn-sm btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Reject delegated gate {{ gate.number }}?');">
                         Reject
                       </button>
                     </form>
