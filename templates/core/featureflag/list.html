@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Feature Flags{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Feature Flags</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Feature Flags</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:config_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Configuration</a>
+      <a href="{% url 'core:feature_flag_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New flag</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Bullet 2 names three scopes and all three are here: the ROW is the per-workspace toggle, <strong>Plan</strong> narrows it to one plan, and exempt roles narrow it to a subset. An unknown key resolves to <strong>off</strong> — an unrecognised flag is not an enabled feature.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="enabled" class="form-select">
+          <option value="">Any state</option>
+          {% for val, label in enabled_choices %}
+            <option value="{{ val }}" {% if request.GET.enabled == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:feature_flag_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Key</th><th>Label</th><th>State</th><th>Plan</th><th>Roles</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><code>{{ obj.key }}</code></td>
+            <td>{{ obj.label }}</td>
+            <td>{% if obj.is_enabled %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-slate">Off</span>{% endif %}</td>
+            <td>{{ obj.applies_to_plan|default:"all plans" }}</td>
+            <td>{% for r in obj.exempt_roles.all %}<span class="badge badge-slate">{{ r.name }}</span> {% empty %}<span class="text-muted">everyone</span>{% endfor %}</td>
+            <td><div class="table-actions"><a href="{% url 'core:feature_flag_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a></div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><h3>No feature flags</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
