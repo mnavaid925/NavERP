@@ -96,6 +96,11 @@ from .FinancialBillingManagement.BillingRuns import urlpatterns as _fbm_billingr
 from .FinancialBillingManagement.RevenueSchedules import urlpatterns as _fbm_revenueschedules
 from .FinancialBillingManagement.PaymentRecords import urlpatterns as _fbm_paymentrecords
 from .FinancialBillingManagement.FinancialBoards import urlpatterns as _fbm_financialboards
+from .WorkflowAutomation.WorkflowRules import urlpatterns as _wa_rules
+from .WorkflowAutomation.ApprovalGates import urlpatterns as _wa_gates
+from .WorkflowAutomation.RecurringTasks import urlpatterns as _wa_recurring
+from .WorkflowAutomation.Webhooks import urlpatterns as _wa_webhooks
+from .WorkflowAutomation.AutomationBoards import urlpatterns as _wa_boards
 
 app_name = "projects"
 
@@ -236,6 +241,13 @@ urlpatterns = (
     + _fbm_revenueschedules
     + _fbm_paymentrecords
     + _fbm_financialboards
+    # 7.17 Workflow & Automation — first segments (rules/, gates/, recurring/,
+    # webhooks/, automation/) are disjoint literals from earlier sub-modules and from each other.
+    + _wa_rules
+    + _wa_gates
+    + _wa_recurring
+    + _wa_webhooks
+    + _wa_boards
 )
 
 
