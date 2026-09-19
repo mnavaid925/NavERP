@@ -7,8 +7,9 @@ request builder has one consumer today but is kept beside the pool builder it mi
 ``critical_path_ids`` is 7.2's critical-chain pass over dependency edges; ``owners`` is 7.5's
 owner/approver/escalation-target dropdown, shared by all four of that sub-module's registers; and
 ``csv_safe`` / ``redirect_back_or`` / ``csv_response`` and ``chart_config`` / ``chart_rows`` are 7.16's,
-each read by more than one of that sub-module's five view modules. Same rule for all thirteen: if only
-one consumer ever needs a helper, it moves to that consumer's module.
+each read by more than one of that sub-module's five view modules; ``DASHBOARD_ORDER`` joins them for
+the same reason, because three grouped reads of one model must order identically. Same rule for all
+fourteen: if only one consumer ever needs a helper, it moves to that consumer's module.
 
 The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
 superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
@@ -25,7 +26,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.core.models import OrgUnit, Party
 from apps.projects import analytics
-from apps.projects.models import Project, ProjectRequest, Requirement, ResourceProfile
+from apps.projects.models import (
+    Project, ProjectDashboard, ProjectRequest, Requirement, ResourceProfile,
+)
 from apps.projects.models.ReportingBusinessIntelligence._choices import CANVAS_CHARTS
 
 
@@ -270,6 +273,25 @@ def csv_response(filename, columns, rows):
     for row in rows[:analytics.MAX_EXPORT_ROWS]:
         writer.writerow([cell(value) for value in row])
     return response
+
+
+#: The dashboard register's order, spelled EXPLICITLY at every grouped read.
+#:
+#: ``annotate(annotation_count=Count("widgets"))`` puts the SELECT in a GROUP BY, and Django
+#: deliberately ignores a model's default ordering for a grouped query (verified
+#: ``django/db/models/query.py`` — "A default ordering doesn't affect GROUP BY queries"), which is
+#: also what makes ``Paginator`` emit its ``UnorderedObjectListWarning``
+#: (``django/core/paginator.py:129-145``). Confirmed against this app's rows by
+#: ``temp/rbi_pdb_probe.py`` step 7b: the annotated SQL ends at its GROUP BY with **no ORDER BY at
+#: all**. Three of 7.16's reads carry that annotation, so all three must re-assert the order — an
+#: unordered page window is L9's bug (a board on both pages or on neither) and an unordered
+#: ``[:6]``/``[:4]`` slice is not "the first few", it is a few the database felt like.
+#:
+#: The keys are read off the model rather than re-typed, so the one definition of the order stays in
+#: ``ProjectDashboard.Meta.ordering``; ``id`` is appended as the tiebreak because ``name`` carries no
+#: per-tenant uniqueness (only ``(tenant, number)`` does) and a tie is the same non-determinism in a
+#: smaller coat.
+DASHBOARD_ORDER = (*ProjectDashboard._meta.ordering, "id")
 
 
 #: The canvas id on a one-chart page: its canvas element is ``wchart`` plus this id, the same shape a
