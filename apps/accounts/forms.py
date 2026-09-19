@@ -6,7 +6,15 @@ from django.utils.text import slugify
 from apps.core.forms import TenantModelForm
 from apps.core.models import Tenant
 
-from .models import Role, User, UserInvite
+from .models import (
+    AccessRequest,
+    AccessReview,
+    AccessReviewItem,
+    ElevationGrant,
+    Role,
+    User,
+    UserInvite,
+)
 
 
 class LoginForm(forms.Form):
@@ -166,3 +174,85 @@ class ProfileForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"class": "form-input"}),
             "username": forms.TextInput(attrs={"class": "form-input"}),
         }
+
+
+# ==================================================== 0.2 bullet 3: access requests
+class AccessRequestForm(TenantModelForm):
+    """What a member may ask for. `requester` is the logged-in user and is set by the view, never
+    chosen here — a form field for it would let anyone request access on someone else's behalf.
+    `status`, the decision stamps and `granted_until` are verb-written and excluded."""
+
+    class Meta:
+        model = AccessRequest
+        fields = ["requested_role", "justification", "requested_days"]
+
+
+class AccessDecisionForm(forms.Form):
+    """The approve/reject note. Required on reject: a denial with no stated reason is not a
+    decision anyone can act on or appeal."""
+
+    note = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
+        help_text="Required when rejecting.",
+    )
+
+    def __init__(self, *args, require_note=False, **kwargs):
+        self.require_note = require_note
+        super().__init__(*args, **kwargs)
+        if require_note:
+            self.fields["note"].required = True
+
+    def clean_note(self):
+        note = (self.cleaned_data.get("note") or "").strip()
+        if self.require_note and not note:
+            raise forms.ValidationError("Give a reason for the rejection.")
+        return note
+
+
+# ==================================================== 0.2 bullet 5: privileged elevation
+class ElevationGrantForm(TenantModelForm):
+    """A JIT elevation request. `status` and the approve/revoke stamps are verb-written."""
+
+    class Meta:
+        model = ElevationGrant
+        fields = ["user", "scope", "reason", "starts_at", "expires_at"]
+
+
+# ==================================================== 0.2 bullet 4: certification
+class AccessReviewForm(TenantModelForm):
+    class Meta:
+        model = AccessReview
+        fields = ["name", "scope_role", "due_on"]
+
+
+class AccessReviewItemForm(TenantModelForm):
+    """The per-row attestation note. `decision` itself is written by ari_attest / ari_revoke."""
+
+    class Meta:
+        model = AccessReviewItem
+        fields = ["note"]
+
+
+# ==================================================== 0.2 bullet 2: bulk provisioning
+class UserImportForm(forms.Form):
+    """Bulk CSV user import. Columns: email, username, first_name, last_name, role (optional).
+
+    A plain Form, not a ModelForm: the upload is validated row by row and only then handed to
+    `UserImportBatch`, so nothing is written until the batch is committed.
+    """
+
+    csv_file = forms.FileField(
+        label="CSV file",
+        widget=forms.ClearableFileInput(attrs={"class": "form-input", "accept": ".csv"}),
+        help_text="Header row required. Columns: email, username, first_name, last_name, role.",
+    )
+
+    MAX_BYTES = 2 * 1024 * 1024
+
+    def clean_csv_file(self):
+        upload = self.cleaned_data["csv_file"]
+        if upload.size > self.MAX_BYTES:
+            raise forms.ValidationError("Files are capped at 2 MB.")
+        if not (upload.name or "").lower().endswith(".csv"):
+            raise forms.ValidationError("Only .csv files are accepted.")
+        return upload
