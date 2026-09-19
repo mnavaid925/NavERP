@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'accounts:access_review_list' %}">Access Reviews</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status != 'closed' %}
+        <form method="post" action="{% url 'accounts:access_review_generate' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="list-plus"></i> Generate lines</button>
+        </form>
+        <form method="post" action="{% url 'accounts:access_review_close' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Close campaign</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Scope</dt><dd>{% if obj.scope_role %}{{ obj.scope_role }}{% else %}All members{% endif %}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Due</dt><dd>{% if obj.due_on %}{{ obj.due_on|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Decided</dt><dd>{{ obj.decided_count }} of {{ items|length }}</dd></div>
+      <div class="detail-item"><dt>Closed</dt><dd>{% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    <p class="text-muted">Each line shows the role the member held when the campaign was generated. A role is a SNAPSHOT, so a later change cannot rewrite what was certified. Attesting changes nothing; revoking clears the member's role if it still matches the snapshot.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Member</th><th>Role at generation</th><th>Decision</th><th>Decided by</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td class="fw-600">{{ item.user }}</td>
+              <td>{% if item.role %}{{ item.role }}{% else %}<span class="badge badge-slate">None</span>{% endif %}</td>
+              <td>
+                {% if item.decision == 'attest' %}<span class="badge badge-green">Attested</span>
+                {% elif item.decision == 'revoke' %}<span class="badge badge-red">Revoked</span>
+                {% else %}<span class="badge badge-amber">Pending</span>{% endif %}
+              </td>
+              <td>{% if item.decided_by %}{{ item.decided_by }} · {{ item.decided_at|date:"M d, H:i" }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  {% if obj.status != 'closed' %}
+                    <form method="post" action="{% url 'accounts:access_review_item_attest' item.pk %}">
+                      {% csrf_token %}
+                      <button class="btn-icon" type="submit" title="Attest"><i data-lucide="check"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'accounts:access_review_item_revoke' item.pk %}">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Revoke access"><i data-lucide="x"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>No lines yet</h3><p>Generate lines to snapshot who holds what.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'accounts:access_review_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
