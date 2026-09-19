@@ -140,6 +140,7 @@ class ProjectRevenueSchedule(TenantNumbered):
             models.Index(fields=["tenant", "project"], name="prs_tnt_prj_idx"),
             models.Index(fields=["tenant", "status"], name="prs_tnt_status_idx"),
             models.Index(fields=["tenant", "recognition_date"], name="prs_tnt_date_idx"),
+            models.Index(fields=["tenant", "method"], name="prs_tnt_method_idx"),
         ]
 
     def __str__(self):
