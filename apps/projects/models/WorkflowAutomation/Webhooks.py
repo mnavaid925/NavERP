@@ -124,6 +124,8 @@ class ProjectWebhookDelivery(TenantOwned):
         ordering = ["-attempted_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "webhook", "status"], name="pwh_del_tnt_wh_stat_idx"),
+            models.Index(fields=["tenant", "-attempted_at"], name="pwh_del_tnt_att_idx"),
+            models.Index(fields=["tenant", "status", "-attempted_at"], name="pwh_del_tnt_stat_att_idx"),
         ]
 
     def __str__(self):
