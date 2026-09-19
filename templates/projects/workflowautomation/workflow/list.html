@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Workflow Rules — Workflow & Automation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Workflow Automation Rules</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <span>Rules</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'projects:pwf_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Workflow Rule
+    </a>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="stat-card">
+    <div class="stat-icon purple">
+      <i data-lucide="git-branch" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Total Rules</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">
+      <i data-lucide="play-circle" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Active Automations</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue">
+      <i data-lucide="activity" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Executions Today</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.executions_today }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, name, description...">
+      </div>
+      <div class="form-group">
+        <label for="id_trigger_entity" class="form-label">Trigger Entity</label>
+        <select name="trigger_entity" id="id_trigger_entity" class="form-select">
+          <option value="">All Entities</option>
+          {% for val, label in trigger_entity_choices %}
+          <option value="{{ val }}" {% if trigger_entity == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects (or Global)</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">Status</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All</option>
+          <option value="active" {% if is_active == "active" or is_active == "true" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" or is_active == "false" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:pwf_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Rules Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">Workflow Rules ({{ page_obj.paginator.count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Rule Name</th>
+          <th>Scope</th>
+          <th>Trigger</th>
+          <th>Executions</th>
+          <th>Last Fired</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rules %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:pwf_detail' r.pk %}" class="font-medium text-brand hover:underline">
+              {{ r.number }}
+            </a>
+          </td>
+          <td>
+            <div class="font-medium text-slate-900">{{ r.name }}</div>
+            {% if r.description %}
+            <div class="text-xs text-muted">{{ r.description|truncatechars:40 }}</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.project %}
+              <a href="{% url 'projects:prj_detail' r.project.pk %}" class="badge badge-info hover:underline">
+                {{ r.project.name|truncatechars:20 }}
+              </a>
+            {% else %}
+              <span class="badge badge-slate">Global (All Projects)</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-slate">{{ r.get_trigger_entity_display }}</span>
+            <span class="text-xs text-muted block mt-0.5">{{ r.get_trigger_event_display }}</span>
+          </td>
+          <td>
+            <span class="font-mono text-xs font-semibold">{{ r.execution_count }}</span>
+          </td>
+          <td>
+            {% if r.last_fired_at %}
+              <span class="text-xs text-muted">{{ r.last_fired_at|date:"M d, Y H:i" }}</span>
+            {% else %}
+              <span class="text-xs text-muted">Never</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-slate">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:pwf_detail' r.pk %}" class="btn btn-icon" title="View Details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'projects:pwf_edit' r.pk %}" class="btn btn-icon" title="Edit Rule">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              <form method="post" action="{% url 'projects:pwf_toggle_active' r.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="{% if r.is_active %}Deactivate{% else %}Activate{% endif %}">
+                  <i data-lucide="power" class="w-4 h-4 {% if r.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'projects:pwf_delete' r.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete workflow rule {{ r.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">
+            <div class="empty-state py-12 text-center">
+              <i data-lucide="git-branch" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+              <h4 class="text-lg font-medium text-slate-800">No Workflow Rules Found</h4>
+              <p class="text-muted text-sm mt-1">Get started by creating your first automated trigger-action rule.</p>
+              <div class="mt-4">
+                <a href="{% url 'projects:pwf_create' %}" class="btn btn-primary">
+                  <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Rule
+                </a>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">
+      Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if trigger_entity %}&trigger_entity={{ trigger_entity }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if trigger_entity %}&trigger_entity={{ trigger_entity }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
