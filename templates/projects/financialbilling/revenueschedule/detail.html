@@ -74,6 +74,8 @@
             <span class="badge badge-amber">Locked</span>
           {% elif schedule.status == "void" %}
             <span class="badge badge-red">Void</span>
+          {% else %}
+            <span class="badge badge-muted">{{ schedule.get_status_display }}</span>
           {% endif %}
         </div>
       </div>
