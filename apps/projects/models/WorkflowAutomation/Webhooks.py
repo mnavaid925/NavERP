@@ -82,6 +82,13 @@ class ProjectWebhookEndpoint(TenantNumbered):
             return ""
         return hmac.new(sec.encode("utf-8"), payload_bytes, hashlib.sha256).hexdigest()
 
+    def verify_signature(self, payload_bytes: bytes, signature: str) -> bool:
+        """Verify HMAC-SHA256 signature against expected payload."""
+        expected = self.compute_signature(payload_bytes)
+        if not expected or not signature:
+            return False
+        return hmac.compare_digest(expected, signature)
+
     @property
     def is_active_badge(self):
         return "badge-green" if self.is_active else "badge-slate"
