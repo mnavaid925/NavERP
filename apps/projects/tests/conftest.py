@@ -6363,5 +6363,192 @@ def financialbilling_payment_record_a(db, tenant_a, financialbilling_project_a, 
     return _financialbilling_payment_record(tenant_a, financialbilling_project_a, financialbilling_party_a)
 
 
+# ==================================================================================================
+# 7.17 Workflow & Automation (subslug ``workflowautomation``)
+# ==================================================================================================
+
+WORKFLOWAUTOMATION_PAGE_SIZE = 15
+
+
+def _workflowautomation_today():
+    return timezone.localdate()
+
+
+def _workflowautomation_rule(tenant, project=None, **overrides):
+    from apps.projects.models.WorkflowAutomation.WorkflowRules import ProjectWorkflowRule
+
+    data = dict(
+        tenant=tenant,
+        project=project,
+        name="Auto-assign High Priority Tasks",
+        description="Assign task to tech lead when priority becomes critical",
+        trigger_entity="task",
+        trigger_event="status_changed",
+        conditions=[{"field": "priority", "operator": "equals", "value": "critical"}],
+        actions=[{"type": "assign_user", "parameters": {"user_id": 1}}],
+        is_active=True,
+    )
+    data.update(overrides)
+    obj = ProjectWorkflowRule(**data)
+    obj.save()
+    return obj
+
+
+def _workflowautomation_execution_log(tenant, rule, **overrides):
+    from apps.projects.models.WorkflowAutomation.WorkflowRules import WorkflowExecutionLog
+
+    data = dict(
+        tenant=tenant,
+        rule=rule,
+        record_label="Manual execution on task #1",
+        target_model="task",
+        target_id=1,
+        status="success",
+        duration_ms=12,
+        evaluated_conditions={"conditions": rule.conditions, "matched": True},
+        executed_actions=[{"type": "assign_user", "parameters": {"user_id": 1}}],
+    )
+    data.update(overrides)
+    obj = WorkflowExecutionLog(**data)
+    obj.save()
+    return obj
+
+
+def _workflowautomation_gate(tenant, project, requested_by=None, approver=None, **overrides):
+    from apps.projects.models.WorkflowAutomation.ApprovalGates import ProjectApprovalGate
+
+    data = dict(
+        tenant=tenant,
+        project=project,
+        title="Phase Transition Gate — Inception to Elaboration",
+        description="Sign-off required for Phase 1 deliverables",
+        gate_type="phase_gate",
+        target_label="Milestone M1: Architecture Baseline",
+        target_model="milestone",
+        target_id=1,
+        requested_by=requested_by,
+        approver=approver,
+        status="pending",
+        timeout_hours=48,
+    )
+    data.update(overrides)
+    obj = ProjectApprovalGate(**data)
+    obj.save()
+    return obj
+
+
+def _workflowautomation_schedule(tenant, project, default_assignee=None, **overrides):
+    from apps.projects.models.WorkflowAutomation.RecurringTasks import RecurringTaskSchedule
+
+    data = dict(
+        tenant=tenant,
+        project=project,
+        title_template="Weekly Status Sync — {{week}}",
+        description_template="Review sprint blockers and deliverables",
+        frequency="weekly",
+        priority="medium",
+        effort_hours=Decimal("2.0"),
+        assignee_strategy="fixed_user",
+        default_assignee=default_assignee,
+        next_run_date=_workflowautomation_today(),
+        is_active=True,
+    )
+    data.update(overrides)
+    obj = RecurringTaskSchedule(**data)
+    obj.save()
+    return obj
+
+
+def _workflowautomation_webhook(tenant, project=None, **overrides):
+    from apps.projects.models.WorkflowAutomation.Webhooks import ProjectWebhookEndpoint
+
+    data = dict(
+        tenant=tenant,
+        project=project,
+        name="Zapier Task Integration",
+        target_url="https://hooks.zapier.com/hooks/catch/123456/abcde/",
+        event_types=["task.created", "task.status_changed"],
+        is_active=True,
+    )
+    data.update(overrides)
+    obj = ProjectWebhookEndpoint(**data)
+    obj.save()
+    return obj
+
+
+def _workflowautomation_delivery(tenant, webhook, **overrides):
+    from apps.projects.models.WorkflowAutomation.Webhooks import ProjectWebhookDelivery
+
+    data = dict(
+        tenant=tenant,
+        webhook=webhook,
+        event_type="task.created",
+        payload={"task_id": 1, "name": "Initial Task"},
+        status="success",
+        response_status=200,
+        response_body='{"status":"received"}',
+        duration_ms=45,
+    )
+    data.update(overrides)
+    obj = ProjectWebhookDelivery(**data)
+    obj.save()
+    return obj
+
+
+@pytest.fixture
+def workflowautomation_project_a(db, tenant_a):
+    return _projectinitiation_project(tenant_a, name="Workflow Project A", code="WPA-01")
+
+
+@pytest.fixture
+def workflowautomation_project_b(db, tenant_b):
+    return _projectinitiation_project(tenant_b, name="Workflow Project B", code="WPB-02")
+
+
+@pytest.fixture
+def workflowautomation_rule_a(db, tenant_a, workflowautomation_project_a):
+    return _workflowautomation_rule(tenant_a, project=workflowautomation_project_a)
+
+
+@pytest.fixture
+def workflowautomation_rule_b(db, tenant_b, workflowautomation_project_b):
+    return _workflowautomation_rule(tenant_b, project=workflowautomation_project_b, name="Globex Rule")
+
+
+@pytest.fixture
+def workflowautomation_gate_a(db, tenant_a, workflowautomation_project_a, admin_user):
+    return _workflowautomation_gate(tenant_a, workflowautomation_project_a, requested_by=admin_user, approver=admin_user)
+
+
+@pytest.fixture
+def workflowautomation_gate_b(db, tenant_b, workflowautomation_project_b, admin_b):
+    return _workflowautomation_gate(tenant_b, workflowautomation_project_b, requested_by=admin_b, approver=admin_b, title="Globex Gate")
+
+
+@pytest.fixture
+def workflowautomation_schedule_a(db, tenant_a, workflowautomation_project_a, admin_user):
+    return _workflowautomation_schedule(tenant_a, workflowautomation_project_a, default_assignee=admin_user)
+
+
+@pytest.fixture
+def workflowautomation_schedule_b(db, tenant_b, workflowautomation_project_b, admin_b):
+    return _workflowautomation_schedule(tenant_b, workflowautomation_project_b, default_assignee=admin_b, title_template="Globex Sync {{week}}")
+
+
+@pytest.fixture
+def workflowautomation_webhook_a(db, tenant_a, workflowautomation_project_a):
+    return _workflowautomation_webhook(tenant_a, project=workflowautomation_project_a)
+
+
+@pytest.fixture
+def workflowautomation_webhook_b(db, tenant_b, workflowautomation_project_b):
+    return _workflowautomation_webhook(tenant_b, project=workflowautomation_project_b, name="Globex Webhook")
+
+
+@pytest.fixture
+def workflowautomation_delivery_a(db, tenant_a, workflowautomation_webhook_a):
+    return _workflowautomation_delivery(tenant_a, workflowautomation_webhook_a)
+
+
 
 
