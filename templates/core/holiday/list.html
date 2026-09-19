@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Holidays{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Holidays</h1>
+      <div class="breadcrumb"><a href="{% url 'core:calendar_board' %}">Business Calendar</a><span class="sep">›</span><span>Holidays</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:holiday_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New holiday</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">A recurring holiday repeats on its month/day every year without a row per year. A one-off is a single dated day.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="region" class="form-select">
+          <option value="">Any region</option>
+          {% for r in regions %}<option value="{{ r }}" {% if request.GET.region == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:holiday_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Date</th><th>Name</th><th>Region</th><th>Recurring</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.date|date:"M d, Y" }}</td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.region|default:"—" }}</td>
+            <td>{% if obj.is_recurring %}<span class="badge badge-info">Yearly</span>{% else %}<span class="badge badge-slate">One-off</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:holiday_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:holiday_delete' obj.pk %}" onsubmit="return confirm('Delete this holiday?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><div class="empty-state"><i data-lucide="calendar-x"></i><h3>No holidays recorded</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
