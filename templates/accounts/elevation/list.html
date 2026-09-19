@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Privileged Access{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Privileged Access</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Privileged Access</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounts:elevation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New elevation</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Just-in-time privileged elevation: a time-boxed admin window with a stated reason. Approving a grant opens the window — it does <strong>not</strong> flip <code>is_tenant_admin</code> for you, because nothing here runs on a timer and a silent privilege change would never be reversed.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by user or reason…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="scope" class="form-select">
+            <option value="">All scopes</option>
+            {% for val, label in scope_choices %}
+              <option value="{{ val }}" {% if request.GET.scope == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounts:elevation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>User</th><th>Scope</th><th>Window</th><th>Status</th><th>Approved by</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounts:elevation_detail' obj.pk %}" class="fw-600">{{ obj.user }}</a></td>
+              <td>{{ obj.get_scope_display }}</td>
+              <td>{{ obj.starts_at|date:"M d, H:i" }} – {{ obj.expires_at|date:"M d, H:i" }}</td>
+              <td>
+                {% if obj.is_live %}<span class="badge badge-red">Live</span>
+                {% elif obj.is_elapsed %}<span class="badge badge-slate">Elapsed</span>
+                {% elif obj.status == 'pending' %}<span class="badge badge-info">Pending</span>
+                {% elif obj.status == 'revoked' %}<span class="badge badge-slate">Revoked</span>
+                {% else %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.approved_by %}{{ obj.approved_by }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounts:elevation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'pending' %}
+                    <a href="{% url 'accounts:elevation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No elevations</h3><p>Raise one to open a time-boxed admin window.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
