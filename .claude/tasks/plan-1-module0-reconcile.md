@@ -16,7 +16,7 @@ not (7.10 shipped a `LIVE_LINKS` entry over 21 missing templates).
 | sub-module | bullets | mapped | verdict |
 |---|---|---|---|
 | 0.1 Tenant & Subscription | 5 | 4 → **5** | **DONE — see below** |
-| 0.2 Identity & Access Management | 5 | 2 | not yet classified |
+| 0.2 Identity & Access Management | 5 | 2 → **5** | **DONE — see below** |
 | 0.3 RBAC & Permissions | 5 | 1 | not yet classified |
 | 0.5 User & Organization | 5 | 2 | not yet classified |
 | 0.7 Data Security & Encryption | 5 | 1 | not yet classified |
@@ -97,3 +97,79 @@ while the concurrent 7.17 session had its views committed but its templates unwr
 
 Classify 0.2, 0.3, 0.5, 0.7, 0.9 and 0.14 by the same method, then build module 0's 14 unbuilt
 sub-modules per `plan-remaining-1-module0-submodules.md`.
+
+---
+
+## 0.2 Identity & Access Management — CLOSED OUT 2026-09-19
+
+**Verdict: the biggest single-sub-module gap in module 0 — 3 of 5 bullets entirely absent, and the
+4th only half-built.** `LIVE_LINKS["0.2"]` mapped 2 of 5 bullets, and a grep for
+`deprovision|bulk|elevat|access_request|attest|certification|scim` across `apps/accounts/*.py`
+returned **nothing at all** — no de-provisioning, no bulk import, no elevation, no access request,
+no attestation, no SCIM.
+
+### Bullet-by-bullet
+
+| bullet | sub-feature | verdict |
+|---|---|---|
+| 1 Centralized User Directory | unified store, lifecycle states | **built** — `User` with `active/suspended/archived` |
+| 2 Provisioning & De-Provisioning | invite-based onboarding | **built** — `UserInvite` + tokenized accept |
+| | **de-provisioning / offboarding** | **ABSENT** → built |
+| | **bulk user import/export** | **ABSENT** → built |
+| | SCIM provisioning | **ABSENT — declared, not built** |
+| 3 Access Request & Approval | self-service requests, approval workflow, time-bound grants | **ABSENT (all three)** → built |
+| 4 Access Certification & Reviews | periodic reviews, attestation campaigns, orphan detection | **ABSENT (all three)** → built |
+| 5 Privileged Access Management | JIT elevation | **ABSENT** → built |
+| | credential vaulting, session recording | **ABSENT — declared, not built** |
+
+### Gaps closed
+
+1. **Bullet 3 — `AccessRequest`** (migration `accounts.0003`). Request, decision and time-bound grant
+   on ONE row, because splitting them would let a decision and its grant drift apart.
+   `access_request_approve` grants the role AND stamps `granted_until` in one atomic block; rejection
+   requires a stated reason. A **self-service lens scoped to `request.user`** (not to the tenant) is
+   what makes the "self-service" half real.
+2. **Bullet 4 — `AccessReview` + `AccessReviewItem`**. `arv_generate` materialises one line per member
+   in scope, snapshotting the role held *now*; it is idempotent, so a second generate cannot wipe an
+   attestation. `ari_revoke` **actually revokes** — it clears the member's role when it still matches
+   the snapshot and leaves it alone when the role has since changed. Plus a COMPUTED
+   **orphan-account board** over four shapes.
+3. **Bullet 5 — `ElevationGrant`**. A time-boxed window with a stated reason. Approving **does not**
+   flip `is_tenant_admin`: the repo has no scheduler, so a privilege that granted itself on a timer
+   would never come back off. `is_live` derives whether the window is open.
+4. **Bullet 2's missing half** — `user_deprovision` (status + role + live elevations + pending
+   requests closed in one atomic action), `UserImportBatch` (staged validate → review → commit, with
+   line-numbered errors), and a CSV export writing exactly the importer's columns.
+
+### Verification
+
+`temp/smoke_02.py` — **112 checks, 0 failures**, re-entrant (it clears its own fixtures, so it is a
+real gate from any prior state). Covers anonymous refusal, every new page, the full request lifecycle
+including the reject-requires-a-note rule and "a decided request cannot be re-decided", self-service
+isolation between two members, the elevation window, the certification decision pair including both
+revoke branches (role matches → cleared; role changed → left alone), re-generate not resetting a
+decision, the four orphan shapes, the import validate/commit split with unusable passwords, the export
+header matching the import columns, de-provisioning, cross-tenant IDOR 404, and member-GET → **405**
+on all 11 POST-only verbs.
+
+`manage.py check accounts core tenants` clean; `makemigrations --check` clean.
+
+### Declared NOT built (recorded rather than faked)
+
+- **SCIM provisioning** (bullet 2) — no SCIM endpoint, no IdP sync.
+- **Credential vaulting** and **session recording** (bullet 5) — no secret is stored, nothing captures
+  a session. Named on the elevation page itself so the absence reads as a decision.
+
+### Notes
+
+- **`apps/accounts` is still the last FLAT app** (`models.py`/`forms.py`/`views.py`/`urls.py`) while
+  `core` and `tenants` are packages. New entities were appended flat to match the app rather than
+  starting a half-package; 69 modules import `from apps.accounts.models import …`, so converting it is
+  a separate refactor that must keep that path working. **Flagged, not done.**
+- Bullet 2's exact text in `NavERP.md` is `Privileged Access Management (PAM)` — mapping the label
+  without the `(PAM)` suffix leaves the bullet showing as unmapped.
+
+### Next
+
+Classify 0.3, 0.5, 0.7, 0.9 and 0.14 by the same method, then build module 0's 14 unbuilt sub-modules
+per `plan-remaining-1-module0-submodules.md`.
