@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ schedule.number }} — {{ schedule.title_template }} — Recurring Tasks — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ schedule.title_template }}</h1>
+      {% if schedule.is_active %}
+        <span class="badge badge-green">Active</span>
+      {% else %}
+        <span class="badge badge-slate">Inactive</span>
+      {% endif %}
+      <span class="font-mono text-sm text-muted">[{{ schedule.number }}]</span>
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <a href="{% url 'projects:rts_list' %}">Recurring Tasks</a>
+      <span>/</span>
+      <span>{{ schedule.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:rts_edit' schedule.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Schedule
+    </a>
+    <form method="post" action="{% url 'projects:rts_generate_task' schedule.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i data-lucide="plus-circle" class="w-4 h-4 mr-1"></i> Generate Task Now
+      </button>
+    </form>
+    <form method="post" action="{% url 'projects:rts_skip_next' schedule.pk %}" class="inline" onsubmit="return confirm('Skip the next run scheduled for {{ schedule.next_run_date }}?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="skip-forward" class="w-4 h-4 mr-1"></i> Skip Next
+      </button>
+    </form>
+    <form method="post" action="{% url 'projects:rts_toggle_active' schedule.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="power" class="w-4 h-4 mr-1 {% if schedule.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i>
+        {% if schedule.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+    </form>
+    <form method="post" action="{% url 'projects:rts_delete' schedule.pk %}" class="inline" onsubmit="return confirm('Delete recurring schedule {{ schedule.number }}?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Left 2 Columns: Schedule Config & Recent Generated Tasks -->
+  <div class="lg:col-span-2 space-y-6">
+    <!-- Schedule Details Card -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Schedule Configuration</h3>
+        <span class="badge badge-slate">{{ schedule.get_frequency_display }}</span>
+      </div>
+      <div class="card-body space-y-4">
+        {% if schedule.description_template %}
+        <div>
+          <span class="text-xs text-muted block">Description Template</span>
+          <p class="text-sm text-slate-800 mt-1 whitespace-pre-line">{{ schedule.description_template }}</p>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-100">
+          <div>
+            <span class="text-xs text-muted block">Project</span>
+            <a href="{% url 'projects:prj_detail' schedule.project.pk %}" class="font-medium text-brand hover:underline text-sm">
+              {{ schedule.project.name }}
+            </a>
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Interval</span>
+            <span class="text-sm font-medium text-slate-900">Every {{ schedule.interval_count }} {{ schedule.frequency }}</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Priority</span>
+            {% if schedule.priority == "urgent" %}
+              <span class="badge badge-red">Urgent</span>
+            {% elif schedule.priority == "high" %}
+              <span class="badge badge-amber">High</span>
+            {% elif schedule.priority == "medium" %}
+              <span class="badge badge-info">Medium</span>
+            {% else %}
+              <span class="badge badge-slate">Low</span>
+            {% endif %}
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Estimated Effort</span>
+            <span class="font-mono text-sm text-slate-800">{{ schedule.effort_hours }} hrs</span>
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Assignee Strategy</span>
+            <span class="text-sm text-slate-900">{{ schedule.get_assignee_strategy_display }}</span>
+            {% if schedule.default_assignee %}
+            <span class="text-xs text-muted block">({{ schedule.default_assignee.get_full_name|default:schedule.default_assignee.username }})</span>
+            {% endif %}
+          </div>
+          <div>
+            <span class="text-xs text-muted block">Schedule Window</span>
+            <span class="text-xs text-slate-800">{{ schedule.start_date|date:"M d, Y" }} &rarr; {{ schedule.end_date|date:"M d, Y"|default:"Ongoing" }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Minted Tasks Card -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Tasks Generated by this Schedule</h3>
+        <span class="text-xs text-muted">Total: {{ schedule.tasks_created_count }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Task Number</th>
+              <th>Task Name</th>
+              <th>Assignee</th>
+              <th>Due Date</th>
+              <th>Status</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in recent_tasks %}
+            <tr>
+              <td>
+                <a href="{% url 'projects:tsk_detail' t.pk %}" class="font-medium text-brand hover:underline">
+                  {{ t.number }}
+                </a>
+              </td>
+              <td>
+                <span class="font-medium text-slate-900">{{ t.name }}</span>
+              </td>
+              <td>
+                <span class="text-sm text-slate-800">{{ t.assigned_to.get_full_name|default:t.assigned_to.username|default:"Unassigned" }}</span>
+              </td>
+              <td>
+                <span class="text-xs text-muted">{{ t.due_date|date:"M d, Y"|default:"-" }}</span>
+              </td>
+              <td>
+                <span class="badge badge-slate">{{ t.get_status_display }}</span>
+              </td>
+              <td class="text-right">
+                <a href="{% url 'projects:tsk_detail' t.pk %}" class="btn btn-icon btn-sm" title="View Task">
+                  <i data-lucide="external-link" class="w-4 h-4"></i>
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center py-6 text-muted text-sm">
+                No tasks generated yet. Click "Generate Task Now" to mint the first task.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Cadence Timing Card -->
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Execution Timing</h3>
+      </div>
+      <div class="card-body space-y-4 text-sm">
+        <div class="p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <span class="text-xs text-purple-700 block font-semibold">Next Scheduled Run</span>
+          <span class="text-xl font-bold text-purple-900">{{ schedule.next_run_date|date:"M d, Y" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Last Run Date</span>
+          <span class="font-medium text-slate-800">{{ schedule.last_run_date|date:"M d, Y"|default:"Never run" }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Cadence Frequency</span>
+          <span class="font-medium text-slate-800">{{ schedule.get_frequency_display }}</span>
+          {% if schedule.days_of_week %}
+          <span class="text-xs text-muted block">Days: {{ schedule.days_of_week }}</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-xs text-muted block">Created At</span>
+          <span class="text-slate-800 text-xs">{{ schedule.created_at|date:"M d, Y H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
