@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Webhook Endpoints — Workflow & Automation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Webhook Endpoints (iPaaS)</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <span>Webhooks</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:pwh_delivery_list' %}" class="btn btn-outline">
+      <i data-lucide="list" class="w-4 h-4 mr-1"></i> Delivery Logs
+    </a>
+    <a href="{% url 'projects:pwh_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Webhook
+    </a>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card">
+    <div class="stat-icon purple">
+      <i data-lucide="webhook" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Total Endpoints</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">
+      <i data-lucide="check-circle" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Active Endpoints</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue">
+      <i data-lucide="send" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Deliveries Today</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.deliveries_today }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon slate">
+      <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Failed Today</div>
+      <div class="text-2xl font-bold text-red-600">{{ stats.failed_today }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, name, URL...">
+      </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">Status</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All</option>
+          <option value="active" {% if is_active == "active" or is_active == "true" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" or is_active == "false" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects (or Global)</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:pwh_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">Webhook Endpoints ({{ page_obj.paginator.count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Name / Target URL</th>
+          <th>Scope</th>
+          <th>Events Subscribed</th>
+          <th>Last Response</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in webhooks %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:pwh_detail' w.pk %}" class="font-medium text-brand hover:underline">
+              {{ w.number }}
+            </a>
+          </td>
+          <td>
+            <div class="font-medium text-slate-900">{{ w.name }}</div>
+            <div class="text-xs font-mono text-muted">{{ w.target_url|truncatechars:45 }}</div>
+          </td>
+          <td>
+            {% if w.project %}
+              <a href="{% url 'projects:prj_detail' w.project.pk %}" class="badge badge-info hover:underline">
+                {{ w.project.name|truncatechars:20 }}
+              </a>
+            {% else %}
+              <span class="badge badge-slate">Global (All Projects)</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="text-xs text-slate-800 font-mono">{{ w.event_types|length }} events</span>
+          </td>
+          <td>
+            {% if w.last_status_code %}
+              <span class="badge {{ w.health_badge }} font-mono">{{ w.last_status_code }}</span>
+              <span class="text-xs text-muted block">{{ w.last_fired_at|date:"M d, H:i" }}</span>
+            {% else %}
+              <span class="text-xs text-muted">Never Fired</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if w.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-slate">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:pwh_detail' w.pk %}" class="btn btn-icon" title="View Details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'projects:pwh_edit' w.pk %}" class="btn btn-icon" title="Edit Webhook">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              <form method="post" action="{% url 'projects:pwh_toggle_active' w.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="{% if w.is_active %}Deactivate{% else %}Activate{% endif %}">
+                  <i data-lucide="power" class="w-4 h-4 {% if w.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'projects:pwh_delete' w.pk %}" class="inline" onsubmit="return confirm('Delete webhook endpoint {{ w.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state py-12 text-center">
+              <i data-lucide="webhook" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+              <h4 class="text-lg font-medium text-slate-800">No Webhook Endpoints Found</h4>
+              <p class="text-muted text-sm mt-1">Connect your projects to Zapier, Make, Slack, or external iPaaS webhooks.</p>
+              <div class="mt-4">
+                <a href="{% url 'projects:pwh_create' %}" class="btn btn-primary">
+                  <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Webhook
+                </a>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">
+      Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
