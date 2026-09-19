@@ -1,4 +1,7 @@
 """Authentication, user/role/invite management, and profile views."""
+import csv
+import io
+
 from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
@@ -6,7 +9,8 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -18,11 +22,16 @@ from django.utils.http import (
 )
 from django.views.decorators.http import require_POST
 
-from apps.core.crud import crud_create, crud_edit, crud_list
+from apps.core.crud import crud_create, crud_delete, crud_edit, crud_list
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 from .forms import (
+    AccessDecisionForm,
+    AccessRequestForm,
+    AccessReviewForm,
+    AccessReviewItemForm,
+    ElevationGrantForm,
     ForgotPasswordForm,
     InviteAcceptForm,
     LoginForm,
@@ -31,9 +40,19 @@ from .forms import (
     SetPasswordForm,
     TenantRegisterForm,
     UserForm,
+    UserImportForm,
     UserInviteForm,
 )
-from .models import Role, User, UserInvite
+from .models import (
+    AccessRequest,
+    AccessReview,
+    AccessReviewItem,
+    ElevationGrant,
+    Role,
+    User,
+    UserImportBatch,
+    UserInvite,
+)
 
 UserModel = get_user_model()
 
@@ -307,3 +326,697 @@ def profile_view(request):
         messages.success(request, "Profile updated.")
         return redirect("accounts:profile")
     return render(request, "accounts/profile.html", {"form": form, "user_obj": request.user})
+
+
+# ============================================== 0.2 bullet 3: Access Request & Approval
+@tenant_admin_required
+def access_request_list(request):
+    """Admin register: every request in the workspace."""
+    return crud_list(
+        request,
+        AccessRequest.objects.filter(tenant=request.tenant)
+        .select_related("requester", "requested_role", "decided_by"),
+        "accounts/accessrequest/list.html",
+        search_fields=["justification", "requester__email"],
+        filters=[("status", "status", False)],
+        extra_context={"status_choices": AccessRequest.STATUS_CHOICES},
+    )
+
+
+@login_required
+def access_request_mine(request):
+    """Self-service lens: a member sees only their own requests.
+
+    Scoped to `request.user` rather than to the tenant on purpose — the whole point of the
+    self-service half of bullet 3 is that a member can file and track a request without an admin
+    seeing it on their behalf, and without the member seeing anyone else's.
+    """
+    if request.tenant is None:
+        messages.info(request, "Access requests need a tenant workspace.")
+        return redirect("dashboard:home")
+    qs = (AccessRequest.objects.filter(tenant=request.tenant, requester=request.user)
+          .select_related("requested_role", "decided_by"))
+    return crud_list(
+        request, qs,
+        "accounts/accessrequest/mine.html",
+        search_fields=["justification"],
+        filters=[("status", "status", False)],
+        extra_context={"status_choices": AccessRequest.STATUS_CHOICES},
+    )
+
+
+@login_required
+def access_request_create(request):
+    """A member files a request for THEMSELVES. `requester` is never taken from the form."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before requesting access.")
+        return redirect("dashboard:home")
+    if request.method == "POST":
+        form = AccessRequestForm(request.POST, tenant=request.tenant)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.tenant = request.tenant
+            obj.requester = request.user
+            obj.status = "pending"
+            obj.save()
+            write_audit_log(request.user, obj, "create")
+            messages.success(request, "Access request submitted.")
+            return redirect("accounts:access_request_mine")
+    else:
+        form = AccessRequestForm(tenant=request.tenant)
+    return render(request, "accounts/accessrequest/form.html", {"form": form, "is_edit": False})
+
+
+def _get_own_or_admin_request(request, pk):
+    """Fetch a request the actor may see: their own, or any one if they are a tenant admin."""
+    qs = AccessRequest.objects.filter(tenant=request.tenant)
+    obj = get_object_or_404(qs, pk=pk)
+    if obj.requester_id != request.user.pk and not _is_tenant_admin(request.user):
+        return None
+    return obj
+
+
+def _is_tenant_admin(user):
+    return bool(user.is_authenticated and (user.is_tenant_admin or user.is_superuser))
+
+
+@login_required
+def access_request_detail(request, pk):
+    obj = _get_own_or_admin_request(request, pk)
+    if obj is None:
+        messages.error(request, "That access request is not yours to view.")
+        return redirect("accounts:access_request_mine")
+    # `can_decide` / `is_own` are computed here rather than in the template: the template would
+    # otherwise have to re-derive the role rule, and the two would drift.
+    return render(request, "accounts/accessrequest/detail.html", {
+        "obj": obj,
+        "can_decide": _is_tenant_admin(request.user),
+        "is_own": obj.requester_id == request.user.pk,
+    })
+
+
+@login_required
+def access_request_edit(request, pk):
+    obj = _get_own_or_admin_request(request, pk)
+    if obj is None:
+        messages.error(request, "That access request is not yours to edit.")
+        return redirect("accounts:access_request_mine")
+    if obj.status != "pending":
+        messages.error(request, "A decided request cannot be edited — raise a new one instead.")
+        return redirect("accounts:access_request_detail", pk=obj.pk)
+    if request.method == "POST":
+        form = AccessRequestForm(request.POST, instance=obj, tenant=request.tenant)
+        if form.is_valid():
+            form.save()
+            write_audit_log(request.user, obj, "update")
+            messages.success(request, "Access request updated.")
+            return redirect("accounts:access_request_detail", pk=obj.pk)
+    else:
+        form = AccessRequestForm(instance=obj, tenant=request.tenant)
+    return render(request, "accounts/accessrequest/form.html",
+                  {"form": form, "obj": obj, "is_edit": True})
+
+
+@require_POST
+@login_required
+def access_request_delete(request, pk):
+    obj = _get_own_or_admin_request(request, pk)
+    if obj is None:
+        messages.error(request, "That access request is not yours to delete.")
+        return redirect("accounts:access_request_mine")
+    if obj.status == "approved":
+        messages.error(request, "An approved request is the evidence for a live grant — cancel the "
+                                "access instead of deleting the record.")
+        return redirect("accounts:access_request_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "delete")
+    obj.delete()
+    messages.success(request, "Access request deleted.")
+    return redirect("accounts:access_request_list" if _is_tenant_admin(request.user)
+                    else "accounts:access_request_mine")
+
+
+@require_POST
+@tenant_admin_required
+def access_request_approve(request, pk):
+    """Approve AND grant, in one atomic block.
+
+    The grant is the point of the approval, so they are one write: an approval that did not grant
+    (or a grant with no approval behind it) would be a half-truth in the audit trail. `granted_until`
+    is stamped from the request's own `requested_days`.
+    """
+    obj = get_object_or_404(AccessRequest, pk=pk, tenant=request.tenant)
+    form = AccessDecisionForm(request.POST)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending request can be decided.")
+        return redirect("accounts:access_request_detail", pk=obj.pk)
+    if not form.is_valid():
+        messages.error(request, "Could not record that decision.")
+        return redirect("accounts:access_request_detail", pk=obj.pk)
+
+    with transaction.atomic():
+        obj.status = "approved"
+        obj.decided_by = request.user
+        obj.decided_at = timezone.now()
+        obj.decision_note = form.cleaned_data["note"]
+        obj.granted_until = timezone.now() + timezone.timedelta(days=obj.requested_days)
+        obj.save(update_fields=["status", "decided_by", "decided_at", "decision_note", "granted_until"])
+        if obj.requested_role_id:
+            requester = obj.requester
+            requester.role = obj.requested_role
+            requester.save(update_fields=["role"])
+        # AuditLog.action is varchar(10) — the verb goes in `changes` (L41).
+        write_audit_log(request.user, obj, "update", changes={"verb": "access_request_approve"})
+    messages.success(request, f"Approved — access granted for {obj.requested_days} day(s).")
+    return redirect("accounts:access_request_detail", pk=obj.pk)
+
+
+@require_POST
+@tenant_admin_required
+def access_request_reject(request, pk):
+    """Reject requires a stated reason — a denial nobody can act on is not a decision."""
+    obj = get_object_or_404(AccessRequest, pk=pk, tenant=request.tenant)
+    form = AccessDecisionForm(request.POST, require_note=True)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending request can be decided.")
+        return redirect("accounts:access_request_detail", pk=obj.pk)
+    if not form.is_valid():
+        for errs in form.errors.values():
+            for e in errs:
+                messages.error(request, e)
+        return redirect("accounts:access_request_detail", pk=obj.pk)
+
+    obj.status = "rejected"
+    obj.decided_by = request.user
+    obj.decided_at = timezone.now()
+    obj.decision_note = form.cleaned_data["note"]
+    obj.save(update_fields=["status", "decided_by", "decided_at", "decision_note"])
+    write_audit_log(request.user, obj, "update", changes={"verb": "access_request_reject"})
+    messages.success(request, "Request rejected.")
+    return redirect("accounts:access_request_detail", pk=obj.pk)
+
+
+@require_POST
+@login_required
+def access_request_cancel(request, pk):
+    """The requester withdraws their own pending request. No role change, no grant."""
+    obj = get_object_or_404(AccessRequest, pk=pk, tenant=request.tenant, requester=request.user)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending request can be cancelled.")
+    else:
+        obj.status = "cancelled"
+        obj.decided_at = timezone.now()
+        obj.save(update_fields=["status", "decided_at"])
+        write_audit_log(request.user, obj, "update", changes={"verb": "access_request_cancel"})
+        messages.success(request, "Request cancelled.")
+    return redirect("accounts:access_request_mine")
+
+
+# ================================================= 0.2 bullet 5: Privileged Access Management
+@tenant_admin_required
+def elevation_list(request):
+    return crud_list(
+        request,
+        ElevationGrant.objects.filter(tenant=request.tenant)
+        .select_related("user", "requested_by", "approved_by"),
+        "accounts/elevation/list.html",
+        search_fields=["reason", "user__email"],
+        filters=[("status", "status", False), ("scope", "scope", False)],
+        extra_context={"status_choices": ElevationGrant.STATUS_CHOICES,
+                       "scope_choices": ElevationGrant.SCOPE_CHOICES},
+    )
+
+
+@tenant_admin_required
+def elevation_detail(request, pk):
+    obj = get_object_or_404(
+        ElevationGrant.objects.select_related("user", "requested_by", "approved_by", "revoked_by"),
+        pk=pk, tenant=request.tenant,
+    )
+    return render(request, "accounts/elevation/detail.html", {"obj": obj})
+
+
+@tenant_admin_required
+def elevation_create(request):
+    return crud_create(request, form_class=ElevationGrantForm,
+                       template="accounts/elevation/form.html",
+                       success_url="accounts:elevation_list")
+
+
+@tenant_admin_required
+def elevation_edit(request, pk):
+    obj = get_object_or_404(ElevationGrant, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "A decided elevation is frozen evidence and cannot be edited.")
+        return redirect("accounts:elevation_detail", pk=obj.pk)
+    return crud_edit(request, model=ElevationGrant, pk=pk, form_class=ElevationGrantForm,
+                     template="accounts/elevation/form.html", success_url="accounts:elevation_list")
+
+
+@require_POST
+@tenant_admin_required
+def elevation_delete(request, pk):
+    obj = get_object_or_404(ElevationGrant, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "A decided elevation is frozen evidence and cannot be deleted.")
+        return redirect("accounts:elevation_detail", pk=obj.pk)
+    return crud_delete(request, model=ElevationGrant, pk=pk, success_url="accounts:elevation_list")
+
+
+@require_POST
+@tenant_admin_required
+def elevation_approve(request, pk):
+    """Opens the window. Deliberately does NOT flip `User.is_tenant_admin`.
+
+    A silent privilege change on a timer (or on approval) is worse than an explicit one: the repo
+    has no scheduler, so the flag would never come back off. `is_live` reports the open window and
+    the admin applies the privilege, which keeps the change auditable.
+    """
+    obj = get_object_or_404(ElevationGrant, pk=pk, tenant=request.tenant)
+    if obj.status != "pending":
+        messages.error(request, "Only a pending elevation can be approved.")
+        return redirect("accounts:elevation_detail", pk=obj.pk)
+    obj.status = "active"
+    obj.approved_by = request.user
+    obj.approved_at = timezone.now()
+    obj.save(update_fields=["status", "approved_by", "approved_at"])
+    write_audit_log(request.user, obj, "update", changes={"verb": "elevation_approve"})
+    messages.success(request, "Elevation approved. It is live only inside its window.")
+    return redirect("accounts:elevation_detail", pk=obj.pk)
+
+
+@require_POST
+@tenant_admin_required
+def elevation_revoke(request, pk):
+    obj = get_object_or_404(ElevationGrant, pk=pk, tenant=request.tenant)
+    if obj.status not in ("pending", "active"):
+        messages.error(request, "That elevation is already closed.")
+        return redirect("accounts:elevation_detail", pk=obj.pk)
+    obj.status = "revoked"
+    obj.revoked_by = request.user
+    obj.revoked_at = timezone.now()
+    obj.save(update_fields=["status", "revoked_by", "revoked_at"])
+    write_audit_log(request.user, obj, "update", changes={"verb": "elevation_revoke"})
+    messages.success(request, "Elevation revoked.")
+    return redirect("accounts:elevation_detail", pk=obj.pk)
+
+
+# ============================================= 0.2 bullet 4: Access Certification & Reviews
+@tenant_admin_required
+def access_review_list(request):
+    return crud_list(
+        request,
+        AccessReview.objects.filter(tenant=request.tenant)
+        .select_related("scope_role", "created_by").annotate(item_count=Count("items")),
+        "accounts/accessreview/list.html",
+        search_fields=["name"],
+        filters=[("status", "status", False)],
+        extra_context={"status_choices": AccessReview.STATUS_CHOICES},
+    )
+
+
+@tenant_admin_required
+def access_review_detail(request, pk):
+    obj = get_object_or_404(AccessReview.objects.select_related("scope_role"), pk=pk,
+                            tenant=request.tenant)
+    # `select_related` on the FK and a single prefetch of the items: the detail page renders every
+    # line and the attest/revoke forms read `item.user`, so an un-prefetched loop would be one
+    # query per row.
+    items = (obj.items.select_related("user", "role", "decided_by")
+             .order_by("user__email"))
+    return render(request, "accounts/accessreview/detail.html", {"obj": obj, "items": items})
+
+
+@tenant_admin_required
+def access_review_create(request):
+    return crud_create(request, form_class=AccessReviewForm,
+                       template="accounts/accessreview/form.html",
+                       success_url="accounts:access_review_list")
+
+
+@tenant_admin_required
+def access_review_edit(request, pk):
+    obj = get_object_or_404(AccessReview, pk=pk, tenant=request.tenant)
+    if obj.status == "closed":
+        messages.error(request, "A closed campaign is frozen evidence and cannot be edited.")
+        return redirect("accounts:access_review_detail", pk=obj.pk)
+    return crud_edit(request, model=AccessReview, pk=pk, form_class=AccessReviewForm,
+                     template="accounts/accessreview/form.html",
+                     success_url="accounts:access_review_list")
+
+
+@require_POST
+@tenant_admin_required
+def access_review_delete(request, pk):
+    obj = get_object_or_404(AccessReview, pk=pk, tenant=request.tenant)
+    if obj.status == "closed":
+        messages.error(request, "A closed campaign is frozen evidence and cannot be deleted.")
+        return redirect("accounts:access_review_detail", pk=obj.pk)
+    return crud_delete(request, model=AccessReview, pk=pk,
+                       success_url="accounts:access_review_list")
+
+
+@require_POST
+@tenant_admin_required
+def access_review_generate(request, pk):
+    """Materialise one item per member in scope, snapshotting the role they hold NOW.
+
+    Explicit rather than implicit: the reviewed population is a recorded decision, not whatever
+    the user table happens to contain when someone opens the page. Re-running is idempotent — the
+    `unique_together (review, user)` means an existing item keeps its decision instead of being
+    reset, so a second generate cannot wipe an attestation.
+    """
+    obj = get_object_or_404(AccessReview, pk=pk, tenant=request.tenant)
+    if obj.status == "closed":
+        messages.error(request, "A closed campaign cannot be regenerated.")
+        return redirect("accounts:access_review_detail", pk=obj.pk)
+
+    users = User.objects.filter(tenant=request.tenant)
+    if obj.scope_role_id:
+        users = users.filter(role=obj.scope_role)
+    existing = set(obj.items.values_list("user_id", flat=True))
+    created = 0
+    with transaction.atomic():
+        for user in users.only("id", "role_id"):
+            if user.pk in existing:
+                continue
+            AccessReviewItem.objects.create(
+                tenant=request.tenant, review=obj, user=user, role_id=user.role_id,
+            )
+            created += 1
+        if obj.status == "draft":
+            obj.status = "open"
+            obj.save(update_fields=["status"])
+    write_audit_log(request.user, obj, "update",
+                    changes={"verb": "access_review_generate", "created": created})
+    messages.success(request, f"Generated {created} review item(s).")
+    return redirect("accounts:access_review_detail", pk=obj.pk)
+
+
+@require_POST
+@tenant_admin_required
+def access_review_close(request, pk):
+    obj = get_object_or_404(AccessReview, pk=pk, tenant=request.tenant)
+    if obj.status == "closed":
+        messages.info(request, "That campaign is already closed.")
+        return redirect("accounts:access_review_detail", pk=obj.pk)
+    undecided = obj.items.filter(decision="pending").count()
+    obj.status = "closed"
+    obj.closed_at = timezone.now()
+    obj.save(update_fields=["status", "closed_at"])
+    write_audit_log(request.user, obj, "update",
+                    changes={"verb": "access_review_close", "undecided": undecided})
+    if undecided:
+        messages.warning(request, f"Campaign closed with {undecided} line(s) still undecided — "
+                                  "they stay on the record as undecided.")
+    else:
+        messages.success(request, "Campaign closed.")
+    return redirect("accounts:access_review_detail", pk=obj.pk)
+
+
+@require_POST
+@tenant_admin_required
+def access_review_item_attest(request, pk):
+    """Confirm the member should keep the entitlement. No access change."""
+    item = get_object_or_404(AccessReviewItem.objects.select_related("review"), pk=pk,
+                             tenant=request.tenant)
+    if item.review.status == "closed":
+        messages.error(request, "That campaign is closed.")
+        return redirect("accounts:access_review_detail", pk=item.review_id)
+    form = AccessReviewItemForm(request.POST, instance=item, tenant=request.tenant)
+    item.decision = "attest"
+    item.decided_by = request.user
+    item.decided_at = timezone.now()
+    if form.is_valid():
+        item.note = form.cleaned_data.get("note", "")
+    item.save(update_fields=["decision", "decided_by", "decided_at", "note"])
+    write_audit_log(request.user, item, "update", changes={"verb": "access_review_item_attest"})
+    messages.success(request, f"Attested access for {item.user}.")
+    return redirect("accounts:access_review_detail", pk=item.review_id)
+
+
+@require_POST
+@tenant_admin_required
+def access_review_item_revoke(request, pk):
+    """Revoke the entitlement — and actually revoke it.
+
+    A certification decision that changed nothing would be theatre, so this clears the member's
+    role when it still matches the snapshot. The snapshot is what was reviewed, so a role that has
+    since changed is left alone: revoking a grant nobody reviewed would be worse than the bug.
+    """
+    item = get_object_or_404(AccessReviewItem.objects.select_related("review", "user"), pk=pk,
+                             tenant=request.tenant)
+    if item.review.status == "closed":
+        messages.error(request, "That campaign is closed.")
+        return redirect("accounts:access_review_detail", pk=item.review_id)
+    form = AccessReviewItemForm(request.POST, instance=item, tenant=request.tenant)
+
+    with transaction.atomic():
+        item.decision = "revoke"
+        item.decided_by = request.user
+        item.decided_at = timezone.now()
+        if form.is_valid():
+            item.note = form.cleaned_data.get("note", "")
+        item.save(update_fields=["decision", "decided_by", "decided_at", "note"])
+
+        cleared = False
+        user = item.user
+        if user.role_id is not None and user.role_id == item.role_id:
+            user.role = None
+            user.save(update_fields=["role"])
+            cleared = True
+        write_audit_log(request.user, item, "update",
+                        changes={"verb": "access_review_item_revoke", "role_cleared": cleared})
+    messages.success(request, f"Revoked access for {item.user}."
+                     + (" Role cleared." if cleared else " Their role had already changed — left as is."))
+    return redirect("accounts:access_review_detail", pk=item.review_id)
+
+
+@tenant_admin_required
+def orphan_accounts(request):
+    """Computed orphan-account board — bullet 4's third capability. No model.
+
+    Four shapes, each a real leak rather than a style preference:
+      * an ACTIVE member holding no role (can log in, cannot do anything — usually a provisioning miss);
+      * a SUSPENDED/ARCHIVED member still holding a role (the offboarding half that never ran);
+      * an ACTIVE member who has never signed in (a licence that was never used);
+      * an APPROVED access request whose grant window has closed while the role is still assigned
+        (a time-bound grant that outlived its window — the cross-check bullet 3 and bullet 4 make
+        possible only together).
+    """
+    base = User.objects.filter(tenant=request.tenant).select_related("role")
+
+    no_role = base.filter(status="active", role__isnull=True)
+    stale_role = base.exclude(status="active").filter(role__isnull=False)
+    never_signed_in = base.filter(status="active", last_login__isnull=True)
+
+    expired_grants = (AccessRequest.objects
+                      .filter(tenant=request.tenant, status="approved", granted_until__lt=timezone.now())
+                      .exclude(requester__role__isnull=True)
+                      .select_related("requester", "requested_role", "decided_by"))
+
+    context = {
+        "no_role": no_role,
+        "stale_role": stale_role,
+        "never_signed_in": never_signed_in,
+        "expired_grants": expired_grants,
+        "orphan_total": no_role.count() + stale_role.count(),
+    }
+    return render(request, "accounts/orphans.html", context)
+
+
+# ================================================= 0.2 bullet 2: bulk provisioning
+@require_POST
+@tenant_admin_required
+def user_deprovision(request, pk):
+    """Offboarding: suspend or archive a member and close everything that granted them access.
+
+    De-provisioning is more than a status flip — the point is that nothing they were granted keeps
+    working. So one atomic action sets the status, clears the role, revokes their live elevations
+    and cancels their pending requests. Approving requests stay as they are: they are the evidence
+    of what was granted and when.
+    """
+    user_obj = get_object_or_404(UserModel, pk=pk, tenant=request.tenant)
+    target_status = request.POST.get("status", "suspended")
+    if target_status not in ("suspended", "archived"):
+        messages.error(request, "Choose suspend or archive.")
+        return redirect("accounts:user_detail", pk=user_obj.pk)
+    if user_obj == request.user:
+        messages.error(request, "You cannot de-provision your own account.")
+        return redirect("accounts:user_detail", pk=user_obj.pk)
+
+    with transaction.atomic():
+        user_obj.status = target_status
+        user_obj.role = None
+        user_obj.is_tenant_admin = False
+        user_obj.save(update_fields=["status", "role", "is_tenant_admin"])
+
+        revoked = (ElevationGrant.objects
+                   .filter(tenant=request.tenant, user=user_obj, status__in=("pending", "active"))
+                   .update(status="revoked", revoked_at=timezone.now(), revoked_by=request.user))
+        cancelled = (AccessRequest.objects
+                     .filter(tenant=request.tenant, requester=user_obj, status="pending")
+                     .update(status="cancelled", decided_at=timezone.now()))
+        write_audit_log(request.user, user_obj, "update",
+                        changes={"verb": "user_deprovision", "status": target_status,
+                                 "elevations_revoked": revoked, "requests_cancelled": cancelled})
+    messages.success(request, f"{user_obj} de-provisioned ({target_status}); "
+                              f"{revoked} elevation(s) revoked, {cancelled} request(s) cancelled.")
+    return redirect("accounts:user_detail", pk=user_obj.pk)
+
+
+#: Accepted header names, in order, for the bulk import. Kept as a constant so the export and the
+#: import cannot drift apart — the export writes exactly these columns.
+IMPORT_COLUMNS = ["email", "username", "first_name", "last_name", "role"]
+
+
+@tenant_admin_required
+def user_import(request):
+    """Stage a CSV of new members. Validates row by row and writes NO users yet."""
+    if request.method == "POST":
+        form = UserImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            upload = form.cleaned_data["csv_file"]
+            try:
+                text = upload.read().decode("utf-8-sig")
+            except UnicodeDecodeError:
+                messages.error(request, "That file is not UTF-8 encoded.")
+                return render(request, "accounts/userimport/form.html", {"form": form})
+
+            reader = csv.DictReader(io.StringIO(text))
+            missing = [c for c in ("email", "username") if c not in (reader.fieldnames or [])]
+            if missing:
+                messages.error(request, f"Missing required column(s): {', '.join(missing)}.")
+                return render(request, "accounts/userimport/form.html", {"form": form})
+
+            roles = {r.name.lower(): r for r in Role.objects.filter(tenant=request.tenant)}
+            seen_emails, seen_usernames, staged, errors = set(), set(), [], []
+            for lineno, row in enumerate(reader, start=2):  # line 1 is the header
+                email = (row.get("email") or "").strip().lower()
+                username = (row.get("username") or "").strip()
+                role_name = (row.get("role") or "").strip().lower()
+
+                if not email or "@" not in email:
+                    errors.append({"line": lineno, "error": "missing or invalid email"})
+                    continue
+                if not username:
+                    errors.append({"line": lineno, "error": "missing username"})
+                    continue
+                if email in seen_emails or UserModel.objects.filter(email=email).exists():
+                    errors.append({"line": lineno, "error": f"email already exists: {email}"})
+                    continue
+                if username in seen_usernames or UserModel.objects.filter(username=username).exists():
+                    errors.append({"line": lineno, "error": f"username already exists: {username}"})
+                    continue
+                role = None
+                if role_name:
+                    role = roles.get(role_name)
+                    if role is None:
+                        errors.append({"line": lineno, "error": f"unknown role: {role_name}"})
+                        continue
+                seen_emails.add(email)
+                seen_usernames.add(username)
+                staged.append({
+                    "email": email, "username": username,
+                    "first_name": (row.get("first_name") or "").strip(),
+                    "last_name": (row.get("last_name") or "").strip(),
+                    "role_id": role.pk if role else None,
+                })
+
+            batch = UserImportBatch.objects.create(
+                tenant=request.tenant, file_name=upload.name, uploaded_by=request.user,
+                status="validated", row_count=len(staged) + len(errors),
+                error_count=len(errors), errors=errors, staged_rows=staged,
+            )
+            write_audit_log(request.user, batch, "create")
+            messages.success(request, f"Validated {len(staged)} row(s), {len(errors)} error(s). "
+                                      "Review, then commit.")
+            return redirect("accounts:user_import_detail", pk=batch.pk)
+    else:
+        form = UserImportForm()
+    return render(request, "accounts/userimport/form.html", {"form": form})
+
+
+@tenant_admin_required
+def user_import_list(request):
+    return crud_list(
+        request,
+        UserImportBatch.objects.filter(tenant=request.tenant).select_related("uploaded_by"),
+        "accounts/userimport/list.html",
+        search_fields=["file_name"],
+        filters=[("status", "status", False)],
+        extra_context={"status_choices": UserImportBatch.STATUS_CHOICES},
+    )
+
+
+@tenant_admin_required
+def user_import_detail(request, pk):
+    obj = get_object_or_404(UserImportBatch.objects.select_related("uploaded_by"), pk=pk,
+                            tenant=request.tenant)
+    return render(request, "accounts/userimport/detail.html",
+                  {"obj": obj, "columns": IMPORT_COLUMNS})
+
+
+@require_POST
+@tenant_admin_required
+def user_import_commit(request, pk):
+    """Write the staged rows as real members.
+
+    Every created user gets an UNUSABLE password: a bulk import is a provisioning step, not a
+    credential hand-out, so the account cannot be logged into until the person completes the
+    invite/password-reset flow. Setting a shared default password would be the bug here.
+    """
+    batch = get_object_or_404(UserImportBatch, pk=pk, tenant=request.tenant)
+    if batch.status == "committed":
+        messages.info(request, "That batch is already committed.")
+        return redirect("accounts:user_import_detail", pk=batch.pk)
+    if not batch.staged_rows:
+        messages.error(request, "Nothing to commit — the batch has no valid rows.")
+        return redirect("accounts:user_import_detail", pk=batch.pk)
+
+    created = 0
+    with transaction.atomic():
+        for row in batch.staged_rows:
+            # Re-check under the write: another session may have taken the email since validation.
+            if UserModel.objects.filter(email=row["email"]).exists():
+                continue
+            user_obj = UserModel(
+                tenant=request.tenant, email=row["email"], username=row["username"],
+                first_name=row.get("first_name", ""), last_name=row.get("last_name", ""),
+                role_id=row.get("role_id"), status="active",
+            )
+            user_obj.set_unusable_password()
+            user_obj.save()
+            created += 1
+        batch.status = "committed"
+        batch.created_count = created
+        batch.committed_at = timezone.now()
+        batch.save(update_fields=["status", "created_count", "committed_at"])
+        write_audit_log(request.user, batch, "update",
+                        changes={"verb": "user_import_commit", "created": created})
+    messages.success(request, f"Committed {created} member(s). They must set a password to sign in.")
+    return redirect("accounts:user_import_detail", pk=batch.pk)
+
+
+@tenant_admin_required
+def user_export(request):
+    """CSV export of the directory — the other half of bullet 2's import/export.
+
+    Writes exactly `IMPORT_COLUMNS`, so an exported file can be edited and fed straight back into
+    the importer without a column-mapping step.
+    """
+    response = HttpResponse(content_type="text/csv")
+    stamp = timezone.localdate().isoformat()
+    response["Content-Disposition"] = f'attachment; filename="users-{request.tenant.slug}-{stamp}.csv"'
+    # No sensitive column is exported: never a password hash, token or session key.
+    writer = csv.writer(response)
+    writer.writerow(IMPORT_COLUMNS)
+    users = (UserModel.objects.filter(tenant=request.tenant)
+             .select_related("role").order_by("email"))
+    for user_obj in users:
+        writer.writerow([
+            user_obj.email, user_obj.username, user_obj.first_name, user_obj.last_name,
+            user_obj.role.name if user_obj.role else "",
+        ])
+    write_audit_log(request.user, None, "update",
+                    changes={"verb": "user_export", "rows": users.count()})
+    return response
