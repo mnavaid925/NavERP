@@ -7,6 +7,7 @@ at the package root. This __init__ re-exports every symbol, so
 from ._base import *  # noqa: F401,F403
 from .Tenant import (
     Tenant,
+    DOMAIN,
 )  # noqa: F401
 from .OrgUnit import (
     OrgUnit,
