@@ -1,5 +1,6 @@
 """Projects 7.15 Financial & Billing Management — FORM tests.
 """
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -150,6 +151,7 @@ def test_financialbilling_billing_run_form_rejects_mismatched_project_and_sow(
     financialbilling_party_a,
     projectinitiation_currency,
 ):
+    import datetime
     from apps.projects.models import StatementOfWork
     foreign_sow = StatementOfWork.objects.create(
         tenant=tenant_a,
@@ -157,7 +159,8 @@ def test_financialbilling_billing_run_form_rejects_mismatched_project_and_sow(
         client=financialbilling_party_a,
         title="Foreign Project SOW",
         status="active",
-        effective_date=_financialbilling_today(),
+        start_date=_financialbilling_today(),
+        end_date=_financialbilling_today() + datetime.timedelta(days=365),
         currency=projectinitiation_currency,
     )
     form = ProjectBillingRunForm(
