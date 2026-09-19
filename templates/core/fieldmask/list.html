@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Sensitive Field Masks{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sensitive Field Masks</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Sensitive Field Masks</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:module_scope_list' %}" class="btn btn-outline"><i data-lucide="shield"></i> Module scopes</a>
+      <a href="{% url 'core:field_mask_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New mask</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">A mask hides a field's value on a page or export. It is a <strong>display</strong> rule, not an access
+      rule — the row still exists and is still fetched. An empty exempt-role list masks <strong>everyone</strong>, including
+      administrators: an unconfigured exemption must not leak.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search field or module…">
+      </div>
+      <div class="form-group">
+        <select name="mask_style" class="form-select">
+          <option value="">Any style</option>
+          {% for val, label in mask_style_choices %}
+            <option value="{{ val }}" {% if request.GET.mask_style == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:field_mask_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Module</th><th>Field</th><th>Style</th><th>Exempt roles</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.scope.module_title }}</td>
+            <td><code>{{ obj.field_name }}</code></td>
+            <td>{{ obj.get_mask_style_display }}</td>
+            <td>{% for r in obj.exempt_roles.all %}<span class="badge badge-slate">{{ r.name }}</span> {% empty %}<span class="text-muted">Everyone</span>{% endfor %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:field_mask_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:field_mask_delete' obj.pk %}" onsubmit="return confirm('Delete this mask?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><div class="empty-state"><i data-lucide="eye-off"></i><h3>No masks configured</h3><p>Add one to hide a sensitive field.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
