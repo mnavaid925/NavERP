@@ -52,7 +52,6 @@ def prs_list(request):
             "status_filter": status_filter,
             "method_choices": ProjectRevenueSchedule.METHOD_CHOICES,
             "method_filter": method_filter,
-            "total_count": qs.count(),
         },
     )
 
