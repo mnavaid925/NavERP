@@ -1245,11 +1245,14 @@ _TOTAL_UNITS = ("count", "hours", "money")
 WIDGET_COMPUTE = {}
 
 
-def _widget(metric):
-    def decorator(func):
-        WIDGET_COMPUTE[metric] = func
-        return func
-    return decorator
+def _widget(func):
+    """Register a tile's compute under its own name: ``_tile_<metric>`` -> metric ``<metric>``.
+
+    The name is the key, so a registry row and its compute cannot drift apart; the parity assert
+    below is what turns a missing or misspelled one into an import error instead of a dead tile.
+    """
+    WIDGET_COMPUTE[func.__name__.removeprefix("_tile_")] = func
+    return func
 
 
 def _tile_qs(model, tenant, project_ids=None):
@@ -1276,50 +1279,50 @@ def _label_series(qs, field, label_map):
     return out
 
 
-@_widget("kpi_active_projects")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_active_projects(tenant, start, end, project_ids):
     return _tile_qs(Project, tenant, project_ids).filter(
         status="active").count()
 
 
-@_widget("kpi_overdue_tasks")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_overdue_tasks(tenant, start, end, project_ids):
     return _tile_qs(ProjectTask, tenant, project_ids).filter(
         planned_end__lt=timezone.localdate()
     ).exclude(status__in=("done", "cancelled")).count()
 
 
-@_widget("kpi_open_risks")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_open_risks(tenant, start, end, project_ids):
     return _tile_qs(ProjectRisk, tenant, project_ids).exclude(status="closed").count()
 
 
-@_widget("kpi_open_issues")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_open_issues(tenant, start, end, project_ids):
     return _tile_qs(ProjectIssue, tenant, project_ids).exclude(status="closed").count()
 
 
-@_widget("kpi_open_defects")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_open_defects(tenant, start, end, project_ids):
     return _tile_qs(QualityDefect, tenant, project_ids).exclude(
         status__in=("closed", "resolved")
     ).count()
 
 
-@_widget("kpi_cpi")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_cpi(tenant, start, end, project_ids):
     totals = _totals(tenant, project_ids)
     return (totals["ev"] / totals["ac"]).quantize(Decimal("0.0001")) if totals["ac"] else None
 
 
-@_widget("kpi_spi")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_spi(tenant, start, end, project_ids):
     totals = _totals(tenant, project_ids)
     return (totals["ev"] / totals["pv"]).quantize(Decimal("0.0001")) if totals["pv"] else None
 
 
-@_widget("kpi_utilization_pct")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_utilization_pct(tenant, start, end, project_ids):
     booked_qs = _windowed(_tile_qs(ResourceTimeEntry, tenant, project_ids), "entry_date", start, end)
     booked = booked_qs.aggregate(value=Sum("hours"))["value"] or Decimal("0")
     allocated_qs = _windowed(
@@ -1328,22 +1331,22 @@ def _(tenant, start, end, project_ids):
     return _pct(booked, allocated)
 
 
-@_widget("kpi_billable_pct")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_billable_pct(tenant, start, end, project_ids):
     rows = _windowed(_tile_qs(ResourceTimeEntry, tenant, project_ids), "entry_date", start, end)
     total = rows.aggregate(value=Sum("hours"))["value"] or Decimal("0")
     billable = rows.filter(is_billable=True).aggregate(value=Sum("hours"))["value"] or Decimal("0")
     return _pct(billable, total)
 
 
-@_widget("kpi_unbilled_amount")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_unbilled_amount(tenant, start, end, project_ids):
     totals = _totals(tenant, project_ids)
     return max(totals["ev"] - totals["invoiced"], Decimal("0"))
 
 
-@_widget("kpi_schedule_slip_days")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_kpi_schedule_slip_days(tenant, start, end, project_ids):
     slipped = [
         days for milestone in _tile_qs(ProjectMilestone, tenant, project_ids).exclude(
             actual_date=None
@@ -1355,45 +1358,45 @@ def _(tenant, start, end, project_ids):
     return (Decimal(sum(slipped)) / Decimal(len(slipped))).quantize(Decimal("0.1"))
 
 
-@_widget("projects_by_status")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_projects_by_status(tenant, start, end, project_ids):
     return _label_series(
         _tile_qs(Project, tenant, project_ids), "status", dict(Project.STATUS_CHOICES)
     )
 
 
-@_widget("tasks_by_status")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_tasks_by_status(tenant, start, end, project_ids):
     return _label_series(
         _windowed(_tile_qs(ProjectTask, tenant, project_ids), "planned_end", start, end),
         "status", dict(ProjectTask.STATUS_CHOICES),
     )
 
 
-@_widget("risks_by_category")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_risks_by_category(tenant, start, end, project_ids):
     return _label_series(
         _tile_qs(ProjectRisk, tenant, project_ids), "category", dict(ProjectRisk.CATEGORY_CHOICES)
     )
 
 
-@_widget("issues_by_severity")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_issues_by_severity(tenant, start, end, project_ids):
     return _label_series(
         _tile_qs(ProjectIssue, tenant, project_ids), "severity", dict(ProjectIssue.SEVERITY_CHOICES)
     )
 
 
-@_widget("defects_by_severity")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_defects_by_severity(tenant, start, end, project_ids):
     return _label_series(
         _tile_qs(QualityDefect, tenant, project_ids), "severity",
         dict(QualityDefect.SEVERITY_CHOICES),
     )
 
 
-@_widget("hours_by_activity_code")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_hours_by_activity_code(tenant, start, end, project_ids):
     out = {}
     for row in _windowed(_tile_qs(ResourceTimeEntry, tenant, project_ids), "entry_date", start, end).values(
         "activity_code"
@@ -1402,16 +1405,16 @@ def _(tenant, start, end, project_ids):
     return out
 
 
-@_widget("cost_variance_by_project")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_cost_variance_by_project(tenant, start, end, project_ids):
     return {
         row["label"]: row["value"]
         for row in _project_measure_rows(tenant, project_ids, lambda account: account["cv"])
     }
 
 
-@_widget("ev_curve_by_month")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_ev_curve_by_month(tenant, start, end, project_ids):
     """Posted 7.4 expense value per month. The EVM properties are as-of-today by design, so a monthly
     curve built from them would be one full re-evaluation per month; posted cost is the honest series."""
     rows = _tile_qs(ProjectExpense, tenant, project_ids).filter(
@@ -1425,8 +1428,8 @@ def _(tenant, start, end, project_ids):
     }
 
 
-@_widget("utilization_by_resource")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_utilization_by_resource(tenant, start, end, project_ids):
     booked, capacity = {}, {}
     for entry in _windowed(
     _tile_qs(ResourceTimeEntry, tenant, project_ids).select_related("resource"), "entry_date", start, end
@@ -1444,8 +1447,8 @@ def _(tenant, start, end, project_ids):
     }
 
 
-@_widget("milestones_on_time_by_month")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_milestones_on_time_by_month(tenant, start, end, project_ids):
     out = {}
     milestones = _windowed(
         _tile_qs(ProjectMilestone, tenant, project_ids).exclude(actual_date=None),
@@ -1462,8 +1465,8 @@ def _(tenant, start, end, project_ids):
     return {key: bucket["on_time"] for key, bucket in sorted(out.items())}
 
 
-@_widget("health_heat_bands")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_health_heat_bands(tenant, start, end, project_ids):
     bands = {key: 0 for key, _label in _RAG_BANDS}
     for account in _evm_map(tenant, _tenant_project_ids(tenant, project_ids)).values():
         rating = _HEALTH_RAG.get(account.get("health") or "")
@@ -1472,8 +1475,8 @@ def _(tenant, start, end, project_ids):
     return bands
 
 
-@_widget("top_cost_variance_projects")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_top_cost_variance_projects(tenant, start, end, project_ids):
     rows = _project_measure_rows(tenant, project_ids, lambda account: account["cv"])
     return {
         "columns": ["Project", "Cost variance"],
@@ -1482,8 +1485,8 @@ def _(tenant, start, end, project_ids):
     }
 
 
-@_widget("top_risk_exposure_projects")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_top_risk_exposure_projects(tenant, start, end, project_ids):
     rows = _risk_exposure_grouped(tenant, project_ids)
     return {
         "columns": ["Project", "Open risk exposure"],
@@ -1492,8 +1495,8 @@ def _(tenant, start, end, project_ids):
     }
 
 
-@_widget("overdue_milestones")
-def _(tenant, start, end, project_ids):
+@_widget
+def _tile_overdue_milestones(tenant, start, end, project_ids):
     cutoff = end or timezone.localdate()
     milestones = _tile_qs(ProjectMilestone, tenant, project_ids).filter(
         target_date__lt=cutoff, status__in=("planned", "in_review")
@@ -1511,6 +1514,15 @@ def _(tenant, start, end, project_ids):
         ],
         "total": total,
     }
+
+
+# Every registry row must have a compute and every compute a registry row. Loud at import, not
+# as a permanently blank tile.
+assert set(WIDGET_COMPUTE) == set(WIDGET_METRICS), (
+    "tile registry drift: "
+    f"missing {sorted(set(WIDGET_METRICS) - set(WIDGET_COMPUTE))}, "
+    f"unknown {sorted(set(WIDGET_COMPUTE) - set(WIDGET_METRICS))}"
+)
 
 
 def _tenant_project_ids(tenant, project_ids=None):
@@ -1579,10 +1591,18 @@ def compute_widget(widget, *, date_range=None):
         "caveats": caveats,
     }
 
+    def blank(error):
+        """A tile that cannot answer is a scalar dash — one shape for every failure, so no template
+        branch renders empty and no canvas config is built for a payload with no data."""
+        return json_safe({
+            **payload, "kind": "scalar", "chart_type": _TILE_FALLBACK_CHART["scalar"],
+            "value": None, "display": "—", "max": None, "pct": None, "error": error,
+        })
+
     func = WIDGET_COMPUTE.get(widget.metric)
     if func is None:
         caveats.append(f"Metric '{widget.metric}' has no compute implementation.")
-        return json_safe({**payload, "value": None, "display": "—", "error": "unknown metric"})
+        return blank("unknown metric")
 
     if widget.chart_type not in entry.get("charts", []):
         fallback = _TILE_FALLBACK_CHART[kind]
@@ -1604,7 +1624,7 @@ def compute_widget(widget, *, date_range=None):
             payload.update(_table_tile(result))
     except Exception as exc:  # noqa: BLE001 — a dashboard tile must never take the page down
         caveats.append(f"This tile could not be computed ({type(exc).__name__}).")
-        return json_safe({**payload, "value": None, "display": "—", "error": type(exc).__name__})
+        return blank(type(exc).__name__)
     return json_safe(payload)
 
 
@@ -1668,7 +1688,7 @@ def _apply_heat_bands(payload, result, caveats):
         return
     caveats.append(
         "Heat bands need a green/amber/red series, so this tile is shown as a bar chart instead.")
-    payload["chart_type"] = "bar"
+    payload["chart_type"] = _TILE_FALLBACK_CHART["series"]
 
 
 # =================================================================================================
