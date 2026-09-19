@@ -1,5 +1,7 @@
 """Projects 7.15 Financial & Billing Management — ProjectPaymentRecord forms.
 """
+from decimal import Decimal
+
 from django import forms
 from django.utils import timezone
 
@@ -39,7 +41,7 @@ class ProjectPaymentRecordForm(TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        _reject_foreign(self, cleaned, ["project", "client", "billing_run", "accounting_invoice"])
+        _reject_foreign(self, cleaned, ["project", "client", "billing_run", "accounting_invoice", "assigned_collector"])
         return cleaned
 
 
@@ -51,6 +53,7 @@ class PaymentPromiseForm(forms.Form):
     promised_amount = forms.DecimalField(
         max_digits=14,
         decimal_places=2,
+        min_value=Decimal("0.00"),
         required=True,
         widget=forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
     )
