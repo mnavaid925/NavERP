@@ -6,9 +6,9 @@ registers; ``resource_profiles`` and ``project_requests`` are 7.3's demand-lens 
 request builder has one consumer today but is kept beside the pool builder it mirrors);
 ``critical_path_ids`` is 7.2's critical-chain pass over dependency edges; ``owners`` is 7.5's
 owner/approver/escalation-target dropdown, shared by all four of that sub-module's registers; and
-``csv_safe`` / ``redirect_back_or`` are 7.16's, each read by more than one of that sub-module's five
-view modules. Same rule for all nine: if only one consumer ever needs a helper, it moves to that
-consumer's module.
+``csv_safe`` / ``redirect_back_or`` / ``csv_response`` are 7.16's, each read by more than one of that
+sub-module's five view modules. Same rule for all eleven: if only one consumer ever needs a helper, it
+moves to that consumer's module.
 
 The dropdown builders return ``.none()`` for a tenant-less user instead of raising: the
 superuser has ``tenant=None`` and sees no module data by design, so a filter dropdown for them
@@ -16,11 +16,15 @@ is empty, not an error. (``critical_path_ids`` is project-scoped, and a tenant-l
 reaches it — their project dropdown is empty — and it returns an empty set for a plan with no
 work packages.)
 """
+import csv
+
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.core.models import OrgUnit, Party
+from apps.projects import analytics
 from apps.projects.models import Project, ProjectRequest, Requirement, ResourceProfile
 
 
@@ -238,3 +242,27 @@ def redirect_back_or(request, fallback_name, **kwargs):
     ):
         return redirect(candidate)
     return redirect(fallback_name, **kwargs)
+
+
+def csv_response(filename, columns, rows):
+    """A CSV download for a register's exact rows — the ONE writer for both 7.16 export routes.
+
+    `rep_csv` and `run_csv` differ only in where their rows come from, so the two rules that matter —
+    every cell through `csv_safe`, the row set capped at `analytics.MAX_EXPORT_ROWS` — live here rather
+    than in each route, where a third export could forget one.
+
+    `filename` is header material and reaches the reader's browser unparsed, so callers pass a
+    system-assigned `number`/pk and never `obj.name`: a newline or a quote in text somebody typed would
+    otherwise become a second header line.
+    """
+    def cell(value):
+        # A missing measure is None in the payload, and `csv_safe` would render it as the word "None".
+        return csv_safe("" if value is None else value)
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow([cell(name) for name in columns])
+    for row in rows[:analytics.MAX_EXPORT_ROWS]:
+        writer.writerow([cell(value) for value in row])
+    return response
