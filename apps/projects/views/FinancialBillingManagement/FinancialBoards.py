@@ -70,6 +70,7 @@ def financial_pnl(request):
             tenant=request.tenant,
             project__in=target_projects,
             entry_type__in=["actual", "commitment"],
+            status="posted",
         )
         .values("project_id")
         .annotate(expense=Sum("amount"))
@@ -397,7 +398,7 @@ def cash_flow_forecast(request):
             in_90 += bal
 
     # Outflows: Committed project expenses / supplier POs
-    outflows_qs = ProjectExpense.objects.filter(tenant=request.tenant, entry_type="commitment")
+    outflows_qs = ProjectExpense.objects.filter(tenant=request.tenant, entry_type="commitment", status="posted")
     if project_id:
         outflows_qs = outflows_qs.filter(project_id=project_id)
 
