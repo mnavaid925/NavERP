@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Elevation Grant{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Elevation Grant</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'accounts:elevation_list' %}">Privileged Access</a><span class="sep">›</span><span>#{{ obj.pk }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'pending' %}
+        <a href="{% url 'accounts:elevation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'accounts:elevation_approve' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'pending' or obj.status == 'active' %}
+        <form method="post" action="{% url 'accounts:elevation_revoke' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="shield-off"></i> Revoke</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if obj.is_live %}
+      <p class="text-danger"><i data-lucide="shield-alert"></i> This elevation is LIVE right now (until {{ obj.expires_at|date:"M d, Y H:i" }}).</p>
+    {% elif obj.is_elapsed %}
+      <p class="text-muted"><i data-lucide="clock"></i> The window closed on {{ obj.expires_at|date:"M d, Y H:i" }}. It is no longer live — nothing needed to sweep it.</p>
+    {% endif %}
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>User</dt><dd>{{ obj.user }}</dd></div>
+      <div class="detail-item"><dt>Scope</dt><dd>{{ obj.get_scope_display }}</dd></div>
+      <div class="detail-item"><dt>Starts</dt><dd>{{ obj.starts_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Expires</dt><dd>{{ obj.expires_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Approved by</dt><dd>{% if obj.approved_by %}{{ obj.approved_by }} · {{ obj.approved_at|date:"M d, H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Revoked by</dt><dd>{% if obj.revoked_by %}{{ obj.revoked_by }} · {{ obj.revoked_at|date:"M d, H:i" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    <div class="detail-item" style="margin-top:1rem;"><dt>Reason</dt><dd>{{ obj.reason|linebreaksbr }}</dd></div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this grant does and does not do</h2></div>
+    <div class="card-body">
+      <p class="text-muted">It records and time-boxes a privileged window. It does <strong>not</strong> change the user's
+        <code>is_tenant_admin</code> flag — that stays an explicit admin action, because the repo has no scheduler and
+        a privilege that grants itself on a timer would never come back off. There is also <strong>no credential
+        vaulting</strong> (no secret is stored here) and <strong>no session recording</strong> (nothing captures a
+        session). Both are declared rather than implied.</p>
+    </div>
+  </div>
+
+  <a href="{% url 'accounts:elevation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
