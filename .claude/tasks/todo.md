@@ -7,6 +7,108 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 
+# Build Plan — Projects 7.17 Workflow & Automation
+
+Source of truth: `.claude/tasks/research-projects-7.17.md`.
+BASE = `d99ec7e2`. Next migration: `0024`.
+App package folder: `WorkflowAutomation/` in `apps/projects/{models,forms,views,urls}/`.
+Template folder: `templates/projects/workflowautomation/`. Test subslug: `workflowautomation`.
+Coexistence: solo builder in `apps/projects/` extending `WorkflowAutomation`.
+
+## Models (`apps/projects/models/WorkflowAutomation/`)
+- [ ] `WorkflowRules.py` — `ProjectWorkflowRule` [PWF-]: Primary Trigger-Condition-Action (TCA) automation rule engine. Evaluates project events against structured criteria and executes automated actions (status transitions, notifications, gate requests, webhook dispatches, task creation).
+  - Fields: `name` (CharField 255), `description` (TextField, blank=True), `project` (FK `projects.Project`, null=True, blank=True, on_delete=SET_NULL, related_name="workflow_rules" — null implies tenant-wide rule), `is_active` (BooleanField, default=True), `trigger_entity` (CharField 30, choices: `project`, `task`, `milestone`, `risk`, `issue`, `budget`, `scope_change`, `inspection`), `trigger_event` (CharField 30, choices: `created`, `updated`, `status_changed`, `due_date_approaching`, `threshold_breached`, `blocked`), `trigger_field` (CharField 100, blank=True), `trigger_value` (CharField 255, blank=True), `conditions` (JSONField, default=list, blank=True), `actions` (JSONField, default=list, blank=True), `execution_count` (PositiveIntegerField, default=0, editable=False), `last_fired_at` (DateTimeField, null=True, blank=True, editable=False), `owner` (FK `AUTH_USER_MODEL`, null=True, blank=True, on_delete=SET_NULL, related_name="owned_project_workflows").
+  - Child: `WorkflowExecutionLog` (inherits `TenantOwned`): `rule` (FK `projects.ProjectWorkflowRule`, CASCADE, related_name="execution_logs"), `record_label` (CharField 255, blank=True), `target_model` (CharField 50, blank=True), `target_id` (PositiveIntegerField, null=True, blank=True), `status` (CharField 20, choices: `success`, `failed`, `condition_failed`, `simulated`, default="success"), `fired_at` (DateTimeField, auto_now_add=True), `error_msg` (TextField, blank=True), `duration_ms` (PositiveIntegerField, default=0), `evaluated_conditions` (JSONField, default=dict, blank=True), `executed_actions` (JSONField, default=list, blank=True).
+  - Constraints: Unique `("tenant", "number")`, indexes on `("tenant", "trigger_entity", "is_active")` and `("tenant", "project", "is_active")`.
+  - Verbs: `pwf_toggle_active` (POST-only: toggles active state, writes AuditLog), `pwf_test_run` (POST-only: simulated execution without mutating data), `pwf_execute_now` (POST-only: manual trigger execution).
+  - Excluded from form: `tenant`, auto `number`, `execution_count`, `last_fired_at`, `created_at`, `updated_at`.
+
+- [ ] `ApprovalGates.py` — `ProjectApprovalGate` [PAR-]: Multi-tier governance approval gates for phase transitions, deliverable acceptances, scope changes, and budget baseline overrides with tolerance auto-approvals, timeout SLA escalation, and delegation.
+  - Fields: `project` (FK `projects.Project`, CASCADE, related_name="approval_gates"), `rule` (FK `projects.ProjectWorkflowRule`, null=True, blank=True, on_delete=SET_NULL, related_name="spawned_gates"), `gate_type` (CharField 30, choices: `phase_gate`, `scope_change`, `budget_override`, `deliverable_acceptance`, `charter_signoff`), `title` (CharField 255), `description` (TextField, blank=True), `target_model` (CharField 50, help_text="e.g. Project, ScopeChangeRequest, DeliverableInspection, BudgetRevision"), `target_id` (PositiveIntegerField), `target_label` (CharField 255, blank=True), `requested_by` (FK `AUTH_USER_MODEL`, PROTECT, related_name="+"), `approver` (FK `AUTH_USER_MODEL`, PROTECT, related_name="+"), `delegate_approver` (FK `AUTH_USER_MODEL`, null=True, blank=True, on_delete=SET_NULL, related_name="+"), `escalate_to` (FK `AUTH_USER_MODEL`, null=True, blank=True, on_delete=SET_NULL, related_name="+"), `timeout_hours` (PositiveIntegerField, default=48), `threshold_amount` (DecimalField 14,2, null=True, blank=True), `auto_approve_threshold` (DecimalField 14,2, null=True, blank=True), `status` (CharField 20, choices: `pending`, `approved`, `rejected`, `escalated`, `auto_approved`, `cancelled`, default="pending"), `decision_notes` (TextField, blank=True), `decided_at` (DateTimeField, null=True, blank=True, editable=False), `escalated_at` (DateTimeField, null=True, blank=True, editable=False).
+  - Constraints: Unique `("tenant", "number")`, indexes on `("tenant", "project", "status")` and `("tenant", "approver", "status")`.
+  - Verbs: `par_approve` (POST-only: marks gate approved, stamps decided_at, syncs target status, logs AuditLog), `par_reject` (POST-only: marks gate rejected, stores decision_notes, stamps decided_at, logs AuditLog), `par_escalate` (POST-only: marks gate escalated, reassigns to escalate_to, stamps escalated_at, dispatches notification), `par_delegate` (POST-only: sets delegate_approver, logs AuditLog), `par_cancel` (POST-only: marks gate cancelled).
+  - Excluded from form: `tenant`, auto `number`, `status`, `decided_at`, `escalated_at`, `created_at`, `updated_at`.
+
+- [ ] `RecurringTasks.py` — `RecurringTaskSchedule` [RTS-]: Cadence and schedule generator for recurring project activities, sprint rituals, and periodic reviews. Automatically creates new `ProjectTask` rows from prototype templates.
+  - Fields: `project` (FK `projects.Project`, CASCADE, related_name="recurring_schedules"), `title_template` (CharField 255, help_text="Supports {{date}}, {{week}}, {{project}}, {{sprint}}"), `description_template` (TextField, blank=True), `is_active` (BooleanField, default=True), `frequency` (CharField 20, choices: `daily`, `weekly`, `biweekly`, `monthly`, `quarterly`, `sprint_cadence`, default="weekly"), `interval_count` (PositiveSmallIntegerField, default=1), `days_of_week` (CharField 50, blank=True, help_text="Comma-separated: MON,TUE,WED,THU,FRI,SAT,SUN"), `day_of_month` (PositiveSmallIntegerField, null=True, blank=True), `priority` (CharField 10, choices: `urgent`, `high`, `medium`, `low`, default="medium"), `effort_hours` (DecimalField 6,2, default=0.00), `assignee_strategy` (CharField 20, choices: `fixed_user`, `project_manager`, `unassigned`, default="fixed_user"), `default_assignee` (FK `AUTH_USER_MODEL`, null=True, blank=True, on_delete=SET_NULL, related_name="+"), `start_date` (DateField), `end_date` (DateField, null=True, blank=True), `next_run_date` (DateField), `last_run_date` (DateField, null=True, blank=True, editable=False), `tasks_created_count` (PositiveIntegerField, default=0, editable=False).
+  - Constraints: Unique `("tenant", "number")`, indexes on `("tenant", "project", "is_active")` and `("tenant", "next_run_date", "is_active")`. Clean asserts `end_date is None or end_date >= start_date`.
+  - Verbs: `rts_toggle_active` (POST-only: toggles active state), `rts_generate_task` (POST-only: mints ProjectTask immediately, advances next_run_date, increments count), `rts_skip_next` (POST-only: advances next_run_date by frequency without minting).
+  - Excluded from form: `tenant`, auto `number`, `last_run_date`, `tasks_created_count`, `created_at`, `updated_at`.
+
+- [ ] `Webhooks.py` — `ProjectWebhookEndpoint` [PWH-]: Outbound event-driven webhook dispatcher for Zapier, Make (Integromat), and external iPaaS systems. Features encrypted HMAC-SHA256 secret signing and delivery auditing.
+  - Fields: `project` (FK `projects.Project`, null=True, blank=True, on_delete=CASCADE, related_name="webhook_endpoints" — null implies tenant-wide), `name` (CharField 255), `target_url` (URLField 500), `secret` (CharField 512, blank=True, help_text="Encrypted HMAC signing key via apps.core.crypto"), `is_active` (BooleanField, default=True), `event_types` (JSONField, default=list, help_text="List of events e.g. ['task.created', 'task.completed', 'milestone.reached', 'gate.approved']"), `custom_headers` (JSONField, default=dict, blank=True), `last_status_code` (PositiveSmallIntegerField, null=True, blank=True, editable=False), `last_fired_at` (DateTimeField, null=True, blank=True, editable=False), `failure_count` (PositiveIntegerField, default=0, editable=False).
+  - Child: `ProjectWebhookDelivery` (inherits `TenantOwned`): `webhook` (FK `projects.ProjectWebhookEndpoint`, CASCADE, related_name="deliveries"), `event` (CharField 100), `payload` (JSONField, default=dict), `signature` (CharField 255, blank=True), `status` (CharField 15, choices: `success`, `failed`, `simulated`, default="success"), `status_code` (PositiveSmallIntegerField, null=True, blank=True), `response_body` (TextField, blank=True), `attempted_at` (DateTimeField, auto_now_add=True), `duration_ms` (PositiveIntegerField, default=0).
+  - Constraints: Unique `("tenant", "number")`, indexes on `("tenant", "is_active")` and `("tenant", "project", "is_active")`.
+  - Verbs: `pwh_toggle_active` (POST-only: toggles active state), `pwh_test_ping` (POST-only: emits test payload / simulated delivery), `pwh_rotate_secret` (POST-only: rotates and re-encrypts HMAC signing secret).
+  - Excluded from form: `tenant`, auto `number`, `secret` (write-only / auto-generated), `last_status_code`, `last_fired_at`, `failure_count`, `created_at`, `updated_at`.
+
+## Backend layers (`apps/projects/{models,forms,views,urls}/WorkflowAutomation/`)
+- [ ] Models: `WorkflowRules.py`, `ApprovalGates.py`, `RecurringTasks.py`, `Webhooks.py`.
+- [ ] Forms: `WorkflowRules.py` (`ProjectWorkflowRuleForm`, `WorkflowRuleTestForm`), `ApprovalGates.py` (`ProjectApprovalGateForm`, `ApprovalDecisionForm`, `ApprovalDelegateForm`), `RecurringTasks.py` (`RecurringTaskScheduleForm`), `Webhooks.py` (`ProjectWebhookEndpointForm`, `WebhookTestPingForm`).
+- [ ] Views: Function-based, `@login_required`, tenant-scoped, audit-logged via `write_audit_log`:
+  - `WorkflowRules.py` (`pwf_list`, `pwf_detail`, `pwf_create`, `pwf_edit`, `pwf_delete`, `pwf_toggle_active`, `pwf_test_run`, `pwf_execute_now`).
+  - `ApprovalGates.py` (`par_list`, `par_detail`, `par_create`, `par_edit`, `par_delete`, `par_approve`, `par_reject`, `par_escalate`, `par_delegate`, `par_cancel`).
+  - `RecurringTasks.py` (`rts_list`, `rts_detail`, `rts_create`, `rts_edit`, `rts_delete`, `rts_toggle_active`, `rts_generate_task`, `rts_skip_next`).
+  - `Webhooks.py` (`pwh_list`, `pwh_detail`, `pwh_create`, `pwh_edit`, `pwh_delete`, `pwh_toggle_active`, `pwh_test_ping`, `pwh_rotate_secret`, `pwh_delivery_list`, `pwh_delivery_detail`).
+  - `AutomationBoards.py` (Computed operational dashboards on read over verified spine entities):
+    - `automation_overview`: Central automation health cockpit (rule stats, gate backlogs, recurring task counts, webhook telemetry).
+    - `approval_inbox`: Dedicated queue for approvers to review pending gates with quick-action approvals and SLA countdowns.
+    - `recurrence_calendar`: Forward calendar projection of upcoming recurring task generations.
+    - `webhook_diagnostics`: iPaaS webhook delivery log viewer, latency monitor, failure diagnostics, and payload inspector.
+- [ ] URLs: Literal routes ordered before `<int:pk>/` routes in `urls/WorkflowAutomation/`:
+  - `WorkflowRules.py`: `rules/`, `rules/create/`, `rules/<int:pk>/`, `rules/<int:pk>/edit/`, `rules/<int:pk>/delete/`, `rules/<int:pk>/toggle/`, `rules/<int:pk>/test-run/`, `rules/<int:pk>/execute/`.
+  - `ApprovalGates.py`: `gates/`, `gates/create/`, `gates/<int:pk>/`, `gates/<int:pk>/edit/`, `gates/<int:pk>/delete/`, `gates/<int:pk>/approve/`, `gates/<int:pk>/reject/`, `gates/<int:pk>/escalate/`, `gates/<int:pk>/delegate/`, `gates/<int:pk>/cancel/`.
+  - `RecurringTasks.py`: `recurring/`, `recurring/create/`, `recurring/<int:pk>/`, `recurring/<int:pk>/edit/`, `recurring/<int:pk>/delete/`, `recurring/<int:pk>/toggle/`, `recurring/<int:pk>/generate/`, `recurring/<int:pk>/skip/`.
+  - `Webhooks.py`: `webhooks/`, `webhooks/create/`, `webhooks/<int:pk>/`, `webhooks/<int:pk>/edit/`, `webhooks/<int:pk>/delete/`, `webhooks/<int:pk>/toggle/`, `webhooks/<int:pk>/test-ping/`, `webhooks/<int:pk>/rotate-secret/`, `webhooks/deliveries/`, `webhooks/deliveries/<int:pk>/`.
+  - `AutomationBoards.py`: `automation/overview/`, `automation/approvals/`, `automation/recurrence-calendar/`, `automation/webhook-diagnostics/`.
+
+## Shared files & Integration
+- [ ] Re-export blocks in `apps/projects/{models,forms,views}/__init__.py`.
+- [ ] Concatenate `urlpatterns` in `apps/projects/urls/__init__.py` with disjoint literals (`_wa_rules`, `_wa_gates`, `_wa_recurring`, `_wa_webhooks`, `_wa_boards`).
+- [ ] Admin registration in `apps/projects/admin.py` for all 4 models and 2 child logs with `list_select_related`, `list_filter`, `search_fields`, `readonly_fields`.
+- [ ] Extend `apps/projects/management/commands/seed_projects.py` with idempotent `_seed_717_workflow_automation(self, tenant, now)`.
+- [ ] Navigation wiring: `LIVE_LINKS["7.17"]` in `apps/core/navigation.py`:
+  - "Visual Workflow Designer" -> `projects:pwf_list`
+  - "Approval Automation" -> `projects:par_list`
+  - "Notification & Reminder Rules" -> `projects:pwf_list?trigger_event=due_date_approaching`
+  - "Recurring Task Automation" -> `projects:rts_list`
+  - "Integration Automation (iPaaS)" -> `projects:pwh_list`
+  - Extra live leaves: Automation Overview (`projects:automation_overview`), Approval Inbox (`projects:approval_inbox`), Recurrence Calendar (`projects:recurrence_calendar`), Webhook Diagnostics (`projects:webhook_diagnostics`).
+- [ ] Migration: `makemigrations projects` -> `0024_...`, run `migrate`, verify `seed_projects` twice (idempotent).
+- [ ] `manage.py check` passes with 0 errors.
+
+## Templates (`templates/projects/workflowautomation/`)
+- [ ] `workflow/`: `list.html` (filter bar by trigger_entity/is_active, rules table, quick toggle, execution stats), `detail.html` (visual card flow: Trigger -> Condition -> Actions, execution history log), `form.html`.
+- [ ] `approvalgate/`: `list.html` (filter bar by gate_type/status, SLA urgency badges, approval table), `detail.html` (governance summary, target record link, audit trail, approve/reject/escalate/delegate action panel), `form.html`.
+- [ ] `recurringtask/`: `list.html` (filter bar by frequency/is_active, next run countdown, schedules table), `detail.html` (recurrence rule details, template preview, minted tasks count, generate now / skip buttons), `form.html`.
+- [ ] `webhook/`: `list.html` (filter bar by is_active/target_url, health status code badges, endpoints table), `detail.html` (endpoint config, signed header documentation, rotate secret button, test ping button, recent deliveries panel), `form.html`, `delivery_list.html` (filterable audit log of outbound payloads), `delivery_detail.html` (full payload, signature, and response body viewer).
+- [ ] `boards/`:
+  - `overview.html`: Executive automation overview cockpit (KPI cards, active rules, pending approval gates, scheduled recurrences, webhook health/deliveries, recent logs).
+  - `approval_inbox.html`: Approver's focused queue of gates awaiting decision (with quick-approve/reject actions, SLA timer badges, urgency sorting).
+  - `recurrence_calendar.html`: Forward-looking calendar view of upcoming recurring task generations.
+  - `webhook_diagnostics.html`: Real-time iPaaS webhook delivery health, latency chart, failure breakdown, and replay interface.
+- [ ] Theme badges: strictly palette classes `.badge-green`, `.badge-amber`, `.badge-red`, `.badge-info`, `.badge-slate` (no semantic `-success`/`-danger`).
+
+## Verification, Review & Tests
+- [ ] Smoke tests: status 200/302 as `admin_acme` / `password`, no leaked comment tokens, IDOR 404.
+- [ ] Multi-agent review wave (6 reviewers: code-reviewer, explorer, frontend-reviewer, performance-reviewer, qa-smoke-tester, security-reviewer) -> `.claude/tasks/review-projects-7.17.md`.
+- [ ] Fix findings via `code-fixer`.
+- [ ] Test wave (`apps/projects/tests/`): `test_workflowautomation_{models,forms,views,security}.py` with full suite passing.
+- [ ] Update documentation: `README.md` (roadmap update) and `apps/projects/` skill/notes updated.
+
+## Closeout Summary — 7.17 Workflow & Automation
+- (to be filled at closeout)
+
+## Later passes / deferred
+- Drag-and-drop Visual Canvas UI (React Flow / jsPlumb) -> Frontend enhancement pass.
+- Asynchronous Celery Task Runner & background worker daemon -> Platform-level infrastructure.
+- Inbound Arbitrary Script Execution (Sandboxed Python/JS) -> 7.18 / Security enhancement.
+- Deep Bidirectional System Synchronization (SAP, Oracle, Jira, GitHub) -> 7.18 Integration & API Hub.
+- External Client Approvals & SOW Sign-offs -> Built in 7.14 Client Collaboration.
+- Project Template & Methodology Master Data -> 7.19 Master Data & Configuration.
+
+---
+
 # Build Plan — Projects 7.15 Financial & Billing Management
 
 Source of truth: `.claude/tasks/research-projects-7.15.md`.
