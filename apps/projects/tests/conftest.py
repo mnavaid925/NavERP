@@ -6216,4 +6216,149 @@ def clientcollab_contact_person_b(db, tenant_b):
     return Party.objects.create(tenant=tenant_b, kind="person", name="Bob Client")
 
 
+# ==================================================================================================
+# 7.15 Financial & Billing Management (subslug ``financialbilling``)
+# ==================================================================================================
+
+def _financialbilling_today():
+    return timezone.localdate()
+
+
+def _financialbilling_rate_card(tenant, **overrides):
+    from apps.projects.models import ProjectRateCard
+    from apps.accounting.models import Currency
+    currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    data = dict(
+        tenant=tenant,
+        name="Solutions Architect Standard Rate",
+        rate_type="role",
+        role_name="Solutions Architect",
+        hourly_rate=Decimal("175.00"),
+        daily_rate=Decimal("1400.00"),
+        currency=currency,
+        effective_from=_financialbilling_today() - datetime.timedelta(days=30),
+        effective_to=_financialbilling_today() + datetime.timedelta(days=365),
+        is_active=True,
+    )
+    data.update(overrides)
+    obj = ProjectRateCard(**data)
+    obj.save()
+    return obj
+
+
+def _financialbilling_billing_run(tenant, project, client, **overrides):
+    from apps.projects.models import ProjectBillingRun
+    from apps.accounting.models import Currency
+    currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    data = dict(
+        tenant=tenant,
+        project=project,
+        client=client,
+        billing_type="time_and_materials",
+        date_from=_financialbilling_today() - datetime.timedelta(days=30),
+        date_to=_financialbilling_today(),
+        currency=currency,
+        labor_amount=Decimal("5000.00"),
+        expense_amount=Decimal("500.00"),
+        fee_amount=Decimal("200.00"),
+        tax_rate_pct=Decimal("10.00"),
+        subtotal=Decimal("5700.00"),
+        tax_amount=Decimal("570.00"),
+        total_amount=Decimal("6270.00"),
+        status="draft",
+    )
+    data.update(overrides)
+    obj = ProjectBillingRun(**data)
+    obj.save()
+    return obj
+
+
+def _financialbilling_revenue_schedule(tenant, project, client, **overrides):
+    from apps.projects.models import ProjectRevenueSchedule
+    from apps.accounting.models import Currency
+    currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    data = dict(
+        tenant=tenant,
+        project=project,
+        client=client,
+        method="percent_complete",
+        fiscal_period_name="2026-Q3",
+        currency=currency,
+        contract_amount=Decimal("100000.00"),
+        percent_complete=Decimal("50.00"),
+        recognized_amount=Decimal("50000.00"),
+        deferred_amount=Decimal("50000.00"),
+        status="draft",
+    )
+    data.update(overrides)
+    obj = ProjectRevenueSchedule(**data)
+    obj.save()
+    return obj
+
+
+def _financialbilling_payment_record(tenant, project, client, **overrides):
+    from apps.projects.models import ProjectPaymentRecord
+    from apps.accounting.models import Currency
+    currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    data = dict(
+        tenant=tenant,
+        project=project,
+        client=client,
+        currency=currency,
+        original_amount=Decimal("10000.00"),
+        amount_due=Decimal("10000.00"),
+        amount_paid=Decimal("0.00"),
+        stage="current",
+        dunning_level="none",
+        status="open",
+    )
+    data.update(overrides)
+    obj = ProjectPaymentRecord(**data)
+    obj.save()
+    return obj
+
+
+@pytest.fixture
+def financialbilling_party_a(db, tenant_a):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, kind="organization", name="Acme Financial Client")
+
+
+@pytest.fixture
+def financialbilling_party_b(db, tenant_b):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_b, kind="organization", name="Globex Financial Client")
+
+
+@pytest.fixture
+def financialbilling_project_a(db, tenant_a, financialbilling_party_a):
+    return _projectinitiation_project(tenant_a, client=financialbilling_party_a, name="Financial Project A", code="FPA-01")
+
+
+@pytest.fixture
+def financialbilling_project_b(db, tenant_b, financialbilling_party_b):
+    return _projectinitiation_project(tenant_b, client=financialbilling_party_b, name="Financial Project B", code="FPB-02")
+
+
+@pytest.fixture
+def financialbilling_rate_card_a(db, tenant_a, financialbilling_project_a, projectinitiation_currency):
+    return _financialbilling_rate_card(tenant_a, project=financialbilling_project_a, currency=projectinitiation_currency)
+
+
+@pytest.fixture
+def financialbilling_billing_run_a(db, tenant_a, financialbilling_project_a, financialbilling_party_a, projectinitiation_currency):
+    return _financialbilling_billing_run(tenant_a, financialbilling_project_a, financialbilling_party_a, currency=projectinitiation_currency)
+
+
+@pytest.fixture
+def financialbilling_revenue_schedule_a(db, tenant_a, financialbilling_project_a, financialbilling_party_a, projectinitiation_currency):
+    return _financialbilling_revenue_schedule(tenant_a, financialbilling_project_a, financialbilling_party_a, currency=projectinitiation_currency)
+
+
+@pytest.fixture
+def financialbilling_payment_record_a(db, tenant_a, financialbilling_project_a, financialbilling_party_a, projectinitiation_currency):
+    return _financialbilling_payment_record(tenant_a, financialbilling_project_a, financialbilling_party_a, currency=projectinitiation_currency)
+
+
+
 
