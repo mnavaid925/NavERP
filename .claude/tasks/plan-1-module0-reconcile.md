@@ -304,3 +304,71 @@ Python's `ipaddress` classifies as PRIVATE**, so `is_public_ip()` correctly reje
   adding a per-request middleware to the hot path.
 - **No MFA device is seeded** — a confirmed device on a demo account would make it unable to sign in
   without a code nobody can tell the user.
+
+---
+
+## 0.6 Application Module Administration & Access Scope — CLOSED OUT 2026-09-19
+
+**Verdict: 0 of 13 bullets mapped and no access-scope layer existed at all.** Its thirteen bullets
+are thirteen *per-module* access scopes (CRM record/territory access, HRM personnel-data masking, DMS
+folder ACLs, …), and they share ONE shape.
+
+### The design decision that mattered
+
+A registry alone would be **decoration** — a config table nothing reads, which is the failure mode I
+criticised in 0.1. So the build is a registry PLUS one real enforcement point:
+
+- `apps/core/scoping.py` — `apply_data_scope()` narrows a queryset by the configured scope;
+  `mask_for()` applies a field mask. Both are pure functions, unit-testable.
+- `crud_list()` gained an **opt-in** `scope_module` / `scope_owner_field` hook, applied **before**
+  search/filters/pagination (narrowing after pagination would return short pages and a lying count).
+- `core:activity_list` is wired as the **proof**, chosen because `Activity.owner` exists and the view
+  is member-facing. The probe proves it in situ: at `data_scope=own` a member sees only their own
+  activities, an admin still sees all, and a disabled scope restores everything.
+
+**One view, not 150, on purpose.** Retrofitting row-level security across every existing list means
+auditing each for the correct owner field, and a wrong guess silently empties a register. The access
+matrix reports which modules enforce, so the gap is visible rather than implied.
+
+### Bullet-by-bullet
+
+| bullet | verdict |
+|---|---|
+| 13 × per-module access scopes | **built** as one registry (24 rows/tenant from the catalog) + the enforcement mechanism. **The finer half of each bullet is NOT built** and is named on each scope's page: consent management, e-signature (21 CFR Part 11), retention locks, check-in/out, PCI scope isolation, dataset certification, BOM/routing change control. |
+| Segregation of duties (Accounting) | **not built here** — procurement 6.3's `ApprovalDelegation` is a different concern (L36); `requires_approval` is recorded, not enforced by an approval engine. |
+| Row-/column-level security (BI) | **partial** — row scoping exists as a mechanism; **column-level is not built**. |
+
+### Verification
+
+`temp/smoke_06.py` — **56 checks, 0 failures**, re-entrant. Includes the in-situ enforcement proof.
+`apps/core apps/accounts apps/tenants apps/crm` — **2455 passed, 0 failed**; the gate matters because
+`crud_list` is used by ~150 sub-modules.
+
+### Three bugs found while building
+
+1. **The decorator-order bug again** — `module_scope_delete` and `field_mask_delete` had
+   `@tenant_admin_required` ABOVE `@require_POST`, so a member's GET got 403 instead of the house 405.
+   Caught by the probe; both fixed with the reason in a docstring.
+2. **The tenant-wide seeder guard again** — I called `_seed_module_scopes` from `_seed_tenant`, which
+   the loop SKIPS for any tenant that already has spine data, so the first run created **zero** scope
+   rows. Same trap as usage metering in `seed_tenants`. Moved outside the guard with its own guard.
+3. **Two wrong slugs in the `?module=` deep-links** — `crm` (the slug is the whole title,
+   `customerrelationshipmanagementcrm`) and a typo in `ecommercememanagementsystem`. Both would have
+   produced a **silently empty register**, which is exactly what a filtered lens hides. Caught by
+   verifying the derived slugs against `LIVE_LINKS` before trusting them.
+
+### Probe-vs-code, again both ways
+
+`apply_data_scope` returned an un-narrowed queryset in the direct-call checks while the view-level
+checks passed — because the probe set `scope.is_enabled = True` **without saving**, and the function
+correctly reads a fresh row from the DB. A missing `.save()` in the probe, not a code bug. Separately,
+an assertion of `== 1` was wrong because the tenant has ~200 seeded activities many of which the test
+member already owns; asserting the **invariant** (a strict subset, every row owned by the actor) is
+the right shape and does not depend on seed volume.
+
+### Also worth carrying
+
+`Activity.Meta.ordering` is `["-due_at", "-created_at"]` and **MySQL sorts NULLs LAST in a DESC
+order**, so newly created rows with no `due_at` land behind 199 seeded ones and never appear on page
+1 of a list. A probe that asserts on rendered page-1 content must narrow with `?q=` or set the sort
+field, or it will fail for a reason that has nothing to do with the code under test.
