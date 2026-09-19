@@ -73,17 +73,21 @@ def automation_overview(request):
 @login_required
 def approval_inbox(request):
     """Focused inbox for the logged-in approver showing pending gates and delegations."""
-    my_gates = ProjectApprovalGate.objects.filter(
-        tenant=request.tenant,
-        approver=request.user,
-        status="pending",
-    ).select_related("project", "requested_by")
+    my_gates = list(
+        ProjectApprovalGate.objects.filter(
+            tenant=request.tenant,
+            approver=request.user,
+            status="pending",
+        ).select_related("project", "requested_by")
+    )
 
-    delegated_gates = ProjectApprovalGate.objects.filter(
-        tenant=request.tenant,
-        delegate_approver=request.user,
-        status="pending",
-    ).select_related("project", "requested_by", "approver")
+    delegated_gates = list(
+        ProjectApprovalGate.objects.filter(
+            tenant=request.tenant,
+            delegate_approver=request.user,
+            status="pending",
+        ).select_related("project", "requested_by", "approver")
+    )
 
     return render(
         request,
@@ -92,8 +96,8 @@ def approval_inbox(request):
             "gates": my_gates,
             "delegated_gates": delegated_gates,
             "stats": {
-                "my_pending": my_gates.count(),
-                "delegated_pending": delegated_gates.count(),
+                "my_pending": len(my_gates),
+                "delegated_pending": len(delegated_gates),
             },
         },
     )
@@ -105,10 +109,12 @@ def recurrence_calendar(request):
     today = timezone.localdate()
     month_end = today + timedelta(days=30)
 
-    upcoming_schedules = RecurringTaskSchedule.objects.filter(
-        tenant=request.tenant,
-        is_active=True,
-    ).select_related("project", "default_assignee").order_by("next_run_date")
+    upcoming_schedules = list(
+        RecurringTaskSchedule.objects.filter(
+            tenant=request.tenant,
+            is_active=True,
+        ).select_related("project", "default_assignee").order_by("next_run_date")
+    )
 
     runs_this_month = RecurringTaskSchedule.objects.filter(
         tenant=request.tenant,
@@ -123,7 +129,7 @@ def recurrence_calendar(request):
         {
             "upcoming_schedules": upcoming_schedules,
             "stats": {
-                "total_recurring": upcoming_schedules.count(),
+                "total_recurring": len(upcoming_schedules),
                 "runs_this_month": runs_this_month,
             },
         },
