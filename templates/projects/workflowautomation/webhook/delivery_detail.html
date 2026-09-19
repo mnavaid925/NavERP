@@ -51,7 +51,7 @@
       <div class="card-header flex justify-between items-center">
         <h3 class="card-title">Receiver HTTP Response</h3>
         {% if delivery.status_code %}
-          <span class="badge {% if delivery.status_code == 200 %}badge-green{% else %}badge-red{% endif %} font-mono">
+          <span class="badge {% if delivery.status_code >= 200 and delivery.status_code < 300 %}badge-green{% else %}badge-red{% endif %} font-mono">
             HTTP {{ delivery.status_code }}
           </span>
         {% else %}
