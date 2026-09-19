@@ -7,6 +7,8 @@
       <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Users</span></div>
     </div>
     <div class="page-actions">
+      <a href="{% url 'accounts:user_export' %}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <a href="{% url 'accounts:user_import' %}" class="btn btn-outline"><i data-lucide="upload"></i> Bulk import</a>
       <a href="{% url 'accounts:user_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New User</a>
     </div>
   </div>
