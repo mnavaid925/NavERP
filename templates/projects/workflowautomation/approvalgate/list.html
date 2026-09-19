@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Approval Gates — Workflow & Automation — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Project Approval Gates</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <span>Approval Gates</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:approval_inbox' %}" class="btn btn-outline">
+      <i data-lucide="inbox" class="w-4 h-4 mr-1"></i> My Approvals Inbox
+    </a>
+    <a href="{% url 'projects:par_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Approval Gate
+    </a>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card">
+    <div class="stat-icon purple">
+      <i data-lucide="shield-check" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Total Gates</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange">
+      <i data-lucide="clock" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Pending Review</div>
+      <div class="text-2xl font-bold text-amber-600">{{ stats.pending }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">
+      <i data-lucide="check-circle" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Approved</div>
+      <div class="text-2xl font-bold text-green-600">{{ stats.approved }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon slate">
+      <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-muted">Escalated</div>
+      <div class="text-2xl font-bold text-red-600">{{ stats.escalated }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, title, target...">
+      </div>
+      <div class="form-group">
+        <label for="id_gate_type" class="form-label">Gate Type</label>
+        <select name="gate_type" id="id_gate_type" class="form-select">
+          <option value="">All Types</option>
+          {% for val, label in gate_type_choices %}
+          <option value="{{ val }}" {% if gate_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_status" class="form-label">Status</label>
+        <select name="status" id="id_status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+          <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:par_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h3 class="card-title">Approval Gates ({{ page_obj.paginator.count }})</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Title / Target</th>
+          <th>Project</th>
+          <th>Gate Type</th>
+          <th>Approver</th>
+          <th>Threshold</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in gates %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:par_detail' g.pk %}" class="font-medium text-brand hover:underline">
+              {{ g.number }}
+            </a>
+          </td>
+          <td>
+            <div class="font-medium text-slate-900">{{ g.title }}</div>
+            {% if g.target_label %}
+            <div class="text-xs text-muted">{{ g.target_model }}: {{ g.target_label }}</div>
+            {% else %}
+            <div class="text-xs text-muted">{{ g.target_model }} #{{ g.target_id }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'projects:prj_detail' g.project.pk %}" class="badge badge-info hover:underline">
+              {{ g.project.name|truncatechars:20 }}
+            </a>
+          </td>
+          <td>
+            <span class="badge badge-slate">{{ g.get_gate_type_display }}</span>
+          </td>
+          <td>
+            <div class="text-sm font-medium text-slate-800">
+              {{ g.approver.get_full_name|default:g.approver.username }}
+            </div>
+            {% if g.delegate_approver %}
+            <div class="text-xs text-amber-700">Delegate: {{ g.delegate_approver.get_full_name|default:g.delegate_approver.username }}</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if g.threshold_amount %}
+              <span class="font-mono text-xs font-semibold">${{ g.threshold_amount }}</span>
+              {% if g.auto_approve_threshold %}
+              <span class="text-xs text-muted block">(Auto &le; ${{ g.auto_approve_threshold }})</span>
+              {% endif %}
+            {% else %}
+              <span class="text-xs text-muted">N/A</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {{ g.status_badge }}">{{ g.get_status_display }}</span>
+          </td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:par_detail' g.pk %}" class="btn btn-icon" title="View Details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              {% if not g.is_terminal %}
+              <a href="{% url 'projects:par_edit' g.pk %}" class="btn btn-icon" title="Edit Gate">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              {% endif %}
+              <form method="post" action="{% url 'projects:par_delete' g.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete gate {{ g.number }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">
+            <div class="empty-state py-12 text-center">
+              <i data-lucide="shield-check" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+              <h4 class="text-lg font-medium text-slate-800">No Approval Gates Found</h4>
+              <p class="text-muted text-sm mt-1">Create governance gates for phase reviews, scope approvals, and budget releases.</p>
+              <div class="mt-4">
+                <a href="{% url 'projects:par_create' %}" class="btn btn-primary">
+                  <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Gate
+                </a>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">
+      Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if gate_type %}&gate_type={{ gate_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if gate_type %}&gate_type={{ gate_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
