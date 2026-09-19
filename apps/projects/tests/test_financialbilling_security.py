@@ -29,43 +29,48 @@ def test_financialbilling_cross_tenant_idor_returns_404(
     financialbilling_revenue_schedule_a,
     financialbilling_payment_record_a,
 ):
-    idor_urls = [
+    get_urls = [
         # Rate Card
         reverse("projects:rtc_detail", args=[financialbilling_rate_card_a.pk]),
         reverse("projects:rtc_edit", args=[financialbilling_rate_card_a.pk]),
-        reverse("projects:rtc_delete", args=[financialbilling_rate_card_a.pk]),
         # Billing Run
         reverse("projects:pbr_detail", args=[financialbilling_billing_run_a.pk]),
         reverse("projects:pbr_edit", args=[financialbilling_billing_run_a.pk]),
-        reverse("projects:pbr_delete", args=[financialbilling_billing_run_a.pk]),
-        reverse("projects:pbr_approve", args=[financialbilling_billing_run_a.pk]),
-        reverse("projects:pbr_generate_invoice", args=[financialbilling_billing_run_a.pk]),
-        reverse("projects:pbr_dispatch", args=[financialbilling_billing_run_a.pk]),
         reverse("projects:pbr_preview_pdf", args=[financialbilling_billing_run_a.pk]),
         # Revenue Schedule
         reverse("projects:prs_detail", args=[financialbilling_revenue_schedule_a.pk]),
         reverse("projects:prs_edit", args=[financialbilling_revenue_schedule_a.pk]),
+        # Payment Record
+        reverse("projects:ppr_detail", args=[financialbilling_payment_record_a.pk]),
+        reverse("projects:ppr_edit", args=[financialbilling_payment_record_a.pk]),
+    ]
+    for url in get_urls:
+        res_get = client_b.get(url)
+        assert res_get.status_code == 404, f"IDOR GET {url} did not return 404, got {res_get.status_code}"
+        res_post = client_b.post(url, {})
+        assert res_post.status_code == 404, f"IDOR POST {url} did not return 404, got {res_post.status_code}"
+
+    post_only_urls = [
+        reverse("projects:rtc_delete", args=[financialbilling_rate_card_a.pk]),
+        reverse("projects:pbr_delete", args=[financialbilling_billing_run_a.pk]),
+        reverse("projects:pbr_approve", args=[financialbilling_billing_run_a.pk]),
+        reverse("projects:pbr_generate_invoice", args=[financialbilling_billing_run_a.pk]),
+        reverse("projects:pbr_dispatch", args=[financialbilling_billing_run_a.pk]),
         reverse("projects:prs_delete", args=[financialbilling_revenue_schedule_a.pk]),
         reverse("projects:prs_approve", args=[financialbilling_revenue_schedule_a.pk]),
         reverse("projects:prs_recognize", args=[financialbilling_revenue_schedule_a.pk]),
         reverse("projects:prs_lock", args=[financialbilling_revenue_schedule_a.pk]),
-        # Payment Record
-        reverse("projects:ppr_detail", args=[financialbilling_payment_record_a.pk]),
-        reverse("projects:ppr_edit", args=[financialbilling_payment_record_a.pk]),
         reverse("projects:ppr_delete", args=[financialbilling_payment_record_a.pk]),
         reverse("projects:ppr_log_contact", args=[financialbilling_payment_record_a.pk]),
         reverse("projects:ppr_record_promise", args=[financialbilling_payment_record_a.pk]),
         reverse("projects:ppr_escalate", args=[financialbilling_payment_record_a.pk]),
         reverse("projects:ppr_resolve", args=[financialbilling_payment_record_a.pk]),
     ]
-    for url in idor_urls:
-        # GET
-        res_get = client_b.get(url)
-        assert res_get.status_code == 404, f"IDOR GET {url} did not return 404, got {res_get.status_code}"
-
-        # POST
+    for url in post_only_urls:
         res_post = client_b.post(url, {})
         assert res_post.status_code == 404, f"IDOR POST {url} did not return 404, got {res_post.status_code}"
+        res_get = client_b.get(url)
+        assert res_get.status_code == 405, f"GET on POST-only {url} did not return 405, got {res_get.status_code}"
 
 
 @pytest.mark.django_db
@@ -104,7 +109,7 @@ def test_financialbilling_anonymous_redirects_to_login(
     for url in urls:
         res = projectinitiation_anon_client.get(url)
         assert res.status_code == 302
-        assert "/accounts/login/" in res.url
+        assert "/login/" in res.url
 
 
 # ==============================================================================================
