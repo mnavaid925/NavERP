@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Tenant Isolation & Security{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Tenant Isolation &amp; Security</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Isolation &amp; Security</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'tenants:encryptionkey_list' %}" class="btn btn-outline"><i data-lucide="key"></i> Encryption keys</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Isolation model</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Workspace</dt><dd>{{ tenant.name }}</dd></div>
+        <div class="detail-item"><dt>Slug</dt><dd>{{ tenant.slug }}</dd></div>
+        <div class="detail-item"><dt>Custom domain</dt><dd>{% if tenant.domain %}{{ tenant.domain }}{% else %}<span class="badge badge-slate">Not provisioned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Isolation strategy</dt><dd><span class="badge badge-info">Shared schema + tenant FK</span></dd></div>
+        <div class="detail-item"><dt>Tenant resolution</dt><dd><code>core.middleware.TenantMiddleware</code> → <code>request.tenant</code></dd></div>
+        <div class="detail-item"><dt>Plan</dt><dd>{% if subscription %}{{ subscription.get_plan_display }}{% else %}—{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted">Every model carries a <code>tenant</code> foreign key and every view filters
+        <code>Model.objects.filter(tenant=request.tenant)</code> — never <code>.all()</code>. There is no
+        per-tenant database or schema: isolation is enforced by that scoping discipline, which is why the
+        cross-tenant checks live in each module's own security test lane rather than in one central place.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Encryption key posture</h2>
+      {% if active_keys %}<span class="badge badge-green">{{ active_keys }} active</span>{% else %}<span class="badge badge-amber">No active key</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if key_counts %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Status</th><th>Keys</th></tr></thead>
+            <tbody>
+              {% for status, count in key_counts.items %}
+                <tr>
+                  <td class="fw-600">{{ status|capfirst }}</td>
+                  <td>
+                    {% if status == 'active' %}<span class="badge badge-green">{{ count }}</span>
+                    {% elif status == 'rotated' %}<span class="badge badge-amber">{{ count }}</span>
+                    {% else %}<span class="badge badge-red">{{ count }}</span>{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if latest_key %}
+          <div class="form-help">Most recent key: {{ latest_key.name }} ({{ latest_key.prefix }}…) created {{ latest_key.created_at|date:"M d, Y" }}. The plaintext is shown once at creation and never stored — only the prefix and a SHA-256 hash persist.</div>
+        {% endif %}
+      {% else %}
+        <div class="empty-state"><i data-lucide="key"></i><h3>No encryption keys</h3><p>Create a key from the encryption key register.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Tenant-scoped tables</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Table</th><th>Rows for this workspace</th><th>Tenant FK</th></tr></thead>
+          <tbody>
+            {% for row in scoped_rows %}
+              <tr>
+                <td class="fw-600">{{ row.label }}</td>
+                <td>{{ row.count }}</td>
+                <td>
+                  {% if row.has_tenant_fk %}<span class="badge badge-green">Present</span>
+                  {% else %}<span class="badge badge-red">MISSING</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if unscoped_models %}
+        <p class="text-danger"><i data-lucide="alert-triangle"></i>
+          Cross-tenant leak risk: {{ unscoped_models|join:", " }} carry no tenant foreign key.</p>
+      {% else %}
+        <p class="text-ok"><i data-lucide="check"></i> Every listed table carries a tenant foreign key.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page cannot prove</h2></div>
+    <div class="card-body">
+      <p class="text-muted">It reports the posture, not a guarantee. Cross-tenant access control is exercised by
+        the per-module security test lanes (a cross-tenant detail request must 404), not by this page — a green
+        badge here means the tenant FK exists on the model, not that every view filters on it. Row-level
+        encryption at rest, a KMS/HSM-backed key store, SIEM forwarding and per-tenant physical isolation are
+        <strong>not implemented</strong>; they belong to 0.7, 0.16 and 0.17. Usage records scoped to this
+        workspace: {{ usage_count }} ({{ billed_usage_count }} billed).</p>
+    </div>
+  </div>
+
+  <a href="{% url 'dashboard:home' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to dashboard</a>
+{% endblock %}
