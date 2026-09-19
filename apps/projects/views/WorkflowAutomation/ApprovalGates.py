@@ -1,6 +1,6 @@
 """Projects 7.17 — ProjectApprovalGate views."""
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.views.decorators.http import require_POST
 
 from apps.projects.forms.WorkflowAutomation.ApprovalGates import (
@@ -36,10 +36,16 @@ def par_list(request):
     if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
-    total_count = ProjectApprovalGate.objects.filter(tenant=request.tenant).count()
-    pending_count = ProjectApprovalGate.objects.filter(tenant=request.tenant, status="pending").count()
-    approved_count = ProjectApprovalGate.objects.filter(tenant=request.tenant, status__in=["approved", "auto_approved"]).count()
-    escalated_count = ProjectApprovalGate.objects.filter(tenant=request.tenant, status="escalated").count()
+    gate_counts = ProjectApprovalGate.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        pending=Count("id", filter=Q(status="pending")),
+        approved=Count("id", filter=Q(status__in=["approved", "auto_approved"])),
+        escalated=Count("id", filter=Q(status="escalated")),
+    )
+    total_count = gate_counts["total"] or 0
+    pending_count = gate_counts["pending"] or 0
+    approved_count = gate_counts["approved"] or 0
+    escalated_count = gate_counts["escalated"] or 0
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
