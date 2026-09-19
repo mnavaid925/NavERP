@@ -10,6 +10,8 @@ from apps.accounts.models import (
     AccessReview,
     AccessReviewItem,
     ElevationGrant,
+    LoginAttempt,
+    PasswordPolicy,
     Permission,
     Role,
     User,
@@ -106,6 +108,7 @@ class Command(BaseCommand):
             # workspaces that already exist (exactly what happened to usage metering in
             # seed_tenants).
             self._seed_access_governance(tenant, admin_role, member_role)
+            self._seed_auth_security(tenant)
 
         self.stdout.write(self.style.SUCCESS("accounts seed complete."))
         self.stdout.write("Login as a TENANT ADMIN to see module data, e.g. admin_acme / password.")
@@ -211,4 +214,36 @@ class Command(BaseCommand):
                     {"email": f"pia.lindqvist@{tenant.slug}.example", "username": f"pia_{tenant.slug}",
                      "first_name": "Pia", "last_name": "Lindqvist", "role_id": None},
                 ],
+            )
+
+    def _seed_auth_security(self, tenant):
+        """0.4: a credential policy and a realistic spread of login attempts.
+
+        Deliberately does NOT seed an MfaDevice. A confirmed device on a demo account would mean
+        that account can no longer sign in through the UI without a code the seeder cannot tell the
+        user — a footgun dressed as a demo. The MFA flow is exercised by temp/smoke_02.../smoke_04
+        instead, and the enrolment path is fully reachable from the UI.
+        """
+        admin = User.objects.filter(tenant=tenant, username=f"admin_{tenant.slug}").first()
+        PasswordPolicy.objects.get_or_create(
+            tenant=tenant,
+            defaults={"is_enforced": False, "min_length": 12, "require_symbol": False,
+                      "max_age_days": 0, "prevent_reuse_count": 0},
+        )
+
+        if LoginAttempt.objects.filter(tenant=tenant).exists():
+            return
+        rows = [
+            (admin, admin.email, "203.0.113.10", "Mozilla/5.0 (Macintosh) Smoke", True, 0, []),
+            (admin, admin.email, "203.0.113.10", "Mozilla/5.0 (Macintosh) Smoke", True, 0, []),
+            (None, "nobody@nowhere.example", "198.51.100.77", "curl/8.0", False, 30, ["new_ip"]),
+            (None, "nobody@nowhere.example", "198.51.100.77", "curl/8.0", False, 70,
+             ["new_ip", "recent_failures"]),
+            (admin, admin.email, "198.51.100.99", "Mozilla/5.0 (Windows) Unknown", False, 100,
+             ["new_ip", "new_device", "recent_failures"]),
+        ]
+        for user_obj, identifier, ip, ua, ok, score, reasons in rows:
+            LoginAttempt.objects.create(
+                tenant=tenant, user=user_obj, identifier=identifier, ip=ip, user_agent=ua,
+                success=ok, risk_score=score, risk_reasons=reasons,
             )
