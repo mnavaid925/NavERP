@@ -59,6 +59,7 @@ class ProjectRateCard(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "project", "is_active"], name="rtc_tnt_prj_act_idx"),
             models.Index(fields=["tenant", "client", "is_active"], name="rtc_tnt_cli_act_idx"),
+            models.Index(fields=["tenant", "is_active"], name="rtc_tnt_act_idx"),
         ]
 
     def __str__(self):
