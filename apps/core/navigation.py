@@ -69,6 +69,29 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.6 Application Module Administration & Access Scope. The thirteen bullets are thirteen
+    # per-module access scopes, so each deep-links to the registry filtered to THAT module
+    # (`?module=<slug>`) rather than all thirteen pointing at one unfiltered page. `data_scope="all"`
+    # is the default and narrows nothing, so a row here records a decision; the matrix is what says
+    # whether it ENFORCES.
+    "0.6": {
+        "Customer Relationship Management (CRM)": "core:module_scope_list?module=customerrelationshipmanagementcrm",
+        "Accounting & Finance": "core:module_scope_list?module=accountingfinance",
+        "Human Resource Management (HRM)": "core:module_scope_list?module=humanresourcemanagementhrm",
+        "Supply Chain Management (SCM)": "core:module_scope_list?module=supplychainmanagementscm",
+        "Inventory Management System (IMS)": "core:module_scope_list?module=inventorymanagementsystemims",
+        "Production Management System": "core:module_scope_list?module=productionmanagementsystem",
+        "Project Management System": "core:module_scope_list?module=projectmanagementsystem",
+        "Sales Management System": "core:module_scope_list?module=salesmanagementsystem",
+        "eCommerce Management System": "core:module_scope_list?module=ecommercemanagementsystem",
+        "Business Intelligence (BI)": "core:module_scope_list?module=businessintelligencebi",
+        "Asset Management System": "core:module_scope_list?module=assetmanagementsystem",
+        "Quality Management System (QMS)": "core:module_scope_list?module=qualitymanagementsystemqms",
+        "Document Management System (DMS)": "core:module_scope_list?module=documentmanagementsystemdms",
+        # Extra live leaves: the computed matrix and the field-mask register.
+        "Access Matrix": "core:access_matrix",
+        "Sensitive Field Masks": "core:field_mask_list",
+    },
     # 0.4 Authentication & Single Sign-On (SSO). NOTE: "SSO & Federation" is deliberately NOT mapped.
     # SAML 2.0 / OAuth-OIDC need an IdP library and a configured identity provider; nothing is built
     # for it, so the bullet renders as the roadmap pill it actually is. Mapping it to the MFA page
