@@ -12,6 +12,8 @@ from .models import (
     PartyRelationship,
     PartyRole,
     Tenant,
+    ModuleAccessScope,
+    SensitiveFieldMask,
 )
 
 
@@ -91,3 +93,23 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_filter = ["action", "tenant"]
     search_fields = ["target"]
     readonly_fields = ["tenant", "user", "content_type", "object_id", "target", "action", "changes", "at"]
+
+
+@admin.register(ModuleAccessScope)
+class ModuleAccessScopeAdmin(admin.ModelAdmin):
+    list_display = ["module_number", "module_slug", "module_title", "is_enabled", "data_scope",
+                    "requires_approval", "mask_sensitive", "tenant"]
+    list_filter = ["is_enabled", "data_scope", "requires_approval", "tenant"]
+    search_fields = ["module_slug", "module_title"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(SensitiveFieldMask)
+class SensitiveFieldMaskAdmin(admin.ModelAdmin):
+    list_display = ["scope", "field_name", "mask_style", "tenant"]
+    list_filter = ["mask_style", "tenant"]
+    search_fields = ["field_name", "scope__module_slug"]
+    list_select_related = ["scope", "tenant"]
+    filter_horizontal = ["exempt_roles"]
+    readonly_fields = ["created_at"]
