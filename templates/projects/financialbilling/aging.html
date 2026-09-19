@@ -41,7 +41,7 @@
       <select name="project" id="id_project" class="form-select">
         <option value="">All Active Projects</option>
         {% for p in projects %}
-          <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
+          <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code|default:p.number }} — {{ p.name }}</option>
         {% endfor %}
       </select>
     </div>
