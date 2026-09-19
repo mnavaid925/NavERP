@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Consent Matrix{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Consent Matrix</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Consent Matrix</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:consent_record_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Consent events</a>
+      <a href="{% url 'core:consent_purpose_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Purposes</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Each party's EFFECTIVE state per purpose, derived from the latest event — there is no stored flag that a withdrawal could fail to update. Only parties with at least one event appear: the matrix reports consent, it does not invent a row for everyone who was never asked.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Active purposes</dt><dd>{{ purpose_count }}</dd></div>
+      <div class="detail-item"><dt>Currently granted</dt><dd>{{ granted_count }}</dd></div>
+      <div class="detail-item"><dt>Withdrawn</dt><dd>{{ withdrawn_count }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Party</th>{% for p in purposes %}<th>{{ p.name }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600">{{ row.party }}</td>
+              {% for c in row.cells %}
+                <td>
+                  {% if c.state == 'granted' %}<span class="badge badge-green">Granted</span>
+                  {% elif c.state == 'withdrawn' %}<span class="badge badge-red">Withdrawn</span>
+                  {% elif c.state == 'expired' %}<span class="badge badge-amber">Expired</span>
+                  {% else %}<span class="badge badge-slate">Never asked</span>{% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="{{ purpose_count|add:1 }}"><div class="empty-state"><i data-lucide="grid-3x3"></i><h3>No consent events recorded</h3><p>Record one to populate the matrix.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
