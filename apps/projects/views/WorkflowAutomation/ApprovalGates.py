@@ -175,6 +175,9 @@ def par_edit(request, pk):
 def par_delete(request, pk):
     """Delete an approval gate."""
     gate = get_object_or_404(ProjectApprovalGate, pk=pk, tenant=request.tenant)
+    if gate.status not in ("pending", "cancelled"):
+        messages.error(request, f"Cannot delete gate {gate.number} with decision status '{gate.status}'.")
+        return redirect("projects:par_detail", pk=gate.pk)
     number = gate.number
     title = gate.title
     gate.delete()
