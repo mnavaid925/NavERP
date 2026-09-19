@@ -77,6 +77,11 @@ def pwh_detail(request, pk):
     )
     deliveries = ProjectWebhookDelivery.objects.filter(tenant=request.tenant, webhook=webhook).order_by("-attempted_at")[:15]
 
+    revealed_secret = None
+    reveal_data = request.session.pop("_whk_secret_reveal", None)
+    if reveal_data and reveal_data.get("pk") == webhook.pk:
+        revealed_secret = reveal_data.get("secret")
+
     return render(
         request,
         "projects/workflowautomation/webhook/detail.html",
@@ -84,6 +89,7 @@ def pwh_detail(request, pk):
             "webhook": webhook,
             "deliveries": deliveries,
             "test_form": WebhookTestPingForm(),
+            "revealed_secret": revealed_secret,
         },
     )
 
@@ -96,8 +102,9 @@ def pwh_create(request):
         if form.is_valid():
             webhook = form.save(commit=False)
             webhook.tenant = request.tenant
-            webhook.generate_secret()
+            raw_secret = webhook.generate_secret()
             webhook.save()
+            request.session["_whk_secret_reveal"] = {"pk": webhook.pk, "secret": raw_secret}
             write_audit_log(
                 user=request.user,
                 obj=webhook,
@@ -258,6 +265,7 @@ def pwh_rotate_secret(request, pk):
     webhook = get_object_or_404(ProjectWebhookEndpoint, pk=pk, tenant=request.tenant)
     new_raw = webhook.generate_secret()
     webhook.save(update_fields=["secret", "updated_at"])
+    request.session["_whk_secret_reveal"] = {"pk": webhook.pk, "secret": new_raw}
 
     write_audit_log(
         user=request.user,
