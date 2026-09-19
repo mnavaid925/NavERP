@@ -80,7 +80,7 @@
                 </td>
                 <td>
                   {% if ep.project %}
-                    <a href="{% url 'projects:project_detail' ep.project.pk %}" class="text-xs text-muted hover:underline">{{ ep.project.name }}</a>
+                    <a href="{% url 'projects:prj_detail' ep.project.pk %}" class="text-xs text-muted hover:underline">{{ ep.project.name }}</a>
                   {% else %}
                     <span class="text-xs text-muted">All Projects</span>
                   {% endif %}
