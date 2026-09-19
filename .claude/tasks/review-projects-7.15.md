@@ -92,7 +92,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: Uses non-existent classes `.text-green`, `.text-amber`, `.btn-ghost`, `.form-control`, `.stats-grid`.
   - **Fix**: Replace with `.text-ok`, `.text-warn`, `.btn.btn-sm.btn-outline`, `.form-select`, `.stat-grid`.
 
-- **[ ] I9: Dark Mode Breakage & Inline Styles on Computed Boards**
+- **[x] fixed — fix(projects): clean up inline styles and dark mode variables in financial boards templates**
   - **Location**: `templates/projects/financialbilling/pnl.html`, `variance.html`, `aging.html`, `cashflow.html`
   - **Problem**: Undefined CSS variables `var(--border-color, #e2e8f0)` and `var(--bg-muted, #f8fafc)` create bright borders and white footers in dark mode.
   - **Fix**: Clean up inline styles and use design system classes (`.table-wrap`, `.table`, `.stat-grid`, `.stat-card`).
