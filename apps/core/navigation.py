@@ -69,6 +69,22 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.8 Privacy & Data Protection. Five bullets, all five mapped. NOTE what each leaf points at:
+    # the DSAR and consent registers are the workflow, the retention board is COMPUTED and destroys
+    # nothing, and the PII map is a data map a human confirms rather than a scanner's findings.
+    "0.8": {
+        "Consent & Preference Management": "core:consent_matrix",   # bullet
+        "Data Subject Rights (DSAR)": "core:dsar_list",             # bullet
+        "Retention & Disposal Policies": "core:retention_board",    # bullet
+        "PII Discovery & Classification": "core:pii_map",           # bullet
+        "Regulatory Coverage": "core:regulatory_list",              # bullet
+        # Extra live leaves: the config and evidence registers behind the boards above.
+        "Privacy Overview": "core:privacy_overview",                # extra
+        "Consent Purposes": "core:consent_purpose_list",            # extra
+        "Consent Events": "core:consent_record_list",               # extra
+        "Retention Policies": "core:retention_policy_list",         # extra
+        "Disposal Records": "core:disposal_list",                   # extra
+    },
     # 0.6 Application Module Administration & Access Scope. The thirteen bullets are thirteen
     # per-module access scopes, so each deep-links to the registry filtered to THAT module
     # (`?module=<slug>`) rather than all thirteen pointing at one unfiltered page. `data_scope="all"`
