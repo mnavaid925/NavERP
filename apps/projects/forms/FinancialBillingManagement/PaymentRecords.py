@@ -42,6 +42,10 @@ class ProjectPaymentRecordForm(TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["project", "client", "billing_run", "accounting_invoice", "assigned_collector"])
+        project = cleaned.get("project")
+        billing_run = cleaned.get("billing_run")
+        if billing_run and project and billing_run.project_id != project.pk:
+            self.add_error("billing_run", "The selected billing run does not belong to the chosen project.")
         return cleaned
 
 
