@@ -6231,10 +6231,9 @@ def _financialbilling_rate_card(tenant, **overrides):
     data = dict(
         tenant=tenant,
         name="Solutions Architect Standard Rate",
-        rate_type="role",
         role_name="Solutions Architect",
         hourly_rate=Decimal("175.00"),
-        daily_rate=Decimal("1400.00"),
+        expense_markup_pct=Decimal("10.00"),
         currency=currency,
         effective_from=_financialbilling_today() - datetime.timedelta(days=30),
         effective_to=_financialbilling_today() + datetime.timedelta(days=365),
@@ -6255,8 +6254,8 @@ def _financialbilling_billing_run(tenant, project, client, **overrides):
         project=project,
         client=client,
         billing_type="time_and_materials",
-        date_from=_financialbilling_today() - datetime.timedelta(days=30),
-        date_to=_financialbilling_today(),
+        run_date=_financialbilling_today(),
+        cutoff_date=_financialbilling_today(),
         currency=currency,
         labor_amount=Decimal("5000.00"),
         expense_amount=Decimal("500.00"),
@@ -6273,21 +6272,15 @@ def _financialbilling_billing_run(tenant, project, client, **overrides):
     return obj
 
 
-def _financialbilling_revenue_schedule(tenant, project, client, **overrides):
+def _financialbilling_revenue_schedule(tenant, project, **overrides):
     from apps.projects.models import ProjectRevenueSchedule
-    from apps.accounting.models import Currency
-    currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
     data = dict(
         tenant=tenant,
         project=project,
-        client=client,
+        recognition_date=_financialbilling_today(),
         method="percent_complete",
-        fiscal_period_name="2026-Q3",
-        currency=currency,
         contract_amount=Decimal("100000.00"),
-        percent_complete=Decimal("50.00"),
-        recognized_amount=Decimal("50000.00"),
-        deferred_amount=Decimal("50000.00"),
+        completion_percent=Decimal("50.00"),
         status="draft",
     )
     data.update(overrides)
@@ -6298,18 +6291,28 @@ def _financialbilling_revenue_schedule(tenant, project, client, **overrides):
 
 def _financialbilling_payment_record(tenant, project, client, **overrides):
     from apps.projects.models import ProjectPaymentRecord
-    from apps.accounting.models import Currency
+    from apps.accounting.models import Invoice, Currency
     currency, _ = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar", "symbol": "$"})
+    invoice = overrides.pop("accounting_invoice", None)
+    if not invoice:
+        invoice = Invoice.objects.create(
+            tenant=tenant,
+            party=client,
+            currency=currency,
+            issue_date=_financialbilling_today(),
+            due_date=_financialbilling_today() + datetime.timedelta(days=30),
+            subtotal=Decimal("10000.00"),
+            tax_total=Decimal("0.00"),
+            total=Decimal("10000.00"),
+            status="posted",
+        )
     data = dict(
         tenant=tenant,
         project=project,
         client=client,
-        currency=currency,
-        original_amount=Decimal("10000.00"),
-        amount_due=Decimal("10000.00"),
-        amount_paid=Decimal("0.00"),
+        accounting_invoice=invoice,
         stage="current",
-        dunning_level="none",
+        dunning_level="friendly_reminder",
         status="open",
     )
     data.update(overrides)
@@ -6351,13 +6354,13 @@ def financialbilling_billing_run_a(db, tenant_a, financialbilling_project_a, fin
 
 
 @pytest.fixture
-def financialbilling_revenue_schedule_a(db, tenant_a, financialbilling_project_a, financialbilling_party_a, projectinitiation_currency):
-    return _financialbilling_revenue_schedule(tenant_a, financialbilling_project_a, financialbilling_party_a, currency=projectinitiation_currency)
+def financialbilling_revenue_schedule_a(db, tenant_a, financialbilling_project_a):
+    return _financialbilling_revenue_schedule(tenant_a, financialbilling_project_a)
 
 
 @pytest.fixture
 def financialbilling_payment_record_a(db, tenant_a, financialbilling_project_a, financialbilling_party_a, projectinitiation_currency):
-    return _financialbilling_payment_record(tenant_a, financialbilling_project_a, financialbilling_party_a, currency=projectinitiation_currency)
+    return _financialbilling_payment_record(tenant_a, financialbilling_project_a, financialbilling_party_a)
 
 
 
