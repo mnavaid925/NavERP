@@ -22,7 +22,7 @@
 </div>
 
 <!-- Navigation Tabs -->
-<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:1.5rem; padding-bottom:0.5rem;">
+<div class="tab-nav" style="display:flex; gap:0.5rem; border-bottom:1px solid var(--border); margin-bottom:1.5rem; padding-bottom:0.5rem;">
   <a href="{% url 'projects:rtc_list' %}" class="btn btn-sm btn-outline">Rate Cards</a>
   <a href="{% url 'projects:pbr_list' %}" class="btn btn-sm btn-outline">Billing Runs</a>
   <a href="{% url 'projects:prs_list' %}" class="btn btn-sm btn-outline">Revenue Schedules</a>
@@ -38,7 +38,7 @@
   <form method="get" class="filter-form" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:1rem;">
     <div style="flex:1; min-width:240px;">
       <label for="id_project" style="font-size:0.85rem; font-weight:600; margin-bottom:0.25rem; display:block;">Filter by Project</label>
-      <select name="project" id="id_project" class="form-select" style="width:100%; padding:0.5rem; border:1px solid var(--border-color, #cbd5e1); border-radius:4px;">
+      <select name="project" id="id_project" class="form-select">
         <option value="">All Active Projects</option>
         {% for p in projects %}
           <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>
@@ -90,62 +90,62 @@
 
 <!-- Detailed EVM Variance Table -->
 <div class="card">
-  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem; border-bottom:1px solid var(--border-color, #e2e8f0);">
-    <h2 class="card-title" style="font-size:1.1rem; font-weight:600; margin:0;"><i data-lucide="activity"></i> Control Account EVM Breakdown</h2>
+  <div class="card-header">
+    <h2 class="card-title"><i data-lucide="activity"></i> Control Account EVM Breakdown</h2>
     <span class="badge badge-info">{{ variance_rows|length }} Control Accounts</span>
   </div>
-  <div class="table-wrap" style="overflow-x:auto;">
-    <table class="table" style="width:100%; border-collapse:collapse;">
+  <div class="table-wrap">
+    <table class="table">
       <thead>
-        <tr style="border-bottom:2px solid var(--border-color, #cbd5e1); text-align:left;">
-          <th style="padding:0.75rem;">Control Account</th>
-          <th style="padding:0.75rem;">Project</th>
-          <th style="padding:0.75rem; text-align:right;">BAC</th>
-          <th style="padding:0.75rem; text-align:right;">PV</th>
-          <th style="padding:0.75rem; text-align:right;">EV</th>
-          <th style="padding:0.75rem; text-align:right;">AC</th>
-          <th style="padding:0.75rem; text-align:right;">Cost Var (CV)</th>
-          <th style="padding:0.75rem; text-align:right;">Sched Var (SV)</th>
-          <th style="padding:0.75rem; text-align:center;">CPI</th>
-          <th style="padding:0.75rem; text-align:center;">SPI</th>
-          <th style="padding:0.75rem; text-align:right;">EAC</th>
-          <th style="padding:0.75rem; text-align:center;">Health</th>
+        <tr>
+          <th>Control Account</th>
+          <th>Project</th>
+          <th style="text-align:right;">BAC</th>
+          <th style="text-align:right;">PV</th>
+          <th style="text-align:right;">EV</th>
+          <th style="text-align:right;">AC</th>
+          <th style="text-align:right;">Cost Var (CV)</th>
+          <th style="text-align:right;">Sched Var (SV)</th>
+          <th style="text-align:center;">CPI</th>
+          <th style="text-align:center;">SPI</th>
+          <th style="text-align:right;">EAC</th>
+          <th style="text-align:center;">Health</th>
         </tr>
       </thead>
       <tbody>
         {% for row in variance_rows %}
-          <tr style="border-bottom:1px solid var(--border-color, #e2e8f0);">
-            <td style="padding:0.75rem;">
-              <span style="font-weight:600;">{{ row.code }}</span>
+          <tr>
+            <td>
+              <span class="fw-600">{{ row.code }}</span>
               <div class="text-muted" style="font-size:0.75rem;">{{ row.name }}</div>
             </td>
-            <td style="padding:0.75rem;">
-              <a href="{% url 'projects:prj_detail' row.project.pk %}" style="font-weight:600; text-decoration:none; color:var(--primary, #2563eb);">
+            <td>
+              <a href="{% url 'projects:prj_detail' row.project.pk %}" class="fw-600 text-brand">
                 {{ row.project.name }}
               </a>
             </td>
-            <td style="padding:0.75rem; text-align:right;">${{ row.bac }}</td>
-            <td style="padding:0.75rem; text-align:right;">${{ row.pv }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-ok">${{ row.ev }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="text-red">${{ row.ac }}</td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.cv >= 0 %}text-ok{% else %}text-red{% endif %}">
+            <td style="text-align:right;">${{ row.bac }}</td>
+            <td style="text-align:right;">${{ row.pv }}</td>
+            <td style="text-align:right; font-weight:600;" class="text-ok">${{ row.ev }}</td>
+            <td style="text-align:right; font-weight:600;" class="text-red">${{ row.ac }}</td>
+            <td style="text-align:right; font-weight:600;" class="{% if row.cv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ row.cv }}
             </td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;" class="{% if row.sv >= 0 %}text-ok{% else %}text-red{% endif %}">
+            <td style="text-align:right; font-weight:600;" class="{% if row.sv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ row.sv }}
             </td>
-            <td style="padding:0.75rem; text-align:center;">
+            <td style="text-align:center;">
               <span class="badge {% if row.cpi >= 1.0 %}badge-green{% elif row.cpi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
                 {{ row.cpi }}
               </span>
             </td>
-            <td style="padding:0.75rem; text-align:center;">
+            <td style="text-align:center;">
               <span class="badge {% if row.spi >= 1.0 %}badge-green{% elif row.spi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
                 {{ row.spi }}
               </span>
             </td>
-            <td style="padding:0.75rem; text-align:right; font-weight:600;">${{ row.eac }}</td>
-            <td style="padding:0.75rem; text-align:center;">
+            <td style="text-align:right; font-weight:600;">${{ row.eac }}</td>
+            <td style="text-align:center;">
               {% if row.health == 'on_track' %}
                 <span class="badge badge-green">On Track</span>
               {% elif row.health == 'warning' %}
@@ -159,7 +159,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="12" style="padding:2rem; text-align:center;" class="text-muted">
+            <td colspan="12" class="empty-state">
               <i data-lucide="info" style="width:32px; height:32px; margin-bottom:0.5rem;"></i>
               <p>No Cost Control Accounts found matching the selected project criteria.</p>
             </td>
@@ -167,31 +167,31 @@
         {% endfor %}
       </tbody>
       {% if variance_rows %}
-        <tfoot style="background-color:var(--bg-muted, #f8fafc); font-weight:700; border-top:2px solid var(--border-color, #cbd5e1);">
+        <tfoot style="background:var(--page-bg); font-weight:700; border-top:2px solid var(--border);">
           <tr>
-            <td colspan="2" style="padding:0.75rem;">Portfolio EVM Totals</td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.bac }}</td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.pv }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="text-ok">${{ totals.ev }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="text-red">${{ totals.ac }}</td>
-            <td style="padding:0.75rem; text-align:right;" class="{% if totals.cv >= 0 %}text-ok{% else %}text-red{% endif %}">
+            <td colspan="2">Portfolio EVM Totals</td>
+            <td style="text-align:right;">${{ totals.bac }}</td>
+            <td style="text-align:right;">${{ totals.pv }}</td>
+            <td style="text-align:right;" class="text-ok">${{ totals.ev }}</td>
+            <td style="text-align:right;" class="text-red">${{ totals.ac }}</td>
+            <td style="text-align:right;" class="{% if totals.cv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ totals.cv }}
             </td>
-            <td style="padding:0.75rem; text-align:right;" class="{% if totals.sv >= 0 %}text-ok{% else %}text-red{% endif %}">
+            <td style="text-align:right;" class="{% if totals.sv >= 0 %}text-ok{% else %}text-red{% endif %}">
               ${{ totals.sv }}
             </td>
-            <td style="padding:0.75rem; text-align:center;">
+            <td style="text-align:center;">
               <span class="badge {% if totals.cpi >= 1.0 %}badge-green{% elif totals.cpi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
                 {{ totals.cpi }}
               </span>
             </td>
-            <td style="padding:0.75rem; text-align:center;">
+            <td style="text-align:center;">
               <span class="badge {% if totals.spi >= 1.0 %}badge-green{% elif totals.spi >= 0.85 %}badge-amber{% else %}badge-red{% endif %}">
                 {{ totals.spi }}
               </span>
             </td>
-            <td style="padding:0.75rem; text-align:right;">${{ totals.eac }}</td>
-            <td style="padding:0.75rem; text-align:center;">—</td>
+            <td style="text-align:right;">${{ totals.eac }}</td>
+            <td style="text-align:center;">—</td>
           </tr>
         </tfoot>
       {% endif %}
