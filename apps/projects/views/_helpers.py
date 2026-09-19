@@ -273,9 +273,9 @@ def csv_response(filename, columns, rows):
 
 
 #: The canvas id on a one-chart page: its canvas element is ``wchart`` plus this id, the same shape a
-#: board uses with real widget pks. A canned page, a saved report and a frozen run each show one chart,
-#: so the id is a constant rather than a per-row value — and it is ONE constant, because those three
-#: pages share ``_result_chart.html``.
+#: board uses with real widget pks. A canned page and a saved report each show one chart, so the id is
+#: a constant rather than a per-row value — and it is ONE constant, because those two pages share
+#: ``_result_chart.html``. A frozen run is the exception: it passes its own pk (see ``chart_config``).
 SINGLE_CHART_ID = 0
 
 #: The areas with a ``_standard_section_<area>.html`` partial on disk. A registry row naming any other
@@ -283,15 +283,22 @@ SINGLE_CHART_ID = 0
 SECTION_AREAS = ("schedule", "cost", "risk", "quality", "resource", "scope", "agile", "trend")
 
 
-def chart_config(chart_type, labels, data):
+def chart_config(chart_type, labels, data, *, chart_id=SINGLE_CHART_ID):
     """The one-entry canvas payload, or no entry at all.
 
     An HTML chart kind (kpi, gauge, table, heat) renders markup and gets no canvas — a blank canvas
     still answers 200, which is the failure nobody notices. No labels is nothing to plot.
+
+    ``chart_id`` is the number the canvas element carries (``wchart<id>``), not a selector for this
+    rule. A canned page and a saved report have no row of their own to name, so they keep
+    ``SINGLE_CHART_ID``; a frozen run is the exception B2.3 pins — its canvas is
+    ``wchart{{ obj.pk }}``, so that page passes the run pk and still gets the canvas-vs-markup
+    decision from here. The parameter exists so that one difference is the ONLY thing a caller can
+    vary; a page that rebuilt the entry to change an id would also own a copy of this rule.
     """
     if chart_type not in CANVAS_CHARTS or not labels:
         return []
-    return [{"id": SINGLE_CHART_ID, "type": chart_type, "labels": labels, "data": data}]
+    return [{"id": chart_id, "type": chart_type, "labels": labels, "data": data}]
 
 
 def chart_rows(labels, data):
