@@ -49,6 +49,13 @@ class ProjectBillingRunForm(TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["project", "client", "sow", "milestone", "tax_code"])
+        project = cleaned.get("project")
+        sow = cleaned.get("sow")
+        milestone = cleaned.get("milestone")
+        if sow and project and sow.project_id != project.pk:
+            self.add_error("sow", "The selected statement of work does not belong to the chosen project.")
+        if milestone and project and milestone.project_id != project.pk:
+            self.add_error("milestone", "The selected milestone does not belong to the chosen project.")
         return cleaned
 
 
