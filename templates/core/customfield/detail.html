@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.label }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.label }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:custom_field_list' %}">Custom Fields</a><span class="sep">›</span><span>{{ obj.field_key }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:custom_field_value_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add value</a>
+      <a href="{% url 'core:custom_field_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit definition</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Entity</dt><dd>{{ obj.entity_label }}</dd></div>
+      <div class="detail-item"><dt>Module</dt><dd>{{ obj.module_slug }}</dd></div>
+      <div class="detail-item"><dt>Field key</dt><dd><code>{{ obj.field_key }}</code></dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_field_type_display }}</dd></div>
+      <div class="detail-item"><dt>Required</dt><dd>{% if obj.is_required %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Choices</dt><dd>{% for c in obj.choices %}<span class="badge badge-slate">{{ c }}</span> {% empty %}—{% endfor %}</dd></div>
+      <div class="detail-item"><dt>Validation</dt><dd>{% if obj.validation_regex %}<code>{{ obj.validation_regex }}</code>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Display order</dt><dd>{{ obj.display_order }}</dd></div>
+    </dl>
+    {% if obj.help_text %}<p class="text-muted">{{ obj.help_text }}</p>{% endif %}
+    <p class="text-muted">Values are keyed by <code>(entity, object id)</code> with <strong>no foreign key</strong> — a generic value table cannot reference a table unknown at
+      migration time, so a deleted parent leaves an orphan value behind. The link is by convention, and the page says so rather than implying enforcement.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Values</h2><span class="badge badge-info">{{ values|length }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Object</th><th>Value</th><th>Updated</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for v in values %}
+            <tr>
+              <td class="fw-600">{{ v.entity_label }} #{{ v.object_id }}</td>
+              <td>{{ v.value }}</td>
+              <td>{{ v.updated_at|date:"M d, Y H:i" }}{% if v.updated_by %} · {{ v.updated_by }}{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <form method="post" action="{% url 'core:custom_field_value_delete' v.pk %}" onsubmit="return confirm('Delete this value?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="form-input"></i><h3>No values stored</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'core:custom_field_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
