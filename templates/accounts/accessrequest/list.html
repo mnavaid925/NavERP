@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Access Requests{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Access Requests</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Access Requests</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounts:access_request_mine' %}" class="btn btn-outline"><i data-lucide="user"></i> My requests</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by requester or justification…">
+        </div>
+        <div class="form-group">
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'accounts:access_request_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requester</th><th>Requested role</th><th>Days</th><th>Status</th><th>Grant until</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'accounts:access_request_detail' obj.pk %}" class="fw-600">{{ obj.requester }}</a></td>
+              <td>{% if obj.requested_role %}{{ obj.requested_role }}{% else %}—{% endif %}</td>
+              <td>{{ obj.requested_days }}</td>
+              <td>
+                {% if obj.is_active %}<span class="badge badge-green">Active</span>
+                {% elif obj.is_expired %}<span class="badge badge-amber">Expired</span>
+                {% elif obj.status == 'pending' %}<span class="badge badge-info">Pending</span>
+                {% elif obj.status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td>{% if obj.granted_until %}{{ obj.granted_until|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'accounts:access_request_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="key-round"></i><h3>No access requests</h3><p>Members can raise one from My requests.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
