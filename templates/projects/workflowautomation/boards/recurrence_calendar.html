@@ -42,7 +42,7 @@
   </div>
   <div class="card-body p-0">
     {% if upcoming_schedules %}
-      <div class="table-responsive">
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -87,16 +87,16 @@
                 </td>
                 <td class="text-right">
                   <div class="flex items-center justify-end gap-2">
-                    <a href="{% url 'projects:rts_detail' s.pk %}" class="btn btn-xs btn-outline">Details</a>
+                    <a href="{% url 'projects:rts_detail' s.pk %}" class="btn btn-sm btn-outline">Details</a>
                     <form method="post" action="{% url 'projects:rts_generate_task' s.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-outline" title="Generate task instance now">
+                      <button type="submit" class="btn btn-sm btn-outline" title="Generate task instance now">
                         Run Now
                       </button>
                     </form>
                     <form method="post" action="{% url 'projects:rts_skip_next' s.pk %}" class="inline">
                       {% csrf_token %}
-                      <button type="submit" class="btn btn-xs btn-outline text-amber-600" title="Skip next scheduled run" onclick="return confirm('Skip next run date for {{ s.number }}?');">
+                      <button type="submit" class="btn btn-sm btn-outline text-amber-600" title="Skip next scheduled run" onclick="return confirm('Skip next run date for {{ s.number }}?');">
                         Skip
                       </button>
                     </form>
