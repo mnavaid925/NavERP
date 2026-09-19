@@ -2,7 +2,7 @@
 import time
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.views.decorators.http import require_POST
 
 from apps.projects.forms.WorkflowAutomation.WorkflowRules import (
@@ -40,8 +40,12 @@ def pwf_list(request):
     if project_id and project_id.isdigit():
         qs = qs.filter(project_id=project_id)
 
-    total_count = ProjectWorkflowRule.objects.filter(tenant=request.tenant).count()
-    active_count = ProjectWorkflowRule.objects.filter(tenant=request.tenant, is_active=True).count()
+    rule_counts = ProjectWorkflowRule.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    total_count = rule_counts["total"] or 0
+    active_count = rule_counts["active"] or 0
     today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     executions_today = WorkflowExecutionLog.objects.filter(tenant=request.tenant, fired_at__gte=today_start).count()
 
