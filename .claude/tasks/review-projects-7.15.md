@@ -105,7 +105,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
   - **Problem**: Missing `{% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}`.
   - **Fix**: Add standard fallback branch.
 
-- **[ ] I11: Missing `min_value` on `PaymentPromiseForm` & Missing `assigned_collector` in `_reject_foreign`**
+- **[x] fixed — fix(projects): add min_value to PaymentPromiseForm and assigned_collector to _reject_foreign**
   - **Location**: `apps/projects/forms/FinancialBillingManagement/PaymentRecords.py:40-60`
   - **Problem**: `promised_amount` missing `min_value=Decimal("0.00")`; `assigned_collector` missing in `_reject_foreign`.
   - **Fix**: Add `min_value=Decimal("0.00")` and add `"assigned_collector"` to `_reject_foreign`.
