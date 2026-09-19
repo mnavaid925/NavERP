@@ -820,8 +820,8 @@ class Meta:
 | omitted | reason |
 |---|---|
 | `tenant` / `number` | as A2.1 (`PDB-` auto-number) |
-| `owner` | `request.user` on create; `null` is reserved for a seeder-authored tenant template, which is not something a UI form may create |
-| `is_default` | made True only through the `pdb_home`/set-default verb, so "which one is my home" is an explicit act and two rows can never both be the default because two edit forms were saved |
+| `owner` | `request.user` on create, stamped by the form's own `save()` (D59) — `crud_create` builds the form from a bare class, so the view passes it via `partial(ProjectDashboardForm, user=request.user)`. `null` is reserved for a seeder-authored tenant template, which is not something a UI form may create |
+| `is_default` | **unreachable from the UI** (D58): A3's tail names a "`pdb_home`/set-default verb" but B1 rows 22-27 pin no such route, so the flag stays seeder-authored. The consequence A2.3 wants holds for a stronger reason than the verb — no form field, no POST and no `crud_*` `extra_fields` can write it, so two edit forms saved one after the other can never produce two homes for one owner |
 | `created_at` / `updated_at` | auto |
 
 `audience`, `default_range`, `layout` are `forms.Select`; `project`/`portfolio` are tenant-narrowed in
@@ -1491,7 +1491,7 @@ parent-number + pk — system-assigned parts only). Audit `action="export"`, `ch
 
 ### B2.4 `views/ReportingBusinessIntelligence/ProjectDashboards.py`
 
-#### `pdb_home` — hand-written, `render(request, "projects/reporting/dashboard_home.html", ctx)`
+#### `pdb_home` — hand-written, `render(request, "projects/reporting/dashboard/home.html", ctx)` (D21)
 
 | key | type | source | consumed by |
 |---|---|---|---|
@@ -1542,13 +1542,18 @@ parent-number + pk — system-assigned parts only). Audit `action="export"`, `ch
 partial.
 
 #### `pdb_create` / `pdb_edit`
-`pdb_create` = `crud_create(form_class=ProjectDashboardForm,
+`pdb_create` = `crud_create(form_class=partial(ProjectDashboardForm, user=request.user)` (D59 — the helper
+instantiates the class it is handed with no user to pass, so the partial is the only way `save()` can stamp the
+owner),
 template="projects/reporting/dashboard/form.html", success_url="projects:pdb_list", extra_context=…)` ⇒
 `form`, `is_edit=False` + `audience_choices`, `layout_choices`, `range_choices` (= `PRESET_RANGES`).
 `pdb_edit` = `crud_edit(model=ProjectDashboard, …, template="projects/reporting/dashboard/form.html",
-success_url="projects:pdb_detail")` ⇒ `form`, `obj`, `is_edit=True` + the same three. **Both fetch through
+success_url=reverse("projects:pdb_detail", args=[pk]))` — **pre-resolved**, because `crud_edit` calls bare
+`redirect(success_url)` (verified `apps/core/crud.py:221`) and `pdb_detail` takes a pk, so the bare name raises
+`NoReverseMatch` on the one path that must work: a valid save (`tsk_execute` is the in-app precedent).
+⇒ `form`, `obj`, `is_edit=True` + the same three. **Both fetch through
 `visible_dashboards(request)` first** (R7, same guard pattern as `rep_edit`). `is_default` / `owner` are not on
-either form (A2.3), so no context key offers them.
+either form (A2.3, D58), so no context key offers them.
 
 #### `pdb_delete` — `@login_required @require_POST`
 Guard-fetch by `visible_dashboards(request)`, then `crud_delete(model=ProjectDashboard, pk=pk,
@@ -2288,6 +2293,9 @@ because a filter excludes exactly the 7.15 / 6.14 / crm tests a shared-file chan
 | **D55** | B3.4: the payload is "**nine** JSON-safe keys"; B2.2: `data=<the other eight>` | the engine returns **16**, so a frozen run's `data` holds **15** | `chart_dataset_label`, `group_count`, `window`, `subject`, `measures`, `dimensions` and `sort_by` were added while B3 was being built. `rep_freeze` stores "every key except `summary`" rather than a named eight, so the payload can grow without a stored key silently vanishing; verified `sorted(run.data) == sorted(compute_report(report)) - {"summary"}` |
 | **D56** | B2.3's `run_detail` row pinned the "earlier runs" strip as `ProjectReportRun.objects.filter(tenant=request.tenant, report=report)` | **`analytics.visible_runs(request).filter(report=report).exclude(pk=obj.pk)[:5]`** | R7 makes `visible_runs` the ONE fetch shape for a run in this sub-module, and the literal was the only read in the whole module that bypassed it. The two agree for every row this caller may open (a run inherits its parent question's privacy; it has no `is_shared` of its own, A1.1), so the literal bought nothing except the chance a later edit re-widens it. Behaviour verified identical on the private-report fixture |
 | **D57** | B2.3: invalid → `messages.error(…, " · ".join(form.errors["narrative"]))` / `["document"]` | kept **as written**, but on a different basis than "the form's `clean()` is the only failure home" | `form.errors` is a plain `dict` subclass with no `__missing__`, so an absent key is a `KeyError` → a 500 on a POST-only verb. What actually closes that: neither form can produce a `__all__` entry, because `ProjectReportRun` has no `unique_together`, no `CheckConstraint` and its `clean()` keys every message on a field name. (A builder's cited mechanism was wrong: `ModelForm._update_errors`'s `else: continue` at `django/forms/models.py:462` only skips the message-overwrite — `add_error(None, errors)` on line 472 still adds the entry, and `BaseForm.add_error` **raises `ValueError`** for a key the form lacks. So a model error on a field neither form renders is a 500 too, just a different one.) The one live form of that is `ProjectReportRun.clean()`'s window rules — unreachable for any row `rep_freeze` mints, since the parent report's own `clean()` bounds the window at 730 days and `all` stores `None`/`None`, which the rule skips |
+| **D58** | A2.3's omitted-field table: `is_default` "made True only through the `pdb_home`/set-default verb" | **no such route exists** (B1 rows 22-27: home, list, add, detail, edit, delete) and none is added. `is_default` is seeder-authored, which is also what makes `is_default` uniqueness (A1.5's `clean()`) unreachable from the UI | The contract's own Part B is the authority on routes, and adding a seventh dashboard verb to satisfy a Part A phrasing would (a) write a row that changes what another user's home is, and (b) need an ACL rule the register has no precedent for. The property A2.3 is protecting — "two edit forms saved one after the other can never leave two home dashboards" — is delivered more strongly: no form field, no POST body and no `extra_fields` path reaches the column at all. Verified: a valid `pdb_edit` POST carrying `is_default=on` renames the board and leaves the flag alone |
+| **D59** | A2.3: `owner` = "`request.user` on create" | `ProjectDashboardForm.save()` stamps it **only on a create** (`self.instance.pk is None`), and `pdb_create` reaches it with `partial(ProjectDashboardForm, user=request.user)` (D54's mechanism) | D54's condition — "only when unset" — would be wrong here, and the two models differ in exactly the way that makes it wrong. `ProjectReport.owner=None` is never a state worth keeping (it only hides the row from its author, which is why D54 could treat it as an accident). `ProjectDashboard.owner=None` **is** a state: A2.3 reserves it for a seeder-authored tenant template that the whole workspace lands on. An "unset ⇒ stamp" edit would therefore hand that shared board to whoever pressed Save and silently turn every colleague's home into somebody's private board. `pk is None` keys on the operation, not on the data, so the template survives its own first edit. Asserted both ways: create stamps `owner=<creator>`; an edit of an `owner=None` board renames it and leaves `owner=None` |
+| **D60** | B2.4's `other_dashboards` / `pdb_list` rows pin `annotate(annotation_count=Count("widgets"))` with no `order_by`; B2.2's `rbi_home` strip is `[:6]` of the same annotated query | all three pass **`_helpers.DASHBOARD_ORDER`** explicitly: `("*", *ProjectDashboard._meta.ordering, "id")` = `("-is_default", "name", "id")` | An annotation that groups makes the SELECT a `GROUP BY`, and Django deliberately drops `Meta.ordering` for a grouped query unless `values()`/`annotate()` is followed by an explicit `order_by` — so an un-ordered grouped read paginates and slices on whatever order the engine happened to pick (L9, the same class as the pinned `?page=` bug). The visible symptom is not a wrong row on page 1, it is a row appearing on two pages or on none. It is a constant rather than a literal because the bug returns the moment a fourth grouped read forgets it, and `_helpers.py` is where a name shared by more than one sub-module lives (Backend rule 5). `id` is appended as the tiebreaker the model's own ordering lacks: `-is_default, name` is not unique, and a non-deterministic tail order is what makes a paginated list lie |
 
 **Part B's answer to Part A's open questions (A3's tail):** every url name (B1), every view function name
 (B1/B2), every context key (B2), every template path (B4) and the seeder's row counts (B5.0: **2 dashboards,
