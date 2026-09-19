@@ -99,11 +99,11 @@ def pwh_create(request):
             webhook.generate_secret()
             webhook.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                webhook,
-                f"Created webhook endpoint {webhook.number}: {webhook.name}",
+                user=request.user,
+                obj=webhook,
+                action="create",
+                changes={"description": f"Created webhook endpoint {webhook.number}: {webhook.name}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Webhook endpoint {webhook.number} created with generated HMAC secret.")
             return redirect("projects:pwh_detail", pk=webhook.pk)
@@ -136,11 +136,11 @@ def pwh_edit(request, pk):
         if form.is_valid():
             webhook = form.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                webhook,
-                f"Updated webhook endpoint {webhook.number}: {webhook.name}",
+                user=request.user,
+                obj=webhook,
+                action="update",
+                changes={"description": f"Updated webhook endpoint {webhook.number}: {webhook.name}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Webhook endpoint {webhook.number} updated successfully.")
             return redirect("projects:pwh_detail", pk=webhook.pk)
@@ -167,11 +167,11 @@ def pwh_delete(request, pk):
     name = webhook.name
     webhook.delete()
     write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        None,
-        f"Deleted webhook endpoint {number}: {name}",
+        user=request.user,
+        obj=None,
+        action="delete",
+        changes={"description": f"Deleted webhook endpoint {number}: {name}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Webhook endpoint {number} deleted successfully.")
     return redirect("projects:pwh_list")
@@ -186,11 +186,11 @@ def pwh_toggle_active(request, pk):
     webhook.save(update_fields=["is_active", "updated_at"])
     state = "activated" if webhook.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
-        request.user,
-        "toggle",
-        webhook,
-        f"{state.capitalize()} webhook endpoint {webhook.number}",
+        user=request.user,
+        obj=webhook,
+        action="toggle",
+        changes={"description": f"{state.capitalize()} webhook endpoint {webhook.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Webhook endpoint {webhook.number} {state}.")
     return redirect("projects:pwh_detail", pk=webhook.pk)
@@ -241,11 +241,11 @@ def pwh_test_ping(request, pk):
     webhook.save(update_fields=["last_status_code", "last_fired_at", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "ping",
-        webhook,
-        f"Test ping dispatched for {webhook.number} (Delivery #{delivery.pk})",
+        user=request.user,
+        obj=webhook,
+        action="ping",
+        changes={"description": f"Test ping dispatched for {webhook.number} (Delivery #{delivery.pk})"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Simulated ping dispatched to {webhook.target_url} (Signature: {sig[:12]}...).")
     return redirect("projects:pwh_detail", pk=webhook.pk)
@@ -260,11 +260,11 @@ def pwh_rotate_secret(request, pk):
     webhook.save(update_fields=["secret", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "rotate",
-        webhook,
-        f"Rotated HMAC secret for webhook {webhook.number}",
+        user=request.user,
+        obj=webhook,
+        action="rotate",
+        changes={"description": f"Rotated HMAC secret for webhook {webhook.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"HMAC secret rotated successfully for {webhook.number}. Please update your receiver.")
     return redirect("projects:pwh_detail", pk=webhook.pk)
