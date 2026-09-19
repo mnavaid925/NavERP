@@ -69,6 +69,22 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.10 System Configuration & Settings. Five bullets, all five mapped. Two of them point at a
+    # COMPUTED board rather than a register on purpose: the numbering board reconciles configured
+    # prefixes against the ones models actually mint, and the calendar board owns the WORKING week
+    # while pointing at accounting.FiscalPeriod for periods (L36 — periods are not re-declared here).
+    "0.10": {
+        "Global & Tenant Settings": "core:settings_overview",      # bullet
+        "Feature Flags & Toggles": "core:feature_flag_list",       # bullet
+        "Numbering & Sequence Management": "core:numbering_board",  # bullet
+        "Business Calendar & Fiscal Periods": "core:calendar_board",  # bullet
+        "Custom Fields & Form Builder": "core:custom_field_list",  # bullet
+        # Extra live leaves: the config hub and the registers behind the boards.
+        "Configuration Overview": "core:config_overview",          # extra
+        "Setting Definitions": "core:setting_definition_list",     # extra
+        "Numbering Schemes": "core:numbering_scheme_list",         # extra
+        "Holidays": "core:holiday_list",                           # extra
+    },
     # 0.8 Privacy & Data Protection. Five bullets, all five mapped. NOTE what each leaf points at:
     # the DSAR and consent registers are the workflow, the retention board is COMPUTED and destroys
     # nothing, and the PII map is a data map a human confirms rather than a scanner's findings.
