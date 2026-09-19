@@ -1832,7 +1832,7 @@ LIVE_LINKS = {
         "Priority & Urgency Scoring":            "projects:task_priority",
         "Kanban & Scrum Boards":                 "projects:task_board",
         "Gantt Charts & Timeline Views":         "projects:gantt_timeline",
-        "Task Dependencies & Blocking":          "projects:dependencies",
+        "Task Dependencies & Blocking":          "projects:dep_list",
         # Extra live leaf: the per-task tick items are 7.8's own second register.
         "Task Checklist Register":               "projects:tcl_list",
     },
