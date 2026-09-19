@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Access Matrix{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Access Matrix</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Access Matrix</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:module_scope_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Configure scopes</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Every NavERP module against this workspace's policy. The three columns are kept separate on
+      purpose, because conflating them is how a policy that does nothing gets mistaken for protection.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Modules in the catalog</dt><dd>{{ module_count }}</dd></div>
+      <div class="detail-item"><dt>Built (has live sub-modules)</dt><dd>{{ built_count }}</dd></div>
+      <div class="detail-item"><dt>Scope rows configured</dt><dd>{{ configured_count }}</dd></div>
+      <div class="detail-item"><dt>Actually enforcing</dt><dd>{{ enforcing_count }}</dd></div>
+      <div class="detail-item"><dt>Field masks</dt><dd>{{ mask_total }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Module</th><th>Built</th><th>Scope row</th><th>Data scope</th><th>Enforcing</th><th>Masks</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.num }}</td>
+              <td class="fw-600">{{ row.title }}</td>
+              <td>{% if row.live_count %}<span class="badge badge-green">{{ row.live_count }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</td>
+              <td>{% if row.scope %}<a href="{% url 'core:module_scope_detail' row.scope.pk %}">configured</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.scope %}{{ row.scope.get_data_scope_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.enforcing %}<span class="badge badge-amber">Yes</span>
+                {% elif row.scope %}<span class="badge badge-slate">No</span>
+                {% else %}<span class="badge badge-slate">Unconfigured</span>{% endif %}
+              </td>
+              <td>{{ row.mask_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How to read this</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><strong>Scope row</strong> means a policy is recorded. <strong>Enforcing</strong> means that policy
+        would actually narrow what a member sees — it requires the scope to be enabled AND the data scope to be something other
+        than "All records". A row that is configured but not enforcing is a recorded decision, not a restriction.
+        Enforcement happens where a module's list view opts in; it is <strong>not</strong> retrofitted across the ~150 existing
+        sub-modules, so a module with no opt-in shows here as configured-but-inert even at a narrower scope.</p>
+    </div>
+  </div>
+{% endblock %}
