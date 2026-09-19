@@ -109,11 +109,11 @@ def par_create(request):
 
             gate.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                gate,
-                f"Created approval gate {gate.number}: {gate.title} ({gate.status})",
+                user=request.user,
+                obj=gate,
+                action="create",
+                changes={"description": f"Created approval gate {gate.number}: {gate.title} ({gate.status})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Approval gate {gate.number} created successfully.")
             return redirect("projects:par_detail", pk=gate.pk)
@@ -148,11 +148,11 @@ def par_edit(request, pk):
         if form.is_valid():
             gate = form.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                gate,
-                f"Updated approval gate {gate.number}: {gate.title}",
+                user=request.user,
+                obj=gate,
+                action="update",
+                changes={"description": f"Updated approval gate {gate.number}: {gate.title}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Approval gate {gate.number} updated successfully.")
             return redirect("projects:par_detail", pk=gate.pk)
@@ -179,11 +179,11 @@ def par_delete(request, pk):
     title = gate.title
     gate.delete()
     write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        None,
-        f"Deleted approval gate {number}: {title}",
+        user=request.user,
+        obj=None,
+        action="delete",
+        changes={"description": f"Deleted approval gate {number}: {title}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Approval gate {number} deleted successfully.")
     return redirect("projects:par_list")
@@ -206,11 +206,11 @@ def par_approve(request, pk):
     gate.save(update_fields=["status", "decided_at", "decision_notes", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "approve",
-        gate,
-        f"Approved gate {gate.number}: {notes or 'No notes'}",
+        user=request.user,
+        obj=gate,
+        action="approve",
+        changes={"description": f"Approved gate {gate.number}: {notes or 'No notes'}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Approval gate {gate.number} has been approved.")
     return redirect("projects:par_detail", pk=gate.pk)
@@ -232,11 +232,11 @@ def par_reject(request, pk):
     gate.save(update_fields=["status", "decided_at", "decision_notes", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "reject",
-        gate,
-        f"Rejected gate {gate.number}: {notes or 'No notes'}",
+        user=request.user,
+        obj=gate,
+        action="reject",
+        changes={"description": f"Rejected gate {gate.number}: {notes or 'No notes'}"},
+        tenant=request.tenant,
     )
     messages.warning(request, f"Approval gate {gate.number} has been rejected.")
     return redirect("projects:par_detail", pk=gate.pk)
@@ -256,11 +256,11 @@ def par_escalate(request, pk):
     gate.save(update_fields=["status", "escalated_at", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "escalate",
-        gate,
-        f"Escalated approval gate {gate.number} to {gate.escalate_to}",
+        user=request.user,
+        obj=gate,
+        action="escalate",
+        changes={"description": f"Escalated approval gate {gate.number} to {gate.escalate_to}"},
+        tenant=request.tenant,
     )
     messages.warning(request, f"Approval gate {gate.number} escalated.")
     return redirect("projects:par_detail", pk=gate.pk)
@@ -282,11 +282,11 @@ def par_delegate(request, pk):
         gate.save(update_fields=["delegate_approver", "updated_at"])
 
         write_audit_log(
-            request.tenant,
-            request.user,
-            "delegate",
-            gate,
-            f"Delegated approval gate {gate.number} to {delegate}",
+            user=request.user,
+            obj=gate,
+            action="delegate",
+            changes={"description": f"Delegated approval gate {gate.number} to {delegate}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Approval gate {gate.number} delegated to {delegate.get_full_name() or delegate.username}.")
     else:
@@ -304,11 +304,11 @@ def par_cancel(request, pk):
     gate.save(update_fields=["status", "updated_at"])
 
     write_audit_log(
-        request.tenant,
-        request.user,
-        "cancel",
-        gate,
-        f"Cancelled approval gate {gate.number}",
+        user=request.user,
+        obj=gate,
+        action="cancel",
+        changes={"description": f"Cancelled approval gate {gate.number}"},
+        tenant=request.tenant,
     )
     messages.info(request, f"Approval gate {gate.number} has been cancelled.")
     return redirect("projects:par_detail", pk=gate.pk)
