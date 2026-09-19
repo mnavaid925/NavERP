@@ -69,6 +69,18 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.4 Authentication & Single Sign-On (SSO). NOTE: "SSO & Federation" is deliberately NOT mapped.
+    # SAML 2.0 / OAuth-OIDC need an IdP library and a configured identity provider; nothing is built
+    # for it, so the bullet renders as the roadmap pill it actually is. Mapping it to the MFA page
+    # would have marked a federation capability "live" by pointing at an unrelated feature.
+    "0.4": {
+        "Multi-Factor Authentication (MFA)": "accounts:mfa_manage",       # bullet (TOTP only)
+        "Password & Credential Policies": "accounts:password_policy_edit",  # bullet
+        "Session Management": "accounts:session_list",                    # bullet
+        "Adaptive & Risk-Based Auth": "accounts:login_attempt_list",      # bullet
+        # Extra live leaf: the computed hub that reports the whole posture and what is NOT built.
+        "Security Overview": "accounts:security_overview",                # extra
+    },
     # 0.5 User & Organization Management
     "0.5": {
         "Organization & Hierarchy Modeling": "core:orgunit_list",  # bullet
