@@ -254,7 +254,7 @@ def pwf_test_run(request, pk):
             error_msg="",
             duration_ms=max(duration_ms, 1),
             evaluated_conditions={"conditions": rule.conditions, "matched": True},
-            executed_actions={"actions": rule.actions, "simulated": True},
+            executed_actions=[{"simulated": True, **a} for a in rule.actions] if isinstance(rule.actions, list) else [{"simulated": True, "actions": rule.actions}],
         )
         write_audit_log(
             user=request.user,
