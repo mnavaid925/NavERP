@@ -1,0 +1,20 @@
+{% extends "base_auth.html" %}
+{% block title %}Two-factor verification{% endblock %}
+{% block content %}
+  <h1 class="auth-title">Two-factor verification</h1>
+  <p class="auth-sub">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+    <button class="btn btn-primary" type="submit" style="width:100%; justify-content:center;">Verify</button>
+  </form>
+  <p class="auth-foot"><a href="{% url 'accounts:login' %}">Back to sign in</a></p>
+{% endblock %}
