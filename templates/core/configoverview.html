@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Configuration{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Configuration</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Configuration</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:settings_overview' %}" class="btn btn-outline"><i data-lucide="sliders"></i> Settings</a>
+      <a href="{% url 'core:feature_flag_list' %}" class="btn btn-outline"><i data-lucide="toggle-left"></i> Feature flags</a>
+      <a href="{% url 'core:numbering_board' %}" class="btn btn-outline"><i data-lucide="hash"></i> Numbering</a>
+      <a href="{% url 'core:calendar_board' %}" class="btn btn-outline"><i data-lucide="calendar"></i> Calendar</a>
+      <a href="{% url 'core:custom_field_list' %}" class="btn btn-outline"><i data-lucide="form-input"></i> Custom fields</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Posture</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Settings defined</dt><dd>{{ definition_count }}</dd></div>
+        <div class="detail-item"><dt>Overridden in this workspace</dt><dd>{{ override_count }}</dd></div>
+        <div class="detail-item"><dt>Feature flags</dt><dd>{{ flag_count }} ({{ flags_on }} on)</dd></div>
+        <div class="detail-item"><dt>Numbering schemes</dt><dd>{{ scheme_count }}</dd></div>
+        <div class="detail-item"><dt>Prefixes models mint</dt><dd>{{ model_prefix_count }}</dd></div>
+        <div class="detail-item"><dt>Business calendar</dt><dd>{% if calendar %}{{ calendar.working_day_count }} working day(s){% else %}<span class="badge badge-amber">not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Holidays</dt><dd>{{ holiday_count }}</dd></div>
+        <div class="detail-item"><dt>Custom fields</dt><dd>{{ custom_field_count }} ({{ custom_value_count }} value(s))</dd></div>
+      </dl>
+      {% if configured_only %}
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> {{ configured_only|length }} numbering scheme(s) configure a prefix nothing detected minting:
+          {% for p in configured_only %}<code>{{ p }}</code> {% endfor %}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recently changed flags</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Key</th><th>Label</th><th>State</th><th>Plan</th></tr></thead>
+        <tbody>
+          {% for f in recent_flags %}
+            <tr>
+              <td class="fw-600"><code>{{ f.key }}</code></td>
+              <td>{{ f.label }}</td>
+              <td>{% if f.is_enabled %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-slate">Off</span>{% endif %}</td>
+              <td>{{ f.applies_to_plan|default:"all plans" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="toggle-left"></i><h3>No flags configured</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this module does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Settings are <strong>not</strong> a <code>django.conf.settings</code> replacement — <code>get_setting()</code> only resolves keys that exist as a
+        registered definition, so a typo returns the caller's default rather than inventing a value. Numbering <strong>configures</strong> but never allocates: every number
+        is still minted by <code>next_number()</code>, and the reconciliation board covers <code>NUMBER_PREFIX</code>-based numbering plus the literal-prefix models listed
+        on it. Fiscal periods and period-close controls live in <code>accounting.FiscalPeriod</code>, not here. Custom-field values are keyed without a foreign key and
+        <strong>no module renders them yet</strong> — a module must opt in. Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
