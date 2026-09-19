@@ -44,6 +44,10 @@ class ProjectRevenueScheduleForm(TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["project", "milestone", "fiscal_period", "cost_center", "gl_account"])
+        project = cleaned.get("project")
+        milestone = cleaned.get("milestone")
+        if milestone and project and milestone.project_id != project.pk:
+            self.add_error("milestone", "The selected milestone does not belong to the chosen project.")
         return cleaned
 
 
