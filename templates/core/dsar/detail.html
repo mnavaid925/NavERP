@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Data Subject Request{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Data Subject Request</h1>
+      <div class="breadcrumb"><a href="{% url 'core:dsar_list' %}">Data Subject Requests</a><span class="sep">›</span><span>#{{ obj.pk }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.is_open %}
+        {% if not obj.identity_verified %}
+          <form method="post" action="{% url 'core:dsar_verify' obj.pk %}">
+            {% csrf_token %}
+            <input type="text" name="verification_note" class="form-input" placeholder="How identity was verified (required)" required>
+            <button class="btn btn-primary" type="submit"><i data-lucide="user-check"></i> Verify identity</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'core:dsar_complete' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Complete</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'core:dsar_withdraw' obj.pk %}">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="undo-2"></i> Withdrawn</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_overdue %}
+    <div class="card"><div class="card-body"><p class="text-danger"><i data-lucide="alert-triangle"></i> This request is OVERDUE — the statutory window closed {{ obj.due_at|date:"M d, Y" }}.</p></div></div>
+  {% elif obj.is_open and not obj.identity_verified %}
+    <div class="card"><div class="card-body"><p class="text-warn"><i data-lucide="lock"></i> Identity is NOT verified. Completion is blocked until it is — releasing or erasing personal data on an unverified request is the failure this workflow exists to prevent.</p></div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Subject</dt><dd>{{ obj.subject }}</dd></div>
+      <div class="detail-item"><dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd></div>
+      <div class="detail-item"><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div class="detail-item"><dt>Received</dt><dd>{{ obj.received_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Due</dt><dd>{% if obj.due_at %}{{ obj.due_at|date:"M d, Y H:i" }}{% else %}<span class="text-warn">No statutory clock</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Identity verified</dt><dd>{% if obj.identity_verified %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Handled by</dt><dd>{% if obj.handled_by %}{{ obj.handled_by }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Completed</dt><dd>{% if obj.completed_at %}{{ obj.completed_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    <div class="detail-item" style="margin-top:1rem;"><dt>Request</dt><dd>{{ obj.detail|linebreaksbr }}</dd></div>
+    {% if obj.verification_note %}<div class="detail-item" style="margin-top:1rem;"><dt>Verification</dt><dd>{{ obj.verification_note }}</dd></div>{% endif %}
+    {% if obj.response_notes %}<div class="detail-item" style="margin-top:1rem;"><dt>Response notes</dt><dd>{{ obj.response_notes|linebreaksbr }}</dd></div>{% endif %}
+  </div></div>
+
+  {% if obj.is_open %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Refuse this request</h2></div>
+      <div class="card-body">
+        <p class="text-muted">A refusal must cite a lawful ground — an unexplained refusal is not a lawful one.</p>
+        <form method="post" action="{% url 'core:dsar_refuse' obj.pk %}">
+          {% csrf_token %}
+          {{ refusal_form.as_div }}
+          <div class="form-actions">
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Refuse with ground</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Not built for this bullet</h2></div>
+    <div class="card-body">
+      <p class="text-muted">This records and drives the workflow; it does <strong>not</strong> assemble the data-subject export or perform the erasure. There is no automatic personal-data collation across modules, and no destruction. Portability produces no machine-readable bundle yet. Declared here rather than implied by the "portability" kind existing.</p>
+    </div>
+  </div>
+
+  <a href="{% url 'core:dsar_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
