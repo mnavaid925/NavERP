@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Business Calendar{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Business Calendar</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Business Calendar</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:holiday_list' %}" class="btn btn-outline"><i data-lucide="calendar-x"></i> Holidays</a>
+      <a href="{% url 'core:calendar_edit' %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit calendar</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Working days</dt><dd>{% for d in working_days %}<span class="badge badge-info">{{ d }}</span> {% empty %}<span class="badge badge-amber">none configured</span>{% endfor %}</dd></div>
+      <div class="detail-item"><dt>Timezone</dt><dd>{% if calendar %}{{ calendar.timezone_name|default:"—" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Holidays recorded</dt><dd>{{ holiday_count }} ({{ recurring_count }} recurring)</dd></div>
+      <div class="detail-item"><dt>Today</dt><dd>{{ today|date:"M d, Y" }} — {% if today_is_working %}<span class="badge badge-green">working day</span>{% else %}<span class="badge badge-slate">non-working</span>{% endif %}</dd></div>
+    </dl>
+    <p class="text-muted">A holiday is a non-working day even when it falls on a configured working weekday — that is what <code>is_working_day()</code> checks, and it is the only place the two are combined.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Upcoming holidays</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Name</th><th>Region</th><th>Recurring</th></tr></thead>
+        <tbody>
+          {% for h in upcoming %}
+            <tr>
+              <td class="fw-600">{{ h.date|date:"M d, Y" }}</td>
+              <td>{{ h.name }}</td>
+              <td>{{ h.region|default:"—" }}</td>
+              <td>{% if h.is_recurring %}<span class="badge badge-info">Yearly</span>{% else %}<span class="badge badge-slate">One-off</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="calendar-x"></i><h3>No upcoming holidays</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Fiscal periods are elsewhere</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Fiscal years, period definitions and period-close controls belong to <code>accounting.FiscalPeriod</code> (2.x) and are
+        <strong>not</strong> re-declared here — a second period table would split the ledger's calendar from the business one. Use the link below.</p>
+      <div class="form-actions">
+        <a href="{% url 'accounting:fiscal_period_list' %}" class="btn btn-outline"><i data-lucide="calendar-range"></i> Accounting fiscal periods</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
