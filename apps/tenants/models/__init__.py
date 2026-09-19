@@ -20,3 +20,7 @@ from .EncryptionKey import (
 from .HealthMetric import (
     HealthMetric,
 )  # noqa: F401
+from .UsageRecord import (
+    UsageRecord,
+    PLAN_ALLOWANCES,
+)  # noqa: F401
