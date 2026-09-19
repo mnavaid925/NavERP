@@ -180,7 +180,20 @@ from .FinancialBillingManagement.PaymentRecords import (  # noqa: F401
     ProjectPaymentRecordForm,
 )
 
-
-
-
-
+# --- 7.17 Workflow & Automation -----------------------------------------------------------------
+from .WorkflowAutomation.WorkflowRules import (  # noqa: F401
+    ProjectWorkflowRuleForm,
+    WorkflowRuleTestForm,
+)
+from .WorkflowAutomation.ApprovalGates import (  # noqa: F401
+    ProjectApprovalGateForm,
+    ApprovalDecisionForm,
+    ApprovalDelegateForm,
+)
+from .WorkflowAutomation.RecurringTasks import (  # noqa: F401
+    RecurringTaskScheduleForm,
+)
+from .WorkflowAutomation.Webhooks import (  # noqa: F401
+    ProjectWebhookEndpointForm,
+    WebhookTestPingForm,
+)
