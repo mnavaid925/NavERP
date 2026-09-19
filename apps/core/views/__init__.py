@@ -77,3 +77,16 @@ from .Search import (
     global_search_suggest,
     global_search,
 )  # noqa: F401
+from .ModuleAccessScope import (
+    module_scope_list,
+    module_scope_detail,
+    module_scope_create,
+    module_scope_edit,
+    module_scope_delete,
+    module_scope_sync,
+    field_mask_list,
+    field_mask_create,
+    field_mask_edit,
+    field_mask_delete,
+    access_matrix,
+)  # noqa: F401
