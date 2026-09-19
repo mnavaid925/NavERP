@@ -22,6 +22,13 @@ def activity_list(request):
                        "parties": _parties(request),
                        "owners": User.objects.filter(tenant=request.tenant)
                        .only("id", "email", "first_name", "last_name")},
+        # 0.6 opt-in: this is the ONE view wired to module data scoping, and it is wired on purpose
+        # so the mechanism is proven in situ rather than only unit-tested. Activities are owned
+        # (`Activity.owner`), which makes them the right first candidate. When module 0's scope is
+        # set to "own", a member sees only their own activities; an admin still sees all.
+        # Nothing changes until an admin narrows the scope — `apply_data_scope` is a no-op at the
+        # default `data_scope="all"`.
+        scope_module="systemadminsecurity", scope_owner_field="owner",
     )
 
 
