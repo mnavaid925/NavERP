@@ -636,7 +636,54 @@ from .FinancialBillingManagement.FinancialBoards import (  # noqa: F401
     financial_variance,
 )
 
-
-
-
-
+# --- 7.17 Workflow & Automation -----------------------------------------------------------------
+from .WorkflowAutomation.WorkflowRules import (  # noqa: F401
+    pwf_list,
+    pwf_detail,
+    pwf_create,
+    pwf_edit,
+    pwf_delete,
+    pwf_toggle_active,
+    pwf_test_run,
+    pwf_execute_now,
+)
+from .WorkflowAutomation.ApprovalGates import (  # noqa: F401
+    par_list,
+    par_detail,
+    par_create,
+    par_edit,
+    par_delete,
+    par_approve,
+    par_reject,
+    par_escalate,
+    par_delegate,
+    par_cancel,
+)
+from .WorkflowAutomation.RecurringTasks import (  # noqa: F401
+    rts_list,
+    rts_detail,
+    rts_create,
+    rts_edit,
+    rts_delete,
+    rts_toggle_active,
+    rts_generate_task,
+    rts_skip_next,
+)
+from .WorkflowAutomation.Webhooks import (  # noqa: F401
+    pwh_list,
+    pwh_detail,
+    pwh_create,
+    pwh_edit,
+    pwh_delete,
+    pwh_toggle_active,
+    pwh_test_ping,
+    pwh_rotate_secret,
+    pwh_delivery_list,
+    pwh_delivery_detail,
+)
+from .WorkflowAutomation.AutomationBoards import (  # noqa: F401
+    automation_overview,
+    approval_inbox,
+    recurrence_calendar,
+    webhook_diagnostics,
+)
