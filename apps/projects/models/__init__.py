@@ -151,6 +151,12 @@ from .FinancialBillingManagement.BillingRuns import ProjectBillingRun  # noqa: F
 from .FinancialBillingManagement.RevenueSchedules import ProjectRevenueSchedule  # noqa: F401
 from .FinancialBillingManagement.PaymentRecords import ProjectPaymentRecord  # noqa: F401
 
+# --- 7.16 Reporting & Business Intelligence ------------------------------------------------------
+from .ReportingBusinessIntelligence.ProjectReports import ProjectReport  # noqa: F401
+from .ReportingBusinessIntelligence.ReportRuns import ProjectReportRun  # noqa: F401
+from .ReportingBusinessIntelligence.ProjectDashboards import ProjectDashboard  # noqa: F401
+from .ReportingBusinessIntelligence.DashboardWidgets import DashboardWidget  # noqa: F401
+
 # 7.17 Workflow & Automation
 from .WorkflowAutomation.WorkflowRules import (  # noqa: F401
     ProjectWorkflowRule,
