@@ -148,7 +148,13 @@
                 <span class="font-medium text-slate-900">{{ t.name }}</span>
               </td>
               <td>
-                <span class="text-sm text-slate-800">{{ t.assignee.get_full_name|default:t.assignee.username|default:"Unassigned" }}</span>
+                <span class="text-sm text-slate-800">
+                  {% if t.assignee %}
+                    {{ t.assignee.get_full_name|default:t.assignee.username }}
+                  {% else %}
+                    Unassigned
+                  {% endif %}
+                </span>
               </td>
               <td>
                 <span class="text-xs text-muted">{{ t.planned_end|date:"M d, Y"|default:"-" }}</span>
