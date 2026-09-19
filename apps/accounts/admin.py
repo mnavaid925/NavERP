@@ -5,11 +5,16 @@ from .models import (
     AccessReview,
     AccessReviewItem,
     ElevationGrant,
+    LoginAttempt,
+    MfaDevice,
+    PasswordHistory,
+    PasswordPolicy,
     Permission,
     Role,
     User,
     UserImportBatch,
     UserInvite,
+    UserSession,
 )
 
 
@@ -102,3 +107,60 @@ class UserImportBatchAdmin(admin.ModelAdmin):
     # system-written; editing them by hand would desync the batch from what was uploaded.
     readonly_fields = ["row_count", "created_count", "error_count", "errors", "staged_rows",
                        "committed_at", "created_at"]
+
+
+@admin.register(MfaDevice)
+class MfaDeviceAdmin(admin.ModelAdmin):
+    list_display = ["user", "kind", "name", "is_confirmed", "is_active", "last_used_at", "tenant"]
+    list_filter = ["kind", "is_active", "tenant"]
+    search_fields = ["user__email", "name"]
+    list_select_related = ["user", "tenant"]
+    # The secret is never rendered or edited here. `core.crypto` protects it at rest, but an admin
+    # form would print the plaintext into a page and an admin action log — the one place it must
+    # never appear. Recovery codes are hashes and are equally excluded.
+    exclude = ["secret_encrypted", "backup_code_hashes"]
+    readonly_fields = ["confirmed_at", "last_used_at", "last_counter", "created_at"]
+
+
+@admin.register(PasswordPolicy)
+class PasswordPolicyAdmin(admin.ModelAdmin):
+    list_display = ["tenant", "is_enforced", "min_length", "max_age_days", "prevent_reuse_count"]
+    list_filter = ["is_enforced", "tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(PasswordHistory)
+class PasswordHistoryAdmin(admin.ModelAdmin):
+    list_display = ["user", "set_at", "tenant"]
+    list_filter = ["tenant"]
+    search_fields = ["user__email"]
+    list_select_related = ["user", "tenant"]
+    # Hashes only, and read-only: this table is an audit of password changes, not an editable one.
+    readonly_fields = ["user", "password_hash", "set_at", "tenant"]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(UserSession)
+class UserSessionAdmin(admin.ModelAdmin):
+    list_display = ["user", "ip", "created_at", "last_seen_at", "is_revoked", "tenant"]
+    list_filter = ["tenant"]
+    search_fields = ["user__email", "ip", "user_agent"]
+    list_select_related = ["user", "tenant", "revoked_by"]
+    readonly_fields = ["session_key", "ip", "user_agent", "created_at", "last_seen_at",
+                       "revoked_at", "revoked_by"]
+
+
+@admin.register(LoginAttempt)
+class LoginAttemptAdmin(admin.ModelAdmin):
+    list_display = ["identifier", "success", "risk_score", "mfa_challenged", "ip", "created_at"]
+    list_filter = ["success", "mfa_challenged", "tenant"]
+    search_fields = ["identifier", "ip", "user_agent"]
+    list_select_related = ["user", "tenant"]
+    # Append-only telemetry: it is the record of what happened, so nothing here is editable.
+    readonly_fields = ["tenant", "user", "identifier", "ip", "user_agent", "success",
+                       "risk_score", "risk_reasons", "mfa_challenged", "created_at"]
+
+    def has_add_permission(self, request):
+        return False
