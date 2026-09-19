@@ -98,11 +98,11 @@ def pwf_create(request):
                 rule.owner = request.user
             rule.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                rule,
-                f"Created workflow rule {rule.number}: {rule.name}",
+                user=request.user,
+                obj=rule,
+                action="create",
+                changes={"description": f"Created workflow rule {rule.number}: {rule.name}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Workflow rule {rule.number} created successfully.")
             return redirect("projects:pwf_detail", pk=rule.pk)
@@ -133,11 +133,11 @@ def pwf_edit(request, pk):
         if form.is_valid():
             rule = form.save()
             write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                rule,
-                f"Updated workflow rule {rule.number}: {rule.name}",
+                user=request.user,
+                obj=rule,
+                action="update",
+                changes={"description": f"Updated workflow rule {rule.number}: {rule.name}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Workflow rule {rule.number} updated successfully.")
             return redirect("projects:pwf_detail", pk=rule.pk)
@@ -164,11 +164,11 @@ def pwf_delete(request, pk):
     name = rule.name
     rule.delete()
     write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        None,
-        f"Deleted workflow rule {number}: {name}",
+        user=request.user,
+        obj=None,
+        action="delete",
+        changes={"description": f"Deleted workflow rule {number}: {name}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Workflow rule {number} deleted successfully.")
     return redirect("projects:pwf_list")
@@ -183,11 +183,11 @@ def pwf_toggle_active(request, pk):
     rule.save(update_fields=["is_active", "updated_at"])
     state = "activated" if rule.is_active else "deactivated"
     write_audit_log(
-        request.tenant,
-        request.user,
-        "toggle",
-        rule,
-        f"{state.capitalize()} workflow rule {rule.number}",
+        user=request.user,
+        obj=rule,
+        action="toggle",
+        changes={"description": f"{state.capitalize()} workflow rule {rule.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Workflow rule {rule.number} {state}.")
     return redirect("projects:pwf_detail", pk=rule.pk)
@@ -218,11 +218,11 @@ def pwf_test_run(request, pk):
             executed_actions={"actions": rule.actions, "simulated": True},
         )
         write_audit_log(
-            request.tenant,
-            request.user,
-            "execute",
-            rule,
-            f"Simulated test run for rule {rule.number} against #{target_id}",
+            user=request.user,
+            obj=rule,
+            action="execute",
+            changes={"description": f"Simulated test run for rule {rule.number} against #{target_id}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Simulated test run completed for rule {rule.number} (Log #{log.pk}).")
     else:
@@ -260,11 +260,11 @@ def pwf_execute_now(request, pk):
             executed_actions=rule.actions,
         )
         write_audit_log(
-            request.tenant,
-            request.user,
-            "execute",
-            rule,
-            f"Executed workflow rule {rule.number} on #{target_id}",
+            user=request.user,
+            obj=rule,
+            action="execute",
+            changes={"description": f"Executed workflow rule {rule.number} on #{target_id}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Workflow rule {rule.number} executed successfully (Log #{log.pk}).")
     else:
