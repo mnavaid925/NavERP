@@ -43,3 +43,19 @@ from .ModuleAccessScope import (
     ModuleAccessScope,
     SensitiveFieldMask,
 )  # noqa: F401
+from .Consent import (
+    ConsentPurpose,
+    ConsentRecord,
+    current_consent,
+)  # noqa: F401
+from .DataSubjectRequest import (
+    DataSubjectRequest,
+)  # noqa: F401
+from .Retention import (
+    RetentionPolicy,
+    DisposalRecord,
+)  # noqa: F401
+from .Privacy import (
+    PiiClassification,
+    RegulatoryFramework,
+)  # noqa: F401
