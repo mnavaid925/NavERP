@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.module_title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.module_title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:module_scope_list' %}">Module Access Scopes</a><span class="sep">›</span><span>{{ obj.module_slug }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:module_scope_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:module_scope_delete' obj.pk %}" onsubmit="return confirm('Delete this scope?');">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    {% if not obj.enforces_scope %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> This scope does not currently narrow anything: either the module
+        is disabled for members, or its data scope is "All records". A configured scope in that state is a recorded decision,
+        not a restriction.</p>
+    {% endif %}
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Module</dt><dd>{{ obj.module_number }} · {{ obj.module_slug }}</dd></div>
+      <div class="detail-item"><dt>Enabled</dt><dd>{% if obj.is_enabled %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Data scope</dt><dd>{{ obj.get_data_scope_display }}</dd></div>
+      <div class="detail-item"><dt>Enforcing</dt><dd>{% if obj.enforces_scope %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Requires approval</dt><dd>{% if obj.requires_approval %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Mask sensitive fields</dt><dd>{% if obj.mask_sensitive %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Posting period locked until</dt><dd>{% if obj.period_lock_until %}{{ obj.period_lock_until|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    {% if obj.notes %}<div class="detail-item" style="margin-top:1rem;"><dt>Notes</dt><dd>{{ obj.notes|linebreaksbr }}</dd></div>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Field masks</h2><span class="badge badge-info">{{ masks|length }}</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Field</th><th>Style</th><th>Exempt roles</th></tr></thead>
+        <tbody>
+          {% for m in masks %}
+            <tr>
+              <td class="fw-600"><code>{{ m.field_name }}</code></td>
+              <td>{{ m.get_mask_style_display }}</td>
+              <td>
+                {% for r in m.exempt_roles.all %}<span class="badge badge-slate">{{ r.name }}</span> {% empty %}<span class="text-muted">Everyone masked</span>{% endfor %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="eye-off"></i><h3>No masks</h3><p>Masking is off for this module.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Not built for this bullet</h2></div>
+    <div class="card-body">
+      <p class="text-muted">The finer half of 0.6's per-module bullets is <strong>not implemented</strong>: consent
+        management, e-signature (21 CFR Part 11), retention locks and check-in/out controls, PCI scope isolation,
+        dataset certification, and BOM/routing change control. Named here rather than implied by a scope row existing.</p>
+    </div>
+  </div>
+
+  <a href="{% url 'core:module_scope_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
