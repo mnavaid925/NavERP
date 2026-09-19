@@ -129,7 +129,7 @@ All 6 specialist review agents (`code-reviewer`, `explorer`, `frontend-reviewer`
 
 ## Minor
 
-- **[ ] M1: Missing Composite Database Indexes on Filtered Fields**
+- **[x] fixed — perf(projects): add composite database indexes on filtered fields**
   - **Location**: `apps/projects/models/FinancialBillingManagement/RateCards.py`, `RevenueSchedules.py`, `PaymentRecords.py`
   - **Problem**: Missing indexes: `(tenant, is_active)` on RTC, `(tenant, method)` on PRS, `(tenant, dunning_level)` on PPR.
   - **Fix**: Add to `Meta.indexes` and generate migration.
