@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ rule.number }} — {{ rule.name }} — Workflow Rules — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ rule.name }}</h1>
+      {% if rule.is_active %}
+        <span class="badge badge-green">Active</span>
+      {% else %}
+        <span class="badge badge-slate">Inactive</span>
+      {% endif %}
+      <span class="font-mono text-sm text-muted">[{{ rule.number }}]</span>
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:automation_overview' %}">Workflow & Automation</a>
+      <span>/</span>
+      <a href="{% url 'projects:pwf_list' %}">Rules</a>
+      <span>/</span>
+      <span>{{ rule.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:pwf_edit' rule.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Rule
+    </a>
+    <form method="post" action="{% url 'projects:pwf_toggle_active' rule.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="power" class="w-4 h-4 mr-1 {% if rule.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i>
+        {% if rule.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+    </form>
+    <form method="post" action="{% url 'projects:pwf_delete' rule.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete workflow rule {{ rule.number }}?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Left 2 Cols: Visual Workflow Canvas & Diagnostics -->
+  <div class="lg:col-span-2 space-y-6">
+    <!-- Visual Workflow Card (Trigger -> Conditions -> Actions) -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Automation Flow Canvas</h3>
+        <span class="text-xs text-muted">Trigger-Condition-Action (TCA)</span>
+      </div>
+      <div class="card-body space-y-4">
+        <!-- 1. Trigger Card -->
+        <div class="p-4 rounded-lg border border-purple-200 bg-purple-50/50">
+          <div class="flex items-center gap-2 text-purple-800 font-semibold text-sm mb-1">
+            <i data-lucide="zap" class="w-4 h-4"></i> WHEN (Trigger Event)
+          </div>
+          <div class="text-slate-800 text-sm font-medium">
+            Entity: <span class="badge badge-info">{{ rule.get_trigger_entity_display }}</span>
+            • Event: <span class="badge badge-slate">{{ rule.get_trigger_event_display }}</span>
+          </div>
+          {% if rule.trigger_field %}
+          <div class="text-xs text-muted mt-1">
+            Watched Field: <span class="font-mono">{{ rule.trigger_field }}</span>
+            {% if rule.trigger_value %} = <span class="font-mono">{{ rule.trigger_value }}</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Flow Connector -->
+        <div class="flex justify-center">
+          <i data-lucide="arrow-down" class="w-5 h-5 text-muted"></i>
+        </div>
+
+        <!-- 2. Conditions Card -->
+        <div class="p-4 rounded-lg border border-blue-200 bg-blue-50/50">
+          <div class="flex items-center gap-2 text-blue-800 font-semibold text-sm mb-1">
+            <i data-lucide="filter" class="w-4 h-4"></i> CHECK IF (Criteria & Conditions)
+          </div>
+          {% if rule.conditions %}
+            <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+              {% for c in rule.conditions %}
+                <li>
+                  <span class="font-mono font-medium">{{ c.field }}</span>
+                  <span class="text-muted">{{ c.operator|default:"==" }}</span>
+                  <span class="font-mono font-semibold">{{ c.value }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-xs text-muted">No additional criteria. Always proceeds to action.</p>
+          {% endif %}
+        </div>
+
+        <!-- Flow Connector -->
+        <div class="flex justify-center">
+          <i data-lucide="arrow-down" class="w-5 h-5 text-muted"></i>
+        </div>
+
+        <!-- 3. Actions Card -->
+        <div class="p-4 rounded-lg border border-green-200 bg-green-50/50">
+          <div class="flex items-center gap-2 text-green-800 font-semibold text-sm mb-1">
+            <i data-lucide="play" class="w-4 h-4"></i> THEN DO THIS (Automated Actions)
+          </div>
+          {% if rule.actions %}
+            <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-700">
+              {% for a in rule.actions %}
+                <li>
+                  <span class="badge badge-green">{{ a.type }}</span>
+                  {% if a.params %}
+                    <span class="font-mono text-xs text-muted">{{ a.params }}</span>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-xs text-muted">No actions defined.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Execution History Card -->
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Execution History (Recent 20)</h3>
+        <span class="text-xs text-muted">Lifetime: {{ rule.execution_count }} runs</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Target Record</th>
+              <th>Fired At</th>
+              <th>Duration</th>
+              <th>Details / Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in execution_logs %}
+            <tr>
+              <td>
+                <span class="badge {{ log.status_badge }}">{{ log.get_status_display }}</span>
+              </td>
+              <td>
+                <span class="font-medium text-slate-900">{{ log.record_label|default:"-" }}</span>
+                {% if log.target_model %}
+                <span class="text-xs text-muted block">{{ log.target_model }} #{{ log.target_id }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="text-xs text-muted">{{ log.fired_at|date:"M d, Y H:i:s" }}</span>
+              </td>
+              <td>
+                <span class="font-mono text-xs">{{ log.duration_ms }} ms</span>
+              </td>
+              <td>
+                {% if log.error_msg %}
+                <span class="text-xs text-red-600 font-mono">{{ log.error_msg|truncatechars:40 }}</span>
+                {% else %}
+                <span class="text-xs text-muted">Success</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center py-6 text-muted text-sm">
+                No execution logs recorded yet.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Col: Metadata, Scope & Test Simulator -->
+  <div class="space-y-6">
+    <!-- Metadata Card -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Rule Details</h3>
+      </div>
+      <div class="card-body space-y-3 text-sm">
+        <div>
+          <span class="text-muted block text-xs">Rule ID</span>
+          <span class="font-mono font-semibold text-slate-800">{{ rule.number }}</span>
+        </div>
+        <div>
+          <span class="text-muted block text-xs">Project Scope</span>
+          {% if rule.project %}
+            <a href="{% url 'projects:prj_detail' rule.project.pk %}" class="font-medium text-brand hover:underline">
+              {{ rule.project.name }}
+            </a>
+          {% else %}
+            <span class="badge badge-slate">Global (All Projects)</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="text-muted block text-xs">Owner / Creator</span>
+          <span class="font-medium text-slate-800">{{ rule.owner.get_full_name|default:rule.owner.username|default:"System" }}</span>
+        </div>
+        <div>
+          <span class="text-muted block text-xs">Created At</span>
+          <span class="text-slate-800">{{ rule.created_at|date:"M d, Y H:i" }}</span>
+        </div>
+        <div>
+          <span class="text-muted block text-xs">Last Fired</span>
+          <span class="text-slate-800">{{ rule.last_fired_at|date:"M d, Y H:i"|default:"Never" }}</span>
+        </div>
+        {% if rule.description %}
+        <div>
+          <span class="text-muted block text-xs">Description</span>
+          <p class="text-slate-700 text-xs mt-1">{{ rule.description }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Test Simulator Card -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Test Runner & Simulator</h3>
+      </div>
+      <div class="card-body space-y-4">
+        <p class="text-xs text-muted">
+          Test rule criteria and simulated action execution against a target record without altering database state.
+        </p>
+        <form method="post" action="{% url 'projects:pwf_test_run' rule.pk %}" class="space-y-3">
+          {% csrf_token %}
+          <div class="form-group">
+            <label for="id_target_id" class="form-label text-xs">Test {{ rule.get_trigger_entity_display }} ID</label>
+            {{ test_form.target_id }}
+          </div>
+          <div class="flex gap-2">
+            <button type="submit" class="btn btn-outline btn-sm w-full">
+              <i data-lucide="play-circle" class="w-4 h-4 mr-1"></i> Simulate Run
+            </button>
+          </div>
+        </form>
+        <div class="border-t border-slate-100 pt-3">
+          <form method="post" action="{% url 'projects:pwf_execute_now' rule.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="target_id" value="1">
+            <button type="submit" class="btn btn-primary btn-sm w-full" onclick="return confirm('Execute this automation rule immediately?');">
+              <i data-lucide="zap" class="w-4 h-4 mr-1"></i> Execute Now
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
