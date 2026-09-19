@@ -21,29 +21,33 @@
   </div>
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <div class="card card-body">
-    <div class="text-muted text-sm">Configured Endpoints</div>
-    <div class="text-2xl font-semibold">{{ stats.total_endpoints }}</div>
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon purple"><i data-lucide="webhook"></i></div>
+    <div class="stat-value">{{ stats.total_endpoints }}</div>
+    <div class="stat-label">Configured Endpoints</div>
     <div class="text-xs text-muted mt-1">{{ stats.active_endpoints }} active</div>
   </div>
-  <div class="card card-body">
-    <div class="text-muted text-sm">Delivery Success Rate</div>
-    <div class="text-2xl font-semibold {% if stats.success_rate_pct >= 95 %}text-green-600{% elif stats.success_rate_pct >= 80 %}text-amber-600{% else %}text-red-600{% endif %}">
+  <div class="stat-card">
+    <div class="stat-icon {% if stats.success_rate_pct >= 95 %}green{% elif stats.success_rate_pct >= 80 %}orange{% else %}red{% endif %}"><i data-lucide="activity"></i></div>
+    <div class="stat-value {% if stats.success_rate_pct >= 95 %}text-green-600{% elif stats.success_rate_pct >= 80 %}text-amber-600{% else %}text-red-600{% endif %}">
       {{ stats.success_rate_pct }}%
     </div>
+    <div class="stat-label">Delivery Success Rate</div>
     <div class="text-xs text-muted mt-1">All recorded attempts</div>
   </div>
-  <div class="card card-body">
-    <div class="text-muted text-sm">Average Latency</div>
-    <div class="text-2xl font-semibold">{{ stats.avg_latency_ms }} ms</div>
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="clock"></i></div>
+    <div class="stat-value">{{ stats.avg_latency_ms }} ms</div>
+    <div class="stat-label">Average Latency</div>
     <div class="text-xs text-muted mt-1">Round-trip response</div>
   </div>
-  <div class="card card-body">
-    <div class="text-muted text-sm">Recent Failures</div>
-    <div class="text-2xl font-semibold {% if recent_failures %}text-red-600{% endif %}">
+  <div class="stat-card">
+    <div class="stat-icon {% if recent_failures %}red{% else %}slate{% endif %}"><i data-lucide="alert-triangle"></i></div>
+    <div class="stat-value {% if recent_failures %}text-red-600{% endif %}">
       {{ recent_failures|length }}
     </div>
+    <div class="stat-label">Recent Failures</div>
     <div class="text-xs text-muted mt-1">Requiring inspection</div>
   </div>
 </div>
