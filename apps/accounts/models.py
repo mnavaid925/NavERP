@@ -415,3 +415,196 @@ class UserImportBatch(models.Model):
 
     def __str__(self):
         return f"{self.file_name} ({self.get_status_display()})"
+
+
+# ================================================= 0.4 bullet 1: Multi-Factor Authentication
+class MfaDevice(models.Model):
+    """A second factor for one user. **Opt-in by construction.**
+
+    Bullet 1 is "MFA — TOTP, SMS/email OTP, push approval, and FIDO2/WebAuthn passkeys". Only TOTP
+    is implemented; SMS, push and WebAuthn each need an external provider or a browser ceremony and
+    are declared on the page rather than implied by a `kind` value that does nothing.
+
+    The step-up is driven by the EXISTENCE of a confirmed device, so a user without one logs in
+    exactly as before. That is deliberate: this app is the login path for every module, and a change
+    that challenged everyone would be a lockout risk across 3,000+ tests and every seeded account.
+    """
+
+    KIND_CHOICES = [("totp", "Authenticator app (TOTP)")]
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
+                               related_name="mfa_devices", db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="mfa_devices")
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default="totp")
+    name = models.CharField(max_length=120, blank=True, help_text="e.g. 'iPhone'.")
+    #: Encrypted with `core.crypto` (reversible), NOT hashed: verifying a TOTP code needs the real
+    #: secret bytes, so a SHA-256 digest would make verification mathematically impossible — the
+    #: same reasoning documented on `apps/core/crypto.py`. The key lives in the environment, so a
+    #: stolen dump yields ciphertext alone.
+    secret_encrypted = models.TextField(editable=False)
+    #: SHA-256 hashes of single-use recovery codes. Hashed, not encrypted, because recovery only
+    #: ever asks "does this match?" — never "what was it?".
+    backup_code_hashes = models.JSONField(default=list, blank=True, editable=False)
+    #: The last accepted TOTP counter. A code is valid for its whole 30s window, so without this a
+    #: shoulder-surfed code could be replayed inside the same window.
+    last_counter = models.BigIntegerField(null=True, blank=True, editable=False)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True, editable=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["tenant", "user", "is_active"], name="mfa_tenant_user_idx")]
+
+    @property
+    def is_confirmed(self):
+        return self.confirmed_at is not None
+
+    def set_secret(self, plaintext):
+        from apps.core.crypto import encrypt
+        self.secret_encrypted = encrypt(plaintext)
+
+    def get_secret(self):
+        from apps.core.crypto import decrypt
+        return decrypt(self.secret_encrypted)
+
+    def __str__(self):
+        return f"{self.user} · {self.get_kind_display()}"
+
+
+# ============================================ 0.4 bullet 3: Password & Credential Policies
+class PasswordPolicy(models.Model):
+    """Per-tenant credential policy. **`is_enforced` defaults to False on purpose.**
+
+    Bullet 3 is "complexity rules, rotation, breach detection, and passwordless options". Complexity
+    and rotation are implemented; **breach detection is NOT** (it needs a breach corpus such as HIBP
+    and an outbound call this repo does not make) and passwordless is NOT (no WebAuthn). Both are
+    declared.
+
+    A brand-new tenant policy does not silently tighten existing behaviour: `is_enforced` is False
+    until an admin turns it on. Changing the password rules for every workspace the moment this
+    model shipped would have invalidated live credentials without anyone asking for it.
+    """
+
+    tenant = models.OneToOneField("core.Tenant", on_delete=models.CASCADE,
+                                  related_name="password_policy", db_index=True)
+    is_enforced = models.BooleanField(
+        default=False, help_text="Off by default — turning it on starts applying these rules.")
+    min_length = models.PositiveIntegerField(default=12)
+    require_upper = models.BooleanField(default=True)
+    require_lower = models.BooleanField(default=True)
+    require_digit = models.BooleanField(default=True)
+    require_symbol = models.BooleanField(default=False)
+    max_age_days = models.PositiveIntegerField(
+        default=0, help_text="0 disables forced rotation.")
+    prevent_reuse_count = models.PositiveIntegerField(
+        default=0, help_text="How many previous passwords to refuse. 0 disables the check.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Password policy · {self.tenant}"
+
+
+class PasswordHistory(models.Model):
+    """One row per password a user has set, so rotation and reuse checks have something to compare.
+
+    Stores the Django password HASH (never the plaintext) and reuses `User.check_password` to
+    compare, so this table can never leak a password.
+    """
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
+                               related_name="password_history", db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="password_history")
+    password_hash = models.CharField(max_length=255)
+    set_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-set_at"]
+        indexes = [models.Index(fields=["tenant", "user", "-set_at"], name="pwdhist_tenant_user_idx")]
+
+    def __str__(self):
+        return f"{self.user} · {self.set_at:%Y-%m-%d}"
+
+
+# ==================================================== 0.4 bullet 4: Session Management
+class UserSession(models.Model):
+    """A register of sign-ins, so a session can be seen and revoked.
+
+    Bullet 4 is "idle/absolute timeouts, concurrent-session limits, and device/session revocation".
+    The idle and absolute timeouts already exist in settings + `SessionTimeoutMiddleware`; what was
+    missing is any way to SEE or KILL a session.
+
+    Enforcement is deliberately one-sided: a session with **no row here is never touched**, so every
+    session created before this model existed (and every session in a test that never signs in
+    through the view) keeps working. Only a row explicitly marked revoked is enforced.
+    """
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE,
+                               related_name="user_sessions", db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="user_sessions")
+    #: The Django session key. Unique so a re-login cannot create a duplicate row for one session.
+    session_key = models.CharField(max_length=64, unique=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    revoked_at = models.DateTimeField(null=True, blank=True, editable=False)
+    revoked_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, editable=False, related_name="revoked_sessions")
+
+    class Meta:
+        ordering = ["-last_seen_at", "-id"]
+        indexes = [models.Index(fields=["tenant", "user", "-last_seen_at"], name="usess_tenant_user_idx")]
+
+    @property
+    def is_revoked(self):
+        return self.revoked_at is not None
+
+    def __str__(self):
+        return f"{self.user} · {self.ip or 'unknown'}"
+
+
+# ============================================ 0.4 bullet 5: Adaptive & Risk-Based Auth
+class LoginAttempt(models.Model):
+    """Every sign-in attempt, with the heuristic risk score that was computed for it.
+
+    Bullet 5 is "geo/IP/device risk scoring, step-up authentication, and anomaly challenges". This
+    records the IP/device signals the app can actually observe and the score derived from them, and
+    MFA is the step-up. It does **NOT** do geo-IP lookup or behavioural analysis — there is no
+    GeoIP database and no baseline model here, and the register says so.
+
+    `user` is nullable so a failed attempt against an unknown identifier is still recorded — which
+    is precisely the case an investigator needs.
+    """
+
+    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, null=True, blank=True,
+                               related_name="login_attempts", db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                             blank=True, related_name="login_attempts")
+    identifier = models.CharField(max_length=255, blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    success = models.BooleanField(default=False)
+    risk_score = models.PositiveIntegerField(default=0)
+    risk_reasons = models.JSONField(default=list, blank=True)
+    mfa_challenged = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="latt_tenant_created_idx"),
+            models.Index(fields=["identifier", "-created_at"], name="latt_ident_created_idx"),
+        ]
+
+    @property
+    def is_risky(self):
+        from apps.accounts.security import RISK_STEP_UP_THRESHOLD
+        return self.risk_score >= RISK_STEP_UP_THRESHOLD
+
+    def __str__(self):
+        return f"{self.identifier or '—'} · {'ok' if self.success else 'failed'} · {self.risk_score}"
