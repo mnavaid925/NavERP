@@ -1,0 +1,123 @@
+{% comment %}
+  The ONE tile grid — `projects/reporting/dashboard/detail.html` and `dashboard/home.html` both include
+  this file (B2.4), so a tile cannot mean two things on two pages.
+
+  Read from the parent context only: `rendered_widgets` ([{"widget","result","span"}] — `span` already
+  clamped to `cols`), `cols`, `active_range_label`, `empty`. `can_edit` and `widget_add_url` are published
+  by `pdb_detail` alone, which is what keeps the move/edit/delete affordances off the landing board
+  (an undefined key is falsy in a template, so home needs no branch of its own).
+  `active_range` itself never reaches this file: the tiles were already computed with it, and the
+  window switcher that compares it lives in the page header.
+{% endcomment %}
+{% if empty %}
+  <div class="card">
+    <div class="card-body">
+      <div class="empty-state">
+        <i data-lucide="layout-dashboard"></i>
+        <h3>No tiles on this board yet</h3>
+        <p>Add a KPI card, chart, gauge or table to see live project figures{% if active_range_label %} for {{ active_range_label }}{% endif %}.</p>
+        {% if can_edit and widget_add_url %}
+          <a href="{{ widget_add_url }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Tile</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  {# The grid is inline-styled, like every other board in this app: `cols` is a runtime number, so a Tailwind class name would have to be built from it and that breaks the moment somebody adds a build step. #}
+  <div style="display:grid; grid-template-columns:repeat({{ cols }}, minmax(200px, 1fr)); gap:1rem; align-items:start;">
+    {% for item in rendered_widgets %}
+      {% with w=item.widget r=item.result %}
+        <div class="card mb-0" style="grid-column:span {{ item.span }};">
+          <div class="card-header">
+            <h3>{{ w.title }}</h3>
+            <div class="flex items-center gap-2">
+              <span class="badge badge-slate">{{ r.range_label }}</span>
+              {% if can_edit %}
+                {# `get_full_path`, not `path`: this page's window is a `?range=` query, and a move that dropped it would land the reader on a different window than the one they were looking at (D64). #}
+                <form method="post" action="{% url 'projects:wdg_move' w.pk %}">{% csrf_token %}
+                  <input type="hidden" name="direction" value="up">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn-icon" type="submit" title="Move up"><i data-lucide="arrow-up"></i></button>
+                </form>
+                <form method="post" action="{% url 'projects:wdg_move' w.pk %}">{% csrf_token %}
+                  <input type="hidden" name="direction" value="down">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn-icon" type="submit" title="Move down"><i data-lucide="arrow-down"></i></button>
+                </form>
+                <a href="{% url 'projects:wdg_edit' w.pk %}" class="btn-icon" title="Edit tile"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'projects:wdg_delete' w.pk %}" onsubmit="return confirm('Remove this tile from the board?');">{% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn-icon danger" type="submit" title="Remove tile"><i data-lucide="trash-2"></i></button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+          <div class="card-body">
+            {% if r.error %}
+              {# A tile that cannot answer is one dash in the same card shape (D33's `blank()`), so the grid never renders a hole. #}
+              <div class="stat-value">{{ r.display }}</div>
+              <div class="stat-label">{{ w.metric_label }}</div>
+              <p class="text-muted">{{ r.error }}</p>
+            {% elif r.kind == "scalar" %}
+              <div class="stat-value">{{ r.display }}</div>
+              <div class="stat-label">{{ w.metric_label }}</div>
+              {% if r.chart_type == "gauge" and r.max %}
+                <div class="progress" style="margin-top:.75rem;"><div class="progress-bar" style="width:{{ r.pct }}%;"></div></div>
+                <div class="stat-label" style="margin-top:.25rem;">{{ r.pct }}% of {{ r.max }}{% if w.target_value %} · target {{ w.target_value }}{% endif %}</div>
+              {% endif %}
+            {% elif r.kind == "table" %}
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>{% for column in r.columns %}<th>{{ column }}</th>{% endfor %}</tr>
+                  </thead>
+                  <tbody>
+                    {% for row in r.rows %}
+                      <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                    {% empty %}
+                      <tr><td colspan="{{ r.columns|length|default:1 }}" class="empty-state"><p>Nothing in this window.</p></td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% if r.truncated %}
+                <div class="text-muted" style="font-size:.78rem; margin-top:.5rem;">Showing {{ r.rows|length }} of {{ r.total }} rows.</div>
+              {% endif %}
+            {% else %}
+              {% if r.bands %}
+                {# `bands` exists only when the series really is green/amber/red — `_apply_heat_bands` rewrites any other series to a bar, so a strip and a canvas can never both be asked for. #}
+                <div class="badge-group" style="margin:.25rem 0 .5rem;">
+                  {% for band in r.bands %}
+                    <span class="badge {{ band.css }}">{{ band.label }} {{ band.count }}</span>
+                  {% endfor %}
+                </div>
+                <div class="stat-label">{{ w.metric_label }}</div>
+              {% elif r.labels %}
+                {# The canvas id is `wchart<pk>` (`w.canvas_id`, A1.5) and the view only built a Chart.js entry for it when the payload's kind is a canvas kind with labels — R6, read off the payload, never the stored `widget.chart_type`. #}
+                <canvas id="{{ w.canvas_id }}" height="160"></canvas>
+                {% if r.total != None %}
+                  <div class="stat-label" style="margin-top:.5rem;">Total {{ r.total|floatformat:"-2" }}</div>
+                {% endif %}
+              {% else %}
+                <p class="text-muted">No rows in this window.</p>
+              {% endif %}
+            {% endif %}
+            {% if r.caveats %}
+              <div class="text-muted" style="font-size:.78rem; margin-top:.5rem;">
+                <ul style="margin:0; padding-left:1.1rem;">
+                  {% for note in r.caveats %}<li>{{ note }}</li>{% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+            {% url r.drill_url_name as drill_url %}
+            {% if drill_url %}
+              <div style="margin-top:.6rem;">
+                <a class="text-brand" style="font-size:.8rem;" href="{{ drill_url }}">Open the source register</a>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endwith %}
+    {% endfor %}
+  </div>
+{% endif %}
