@@ -197,3 +197,21 @@ from .WorkflowAutomation.Webhooks import (  # noqa: F401
     ProjectWebhookEndpointForm,
     WebhookTestPingForm,
 )
+
+# --- 7.16 Reporting & Business Intelligence --------------------------------------
+from .ReportingBusinessIntelligence.ProjectReports import ProjectReportForm  # noqa: F401
+from .ReportingBusinessIntelligence.ReportRuns import (  # noqa: F401
+    ProjectReportIssueForm,
+    ProjectReportNarrativeForm,
+)
+from .ReportingBusinessIntelligence.ProjectDashboards import ProjectDashboardForm  # noqa: F401
+from .ReportingBusinessIntelligence.DashboardWidgets import DashboardWidgetForm  # noqa: F401
+
+# --- 7.18 Integration & API Hub -------------------------------------------------
+from .IntegrationApiHub.Connectors import (  # noqa: F401
+    ConnectorTestForm,
+    ProjectIntegrationConnectorForm,
+)
+from .IntegrationApiHub.FieldMappings import ConnectorFieldMappingForm  # noqa: F401
+from .IntegrationApiHub.SyncJobs import ProjectSyncJobForm  # noqa: F401
+
