@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Saved Reports{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Saved Reports</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <span>Saved Reports</span>
+      </div>
+      <p class="text-muted">Every row here is a saved <em>question</em>, never a saved answer — the register opens live each time. Freeze a report from its own page to keep an immutable snapshot of one answer.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:report_library' %}" class="btn btn-outline"><i data-lucide="library"></i> Standard library</a>
+      <a href="{% url 'projects:run_list' %}" class="btn btn-outline"><i data-lucide="history"></i> Frozen runs</a>
+      <a href="{% url 'projects:rep_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Report</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <label class="form-label" for="id_q">Search</label>
+          <input type="text" class="form-input" id="id_q" name="q" value="{{ q }}" placeholder="Number, name, description or notes…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_report_type">Kind</label>
+          <select class="form-select" id="id_report_type" name="report_type">
+            <option value="">Any kind</option>
+            {% for value, label in report_type_choices %}
+              <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_subject">Subject</label>
+          <select class="form-select" id="id_subject" name="subject">
+            <option value="">Any subject</option>
+            {% for value, label in subject_choices %}
+              <option value="{{ value }}" {% if subject_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_chart_type">Chart</label>
+          <select class="form-select" id="id_chart_type" name="chart_type">
+            <option value="">Any chart</option>
+            {% for value, label in chart_choices %}
+              <option value="{{ value }}" {% if chart_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_project">Project</label>
+          <select class="form-select" id="id_project" name="project">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_owner">Owner</label>
+          <select class="form-select" id="id_owner" name="owner">
+            <option value="">Any owner</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if owner_filter|stringformat:"d" == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_shared">Visibility</label>
+          <select class="form-select" id="id_shared" name="shared">
+            <option value="">Shared and private</option>
+            <option value="True" {% if shared_filter == "True" %}selected{% endif %}>Shared only</option>
+            <option value="False" {% if shared_filter == "False" %}selected{% endif %}>Private only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_favorite">Favourites</label>
+          <select class="form-select" id="id_favorite" name="favorite">
+            <option value="">Starred and unstarred</option>
+            <option value="True" {% if favorite_filter == "True" %}selected{% endif %}>Starred only</option>
+            <option value="False" {% if favorite_filter == "False" %}selected{% endif %}>Unstarred only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a class="btn btn-outline" href="{% url 'projects:rep_list' %}">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Report</th>
+            <th>Kind</th>
+            <th>Subject</th>
+            <th>Question</th>
+            <th>Chart</th>
+            <th>Scope</th>
+            <th>Window</th>
+            <th>Access</th>
+            <th>Last run</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'projects:rep_detail' r.pk %}">{{ r.number }}</a>
+                <div class="text-muted">{{ r.name }}</div>
+              </td>
+              <td><span class="badge badge-slate">{{ r.get_report_type_display }}</span></td>
+              <td>{{ r.get_subject_display }}</td>
+              <td>
+                <div>{% if r.metric_labels %}{{ r.metric_labels|join:" · " }}{% else %}<span class="text-muted">No measures</span>{% endif %}</div>
+                <div class="text-muted">{% if r.dimension_labels %}by {{ r.dimension_labels|join:" · " }}{% else %}not grouped{% endif %}</div>
+              </td>
+              <td>{{ r.get_chart_type_display }}</td>
+              <td>{{ r.scope_label }}</td>
+              <td>{{ r.window_label }}</td>
+              <td>
+                {% if r.is_shared %}
+                  <span class="badge badge-green">Shared</span>
+                {% else %}
+                  <span class="badge badge-muted">Private</span>
+                {% endif %}
+                <div class="text-muted">{% if r.owner %}{{ r.owner.get_full_name|default:r.owner.email }}{% else %}un-owned{% endif %}</div>
+              </td>
+              <td>{% if r.last_run_at %}{{ r.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    `rep_favorite` is the one verb here that comes back where the star was clicked, so
+                    this is the only row form carrying `next` — and it carries `get_full_path`, because
+                    the filters that narrowed this register are the page state (D64).
+                  {% endcomment %}
+                  <form method="post" action="{% url 'projects:rep_favorite' r.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn-icon{% if r.is_favorite %} text-brand{% endif %}" type="submit" title="{% if r.is_favorite %}Remove from favourites{% else %}Add to favourites{% endif %}"><i data-lucide="star"></i></button>
+                  </form>
+                  <a href="{% url 'projects:rep_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'projects:rep_edit' r.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'projects:rep_delete' r.pk %}" onsubmit="return confirm('Delete this saved report and its frozen runs? This cannot be undone.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="file-bar-chart"></i>
+                  <h3>No saved reports yet</h3>
+                  <p>Nothing matches this filter, or nobody has saved a question yet. Start from the standard library or build one in the report builder.</p>
+                  <a href="{% url 'projects:rep_create' %}" class="btn btn-primary">New Report</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
