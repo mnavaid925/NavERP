@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Tile{% else %}Add Tile{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit tile: {{ obj.title }}{% else %}Add a tile{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:pdb_detail' dashboard.pk %}">{{ dashboard.name }}</a><span class="sep">›</span>
+        <span>{% if is_edit %}{{ obj.title }}{% else %}New tile{% endif %}</span>
+      </div>
+      <p class="text-muted">A tile is one saved question about one metric, drawn live every time the board opens — this page stores the ask, never the answer.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pdb_detail' dashboard.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to {{ dashboard.name }}</a>
+    </div>
+  </div>
+
+  {% comment %}
+    One template for both routes (B4.1), and no action attribute: each route posts back at itself, so a
+    written-out action would be a second place that knows which URL saves this tile.
+  {% endcomment %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Tile definition</h3>
+        <span class="badge badge-slate">{{ dashboard.number }} · {{ dashboard.name }}</span>
+      </div>
+      <div class="card-body">
+        {% for error in form.non_field_errors %}
+          <div class="form-error">{{ error }}</div>
+        {% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+
+        {% comment %}
+          The pair table below is the same `chart_rules` map the form's own clean() consults, printed
+          rather than re-derived: a second spelling of "which charts can show this metric" is how the
+          dropdown and the validation start disagreeing (D23). Keys print raw because they are the
+          literal values that map holds.
+        {% endcomment %}
+        <div class="table-wrap" style="margin-top:.75rem;">
+          <table class="table">
+            <thead>
+              <tr><th>Metric</th><th>Charts it can draw</th></tr>
+            </thead>
+            <tbody>
+              {% for value, label in metric_choices %}
+                {% for metric, charts in chart_rules.items %}
+                  {% if metric == value %}
+                    <tr>
+                      <td class="fw-600">{{ label }}<div class="text-muted">{{ value }}</div></td>
+                      <td>{{ charts|join:" · " }}</td>
+                    </tr>
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-muted" style="margin-top:.6rem;">
+          <i data-lucide="info"></i>
+          A count metric is a number and takes a KPI card or a gauge; a series metric has labels and can take
+          a bar, line, pie, doughnut or heat bands. The dropdown below prunes itself to match, and the form
+          refuses the pair again on the server — the pruning is a convenience, never the check.
+        </p>
+        <p class="text-muted" style="margin-top:.4rem;">
+          <i data-lucide="info"></i>
+          The window dropdown lists the six presets and not <em>custom</em>: a tile stores no date pair of
+          its own, so a custom range could only come back as an error. Leaving the project and portfolio
+          blank asks the workspace-wide figure; the board's own scope does not narrow a tile by itself.
+        </p>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save tile{% else %}Add tile{% endif %}</button>
+          <a class="btn btn-outline" href="{{ cancel_url }}">Cancel</a>
+        </div>
+      </div>
+    </div>
+  </form>
+{% endblock %}
+
+{% block extra_js %}
+  {% comment %}
+    D23's hint, and the ONLY way this payload reaches JS: `json_script` escapes for a script context, so
+    no metric key can break out of the element the way a `|safe` interpolation would (B4.3).
+  {% endcomment %}
+  {{ chart_rules|json_script:"rbi-chart-rules" }}
+  <script>
+    (function () {
+      var source = document.getElementById("rbi-chart-rules");
+      var metric = document.getElementById("id_metric");
+      var chart = document.getElementById("id_chart_type");
+      if (!source || !metric || !chart) { return; }
+      var rules = JSON.parse(source.textContent) || {};
+      function prune() {
+        var allowed = rules[metric.value];
+        Array.prototype.forEach.call(chart.options, function (option) {
+          // An unknown metric leaves every choice on the list; the selected option always stays
+          // selectable, or editing a legacy pair would submit a blank chart type.
+          var keep = !Array.isArray(allowed) || allowed.indexOf(option.value) !== -1 || option.selected;
+          option.hidden = !keep;
+          option.disabled = !keep;
+        });
+      }
+      metric.addEventListener("change", prune);
+      prune();
+    })();
+  </script>
+{% endblock %}
