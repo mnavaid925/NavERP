@@ -1261,7 +1261,7 @@ GET params: `portfolio`, `project`, `as_of`.
 
 | key | type | source | consumed by |
 |---|---|---|---|
-| `bands` | `list[dict]` — `{"project": Project, "portfolio": str, "program": str, "rating": str, "rag_css": str, "streak_weeks": int, "streak_label": str, "cpi": float, "spi": float, "cv": str, "sv": str, "hours": float, "margin_pct": str, "drill_url": str}` | `analytics.exec_pack(request.tenant, portfolio=…, as_of=…)` | the RAG band table; `class="badge {{ b.rag_css }}"`, `{{ b.streak_label }}` = "amber · 6 weeks" |
+| `bands` | `list[dict]` — `{"project": Project, "portfolio": str, "program": str, "rating": str, "rag_css": str, "streak_weeks": int, "streak_label": str, "cpi": float, "spi": float, "cv": str, "sv": str, "hours": float, "margin_pct": str, "drill_url_name": str, "drill_pk": int}` | `analytics.exec_pack(request.tenant, portfolio=…, as_of=…)` | the RAG band table; `class="badge {{ b.rag_css }}"`, `{{ b.streak_label }}` = **"amber · 6 runs in a row"** (`_streak_result`, `analytics.py:1863` — the count is consecutive issued **runs**, so the sentence says runs; `streak_weeks` keeps its key name and D35 owns the wording). `drill_url_name` + `drill_pk` are the analytics-shaped pair (D36); the view resolves `drill_url` |
 | `rag_series` | `list[dict]` — `{"label": str, "green": int, "amber": int, "red": int}` | `analytics.rag_streak()` month buckets over `visible_runs`-scoped issued runs reading `data["rating"]` | the persistence sparkline (`chart_config`-shaped canvas is NOT used here; it is an HTML mini-table) |
 | `chart_config` / `chart_rows` / `canvas_charts` | as B2.1 `report_standard` | the exec payload's portfolio→program→project rollup | the trend canvas + its HTML fallback |
 | `summary` / `summary_cards` | as above | `exec_pack()["summary"]` | the pack header KPI strip |
@@ -1745,10 +1745,13 @@ def exec_pack(tenant, *, portfolio=None, project=None, as_of=None) -> dict:
     "rollup" (portfolio→program→project rows). `bands` is the one place a rating is derived."""
 
 def rag_streak(tenant, project=None, as_of=None) -> dict:
-    """{"rating": str, "weeks": int, "label": "amber · 6 weeks"} from the consecutive issued
+    """{"rating": str, "weeks": int, "label": "amber · 6 runs in a row"} from the consecutive issued
     ProjectReportRun series (-generated_at,-id, status="issued", reading data["rating"]).
-    No issued run -> {"rating": "", "weeks": 0, "label": "no history"} — the template's {%% if %%}
-    covers it. This is the ONLY function that reads stored run payloads, and it reads one key."""
+    No issued run -> {"rating": "", "weeks": 0, "label": "no rating on record"} — the template's {%% if %%}
+    covers it. `weeks` counts runs, so every sentence goes through `_streak_result(rating, weeks)`, the ONE
+    place a streak becomes a label ("{rating} · {n} run(s) in a row" / "{rating} · no prior run at this
+    rating" / "no rating on record", D35). This is the ONLY function that reads stored run payloads, and it
+    reads one key."""
 
 def narrative_seed(tenant, report, result) -> str:
     """Plain-text starter for a new run's `narrative`: open IssueEscalation count + the project's
@@ -1828,7 +1831,7 @@ client (B6).
 
 ## B4 — Templates: exact tree + `render()` path strings
 
-**26 files** under `templates/projects/reporting/` (the short slug, verified sibling shape:
+**27 files** under `templates/projects/reporting/` (the short slug, verified sibling shape:
 `templates/projects/financialbilling/`, `agile/`, `portfolio/`). **Every `render()` first argument is the full
 path from the templates root**, e.g. `render(request, "projects/reporting/report/list.html", ctx)`.
 
@@ -1865,6 +1868,9 @@ templates/projects/reporting/
 ├── _result_table.html                         (partial, standard + report/detail + reportrun/detail)
 ├── _result_chart.html                         (partial, the canvas + its HTML fallback + json_script)
 ├── _charts_script.html                        (partial, the ONE `new Chart()` loop, in {% block extra_js %})
+├── _caveats.html                              (partial, the ONE caveat strip: `_result_table.html`,
+│                                               `exec_pack.html` and `_widget_grid.html` — the last hands it
+│                                               each tile's own list with `with caveats=`)
 ├── _standard_section_schedule.html            ┐
 ├── _standard_section_cost.html                │
 ├── _standard_section_risk.html                │  the eight areas of B3.3's closed set; each is
@@ -1885,7 +1891,7 @@ templates/projects/reporting/
 └── widget/form.html                           wdg_create/wdg_edit "…/widget/form.html"
 ```
 
-**Count:** 4 root standalone + 12 partials + 3 `report/` + 2 `reportrun/` + 4 `dashboard/` + 1 `widget/` = **26**.
+**Count:** 4 root standalone + 13 partials + 3 `report/` + 2 `reportrun/` + 4 `dashboard/` + 1 `widget/` = **27**.
 
 **Documented exemptions (CRUD Completeness rule, stated in the module docstrings so a reviewer does not file
 them):**
@@ -2306,6 +2312,7 @@ because a filter excludes exactly the 7.15 / 6.14 / crm tests a shared-file chan
 | **D64** | B4.2's form-page bullet pins the redirect-back field as `<input type="hidden" name="next" value="{{ request.path }}">` | the value is **`{{ request.get_full_path }}`** on every form that posts to a `redirect_back_or` route (`_widget_grid.html`'s three tile forms, the `rep_favorite` star, each register's row delete) | `request.path` drops the query string, and in this sub-module the query IS page state in two places: `pdb_detail`'s window is `?range=` (B2.4) and a register's filters are `?q=&status=&owner=` (R1/R3). A member who favourites the third row of a filtered `rep_list` is bounced to the unfiltered page and watches the row they just starred disappear; a tile moved on a board opened at `?range=last_7` lands on the authored window, so the numbers under it change as well as its place. Both are the "the page lied" class and neither is visible to a status-code assertion. Openness is unaffected: D63's `looks_like_target` still requires a root-relative path and Django's host check still runs, so a query cannot turn the value into a foreign target — `…/dashboards/<pk>/?range=last_7` round-trips verbatim through `wdg_move` (`temp/rbi_wdg_probe.py` step 14, `ALL PROBES PASSED`) |
 | **D65** | B2.1's `report_library` block pins `type_filter` as the raw `?type=` echo that "narrows the list **client-side**" while the same cell promises "an unknown key leaves the full list (never an empty page, L11)" | the narrow moves **into the view**: `matched = [row for row in rows if row["type"] == wanted]`, `"library": matched or rows`, `"total_kinds": len(rows)` (always the full count) and `"type_filter": wanted if matched else ""` | The two halves are only jointly satisfiable in Python. A template loop guards rows with an `{% if %}` and cannot fall back once it has skipped all of them, so `?type=junk` would print a header over **zero** rows — the exact empty page the same cell forbids — and `{% empty %}` cannot catch it, because it fires only when the source list itself is empty. Echoing the raw value is the other half of the same lie: the banner then announces a filter that did not happen. Blanking `type_filter` when nothing matched makes the banner and the list one statement instead of two that can disagree. `total_kinds` is deliberately **not** the narrowed length — the caption answers "how many kinds exist", not "how many are on screen". View re-imported clean this pass; the page itself is asserted in Phase 3.5 smoke with a valid key, an unknown key and no key. |
 | **D66** | B2.1's `range_choices` row pins the window control as "the quick-window links" | one `<select name="range">` inside the page's **existing** GET form, alongside the four scope picks, `from`/`to` and `as_of` | Eight links would each have to reassemble the querystring in markup — `?type={{ kind }}&range={{ v }}` plus whichever of `project`/`portfolio`/`client`/`org_unit`/`from`/`to` the reader had just set — which is the index-and-concatenation gymnastics B4.7 bans from a template, and the failure is quiet: click a window chip and the scope you were looking at is gone, so the numbers change for a reason the page never states. The bar already submits all of it in one place, Django drops empty inputs from the GET itself, and `RANGE_KEYS` in the view ignores a junk window exactly as it ignored one arriving by link. Cost: `range` is the single param the template reads from `request.GET` directly, because the view echoes the other six and not this one (B2.1's `active_filters` is `SCOPE_PARAMS`, and adding a seventh key for a `selected` comparison would be a second source for a value the request already holds) |
+| **D67** | B3.1's `exec_pack()` returns `money`, `rollup`, `top_risks` and `overdue_milestones` beside `bands`, and B2.1's key table reads as though the pack page shows all of them | `exec_pack` (the view) publishes **the banded answer only** — `bands`, `rag_series`, `chart_config`/`chart_rows`, `summary`/`summary_cards`, `caveats`, `narrative*`, the scope picks and `drills`. The four extra keys are computed and never rendered, and the same is true of the payload's `columns`/`rows`/`truncated`/`group_count`/`rating`/`scope_label`/`window`/`chart_dataset_label` | The page's one register is the RAG band table, and every column the committee reads off a band row (`cpi`, `spi`, `cv`, `sv`, `hours`, `margin_pct`) already travels **inside** that row — so a separate money strip and risk table would put the same six numbers on the sheet twice, in two formats, with nothing to tell the reader which one the total was taken from. `top_risks` and `overdue_milestones` are the same two computes a board tile can already be authored with (`WIDGET_COMPUTE`), so the pack links out to those registers (`PACK_DRILLS` → `_drill_rows`) instead of re-deriving them under a different cap. Keeping the keys on the payload is deliberate, not an oversight: `exec_pack()` is `json_safe()` end to end, so a CSV or JSON pack route is one view away with no second arithmetic (the same reason B3 keeps DOM ids out of analytics). **Whether the four keys should be dropped from the compute or surfaced on the sheet is carried to Phase 5** — it is a payload-shape decision, and the template pass must not silently delete a contract-pinned key. |
 
 **Part B's answer to Part A's open questions (A3's tail):** every url name (B1), every view function name
 (B1/B2), every context key (B2), every template path (B4) and the seeder's row counts (B5.0: **2 dashboards,
@@ -2328,3 +2335,17 @@ new names it introduces are analytics symbols (`MEASURES`, `DIMENSIONS`, `SUBJEC
    adding a chart kind means touching both `_widget_grid.html` and `_result_chart.html`.
 3. `DashboardWidget.canvas_id` == `f"wchart{self.pk}"` is the DOM contract the JS looks up; renaming the
    property or its format breaks the smoke assertion in B5.3 item 3 before it breaks anything visible.
+
+### B7.1 Carried to Phase 4 review (found while writing the templates, deliberately not fixed there)
+
+The template pass reads every measure's semantics in order to write its area note, and four of those notes say
+something the compute does not do. They are **wording** defects, not arithmetic ones — the numbers on the page
+are what `analytics` computes — so the fix belongs with the `code-fixer`, not in a template edit that would put
+one app's prose out of step with the registry it describes. Each is verified against the code, line included.
+
+| # | Where | The sentence promises | What the code actually answers | Fix that keeps one authority |
+|---|---|---|---|---|
+| F1 | `analytics.py:1208` — `quality_defect_summary.description` | "Defects raised in the window by severity, **against the task count that produced them**" | `subject="defect"`, so `_aggregate`'s `task_count = len(facts)` (`analytics.py:904`) counts the **defect rows** in that severity group, not `ProjectTask` rows. `open_count` over `task_count` is therefore "how many of this severity are still open", a share of defects — never a defects-per-task rate | Re-word to the ratio it is ("… by severity, with how many of each are still open"), or bind a real task denominator. Re-wording is the honest change: a defects-per-task figure is a different compute over a different model and belongs in `MEASURES`, invented here |
+| F2 | `analytics.py:1239` — `resource_utilization.description` | "Hours booked per resource **against the billable share of those hours**" | `ResourceAllocation` carries **no billable flag**, so `_fact`'s coercion gives `billable = Decimal(0)` for every row and `billable_pct` answers `0%` whatever the hours say. The register's second column is a constant | Either drop `billable_pct` from this kind's `measures` and say so, or take the billable share from the time entries that feed the booking. A note that says "no billable flag on a booking" is what the page needs while the axis stays |
+| F3 | `analytics.py:1263` — `agile_throughput.description` | "**Completed items** per sprint month — the team's throughput, not a story-point guess" | `subject="sprint"`, so `completed_count` counts **sprints** whose `status == "completed"` and `task_count` counts sprint rows, bucketed by month. A month showing 2 completed did two **sprints**, not two work items | Re-word to "Sprints completed per month, beside the sprints that ran" — the real number is a delivery-cadence count. A true item-throughput series is a `ProjectTask`-subjected compute and would be a new metric key, not a rename |
+| F4 | `models/ReportingBusinessIntelligence/_choices.py:52` — `SIZE_CHOICES` | `"large"` = "Large (**three-quarter width**)" | Unreachable. `LAYOUT_COLS` caps the grid at three columns (`ProjectDashboards.py:57`) and `SIZE_SPANS["large"] = 3` (`:63`), then the span is clamped by `min(raw_span, cols)` — so `large` is the **whole row** on a 1-, 2- and 3-column board alike. Three-quarters of a board is `medium` on a three-column one | Relabel to "Large (full row)". This one needs a migration: `choices` is part of the field's deconstruction, so an `AlterField` on `DashboardWidget.size` follows the label. **Claim the migration number at the moment it is written** — a 7.18 session is generating migrations in this same checkout (L43) and `0025` is already taken by it |
