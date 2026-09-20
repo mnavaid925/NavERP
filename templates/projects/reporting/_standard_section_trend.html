@@ -1,0 +1,9 @@
+{% comment %}
+  The trend area's section — see `_standard_section_schedule.html` for the framing rule.
+  This area is the one that pairs a live count with ratios that need both sides of a comparison, and
+  `_pct`/the index measures return None rather than 0 when a denominator is missing (analytics `_pct`), so
+  the dash is the claim worth explaining.
+{% endcomment %}
+<p class="text-muted fw-600" style="margin-top:.75rem;">Trend</p>
+<p class="text-muted">The trend area answers across time, so it mixes a live count with ratios. Open counts rows in the window that have not closed yet; on-time is scored only on work that has actually landed. CPI and SPI each need both sides of a comparison — planned value to divide by, or actual cost to divide into — so a group with nothing booked reads as a dash, and a dash here means no answer rather than a poor one.</p>
+{% include "projects/reporting/_result_table.html" %}
