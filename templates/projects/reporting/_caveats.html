@@ -1,8 +1,9 @@
 {% comment %}
-  The ONE caveat strip. `_result_table.html` includes it below the register, and a page with no register
-  at all (the steering pack) includes it directly — so the sentence a reader needs to trust a number can
-  never be printed on one page and silently dropped on another. The compute layer always appends at least
-  one caveat when no workspace is bound, which makes this the whole answer for a tenant-less reader.
+  The ONE caveat strip. `_result_table.html` includes it below the register, a page with no register at
+  all (the steering pack) includes it directly, and `_widget_grid.html` hands it each tile's own list
+  with `with caveats=` — so the sentence a reader needs to trust a number can never be printed on one
+  page and silently dropped on another. The compute layer always appends at least one caveat when no
+  workspace is bound, which makes this the whole answer for a tenant-less reader.
 
   Read from the parent context: `caveats`. Include it once per region, next to the figures it qualifies.
 {% endcomment %}
