@@ -132,6 +132,12 @@ def run_detail(request, pk):
     chart_type = obj.chart_type
     chart_labels = obj.chart_labels
     chart_data = obj.chart_data
+    # Unbound, on purpose: these are the only two writes a page here makes, and each form's own
+    # ``clean()`` is the draft gate. The issue form is also the only thing that knows which documents
+    # exist for this workspace, so a hand-built ``<select name="document">`` would offer values that
+    # no form validates.
+    narrative_form = ProjectReportNarrativeForm(instance=obj, tenant=request.tenant)
+    issue_form = ProjectReportIssueForm(instance=obj, tenant=request.tenant)
 
     return render(request, TEMPLATE_DETAIL, {
         "obj": obj,
@@ -158,6 +164,8 @@ def run_detail(request, pk):
         # rejects — a badge class that stops matching the letter the compute chose.
         "rag_css": obj.rag_css,
         "narrative": obj.narrative,
+        "narrative_form": narrative_form,
+        "issue_form": issue_form,
         # All four status flags, because the sidebar gates three different buttons on three
         # different ones and an ``{% if obj.status == "draft" %}`` in the template would be a
         # literal compared against a choice key the contract already exposes (B4.4).
