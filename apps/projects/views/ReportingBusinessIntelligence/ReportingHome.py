@@ -236,13 +236,19 @@ def rbi_home(request):
 @login_required
 def report_library(request):
     """The catalogue: every canned kind, its subject and how many saved questions back it."""
-    library = _library_rows(request)
+    rows = _library_rows(request)
+    wanted = request.GET.get("type", "").strip()
+    matched = [row for row in rows if row["type"] == wanted]
     return render(request, TEMPLATE_LIBRARY, {
-        "library": library,
-        "total_kinds": len(library),
+        # The narrow happens here because a template loop that skipped every row could not fall back to
+        # the whole list: an unknown `?type=` must leave the catalogue intact, not empty it (L11).
+        "library": matched or rows,
+        # Always the full kind count, so the caption still answers "how many kinds exist" while a
+        # narrowed one-row list is on screen.
+        "total_kinds": len(rows),
         "sibling_boards": _sibling_boards(),
-        # An unknown ``?type=`` narrows nothing: the list stays whole, the banner says why.
-        "type_filter": request.GET.get("type", "").strip(),
+        # Echoed only when it actually matched, so the banner never claims a filter that did not happen.
+        "type_filter": wanted if matched else "",
     })
 
 
