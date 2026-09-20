@@ -96,6 +96,11 @@ from .FinancialBillingManagement.BillingRuns import urlpatterns as _fbm_billingr
 from .FinancialBillingManagement.RevenueSchedules import urlpatterns as _fbm_revenueschedules
 from .FinancialBillingManagement.PaymentRecords import urlpatterns as _fbm_paymentrecords
 from .FinancialBillingManagement.FinancialBoards import urlpatterns as _fbm_financialboards
+from .ReportingBusinessIntelligence.ReportingHome import urlpatterns as _rbi_home
+from .ReportingBusinessIntelligence.ProjectReports import urlpatterns as _rbi_reports
+from .ReportingBusinessIntelligence.ReportRuns import urlpatterns as _rbi_runs
+from .ReportingBusinessIntelligence.ProjectDashboards import urlpatterns as _rbi_dashboards
+from .ReportingBusinessIntelligence.DashboardWidgets import urlpatterns as _rbi_widgets
 from .WorkflowAutomation.WorkflowRules import urlpatterns as _wa_rules
 from .WorkflowAutomation.ApprovalGates import urlpatterns as _wa_gates
 from .WorkflowAutomation.RecurringTasks import urlpatterns as _wa_recurring
@@ -241,6 +246,17 @@ urlpatterns = (
     + _fbm_revenueschedules
     + _fbm_paymentrecords
     + _fbm_financialboards
+    # 7.16 Reporting & Business Intelligence — every route sits under the one first segment
+    # `reporting/`, which no other sub-module in this package uses (grep-verified: `path("reporting`
+    # appears nowhere outside this sub-module), so the block cannot shadow an earlier one. Within it
+    # the order below is legibility, not precedence: each pattern carries its own trailing slash, so
+    # `reporting/` cannot capture `reporting/library/` and `reporting/dashboards/<int:pk>/` cannot
+    # capture `reporting/dashboards/<int:pk>/widgets/add/`.
+    + _rbi_home
+    + _rbi_reports
+    + _rbi_runs
+    + _rbi_dashboards
+    + _rbi_widgets
     # 7.17 Workflow & Automation — first segments (rules/, gates/, recurring/,
     # webhooks/, automation/) are disjoint literals from earlier sub-modules and from each other.
     + _wa_rules
