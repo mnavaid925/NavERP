@@ -151,6 +151,13 @@ from apps.projects.models import (
     RecurringTaskSchedule,
     ProjectWebhookEndpoint,
     ProjectWebhookDelivery,
+    ProjectReport,
+    ProjectDashboard,
+    DashboardWidget,
+    ProjectIntegrationConnector,
+    ConnectorFieldMapping,
+    ProjectSyncJob,
+    ProjectSyncRun,
 )
 
 
@@ -354,6 +361,12 @@ class Command(BaseCommand):
             # apps/projects, so nothing outside 7.10 lives in either subtree.
             purged = self._purge_docmgt_files()
             self.stdout.write(f"  removed {purged} stored 7.10 file(s) from MEDIA_ROOT")
+            # 7.18 Integration & API Hub — children first (runs → jobs → mappings → connectors),
+            # ABOVE 7.17's webhook deletes because a connector FKs a ProjectWebhookEndpoint.
+            ProjectSyncRun.objects.all().delete()
+            ProjectSyncJob.objects.all().delete()
+            ConnectorFieldMapping.objects.all().delete()
+            ProjectIntegrationConnector.objects.all().delete()
             ProjectWebhookDelivery.objects.all().delete()
             ProjectWebhookEndpoint.objects.all().delete()
             RecurringTaskSchedule.objects.all().delete()
@@ -495,8 +508,13 @@ class Command(BaseCommand):
         # 7.15 Financial & Billing Management: rate cards, billing runs,
         # ASC 606 revenue schedules, payment records & collection workflows.
         self._financial_billing(tenant, now)
+        # 7.16 Reporting & Business Intelligence: saved report questions, dashboard
+        # definitions and their tile rows. No report runs — those are frozen by a person.
+        self._reporting_bi(tenant, now)
         # 7.17 Workflow & Automation: workflow rules, approval gates, recurring tasks, webhooks.
         self._workflow_automation(tenant, now)
+        # 7.18 Integration & API Hub: connectors, field mappings, sync jobs, sync runs.
+        self._integration_hub(tenant, now)
 
 
 
@@ -4135,6 +4153,136 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.15 seeded: 4 rate cards, 3 billing runs, 3 revenue schedules, 3 payment records."))
 
+    def _reporting_bi(self, tenant, now):
+        """7.16 Reporting & Business Intelligence — 5 saved questions, 2 boards, 11 tiles, 0 runs.
+
+        Reuses the projects, portfolio and client the earlier blocks already made; a reporting seed
+        that minted its own project would put two workspaces' figures on the same board.
+
+        Every row goes through ``full_clean()`` before ``save()``. That is not ceremony here: the tile
+        rows carry a metric/chart pair the model validates against ``analytics.allowed_charts``, and a
+        seeder that wrote the column directly would ship a blank tile that every page still renders
+        as a 200.
+        """
+        if ProjectReport.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"  {tenant.name}: 7.16 Reporting & Business Intelligence already seeded — skipping.")
+            return
+
+        today = now.date()
+        active_proj = Project.objects.filter(tenant=tenant, status="active").order_by("id").first() \
+            or Project.objects.filter(tenant=tenant).order_by("id").first()
+        portfolio = Portfolio.objects.filter(tenant=tenant).order_by("id").first()
+        client_party = self._client(tenant)
+        User = get_user_model()
+        manager = (getattr(active_proj, "project_manager", None) or getattr(active_proj, "created_by", None)
+                   or User.objects.filter(tenant=tenant, is_superuser=False).first())
+        # The tenant admin owns the default board on purpose: `pdb_home` resolves the *caller's* own
+        # default, so a board owned by somebody else renders an empty home page for the account every
+        # smoke pass logs in as — a blank region that still answers 200.
+        pm_user = (User.objects.filter(tenant=tenant, username__startswith="admin_").order_by("id").first()
+                   or manager)
+        if not active_proj or not pm_user:
+            return
+
+        def _row(model, key, fields=()):
+            """Idempotent, validated create on a natural key — never a bare `.create()`."""
+            obj = model.objects.filter(**key).first()
+            if obj is not None:
+                return obj, False
+            obj = model(**key)
+            for name, value in fields.items():
+                setattr(obj, name, value)
+            obj.full_clean()
+            obj.save()
+            return obj, True
+
+        report_specs = [
+            ({"name": "Weekly status digest"}, {
+                "description": "What closed this week and what is still open, in the shape a stand-up reads.",
+                "report_type": "status_report", "subject": "project",
+                "measures": ["completed_count", "open_count"], "dimension_1": "status",
+                "date_range": "last_7", "chart_type": "table", "top_n": 20,
+                "is_favorite": True, "is_shared": True, "owner": pm_user, "project": active_proj}),
+            ({"name": "Earned value by project"}, {
+                "description": "Planned, earned and actual side by side, month over month.",
+                "report_type": "earned_value", "subject": "project",
+                "measures": ["earned_value", "cv", "cpi"], "dimension_1": "project",
+                "dimension_2": "month", "date_range": "last_90", "chart_type": "line", "top_n": 15,
+                "is_shared": True, "owner": pm_user}),
+            ({"name": "Risk exposure register"}, {
+                "description": "Every open risk shaded by severity with the exposure each one carries.",
+                "report_type": "risk_register", "subject": "risk",
+                "measures": ["exposure_value", "open_count"], "dimension_1": "risk_category",
+                "dimension_2": "severity", "date_range": "all", "chart_type": "bar", "top_n": 50,
+                "is_shared": True, "owner": pm_user}),
+            ({"name": "My utilization check"}, {
+                "description": "Hours booked per resource this month — the private one, kept private on purpose.",
+                "report_type": "resource_utilization", "subject": "resource_allocation",
+                "measures": ["utilization_pct", "hours"], "dimension_1": "resource",
+                "dimension_2": "role", "date_range": "last_30", "chart_type": "bar", "top_n": 25,
+                "is_shared": False, "owner": pm_user}),
+            ({"name": "Unbilled by client (custom)"}, {
+                "description": "Worked-but-unbilled money per client over a hand-picked window.",
+                "report_type": "custom", "subject": "invoice",
+                "measures": ["unbilled_amount", "invoiced_amount"], "dimension_1": "client",
+                "dimension_2": "month", "date_range": "custom", "date_from": today - timedelta(days=60),
+                "date_to": today - timedelta(days=14), "chart_type": "bar", "top_n": 10,
+                "sort_by": "unbilled_amount", "is_shared": True, "owner": pm_user,
+                "project": active_proj, "client": client_party}),
+        ]
+        reports = []
+        for key, fields in report_specs:
+            report, _created = _row(ProjectReport, {"tenant": tenant, **key}, fields)
+            reports.append(report)
+
+        # Board A is a member's own working board; board B is the unowned, shared tenant template that
+        # `home_dashboard` falls back to for anybody without a default of their own.
+        board_specs = [
+            ({"name": "PM Delivery Board"}, {
+                "description": "The three numbers a delivery check-in opens with, then the slipped work.",
+                "owner": pm_user, "audience": "pm", "layout": "two", "default_range": "last_30",
+                "is_default": True, "is_shared": False, "project": active_proj}),
+            ({"name": "Executive Portfolio Pulse"}, {
+                "description": "Earned-value health across the whole portfolio, for anyone who lands here.",
+                "owner": None, "audience": "executive", "layout": "three", "default_range": "last_90",
+                "is_default": False, "is_shared": True, "portfolio": portfolio}),
+        ]
+        boards = []
+        for key, fields in board_specs:
+            board, _created = _row(ProjectDashboard, {"tenant": tenant, **key}, fields)
+            boards.append(board)
+        board_a, board_b = boards
+
+        tile_specs = [
+            (board_a, "Active projects", "kpi_active_projects", "kpi", "last_30", "small", 0, None, "project"),
+            (board_a, "Overdue tasks", "kpi_overdue_tasks", "kpi", "last_30", "small", 1, None, "project"),
+            (board_a, "Open risks", "kpi_open_risks", "kpi", "last_30", "small", 2, None, "project"),
+            (board_a, "Work by status", "tasks_by_status", "bar", "last_90", "medium", 3, None, "project"),
+            (board_a, "Project mix", "projects_by_status", "doughnut", "last_90", "medium", 4, None, None),
+            (board_a, "Slipped milestones", "overdue_milestones", "table", "last_30", "full", 5, None, "project"),
+            (board_b, "Cost performance", "kpi_cpi", "gauge", "last_90", "medium", 0, Decimal("1.00"), None),
+            (board_b, "Schedule performance", "kpi_spi", "kpi", "last_90", "medium", 1, None, None),
+            (board_b, "Cost variance by project", "cost_variance_by_project", "bar", "last_90", "large", 2, None, None),
+            (board_b, "Earned-value curve", "ev_curve_by_month", "line", "year", "medium", 3, None, None),
+            (board_b, "Portfolio health", "health_heat_bands", "heat", "last_90", "full", 4, None, "portfolio"),
+        ]
+        for board, title, metric, chart, window, size, position, target, scope in tile_specs:
+            _row(
+                DashboardWidget,
+                {"tenant": tenant, "dashboard": board, "title": title},
+                {"metric": metric, "chart_type": chart, "date_range": window, "size": size,
+                 "position": position, "target_value": target,
+                 # The tile's own tenant is denormalised from its board (A1.3) and set in the same
+                 # statement as the board, so the two can never disagree on the way in.
+                 "project": active_proj if scope == "project" else None,
+                 "portfolio": portfolio if scope == "portfolio" else None})
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.16 — {len(boards)} dashboards, {len(tile_specs)} tiles, "
+            f"{len(reports)} saved reports; 0 runs (a run is frozen by a person from a report page, "
+            f"never seeded)."))
+
     def _workflow_automation(self, tenant, now):
         """Workflow rules, approval gates, recurring tasks, and webhooks (7.17).
 
@@ -4412,6 +4560,72 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.17 seeded: 3 workflow rules, 3 execution logs, 3 approval gates, 3 recurring schedules, 2 webhook endpoints, 3 deliveries."))
 
+    def _integration_hub(self, tenant, now):
+        """Integration & API Hub (7.18): connectors, field mappings, sync jobs, sync runs.
+
+        Guarded per tenant so a re-run is a no-op unless --flush is passed. Runs are created
+        through ``ProjectSyncRun.record()`` — the model's ONLY writer — never bare ``.create()``.
+        Nothing here performs an outbound request; every run is ``simulated`` or an honest
+        recorded outcome.
+        """
+        if ProjectIntegrationConnector.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.18 integration hub already seeded. Skipping.")
+            return
+
+        projects = list(Project.objects.filter(tenant=tenant))
+        if not projects:
+            self.stdout.write(self.style.WARNING(f"  {tenant.name}: no projects found for 7.18 seeding."))
+            return
+
+        active_proj = next((p for p in projects if p.status == "active"), projects[0])
+        second_proj = next((p for p in projects if p.id != active_proj.id), active_proj)
+
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        manager = users[0] if users else None
+        approver = users[1] if len(users) > 1 else manager
+        webhook = ProjectWebhookEndpoint.objects.filter(tenant=tenant).order_by("id").first()
+
+        with transaction.atomic():
+            # 1. Connectors — one per domain value plus one extra, spanning every status.
+            erp = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=active_proj, name="SAP S/4HANA Finance Bridge",
+                domain="erp", provider="sap", direction="bidirectional", auth_method="oauth2",
+                base_url="https://sap-prod.acme-co.local:44300/sap/bc/srt/rfc",
+                remote_scope_ref="Company code NAVERP", trigger_mode="scheduled",
+                schedule_note="Nightly full pull at 02:00 local", environment="production",
+                status="connected", is_active=True, last_sync_at=now - timedelta(hours=6),
+                last_success_at=now - timedelta(hours=6), consecutive_failures=0,
+                owner=manager, notes="Cost lines and journal entries land in the GL.",
+            )
+            erp.set_credential("sap-demo-oauth-token-7f3a9c2e1b4d")
+            erp.save(update_fields=["credential"])
+
+            crm = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=active_proj, name="Salesforce Client Projects Link",
+                domain="crm", provider="salesforce", direction="bidirectional", auth_method="oauth2",
+                base_url="https://acme-co.my.salesforce.com",
+                remote_scope_ref="Org 00D5f000004XqZk", trigger_mode="event",
+                schedule_note="Outbound message on Opportunity stage change", environment="production",
+                status="connected", is_active=True, last_sync_at=now - timedelta(minutes=35),
+                last_success_at=now - timedelta(minutes=35), consecutive_failures=0,
+                notify_webhook=webhook, owner=manager,
+                notes="Syncs client projects with Opportunities won.",
+            )
+            crm.set_credential("sf-demo-oauth-token-9d81bb2c")
+            crm.save(update_fields=["credential"])
+
+            hris = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=second_proj, name="Workday Resource Pool Feed",
+                domain="hris", provider="workday", direction="inbound", auth_method="api_key",
+                base_url="https://services1.myworkday.com/ccx/service/acme",
+                remote_scope_ref="Supervisory org: Delivery", trigger_mode="scheduled",
+                schedule_note="Hourly incremental on workers", environment="production",
+                status="error", is_active=True, last_sync_at=now - timedelta(hours=2),
+                last_success_at=now - timedelta(days=2), consecutive_failures=3,
+                owner=approver,
+                notes="401 since the key rotation — re-enter the credential.",
+            )
+
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
         role = PartyRole.objects.filter(tenant=tenant, role="customer").select_related("party").first()
@@ -4436,3 +4650,99 @@ class Command(BaseCommand):
             self.stdout.write(f"  {u.username}  (tenant: {u.tenant})")
         self.stdout.write(self.style.WARNING(
             "  Superuser 'admin' has no tenant — data won't appear when logged in as admin"))
+
+            jira = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=active_proj, name="Jira Software Cloud",
+                domain="devops", provider="jira", direction="bidirectional", auth_method="pat",
+                base_url="https://acme-co.atlassian.net", remote_scope_ref="NAVERP",
+                trigger_mode="event", schedule_note="Webhook on issue updated", environment="production",
+                status="connected", is_active=True, last_sync_at=now - timedelta(minutes=12),
+                last_success_at=now - timedelta(minutes=12), consecutive_failures=0,
+                owner=manager,
+            )
+            jira.set_credential("jira-demo-pat-3e5f7a9b1c2d")
+            jira.save(update_fields=["credential"])
+
+            github = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=second_proj, name="GitHub Repository Mirror",
+                domain="devops", provider="github", direction="inbound", auth_method="pat",
+                base_url="https://api.github.com", remote_scope_ref="acme-co/platform",
+                trigger_mode="manual", environment="sandbox", status="unverified", is_active=True,
+                owner=approver,
+            )
+
+            sharepoint = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=second_proj, name="SharePoint Document Library Sync",
+                domain="storage", provider="sharepoint", direction="bidirectional", auth_method="oauth2",
+                base_url="https://acme-co.sharepoint.com/sites/delivery",
+                remote_scope_ref="Site: Delivery / Library: Project Documents",
+                trigger_mode="scheduled", schedule_note="Every 4 hours", environment="sandbox",
+                status="disabled", is_active=False, owner=approver,
+            )
+
+            custom = ProjectIntegrationConnector.objects.create(
+                tenant=tenant, project=None, name="Legacy Billing FTP Drop",
+
+            # 2. Field mappings — 30 across five connectors (>=1 is_key per connector).
+            mapping_specs = {
+                erp: [
+                    ("cost_lines.amount", "GL_AMOUNT", "to_remote", "number", True),
+                    ("cost_lines.category", "COST_ELEMENT", "to_remote", "upper", False),
+                    ("journals.entry_date", "POSTING_DATE", "both", "date_iso", True),
+                    ("journals.reference", "ALLOC_REF", "both", "trim", False),
+                    ("budgets.total", "BUDGET_TOTAL", "from_remote", "number", False),
+                    ("journals.currency", "WAERS", "both", "upper", False),
+                ],
+                crm: [
+                    ("client.name", "Account.Name", "both", "none", True),
+                    ("client.email", "Account.PersonEmail", "both", "lower", False),
+                    ("tasks.external_ref", "Case.External_Id__c", "to_remote", "trim", False),
+                    ("milestones.due_date", "Opportunity.CloseDate", "from_remote", "date_iso", False),
+                    ("resources.email", "Contact.Email", "both", "lower", False),
+                    ("documents.title", "Attachment.Name", "to_remote", "trim", False),
+                ],
+                hris: [
+                    ("resources.employee_id", "Worker.ID", "both", "trim", True),
+                    ("resources.name", "Worker.PreferredName", "from_remote", "trim", False),
+                    ("time_entries.hours", "TimeBlock.Quantity", "from_remote", "number", False),
+                    ("time_entries.worked_date", "TimeBlock.Date", "from_remote", "date_iso", False),
+                    ("resources.active", "Worker.Active", "from_remote", "bool", False),
+                    ("resources.cost_rate", "Worker.CostRate", "from_remote", "number", False),
+                ],
+                jira: [
+                    ("tasks.title", "fields.summary", "both", "trim", True),
+                    ("tasks.status", "fields.status.name", "both", "lower", False),
+                    ("tasks.description", "fields.description", "to_remote", "none", False),
+                    ("issues.severity", "fields.priority.name", "from_remote", "lower", False),
+                    ("tasks.assignee_email", "fields.assignee.emailAddress", "from_remote", "lower", False),
+                    ("milestones.name", "fixVersions.name", "both", "trim", False),
+                ],
+                github: [
+                    ("tasks.external_ref", "number", "both", "trim", True),
+                    ("tasks.title", "title", "from_remote", "trim", False),
+                    ("documents.checksum", "sha", "from_remote", "lower", False),
+                    ("tasks.status", "state", "both", "lower", False),
+                    ("resources.email", "owner.email", "from_remote", "lower", False),
+                    ("folders.name", "path", "from_remote", "trim", False),
+                ],
+            }
+            for conn, specs in mapping_specs.items():
+                for local, remote, direction, transform, is_key in specs:
+                    value_map = {}
+                    if conn is jira and local == "tasks.status":
+                        value_map = {"done": "completed", "in progress": "in_progress"}
+                    if conn is crm and local == "client.name":
+                        value_map = {"Acme Manufacturing": "Acme Manufacturing Ltd."}
+                    ConnectorFieldMapping.objects.create(
+                        tenant=tenant, connector=conn, local_field=local, remote_field=remote,
+                        direction=direction, transform=transform, value_map=value_map,
+                        is_key=is_key, is_required=is_key,
+                    )
+
+                domain="custom", provider="custom", direction="outbound", auth_method="basic",
+                base_url="ftps://files.acme-co.internal/billing", remote_scope_ref="/outbound/projects",
+                trigger_mode="scheduled", schedule_note="Weekly Friday 18:00", environment="sandbox",
+                status="disconnected", is_active=False, owner=manager,
+                notes="Workspace-wide; kept for the year-end batch only.",
+            )
+
