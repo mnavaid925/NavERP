@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Saved Report{% else %}New Saved Report{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit saved report: {{ obj.name }}{% else %}Report builder — new saved report{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:rep_list' %}">Saved Reports</a><span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">Every axis is a dropdown or a checkbox — the vocabulary is frozen in code, so a builder can never invent a measure. Nothing is stored here but the question: the answer is computed when the report is opened.</p>
+    </div>
+  </div>
+
+  {% comment %}
+    One template for both routes (B4.1). `form_action_url` is published by `_builder_context()` on
+    create AND edit, and the create page is reached from `?type=` links, so the action is written
+    explicitly rather than left to post back at the current URL.
+  {% endcomment %}
+  <form method="post" action="{{ form_action_url }}" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Step 1 · start from a canned kind (optional)</h3></div>
+      <div class="card-body">
+        {% if is_edit %}
+          <p class="text-muted">This question is filed under
+            <span class="badge badge-slate">{{ obj.get_report_type_display }}</span>
+            {% if obj.measures|length %}with {{ obj.measures|length }} of 3 measures{% endif %}.
+            Changing the kind here only re-files the row — the axes below are what it actually asks.
+          </p>
+        {% else %}
+          <p class="text-muted">Open the builder with a kind already selected, then adjust the axes you care about.
+            {% if initial_type %}The kind you followed a link for is highlighted below.{% endif %}</p>
+          <div class="badge-group" style="margin-top:.5rem;">
+            {% for value, label in report_type_choices %}
+              {% if value != "custom" %}
+                <a class="badge {% if initial_type == value %}badge-info{% else %}badge-slate{% endif %}"
+                   href="{% url 'projects:rep_create' %}?type={{ value }}">{{ label }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="table-wrap" style="margin-top:.75rem;">
+            <table class="table">
+              <thead>
+                <tr><th>Canned kind</th><th>Rows are…</th><th>Measures</th><th>Grouped by</th><th>Chart</th></tr>
+              </thead>
+              <tbody>
+                {% for kind, axes in canned_axes.items %}
+                  <tr>
+                    <td class="fw-600">{{ kind }}</td>
+                    <td>{{ axes.subject }}</td>
+                    <td>{{ axes.measures|join:" · " }}</td>
+                    <td>{{ axes.dimension_1|default:"—" }}</td>
+                    <td>{{ axes.chart_type }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="5"><div class="empty-state"><p>No canned kinds are registered.</p></div></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-muted" style="margin-top:.5rem;">The table shows each kind's axes as the frozen keys <code>analytics</code> computes from; step 2 carries the same vocabulary as labels.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Step 2 · the question</h3></div>
+      <div class="card-body">
+        {% for error in form.non_field_errors %}
+          <div class="form-error">{{ error }}</div>
+        {% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+        <p class="text-muted" style="margin-top:.5rem;">
+          <i data-lucide="info"></i>
+          The owner, the favourite star and the last-run stamp are not on this form — ownership moves by its
+          own action, the star is a toggle, and a run is stamped by Run or Freeze. A custom range needs both
+          dates; an as-of date must fall inside the window.
+        </p>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Report{% endif %}</button>
+          {% if is_edit %}
+            <a class="btn btn-outline" href="{% url 'projects:rep_detail' obj.pk %}">Cancel</a>
+          {% else %}
+            <a class="btn btn-outline" href="{% url 'projects:rep_list' %}">Cancel</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% comment %}
+    Outside the form on purpose: this panel is the closed vocabulary the dropdowns are drawn from,
+    not an input. Adding an axis is a code change in `_choices.py` and `analytics.py` together.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">The frozen vocabulary</h3></div>
+    <div class="card-body">
+      <p class="text-muted fw-600">Measures (pick 1–3)</p>
+      <div class="badge-group">
+        {% for value, label in measure_choices %}
+          <span class="badge badge-slate" title="{{ value }}">{{ label }}</span>
+        {% empty %}
+          <p class="text-muted">No measures are registered.</p>
+        {% endfor %}
+      </div>
+      <p class="text-muted fw-600" style="margin-top:.75rem;">Groupings</p>
+      <div class="badge-group">
+        {% for value, label in dimension_choices %}
+          <span class="badge badge-slate" title="{{ value }}">{{ label }}</span>
+        {% empty %}
+          <p class="text-muted">No groupings are registered.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endblock %}
