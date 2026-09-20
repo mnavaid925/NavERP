@@ -75,6 +75,10 @@ from .models import (
     RecurringTaskSchedule,
     ProjectWebhookEndpoint,
     ProjectWebhookDelivery,
+    ProjectReport,
+    ProjectReportRun,
+    ProjectDashboard,
+    DashboardWidget,
 )
 
 
@@ -911,3 +915,62 @@ class ProjectWebhookDeliveryAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ProjectReport)
+class ProjectReportAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "report_type", "subject", "chart_type", "date_range",
+                    "is_favorite", "is_shared", "owner", "last_run_at", "tenant")
+    list_filter = ("report_type", "chart_type", "is_shared", "is_favorite")
+    list_select_related = ("tenant", "owner", "project", "portfolio")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "last_run_at", "created_at", "updated_at")
+
+
+@admin.register(ProjectReportRun)
+class ProjectReportRunAdmin(admin.ModelAdmin):
+    """A run is a frozen artifact: `rep_freeze` mints it, so the admin may only write the commentary.
+
+    `data`/`summary`/`row_count` are the whole point of the row — editing them in the admin would make
+    the archive lie about what was computed when it was issued.
+    """
+
+    EDITABLE_FIELDS = ("narrative",)
+
+    list_display = ("id", "title", "report", "status", "as_of", "row_count",
+                    "generated_by", "generated_at", "tenant")
+    list_filter = ("status", "as_of")
+    list_select_related = ("tenant", "report", "generated_by", "issued_by", "document")
+    search_fields = ("title", "report__name", "narrative")
+    date_hierarchy = "as_of"
+
+    def get_readonly_fields(self, request, obj=None):
+        return tuple(
+            field.name for field in self.model._meta.fields if field.name not in self.EDITABLE_FIELDS
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ProjectDashboard)
+class ProjectDashboardAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "audience", "layout", "default_range",
+                    "is_default", "is_shared", "owner", "tenant")
+    list_filter = ("audience", "layout", "default_range", "is_default", "is_shared")
+    list_select_related = ("tenant", "owner", "project", "portfolio")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(DashboardWidget)
+class DashboardWidgetAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "dashboard", "metric", "chart_type", "size",
+                    "date_range", "position", "tenant")
+    list_filter = ("metric", "chart_type", "size", "date_range")
+    list_select_related = ("tenant", "dashboard", "project", "portfolio")
+    search_fields = ("title", "metric")
+    readonly_fields = ("created_at", "updated_at")
