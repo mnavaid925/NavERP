@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{{ kind_meta.label }}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ kind_meta.label }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:report_library' %}">Standard library</a><span class="sep">›</span>
+        <span>{{ kind_meta.label }}</span>
+      </div>
+      <p class="text-muted">Rows are {{ kind_meta.subject }} · as of {{ as_of|date:"d M Y" }}</p>
+      <p class="text-muted">{{ kind_meta.description|default:"This canned question is computed live every time the page opens." }}</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        `save_report_url` is the builder link the view built from this request's echoes, query string
+        included — rebuilding it here would lose the scope the reader is looking at.
+      {% endcomment %}
+      <a href="{{ save_report_url }}" class="btn btn-primary"><i data-lucide="bookmark"></i> Save this as a report</a>
+      <a href="{% url 'projects:report_library' %}" class="btn btn-outline"><i data-lucide="library"></i> Standard library</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Scope this answer</h3></div>
+    <div class="card-body">
+      <form method="get" action="{% url 'projects:report_standard' %}" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="id_type">Question</label>
+          <select class="form-select" id="id_type" name="type">
+            {% for t in report_types %}
+              <option value="{{ t.0 }}" {% if kind == t.0 %}selected{% endif %}>{{ t.1 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_project">Project</label>
+          <select class="form-select" id="id_project" name="project">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if active_filters.project|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_portfolio">Portfolio</label>
+          <select class="form-select" id="id_portfolio" name="portfolio">
+            <option value="">Any portfolio</option>
+            {% for pf in portfolios %}
+              <option value="{{ pf.pk }}" {% if active_filters.portfolio|stringformat:"d" == pf.pk|stringformat:"d" %}selected{% endif %}>{{ pf.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_client">Client</label>
+          <select class="form-select" id="id_client" name="client">
+            <option value="">Any client</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if active_filters.client|stringformat:"d" == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_org_unit">Organisation unit</label>
+          <select class="form-select" id="id_org_unit" name="org_unit">
+            <option value="">Any unit</option>
+            {% for o in org_units %}
+              <option value="{{ o.pk }}" {% if active_filters.org_unit|stringformat:"d" == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_range">Window</label>
+          {# The active window is deliberately not echoed into context, so this one read of the raw param is the sanctioned exception. #}
+          <select class="form-select" id="id_range" name="range">
+            <option value="">Registry default</option>
+            {% for r in range_choices %}
+              <option value="{{ r.0 }}" {% if request.GET.range == r.0 %}selected{% endif %}>{{ r.1 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_as_of">As of</label>
+          <input type="date" class="form-input" id="id_as_of" name="as_of" value="{{ as_of|date:'Y-m-d' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_from">From</label>
+          <input type="date" class="form-input" id="id_from" name="from" value="{{ active_filters.from }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_to">To</label>
+          <input type="date" class="form-input" id="id_to" name="to" value="{{ active_filters.to }}">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a class="btn btn-outline" href="{% url 'projects:report_standard' %}?type={{ kind }}">Reset</a>
+      </form>
+      <p class="text-muted" style="margin-top:.6rem;">A canned question's dates come from the registry, so the <strong>From / To</strong> pair does not move the numbers below — it travels with <em>Save this as a report</em> so the question you build starts where you were looking. Use the Window dropdown, or save and edit, to change the period that is actually computed.</p>
+    </div>
+  </div>
+
+  {% if summary_cards %}
+    <div class="stat-grid">
+      {% for card in summary_cards %}
+        <div class="stat-card">
+          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-label">{{ card.label }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">The answer</h3>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ result.kind_label }}</span>
+        {% comment %}
+          The section titles come from the registry row, which is the only place the canned kind says what
+          it laid this register out to show. `result.subject` is not printed here: it is the engine's raw
+          register key, and the header line above already gives the reader the words for it.
+        {% endcomment %}
+        {% for s in sections %}
+          <span class="badge badge-slate">{{ s.title }}</span>
+        {% endfor %}
+        <span class="badge badge-slate">{{ result.chart_type }}</span>
+        {% if result.window %}
+          <span class="badge badge-info">{{ result.window.from }} → {{ result.window.to }}</span>
+        {% else %}
+          <span class="badge badge-muted">No window computed</span>
+        {% endif %}
+        <span class="badge badge-muted">{{ result.group_count }} groups</span>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if not summary_cards %}
+        <p class="text-muted">This question has no KPI line — its answer is the register below.</p>
+      {% endif %}
+      {% comment %}
+        A canned kind lays its register out through its own `_standard_section_<area>.html` partial,
+        which wraps `_result_table.html` itself; including the table as well would print the same rows
+        twice under two headings, so the two branches are exclusive. The loop's empty branch covers a
+        registry row whose area has no partial on disk. `_result_chart.html` sits outside the branch —
+        included exactly once per page, because the `json_script` id it emits is the one
+        `_charts_script.html` reads.
+      {% endcomment %}
+      {% for section_template in section_templates %}
+        {% include section_template %}
+      {% empty %}
+        {% include "projects/reporting/_result_table.html" %}
+      {% endfor %}
+      {% include "projects/reporting/_result_chart.html" %}
+      {% if kind_meta.drill %}
+        <p class="text-muted" style="margin-top:.75rem;"><i data-lucide="arrow-down-right"></i> <a href="{{ kind_meta.drill }}">Go deeper</a> — {{ kind_meta.subject }} live in the module that owns them.</p>
+      {% endif %}
+      {% comment %}
+        Empty by design here: a canned answer is never written down, so it has no file to download —
+        freezing it into a run, or saving it and exporting from there, is what produces one. The list
+        is published by the view, so nothing below reverses a route of its own.
+      {% endcomment %}
+      {% if export_urls %}
+        <div class="flex flex-wrap gap-2" style="margin-top:.75rem;">
+          {% for export in export_urls %}
+            <a href="{{ export.url }}" class="btn btn-outline"><i data-lucide="download"></i> {{ export.label }}</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  {% include "projects/reporting/_charts_script.html" %}
+{% endblock %}
