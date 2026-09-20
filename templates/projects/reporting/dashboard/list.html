@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Reporting Boards{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reporting boards</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <span>Boards</span>
+      </div>
+      <p class="text-muted">A board is a saved arrangement of tiles, not a saved set of numbers — every figure on it is read from the module that owns it while the page renders.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:pdb_home' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> My board</a>
+      <a href="{% url 'projects:pdb_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New board</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Filter boards</h3></div>
+    <div class="card-body">
+      <form method="get" action="{% url 'projects:pdb_list' %}" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="id_q">Search</label>
+          <input type="text" class="form-input" id="id_q" name="q" value="{{ q }}" placeholder="Number, name or description…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_audience">Audience</label>
+          <select class="form-select" id="id_audience" name="audience">
+            <option value="">Any audience</option>
+            {% for value, label in audience_choices %}
+              <option value="{{ value }}" {% if audience_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_layout">Layout</label>
+          <select class="form-select" id="id_layout" name="layout">
+            <option value="">Any layout</option>
+            {% for value, label in layout_choices %}
+              <option value="{{ value }}" {% if layout_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_owner">Owner</label>
+          <select class="form-select" id="id_owner" name="owner">
+            <option value="">Anyone</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if owner_filter|stringformat:"d" == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_project">Project</label>
+          <select class="form-select" id="id_project" name="project">
+            <option value="">Any project</option>
+            {% for p in projects %}
+              <option value="{{ p.pk }}" {% if project_filter|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_shared">Visibility</label>
+          <select class="form-select" id="id_shared" name="shared">
+            <option value="">Any</option>
+            <option value="True" {% if shared_filter == "True" %}selected{% endif %}>Shared</option>
+            <option value="False" {% if shared_filter == "False" %}selected{% endif %}>Private</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a class="btn btn-outline" href="{% url 'projects:pdb_list' %}">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Boards</h3>
+      <span class="badge badge-slate">{{ page_obj.paginator.count }} total</span>
+    </div>
+    {% comment %}
+      `annotation_count` is the view's single grouped read of tile counts (L9); the board's own
+      `widget_count` property would cost one COUNT per row on a page that already has every answer.
+      A board with a null owner is a workspace template, which is what the badge pair below is for.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Board</th>
+            <th>Audience</th>
+            <th>Tiles</th>
+            <th>Window</th>
+            <th>Layout</th>
+            <th>Owner</th>
+            <th>Scope</th>
+            <th>Updated</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in object_list %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'projects:pdb_detail' d.pk %}">{{ d.number }} · {{ d.name }}</a>
+                <div class="badge-group">
+                  {% if d.is_default %}<span class="badge badge-green">Default</span>{% endif %}
+                  {% if d.is_shared %}<span class="badge badge-info">Shared</span>{% else %}<span class="badge badge-muted">Private</span>{% endif %}
+                </div>
+              </td>
+              <td>{{ d.get_audience_display }}</td>
+              <td>{{ d.annotation_count }}</td>
+              <td class="text-muted">{{ d.get_default_range_display }}</td>
+              <td class="text-muted">{{ d.get_layout_display }}</td>
+              <td>{% if d.owner %}{{ d.owner.get_full_name|default:d.owner.username }}{% else %}<span class="badge badge-muted">Workspace template</span>{% endif %}</td>
+              <td class="text-muted">{{ d.project.name|default:"All projects" }}</td>
+              <td class="text-muted">{{ d.updated_at|date:"d M Y H:i" }}</td>
+              <td class="table-actions">
+                <a href="{% url 'projects:pdb_detail' d.pk %}" class="btn btn-outline btn-sm"><i data-lucide="eye"></i></a>
+                <a href="{% url 'projects:pdb_edit' d.pk %}" class="btn btn-outline btn-sm"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'projects:pdb_delete' d.pk %}" style="display:inline;" data-tiles="{{ d.annotation_count }}" onsubmit="return confirm('Delete this board and its ' + this.dataset.tiles + ' tile(s)? This cannot be undone.');">
+                  {% csrf_token %}
+                  <button class="btn btn-outline btn-sm" type="submit"><i data-lucide="trash-2"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="layout-dashboard"></i>
+                  <h3>No boards yet</h3>
+                  <p>Nothing matches this filter, or this workspace has not arranged a board yet. A board holds tiles; a tile holds one live figure.</p>
+                  <a href="{% url 'projects:pdb_create' %}" class="btn btn-primary">New board</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
