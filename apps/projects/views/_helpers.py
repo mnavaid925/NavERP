@@ -18,6 +18,7 @@ reaches it — their project dropdown is empty — and it returns an empty set f
 work packages.)
 """
 import csv
+from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
@@ -237,14 +238,42 @@ def csv_safe(value):
     return f"'{text}" if text[:1] in _CSV_DANGEROUS else text
 
 
+def looks_like_target(candidate):
+    """Is ``candidate`` somewhere a browser can be pointed, as opposed to a word?
+
+    The gate in :func:`redirect_back_or` is a second one deliberately, because
+    ``url_has_allowed_host_and_scheme`` answers ``True`` for **any** relative reference — it only
+    refuses foreign hosts and unsafe schemes, since "back where the user came from" is its job in
+    ``LoginView``. So ``next=home`` passes it and reaches ``redirect()``, which tries a
+    :func:`~django.urls.reverse` first and re-raises ``NoReverseMatch`` for a string with no ``/``
+    and no ``.`` in it (verified ``venv/lib/site-packages/django/shortcuts.py:177-186`` — "If this
+    doesn't 'feel' like a URL, re-raise"). A 500 on a POST-only verb whose write has already
+    committed is the outcome being refused here.
+
+    Two shapes are honoured: a full URL with a scheme (whose host the second gate then vouches for)
+    and a path from the root. Everything else — ``home``, ``a.b``, ``foo/bar``, and the backslash
+    variant ``\\\\host`` that some browsers read as a network path — falls back.
+    """
+    parts = urlsplit(candidate)
+    return bool(parts.scheme and parts.netloc) or parts.path.startswith("/")
+
+
 def redirect_back_or(request, fallback_name, **kwargs):
     """Honour a POSTed ``next`` only as a same-host target; otherwise redirect to ``fallback_name``.
 
     ``next`` arrives from a form the client controls, so trusting it unchecked is an open redirect —
-    scheme-relative values (``//evil.example``) and absolute ones fall back here, not through.
+    scheme-relative values (``//evil.example``) and absolute ones fall back here, not through. The two
+    gates are ``looks_like_target`` (is it a location at all — see its docstring for the ``NoReverseMatch``
+    this refuses) and Django's own host/scheme check, in that order.
+
+    The cheaper-looking fix was to return ``HttpResponseRedirect(candidate)`` and skip ``redirect()``'s
+    view-name lookup entirely. Rejected: it turns a junk value into a silent redirect to the wrong page
+    (a browser resolves ``Location: home`` against the current directory, so a POST to
+    ``…/widgets/7/move/`` would land on ``…/widgets/home``) instead of the pinned fallback, which is
+    the page the operator meant to return to.
     """
     candidate = request.POST.get("next")
-    if candidate and url_has_allowed_host_and_scheme(
+    if candidate and looks_like_target(candidate) and url_has_allowed_host_and_scheme(
         candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()
     ):
         return redirect(candidate)
