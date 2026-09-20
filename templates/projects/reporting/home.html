@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Reporting &amp; BI{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reporting &amp; Business Intelligence</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <span>Reporting &amp; BI</span>
+      </div>
+      <p class="text-muted">Nothing on this page is stored. Every count, board and answer below is read from the module that owns it at the moment the page opened — 7.16 asks questions, it does not keep answers.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_build %}
+        <a href="{% url 'projects:rep_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New report</a>
+      {% endif %}
+      <a href="{% url 'projects:report_library' %}" class="btn btn-outline"><i data-lucide="library"></i> Standard library</a>
+      <a href="{% url 'projects:pdb_list' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Dashboards</a>
+      <a href="{% url 'projects:exec_pack' %}" class="btn btn-outline"><i data-lucide="presentation"></i> Steering pack</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-value">{{ counts.reports }}</div>
+      <div class="stat-label">Saved questions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ counts.dashboards }}</div>
+      <div class="stat-label">Boards</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ counts.runs }}</div>
+      <div class="stat-label">Frozen runs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ counts.issued }}</div>
+      <div class="stat-label">Issued runs</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Your board</h3>
+      {% if my_dashboard %}
+        <div class="badge-group">
+          <span class="badge badge-slate">{{ my_dashboard.get_audience_display }}</span>
+          {% if my_dashboard.is_default %}<span class="badge badge-green">Home default</span>{% endif %}
+          {% if my_dashboard.is_shared %}<span class="badge badge-info">Shared</span>{% endif %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if my_dashboard %}
+        <p class="text-muted">{{ my_dashboard.name }} · {{ my_dashboard.widget_count }} tile(s) · window {{ my_dashboard.get_default_range_display }}</p>
+        <div class="flex flex-wrap gap-2">
+          <a href="{% url 'projects:pdb_home' %}" class="btn btn-primary"><i data-lucide="layout-dashboard"></i> Open your board</a>
+          <a href="{% url 'projects:pdb_detail' my_dashboard.pk %}" class="btn btn-outline"><i data-lucide="list"></i> Manage its tiles</a>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="layout-dashboard"></i>
+          <h3>No board is yours to land on</h3>
+          <p>With no workspace bound to this session there is nothing to show — a tenant account sees its default board here, or the newest shared one.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Recently answered questions</h3>
+      <a href="{% url 'projects:rep_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All saved reports</a>
+    </div>
+    {% comment %}
+      Ordered by `last_run_at` with unswept questions last: the point of the register is "what is in
+      motion", and a question nobody has run yet should not sit at the top of the page pretending to be.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Question</th>
+            <th>Kind</th>
+            <th>Scope</th>
+            <th>Last run</th>
+            <th>Owner</th>
+            <th class="table-actions">Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in object_list %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:rep_detail' r.pk %}">{{ r.name }}</a></td>
+              <td>{{ r.get_report_type_display }}</td>
+              <td class="text-muted">{{ r.scope_label }}</td>
+              <td>{{ r.last_run_at|date:"d M Y H:i"|default:"never" }}</td>
+              <td>{{ r.owner.get_full_name|default:r.owner.username|default:"—" }}</td>
+              <td class="table-actions">
+                <a href="{% url 'projects:rep_detail' r.pk %}" class="btn btn-outline"><i data-lucide="eye"></i> View</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="file-bar-chart"></i>
+                  <h3>No saved questions yet</h3>
+                  <p>A saved question is a stored set of axes, not a stored answer. Open a canned kind from the library and save it, and it appears here.</p>
+                  {% if can_build %}
+                    <a href="{% url 'projects:report_library' %}" class="btn btn-outline">Standard library</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Frozen runs</h3>
+      <a href="{% url 'projects:run_list' %}" class="btn btn-outline"><i data-lucide="history"></i> All runs</a>
+    </div>
+    {% comment %}
+      A run is the only 7.16 artefact that stores an answer, so its status is the whole story: draft is
+      somebody's working number, issued is a figure that has been stood behind. Colour pairs with the
+      word because these rows get printed with the steering pack.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Question</th>
+            <th>Period</th>
+            <th>Status</th>
+            <th>Rows</th>
+            <th>Generated</th>
+            <th class="table-actions">Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in recent_runs %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:run_detail' run.pk %}">{{ run.title }}</a></td>
+              <td>{{ run.report.name|default:"—" }}</td>
+              <td class="text-muted">{{ run.period_from|date:"d M Y"|default:"—" }} → {{ run.period_to|date:"d M Y"|default:"—" }}</td>
+              <td>
+                {% if run.status == "issued" %}
+                  <span class="badge badge-info">Issued</span>
+                {% elif run.status == "archived" %}
+                  <span class="badge badge-muted">Archived</span>
+                {% else %}
+                  <span class="badge badge-amber">Draft</span>
+                {% endif %}
+              </td>
+              <td>{{ run.row_count }}</td>
+              <td class="text-muted">{{ run.generated_at|date:"d M Y H:i" }} · {{ run.generated_by.get_full_name|default:run.generated_by.username }}</td>
+              <td class="table-actions">
+                <a href="{% url 'projects:run_detail' run.pk %}" class="btn btn-outline"><i data-lucide="eye"></i> View</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="history"></i>
+                  <h3>Nothing has been frozen yet</h3>
+                  <p>An answer is only written down when somebody freezes it, so a workspace that has never run a report has no history to show here.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Boards</h3>
+      <a href="{% url 'projects:pdb_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> New board</a>
+    </div>
+    {% comment %}
+      `annotation_count` is the view's grouped read of this board's tiles, ordered explicitly because the
+      annotate drops the model's Meta ordering (L9). The board's own `widget_count` property would be one
+      query per row on a page that already has the answer.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Board</th>
+            <th>Audience</th>
+            <th>Tiles</th>
+            <th>Window</th>
+            <th>Scope</th>
+            <th class="table-actions">Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in dashboards %}
+            <tr>
+              <td class="fw-600">
+                <a href="{% url 'projects:pdb_detail' d.pk %}">{{ d.name }}</a>
+                {% if d.is_default %}<span class="badge badge-green">Default</span>{% endif %}
+                {% if d.is_shared %}<span class="badge badge-info">Shared</span>{% endif %}
+              </td>
+              <td>{{ d.get_audience_display }}</td>
+              <td>{{ d.annotation_count|default:0 }}</td>
+              <td class="text-muted">{{ d.get_default_range_display }}</td>
+              <td class="text-muted">{{ d.project.name|default:"All projects" }}</td>
+              <td class="table-actions">
+                <a href="{% url 'projects:pdb_detail' d.pk %}" class="btn btn-outline"><i data-lucide="eye"></i> View</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="layout-dashboard"></i>
+                  <h3>No boards visible to you</h3>
+                  <p>A board is a saved layout of tiles, not a saved set of numbers. Create one to arrange the figures you check every day.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Canned questions</h3>
+      <a href="{% url 'projects:report_library' %}" class="btn btn-outline"><i data-lucide="library"></i> Full catalogue</a>
+    </div>
+    <div class="card-body">
+      <div class="badge-group">
+        {% for item in library %}
+          <a href="{{ item.url }}" class="btn btn-outline">{{ item.label }}</a>
+        {% endfor %}
+      </div>
+      <p class="text-muted" style="margin-top:.6rem;">Each one is computed live for the scope you pick, and the library page carries the axes and the saved-report count behind each.</p>
+    </div>
+  </div>
+
+  {% comment %}
+    7.16 links these surfaces instead of re-deriving them: a second arithmetic over the same rows is how
+    two pages end up disagreeing about one figure.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">The boards that already answer in detail</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Board</th><th class="table-actions">Owned by</th></tr>
+        </thead>
+        <tbody>
+          {% for b in sibling_boards %}
+            <tr>
+              <td><a href="{{ b.url }}" class="fw-600">{{ b.label }}</a></td>
+              <td class="table-actions"><span class="badge badge-muted">{{ b.group }}</span></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2">
+                <div class="empty-state">
+                  <i data-lucide="unlink"></i>
+                  <h3>No sibling boards resolved</h3>
+                  <p>Every reporting surface this page links to is per-object or not wired up yet, so the shortcuts were dropped instead of rendering dead.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
