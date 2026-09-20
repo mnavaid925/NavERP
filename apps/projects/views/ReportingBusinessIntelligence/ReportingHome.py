@@ -361,6 +361,9 @@ def exec_pack(request):
         "canvas_charts": CANVAS_CHARTS,
         "summary": summary,
         "summary_cards": analytics.summary_pairs(summary),
+        # This page has no register, so nothing else here would print the pack's caveats — and the
+        # compute always appends at least one (the EVM currency note, plus a no-workspace note).
+        "caveats": pack.get("caveats") or [],
         "narrative_run": narrative_run,
         "narrative": narrative_run.narrative if narrative_run else "",
         "as_of": as_of,
