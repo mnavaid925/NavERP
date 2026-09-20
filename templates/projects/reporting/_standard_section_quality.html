@@ -1,0 +1,8 @@
+{% comment %}
+  The quality area's section — see `_standard_section_schedule.html` for the framing rule. The note has to
+  name the count column because `task_count` is the rows in the group, and a defect register's rows are
+  defects: a reader who expects "tasks" here would read the wrong denominator off the page.
+{% endcomment %}
+<p class="text-muted fw-600" style="margin-top:.75rem;">Quality</p>
+<p class="text-muted">Defects are counted from the quality register on the date they were raised. A row counts as open until its status is closed or resolved, and the second column is the number of defects in that severity band — not the number of tasks that produced them.</p>
+{% include "projects/reporting/_result_table.html" %}
