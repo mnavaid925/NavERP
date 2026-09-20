@@ -687,3 +687,85 @@ from .WorkflowAutomation.AutomationBoards import (  # noqa: F401
     recurrence_calendar,
     webhook_diagnostics,
 )
+
+# --- 7.16 Reporting & Business Intelligence --------------------------------------
+from .ReportingBusinessIntelligence.ReportingHome import (  # noqa: F401
+    rbi_home,
+    report_library,
+    report_standard,
+    exec_pack,
+)
+from .ReportingBusinessIntelligence.ProjectReports import (  # noqa: F401
+    rep_list,
+    rep_create,
+    rep_edit,
+    rep_detail,
+    rep_delete,
+    rep_run,
+    rep_freeze,
+    rep_favorite,
+    rep_csv,
+    rep_json,
+)
+from .ReportingBusinessIntelligence.ReportRuns import (  # noqa: F401
+    run_list,
+    run_detail,
+    run_narrative,
+    run_issue,
+    run_archive,
+    run_delete,
+    run_csv,
+)
+from .ReportingBusinessIntelligence.ProjectDashboards import (  # noqa: F401
+    pdb_home,
+    pdb_list,
+    pdb_detail,
+    pdb_create,
+    pdb_edit,
+    pdb_delete,
+)
+from .ReportingBusinessIntelligence.DashboardWidgets import (  # noqa: F401
+    wdg_create,
+    wdg_edit,
+    wdg_delete,
+    wdg_move,
+)
+
+# --- 7.18 Integration & API Hub -------------------------------------------------
+from .IntegrationApiHub.Connectors import (  # noqa: F401
+    ixc_list,
+    ixc_detail,
+    ixc_create,
+    ixc_edit,
+    ixc_delete,
+    ixc_rotate_credential,
+    ixc_test,
+    ixc_toggle_active,
+    connector_health,
+)
+from .IntegrationApiHub.FieldMappings import (  # noqa: F401
+    ixm_list,
+    ixm_detail,
+    ixm_create,
+    ixm_edit,
+    ixm_delete,
+)
+from .IntegrationApiHub.SyncJobs import (  # noqa: F401
+    syj_list,
+    syj_detail,
+    syj_create,
+    syj_edit,
+    syj_delete,
+    syj_run,
+    syj_toggle_active,
+)
+from .IntegrationApiHub.SyncRuns import (  # noqa: F401
+    syr_list,
+    syr_detail,
+    syr_retry,
+)
+from .IntegrationApiHub.HubBoards import (  # noqa: F401
+    integration_hub,
+    sync_monitor,
+)
+
