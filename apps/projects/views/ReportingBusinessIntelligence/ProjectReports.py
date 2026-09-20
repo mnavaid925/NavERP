@@ -216,8 +216,11 @@ def rep_detail(request, pk):
         "section_templates": [
             f"projects/reporting/_standard_section_{i['area']}.html" for i in sections
         ],
-        # Meta.ordering is newest-first, so this slice is the ten most recent freezes.
-        "runs": obj.runs.filter(tenant=request.tenant).select_related("generated_by")[:10],
+        # Meta.ordering is newest-first, so this slice is the ten most recent freezes. Through
+        # ``visible_runs`` rather than a raw ``tenant=`` on the reverse relation: R7 keeps this helper the
+        # ONE fetch shape in the module, and the two agree here because a run inherits its parent's
+        # privacy and this page's parent is already visibility-gated.
+        "runs": analytics.visible_runs(request).filter(report=obj).select_related("generated_by")[:10],
         "is_owner": obj.owner_id == request.user.id,
         # Contract-pinned. The fetch above already 404s a tenant-less caller (``visible_reports`` is
         # empty without a tenant), so the template's gate is belt-and-braces, not a live branch.
