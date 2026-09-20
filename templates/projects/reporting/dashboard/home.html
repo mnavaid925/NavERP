@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}My Reporting Board{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if dashboard %}{{ dashboard.name }}{% else %}My reporting board{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <span>My board</span>
+      </div>
+      <p class="text-muted">The window below is the one this board was authored with. Switching windows is the board page's job, because that is the page you can come back from.</p>
+    </div>
+    <div class="page-actions">
+      {% if dashboard %}
+        <a href="{{ detail_url }}" class="btn btn-outline"><i data-lucide="settings-2"></i> Manage this board</a>
+      {% endif %}
+      <a href="{{ create_url }}" class="btn btn-primary"><i data-lucide="plus"></i> New board</a>
+    </div>
+  </div>
+
+  {% if dashboard %}
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">{{ dashboard.number }} · {{ dashboard.name }}</h3>
+        <div class="badge-group">
+          <span class="badge badge-slate">{{ dashboard.get_audience_display }}</span>
+          {% if active_range_label %}<span class="badge badge-info">{{ active_range_label }}</span>{% endif %}
+          {% if dashboard.is_default %}<span class="badge badge-green">Your home board</span>{% endif %}
+          {% if dashboard.is_shared %}<span class="badge badge-info">Shared</span>{% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">{{ dashboard.description|default:"Every figure on this board is read while the page opens, from the module that owns it." }}</p>
+        <p class="text-muted"><a href="{{ detail_url }}">Open the board</a> to change the window, add a tile or move one.</p>
+      </div>
+    </div>
+
+    {% comment %}
+      Only reached with a board in hand: `_widget_grid.html`'s empty branch says "no tiles on this
+      board", which would be a lie about a page with no board at all — so the no-board case is the
+      card below this one, not the partial's. The landing board publishes no `can_edit` and no
+      `widget_add_url`, which is what keeps the move/edit arrows off this page without a branch.
+    {% endcomment %}
+    {% include "projects/reporting/_widget_grid.html" %}
+    {{ chart_configs|json_script:"rbi-charts" }}
+  {% else %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="layout-dashboard"></i>
+          <h3>No board to land on yet</h3>
+          <p>With no workspace bound to this session there is nothing to resolve, and a workspace with no boards has nothing to show. Create one and its tiles appear here the next time you open this page.</p>
+          <div class="flex flex-wrap gap-2" style="margin-top:.6rem;">
+            <a href="{{ create_url }}" class="btn btn-primary"><i data-lucide="plus"></i> New board</a>
+            <a href="{% url 'projects:pdb_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All boards</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if other_dashboards %}
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Your other boards</h3>
+        <a href="{% url 'projects:pdb_list' %}" class="btn btn-outline"><i data-lucide="list"></i> All boards</a>
+      </div>
+      {% comment %}
+        `annotation_count` is the view's one grouped read, ordered explicitly because the GROUP BY drops
+        the model's ordering (L9) — a slice of an unordered query is not "the first four".
+      {% endcomment %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Board</th><th>Audience</th><th>Tiles</th><th>Window</th><th class="table-actions">Open</th></tr>
+          </thead>
+          <tbody>
+            {% for d in other_dashboards %}
+              <tr>
+                <td class="fw-600">
+                  <a href="{% url 'projects:pdb_detail' d.pk %}">{{ d.number }} · {{ d.name }}</a>
+                  {% if d.is_shared %}<span class="badge badge-info">Shared</span>{% endif %}
+                </td>
+                <td>{{ d.get_audience_display }}</td>
+                <td>{{ d.annotation_count }}</td>
+                <td class="text-muted">{{ d.get_default_range_display }}</td>
+                <td class="table-actions">
+                  <a href="{% url 'projects:pdb_detail' d.pk %}" class="btn btn-outline btn-sm"><i data-lucide="eye"></i> View</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% include "projects/reporting/_charts_script.html" %}
+{% endblock %}
