@@ -1,0 +1,43 @@
+{% comment %}
+  The ONE result register: `standard.html`, `report/detail.html` and `reportrun/detail.html` include this
+  with the same flat keys (B4.1, D24), so a saved report, a canned page and a frozen run print their rows
+  identically. Read from the parent context: `columns`, `rows`, `truncated`, `caveats`.
+
+  This partial owns the truncation strip and the caveat list — a page that renders them again prints the
+  same sentence twice. The heading over the table belongs to the including page (or to the
+  `_standard_section_<area>.html` that wraps this one), never to the table.
+{% endcomment %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>{% for column in columns %}<th>{{ column }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+      {% empty %}
+        <tr>
+          <td colspan="{{ columns|length|default:1 }}" class="empty-state">
+            <i data-lucide="inbox"></i>
+            <p>No rows answer this question in this window.</p>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if truncated %}
+  <div class="text-muted" style="font-size:.8rem; margin-top:.5rem;">
+    The register is capped at {{ rows|length }} rows — narrow the window or export the file to see the rest.
+  </div>
+{% endif %}
+
+{% if caveats %}
+  <div style="margin-top:.6rem;">
+    <span class="badge badge-amber">Caveat</span>
+    <ul class="text-muted" style="margin:.4rem 0 0; padding-left:1.1rem; font-size:.8rem;">
+      {% for note in caveats %}<li>{{ note }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
