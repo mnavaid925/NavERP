@@ -1,0 +1,9 @@
+{% comment %}
+  The agile area's section — see `_standard_section_schedule.html` for the framing rule.
+  The register's rows are sprints, not sprint items: `is_done` is the sprint's own status and `task_count`
+  is the number of sprints grouped in the month, so the note says so rather than letting the reader count
+  work items off a column that counts cycles.
+{% endcomment %}
+<p class="text-muted fw-600" style="margin-top:.75rem;">Agile</p>
+<p class="text-muted">Rows are sprints, placed in the month their start date falls in. The completed column counts cycles that closed with a completed status, and the count beside it is every sprint that started in that month — so an open sprint is already in the denominator. Committed points stay on the sprint itself; this register never adds them up, which is why throughput here is counted in cycles rather than estimated in points.</p>
+{% include "projects/reporting/_result_table.html" %}
