@@ -102,13 +102,12 @@
                 <p class="text-muted">No rows in this window.</p>
               {% endif %}
             {% endif %}
-            {% if r.caveats %}
-              <div class="text-muted" style="font-size:.78rem; margin-top:.5rem;">
-                <ul style="margin:0; padding-left:1.1rem;">
-                  {% for note in r.caveats %}<li>{{ note }}</li>{% endfor %}
-                </ul>
-              </div>
-            {% endif %}
+            {% comment %}
+              The shared strip, handed this tile's own list: a caveat that reads as a grey footnote is a
+              caveat that gets skipped, and the amber label is the only thing that tells a reader a
+              headline figure carries a condition.
+            {% endcomment %}
+            {% include "projects/reporting/_caveats.html" with caveats=r.caveats %}
             {% url r.drill_url_name as drill_url %}
             {% if drill_url %}
               <div style="margin-top:.6rem;">
