@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Standard Report Library{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Standard report library</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <span>Standard report library</span>
+      </div>
+      <p class="text-muted">Every row is a canned question the engine computes on read from the module that owns the figures — no answer is stored anywhere, so nothing here can go stale. {{ total_kinds }} kinds × four scope axes × any window: the list of kinds is short, the questions it can answer are not.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'projects:rep_list' %}" class="btn btn-outline"><i data-lucide="file-bar-chart"></i> Saved Reports</a>
+      <a href="{% url 'projects:run_list' %}" class="btn btn-outline"><i data-lucide="history"></i> Frozen runs</a>
+      <a href="{% url 'projects:rep_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Report</a>
+    </div>
+  </div>
+
+  {% if type_filter %}
+    {% comment %}
+      Which rows survive the `?type=` filter is the view's decision, made before it renders this page;
+      a second filter in the template would put that rule in two places. The banner only names the
+      active filter and the way out of it.
+    {% endcomment %}
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-body">
+        <span class="badge badge-amber">{{ type_filter }}</span>
+        <span class="text-muted" style="margin-left:.5rem;">Filtered to this kind.</span>
+        <a href="{% url 'projects:report_library' %}" class="btn btn-outline" style="margin-left:.6rem;"><i data-lucide="list"></i> Show all kinds</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Canned kinds</h3>
+      <span class="badge badge-slate">{{ total_kinds }} kinds</span>
+    </div>
+    {% comment %}
+      `r.url` is resolved by the view's link builder, `?type=` and all, because the compute layer never
+      touches a route. Appending a query string to it here would contradict the kind it points at.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Kind</th>
+            <th>Rows are</th>
+            <th>What it answers</th>
+            <th>Grouped</th>
+            <th>Saved</th>
+            <th class="table-actions">Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in library %}
+            <tr>
+              <td>
+                <div class="fw-600">{{ r.label }}</div>
+                {# The raw key prints because it is the literal `?type=` value this row stands for. #}
+                <div class="text-muted">{{ r.type }}</div>
+              </td>
+              <td>{{ r.subject_label|default:"—" }}</td>
+              <td>{{ r.description|default:"—" }}</td>
+              <td>
+                {% for s in r.sections %}
+                  <div class="fw-600">{{ s.title }}</div>
+                  <span class="badge badge-muted">{{ s.area }}</span>
+                {% empty %}
+                  <span class="text-muted">no canned layout</span>
+                {% endfor %}
+              </td>
+              <td><a href="{% url 'projects:rep_list' %}?report_type={{ r.type }}">{{ r.saved_count }} saved</a></td>
+              <td class="table-actions">
+                {% comment %}
+                  A kind with no entry in the canned registry has no compute behind it, so its row
+                  opens the builder with the kind prefilled instead of a page that cannot answer.
+                {% endcomment %}
+                {% if r.is_canned %}
+                  <a href="{{ r.url }}" class="btn btn-outline"><i data-lucide="play"></i> Open</a>
+                {% else %}
+                  <a href="{{ r.url }}" class="btn btn-outline"><i data-lucide="hammer"></i> Build it</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">Open a kind to answer it for one scope and one window; the same page lets you save that answer as a question of your own.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">The engine you are not reusing</h3></div>
+    <div class="card-body">
+      <p class="text-muted">Each board below already computes these figures from its own sub-module. 7.16 links to them rather than running a second arithmetic over the same rows — two answers for one number is how a report stops being trusted.</p>
+    </div>
+    {% comment %}
+      Every row carries its own group: the view resolved and ordered this list, so regrouping it here
+      (or hiding a repeated label) would put the grouping rule in two places.
+    {% endcomment %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Board</th><th class="table-actions">Owned by</th></tr>
+        </thead>
+        <tbody>
+          {% for b in sibling_boards %}
+            <tr>
+              <td><a href="{{ b.url }}" class="fw-600">{{ b.label }}</a></td>
+              <td class="table-actions"><span class="badge badge-muted">{{ b.group }}</span></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2">
+                <div class="empty-state">
+                  <i data-lucide="unlink"></i>
+                  <h3>No sibling boards resolved</h3>
+                  <p>Every reporting surface this page links to is per-object or not wired up yet, so the shortcuts were dropped instead of rendering dead.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
