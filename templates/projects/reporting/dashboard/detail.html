@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ obj.name }}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:pdb_list' %}">Boards</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{{ obj.description|default:"Every tile below is computed while this page renders, from the module that owns the figure. This board stores a layout, not a number." }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ home_url }}" class="btn btn-outline"><i data-lucide="house"></i> My board</a>
+      {% if can_edit %}
+        <a href="{% url 'projects:pdb_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit board</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Window</h3>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_audience_display }}</span>
+        <span class="badge badge-slate">{{ obj.get_layout_display }}</span>
+        {% if active_range %}
+          <span class="badge badge-info">{{ active_range_label }}</span>
+        {% else %}
+          <span class="badge badge-muted">Board default</span>
+        {% endif %}
+        {% if obj.is_default %}<span class="badge badge-green">Home default</span>{% endif %}
+        {% if obj.is_shared %}<span class="badge badge-info">Shared</span>{% else %}<span class="badge badge-muted">Private</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        The board's authored window is what `pdb_home` always shows; this switcher is a request and
+        nothing else — it reaches the tiles through the compute call and writes no column, so two
+        readers on the same board can be looking at two windows without either changing the row.
+      {% endcomment %}
+      <form method="get" action="{% url 'projects:pdb_detail' obj.pk %}" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="id_range">Show tiles for</label>
+          <select class="form-select" id="id_range" name="range">
+            <option value="">Board default ({{ obj.get_default_range_display }})</option>
+            {% for value, label in range_choices %}
+              <option value="{{ value }}" {% if active_range == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a class="btn btn-outline" href="{% url 'projects:pdb_detail' obj.pk %}">Reset</a>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}
+    `_widget_grid.html` is the ONE tile markup (B2.4) — the landing board and this page include the same
+    file, so a "large" tile cannot mean two widths on two pages. `can_edit` and `widget_add_url` are
+    published here and not on home, which is what puts the move/edit/remove arrows on the editable page
+    only, with no branch of its own in the partial.
+  {% endcomment %}
+  {% include "projects/reporting/_widget_grid.html" %}
+
+  {% comment %}
+    The grid's canvas configs, handed to `_charts_script.html` through the payload id that file reads
+    (R6, B4.3). `json_script` is the only transport: a hand-interpolated label would put a person-typed
+    tile title into the executable path.
+  {% endcomment %}
+  {{ chart_configs|json_script:"rbi-charts" }}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6" style="margin-top:1rem;">
+    <div class="lg:col-span-2">
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">The board definition</h3></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <dt>Audience</dt><dd>{{ obj.get_audience_display }}</dd>
+            <dt>Layout</dt><dd>{{ obj.get_layout_display }} · {{ cols }} grid column(s)</dd>
+            <dt>Authored window</dt><dd>{{ obj.get_default_range_display }}{% if active_range and active_range != obj.default_range %} <span class="text-muted">(this page is showing {{ active_range_label }})</span>{% endif %}</dd>
+            <dt>Tiles</dt><dd>{{ rendered_widgets|length }}</dd>
+            <dt>Project</dt><dd>{% if obj.project %}<a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% else %}All projects{% endif %}</dd>
+            <dt>Portfolio</dt><dd>{{ obj.portfolio.name|default:"—" }}</dd>
+            <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}<span class="badge badge-muted">Workspace template</span>{% endif %}</dd>
+            <dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+            <dt>Last change</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd>
+          </dl>
+          <p class="text-muted" style="margin-top:.6rem;">Which board a member lands on is set on their own board page, not here: the home flag is written by no route on a shared definition, so two people editing one board cannot leave two home boards behind.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Actions</h3></div>
+        <div class="card-body">
+          <div class="flex flex-wrap gap-2">
+            <a href="{% url 'projects:pdb_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All boards</a>
+            {% if can_edit %}
+              <a href="{{ widget_add_url }}" class="btn btn-primary"><i data-lucide="plus"></i> Add tile</a>
+              <a href="{% url 'projects:pdb_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+            {% endif %}
+            {% comment %}
+              Delete is offered to whoever may edit: the board's rows are its tiles, and CASCADE is the
+              only way they leave. The count is read off this form's own data attribute so the dialog can
+              name what is about to go without a context key for it.
+            {% endcomment %}
+            {% if can_edit %}
+              <form method="post" action="{% url 'projects:pdb_delete' obj.pk %}" data-tiles="{{ rendered_widgets|length }}" onsubmit="return confirm('Delete this board and its ' + this.dataset.tiles + ' tile(s)? This cannot be undone.');">
+                {% csrf_token %}
+                <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete board</button>
+              </form>
+            {% endif %}
+          </div>
+          {% if not can_edit %}
+            <p class="text-muted" style="margin-top:.5rem;">
+              Only {{ obj.owner.get_full_name|default:obj.owner.username|default:"its owner" }} or a workspace administrator can change this board. Every tile on it still reads for you.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Where these figures come from</h3></div>
+        <div class="card-body">
+          <p class="text-muted">Each tile carries a link to the register that owns its metric, and the board page never re-runs that module's arithmetic — a tile and its source register cannot disagree, because there is only one computation between them.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  {% include "projects/reporting/_charts_script.html" %}
+{% endblock %}
