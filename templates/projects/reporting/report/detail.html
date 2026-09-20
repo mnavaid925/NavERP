@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}{{ obj.number }} — {{ obj.name }}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} — {{ obj.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:rep_list' %}">Saved Reports</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">{% if obj.description %}{{ obj.description }}{% else %}This saved question is computed live every time the page opens — the figures are the source modules' current ones.{% endif %}</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        The verbs themselves live once, in the Actions sidebar below: one form per POST route.
+      {% endcomment %}
+      <a href="{% url 'projects:rep_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  {% if summary_cards %}
+    <div class="stat-grid">
+      {% for card in summary_cards %}
+        <div class="stat-card">
+          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-label">{{ card.label }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Live answer</h3>
+          <div class="badge-group">
+            <span class="badge {{ rag_css }}">{% if rating %}{{ rating|title }}{% else %}Not rated{% endif %}</span>
+            <span class="badge badge-slate">{{ obj.get_chart_type_display }}</span>
+            <span class="badge badge-slate">{{ obj.window_label }}</span>
+            <span class="badge badge-slate">{{ obj.scope_label }}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if not summary_cards %}
+            <p class="text-muted">This question has no KPI line — its answer is the register below.</p>
+          {% endif %}
+          {% comment %}
+            A canned kind lays its register out through its own section partial, which wraps
+            `_result_table.html` itself; a `custom` report has no canned section at all (D24). Including
+            both would print the same rows twice under two headings, so the two branches are exclusive.
+            `_result_chart.html` sits outside the branch — it is included exactly once per page because
+            the `json_script` id it emits is the one `_charts_script.html` reads.
+          {% endcomment %}
+          {% if section_templates %}
+            {% for section_template in section_templates %}
+              {% include section_template %}
+            {% endfor %}
+          {% else %}
+            {% include "projects/reporting/_result_table.html" %}
+          {% endif %}
+          {% include "projects/reporting/_result_chart.html" %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">The saved question</h3></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <dt>Kind</dt><dd><span class="badge badge-slate">{{ obj.get_report_type_display }}</span></dd>
+            <dt>Subject</dt><dd>{{ obj.get_subject_display }}</dd>
+            <dt>Measures</dt><dd>{% if obj.metric_labels %}{{ obj.metric_labels|join:" · " }}{% else %}—{% endif %}</dd>
+            <dt>Grouped by</dt><dd>{% if obj.dimension_labels %}{{ obj.dimension_labels|join:" · " }}{% else %}not grouped{% endif %}</dd>
+            <dt>Window</dt><dd>{{ obj.window_label }}</dd>
+            <dt>From / to</dt><dd>{% if obj.date_from and obj.date_to %}{{ obj.date_from }} → {{ obj.date_to }}{% else %}{{ obj.window_label }}{% endif %}</dd>
+            <dt>As of</dt><dd>{% if obj.as_of %}{{ obj.as_of|date:"M d, Y" }}{% else %}today{% endif %}</dd>
+            <dt>Sort</dt><dd>{% if obj.sort_by %}{{ obj.sort_by }}{% else %}first measure{% endif %}</dd>
+            <dt>Top rows</dt><dd>{{ obj.top_n }}</dd>
+            <dt>Project</dt><dd>{% if obj.project %}<a href="{% url 'projects:prj_detail' obj.project_id %}">{{ obj.project.name }}</a>{% else %}—{% endif %}</dd>
+            <dt>Scope</dt><dd>{{ obj.scope_label }}</dd>
+            <dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.email }}{% else %}<span class="text-muted">un-owned</span>{% endif %}</dd>
+            <dt>Last run</dt><dd>{% if obj.last_run_at %}{{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+          </dl>
+          {% if obj.notes %}
+            <p style="margin-top:.75rem;"><strong>Notes.</strong> {{ obj.notes }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Actions</h3></div>
+        <div class="card-body">
+          <div class="flex flex-wrap gap-2">
+            <a href="{% url 'projects:rep_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+            <a href="{% url 'projects:rep_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+            {% if can_run %}
+              <form method="post" action="{% url 'projects:rep_run' obj.pk %}" onsubmit="return confirm('Run this report now? Nothing is stored — only the last-run stamp moves.');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="play"></i> Run</button>
+              </form>
+              <form method="post" action="{% url 'projects:rep_freeze' obj.pk %}" onsubmit="return confirm('Freeze this answer? The rows are stored as an immutable run.');">
+                {% csrf_token %}
+                <button class="btn btn-primary" type="submit"><i data-lucide="snowflake"></i> Freeze</button>
+              </form>
+            {% endif %}
+            {% comment %}
+              The star is the only form on this page that posts to a `redirect_back_or` route, so it is
+              the only one carrying `next` (D64).
+            {% endcomment %}
+            <form method="post" action="{% url 'projects:rep_favorite' obj.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="btn btn-outline" type="submit"><i data-lucide="star"></i> {% if obj.is_favorite %}Remove from favourites{% else %}Add to favourites{% endif %}</button>
+            </form>
+            <form method="post" action="{% url 'projects:rep_delete' obj.pk %}" onsubmit="return confirm('Delete this saved report and its frozen runs? This cannot be undone.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          </div>
+          {% if not can_run %}
+            <p class="text-muted" style="margin-top:.5rem;">Pick a tenant workspace to run or freeze this report.</p>
+          {% endif %}
+          {% if obj.is_shared %}
+            <p style="margin-top:.75rem;"><span class="badge badge-green">Shared</span> <span class="text-muted">Every member of this workspace can open it.</span></p>
+          {% else %}
+            <p style="margin-top:.75rem;"><span class="badge badge-muted">Private</span>{% if is_owner %} <span class="badge badge-muted">Private to you</span>{% endif %} <span class="text-muted">Share it from the edit form to let the workspace open it.</span></p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Take the answer with you</h3></div>
+        <div class="card-body">
+          <div class="flex flex-wrap gap-2">
+            <a href="{% url 'projects:rep_csv' obj.pk %}" class="btn btn-outline"><i data-lucide="download"></i> CSV</a>
+            <a href="{% url 'projects:rep_json' obj.pk %}" class="btn btn-outline"><i data-lucide="braces"></i> JSON</a>
+          </div>
+          <p class="text-muted" style="margin-top:.5rem;">Both exports compute the live answer — they are not the frozen run's file.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Frozen history</h3></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Run</th><th>Status</th><th>Rows</th><th>Generated</th></tr>
+            </thead>
+            <tbody>
+              {% for run in runs %}
+                <tr>
+                  <td>
+                    <a href="{% url 'projects:run_detail' run.pk %}" class="fw-600">{{ run.title }}</a>
+                    <div><span class="badge {{ run.rag_css }}">{% if run.rating %}{{ run.rating|title }}{% else %}Not rated{% endif %}</span></div>
+                  </td>
+                  <td>
+                    {% if run.status == "draft" %}
+                      <span class="badge badge-amber">{{ run.get_status_display }}</span>
+                    {% elif run.status == "issued" %}
+                      <span class="badge badge-info">{{ run.get_status_display }}</span>
+                    {% elif run.status == "archived" %}
+                      <span class="badge badge-muted">{{ run.get_status_display }}</span>
+                    {% else %}
+                      <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ run.row_count }}</td>
+                  <td>
+                    <div>{{ run.generated_at|date:"M d, Y H:i" }}</div>
+                    <div class="text-muted">{% if run.generated_by %}{{ run.generated_by.get_full_name|default:run.generated_by.email }}{% else %}system{% endif %}</div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="4">
+                    <div class="empty-state">
+                      <i data-lucide="snowflake"></i>
+                      <h3>Nothing frozen yet</h3>
+                      <p>Freeze to open a run — a frozen run is the only answer this table keeps.</p>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">The ten most recent freezes — the <a href="{% url 'projects:run_list' %}">frozen runs register</a> lists every one.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  {% include "projects/reporting/_charts_script.html" %}
+{% endblock %}
