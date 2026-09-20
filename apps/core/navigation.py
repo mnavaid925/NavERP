@@ -2021,6 +2021,21 @@ LIVE_LINKS = {
         "A/R Aging Dashboard":               "projects:ar_aging",
         "Cash Flow Forecast":                "projects:cash_flow_forecast",
     },
+    "7.16": {
+        "Standard Project Reports":              "projects:report_library",
+        "Custom Report Builder":                 "projects:rep_list",
+        "Real-Time Dashboards & Widgets":        "projects:pdb_home",
+        "Executive & Steering Committee Packs":  "projects:exec_pack",
+        "Data Export & API Connectivity":        "projects:run_list",
+        # Extra live leaves: a run is minted from a report page and a tile renders only inside its
+        # board, so neither gets a register of its own here — this dict maps bullets to pages.
+        "Reporting & BI Home":                   "projects:rbi_home",
+        "Saved Reports":                         "projects:rep_list",
+        "Standard Report Runner":                "projects:report_standard?type=status_report",
+        "Report Runs (frozen)":                  "projects:run_list",
+        "Dashboards":                            "projects:pdb_list",
+        "Portfolio Heat Map":                    "projects:pfm_dashboard",
+    },
     "7.17": {
         "Visual Workflow Designer":          "projects:pwf_list",
         "Approval Automation":               "projects:par_list",
