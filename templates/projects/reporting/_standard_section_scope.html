@@ -1,0 +1,6 @@
+{% comment %}
+  The scope area's section — see `_standard_section_schedule.html` for the framing rule.
+{% endcomment %}
+<p class="text-muted fw-600" style="margin-top:.75rem;">Scope</p>
+<p class="text-muted">Change orders are grouped by the status the scope module holds, and the exposure column is their cost impact summed — a request nobody has priced contributes a row but no money, so an unpriced change is missing from that total rather than free. Approved and implemented count as done; a cancelled request leaves the open count but stays in the register.</p>
+{% include "projects/reporting/_result_table.html" %}
