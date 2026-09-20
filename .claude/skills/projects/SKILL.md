@@ -35,10 +35,10 @@ description: >-
   per-project folder tree with a computed path and document count, the controlled-document register
   with real link FKs to milestones/tasks, the immutable approved-revision chain with a cooperative
   check-out lock and a denormalized search copy, the tenant-wide standards library, the insight
-  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast).
+  and 7.14 Client & External Collaboration: client portal access tokens [CPA-] with fine-grained visibility flags and expiration checks, formal client review cycles & approval requests [CFB-] with sign-off/rejection workflows, contract statements of work [SOW-] and approved amendment chains [SWA-] with dynamic value rollup, external vendor coordination & handoffs [VHD-] with deliverable acceptance and 1–5 scorecard ratings, and project client billing schedules [PCI-] with 1-click accounting AR invoice generation; and 7.15 Financial & Billing Management: rate cards [RTC-] with role/activity rates and markup, automated billing runs [PBR-] with labor/expense/fee calculation, exchange rate, and 1-click accounting.Invoice generation + PDF preview, revenue recognition schedules [PRS-] with milestones/ASC-606 percent-complete recognition and lock/supersede verbs, payment tracking records [PPR-] with DSO calculation, promise-to-pay logging, contact notes, and 4 computed financial boards: project P&L, budget vs actual variance, A/R aging buckets, and 12-month cash flow forecast; and 7.17 Workflow & Automation: trigger-condition-action workflow rules [PWF-] with child execution logs and test run simulation, multi-level stage-gate approval gates [PAR-] with escalate/delegate/self-approval prevention, recurring task generation schedules [RTS-] with cron/interval cadence and next occurrence computation, outbound webhook endpoints [PWH-] with HMAC-SHA256 signing and delivery attempt logging, plus 4 computed operational boards: automation overview, approval inbox, recurrence calendar, and webhook diagnostics).
   Use when the user
   asks to add/change/debug anything under apps/projects or templates/projects, extend the
-  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.15), work on
+  seed_projects seeder, touch project sidebar wiring (LIVE_LINKS 7.1–7.15, 7.17), work on
   ProjectRequest/Project/ProjectStakeholder/ProjectKickoff/ProjectTask/TaskDependency/
   ProjectMilestone/ScheduleBaseline/ResourceProfile/ResourceAllocation/ResourceTimeEntry/
   BudgetRevision/CostControlAccount/ProjectBudgetLine/ProjectExpense/
@@ -53,13 +53,15 @@ description: >-
   Portfolio/Program/PortfolioInvestment/ProgramDependency/
   Sprint/ProjectEpic/ProjectRelease/SprintImpediment/SprintRetrospective/
   ClientPortalAccess/ClientApprovalRequest/StatementOfWork/SOWAmendment/VendorHandoff/ProjectClientInvoice/
-  ProjectRateCard/ProjectBillingRun/ProjectRevenueSchedule/ProjectPaymentRecord,
+  ProjectRateCard/ProjectBillingRun/ProjectRevenueSchedule/ProjectPaymentRecord/
+  ProjectWorkflowRule/WorkflowExecutionLog/ProjectApprovalGate/RecurringTaskSchedule/
+  ProjectWebhookEndpoint/ProjectWebhookDelivery,
   or invokes /projects.
 ---
 
 # Module 7 — Project Management (`apps/projects`)
 
-**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14 + 7.15.** 7.16–7.19 are roadmap (a
+**As-built: 7.1 + 7.2 + 7.3 + 7.4 + 7.5 + 7.6 + 7.7 + 7.8 + 7.9 + 7.10 + 7.11 + 7.12 + 7.13 + 7.14 + 7.15 + 7.17.** 7.16, 7.18–7.19 are roadmap (a
 parallel build may be landing them — always check `apps/projects/models/` first). Do not assume a
 model exists because NavERP.md lists the feature — check first.
 
@@ -75,7 +77,7 @@ went to the parallel 7.7 build), `0010_alter_scopeitem_status` (7.7 — the `vio
 build had omitted from the choices entirely), `0011_taskblock_taskchecklistitem_projecttask_actual_end_and_more`
 (7.8's execution columns + its two registers), `0012_channel_channelmessage_documentshare_meeting_and_more`
 (7.9's seven tables), `0013_channelmessage_chm_tnt_created_idx_and_more` (7.9 review indexes) and
-`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), and `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes).
+`0014_projectfolder_projectdocument_documenttemplate_and_more` (7.10's five tables), `0017_resourcetimeentry_activity_code_and_more` (7.11 ResourceTimeEntry fields), `0018_overtimerule_projectovertimerecord_timeactivitycode` (7.11's three tables), `0019_portfolio_program_portfolioinvestment_and_more` (7.12's four tables), `0020_projecttask_epic_projecttask_release_and_more` (7.13's five tables + ProjectTask agile extensions), `0021_statementofwork_sowamendment_projectclientinvoice_and_more` (7.14's six tables), `0022_projectbillingrun_projectpaymentrecord_and_more` (7.15's four tables), `0023_projectbillingrun_pbr_tnt_status_idx_and_more` (7.15 review indexes), `0024_projectapprovalgate_projectwebhookendpoint_and_more` (7.17's six tables), and `0025_projectworkflowrule_pwf_tnt_status_idx_and_more` (7.17 review indexes).
 
 ## ⚠️ Three different models are called "Project"
 
@@ -1852,6 +1854,47 @@ Covers rate card configuration with role/activity rates and markup, automated bi
   - `financial_variance` (`financial/variance/`): Budget vs actual cost, schedule, and margin variance analysis.
   - `ar_aging` (`financial/ar-aging/`): Accounts receivable aging buckets (current, 1-30, 31-60, 61-90, 90+ days overdue) with collections follow-up queue.
   - `cash_flow_forecast` (`financial/cash-flow/`): 12-month rolling project cash flow projection combining scheduled revenue, billing runs, and payment receipts.
+
+```python
+"7.17": {
+    "Visual Workflow Designer":              "projects:automation_overview",
+    "Approval Automation":                   "projects:approval_inbox",
+    "Notification & Reminder Rules":         "projects:pwf_list",
+    "Recurring Task Automation":             "projects:recurrence_calendar",
+    "Integration Automation (iPaaS)":        "projects:webhook_diagnostics",
+    # Extra live leaves:
+    "Workflow Rules":                        "projects:pwf_list",
+    "Approval Gates":                        "projects:par_list",
+    "Recurring Schedules":                   "projects:rts_list",
+    "Webhooks & Endpoints":                  "projects:pwh_list",
+    "Webhook Deliveries":                    "projects:pwh_delivery_list",
+}
+```
+Bullet 1 maps to `automation_overview` command center and visual execution telemetry; bullet 2 maps to `approval_inbox` multi-project governance gate queue; bullet 3 maps to `pwf_list` event-driven notification & rule engine; bullet 4 maps to `recurrence_calendar` cron & interval scheduling horizon; bullet 5 maps to `webhook_diagnostics` integration & delivery health monitor. Extra live leaves provide direct CRUD access to `pwf_list`, `par_list`, `rts_list`, `pwh_list`, and `pwh_delivery_list`.
+
+### 7.17 Workflow & Automation — Reference
+
+Covers visual workflow triggers & actions, multi-tier stage gate approvals, recurring task generation, and outbound webhook delivery:
+
+#### Models (`apps/projects/models/WorkflowAutomation/`)
+- **`ProjectWorkflowRule`** [`PWF-`] (`WorkflowRules.py`): Trigger-condition-action workflow automation engine. Fields: `project` (optional, null=workspace-wide default), `name`, `description`, `trigger_type` (task_status_changed/milestone_reached/budget_threshold_exceeded/risk_realized/approval_decided/issue_escalated/schedule_delayed/manual), `trigger_config` (JSON), `conditions` (JSON list of field/op/value clauses), `actions` (JSON list of action specifications: send_notification, create_task, update_status, escalate_issue, call_webhook, require_approval), `is_active`, `execution_count`, `last_executed_at`, `created_by`. Verbs: `pwf_execute_now`, `pwf_test_run`, `pwf_toggle_active`.
+- **`WorkflowExecutionLog`** (`WorkflowRules.py`): Append-only execution audit log for workflow rule executions. Fields: `tenant`, `rule` (CASCADE), `triggered_by`, `trigger_event`, `trigger_payload` (JSON), `status` (success/failed/partial/skipped), `actions_executed` (JSON), `error_message`, `execution_duration_ms`, `executed_at`. Read-only history.
+- **`ProjectApprovalGate`** [`PAR-`] (`ApprovalGates.py`): Formal stage-gate, phase-gate, or deliverable sign-off gate. Fields: `project`, `name`, `gate_type` (phase_gate/charter_approval/baseline_change/budget_increase/scope_change/contract_signoff/deliverable_acceptance), `status` (draft/pending/approved/rejected/escalated/cancelled), `required_approver_role` (project_manager/executive_sponsor/client/pmo_lead/finance_lead/custom), `assigned_approver` (User), `delegate_approver` (User), `requested_by` (User), `decided_by` (User), `requested_at`, `due_date`, `decided_at`, `decision_notes`, `escalation_notes`, `target_milestone` (MST- link), `target_baseline` (BSL- link), `target_scope_change` (SCR- link), `target_deliverable` (QCI- link). Verbs: `par_approve`, `par_reject`, `par_escalate`, `par_delegate`, `par_cancel`. Enforces maker-checker (requester cannot self-approve unless tenant admin).
+- **`RecurringTaskSchedule`** [`RTS-`] (`RecurringTasks.py`): Automated task recurrence and template schedule. Fields: `project`, `title`, `description`, `recurrence_pattern` (daily/weekly/biweekly/monthly/quarterly/cron), `cron_expression`, `interval_days`, `start_date`, `end_date`, `next_run_date`, `last_run_date`, `tasks_generated_count`, `is_active`, `template_priority`, `template_effort_hours`, `template_assignee`, `template_milestone`, `template_parent_task`, `auto_assign`, `notify_assignee_on_creation`, `created_by`. Verbs: `rts_generate_task`, `rts_skip_next`, `rts_toggle_active`.
+- **`ProjectWebhookEndpoint`** [`PWH-`] (`Webhooks.py`): Outbound webhook destination for iPaaS and third-party event delivery. Fields: `project` (optional, null=workspace-wide default), `name`, `payload_url`, `secret_token` (write-once / reveal-once HMAC key stored as SHA-256 hash), `subscribed_events` (JSON array of subscribed events or `*`), `is_active`, `retry_limit`, `timeout_seconds`, `custom_headers` (JSON dict), `total_deliveries`, `successful_deliveries`, `failed_deliveries`, `last_delivery_at`, `created_by`. Verbs: `pwh_test_ping`, `pwh_rotate_secret`, `pwh_toggle_active`.
+- **`ProjectWebhookDelivery`** [`DLV-`] (`Webhooks.py`): Append-only event delivery attempt log. Fields: `endpoint` (CASCADE), `event_name`, `payload` (JSON), `request_headers` (JSON), `response_status_code`, `response_body_excerpt`, `is_success`, `duration_ms`, `attempt_number`, `delivered_at`. Read-only diagnostics.
+
+#### Views & Routes (`apps/projects/views/WorkflowAutomation/`, `apps/projects/urls/WorkflowAutomation/`)
+- **WorkflowRule**: `pwf_list` (`workflow/rules/`), `pwf_create` (`workflow/rules/add/`), `pwf_detail` (`workflow/rules/<int:pk>/`), `pwf_edit` (`workflow/rules/<int:pk>/edit/`), `pwf_delete` (`workflow/rules/<int:pk>/delete/`), `pwf_execute_now` (`workflow/rules/<int:pk>/execute/`), `pwf_test_run` (`workflow/rules/<int:pk>/test-run/`), `pwf_toggle_active` (`workflow/rules/<int:pk>/toggle-active/`).
+- **ApprovalGate**: `par_list` (`workflow/approvals/`), `par_create` (`workflow/approvals/add/`), `par_detail` (`workflow/approvals/<int:pk>/`), `par_edit` (`workflow/approvals/<int:pk>/edit/`), `par_delete` (`workflow/approvals/<int:pk>/delete/`), `par_approve` (`workflow/approvals/<int:pk>/approve/`), `par_reject` (`workflow/approvals/<int:pk>/reject/`), `par_escalate` (`workflow/approvals/<int:pk>/escalate/`), `par_delegate` (`workflow/approvals/<int:pk>/delegate/`), `par_cancel` (`workflow/approvals/<int:pk>/cancel/`).
+- **RecurringTask**: `rts_list` (`workflow/recurring-tasks/`), `rts_create` (`workflow/recurring-tasks/add/`), `rts_detail` (`workflow/recurring-tasks/<int:pk>/`), `rts_edit` (`workflow/recurring-tasks/<int:pk>/edit/`), `rts_delete` (`workflow/recurring-tasks/<int:pk>/delete/`), `rts_generate_task` (`workflow/recurring-tasks/<int:pk>/generate-task/`), `rts_skip_next` (`workflow/recurring-tasks/<int:pk>/skip-next/`), `rts_toggle_active` (`workflow/recurring-tasks/<int:pk>/toggle-active/`).
+- **WebhookEndpoint**: `pwh_list` (`workflow/webhooks/`), `pwh_create` (`workflow/webhooks/add/`), `pwh_detail` (`workflow/webhooks/<int:pk>/`), `pwh_edit` (`workflow/webhooks/<int:pk>/edit/`), `pwh_delete` (`workflow/webhooks/<int:pk>/delete/`), `pwh_test_ping` (`workflow/webhooks/<int:pk>/test-ping/`), `pwh_rotate_secret` (`workflow/webhooks/<int:pk>/rotate-secret/`), `pwh_toggle_active` (`workflow/webhooks/<int:pk>/toggle-active/`).
+- **WebhookDelivery**: `pwh_delivery_list` (`workflow/deliveries/`), `pwh_delivery_detail` (`workflow/deliveries/<int:pk>/`).
+- **Computed Operational Boards**:
+  - `automation_overview` (`workflow/overview/`): Central automation command center with active rule statistics, today's execution volume, approval backlog alerts, webhook success rate gauges, and recent execution telemetry.
+  - `approval_inbox` (`workflow/approval-inbox/`): Pending approval gate queue with overdue breach tracking, priority filtering, and direct action dialogs.
+  - `recurrence_calendar` (`workflow/recurrence-calendar/`): Recurring schedule timeline, upcoming task generation horizon (next 30 days), and manual trigger queue.
+  - `webhook_diagnostics` (`workflow/webhook-diagnostics/`): Endpoint health monitor, real-time HTTP response code distribution, latency metrics, and failure inspection logs.
 
 ## Common tasks
 
