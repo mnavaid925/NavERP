@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Steering Pack{% endblock %}
+
+{% block extra_css %}
+  {% comment %}
+    No PDF library exists in this project, so "print a pack" means the browser's own print dialogue:
+    these four rules are the whole print contract, and `?print=1` is what drops the chrome above them.
+  {% endcomment %}
+  <style>
+    @media print {
+      .no-print, aside, .topbar, .sidebar, .pagination { display: none !important; }
+      .card { border: none !important; break-inside: avoid; }
+      body { margin: 0; }
+      @page { size: A4 landscape; margin: 12mm; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {# `printing` marks the clean artefact so a stylesheet can widen it without touching the chrome rules above. #}
+  <div{% if print_mode %} class="printing"{% endif %}>
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Steering pack</h1>
+        <div class="breadcrumb">
+          <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+          <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+          <span>Steering pack</span>
+        </div>
+        <p class="text-muted">{{ portfolio.name|default:"All portfolios" }} · As of {{ as_of|date:"d M Y" }}</p>
+        <p class="text-muted">Every band, index and hour below is read from the module that owns it at the moment the page opened — this pack stores no figure of its own.</p>
+      </div>
+      <div class="page-actions no-print">
+        {% if not print_mode %}
+          <button class="btn btn-outline" onclick="window.print()"><i data-lucide="printer"></i> Print</button>
+          <a class="btn btn-outline" href="{% url 'projects:exec_pack' %}?portfolio={{ active_filters.portfolio }}&project={{ active_filters.project }}&as_of={{ as_of|date:'Y-m-d' }}&print=1"><i data-lucide="maximize"></i> Full-width print view</a>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not print_mode %}
+      <div class="card no-print">
+        <div class="card-header"><h3 class="card-title">Scope this pack</h3></div>
+        <div class="card-body">
+          <form method="get" action="{% url 'projects:exec_pack' %}" class="filter-bar">
+            <div class="form-group">
+              <label class="form-label" for="id_portfolio">Portfolio</label>
+              <select class="form-select" id="id_portfolio" name="portfolio">
+                <option value="">All portfolios</option>
+                {% for pf in portfolios %}
+                  <option value="{{ pf.pk }}" {% if active_filters.portfolio|stringformat:"d" == pf.pk|stringformat:"d" %}selected{% endif %}>{{ pf.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="id_project">Project</label>
+              <select class="form-select" id="id_project" name="project">
+                <option value="">Any project</option>
+                {% for p in projects %}
+                  <option value="{{ p.pk }}" {% if active_filters.project|stringformat:"d" == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="id_as_of">As of</label>
+              <input type="date" class="form-input" id="id_as_of" name="as_of" value="{{ as_of|date:'Y-m-d' }}">
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+            <a class="btn btn-outline" href="{% url 'projects:exec_pack' %}">Reset</a>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if summary_cards %}
+      <div class="stat-grid">
+        {% for card in summary_cards %}
+          <div class="stat-card">
+            <div class="stat-value">{{ card.value }}</div>
+            <div class="stat-label">{{ card.label }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">RAG bands</h3>
+        <div class="badge-group">
+          <span class="badge badge-slate">{{ portfolio.name|default:"All portfolios" }}</span>
+          <span class="badge badge-muted">As of {{ as_of|date:"d M Y" }}</span>
+        </div>
+      </div>
+      {% comment %}
+        Every status cell pairs the colour with the word: a colour-only band is unreadable to a screen
+        reader and to roughly 8% of readers with a red/green deficiency — and this table is printed.
+      {% endcomment %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Portfolio</th>
+              <th>Program</th>
+              <th>RAG</th>
+              <th>Streak</th>
+              <th>CPI</th>
+              <th>SPI</th>
+              <th>CV</th>
+              <th>SV</th>
+              <th>Hours</th>
+              <th>Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in bands %}
+              <tr>
+                <td class="fw-600">
+                  {% if b.drill_url %}
+                    <a href="{{ b.drill_url }}">{{ b.project.name|default:"—" }}</a>
+                  {% else %}
+                    {{ b.project.name|default:"—" }}
+                  {% endif %}
+                </td>
+                <td>{{ b.portfolio|default:"—" }}</td>
+                <td>{{ b.program|default:"—" }}</td>
+                <td>
+                  {% if b.rating %}
+                    <span class="badge {{ b.rag_css }}">{{ b.rating|title }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">No rating</span>
+                  {% endif %}
+                </td>
+                <td>{{ b.streak_label|default:"—" }}</td>
+                <td>{{ b.cpi|floatformat:2|default:"—" }}</td>
+                <td>{{ b.spi|floatformat:2|default:"—" }}</td>
+                <td>{{ b.cv|default:"—" }}</td>
+                <td>{{ b.sv|default:"—" }}</td>
+                <td>{{ b.hours|floatformat:2|default:"—" }}</td>
+                <td>{{ b.margin_pct|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="11">
+                  <div class="empty-state">
+                    <i data-lucide="traffic-cone"></i>
+                    <h3>Nothing to band in this scope</h3>
+                    <p>No project in this portfolio carries cost-control data yet, or no workspace is bound to this session — the committee page is empty until the owning modules have rows.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          The pack prints no register, so this is the only place its caveats can appear — the EVM currency
+          note travels with the bands it qualifies, including on the printed sheet.
+        {% endcomment %}
+        {% include "projects/reporting/_caveats.html" %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">How long the bands have held</h3></div>
+      {% comment %}
+        Deliberately markup and not a canvas: a handful of month buckets against three letters is a
+        table the committee reads off the printed page, where a canvas prints as a picture of one.
+      {% endcomment %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Month</th><th style="text-align:right;">Green</th><th style="text-align:right;">Amber</th><th style="text-align:right;">Red</th></tr>
+          </thead>
+          <tbody>
+            {% for bucket in rag_series %}
+              <tr>
+                <td class="fw-600">{{ bucket.label }}</td>
+                <td style="text-align:right;">{{ bucket.green }}</td>
+                <td style="text-align:right;">{{ bucket.amber }}</td>
+                <td style="text-align:right;">{{ bucket.red }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4">
+                  <div class="empty-state">
+                    <i data-lucide="calendar-x"></i>
+                    <h3>No issued runs in these buckets</h3>
+                    <p>Nothing has been frozen and issued as a rated run in the months this register covers, so there is no history to count.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">These buckets count issued runs per month, empty months included — an answered question is what moves a band, not a page view.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Rating trend</h3></div>
+      <div class="card-body">
+        {% comment %}
+          Included exactly once per page: this partial owns the `json_script` payload id that
+          `_charts_script.html` reads, so a second include would register the same canvas twice.
+        {% endcomment %}
+        {% include "projects/reporting/_result_chart.html" %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Commentary</h3>
+        <div class="badge-group">
+          {% if narrative_run %}
+            <span class="badge badge-info">Issued pack</span>
+          {% else %}
+            <span class="badge badge-muted">No issued pack</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        {% if narrative_run %}
+          <p class="text-muted">{{ narrative_run.title }} · issued {{ narrative_run.generated_at|date:"d M Y H:i" }} · <a href="{% url 'projects:run_detail' narrative_run.pk %}">open the frozen run</a></p>
+          {# Auto-escaped, and `pre-wrap` keeps the author's line breaks without an HTML filter. #}
+          <p style="white-space: pre-wrap; margin-top:.5rem;">{{ narrative|default:"This issued pack carries no commentary text." }}</p>
+        {% else %}
+          <div class="empty-state">
+            <i data-lucide="message-square-dashed"></i>
+            <h3>No issued steering pack yet</h3>
+            <p>Commentary comes from a frozen run that somebody issued. Freeze the steering pack report and issue it, and its narrative lands here.</p>
+            <a href="{% url 'projects:run_list' %}" class="btn btn-outline">Frozen runs</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% comment %}
+      7.16 links these surfaces instead of re-deriving them: a second arithmetic over the same rows is
+      how two pages end up disagreeing about one figure.
+    {% endcomment %}
+    <div class="card no-print">
+      <div class="card-header"><h3 class="card-title">Need the underlying board?</h3></div>
+      <div class="card-body">
+        <div class="flex flex-wrap gap-2">
+          {% for d in drills %}
+            <a href="{{ d.url }}" class="btn btn-outline"><i data-lucide="external-link"></i> {{ d.label }}</a>
+          {% empty %}
+            <p class="text-muted">The boards that answer in detail are not reachable from this workspace yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  {% include "projects/reporting/_charts_script.html" %}
+{% endblock %}
