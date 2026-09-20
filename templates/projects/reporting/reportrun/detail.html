@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}{{ obj.title }}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:run_list' %}">Frozen runs</a><span class="sep">›</span>
+        <span>#{{ obj.pk }}</span>
+      </div>
+      <p class="text-muted">Every figure below was read once, when this run was frozen, and stored with it — this page recomputes nothing, which is the only reason it can still say what the numbers were on {{ obj.as_of|date:"d M Y" }}.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ csv_url }}" class="btn btn-outline"><i data-lucide="download"></i> CSV</a>
+      <a href="{% url 'projects:rep_detail' report.pk %}" class="btn btn-outline"><i data-lucide="file-bar-chart"></i> The question</a>
+    </div>
+  </div>
+
+  {% if summary_cards %}
+    <div class="stat-grid">
+      {% for card in summary_cards %}
+        <div class="stat-card">
+          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-label">{{ card.label }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">The frozen answer</h3>
+          <div class="badge-group">
+            <span class="badge {{ rag_css }}">{% if rating %}{{ rating|title }}{% else %}Not rated{% endif %}</span>
+            <span class="badge badge-slate">{{ obj.chart_type }}</span>
+            <span class="badge badge-slate">{{ obj.row_count }} rows</span>
+            {% if obj.period_from and obj.period_to %}
+              <span class="badge badge-info">{{ obj.period_from|date:"d M Y" }} → {{ obj.period_to|date:"d M Y" }}</span>
+            {% else %}
+              <span class="badge badge-muted">No window stored</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          {% if not summary_cards %}
+            <p class="text-muted">This run stored no KPI line — its answer is the register below.</p>
+          {% endif %}
+          {% comment %}
+            The register and the caveat strip both come from `_result_table.html`, which reads the flat
+            `columns` / `rows` / `truncated` / `caveats` keys this view publishes off the stored payload —
+            never off a fresh compute. A run that laid out its own table differently would stop matching
+            the CSV downloaded from it.
+          {% endcomment %}
+          {% include "projects/reporting/_result_table.html" %}
+          {% include "projects/reporting/_result_chart.html" %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Commentary</h3>
+          {% if is_draft %}
+            <span class="badge badge-amber">Editable while draft</span>
+          {% else %}
+            <span class="badge badge-muted">Locked</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          {% if is_draft %}
+            {% comment %}
+              One form per POST route (B4.2). The draft gate is the form's own `clean()`, so this page can
+              offer the box and still refuse a stale POST — and a non-draft run never sees the form at all.
+            {% endcomment %}
+            <form method="post" action="{% url 'projects:run_narrative' obj.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              {% for field in narrative_form %}
+                {% include "partials/form_field.html" with field=field %}
+              {% endfor %}
+              <div class="flex flex-wrap gap-2" style="margin-top:.6rem;">
+                <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> Save commentary</button>
+              </div>
+            </form>
+          {% elif narrative %}
+            {# Auto-escaped, and `pre-wrap` keeps the author's line breaks without an HTML filter. #}
+            <p style="white-space: pre-wrap;">{{ narrative }}</p>
+          {% else %}
+            <p class="text-muted">This pack was frozen without commentary. Commentary is a draft-only write — freeze a new run to add it.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Provenance</h3></div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <dt>Question</dt><dd><a href="{% url 'projects:rep_detail' report.pk %}">{{ report.number|default:"—" }} · {{ report.name|default:"deleted question" }}</a></dd>
+            <dt>Kind</dt><dd><span class="badge badge-slate">{{ report.get_report_type_display|default:"—" }}</span></dd>
+            <dt>As of</dt><dd>{{ obj.as_of|date:"d M Y" }}</dd>
+            <dt>Period</dt><dd>{% if obj.period_from and obj.period_to %}{{ obj.period_from }} → {{ obj.period_to }}{% else %}—{% endif %}</dd>
+            <dt>Frozen</dt><dd>{{ obj.generated_at|date:"M d, Y H:i" }} · {{ obj.generated_by.get_full_name|default:obj.generated_by.username|default:"system" }}</dd>
+            <dt>Last change</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd>
+            <dt>Issued</dt><dd>{% if obj.issued_at %}{{ obj.issued_at|date:"M d, Y H:i" }} · {{ obj.issued_by.get_full_name|default:obj.issued_by.username }}{% else %}<span class="text-muted">not issued</span>{% endif %}</dd>
+            <dt>Filed against</dt><dd>{% if document %}{{ document.name }} <span class="text-muted">(filed in the document repository, 7.10)</span>{% else %}—{% endif %}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Actions</h3>
+          <div class="badge-group">
+            {% if obj.status == "issued" %}
+              <span class="badge badge-info">Issued</span>
+            {% elif obj.status == "archived" %}
+              <span class="badge badge-muted">Archived</span>
+            {% else %}
+              <span class="badge badge-amber">Draft</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="flex flex-wrap gap-2">
+            <a href="{% url 'projects:run_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to runs</a>
+            {% comment %}
+              Issue is the one verb that carries a field, so it is a form with the document select rather
+              than a bare button: issuing is what makes a pack quotable, and the pack should name what it
+              was filed against when it can.
+            {% endcomment %}
+            {% if is_draft %}
+              <form method="post" action="{% url 'projects:run_issue' obj.pk %}" onsubmit="return confirm('Issue this pack? Its figures become a standing answer.');">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                {% for field in issue_form %}
+                  {% include "partials/form_field.html" with field=field %}
+                {% endfor %}
+                <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Issue pack</button>
+              </form>
+              <form method="post" action="{% url 'projects:run_archive' obj.pk %}" onsubmit="return confirm('Archive this run? Archiving is terminal — it cannot be issued again.');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+              </form>
+            {% elif is_editable %}
+              <form method="post" action="{% url 'projects:run_archive' obj.pk %}" onsubmit="return confirm('Archive this run? Archiving is terminal — it cannot be issued again.');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+              </form>
+            {% endif %}
+            <a href="{{ csv_url }}" class="btn btn-outline"><i data-lucide="download"></i> CSV of these rows</a>
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+              <form method="post" action="{% url 'projects:run_delete' obj.pk %}" onsubmit="return confirm('Delete this frozen run and its stored answer? This cannot be undone.');">
+                {% csrf_token %}
+                <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+              </form>
+            {% endif %}
+          </div>
+          {% if is_archived %}
+            <p class="text-muted" style="margin-top:.5rem;">An archived pack keeps its figures and stops accepting writes — there is no un-archive.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Earlier freezes</h3></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Run</th><th>Status</th><th>Rows</th><th>Generated</th></tr>
+            </thead>
+            <tbody>
+              {% for run in runs %}
+                <tr>
+                  <td><a href="{% url 'projects:run_detail' run.pk %}" class="fw-600">{{ run.title }}</a></td>
+                  <td>
+                    {% if run.status == "issued" %}
+                      <span class="badge badge-info">{{ run.get_status_display }}</span>
+                    {% elif run.status == "archived" %}
+                      <span class="badge badge-muted">{{ run.get_status_display }}</span>
+                    {% else %}
+                      <span class="badge badge-amber">{{ run.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ run.row_count }}</td>
+                  <td class="text-muted">{{ run.generated_at|date:"M d, Y H:i" }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="4">
+                    <div class="empty-state">
+                      <i data-lucide="history"></i>
+                      <h3>This question has one freeze only</h3>
+                      <p>The streak a band reads comes from a second, third, fourth freeze of the same question — until then there is no history to compare against.</p>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">Up to five earlier freezes of the same question, newest first.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  {% include "projects/reporting/_charts_script.html" %}
+{% endblock %}
