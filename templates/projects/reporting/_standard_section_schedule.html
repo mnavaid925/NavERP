@@ -1,0 +1,8 @@
+{% comment %}
+  The schedule area's section (B4.1): a heading and the one register partial, no card of its own — the
+  page frames it. Reads the flat result keys from the parent context; it takes no arguments, which is why
+  the caption is the area's and not the registry row's title (the page prints that one).
+{% endcomment %}
+<p class="text-muted fw-600" style="margin-top:.75rem;">Schedule</p>
+<p class="text-muted">Delivered against planned, read from the tasks and milestones that own their own dates. On-time percentage is scored on the work that actually landed, and the slip figure is the average over the items that slipped — so a group with nothing delivered reads as blank, not as early.</p>
+{% include "projects/reporting/_result_table.html" %}
