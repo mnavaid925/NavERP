@@ -15,10 +15,11 @@
 ### BF-1 — Every write verb in 7.16 is gated by **visibility**, not by ownership or role. A member can rename, un-publish and delete a tenant admin's shared board.
 
 **Where.** `apps/projects/views/ReportingBusinessIntelligence/ProjectDashboards.py` — `pdb_edit`,
-`pdb_delete`; the twin in `ProjectReports.py:237-246` — `rep_edit`, `rep_delete`; and, once B2.5 lands,
-the four tile verbs. Each guard-fetch is `analytics.visible_dashboards(request)` /
+`pdb_delete`; the twin in `ProjectReports.py:237-246` — `rep_edit`, `rep_delete`; and the four tile verbs
+in `DashboardWidgets.py` (B2.5, now built). Each guard-fetch is
+`analytics.visible_dashboards(request)` /
 `visible_reports(request)` (`apps/projects/analytics.py:209-224`), i.e. *"can this caller see the row?"*
-`can_edit` is computed at `ProjectDashboards.py:327` and passed as context — it selects which buttons the
+`can_edit` is computed at `ProjectDashboards.py:315` and passed as context — it selects which buttons the
 template draws and is consulted by no view.
 
 **Why the build did it that way.** R7 and B2.4 pin that exact fetch, and B2.4's `can_edit` row is written
@@ -40,9 +41,15 @@ deleted by primary key afterwards; all four 7.16 tables are back to 0 rows):
 2 member POST pdb_delete on a tenant template        -> 302; row gone: True
 3 member POST rep_delete on an admin's shared question -> 302; row gone: True
 member POST pdb_edit on a SHARED tenant template, is_shared omitted -> 302 | is_shared now False
+20 BF-1 on tiles: ops_acme (a plain member) REORDERED, RENAMED, ADDED and DELETED tiles on
+   admin_acme's SHARED board — all four 302. The gate is visibility, and can_edit is only a button
+   rule (ProjectDashboards.py:315). Phase 4/5 owns the fix, not this slice.
 ```
 
-The last line is the quiet one: an **unticked checkbox** is all it takes, so a member's ordinary
+The tile line is verbatim from `temp/rbi_wdg_probe.py` step 20; the board/report lines above it are from
+the two earlier probes.
+
+The `is_shared` line is the quiet one: an **unticked checkbox** is all it takes, so a member's ordinary
 "save my layout" POST silently un-publishes a row the whole workspace resolves as its home template.
 The delete of a `owner=None` template removes the board that `analytics.home_dashboard()` hands to
 every user who never made one. `rep_delete` takes a shared question **and its frozen runs** with it
@@ -82,6 +89,28 @@ who cannot delete a board can currently still add, move and delete the tiles ins
 **Severity: propose Important, possibly Critical.** Left unfixed it is a same-tenant integrity problem
 with a trace (`write_audit_log` does record the `update`/`delete`, so it is unauthorised rather than
 invisible) and no cross-tenant leak — every one of these routes is a proven 404 across tenants.
+
+### BF-2 — `redirect_back_or` turned a hand-typed junk `next` into a **500 on a verb whose write had already committed**. Found while building the tile verbs; fixed in Phase 3, so it is here to be confirmed, not to be re-fixed.
+
+**Where.** `apps/projects/views/_helpers.py` — `redirect_back_or`, used by all 11 POST-only verbs (R10).
+
+**What the probe caught** (`temp/rbi_wdg_probe.py` step 14): `url_has_allowed_host_and_scheme` answers
+`True` for *any* relative reference, so `next=not a url at all` passed the gate and reached
+`redirect()`, which tries such a string as a **view name** and re-raises `NoReverseMatch` when it contains
+neither `/` nor `.` (`django/shortcuts.py:177-186`). The tile had already moved by then: the data write was
+committed and the operator got an error page instead of the board.
+
+**The fix taken, and the one refused.** A `looks_like_target(candidate)` gate now sits in front of the
+pinned helper and sends anything that is not an absolute same-host URL or a root-relative path to the
+fallback. `HttpResponseRedirect(candidate)` was the alternative — it drops the view-name lookup but turns
+junk into a *silent* redirect to the wrong page (`Location: home` resolves against the current directory,
+so `…/widgets/7/move/` would land on `…/widgets/home`). Contract **D63** carries the reasoning.
+
+**What Phase 4 should check.** That this is a robustness fix and not an openness fix: `//evil.example`,
+`http://evil.example/…`, `javascript:` and a control-char-prefixed host were refused before and are
+re-asserted as still refused (probe step 14 covers all six shapes on a real verb). And that no other 7.16
+slice regressed — all four probes (`rbi_reports`, `rbi_runs`, `rbi_dashboards`, `rbi_wdg`) were re-run green
+after the change, since every one of them posts a `next`.
 
 ---
 
