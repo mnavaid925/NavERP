@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Board{% else %}New Board{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit board: {{ obj.name }}{% else %}New reporting board{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'projects:overview' %}">Projects</a><span class="sep">›</span>
+        <a href="{% url 'projects:rbi_home' %}">Reporting &amp; BI</a><span class="sep">›</span>
+        <a href="{% url 'projects:pdb_list' %}">Boards</a><span class="sep">›</span>
+        <span>{% if is_edit %}{{ obj.number }}{% else %}New{% endif %}</span>
+      </div>
+      <p class="text-muted">This form defines the board — its audience, its window and how wide its grid is. Tiles are added from the board page once it exists, because a tile needs a board to sit on.</p>
+    </div>
+    <div class="page-actions">
+      {% if is_edit %}
+        <a href="{% url 'projects:pdb_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to the board</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    One template for both routes (B4.1), and no explicit action: `crud_create` and `crud_edit` each post
+    back at their own URL, so a hand-built action would be a second place that knows which route saved
+    this row.
+  {% endcomment %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">{% if is_edit %}Board definition{% else %}Define a board{% endif %}</h3></div>
+      <div class="card-body">
+        {% for error in form.non_field_errors %}
+          <div class="form-error">{{ error }}</div>
+        {% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            {% include "partials/form_field.html" with field=field %}
+          {% endfor %}
+        </div>
+
+        {% comment %}
+          The clamp, spelled out: a tile's columns are `min(size span, board columns)` (small 1, medium 2,
+          large 3, full the row itself), so the same size choice means a different width on a one-column
+          board than on a three-column one. An author cannot see that from a dropdown.
+        {% endcomment %}
+        <div class="table-wrap" style="margin-top:.75rem;">
+          <table class="table">
+            <thead>
+              <tr><th>Layout</th><th>Grid columns</th><th>Small</th><th>Medium</th><th>Large</th><th>Full</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>One column</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+              <tr><td>Two columns</td><td>2</td><td>1</td><td>2</td><td>2</td><td>2</td></tr>
+              <tr><td>Three columns</td><td>3</td><td>1</td><td>2</td><td>3</td><td>3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="badge-group" style="margin-top:.6rem;">
+          {% for value, label in audience_choices %}
+            <span class="badge badge-slate">{{ label }}</span>
+          {% endfor %}
+        </div>
+        <div class="badge-group" style="margin-top:.4rem;">
+          {% for value, label in range_choices %}
+            <span class="badge badge-slate">{{ label }}</span>
+          {% endfor %}
+        </div>
+
+        <p class="text-muted" style="margin-top:.6rem;">
+          <i data-lucide="info"></i>
+          The window dropdown lists the six presets and not <em>custom</em>: a board holds no date pair of its
+          own, so a custom range could only ever come back as an error. A tile inherits this window and may
+          override it per tile.
+        </p>
+        <p class="text-muted" style="margin-top:.4rem;">
+          <i data-lucide="info"></i>
+          Ownership and the home-board flag are not on this form. A new board is owned by whoever creates it,
+          a board owned by nobody is a workspace template, and which board you land on is set from your own
+          board page — never from a shared definition.
+        </p>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save board{% else %}Create board{% endif %}</button>
+          {% if is_edit %}
+            <a class="btn btn-outline" href="{% url 'projects:pdb_detail' obj.pk %}">Cancel</a>
+          {% else %}
+            <a class="btn btn-outline" href="{% url 'projects:pdb_list' %}">Cancel</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </form>
+{% endblock %}
