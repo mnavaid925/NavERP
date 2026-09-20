@@ -1,0 +1,39 @@
+{% comment %}
+  The ONE chart for a flat result page: `standard.html`, `report/detail.html`, `reportrun/detail.html` and
+  `exec_pack.html` all get their chart through this file (D24, D52), so a canvas can never exist on one
+  page and not the others. Read from the parent context: `chart_config` and `chart_rows`.
+
+  The discriminator is `chart_config`, not `chart_type` — `chart_config()` answers `[]` for an HTML chart
+  kind and for a series with no labels (D52), which is exactly the rule that keeps a blank canvas off a
+  page that still answers 200 (L8). It is also why this file does not need `chart_type`: `exec_pack`
+  publishes `chart_config` without it.
+
+  Include this partial ONCE per page — the `json_script` id below is the one `_charts_script.html` reads.
+{% endcomment %}
+{% if chart_config %}
+  {% for chart in chart_config %}
+    <canvas id="wchart{{ chart.id }}" height="160"></canvas>
+  {% endfor %}
+  {{ chart_config|json_script:"rbi-report-chart" }}
+{% elif chart_rows %}
+  {# kpi / gauge / table / heat render markup, never a canvas (B4.3) — the pairs are already zipped in the view, so no index arithmetic happens here. #}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Category</th><th style="text-align:right;">Value</th></tr>
+      </thead>
+      <tbody>
+        {% for pair in chart_rows %}
+          <tr>
+            <td>{{ pair.label }}</td>
+            <td style="text-align:right;">{{ pair.value|floatformat:"-2" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="2" class="empty-state"><p>Nothing to plot in this window.</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-muted">This report has no chart — its answer is the register above.</p>
+{% endif %}
