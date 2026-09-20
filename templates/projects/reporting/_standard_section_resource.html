@@ -1,0 +1,10 @@
+{% comment %}
+  The resource area's section — see `_standard_section_schedule.html` for the framing rule.
+  Three readings here are only explainable from the compute, so this is the one place on the page that
+  explains them: `hours` sums the row's own figure (`ResourceAllocation.total_hours` is null unless the
+  booking used that unit), `billable_pct` has no source field on a booking at all, and `utilization_pct`
+  is pinned to None in `_aggregate` because capacity lives on the resource record.
+{% endcomment %}
+<p class="text-muted fw-600" style="margin-top:.75rem;">Resource</p>
+<p class="text-muted">Hours are each row's own booked or logged figure, summed. A booking taken as hours per week or as a share of capacity records no total, so it adds nothing and the group reads 0 hours — the unit the booker chose, not a missing timesheet. The billable share is real only where hours were logged: a booking carries no billable flag, so a register of allocations shows 0% whatever its hours say, and utilisation against capacity is the resource board's arithmetic, not this register's.</p>
+{% include "projects/reporting/_result_table.html" %}
