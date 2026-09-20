@@ -1,0 +1,62 @@
+{% comment %}
+  The ONE `new Chart()` loop for 7.16 (B4.3). Included inside `{% block extra_js %}` by
+  `dashboard/detail.html`, `dashboard/home.html`, `standard.html`, `report/detail.html`,
+  `reportrun/detail.html` and `exec_pack.html`. It extends nothing and emits no markup of its own.
+
+  It reads every `json_script` payload id the sub-module pins, and a missing id is a silent skip — that is
+  what lets one page omit a chart without another page's script breaking:
+
+    * `rbi-charts`        — `chart_configs`, the dashboard grid on both board pages (R6)
+    * `rbi-report-chart`  — `chart_config`, the single chart on a flat result page, emitted by
+                            `_result_chart.html` so the four pages that include it cannot drift
+
+  Chart.js 4.4.1 is already global at `templates/base.html:28`, so this file adds no script tag.
+  Nothing is interpolated into the JS by hand either: `json_script` is the only transport (B4.3), which is
+  what keeps people-typed labels and metric names out of the executable path.
+{% endcomment %}
+<script>
+  (function () {
+    if (typeof Chart === "undefined") return;
+
+    var PAYLOAD_IDS = ["rbi-charts", "rbi-report-chart"];
+    var blue = "#2563eb";
+    var palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"];
+
+    function read(id) {
+      var node = document.getElementById(id);
+      if (!node) return [];
+      try {
+        return JSON.parse(node.textContent) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    PAYLOAD_IDS.forEach(function (id) {
+      read(id).forEach(function (chart) {
+        // The element is `wchart` + the entry's id: a widget pk on a board, a run pk on a frozen pack,
+        // 0 (SINGLE_CHART_ID) everywhere else. No element means no canvas was drawn for this entry,
+        // and no labels means there is nothing to plot — both are skips, not errors.
+        var el = document.getElementById("wchart" + chart.id);
+        if (!el || !chart.labels || !chart.labels.length) return;
+
+        var pie = (chart.type === "pie" || chart.type === "doughnut");
+        var dataset = pie
+          ? [{ data: chart.data, backgroundColor: palette }]
+          : [{ label: "", data: chart.data,
+               backgroundColor: chart.type === "line" ? "rgba(37,99,235,.15)" : blue,
+               borderColor: blue, borderRadius: 6,
+               fill: chart.type === "line", tension: 0.3 }];
+
+        new Chart(el, {
+          type: chart.type,
+          data: { labels: chart.labels, datasets: dataset },
+          options: {
+            plugins: { legend: { display: pie, position: "bottom" } },
+            scales: pie ? {} : { y: { beginAtZero: true } }
+          }
+        });
+      });
+    });
+  })();
+</script>
