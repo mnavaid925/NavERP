@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Test Rule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Test Rule</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Test Rule</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:business_rule_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Evaluate <strong>{{ obj.name }}</strong> against a context you supply. The evaluation is real and it is logged, so an operator can see exactly which clauses matched before trusting the rule.</p>
+    <div class="detail-item"><dt>Condition</dt><dd><pre class="text-muted">{{ obj.condition }}</pre></dd></div>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
+      <div class="form-group">
+        <label class="form-label" for="context">Context (JSON)</label>
+        <textarea name="context" id="context" class="form-textarea" rows="8">{{ context_raw }}</textarea>
+        <div class="form-help">Dotted paths are supported, e.g. <code>vendor.tier</code>.</div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Evaluate</button>
+      </div>
+    </form>
+  </div></div>
+
+  {% if result %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Result</h2>
+        {% if result.matched %}<span class="badge badge-green">Matched</span>{% else %}<span class="badge badge-slate">No match</span>{% endif %}
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Recommended action: <strong>{{ obj.get_action_display }}</strong>{% if obj.action_payload %} with {{ obj.action_payload }}{% endif %}. Nothing performed it — the evaluation was recorded with the note that this was a test run.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Clause</th></tr></thead>
+            <tbody>
+              {% for r in result.reasons %}<tr><td><code>{{ r }}</code></td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
