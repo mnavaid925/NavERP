@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Delivery Tracking{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Delivery Tracking</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Delivery Tracking</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:notification_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Overview</a>
+      <a href="{% url 'core:provider_list' %}" class="btn btn-outline"><i data-lucide="server"></i> Providers</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Read live from the delivery tables of other apps. <strong>Nothing is stored</strong> — every figure is derived on read. Window: last {{ stats.days }} days.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Sent</dt><dd><span class="badge badge-green">{{ totals.sent }}</span></dd></div>
+      <div class="detail-item"><dt>Pending</dt><dd><span class="badge badge-amber">{{ totals.pending }}</span></dd></div>
+      <div class="detail-item"><dt>Failed</dt><dd>{% if totals.failed %}<span class="badge badge-red">{{ totals.failed }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Simulated (dry run)</dt><dd><span class="badge badge-info">{{ totals.simulated }}</span></dd></div>
+      <div class="detail-item"><dt>Real success rate</dt><dd>{% if stats.real_success_rate is not None %}{{ stats.real_success_rate }}%{% else %}&mdash;{% endif %}</dd></div>
+    </dl>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Simulated rows are kept separate from sent ones.</strong> A <code>simulated</code> delivery is a DRY RUN — nothing left
+      the building. Folding it into &ldquo;sent&rdquo; would let a workspace that has never actually sent anything report a perfect success rate, so the rate above excludes them and the count is shown beside it.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">By source</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Source</th><th>Sent</th><th>Pending</th><th>Failed</th><th>Simulated</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td class="fw-600"><code>{{ r.label }}</code></td>
+              <td>{% if r.sent %}<span class="badge badge-green">{{ r.sent }}</span>{% else %}0{% endif %}</td>
+              <td>{% if r.pending %}<span class="badge badge-amber">{{ r.pending }}</span>{% else %}0{% endif %}</td>
+              <td>{% if r.failed %}<span class="badge badge-red">{{ r.failed }}</span>{% else %}0{% endif %}</td>
+              <td>{% if r.simulated %}<span class="badge badge-info">{{ r.simulated }}</span>{% else %}0{% endif %}</td>
+              <td>{{ r.total }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="activity"></i><h3>No delivery sources found</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Accounted for, but not message deliveries</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Model</th><th>Why it is not tracked here</th></tr></thead>
+        <tbody>
+          {% for s in skipped %}
+            <tr><td class="fw-600"><code>{{ s.label }}</code></td><td><span class="text-muted">{{ s.reason }}</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if providers %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Provider failover order</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Channel</th><th>Provider</th><th>Priority</th><th>Host</th></tr></thead>
+          <tbody>
+            {% for p in providers %}
+              <tr>
+                <td class="fw-600">{{ p.get_channel_kind_display }}</td>
+                <td>{{ p.label }}</td>
+                <td>{{ p.priority }}</td>
+                <td>{{ p.host|default:"&mdash;" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body"><p class="text-muted">The order is recorded; <strong>nothing retries</strong> — there is no outbound worker in this module.</p></div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted">It reports what other modules recorded. There is <strong>no open-rate or click tracking</strong>, no bounce handling beyond the statuses the owning
+        modules already set, and <strong>no retry policy</strong>: the failover order above is a recorded intention and nothing acts on it. The window is by <code>created_at</code>, so a source
+        without one cannot be time-bounded and is counted in full. Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
