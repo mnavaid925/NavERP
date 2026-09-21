@@ -210,9 +210,11 @@ def localization_board(request):
     active_currencies = Currency.objects.filter(is_active=True).count()
     zones = TimeZone.objects.filter(is_active=True)
     languages = Language.objects.filter(is_active=True)
+    profile = LocaleProfile.objects.filter(tenant=tenant).first()
 
     context = {
-        "profile": LocaleProfile.objects.filter(tenant=tenant).first(),
+        "profile": profile,
+        "base_currency": profile.base_currency if profile else None,
         "rate_rows": rate_rows,
         "rate_count": len(rate_rows),
         "stale_rate_count": sum(1 for row in rate_rows if row["age_days"] > STALE_RATE_DAYS),
