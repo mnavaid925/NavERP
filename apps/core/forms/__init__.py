@@ -78,3 +78,8 @@ from .Integration import (
     MappingTemplateForm,
     SyncScheduleForm,
 )  # noqa: F401
+from .Localization import (
+    LocaleProfileForm,
+    StatutoryRuleForm,
+    UserLocalePreferenceForm,
+)  # noqa: F401
