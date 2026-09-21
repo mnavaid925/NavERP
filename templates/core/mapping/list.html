@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Mapping Templates{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Mapping Templates</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Mapping Templates</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:sync_list' %}" class="btn btn-outline"><i data-lucide="refresh-cw"></i> Sync schedules</a>
+      <a href="{% url 'core:mapping_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New template</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Reusable field mappings for an inbound or outbound exchange. A mapping is one JSON document an operator edits as a whole, which is why it is a JSON column rather than a child table. <strong>Nothing applies these</strong> — a module reads a template and does the mapping.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="direction" class="form-select">
+          <option value="">Any direction</option>
+          {% for val, label in direction_choices %}
+            <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for val, label in active_choices %}
+            <option value="{{ val }}" {% if request.GET.active == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:mapping_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Template</th><th>Direction</th><th>Source format</th><th>Target</th><th>Rows</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'core:mapping_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+            <td>{% if obj.direction == 'inbound' %}<span class="badge badge-info">Inbound</span>{% else %}<span class="badge badge-amber">Outbound</span>{% endif %}</td>
+            <td>{{ obj.source_format|default:"&mdash;" }}</td>
+            <td>{% if obj.target_label %}<code>{{ obj.target_label }}</code>{% else %}&mdash;{% endif %}</td>
+            <td>{{ obj.mapping_count }}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:mapping_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:mapping_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>No mapping templates</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
