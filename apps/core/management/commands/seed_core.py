@@ -14,6 +14,11 @@ from django.utils import timezone
 from apps.core.navigation import parse_catalog
 from apps.core.models import (
     ModuleAccessScope,
+    ApprovalLimit,
+    BusinessRule,
+    SlaRule,
+    WorkflowDefinition,
+    WorkflowStep,
     BusinessCalendar,
     CustomFieldDefinition,
     FeatureFlag,
@@ -87,6 +92,7 @@ class Command(BaseCommand):
             self._seed_module_scopes(tenant)
             self._seed_privacy(tenant)
             self._seed_configuration(tenant)
+            self._seed_workflow(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -349,4 +355,109 @@ class Command(BaseCommand):
                 validation_regex="[A-Z]{2}-[0-9]{4}",
                 help_text="Seeded demo custom field with a format rule, e.g. AB-1234.",
                 display_order=2,
+            )
+
+    def _seed_workflow(self, tenant):
+        """0.11: the workflow registry, limits, SLA rules and business rules.
+
+        Every seeded definition points at a REAL engine label that `apps/core/workflow.py` monitors,
+        except one, deliberately left pointing at a model that is NOT a monitored queue so the
+        process-monitoring board's unmonitored-process flag is demonstrated rather than theoretical.
+
+        No approval DECISION rows are seeded. Those belong to the modules that own the engines
+        (procurement, inventory, projects, crm, hrm) and their own seeders create them; this command
+        registers and describes, and does not invent decisions in another module's table.
+
+        `accounts.Role` is imported INSIDE the method: core is imported by accounts, so a module-level
+        import would be circular.
+        """
+        from apps.accounts.models import Role
+
+        definitions = [
+            ("Purchase requisition approval", "procurement", "procurement.RequisitionApproval",
+             "Two-tier requisition approval with a value threshold.", 48),
+            ("Purchase order approval", "inventory", "inventory.PurchaseOrderApproval",
+             "Warehouse purchase-order sign-off.", 24),
+            ("Stock transfer approval", "inventory", "inventory.TransferApproval",
+             "Inter-location transfer sign-off.", 24),
+            ("Offer approval", "hrm", "hrm.OfferApproval",
+             "Offer letter approval before issue.", 72),
+            ("Client approval request", "projects", "projects.ClientApprovalRequest",
+             "Client sign-off on a deliverable.", 120),
+            ("Project approval gate", "projects", "projects.ProjectApprovalGate",
+             "Stage-gate approval on a project.", 48),
+            ("CRM approval request", "crm", "crm.ApprovalRequest",
+             "Discount and terms approval.", 24),
+            # NOT a monitored queue on purpose: ApprovalRoutingRule is a rule table, not a queue.
+            ("Vendor onboarding review", "procurement", "procurement.ApprovalRoutingRule",
+             "Seeded example of a process whose engine is a rule table, not a queue.", 96),
+        ]
+        for name, module_slug, engine, description, target in definitions:
+            definition, created = WorkflowDefinition.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"module_slug": module_slug, "engine_label": engine,
+                          "description": description, "target_hours": target},
+            )
+            if created and engine in ("procurement.RequisitionApproval",
+                                      "projects.ProjectApprovalGate"):
+                for seq, step_name, parallel, threshold in [
+                    (1, "Line manager review", False, None),
+                    (2, "Finance review", False, "10000.00"),
+                    (3, "Director sign-off", True, "50000.00"),
+                ]:
+                    WorkflowStep.objects.create(
+                        tenant=tenant, definition=definition, sequence=seq, name=step_name,
+                        is_parallel=parallel, threshold_amount=threshold,
+                    )
+
+        admin_role = Role.objects.filter(tenant=tenant, name="Administrator").first()
+        member_role = Role.objects.filter(tenant=tenant, name="Member").first()
+        if member_role:
+            for module_slug, amount in [("procurement", "5000.00"), ("inventory", "10000.00"),
+                                        ("projects", "2500.00")]:
+                ApprovalLimit.objects.get_or_create(
+                    tenant=tenant, module_slug=module_slug, role=member_role,
+                    defaults={"max_amount": amount,
+                              "notes": "Seeded demo limit: above this the approval escalates."},
+                )
+        if admin_role:
+            ApprovalLimit.objects.get_or_create(
+                tenant=tenant, module_slug="procurement", role=admin_role,
+                defaults={"max_amount": "250000.00", "notes": "Seeded demo limit."},
+            )
+
+        sla_rules = [
+            ("Requisition ageing", "procurement", 48, "escalate"),
+            ("Offer ageing", "hrm", 72, "remind"),
+            ("Transfer ageing", "inventory", 24, "remind"),
+            ("Client approval ageing", "projects", 120, "escalate"),
+        ]
+        for name, module_slug, hours, action in sla_rules:
+            SlaRule.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"module_slug": module_slug, "hours": hours, "action": action,
+                          "escalate_to_role": admin_role if action == "escalate" else None,
+                          "notes": "Seeded demo SLA rule. Nothing acts on it, by design."},
+            )
+
+        business_rules = [
+            ("Large requisition needs finance", "procurement", "on_create",
+             {"all": [{"field": "amount", "op": "gt", "value": 10000}]}, "require_approval",
+             {"role": "Administrator"}, 10),
+            ("High-value PO needs director", "inventory", "on_create",
+             {"all": [{"field": "total", "op": "gte", "value": 50000}]}, "require_approval",
+             {"role": "Administrator"}, 20),
+            ("Expiring contract flagged", "procurement", "on_evaluation",
+             {"all": [{"field": "days_to_expiry", "op": "lte", "value": 30}]}, "flag", {}, 30),
+            ("Rush order notify ops", "projects", "on_status_change",
+             {"any": [{"field": "priority", "op": "eq", "value": "urgent"},
+                      {"field": "tags", "op": "contains", "value": "rush"}]}, "notify_role",
+             {"role": "Member"}, 40),
+        ]
+        for name, module_slug, trigger, condition, action, payload, priority in business_rules:
+            BusinessRule.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"module_slug": module_slug, "trigger": trigger, "condition": condition,
+                          "action": action, "action_payload": payload, "priority": priority,
+                          "notes": "Seeded demo rule. Evaluated on request; nothing executes it."},
             )
