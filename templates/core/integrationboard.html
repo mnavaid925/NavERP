@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Integration Health{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Integration Health</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Integration Health</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:integration_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Overview</a>
+      <a href="{% url 'core:connector_list' %}" class="btn btn-outline"><i data-lucide="plug"></i> Connectors</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Read live from the integration tables of five apps. <strong>Nothing is stored</strong> — every figure is derived on read. Traffic window: last {{ health.days }} days.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Connected</dt><dd><span class="badge badge-green">{{ totals.connected }}</span></dd></div>
+      <div class="detail-item"><dt>Erroring</dt><dd>{% if totals.error %}<span class="badge badge-red">{{ totals.error }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Switched off</dt><dd><span class="badge badge-slate">{{ totals.off }}</span></dd></div>
+      <div class="detail-item"><dt>Unverified</dt><dd>{% if totals.unverified %}<span class="badge badge-amber">{{ totals.unverified }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Traffic sent</dt><dd>{{ totals.sent }}</dd></div>
+      <div class="detail-item"><dt>Pending</dt><dd>{{ totals.pending }}</dd></div>
+      <div class="detail-item"><dt>Failed</dt><dd>{% if totals.failed %}<span class="badge badge-red">{{ totals.failed }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Dry runs</dt><dd><span class="badge badge-info">{{ totals.dry_run }}</span></dd></div>
+      <div class="detail-item"><dt>Traffic success rate</dt><dd>{% if health.traffic_success_rate is not None %}{{ health.traffic_success_rate }}%{% else %}&mdash;{% endif %}</dd></div>
+    </dl>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Unverified and dry-run rows are counted separately from healthy ones.</strong> A connector that was
+      configured and never verified is not a working connector, and a simulated webhook never left the building — folding either into
+      &ldquo;connected&rdquo; or &ldquo;sent&rdquo; would report an untested integration as healthy. The success rate excludes them.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Connection health</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Integration</th><th>Connected</th><th>Error</th><th>Off</th><th>Unverified</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for c in connections %}
+            <tr>
+              <td class="fw-600"><code>{{ c.label }}</code></td>
+              <td>{% if c.connected %}<span class="badge badge-green">{{ c.connected }}</span>{% else %}0{% endif %}</td>
+              <td>{% if c.error %}<span class="badge badge-red">{{ c.error }}</span>{% else %}0{% endif %}</td>
+              <td>{{ c.off }}</td>
+              <td>{% if c.unverified %}<span class="badge badge-amber">{{ c.unverified }}</span>{% else %}0{% endif %}</td>
+              <td>{{ c.total }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="plug"></i><h3>No integration sources found</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Traffic</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Source</th><th>Sent</th><th>Pending</th><th>Failed</th><th>Dry run</th></tr></thead>
+        <tbody>
+          {% for t in traffic %}
+            <tr>
+              <td class="fw-600"><code>{{ t.label }}</code></td>
+              <td>{% if t.sent %}<span class="badge badge-green">{{ t.sent }}</span>{% else %}0{% endif %}</td>
+              <td>{% if t.pending %}<span class="badge badge-amber">{{ t.pending }}</span>{% else %}0{% endif %}</td>
+              <td>{% if t.failed %}<span class="badge badge-red">{{ t.failed }}</span>{% else %}0{% endif %}</td>
+              <td>{% if t.dry_run %}<span class="badge badge-info">{{ t.dry_run }}</span>{% else %}0{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Accounted for, but not tracked as integrations</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Model</th><th>Why it is not an endpoint or a delivery</th></tr></thead>
+        <tbody>
+          {% for s in skipped %}
+            <tr><td class="fw-600"><code>{{ s.label }}</code></td><td><span class="text-muted">{{ s.reason }}</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted">It reports what other apps recorded. There is <strong>no throughput or latency measurement</strong> — the integration tables carry no
+        duration column, so &ldquo;throughput&rdquo; here is a count of rows, not a rate. <strong>No retry or dead-letter handling is performed:</strong> the failover and
+        retry order elsewhere in this module is a recorded intention and nothing acts on it. No alerting on an erroring integration. Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
