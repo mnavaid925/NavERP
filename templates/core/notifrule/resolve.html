@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Resolve — {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Resolve — {{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Resolve — {{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:rule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">What this event would reach. A member with an explicit preference is marked <strong>preference</strong>; without one the rule's default applies. Both end up unmessaged when opted out, but only one of them chose it — which is the difference an operator investigating "why didn't I get this?" needs.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <select name="user" class="form-select">
+          <option value="">Everyone (rule defaults only)</option>
+          {% for u in members %}<option value="{{ u.pk }}" {% if subject and subject.pk == u.pk %}selected{% endif %}>{{ u.email }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Resolve for</button>
+    </form>
+    {% if subject %}<p class="text-muted">Resolving for <strong>{{ subject.get_full_name }}</strong>.</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Channel</th><th>Reaches</th><th>Decided by</th></tr></thead>
+        <tbody>
+          {% for r in resolved %}
+            <tr>
+              <td class="fw-600">{{ r.rule.name }}</td>
+              <td>{{ r.channel.get_kind_display }}</td>
+              <td>{% if r.enabled %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</td>
+              <td>
+                {% if r.decided_by == 'preference' %}<span class="badge badge-info">Preference</span>
+                {% elif r.decided_by == 'channel_disabled' %}<span class="badge badge-amber">Channel disabled</span>
+                {% else %}<span class="badge badge-slate">Rule default</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="bell-off"></i><h3>This event reaches nothing</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><strong>Nothing is sent by resolving.</strong> This reports the routing decision.</p>
+  </div></div>
+{% endblock %}
