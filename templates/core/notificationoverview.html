@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Notification & Communication{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Notification & Communication</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Notification & Communication</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:delivery_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Delivery tracking</a>
+      <a href="{% url 'core:channel_list' %}" class="btn btn-outline"><i data-lucide="radio"></i> Channels</a>
+      <a href="{% url 'core:rule_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Posture</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Channels</dt><dd>{{ channel_count }} ({{ channels_on }} enabled)</dd></div>
+        <div class="detail-item"><dt>Active templates</dt><dd>{{ template_count }} across {{ locale_count }} locale(s)</dd></div>
+        <div class="detail-item"><dt>Routing rules</dt><dd>{{ rule_count }} covering {{ event_count }} event(s)</dd></div>
+        <div class="detail-item"><dt>Preferences recorded</dt><dd>{{ preference_count }} ({{ opted_out }} opt-out(s))</dd></div>
+        <div class="detail-item"><dt>Active providers</dt><dd>{{ provider_count }}</dd></div>
+        <div class="detail-item"><dt>Sent (30d)</dt><dd>{{ totals.sent }}</dd></div>
+        <div class="detail-item"><dt>Pending</dt><dd>{{ totals.pending }}</dd></div>
+        <div class="detail-item"><dt>Failed</dt><dd>{{ totals.failed }}</dd></div>
+        <div class="detail-item"><dt>Simulated (dry run)</dt><dd>{{ totals.simulated }}</dd></div>
+        <div class="detail-item"><dt>Real success rate</dt><dd>{% if success_rate is not None %}{{ success_rate }}%{% else %}&mdash;{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent rules</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Event</th><th>Channel</th><th>Digest</th></tr></thead>
+        <tbody>
+          {% for r in recent_rules %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:rule_resolve' r.pk %}">{{ r.name }}</a></td>
+              <td><code>{{ r.event }}</code></td>
+              <td>{{ r.channel.get_kind_display }}</td>
+              <td>{{ r.get_digest_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="bell-off"></i><h3>No rules configured</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this module does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><strong>Nothing sends.</strong> There is no outbound worker, no queue and no scheduler, so a rule routes and a provider records where a message
+        <em>would</em> go; the sending itself happens in the module that owns the message. <strong>No per-tenant branding layer</strong> for messages — a template body is the whole message,
+        and no logo or footer is injected from <code>tenants.BrandingSetting</code>. <strong>No automatic translation:</strong> locale is a stored column and a manual per-locale row, not
+        negotiation from the recipient. <strong>No digest scheduler:</strong> the digest choice is recorded and nothing batches on it. <strong>No open/click tracking and no retry.</strong>
+        Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
