@@ -94,3 +94,10 @@ from .Notification import (
     NotificationPreference,
     ProviderConfig,
 )  # noqa: F401
+from .Integration import (
+    ApiCredential,
+    RateLimitPolicy,
+    ConnectorDefinition,
+    MappingTemplate,
+    SyncSchedule,
+)  # noqa: F401
