@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Localization Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Localization Board</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'core:localization_overview' %}">Localization</a><span class="sep">›</span><span>Board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{{ exchange_rate_url }}" class="btn btn-outline"><i data-lucide="trending-up"></i> Exchange rates</a>
+      <a href="{{ tax_code_url }}" class="btn btn-outline"><i data-lucide="percent"></i> Tax codes</a>
+      <a href="{% url 'core:locale_profile_edit' %}" class="btn btn-primary"><i data-lucide="sliders-horizontal"></i> Regional settings</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Read live from the <strong>real</strong> Accounting registers. <strong>Nothing is stored</strong> — every figure is derived on read. The currency master and the dated rates belong to <code>accounting</code> (2.2) and the tax master to <code>accounting</code> (2.11); this board points at them rather than keeping a second copy.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Base currency</dt><dd>{% if base_currency %}<span class="badge badge-info">{{ base_currency }}</span>{% else %}<span class="badge badge-amber">Not set</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Currencies with rates</dt><dd>{{ rate_count }}</dd></div>
+      <div class="detail-item"><dt>Currencies without rates</dt><dd>{% if currencies_without_rates %}<span class="badge badge-amber">{{ currencies_without_rates }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Rates older than {{ stale_after_days }} days</dt><dd>{% if stale_rate_count %}<span class="badge badge-red">{{ stale_rate_count }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Languages offered</dt><dd>{{ language_count }}</dd></div>
+      <div class="detail-item"><dt>Right-to-left languages</dt><dd>{{ rtl_count }}</dd></div>
+      <div class="detail-item"><dt>Time zones</dt><dd>{{ timezone_count }}</dd></div>
+      <div class="detail-item"><dt>Observing DST</dt><dd>{{ dst_zone_count }}</dd></div>
+      <div class="detail-item"><dt>Active statutory rules</dt><dd>{{ statutory_count }}</dd></div>
+      <div class="detail-item"><dt>Requiring e-invoicing</dt><dd>{% if e_invoicing_count %}<span class="badge badge-amber">{{ e_invoicing_count }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</dd></div>
+    </dl>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>A rate is not fetched by anything.</strong> <code>accounting.ExchangeRate.source</code> records whether a row was
+      entered by hand or arrived from a feed, and 0.13's sync schedules can record the <em>intention</em> to refresh them — but this repository has no scheduler and no rate feed, so
+      a stale rate stays stale until somebody types a new one. The count above is how you notice.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Latest rate per currency</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Currency</th><th>Rate</th><th>Rate date</th><th>Source</th><th>Age</th></tr></thead>
+        <tbody>
+          {% for row in rate_rows %}
+            <tr>
+              <td class="fw-600"><code>{{ row.currency.code }}</code> <span class="text-muted">{{ row.currency.name }}</span></td>
+              <td>{{ row.rate }}</td>
+              <td>{{ row.rate_date|date:"Y-m-d" }}</td>
+              <td>{{ row.source }}</td>
+              <td>{% if row.age_days > stale_after_days %}<span class="badge badge-red">{{ row.age_days }}d — stale</span>{% else %}<span class="badge badge-green">{{ row.age_days }}d</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="trending-up"></i><h3>No exchange rates recorded</h3><p class="text-muted">Rates live in Accounting — <a href="{{ exchange_rate_url }}">add one there</a>.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
