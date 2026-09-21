@@ -35,6 +35,11 @@ from .models import (
     SlaRule,
     BusinessRule,
     BusinessRuleLog,
+    NotificationChannel,
+    NotificationTemplate,
+    NotificationRule,
+    NotificationPreference,
+    ProviderConfig,
 )
 
 
@@ -331,3 +336,49 @@ class BusinessRuleLogAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(NotificationChannel)
+class NotificationChannelAdmin(admin.ModelAdmin):
+    list_display = ["kind", "label", "is_enabled", "tenant"]
+    list_filter = ["kind", "is_enabled", "tenant"]
+    search_fields = ["label"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(NotificationTemplate)
+class NotificationTemplateAdmin(admin.ModelAdmin):
+    list_display = ["code", "name", "channel_kind", "locale", "module_slug", "is_active", "tenant"]
+    list_filter = ["channel_kind", "locale", "is_active", "tenant"]
+    search_fields = ["code", "name", "subject"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(NotificationRule)
+class NotificationRuleAdmin(admin.ModelAdmin):
+    list_display = ["name", "event", "module_slug", "channel", "audience_kind", "digest",
+                    "is_active", "tenant"]
+    list_filter = ["event", "audience_kind", "digest", "is_active", "tenant"]
+    search_fields = ["name", "event"]
+    list_select_related = ["channel", "template", "audience_role", "audience_user", "tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(NotificationPreference)
+class NotificationPreferenceAdmin(admin.ModelAdmin):
+    list_display = ["user", "event", "channel_kind", "is_enabled", "tenant"]
+    list_filter = ["channel_kind", "is_enabled", "tenant"]
+    search_fields = ["event", "user__email"]
+    list_select_related = ["user", "tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(ProviderConfig)
+class ProviderConfigAdmin(admin.ModelAdmin):
+    list_display = ["channel_kind", "label", "priority", "host", "is_active", "tenant"]
+    list_filter = ["channel_kind", "is_active", "tenant"]
+    search_fields = ["label", "host", "from_address"]
+    list_select_related = ["tenant"]
+    # The credential is never stored here, so there is nothing secret to render — only the NAME of
+    # the environment variable holding it.
+    readonly_fields = ["updated_at"]
