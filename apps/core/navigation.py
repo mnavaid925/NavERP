@@ -69,6 +69,20 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.11 Workflow & Approval Administration. The repo already contains ~71 approval/workflow/
+    # escalation models across six apps, so 0.11 owns the REGISTRY and the MONITORING, not an engine.
+    # `Process Monitoring` is the bullet that is genuinely new: it reads the real approval tables of
+    # other apps (see apps/core/workflow.py) rather than a platform table of its own.
+    "0.11": {
+        "Visual Workflow Designer": "core:workflow_definition_list",  # bullet
+        "Approval Hierarchies & Limits": "core:approval_limit_list",  # bullet
+        "Escalation & SLA Rules": "core:sla_rule_list",               # bullet
+        "Business Rules Engine": "core:business_rule_list",           # bullet
+        "Process Monitoring": "core:process_monitor",                 # bullet
+        # Extra live leaves: the hub and the evaluation log.
+        "Workflow Overview": "core:workflow_overview",                # extra
+        "Rule Evaluation Log": "core:rule_log_list",                  # extra
+    },
     # 0.10 System Configuration & Settings. Five bullets, all five mapped. Two of them point at a
     # COMPUTED board rather than a register on purpose: the numbering board reconciles configured
     # prefixes against the ones models actually mint, and the calendar board owns the WORKING week
