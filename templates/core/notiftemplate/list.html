@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Notification Templates{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Notification Templates</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Notification Templates</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:notification_overview' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Overview</a>
+      <a href="{% url 'core:template_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New template</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Reusable, localisable message templates. <strong>Locale is part of the key</strong>, so one code can carry an English and a French row. A template that does not compile is refused on save — the renderer tolerates a broken one at send time (so it cannot 500 a page), which makes this the only place the error can be caught.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="channel" class="form-select">
+          <option value="">Any channel</option>
+          {% for val, label in kind_choices %}
+            <option value="{{ val }}" {% if request.GET.channel == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="locale" class="form-select">
+          <option value="">Any locale</option>
+          {% for loc in locales %}
+            <option value="{{ loc }}" {% if request.GET.locale == loc %}selected{% endif %}>{{ loc }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for val, label in active_choices %}
+            <option value="{{ val }}" {% if request.GET.active == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:template_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Code</th><th>Name</th><th>Channel</th><th>Locale</th><th>Module</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td><a href="{% url 'core:template_detail' obj.pk %}" class="fw-600"><code>{{ obj.code }}</code></a></td>
+            <td>{{ obj.name }}</td>
+            <td>{{ obj.get_channel_kind_display }}</td>
+            <td><span class="badge badge-info">{{ obj.locale|default:"default" }}</span></td>
+            <td>{{ obj.module_slug|default:"&mdash;" }}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:template_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:template_preview' obj.pk %}" class="btn-icon" title="Preview"><i data-lucide="play"></i></a>
+                <a href="{% url 'core:template_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>No templates</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
