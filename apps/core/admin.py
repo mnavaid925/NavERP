@@ -29,6 +29,12 @@ from .models import (
     Holiday,
     CustomFieldDefinition,
     CustomFieldValue,
+    WorkflowDefinition,
+    WorkflowStep,
+    ApprovalLimit,
+    SlaRule,
+    BusinessRule,
+    BusinessRuleLog,
 )
 
 
@@ -259,3 +265,69 @@ class CustomFieldValueAdmin(admin.ModelAdmin):
     search_fields = ["entity_label", "definition__field_key"]
     list_select_related = ["tenant", "definition"]
     readonly_fields = ["updated_by", "updated_at"]
+
+
+class WorkflowStepInline(admin.TabularInline):
+    model = WorkflowStep
+    extra = 0
+    fields = ["sequence", "name", "approver_role", "is_parallel", "threshold_amount"]
+    ordering = ["sequence", "id"]
+
+
+@admin.register(WorkflowDefinition)
+class WorkflowDefinitionAdmin(admin.ModelAdmin):
+    list_display = ["name", "module_slug", "engine_label", "owner_role", "is_active", "tenant"]
+    list_filter = ["module_slug", "is_active", "tenant"]
+    search_fields = ["name", "engine_label"]
+    list_select_related = ["owner_role", "tenant"]
+    readonly_fields = ["created_at"]
+    inlines = [WorkflowStepInline]
+
+
+@admin.register(WorkflowStep)
+class WorkflowStepAdmin(admin.ModelAdmin):
+    list_display = ["definition", "sequence", "name", "approver_role", "is_parallel"]
+    list_filter = ["is_parallel", "tenant"]
+    search_fields = ["name", "definition__name"]
+    list_select_related = ["definition", "approver_role"]
+
+
+@admin.register(ApprovalLimit)
+class ApprovalLimitAdmin(admin.ModelAdmin):
+    list_display = ["module_slug", "role", "max_amount", "currency_code", "tenant"]
+    list_filter = ["module_slug", "tenant"]
+    search_fields = ["module_slug", "role__name"]
+    list_select_related = ["role", "tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(SlaRule)
+class SlaRuleAdmin(admin.ModelAdmin):
+    list_display = ["name", "module_slug", "hours", "action", "escalate_to_role", "is_active"]
+    list_filter = ["module_slug", "action", "is_active", "tenant"]
+    search_fields = ["name", "engine_label"]
+    list_select_related = ["escalate_to_role", "tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(BusinessRule)
+class BusinessRuleAdmin(admin.ModelAdmin):
+    list_display = ["name", "module_slug", "trigger", "action", "priority", "is_active", "tenant"]
+    list_filter = ["module_slug", "trigger", "action", "is_active", "tenant"]
+    search_fields = ["name", "notes"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(BusinessRuleLog)
+class BusinessRuleLogAdmin(admin.ModelAdmin):
+    list_display = ["module_slug", "trigger", "matched", "rule", "evaluated_at", "tenant"]
+    list_filter = ["module_slug", "trigger", "matched", "tenant"]
+    search_fields = ["module_slug", "action_taken"]
+    list_select_related = ["rule", "evaluated_by", "tenant"]
+    # An evaluation log is a record of what happened; nothing here is editable.
+    readonly_fields = ["tenant", "rule", "module_slug", "trigger", "context", "matched",
+                       "action_taken", "evaluated_by", "evaluated_at"]
+
+    def has_add_permission(self, request):
+        return False
