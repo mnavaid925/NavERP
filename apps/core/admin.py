@@ -45,6 +45,11 @@ from .models import (
     ConnectorDefinition,
     MappingTemplate,
     SyncSchedule,
+    Language,
+    TimeZone,
+    LocaleProfile,
+    UserLocalePreference,
+    StatutoryRule,
 )
 
 
@@ -435,3 +440,47 @@ class SyncScheduleAdmin(admin.ModelAdmin):
     search_fields = ["name", "entity_label"]
     list_select_related = ["mapping_template", "connector", "tenant"]
     readonly_fields = ["updated_at"]
+
+
+# ---------------------------------------------------------------- 0.15 Localization & Regional Settings
+@admin.register(Language)
+class LanguageAdmin(admin.ModelAdmin):
+    list_display = ["code", "name", "native_name", "is_rtl", "is_default", "is_active"]
+    list_filter = ["is_rtl", "is_default", "is_active"]
+    search_fields = ["code", "name", "native_name"]
+
+
+@admin.register(TimeZone)
+class TimeZoneAdmin(admin.ModelAdmin):
+    list_display = ["name", "label", "utc_offset_minutes", "observes_dst", "is_active"]
+    list_filter = ["observes_dst", "is_active"]
+    search_fields = ["name", "label"]
+
+
+@admin.register(LocaleProfile)
+class LocaleProfileAdmin(admin.ModelAdmin):
+    list_display = ["tenant", "language", "base_currency", "time_zone", "first_day_of_week",
+                    "updated_at"]
+    list_filter = ["first_day_of_week", "language", "time_zone"]
+    search_fields = ["tenant__name"]
+    list_select_related = ["tenant", "language", "base_currency", "time_zone"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(UserLocalePreference)
+class UserLocalePreferenceAdmin(admin.ModelAdmin):
+    list_display = ["user", "language", "time_zone", "date_format", "tenant", "updated_at"]
+    list_filter = ["language", "time_zone", "tenant"]
+    search_fields = ["user__email"]
+    list_select_related = ["user", "language", "time_zone", "tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(StatutoryRule)
+class StatutoryRuleAdmin(admin.ModelAdmin):
+    list_display = ["name", "jurisdiction", "tax_code", "e_invoicing_scheme",
+                    "e_invoicing_required", "effective_from", "is_active", "tenant"]
+    list_filter = ["e_invoicing_scheme", "e_invoicing_required", "is_active", "tenant"]
+    search_fields = ["name", "jurisdiction", "statutory_report"]
+    list_select_related = ["tax_code", "tenant"]
+    readonly_fields = ["created_at", "updated_at"]
