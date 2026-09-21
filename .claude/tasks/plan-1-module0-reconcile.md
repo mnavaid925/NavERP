@@ -710,3 +710,68 @@ apps/crm` — **2455 passed, 0 failed**. Migration `core.0010`.
 The repo has a **`post-commit` git hook** that prints `git status` and exits non-zero. It does not
 block a commit, but it **breaks any `&&` chain** after a `git commit` — the chain stops at the first
 commit even though the commit succeeded. Use `;` between commit steps, or one commit per call.
+
+---
+
+## 0.13 Integration & API Management — CLOSED OUT 2026-09-21
+
+**Verdict: 0 of 5 bullets mapped, and — for the third sub-module running — every module had already
+partly built it.** An inventory found integration machinery across FIVE apps: scm's whole
+IntegrationApiGateway sub-module (`IntegrationEndpoint`, `IntegrationMessage`, `WebhookSubscription`,
+`WebhookDelivery`), crm's `Webhook`/`WebhookDelivery`, projects'
+`ProjectIntegrationConnector`/`ProjectWebhookEndpoint`/`ProjectWebhookDelivery`/`ConnectorFieldMapping`,
+`inventory.IntegrationChannel` and `accounting.IntegrationConfig`.
+
+**What genuinely did not exist anywhere**, and is what 0.13 owns:
+
+| bullet | what ships |
+|---|---|
+| 1 API Gateway & Keys | `ApiCredential` (there was **no API key model in the repo at all**) + `RateLimitPolicy` |
+| 2 Webhooks & Event Bus | the platform sync registry (subscriptions stay per-module) |
+| 3 Connector Marketplace | `ConnectorDefinition` — a catalogue; only a project-scoped connector existed |
+| 4 Inbound/Outbound Data Exchange | `MappingTemplate` + `SyncSchedule` |
+| 5 Integration Monitoring | a COMPUTED board over the **real** tables of five apps |
+
+### The design decisions that carry weight
+
+- **`ApiCredential` stores a PREFIX and a SHA-256 hash, never the plaintext** — the one-way pattern
+  `tenants.EncryptionKey` established. A credential only ever answers "is this the same key?", so a
+  one-way hash is strictly safer than reversible encryption. The plaintext is shown once at issue.
+- **`verify_credential()` looks up by the non-secret prefix, then compares in constant time**
+  (`hmac.compare_digest`). Comparing via the ORM would also work — the hash of a 256-bit random token
+  is not a useful oracle — but the constant-time comparison costs nothing and removes the question.
+- **`api_credential_required` answers JSON 401/403, not a redirect to `/login/`.** The caller is a
+  program; a 302 tells it nothing. It is a REAL decorator, tested in the smoke suite against probe
+  views, and applied to nothing in this module — **no API views ship in 0.13**.
+- **Revoking DEACTIVATES rather than deletes.** A deleted credential leaves no trace of the key that
+  was in circulation; a deactivated one keeps the prefix, scopes and last-used stamp an investigator
+  needs.
+- **The board keeps `unverified` connectors separate from `connected`,** for the same reason 0.12 keeps
+  `simulated` separate from `sent`: a connector configured and never verified is not a working
+  connector, and folding it in would report an untested integration as healthy. The traffic success
+  rate excludes dry runs. Real data: 10 connected, 2 erroring, 3 off, **1 unverified**; 2 sent,
+  1 failed, **2 dry runs** → 66.7%.
+- **`ConnectorDefinition.engine_label` is a validated string naming a real model,** so the catalogue is
+  followable rather than decorative, and `is_installed` mirrors whether that model actually has rows.
+
+### What is deliberately NOT done, and stated on the pages
+
+**No API is exposed** (the verifier and decorator are real and tested; a module opts in). **No OAuth
+authorisation server** — an `oauth_client` credential is recorded and there is no token endpoint,
+authorisation-code flow or refresh. **No rate limiting is enforced** (the policy is recorded; a view
+must apply the check). **No marketplace backend** — the catalogue indexes per-module models and
+installs nothing. **No scheduled execution and no retry/dead-letter handling** (no scheduler, no
+outbound worker). **No throughput or latency metrics** — the integration tables carry no duration
+column, so "throughput" here is a row count, not a rate.
+
+### Verification
+
+`temp/smoke_13.py` — **84 checks, 0 failures**, re-entrant. `apps/core apps/accounts apps/tenants
+apps/crm` — **2455 passed, 0 failed**. Migration `core.0011`.
+
+### Recurring trap, now three times
+
+A generated `form.html`'s cancel link pointed at a route name that does not exist
+(`core:syncschedule_list` — the route is `core:sync_list`). Same class of error in 0.10
+(`fiscalperiod_list`) and 0.11. **Verify every `{% url %}` name against `LIVE_LINKS` or `reverse()`
+before trusting a generated template** — a bad name 500s the form render, not the save.
