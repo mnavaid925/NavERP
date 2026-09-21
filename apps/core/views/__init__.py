@@ -235,3 +235,16 @@ from .Integration import (
     integration_board,
     integration_overview,
 )  # noqa: F401
+from .Localization import (
+    language_list,
+    timezone_list,
+    locale_profile_edit,
+    user_locale_edit,
+    statutory_rule_list,
+    statutory_rule_create,
+    statutory_rule_detail,
+    statutory_rule_edit,
+    statutory_rule_delete,
+    localization_board,
+    localization_overview,
+)  # noqa: F401
