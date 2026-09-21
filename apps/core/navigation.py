@@ -208,6 +208,18 @@ LIVE_LINKS = {
         "Party Relationships": "core:partyrelationship_list",  # extra
         "Documents": "core:document_list",              # extra
     },
+    # 0.15 Localization & Regional Settings. Bullets 2 and 4 point at the pages that already answer
+    # them: the currency master and the dated rate register live in `accounting` (2.2), and the tax
+    # master in `accounting` (2.11). 0.15 adds the registries, the profile and the statutory layer.
+    "0.15": {
+        "Multi-Language & Translation": "core:language_list",           # bullet 1
+        "Multi-Currency & Exchange Rates": "core:localization_board",   # bullet 2 (reads accounting)
+        "Regional Formats": "core:locale_profile_edit",                 # bullet 3
+        "Tax & Statutory Configuration": "core:statutory_rule_list",    # bullet 4 (points at accounting)
+        "Time Zone Management": "core:timezone_list",                   # bullet 5
+        "Localization Overview": "core:localization_overview",          # extra
+        "My Regional Settings": "core:user_locale_edit",                # extra
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
