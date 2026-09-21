@@ -6,6 +6,7 @@ seed_accounts → seed_tenants.
 """
 import datetime
 
+from django.apps import apps as django_apps
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -50,6 +51,10 @@ from apps.core.models import (
     PartyRelationship,
     PartyRole,
     Tenant,
+    Language,
+    LocaleProfile,
+    StatutoryRule,
+    TimeZone,
 )
 
 TENANTS = [
@@ -81,6 +86,11 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        # 0.15's Language and TimeZone are GLOBAL registries (no tenant FK), so they are seeded ONCE
+        # here — outside the tenant loop — rather than per workspace. Seeding them per tenant would
+        # imply they belong to one, which is exactly the mistake their missing FK prevents.
+        self._seed_localization_globals()
+
         for spec in TENANTS:
             tenant, created = Tenant.objects.get_or_create(
                 slug=spec["slug"],
@@ -104,6 +114,7 @@ class Command(BaseCommand):
             self._seed_workflow(tenant)
             self._seed_notifications(tenant)
             self._seed_integrations(tenant)
+            self._seed_localization(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -666,3 +677,110 @@ class Command(BaseCommand):
                           "notes": "Seeded demo schedule. Nothing runs it — the repo has no "
                                    "scheduler."},
             )
+
+    # ---------------------------------------------------------------- 0.15 Localization
+    def _seed_localization_globals(self):
+        """0.15: the two GLOBAL registries — languages and IANA time zones.
+
+        Called ONCE, outside the tenant loop, because neither model has a `tenant` FK. Guarded by
+        `get_or_create` on the natural key so a re-run adds only what is missing.
+
+        Two of the eight languages are RTL, and the ten zones span both DST postures — not for
+        variety's sake, but because `is_rtl` and `observes_dst` are the two flags the whole sub-module
+        exists to expose, and a registry that contained only one posture of either would leave the
+        board and the list filters untestable against real data.
+        """
+        languages = [
+            ("en", "English", "English", False, True),
+            ("fr", "French", "Français", False, False),
+            ("de", "German", "Deutsch", False, False),
+            ("es", "Spanish", "Español", False, False),
+            ("pt", "Portuguese", "Português", False, False),
+            ("zh-hans", "Chinese (Simplified)", "简体中文", False, False),
+            ("ar", "Arabic", "العربية", True, False),
+            ("he", "Hebrew", "עברית", True, False),
+        ]
+        created = 0
+        for code, name, native, rtl, is_default in languages:
+            _, made = Language.objects.get_or_create(
+                code=code,
+                defaults={"name": name, "native_name": native, "is_rtl": rtl,
+                          "is_default": is_default, "is_active": True},
+            )
+            created += int(made)
+        if created:
+            self.stdout.write(f"  localization: seeded {created} language(s)")
+
+        zones = [
+            ("UTC", "UTC", 0, False),
+            ("Europe/London", "London (GMT/BST)", 0, True),
+            ("Europe/Berlin", "Berlin (CET/CEST)", 60, True),
+            ("Europe/Lisbon", "Lisbon (WET/WEST)", 0, True),
+            ("America/New_York", "New York (EST/EDT)", -300, True),
+            ("America/Chicago", "Chicago (CST/CDT)", -360, True),
+            ("America/Los_Angeles", "Los Angeles (PST/PDT)", -480, True),
+            ("Asia/Dubai", "Dubai (GST)", 240, False),
+            ("Asia/Kolkata", "Kolkata (IST)", 330, False),
+            ("Asia/Tokyo", "Tokyo (JST)", 540, False),
+        ]
+        created = 0
+        for name, label, offset, dst in zones:
+            _, made = TimeZone.objects.get_or_create(
+                name=name,
+                defaults={"label": label, "utc_offset_minutes": offset, "observes_dst": dst,
+                          "is_active": True},
+            )
+            created += int(made)
+        if created:
+            self.stdout.write(f"  localization: seeded {created} time zone(s)")
+
+    def _seed_localization(self, tenant):
+        """0.15: the per-tenant half — the locale profile and the statutory register.
+
+        PER-ENTITY guards, never a tenant-wide one. A tenant-wide guard is the documented defect that
+        left every entity added to this command after the fact unreachable in the workspaces that
+        already existed — so each entity below checks for itself.
+
+        `Currency` and `TaxCode` are read through `django_apps.get_model` rather than imported: they
+        belong to `accounting`, and this command seeds `core` only. Reading a peer's rows to build a
+        coherent FK is fine; seeding them here would be the cross-app defect the audit's check 6 hunts.
+        """
+        if not LocaleProfile.objects.filter(tenant=tenant).exists():
+            Currency = django_apps.get_model("accounting", "Currency")
+            LocaleProfile.objects.create(
+                tenant=tenant,
+                language=Language.objects.filter(code="en").first(),
+                base_currency=Currency.objects.filter(code="USD").first(),
+                time_zone=TimeZone.objects.filter(name="UTC").first(),
+                date_format="dd/MM/yyyy",
+                time_format="HH:mm",
+                number_format="#,##0.00",
+                address_format="{line1}\n{line2}\n{city}, {region} {postal}\n{country}",
+                first_day_of_week=1,
+                notes="Seeded default profile. Formats are patterns, not an enum — edit them here.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded the locale profile")
+
+        if not StatutoryRule.objects.filter(tenant=tenant).exists():
+            TaxCode = django_apps.get_model("accounting", "TaxCode")
+            # Matched by TYPE, not by `.first()`. Picking an arbitrary code attached the EU
+            # e-invoicing rule to a California sales-tax code — a rule pointing at a rate that has
+            # nothing to do with it. The FK is only meaningful if it names the right rate.
+            vat_code = TaxCode.objects.filter(tenant=tenant, tax_type="vat").first()
+            sales_code = TaxCode.objects.filter(tenant=tenant, tax_type="sales").first()
+            today = timezone.localdate()
+            rules = [
+                ("EU VAT e-invoicing", "European Union", vat_code, True, "peppol", "EC Sales List"),
+                ("US sales tax filing", "United States", sales_code, False, "none",
+                 "Sales Tax Return"),
+                ("India GST e-invoice", "India", None, True, "gst_irn", "GSTR-1"),
+            ]
+            for name, jurisdiction, tax_code, e_inv, scheme, report in rules:
+                StatutoryRule.objects.create(
+                    tenant=tenant, name=name, jurisdiction=jurisdiction, tax_code=tax_code,
+                    e_invoicing_required=e_inv, e_invoicing_scheme=scheme,
+                    statutory_report=report, effective_from=today, is_active=True,
+                    notes="Seeded statutory rule. Nothing transmits an invoice — this records the "
+                          "obligation.",
+                )
+            self.stdout.write(f"  {tenant.name}: seeded {len(rules)} statutory rule(s)")
