@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Integration & API Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Integration & API Management</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Integration & API Management</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:integration_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Integration health</a>
+      <a href="{% url 'core:credential_list' %}" class="btn btn-outline"><i data-lucide="key"></i> Credentials</a>
+      <a href="{% url 'core:connector_list' %}" class="btn btn-outline"><i data-lucide="plug"></i> Connectors</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Posture</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>API credentials</dt><dd>{{ credential_count }} ({{ credentials_active }} active, {{ credentials_expired }} expired)</dd></div>
+        <div class="detail-item"><dt>Credentials ever used</dt><dd>{{ credentials_used }}</dd></div>
+        <div class="detail-item"><dt>Active rate limits</dt><dd>{{ limit_count }}</dd></div>
+        <div class="detail-item"><dt>Connectors catalogued</dt><dd>{{ connector_count }} ({{ connectors_installed }} installed)</dd></div>
+        <div class="detail-item"><dt>Mapping templates</dt><dd>{{ mapping_count }}</dd></div>
+        <div class="detail-item"><dt>Sync schedules</dt><dd>{{ schedule_count }}</dd></div>
+        <div class="detail-item"><dt>Connected integrations</dt><dd><span class="badge badge-green">{{ totals.connected }}</span></dd></div>
+        <div class="detail-item"><dt>Erroring</dt><dd>{% if totals.error %}<span class="badge badge-red">{{ totals.error }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Unverified connectors</dt><dd>{% if totals.unverified %}<span class="badge badge-amber">{{ totals.unverified }}</span>{% else %}0{% endif %}</dd></div>
+        <div class="detail-item"><dt>Traffic success rate</dt><dd>{% if success_rate is not None %}{{ success_rate }}%{% else %}&mdash;{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent credentials</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Label</th><th>Prefix</th><th>State</th><th>Last used</th></tr></thead>
+        <tbody>
+          {% for c in recent_credentials %}
+            <tr>
+              <td class="fw-600">{{ c.label }}</td>
+              <td><code>{{ c.prefix }}…</code></td>
+              <td>
+                {% if not c.is_active %}<span class="badge badge-slate">Revoked</span>
+                {% elif c.is_expired %}<span class="badge badge-red">Expired</span>
+                {% else %}<span class="badge badge-green">Active</span>{% endif %}
+              </td>
+              <td>{% if c.last_used_at %}{{ c.last_used_at|date:"M d, H:i" }}{% else %}<span class="text-muted">never</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="key"></i><h3>No credentials issued</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this module does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><strong>No API is exposed.</strong> The credential verifier and the <code>api_credential_required</code> decorator are real and tested, but
+        no API views ship in 0.13 — a module opts in. <strong>No OAuth authorisation server:</strong> an <code>oauth_client</code> credential is recorded, and there is no
+        token endpoint, no authorisation-code flow and no refresh. <strong>No rate limiting is enforced</strong> — the policy is recorded and a view must apply the
+        check. <strong>No connector marketplace backend:</strong> the catalogue indexes the per-module connector models; nothing installs anything. <strong>No scheduled
+        execution and no retry/dead-letter handling</strong> — the repo has no scheduler and no outbound worker. <strong>No throughput or latency metrics.</strong>
+        Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
