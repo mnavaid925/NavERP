@@ -19,6 +19,10 @@ from apps.core.models import (
     SlaRule,
     WorkflowDefinition,
     WorkflowStep,
+    NotificationChannel,
+    NotificationRule,
+    NotificationTemplate,
+    ProviderConfig,
     BusinessCalendar,
     CustomFieldDefinition,
     FeatureFlag,
@@ -93,6 +97,7 @@ class Command(BaseCommand):
             self._seed_privacy(tenant)
             self._seed_configuration(tenant)
             self._seed_workflow(tenant)
+            self._seed_notifications(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -460,4 +465,98 @@ class Command(BaseCommand):
                 defaults={"module_slug": module_slug, "trigger": trigger, "condition": condition,
                           "action": action, "action_payload": payload, "priority": priority,
                           "notes": "Seeded demo rule. Evaluated on request; nothing executes it."},
+            )
+
+    def _seed_notifications(self, tenant):
+        """0.12: channels, templates, routing rules and provider configs.
+
+        Three deliberate omissions, each the honest state to show:
+
+        * **Only email and in-app are ENABLED.** A channel is enabled only when a provider sits
+          behind it; enabling SMS with no gateway would be a switch that does nothing.
+        * **No `NotificationPreference` rows are seeded.** A preference is a member's own choice, and
+          a seeder inventing opt-outs would be fabricating consent. Absence means "take the rule's
+          default", which is the correct starting state.
+        * **No delivery rows are seeded anywhere.** Delivery records belong to the modules that own
+          the webhooks and notifications; this command does not invent rows in another app's tables.
+
+        `accounts.Role` is imported here for the same reason as in `_seed_workflow`: core is imported
+        by accounts, so a module-level import would be circular.
+        """
+        from apps.accounts.models import Role
+
+        channels = [
+            ("email", "Email", True, "Enabled: an SMTP provider is configured below."),
+            ("in_app", "In-app", True, "Enabled: delivered by the module's own in-app register."),
+            ("sms", "SMS", False, "Disabled until an SMS gateway is configured."),
+            ("push", "Push", False, "Disabled: no push provider is configured."),
+            ("chat", "Chat (Slack / Teams)", False, "Disabled: no chat webhook is configured."),
+        ]
+        for kind, label, enabled, notes in channels:
+            NotificationChannel.objects.get_or_create(
+                tenant=tenant, kind=kind,
+                defaults={"label": label, "is_enabled": enabled, "notes": notes},
+            )
+        email_channel = NotificationChannel.objects.filter(tenant=tenant, kind="email").first()
+        inapp_channel = NotificationChannel.objects.filter(tenant=tenant, kind="in_app").first()
+
+        templates = [
+            ("invoice_overdue", "Invoice overdue", "email",
+             "Invoice {{ reference }} is overdue",
+             "Hello {{ recipient_name }},\n\nInvoice {{ reference }} for {{ amount }} is now overdue."
+             "\n\nRegards,\n{{ tenant_name }}", "en", "accounting"),
+            ("invoice_overdue_fr", "Facture en retard", "email",
+             "La facture {{ reference }} est en retard",
+             "Bonjour {{ recipient_name }},\n\nLa facture {{ reference }} de {{ amount }} est en "
+             "retard.\n\nCordialement,\n{{ tenant_name }}", "fr", "accounting"),
+            ("approval_waiting", "Approval waiting", "in_app", "",
+             "An approval is waiting for you: {{ reference }}.", "en", ""),
+        ]
+        for code, name, kind, subject, body, locale, module_slug in templates:
+            NotificationTemplate.objects.get_or_create(
+                tenant=tenant, code=code, locale=locale,
+                defaults={"name": name, "channel_kind": kind, "subject": subject, "body": body,
+                          "module_slug": module_slug},
+            )
+        overdue_tmpl = NotificationTemplate.objects.filter(
+            tenant=tenant, code="invoice_overdue", locale="en").first()
+        waiting_tmpl = NotificationTemplate.objects.filter(
+            tenant=tenant, code="approval_waiting", locale="en").first()
+
+        rules = [
+            ("Overdue invoice email", "invoice.overdue", "accounting", email_channel,
+             overdue_tmpl, "party", "immediate", 10),
+            ("Approval waiting in-app", "approval.waiting", "", inapp_channel,
+             waiting_tmpl, "role", "immediate", 20),
+            ("Approval digest", "approval.waiting", "", email_channel,
+             None, "role", "daily", 30),
+        ]
+        admin_role = Role.objects.filter(tenant=tenant, name="Administrator").first()
+        for name, event, module_slug, channel, template, audience, digest, priority in rules:
+            if channel is None:
+                continue
+            NotificationRule.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"event": event, "module_slug": module_slug, "channel": channel,
+                          "template": template, "audience_kind": audience,
+                          "audience_role": admin_role if audience == "role" else None,
+                          "digest": digest, "priority": priority,
+                          "notes": "Seeded demo rule. It routes; nothing dispatches."},
+            )
+
+        providers = [
+            ("email", "Primary SMTP", 10, "smtp.example.com", 587, "no-reply@example.com", "",
+             "SMTP_PASSWORD"),
+            ("email", "Failover SMTP", 20, "smtp-backup.example.com", 587,
+             "no-reply@example.com", "", "SMTP_FAILOVER_PASSWORD"),
+            ("sms", "SMS gateway", 10, "", None, "", "https://sms.example.com/send", "SMS_API_KEY"),
+        ]
+        for kind, label, priority, host, port, from_address, api, env_var in providers:
+            ProviderConfig.objects.get_or_create(
+                tenant=tenant, channel_kind=kind, label=label,
+                defaults={"priority": priority, "host": host, "port": port,
+                          "from_address": from_address, "api_endpoint": api,
+                          "credential_env_var": env_var,
+                          "notes": "Seeded demo provider. No credential is stored, only its "
+                                   "environment variable name."},
             )
