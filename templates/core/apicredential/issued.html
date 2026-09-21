@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Credential Issued{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Credential Issued</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Credential Issued</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:credential_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Copy this key now</h2><span class="badge badge-red">Shown once</span></div>
+    <div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> This is the <strong>only</strong> time the key is visible. Only a prefix and a SHA-256 hash are stored, so nobody — including an administrator — can show it again.</p>
+      <div class="detail-item"><dt>Key</dt><dd><code>{{ plaintext }}</code></dd></div>
+      <dl class="detail-grid" style="margin-top:1rem;">
+        <div class="detail-item"><dt>Label</dt><dd>{{ obj.label }}</dd></div>
+        <div class="detail-item"><dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd></div>
+        <div class="detail-item"><dt>Prefix</dt><dd><code>{{ obj.prefix }}</code></dd></div>
+        <div class="detail-item"><dt>Scopes</dt><dd>{{ obj.scopes|default:"&mdash;" }}</dd></div>
+      </dl>
+      <p class="text-muted">A client presents it as <code>Authorization: Bearer &lt;key&gt;</code>, or as <code>X-API-Key</code>.
+        <strong>Nothing in this module accepts a request</strong> — no API views ship here; the decorator that verifies a key is provided for a module to apply.</p>
+    </div>
+  </div>
+{% endblock %}
