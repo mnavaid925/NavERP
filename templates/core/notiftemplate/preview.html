@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Preview — {{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Preview — {{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Preview — {{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:template_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Rendered for real against a fixed sample context. The sample is primitives on purpose — a preview that accepted arbitrary JSON would be a way to render a stored template against a chosen context.</p>
+    {% if error %}<p class="text-danger"><i data-lucide="alert-triangle"></i> {{ error }}</p>{% endif %}
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Channel</dt><dd>{{ obj.get_channel_kind_display }}</dd></div>
+      <div class="detail-item"><dt>Locale</dt><dd>{{ obj.locale|default:"default" }}</dd></div>
+    </dl>
+    {% if obj.subject %}
+      <div class="detail-item" style="margin-top:1rem;"><dt>Rendered subject</dt><dd class="fw-600">{{ subject }}</dd></div>
+    {% endif %}
+    <div class="detail-item" style="margin-top:1rem;"><dt>Rendered body</dt><dd><pre>{{ body }}</pre></dd></div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Sample context</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Key</th><th>Value</th></tr></thead>
+        <tbody>
+          {% for k, v in sample.items %}<tr><td class="fw-600"><code>{{ k }}</code></td><td>{{ v }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><strong>Nothing was sent.</strong> This page renders; it does not dispatch. There is no outbound worker in this module.</p>
+  </div></div>
+{% endblock %}
