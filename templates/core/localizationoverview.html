@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Localization & Regional Settings{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Localization &amp; Regional Settings</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Localization</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:localization_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Board</a>
+      <a href="{% url 'core:locale_profile_edit' %}" class="btn btn-primary"><i data-lucide="sliders-horizontal"></i> Regional settings</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">How this workspace presents language, money, dates and time. <strong>Nothing on this page is stored</strong> — the counts are derived on read from the registries and this tenant's rows.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Workspace profile</dt><dd>{% if has_profile %}<span class="badge badge-green">Configured</span>{% else %}<span class="badge badge-amber">Not configured</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Default language</dt><dd>{% if profile.language %}{{ profile.language }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Base currency</dt><dd>{% if profile.base_currency %}{{ profile.base_currency }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Display time zone</dt><dd>{% if profile.time_zone %}{{ profile.time_zone }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Date format</dt><dd>{% if profile %}<code>{{ profile.date_format }}</code>{% else %}&mdash;{% endif %}</dd></div>
+      <div class="detail-item"><dt>Number format</dt><dd>{% if profile %}<code>{{ profile.number_format }}</code>{% else %}&mdash;{% endif %}</dd></div>
+      <div class="detail-item"><dt>Your overrides</dt><dd>{% if my_pref %}<span class="badge badge-info">Set</span>{% else %}<span class="text-muted">Inheriting the workspace</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>People with overrides</dt><dd>{{ user_pref_count }}</dd></div>
+      <div class="detail-item"><dt>Languages offered</dt><dd>{{ language_count }} <span class="text-muted">({{ rtl_count }} RTL)</span></dd></div>
+      <div class="detail-item"><dt>Time zones</dt><dd>{{ timezone_count }} <span class="text-muted">({{ dst_zone_count }} DST)</span></dd></div>
+      <div class="detail-item"><dt>Active statutory rules</dt><dd>{{ statutory_count }}</dd></div>
+      <div class="detail-item"><dt>Requiring e-invoicing</dt><dd>{{ e_invoicing_count }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Registries and settings</h2></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Surface</th><th>What it holds</th><th class="table-actions">Open</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Languages</td>
+              <td>A global registry of the languages the platform can present, and which read right-to-left.</td>
+              <td><a href="{% url 'core:language_list' %}" class="btn-icon" title="Languages"><i data-lucide="eye"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600">Time zones</td>
+              <td>A global registry of IANA zones with their standard offset and DST posture.</td>
+              <td><a href="{% url 'core:timezone_list' %}" class="btn-icon" title="Time zones"><i data-lucide="eye"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600">Regional settings</td>
+              <td>This workspace's default language, base currency, display zone and format patterns.</td>
+              <td><a href="{% url 'core:locale_profile_edit' %}" class="btn-icon" title="Regional settings"><i data-lucide="pencil"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600">My regional settings</td>
+              <td>Your own overrides; anything blank inherits the workspace.</td>
+              <td><a href="{% url 'core:user_locale_edit' %}" class="btn-icon" title="My regional settings"><i data-lucide="pencil"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600">Statutory rules</td>
+              <td>Per-jurisdiction e-invoicing and statutory reporting obligations.</td>
+              <td><a href="{% url 'core:statutory_rule_list' %}" class="btn-icon" title="Statutory rules"><i data-lucide="eye"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600">Localization board</td>
+              <td>Rate recency, currency coverage and registry posture, computed on read.</td>
+              <td><a href="{% url 'core:localization_board' %}" class="btn-icon" title="Board"><i data-lucide="eye"></i></a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent statutory rules</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Jurisdiction</th><th>Scheme</th><th>State</th></tr></thead>
+        <tbody>
+          {% for rule in recent_rules %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:statutory_rule_detail' rule.pk %}">{{ rule.name }}</a></td>
+              <td>{{ rule.jurisdiction|default:"—" }}</td>
+              <td>{{ rule.get_e_invoicing_scheme_display }}</td>
+              <td>{% if rule.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="scale"></i><h3>No statutory rules yet</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>What this sub-module does NOT do.</strong> It does not translate the interface: the strings live in Django's
+      <code>gettext</code> catalogues, and this platform ships no <code>locale/</code> directory, so the languages registered here describe what is offered rather than what is translated.
+      It does not fetch exchange rates — there is no feed and no scheduler. It does not convert any date or time on any other page: the registry records the zone, and applying it
+      across the twenty apps that render dates is a separate change. And it does not transmit an e-invoice or file a return.</p>
+  </div></div>
+{% endblock %}
