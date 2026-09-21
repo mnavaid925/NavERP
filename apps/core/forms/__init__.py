@@ -71,3 +71,10 @@ from .Notification import (
     NotificationPreferenceForm,
     ProviderConfigForm,
 )  # noqa: F401
+from .Integration import (
+    ApiCredentialForm,
+    RateLimitPolicyForm,
+    ConnectorDefinitionForm,
+    MappingTemplateForm,
+    SyncScheduleForm,
+)  # noqa: F401
