@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Process Monitor{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Process Monitor</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Process Monitor</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:workflow_definition_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Registry</a>
+      <a href="{% url 'core:sla_rule_list' %}" class="btn btn-outline"><i data-lucide="timer"></i> SLA rules</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Read live from the approval tables of other apps. <strong>Nothing is stored</strong> — every figure is derived on read, so this cannot go stale.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Approval sources declared</dt><dd>{{ declared_count }}</dd></div>
+      <div class="detail-item"><dt>In-flight queues</dt><dd>{{ queues|length }}</dd></div>
+      <div class="detail-item"><dt>Total open items</dt><dd>{% if backlog.total_open %}<span class="badge badge-amber">{{ backlog.total_open }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Breached {{ backlog.aging_hours }}h</dt><dd>{% if backlog.total_breached %}<span class="badge badge-red">{{ backlog.total_breached }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">In-flight queues</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Engine</th><th>Waiting state</th><th>Open</th><th>Oldest</th><th>Breached</th></tr></thead>
+        <tbody>
+          {% for q in queues %}
+            <tr>
+              <td class="fw-600"><code>{{ q.label }}</code></td>
+              <td>{% for s in q.open_states %}<span class="badge badge-slate">{{ s }}</span> {% endfor %}</td>
+              <td>{% if q.open %}<span class="badge badge-amber">{{ q.open }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</td>
+              <td>{% if q.oldest_hours is not None %}{{ q.oldest_hours }}h{% else %}<span class="text-muted">no created_at</span>{% endif %}</td>
+              <td>{% if q.breached %}<span class="badge badge-red">{{ q.breached }}</span>{% else %}<span class="badge badge-slate">0</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="activity"></i><h3>No queues found</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Decision logs, not queues</h2></div>
+    <div class="card-body">
+      <p class="text-muted">These tables record a decision (<code>approved</code>/<code>rejected</code>) with <strong>no waiting state</strong>. Every row is already decided — the in-flight state lives on the PARENT record, so reporting them as a backlog would be fabricated.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Engine</th><th>Decisions recorded</th><th>Why not a queue</th></tr></thead>
+        <tbody>
+          {% for d in decision_logs %}
+            <tr>
+              <td class="fw-600"><code>{{ d.label }}</code></td>
+              <td>{{ d.decided }}</td>
+              <td><span class="text-muted">{{ d.reason }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Accounted for, but not approval queues</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Model</th><th>Why it is not a queue</th></tr></thead>
+        <tbody>
+          {% for s in skipped %}
+            <tr><td class="fw-600"><code>{{ s.label }}</code></td><td><span class="text-muted">{{ s.reason }}</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if unmonitored %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Registered processes this board cannot see</h2><span class="badge badge-amber">{{ unmonitored|length }}</span></div>
+      <div class="card-body">
+        <p class="text-warn"><i data-lucide="alert-triangle"></i> These are active in the registry but their engine is not an approval table this board reads, so their backlog is invisible here.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Process</th><th>Module</th><th>Engine</th></tr></thead>
+            <tbody>
+              {% for d in unmonitored %}
+                <tr>
+                  <td class="fw-600"><a href="{% url 'core:workflow_definition_detail' d.pk %}">{{ d.name }}</a></td>
+                  <td>{{ d.module_slug }}</td>
+                  <td><code>{{ d.engine_label }}</code></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted">It reads; it does not act. No escalation is sent, nothing is auto-approved or auto-rejected, and no SLA rule fires — the repo has no scheduler, so those are recorded intentions and this board is where an overdue item becomes visible. Bottleneck <strong>analysis</strong> is limited to counts and oldest-item age: there is no per-approver timing, no cycle-time trend and no throughput history, because the approval tables do not carry the decision timestamps that would need.</p>
+    </div>
+  </div>
+{% endblock %}
