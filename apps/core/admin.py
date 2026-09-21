@@ -40,6 +40,11 @@ from .models import (
     NotificationRule,
     NotificationPreference,
     ProviderConfig,
+    ApiCredential,
+    RateLimitPolicy,
+    ConnectorDefinition,
+    MappingTemplate,
+    SyncSchedule,
 )
 
 
@@ -381,4 +386,52 @@ class ProviderConfigAdmin(admin.ModelAdmin):
     list_select_related = ["tenant"]
     # The credential is never stored here, so there is nothing secret to render — only the NAME of
     # the environment variable holding it.
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(ApiCredential)
+class ApiCredentialAdmin(admin.ModelAdmin):
+    list_display = ["label", "kind", "prefix", "is_active", "last_used_at", "expires_at", "tenant"]
+    list_filter = ["kind", "is_active", "tenant"]
+    search_fields = ["label", "prefix", "scopes"]
+    list_select_related = ["created_by", "tenant"]
+    # The plaintext was never stored, so there is nothing secret to render — only the prefix and the
+    # hash, both of which are safe to display and useful for identifying a key in a log.
+    readonly_fields = ["prefix", "key_hash", "last_used_at", "created_by", "created_at"]
+
+
+@admin.register(RateLimitPolicy)
+class RateLimitPolicyAdmin(admin.ModelAdmin):
+    list_display = ["name", "credential", "max_requests", "window", "is_active", "tenant"]
+    list_filter = ["window", "is_active", "tenant"]
+    search_fields = ["name"]
+    list_select_related = ["credential", "tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(ConnectorDefinition)
+class ConnectorDefinitionAdmin(admin.ModelAdmin):
+    list_display = ["name", "vendor", "category", "engine_label", "is_installed", "is_active",
+                    "tenant"]
+    list_filter = ["category", "is_installed", "is_active", "tenant"]
+    search_fields = ["name", "vendor", "engine_label"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(MappingTemplate)
+class MappingTemplateAdmin(admin.ModelAdmin):
+    list_display = ["name", "direction", "source_format", "target_label", "is_active", "tenant"]
+    list_filter = ["direction", "is_active", "tenant"]
+    search_fields = ["name", "source_format", "target_label"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(SyncSchedule)
+class SyncScheduleAdmin(admin.ModelAdmin):
+    list_display = ["name", "direction", "transport", "frequency", "is_active", "tenant"]
+    list_filter = ["direction", "transport", "frequency", "is_active", "tenant"]
+    search_fields = ["name", "entity_label"]
+    list_select_related = ["mapping_template", "connector", "tenant"]
     readonly_fields = ["updated_at"]
