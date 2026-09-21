@@ -69,6 +69,23 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.12 Notification & Communication Management. Every module has already partly built this
+    # (crm.EmailTemplate, hrm.OfferLetterTemplate, crm/scm/projects webhook deliveries,
+    # inventory.NotificationDelivery), so 0.12 owns the PLATFORM layer nobody owns: the channel
+    # registry, the shared localisable templates, the routing rules and member preferences, the
+    # provider config, and the delivery monitoring. `My Preferences` is deliberately NOT admin-gated
+    # -- a preference a member cannot set is an admin setting with a different label.
+    "0.12": {
+        "Multi-Channel Delivery": "core:channel_list",              # bullet
+        "Template & Branding Management": "core:template_list",     # bullet
+        "Notification Rules & Subscriptions": "core:rule_list",     # bullet
+        "Provider & Gateway Configuration": "core:provider_list",   # bullet
+        "Delivery Tracking & Logs": "core:delivery_board",          # bullet
+        # Extra live leaves: the hub, the member's own preferences, and the admin preference register.
+        "Notification Overview": "core:notification_overview",      # extra
+        "My Notification Preferences": "core:my_preferences",       # extra (self-service)
+        "Notification Preferences": "core:preference_list",         # extra
+    },
     # 0.11 Workflow & Approval Administration. The repo already contains ~71 approval/workflow/
     # escalation models across six apps, so 0.11 owns the REGISTRY and the MONITORING, not an engine.
     # `Process Monitoring` is the bullet that is genuinely new: it reads the real approval tables of
