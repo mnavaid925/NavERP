@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:workflow_step_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add step</a>
+      <a href="{% url 'core:workflow_definition_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  {% if not is_monitored %}
+    <div class="card"><div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This process is not monitored.</strong> Its engine label is not one of the approval
+        tables the process monitor reads, so its backlog will not appear there. Either point it at a real queue, or record that this process is not queue-shaped.</p>
+    </div></div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Module</dt><dd>{{ obj.module_slug }}</dd></div>
+      <div class="detail-item"><dt>Engine</dt><dd>{% if obj.engine_label %}<code>{{ obj.engine_label }}</code>{% else %}&mdash;{% endif %}</dd></div>
+      <div class="detail-item"><dt>Monitored</dt><dd>{% if is_monitored %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">No</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner role</dt><dd>{% if obj.owner_role %}{{ obj.owner_role }}{% else %}&mdash;{% endif %}</dd></div>
+      <div class="detail-item"><dt>Target</dt><dd>{{ obj.target_hours }} hours</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+    {% if obj.description %}<p class="text-muted">{{ obj.description }}</p>{% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Steps</h2><span class="badge badge-info">{{ steps|length }}</span></div>
+    <div class="card-body">
+      <p class="text-muted">Steps <strong>document</strong> what the backing engine does. They are not enforced — a step that claimed to control routing would be a second source of truth against the engine that actually decides.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Step</th><th>Approver role</th><th>Parallel</th><th>Threshold</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in steps %}
+            <tr>
+              <td class="fw-600">{{ s.sequence }}</td>
+              <td>{{ s.name }}</td>
+              <td>{% if s.approver_role %}{{ s.approver_role }}{% else %}&mdash;{% endif %}</td>
+              <td>{% if s.is_parallel %}<span class="badge badge-info">Yes</span>{% else %}&mdash;{% endif %}</td>
+              <td>{% if s.threshold_amount %}{{ s.threshold_amount }}{% else %}&mdash;{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'core:workflow_step_edit' s.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'core:workflow_step_delete' s.pk %}" onsubmit="return confirm('Remove this step?');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No steps recorded</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if limits %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Approval limits for {{ obj.module_slug }}</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Role</th><th>May approve up to</th></tr></thead>
+          <tbody>
+            {% for l in limits %}<tr><td class="fw-600">{{ l.role }}</td><td>{{ l.max_amount }} {{ l.currency_code }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <a href="{% url 'core:workflow_definition_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
