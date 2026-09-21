@@ -184,5 +184,21 @@ urlpatterns = (
         path("integrations/syncs/add/", views.sync_create, name="sync_create"),
         path("integrations/syncs/<int:pk>/edit/", views.sync_edit, name="sync_edit"),
         path("integrations/syncs/<int:pk>/delete/", views.sync_delete, name="sync_delete"),
+        # 0.15 Localization & Regional Settings. Literal segments before the <int:pk> routes.
+        path("localization/", views.localization_overview, name="localization_overview"),
+        path("localization/board/", views.localization_board, name="localization_board"),
+        path("localization/languages/", views.language_list, name="language_list"),
+        path("localization/time-zones/", views.timezone_list, name="timezone_list"),
+        path("localization/profile/", views.locale_profile_edit, name="locale_profile_edit"),
+        path("localization/my-settings/", views.user_locale_edit, name="user_locale_edit"),
+        path("localization/statutory/", views.statutory_rule_list, name="statutory_rule_list"),
+        path("localization/statutory/add/", views.statutory_rule_create,
+             name="statutory_rule_create"),
+        path("localization/statutory/<int:pk>/", views.statutory_rule_detail,
+             name="statutory_rule_detail"),
+        path("localization/statutory/<int:pk>/edit/", views.statutory_rule_edit,
+             name="statutory_rule_edit"),
+        path("localization/statutory/<int:pk>/delete/", views.statutory_rule_delete,
+             name="statutory_rule_delete"),
     ]
 )
