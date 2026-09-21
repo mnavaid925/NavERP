@@ -244,3 +244,9 @@ class StatutoryRule(models.Model):
         super().clean()
         if self.effective_to and self.effective_from and self.effective_to < self.effective_from:
             raise ValidationError({"effective_to": "The end date cannot precede the start date."})
+        # Coherence, checked here rather than in the form so the seeder and the admin are covered by
+        # the same rule. "E-invoicing is required but no scheme is named" is not a state anyone can
+        # act on, so it is refused at the only edge every writer passes through.
+        if self.e_invoicing_required and self.e_invoicing_scheme == "none":
+            raise ValidationError({"e_invoicing_scheme":
+                                   "Choose the scheme this jurisdiction uses."})
