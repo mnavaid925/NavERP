@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:mapping_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+      <div class="detail-item"><dt>Source format</dt><dd>{{ obj.source_format|default:"&mdash;" }}</dd></div>
+      <div class="detail-item"><dt>Target</dt><dd>{% if obj.target_label %}<code>{{ obj.target_label }}</code>{% else %}&mdash;{% endif %}</dd></div>
+      <div class="detail-item"><dt>Rows</dt><dd>{{ obj.mapping_count }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Mapped fields</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>From</th><th>To</th><th>Transform</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-600"><code>{{ row.from }}</code></td>
+              <td><code>{{ row.to }}</code></td>
+              <td>{{ row.transform|default:"&mdash;" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="shuffle"></i><h3>No rows</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body"><p class="text-muted"><strong>Nothing applies this mapping.</strong> A module reads the template and performs the mapping itself.</p></div>
+  </div>
+
+  <a href="{% url 'core:mapping_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
