@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Workflow & Approval Administration{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Workflow & Approval Administration</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Workflow & Approval Administration</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:process_monitor' %}" class="btn btn-outline"><i data-lucide="activity"></i> Process monitor</a>
+      <a href="{% url 'core:workflow_definition_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Registry</a>
+      <a href="{% url 'core:business_rule_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Posture</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Registered processes</dt><dd>{{ definition_count }} ({{ step_count }} step(s) documented)</dd></div>
+        <div class="detail-item"><dt>Approval limits</dt><dd>{{ limit_count }}</dd></div>
+        <div class="detail-item"><dt>Active SLA rules</dt><dd>{{ sla_count }}</dd></div>
+        <div class="detail-item"><dt>Business rules</dt><dd>{{ rule_count }} ({{ rules_on }} active)</dd></div>
+        <div class="detail-item"><dt>Rule evaluations</dt><dd>{{ log_count }} ({{ matched_count }} matched)</dd></div>
+        <div class="detail-item"><dt>Approval engines in the repo</dt><dd>{{ engines_in_repo }}</dd></div>
+        <div class="detail-item"><dt>In-flight queues</dt><dd>{{ queue_count }}</dd></div>
+        <div class="detail-item"><dt>Open items</dt><dd>{{ total_open }}</dd></div>
+        <div class="detail-item"><dt>Breached 48h</dt><dd>{% if total_breached %}<span class="badge badge-red">{{ total_breached }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent rules</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Module</th><th>Trigger</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for r in recent_rules %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:business_rule_detail' r.pk %}">{{ r.name }}</a></td>
+              <td>{{ r.module_slug }}</td>
+              <td>{{ r.get_trigger_display }}</td>
+              <td>{{ r.get_action_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="scale"></i><h3>No rules configured</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this module does NOT do</h2></div>
+    <div class="card-body">
+      <p class="text-muted"><strong>No workflow engine.</strong> The repo already contains ~71 approval models across six apps and each decides its own routing; a platform engine would be a second source of truth for every one of them. This module owns the registry, the limits, the rules and the monitoring — not the decisions. <strong>No drag-and-drop designer:</strong> steps are recorded as an ordered register, not a canvas. <strong>Nothing executes:</strong> rules recommend, SLA rules record intent, and no escalation is sent. <strong>No auto-approve or auto-reject</strong> — there is no scheduler. Bottleneck analysis is counts and oldest-item age only, with no per-approver timing. Declared here rather than implied.</p>
+    </div>
+  </div>
+{% endblock %}
