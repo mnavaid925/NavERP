@@ -23,6 +23,11 @@ from apps.core.models import (
     NotificationRule,
     NotificationTemplate,
     ProviderConfig,
+    ApiCredential,
+    ConnectorDefinition,
+    MappingTemplate,
+    RateLimitPolicy,
+    SyncSchedule,
     BusinessCalendar,
     CustomFieldDefinition,
     FeatureFlag,
@@ -98,6 +103,7 @@ class Command(BaseCommand):
             self._seed_configuration(tenant)
             self._seed_workflow(tenant)
             self._seed_notifications(tenant)
+            self._seed_integrations(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -554,9 +560,109 @@ class Command(BaseCommand):
         for kind, label, priority, host, port, from_address, api, env_var in providers:
             ProviderConfig.objects.get_or_create(
                 tenant=tenant, channel_kind=kind, label=label,
-                defaults={"priority": priority, "host": host, "port": port,
-                          "from_address": from_address, "api_endpoint": api,
-                          "credential_env_var": env_var,
-                          "notes": "Seeded demo provider. No credential is stored, only its "
-                                   "environment variable name."},
+                    defaults={"priority": priority, "host": host, "port": port,
+                              "from_address": from_address, "api_endpoint": api,
+                              "credential_env_var": env_var,
+                              "notes": "Seeded demo provider. No credential is stored, only its "
+                                       "environment variable name."},
+            )
+
+    def _seed_integrations(self, tenant):
+        """0.13: API credentials, rate limits, the connector catalogue, mappings and sync schedules.
+
+        Three deliberate omissions, each the honest state to show:
+
+        * **The API credential's plaintext is discarded here.** `ApiCredential.issue()` returns it and
+          the seeder drops it on the floor — that is the whole point of the one-way design, and a
+          seeder that printed a working key would defeat it. The seeded key is therefore unusable,
+          which is the correct state for a demo credential.
+        * **Connector `engine_label`s point at the REAL per-module models** (`scm.IntegrationEndpoint`,
+          `accounting.IntegrationConfig`, `inventory.IntegrationChannel`,
+          `projects.ProjectIntegrationConnector`) so the catalogue is followable rather than
+          decorative. `is_installed` mirrors whether that model actually has rows.
+        * **No integration TRAFFIC rows are seeded** — those belong to the modules that own the
+          webhooks, and their own seeders create them.
+        """
+        from apps.core.integration import integration_health
+
+        # A credential whose plaintext is thrown away on purpose.
+        if not ApiCredential.objects.filter(tenant=tenant, label="Primary API key").exists():
+            ApiCredential.issue(
+                tenant, "Primary API key", kind="api_key",
+                scopes="projects.read crm.read inventory.read",
+            )
+        primary = ApiCredential.objects.filter(tenant=tenant, label="Primary API key").first()
+
+        if primary and not RateLimitPolicy.objects.filter(tenant=tenant,
+                                                          name="Default API limit").exists():
+            RateLimitPolicy.objects.create(
+                tenant=tenant, credential=primary, name="Default API limit",
+                max_requests=1000, window="hour",
+                notes="Seeded demo limit. Nothing enforces it — there is no gateway process.",
+            )
+        if not RateLimitPolicy.objects.filter(tenant=tenant, name="Workspace-wide limit").exists():
+            RateLimitPolicy.objects.create(
+                tenant=tenant, name="Workspace-wide limit", max_requests=10000, window="day",
+                notes="Seeded demo limit applying to every credential.",
+            )
+
+        # The catalogue indexes the REAL per-module connector models.
+        health = integration_health(tenant)
+        installed_labels = {c["label"] for c in health["connections"] if c["total"] > 0}
+        connectors = [
+            ("SCM integration endpoint", "NavERP", "logistics", "scm.IntegrationEndpoint",
+             "Trading-partner EDI endpoints (850/856/810)."),
+            ("Accounting integration", "NavERP", "accounting", "accounting.IntegrationConfig",
+             "Ledger and payment-gateway connections."),
+            ("Inventory channel", "Boomi", "logistics", "inventory.IntegrationChannel",
+             "Warehouse and 3PL stock-sync channels."),
+            ("Project integration connector", "NavERP", "other",
+             "projects.ProjectIntegrationConnector",
+             "Per-project third-party connectors with field mappings."),
+        ]
+        for name, vendor, category, engine, description in connectors:
+            ConnectorDefinition.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"vendor": vendor, "category": category, "engine_label": engine,
+                          "description": description,
+                          "is_installed": engine in installed_labels,
+                          "notes": "Seeded catalogue entry. Installed mirrors whether the engine "
+                                   "model actually has rows."},
+            )
+
+        mappings = [
+            ("X12 850 to purchase order", "inbound", "X12 850", "scm.PurchaseOrder",
+             [{"from": "PO1.01", "to": "number"},
+              {"from": "PO1.02", "to": "quantity", "transform": "int"},
+              {"from": "N1.02", "to": "supplier_name"}]),
+            ("Stock level to Boomi", "outbound", "JSON", "inventory.Item",
+             [{"from": "sku", "to": "item_code"},
+              {"from": "on_hand", "to": "quantity_available", "transform": "int"}]),
+        ]
+        for name, direction, source_format, target, rows in mappings:
+            MappingTemplate.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"direction": direction, "source_format": source_format,
+                          "target_label": target, "mappings": rows,
+                          "notes": "Seeded demo mapping. Nothing applies it — a module reads it."},
+            )
+
+        schedules = [
+            ("Nightly stock sync", "inbound", "api", "daily", "inventory.Item",
+             "Stock level to Boomi", "Inventory channel"),
+            ("Hourly order export", "outbound", "sftp", "hourly", "scm.PurchaseOrder",
+             None, "SCM integration endpoint"),
+            ("Manual EDI import", "inbound", "edi", "manual", "scm.PurchaseOrder",
+             "X12 850 to purchase order", "SCM integration endpoint"),
+        ]
+        for name, direction, transport, frequency, entity, tmpl_name, conn_name in schedules:
+            template = MappingTemplate.objects.filter(tenant=tenant, name=tmpl_name).first() if tmpl_name else None
+            connector = ConnectorDefinition.objects.filter(tenant=tenant, name=conn_name).first() if conn_name else None
+            SyncSchedule.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"direction": direction, "transport": transport, "frequency": frequency,
+                          "entity_label": entity, "mapping_template": template,
+                          "connector": connector,
+                          "notes": "Seeded demo schedule. Nothing runs it — the repo has no "
+                                   "scheduler."},
             )
