@@ -7,7 +7,66 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 
-# Build Plan — Projects 7.17 Workflow & Automation
+# Build Plan — Module 0 0.15 Localization & Regional Settings
+
+Source of truth: `.claude/tasks/research-core-0.15.md`.
+BASE = `35cde520`. Next migration: `core.0012`.
+App: `core` (foundation app — entity files sit **FLAT at the package root**, `urls.py` is a **flat file**).
+Template folder: `templates/core/<entity>/`. Test subslug: `localization`.
+
+## Ownership call (L36) — what 0.15 deliberately does NOT build
+
+| bullet | already owned by | 0.15's role |
+|---|---|---|
+| Multi-Currency & Exchange Rates | `accounting.Currency` (global ISO master), `accounting.ExchangeRate` (tenant, daily, manual/feed) | **points at** them; adds only the tenant's *base* currency on `LocaleProfile` and a computed FX-recency board. |
+| Tax & Statutory Configuration | `accounting.TaxCode` (tenant, `jurisdiction` + `tax_type` + `rate_pct` + payable GL) | **points at** it; adds only the absent half — e-invoicing mode + statutory-report registry. |
+| scheduled rate updates | `core.SyncSchedule` (0.13, "a recorded sync intention — nothing runs it") | **reuses** it; no second schedule table. |
+| Time Zone (business calendar) | `core.BusinessCalendar.timezone_name` (0.10, free-text IANA) | untouched — the *working-day* zone is a different zone from the tenant's *display* zone. |
+| generic settings | `core.SettingDefinition` / `SettingValue` (0.10) | untouched — a language is a row with an RTL flag, not a string. |
+
+## Models — 5, each in `apps/core/models/Localization.py` (one file per sub-module, the core convention)
+
+- [ ] `Language` — **GLOBAL** (no `tenant` FK, precedent `accounting.Currency`): `code` (CharField 8, unique, ISO 639-1), `name` (CharField 60), `native_name` (CharField 60, blank), `is_rtl` (BooleanField, default=False), `is_default` (BooleanField, default=False), `is_active` (BooleanField, default=True). Bullet 1. Registers *which* languages are offered + RTL; the strings themselves are Django `gettext`/`.po`, never a table.
+- [ ] `TimeZone` — **GLOBAL**: `name` (CharField 64, unique, IANA e.g. `Europe/London`), `label` (CharField 100), `utc_offset_minutes` (IntegerField, default=0), `observes_dst` (BooleanField, default=False), `is_active` (BooleanField, default=True). Bullet 5. Conversion uses stdlib `zoneinfo`; the stored offset is display-only.
+- [ ] `LocaleProfile` — **tenant**, `OneToOneField("core.Tenant", related_name="locale_profile")`: `language` (FK `core.Language`, SET_NULL, null), `base_currency` (FK `accounting.Currency`, SET_NULL, null), `time_zone` (FK `core.TimeZone`, SET_NULL, null), `date_format` (CharField 40, default `dd/MM/yyyy`), `time_format` (CharField 40, default `HH:mm`), `number_format` (CharField 40, default `#,##0.00`), `address_format` (TextField, blank), `first_day_of_week` (PositiveSmallIntegerField, default=1, 1–7), `notes` (TextField, blank), `updated_at`. Bullets 2, 3, 5. Singleton → **edit page, not CRUD** (same shape as 0.10's `BusinessCalendar`).
+- [ ] `UserLocalePreference` — **user**, `OneToOneField(AUTH_USER_MODEL, related_name="locale_preference")` + `tenant` FK: `language` (FK, SET_NULL, null), `time_zone` (FK, SET_NULL, null), `date_format` (CharField 40, blank = inherit tenant), `updated_at`. Bullet 5's per-user half. Singleton → one "My Regional Settings" edit page (mirrors 0.12's `my_preferences`).
+- [ ] `StatutoryRule` — **tenant**: `name` (CharField 150), `jurisdiction` (CharField 120, blank — free text, like `core.Holiday.region`), `tax_code` (FK `accounting.TaxCode`, SET_NULL, null, blank), `e_invoicing_required` (BooleanField, default=False), `e_invoicing_scheme` (CharField 40, blank, choices: `none`, `peppol`, `sdi`, `cfdi`, `gst_irn`, `other`), `statutory_report` (CharField 150, blank), `effective_from` (DateField), `effective_to` (DateField, null, blank), `is_active` (BooleanField, default=True), `notes` (TextField, blank). Bullet 4's absent half.
+
+## Backend layers (`apps/core/{models,forms,views}/Localization.py` + flat `apps/core/urls.py`)
+
+- [ ] Forms: `LanguageForm`, `TimeZoneForm` (platform-admin only — see below), `LocaleProfileForm`, `UserLocalePreferenceForm`, `StatutoryRuleForm`. Exclude `tenant`, `updated_at`, and `is_default` on `Language`.
+- [ ] Views — function-based, tenant-scoped, `@tenant_admin_required` on writes, audit-logged via `write_audit_log`:
+  - `language_list` (GLOBAL read-only), `timezone_list` (GLOBAL read-only) — `@login_required`, **no tenant filter** (the models have no tenant FK) and **no create/edit/delete** (a write would need a platform-admin gate this repo does not have).
+  - `locale_profile_edit` — get-or-create the tenant's singleton, then save. Redirects to `dashboard:home` when `request.tenant is None`.
+  - `user_locale_edit` — get-or-create the actor's singleton ("My Regional Settings").
+  - `statutory_rule_list` / `_create` / `_detail` / `_edit` / `_delete` — full CRUD via the `crud_*` helpers.
+  - `localization_overview` — COMPUTED hub, no table.
+  - `localization_board` — COMPUTED monitoring: FX rate recency per currency (reads the REAL `accounting.ExchangeRate`), DST zone counts, statutory coverage, unconfigured-locale count.
+- [ ] URLs (flat `apps/core/urls.py`, literals before `<int:pk>`):
+  `localization/`, `localization/board/`, `localization/languages/`, `localization/time-zones/`, `localization/profile/`, `localization/my-settings/`, `localization/statutory/`, `localization/statutory/add/`, `localization/statutory/<int:pk>/`, `localization/statutory/<int:pk>/edit/`, `localization/statutory/<int:pk>/delete/`.
+
+## Templates (`templates/core/`)
+
+- [ ] `language/list.html`, `timezone/list.html` — reference lists, `.table-wrap` + `.empty-state`, no Actions column (read-only).
+- [ ] `localeprofile/form.html`, `userlocale/form.html` — singleton edit forms.
+- [ ] `statutoryrule/list.html` (+ search/filters/pagination/Actions), `statutoryrule/form.html`, `statutoryrule/detail.html`.
+- [ ] `localizationboard.html`, `localizationoverview.html` — computed pages.
+
+## Shared files & Integration
+
+- [ ] Re-export blocks in `apps/core/{models,forms,views}/__init__.py` (models before views; views import from `apps.core.models`).
+- [ ] Admin registration in `apps/core/admin.py` for all 5 models.
+- [ ] Extend `apps/core/management/commands/seed_core.py`: `_seed_localization_globals()` (Language + TimeZone — global, guarded by `.exists()`, **not** per tenant) called ONCE outside the tenant loop, and `_seed_localization(tenant)` with a **per-entity guard** (never a tenant-wide one).
+- [ ] `LIVE_LINKS["0.15"]` in `apps/core/navigation.py` mapping the EXACT NavERP.md bullet names:
+  `Multi-Language & Translation` → `core:language_list`; `Multi-Currency & Exchange Rates` → `core:localization_board`; `Regional Formats` → `core:locale_profile_edit`; `Tax & Statutory Configuration` → `core:statutory_rule_list`; `Time Zone Management` → `core:timezone_list`; plus `Localization Overview` → `core:localization_overview` and `My Regional Settings` → `core:user_locale_edit`.
+- [ ] `makemigrations core` → `0012_...`; `migrate`; `seed_core` ×2 (idempotency); `manage.py check`.
+
+## Verification gate
+- [ ] `venv\Scripts\python.exe temp\audit_integrity.py` — all 6 checks (a new sub-module must not disturb check 3/4/5).
+
+---
+
+
 
 Source of truth: `.claude/tasks/research-projects-7.17.md`.
 BASE = `d99ec7e2`. Next migration: `0024`.
