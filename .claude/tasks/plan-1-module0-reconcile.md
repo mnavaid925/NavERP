@@ -586,3 +586,65 @@ MySQL was down at session start (no service registered; `mysqld` needed a manual
 crash recovery from a checkpoint). Started with `MSYS_NO_PATHCONV=1 mysqld.exe
 --defaults-file="C:\xampp\mysql\bin\my.ini"` — without `MSYS_NO_PATHCONV` Git Bash mangles the path to
 `\c\xampp\...` and mysqld aborts on "Could not open required defaults file".
+
+---
+
+## 0.12 Notification & Communication Management — CLOSED OUT 2026-09-21
+
+**Verdict: 0 of 5 bullets mapped — and, like 0.11, the decisive finding was that every module has
+already partly built this.** An inventory found per-module email templates (`crm.EmailTemplate`,
+`hrm.OfferLetterTemplate`), per-module webhook subscriptions AND delivery rows (`crm`, `scm`,
+`projects`), a per-module notification (`projects.ProjectNotification`) and per-module delivery
+records (`inventory.NotificationDelivery`). Each is the right home for ITS module's messages, so 0.12
+owns the PLATFORM layer nobody owns.
+
+| bullet | what ships |
+|---|---|
+| 1 Multi-Channel Delivery | `NotificationChannel` — the channel registry (email/SMS/push/in-app/chat), off by default |
+| 2 Template & Branding Management | `NotificationTemplate` — shared, localisable (locale is part of the key) |
+| 3 Notification Rules & Subscriptions | `NotificationRule` (event → channel → audience) + `NotificationPreference` + a **self-service** page |
+| 4 Provider & Gateway Configuration | `ProviderConfig` with a failover order and an env-var credential reference |
+| 5 Delivery Tracking & Logs | a COMPUTED board over the **real** delivery tables of other apps |
+
+### The probing finding that shaped the board
+
+`procurement.DeliverySchedule` **is not a message delivery.** Its name matches a naive scan, and it
+would have counted physical goods shipments (`planned/confirmed/shipped/received/cancelled`) as
+notifications. It is listed with the reason instead, alongside two notification/chat models that carry
+no delivery state to track.
+
+And **`simulated` is a distinct bucket, not a success.** `crm`, `scm` and `projects` webhook deliveries
+all carry it, and it means the delivery was a DRY RUN — nothing left the building. Folding it into
+"sent" would let a workspace that has never actually sent anything report a 100% success rate, which is
+the most dangerous number this board could show. The reported rate excludes them; the count sits beside
+it. Real data: 2 sent, 11 pending, 1 failed, **2 simulated**, honest rate 66.7%.
+
+### The bug the probe caught (the important one)
+
+**The self-service preference page could only ever opt IN.** An unchecked checkbox is not submitted at
+all, so the view's `field not in request.POST -> skip` meant unticking a box created no row and the
+rule's default silently kept applying — the page *appeared* to work while doing nothing in the one
+direction a preference exists for. Fixed by emitting a hidden `off` before each checkbox, so an
+unchecked box submits `off` and a ticked one submits `on` after it (`.get()` returns the last value).
+
+Also caught: `{"%s__in": ...}` as a dict key is **not** a format string — the lookup was literally on a
+field named `%s`. And a flat context list fed to a `{% for a, b in ... %}` filter.
+
+### What is deliberately NOT done, and stated on the pages
+
+**Nothing sends.** There is no outbound worker, queue or scheduler, so a rule routes and a provider
+records where a message *would* go. No per-tenant **branding layer** for messages — the body is the
+whole message and no logo or footer is injected from `tenants.BrandingSetting`. No automatic
+translation (locale is a stored column, not recipient negotiation). No digest scheduler. No open/click
+tracking and no retry. Templates render with autoescaping ON against a plain dict of primitives.
+
+### Verification
+
+`temp/smoke_12.py` — **73 checks, 0 failures**, re-entrant. `apps/core apps/accounts apps/tenants
+apps/crm` — **2455 passed, 0 failed**. Migration `core.0010`.
+
+### Environment note
+
+The repo has a **`post-commit` git hook** that prints `git status` and exits non-zero. It does not
+block a commit, but it **breaks any `&&` chain** after a `git commit` — the chain stops at the first
+commit even though the commit succeeded. Use `;` between commit steps, or one commit per call.
