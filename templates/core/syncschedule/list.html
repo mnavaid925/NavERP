@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Sync Schedules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sync Schedules</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Sync Schedules</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:mapping_list' %}" class="btn btn-outline"><i data-lucide="shuffle"></i> Mappings</a>
+      <a href="{% url 'core:sync_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New schedule</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Recorded sync intentions: direction, transport and frequency. <strong>Nothing runs them</strong> — the repo has no scheduler, so a frequency here is what should happen, not what does. The integration health board is where actual traffic is visible.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="direction" class="form-select">
+          <option value="">Any direction</option>
+          {% for val, label in direction_choices %}
+            <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="transport" class="form-select">
+          <option value="">Any transport</option>
+          {% for val, label in transport_choices %}
+            <option value="{{ val }}" {% if request.GET.transport == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="frequency" class="form-select">
+          <option value="">Any frequency</option>
+          {% for val, label in frequency_choices %}
+            <option value="{{ val }}" {% if request.GET.frequency == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:sync_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Schedule</th><th>Direction</th><th>Transport</th><th>Frequency</th><th>Entity</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.name }}</td>
+            <td>{{ obj.get_direction_display }}</td>
+            <td>{{ obj.get_transport_display }}</td>
+            <td>{{ obj.get_frequency_display }}</td>
+            <td>{% if obj.entity_label %}<code>{{ obj.entity_label }}</code>{% else %}&mdash;{% endif %}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:sync_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:sync_delete' obj.pk %}" onsubmit="return confirm('Delete this schedule?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>No sync schedules</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
