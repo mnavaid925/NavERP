@@ -69,6 +69,23 @@ LIVE_LINKS = {
     "0.3": {
         "Roles & Role Hierarchies": "accounts:role_list",   # bullet
     },
+    # 0.13 Integration & API Management. Per-module integration machinery already exists across five
+    # apps (scm's IntegrationApiGateway, crm/projects webhooks, accounting.IntegrationConfig,
+    # inventory.IntegrationChannel), so 0.13 owns what NONE of them had: API-credential issuance and
+    # rate-limit policy, the connector catalogue, the platform mapping/sync registry, and the health
+    # board. NOTE bullet 2: the webhook SUBSCRIPTIONS live in scm/crm/projects, so its leaf points at
+    # the platform schedule registry (which records webhook-transport syncs) rather than aliasing
+    # bullet 5's board.
+    "0.13": {
+        "API Gateway & Keys": "core:credential_list",               # bullet
+        "Webhooks & Event Bus": "core:sync_list",                   # bullet
+        "Connector Marketplace": "core:connector_list",             # bullet
+        "Inbound/Outbound Data Exchange": "core:mapping_list",      # bullet
+        "Integration Monitoring": "core:integration_board",         # bullet
+        # Extra live leaves: the hub, the rate-limit register, and the connector health board.
+        "Integration Overview": "core:integration_overview",        # extra
+        "Rate Limit Policies": "core:rate_limit_list",              # extra
+    },
     # 0.12 Notification & Communication Management. Every module has already partly built this
     # (crm.EmailTemplate, hrm.OfferLetterTemplate, crm/scm/projects webhook deliveries,
     # inventory.NotificationDelivery), so 0.12 owns the PLATFORM layer nobody owns: the channel
