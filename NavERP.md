@@ -58,14 +58,14 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 
 | # | Module | Django app(s) | Status |
 |---|--------|---------------|--------|
-| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 7 of 21 built — 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.14 |
+| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 14 of 21 built — 0.1–0.14 (7 remain: 0.15–0.21) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built |
 | 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1–3.41 built — all 41 sub-modules |
 | 4 | Supply Chain Management (SCM) | `scm` | ✅ 4.1–4.19 built — all 19 sub-modules |
 | 5 | Inventory Management System (IMS) | `inventory` | ✅ 5.1–5.20 built — all 20 sub-modules |
 | 6 | Procurement Management System | `procurement` | ✅ 6.1–6.19 built — all 19 sub-modules |
-| 7 | Project Management | `projects` | 🟦 7.1–7.15 built — 15 of 19 sub-modules |
+| 7 | Project Management | `projects` | 🟦 7.1–7.17 built — 17 of 19 sub-modules |
 | 8 | Sales Management System | `sales` | ⬜ Roadmap |
 | 9 | eCommerce Management System | `ecommerce` | ⬜ Roadmap |
 | 10 | Business Intelligence (BI) | `bi` | ⬜ Roadmap (read-only over the spine) |
@@ -96,12 +96,20 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 > **Implementation status (this repo).** Module 0 is realized by four Django apps — `core` (tenant spine,
 > middleware, navigation, audit, shared CRUD), `accounts` (users, RBAC, auth, invites), `tenants` (sub-module
 > **0.1**), and `dashboard` (KPIs). Sub-module **0.1 Tenant & Subscription Management is fully built**
-> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). **7 of the 21
-> sub-modules have a `LIVE_LINKS` entry: 0.1, 0.2, 0.3, 0.5, 0.7, 0.9 and 0.14.** Note that those seven
-> surface only part of their own bullet lists below — 0.2 maps 2 of 5 bullets, 0.5 maps 2 of 5, and 0.3 /
-> 0.7 / 0.9 / 0.14 each map just 1 of 5 — so an unmapped bullet is either realized in code without a
-> sidebar leaf or genuinely absent, and has not yet been reconciled either way. The remaining 14 sub-modules
-> (0.4, 0.6, 0.8, 0.10–0.13, 0.15–0.21) are unbuilt; see
+> (subscriptions + Stripe billing, branding, encryption keys, health monitoring, onboarding). **14 of the 21
+> sub-modules have a `LIVE_LINKS` entry: 0.1–0.14.** Nine of them — 0.1, 0.2, 0.4, 0.6, 0.8, 0.10, 0.11,
+> 0.12 and 0.13 — were reconciled and closed out on 2026-09-19/21, which added the missing models and
+> surfaces and recorded what is deliberately *not* built on the pages themselves.
+>
+> The remaining **7** sub-modules (0.15–0.21) are unbuilt. Several of the live ones still surface only part
+> of their own bullet lists — **0.3 maps 1 of 5, 0.4 maps 4 of 5, 0.5 maps 2 of 5, 0.7 maps 1 of 5, 0.9
+> maps 1 of 5 and 0.14 maps 1 of 5** — and the reconcile has classified every one of those gaps, so each is
+> a known build rather than an unknown. Two of those counts need a caveat: **0.4's single gap is
+> `SSO & Federation`, deliberately left unmapped** because SAML/OIDC need an IdP library and a configured
+> provider, so the bullet renders as the roadmap pill it actually is; and **0.9's `User Activity Tracking`
+> is realized and surfaced** as the `Activities` register, so it is a label mismatch rather than a gap.
+> The per-bullet verdicts are in
+> `.claude/tasks/plan-1-module0-reconcile.md`; see
 > [`README.md`](README.md) for the as-built feature list and routes, and
 > [`NavERP-ERD.md`](NavERP-ERD.md#as-built-foundation-schema-module-0--01) for the concrete schema.
 
