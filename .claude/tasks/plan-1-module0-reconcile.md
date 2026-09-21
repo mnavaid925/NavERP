@@ -513,3 +513,76 @@ so a typo returns the caller's default rather than inventing a value. Numbering 
 allocates. Fiscal periods and period-close live in accounting. Custom-field values are keyed without a
 foreign key (a deleted parent leaves an orphan) and **no module renders them yet** — a module must opt
 in, the same shape 0.6's data scoping uses.
+
+---
+
+## 0.11 Workflow & Approval Administration — CLOSED OUT 2026-09-21
+
+**Verdict: 0 of 5 bullets mapped — and the decisive finding was that 0.11 must NOT build an engine.**
+An inventory found **~71 approval/workflow/escalation models already in the repo** across six apps
+(`procurement.ApprovalRoutingRule`, `procurement.EscalationPolicy`, `crm.WorkflowRule`,
+`inventory.TransferApproval`, `hrm.OfferApproval`, `projects.ProjectApprovalGate`, …). Every one
+decides its own routing and writes its own decision rows. A platform engine would be the L36 mistake
+at the largest possible scale, so 0.11 owns the three things nobody owns instead.
+
+| bullet | what ships |
+|---|---|
+| 1 Visual Workflow Designer | `WorkflowDefinition` + `WorkflowStep` — the REGISTRY: which processes exist, which engine backs each, what routing it is *supposed* to follow |
+| 2 Approval Hierarchies & Limits | `WorkflowStep` (tiers + thresholds, documented) + `ApprovalLimit` (platform thresholds per role) |
+| 3 Escalation & SLA Rules | `SlaRule` — the generic one the non-procurement modules never had |
+| 4 Business Rules Engine | `BusinessRule` + `BusinessRuleLog` + a real evaluator and a test-run page |
+| 5 Process Monitoring | a COMPUTED board reading the **real** approval tables of other apps |
+
+### The probing finding that shaped the monitoring board
+
+`approval_backlog()` reads eight declared approval sources. Introspecting their choices showed that
+**only five are in-flight queues** — the other three (`inventory.PurchaseOrderApproval`,
+`inventory.TransferApproval`, `procurement.RequisitionApproval`) record only
+`decision = approved|rejected` with **no waiting state at all**. Every row in those is already
+decided; the in-flight state lives on the PARENT record. Reporting them as a backlog would have been
+a fabricated queue, so they are reported as decided-volume with the reason. Four further models
+(execution logs, SLA definitions) are listed with why they are not queues, so the board accounts for
+all twelve rather than silently dropping half.
+
+Real data on the board: **6 open items across 5 queues, 4 breached at 48h**, oldest 2225h.
+
+### What is deliberately NOT done, and why
+
+- **No workflow engine, and no drag-and-drop canvas.** Steps are an ordered register, not a designer.
+- **`WorkflowStep` is not enforced.** A step claiming to control routing would be a second source of
+  truth against the engine that actually decides.
+- **Nothing executes.** `evaluate_rules()` returns matches in priority order and performs no action;
+  the caller acts and reports back via `BusinessRuleLog.action_taken`. There is no cross-module action
+  executor, because one would mean reaching into 71 other engines and mutating their rows.
+- **No escalation fires and nothing auto-approves.** The repo has no scheduler, so an auto-approve SLA
+  rule would be a promise nothing keeps. The board is where an overdue item becomes visible.
+- **Bottleneck analysis is counts and oldest-item age only** — no per-approver timing, cycle-time
+  trend or throughput history, because the approval tables do not carry the decision timestamps.
+
+### Two design details that carry weight
+
+- **`engine_label` is a validated string, not a ContentType FK.** `WorkflowDefinitionForm` refuses a
+  label naming no model — the registry only has value if it can be checked against something, and a
+  typo would silently make a process unmonitorable. The monitor then flags any active definition whose
+  engine is not a queue it reads.
+- **`BusinessRuleLog.rule` is `SET_NULL`, not `CASCADE`.** The log is the evidence that a rule fired;
+  retiring a rule must not erase the record of what it did. Verified: deleting a rule leaves its logs
+  with `rule_id IS NULL`.
+
+### Verification
+
+`temp/smoke_11.py` — **80 checks, 0 failures**, re-entrant. `apps/core apps/accounts apps/tenants
+apps/crm` — **2455 passed, 0 failed**. Migration `core.0009`.
+
+### Trap caught by the probe
+
+`annotate()` with an aggregate leaves the queryset **unordered for pagination**, raising
+`UnorderedObjectListWarning` and able to yield inconsistent pages — `Meta.ordering` alone is not
+enough. Both annotated lists now carry an explicit `order_by`.
+
+### Environment note
+
+MySQL was down at session start (no service registered; `mysqld` needed a manual start and performed
+crash recovery from a checkpoint). Started with `MSYS_NO_PATHCONV=1 mysqld.exe
+--defaults-file="C:\xampp\mysql\bin\my.ini"` — without `MSYS_NO_PATHCONV` Git Bash mangles the path to
+`\c\xampp\...` and mysqld aborts on "Could not open required defaults file".
