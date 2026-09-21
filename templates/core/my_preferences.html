@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}My Notification Preferences{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Notification Preferences</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>My Notification Preferences</span></div>
+    </div>
+    <div class="page-actions">
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Which events reach you, per channel. Only events this workspace actually routes are listed — a preference for an event nothing sends would be a control that does nothing.</p>
+    {% if not events %}
+      <div class="empty-state"><i data-lucide="bell-off"></i><h3>No events are routed yet</h3><p>An administrator must configure a notification rule first.</p></div>
+    {% else %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Event</th>{% for c in channels %}<th>{{ c.get_kind_display }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for row in grid %}
+                <tr>
+                  <td class="fw-600"><code>{{ row.event }}</code></td>
+                  {% for cell in row.cells %}
+                    <td>
+                      <label class="form-check">
+                        {# The hidden input is REQUIRED: an unchecked checkbox is not submitted at
+                           all, so without it unchecking a box would create no row and the rule
+                           default would silently keep applying. With it, an unchecked box submits
+                           "off" and the checkbox (when ticked) submits "on" after it. #}
+                        <input type="hidden" name="{{ cell.field }}" value="off">
+                        <input type="checkbox" name="{{ cell.field }}" value="on" {% if cell.checked %}checked{% endif %}>
+                        {% if cell.explicit %}<span class="badge badge-info">set</span>{% else %}<span class="badge badge-slate">default</span>{% endif %}
+                      </label>
+                    </td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save preferences</button>
+        </div>
+      </form>
+      <p class="text-muted">A row marked <strong>default</strong> means you have never expressed a preference for it and the rule applies. Unticking one creates an explicit opt-out.</p>
+    {% endif %}
+  </div></div>
+{% endblock %}
