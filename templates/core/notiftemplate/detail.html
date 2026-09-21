@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:template_preview' obj.pk %}" class="btn btn-outline"><i data-lucide="play"></i> Preview</a>
+      <a href="{% url 'core:template_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Code</dt><dd><code>{{ obj.code }}</code></dd></div>
+      <div class="detail-item"><dt>Channel</dt><dd>{{ obj.get_channel_kind_display }}</dd></div>
+      <div class="detail-item"><dt>Locale</dt><dd>{{ obj.locale|default:"default" }}</dd></div>
+      <div class="detail-item"><dt>Module</dt><dd>{{ obj.module_slug|default:"&mdash;" }}</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+    {% if obj.subject %}<div class="detail-item" style="margin-top:1rem;"><dt>Subject</dt><dd>{{ obj.subject }}</dd></div>{% endif %}
+    <div class="detail-item" style="margin-top:1rem;"><dt>Body</dt><dd><pre class="text-muted">{{ obj.body }}</pre></dd></div>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Not built for this bullet</h2></div>
+    <div class="card-body">
+      <p class="text-muted">There is no per-tenant <strong>visual branding layer</strong> for messages: the template body is the whole message, and no logo, colour or footer is injected from
+        <code>tenants.BrandingSetting</code>. Localisation is a stored locale column and a manual per-locale row, <strong>not</strong> automatic translation or locale negotiation from the recipient.
+        Declared here rather than implied by a locale field existing.</p>
+    </div>
+  </div>
+
+  <a href="{% url 'core:template_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
