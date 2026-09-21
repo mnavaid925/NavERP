@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}API Credentials{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">API Credentials</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>API Credentials</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:rate_limit_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Rate limits</a>
+      <a href="{% url 'core:credential_issue' %}" class="btn btn-primary"><i data-lucide="plus"></i> Issue credential</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Issued API credentials. <strong>Only a prefix and a SHA-256 hash are stored</strong> — the plaintext is shown once at issue and never again, because a credential only ever answers &ldquo;is this the same key?&rdquo;. Revoking KEEPS the row so the prefix, scopes and last-used stamp stay available for an investigation.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="kind" class="form-select">
+          <option value="">Any kind</option>
+          {% for val, label in kind_choices %}
+            <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for val, label in active_choices %}
+            <option value="{{ val }}" {% if request.GET.active == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:credential_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Label</th><th>Kind</th><th>Prefix</th><th>Scopes</th><th>State</th><th>Last used</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.label }}</td>
+            <td>{{ obj.get_kind_display }}</td>
+            <td><code>{{ obj.prefix }}…</code></td>
+            <td><span class="text-muted">{{ obj.scopes|default:"&mdash;"|truncatechars:40 }}</span></td>
+            <td>
+              {% if not obj.is_active %}<span class="badge badge-slate">Revoked</span>
+              {% elif obj.is_expired %}<span class="badge badge-red">Expired</span>
+              {% else %}<span class="badge badge-green">Active</span>{% endif %}
+            </td>
+            <td>{% if obj.last_used_at %}{{ obj.last_used_at|date:"M d, H:i" }}{% else %}<span class="text-muted">never</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:credential_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                {% if obj.is_active %}
+                  <form method="post" action="{% url 'core:credential_revoke' obj.pk %}" onsubmit="return confirm('Revoke this credential? The row is kept for the audit trail.');">
+                    {% csrf_token %}
+                    <button class="btn-icon danger" type="submit" title="Revoke"><i data-lucide="ban"></i></button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>No credentials issued</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
