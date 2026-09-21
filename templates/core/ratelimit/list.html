@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Rate Limit Policies{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Rate Limit Policies</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>Rate Limit Policies</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:credential_list' %}" class="btn btn-outline"><i data-lucide="key"></i> Credentials</a>
+      <a href="{% url 'core:rate_limit_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New policy</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Recorded request limits. A policy scoped to one credential beats a workspace-wide one. <strong>Nothing enforces these</strong> — there is no gateway process, so a view that wants limiting applies <code>within_rate_limit()</code> itself. Stated rather than implied.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search…">
+      </div>
+      <div class="form-group">
+        <select name="window" class="form-select">
+          <option value="">Any window</option>
+          {% for val, label in window_choices %}
+            <option value="{{ val }}" {% if request.GET.window == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="active" class="form-select">
+          <option value="">Any state</option>
+          {% for val, label in active_choices %}
+            <option value="{{ val }}" {% if request.GET.active == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:rate_limit_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Policy</th><th>Applies to</th><th>Limit</th><th>Window</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600">{{ obj.name }}</td>
+            <td>{% if obj.credential %}<code>{{ obj.credential.prefix }}…</code>{% else %}<span class="badge badge-slate">whole workspace</span>{% endif %}</td>
+            <td>{{ obj.max_requests }}</td>
+            <td>{{ obj.get_window_display }}</td>
+            <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:rate_limit_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:rate_limit_delete' obj.pk %}" onsubmit="return confirm('Delete this policy?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><h3>No rate limit policies</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
