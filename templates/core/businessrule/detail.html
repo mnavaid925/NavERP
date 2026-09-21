@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:business_rule_test' obj.pk %}" class="btn btn-outline"><i data-lucide="play"></i> Test run</a>
+      <a href="{% url 'core:business_rule_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Module</dt><dd>{{ obj.module_slug }}</dd></div>
+      <div class="detail-item"><dt>Trigger</dt><dd>{{ obj.get_trigger_display }}</dd></div>
+      <div class="detail-item"><dt>Action</dt><dd>{{ obj.get_action_display }}</dd></div>
+      <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }} (lower fires first)</dd></div>
+      <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}Yes{% else %}No{% endif %}</dd></div>
+      <div class="detail-item"><dt>Times evaluated</dt><dd>{{ log_count }}</dd></div>
+    </dl>
+    <div class="detail-item" style="margin-top:1rem;"><dt>Condition</dt><dd><pre class="text-muted">{{ obj.condition }}</pre></dd></div>
+    <div class="detail-item" style="margin-top:1rem;"><dt>Action payload</dt><dd><pre class="text-muted">{{ obj.action_payload }}</pre></dd></div>
+    <p class="text-muted">Evaluating this rule returns a recommendation. <strong>Nothing here performs the action</strong> — the calling module does, and reports back through the evaluation log.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent evaluations</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Trigger</th><th>Result</th><th>Context</th><th>Action taken</th></tr></thead>
+        <tbody>
+          {% for l in logs %}
+            <tr>
+              <td class="fw-600">{{ l.evaluated_at|date:"M d, H:i" }}</td>
+              <td>{{ l.trigger }}</td>
+              <td>{% if l.matched %}<span class="badge badge-green">Matched</span>{% else %}<span class="badge badge-slate">No match</span>{% endif %}</td>
+              <td><code>{{ l.context }}</code></td>
+              <td>{{ l.action_taken|default:"&mdash;" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="scroll-text"></i><h3>Never evaluated</h3><p>Use Test run to evaluate it against a context.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'core:business_rule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
