@@ -35,7 +35,7 @@ All FK strings below are **verified to exist and to be re-exported by their pack
 
 ---
 
-## 2. Models — 6, in `apps/core/models/Backup.py` and `apps/core/models/Compliance.py`
+## 2. Models — 6, in `apps/core/models/Backup.py` (5) and `apps/core/models/LegalHold.py` (1)
 
 ### 2.1 `BackupJob` → `apps/core/models/Backup.py`
 Register of a backup a human reports as taken. Bullet 1.
@@ -154,9 +154,18 @@ The **catalogue entry that makes a restore possible** — the loop 0.8 left open
 `age_days`.
 **Property:** `tier_display_long` — `"Cold / asynchronous retrieval"` when async, else the `get_storage_tier_display()`.
 
-### 2.4 `LegalHold` → `apps/core/models/Compliance.py`
+### 2.4 `LegalHold` → `apps/core/models/LegalHold.py`
 The event that **suspends** a schedule. Bullet 4. **Not a field on `RetentionPolicy`** — proven in the
 research (Zubulake; S3 Object Lock: a hold has no expiry and outlives the retention period).
+
+> **CONTRACT CORRECTION (found while building).** The frozen draft named this file
+> `apps/core/models/Compliance.py` and called it "the existing 0.8 compliance home".
+> **That file does not exist** — verified with `ls apps/core/models/ | grep -i complian`, which returned
+> nothing. 0.8's compliance models live in `Retention.py` (retention/disposal) and `Privacy.py`
+> (PII classification, regulatory frameworks). This is exactly the class of claim the research agent was
+> told to verify and did not. Corrected here to a **new** file, `LegalHold.py`, named after the entity —
+> which is also the house convention (`Localization.py`, `Retention.py`, `Notification.py`: one file per
+> sub-module named for what it holds). No code was written against the wrong path.
 
 | field | exact type / choices |
 |---|---|
@@ -287,7 +296,7 @@ never prints `0` for "cannot tell".
 
 ---
 
-## 3. Forms — `apps/core/forms/Backup.py` + `apps/core/forms/Compliance.py`
+## 3. Forms — `apps/core/forms/Backup.py` + `apps/core/forms/LegalHold.py`
 
 All subclass `TenantModelForm` (so `tenant` scoping of FK querysets is automatic). **`tenant` is never in
 `Meta.fields`** — that is also exactly why a `unique_together` including `tenant` would never validate
