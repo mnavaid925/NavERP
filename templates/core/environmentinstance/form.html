@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Environment{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit environment{% else %}Record an environment{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:environment_instance_list' %}">Environments</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This records an environment; it does not
+      provision one.</strong> Setting the status to <em>Active</em> says a person believes it is up — and a
+      record of a sandbox that does not exist is the mirror image of the fake-delete this codebase already
+      refuses.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>The subset rule is declared, not run.</strong> Write
+      down which data, how much, and from where — nothing here can select rows.</p>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'core:environment_instance_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="shield-alert"></i> <strong>Copying production PII downward is the
+      classic compliance failure.</strong> If the copy scope carries no data it cannot include PII; if it does
+      include PII, mark masking as required. NavERP records the obligation — it does not mask.</p>
+    <p class="text-muted"><i data-lucide="info"></i> An environment cannot be derived from itself, and cannot
+      expire before it was created.</p>
+  </div></div>
+{% endblock %}
