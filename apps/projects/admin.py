@@ -79,6 +79,10 @@ from .models import (
     ProjectReportRun,
     ProjectDashboard,
     DashboardWidget,
+    ProjectIntegrationConnector,
+    ConnectorFieldMapping,
+    ProjectSyncJob,
+    ProjectSyncRun,
 )
 
 
@@ -909,6 +913,53 @@ class ProjectWebhookDeliveryAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "webhook")
     search_fields = ("webhook__name", "webhook__number", "event", "response_body")
     readonly_fields = ("webhook", "event", "payload", "signature", "status", "status_code", "response_body", "duration_ms", "attempted_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+# --- 7.18 Integration & API Hub -----------------------------------------------------------------
+
+@admin.register(ProjectIntegrationConnector)
+class ProjectIntegrationConnectorAdmin(admin.ModelAdmin):
+    # NOTE: `credential` is deliberately absent from every rendering list — it is a Fernet
+    # ciphertext and must never be displayed in the admin.
+    list_display = ("number", "name", "project", "domain", "provider", "direction", "status", "is_active", "environment", "last_sync_at", "tenant")
+    list_filter = ("domain", "status", "environment", "is_active")
+    list_select_related = ("tenant", "project", "owner", "notify_webhook")
+    search_fields = ("number", "name", "remote_scope_ref", "base_url", "notes")
+    readonly_fields = ("number", "credential", "last_sync_at", "last_success_at", "consecutive_failures", "created_at", "updated_at")
+
+
+@admin.register(ConnectorFieldMapping)
+class ConnectorFieldMappingAdmin(admin.ModelAdmin):
+    list_display = ("id", "connector", "local_field", "remote_field", "direction", "transform", "is_key", "is_required", "tenant")
+    list_filter = ("direction", "transform", "is_key", "is_required")
+    list_select_related = ("tenant", "connector")
+    search_fields = ("local_field", "remote_field", "connector__number", "connector__name")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ProjectSyncJob)
+class ProjectSyncJobAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "connector", "entity_scope", "direction", "trigger_mode", "conflict_policy", "is_active", "run_count", "last_run_at", "tenant")
+    list_filter = ("entity_scope", "trigger_mode", "conflict_policy", "is_active")
+    list_select_related = ("tenant", "connector")
+    search_fields = ("number", "name", "filter_expression")
+    readonly_fields = ("number", "last_run_at", "next_run_at", "run_count", "last_status", "created_at", "updated_at")
+
+
+@admin.register(ProjectSyncRun)
+class ProjectSyncRunAdmin(admin.ModelAdmin):
+    # Append-only: runs are recorded by ProjectSyncRun.record(); the admin neither adds nor deletes.
+    list_display = ("number", "job", "direction", "status", "trigger_source", "records_read", "records_created", "records_updated", "records_failed", "attempt_no", "started_at", "tenant")
+    list_filter = ("status", "trigger_source")
+    list_select_related = ("tenant", "job", "job__connector", "triggered_by")
+    search_fields = ("number", "error_code", "error_message", "job__number")
+    readonly_fields = ("number", "job", "direction", "status", "trigger_source", "triggered_by", "records_read", "records_created", "records_updated", "records_skipped", "records_failed", "error_code", "error_message", "payload_excerpt", "attempt_no", "next_retry_at", "started_at", "finished_at", "duration_ms")
 
     def has_add_permission(self, request):
         return False
