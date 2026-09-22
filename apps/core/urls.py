@@ -200,5 +200,22 @@ urlpatterns = (
              name="statutory_rule_edit"),
         path("localization/statutory/<int:pk>/delete/", views.statutory_rule_delete,
              name="statutory_rule_delete"),
+        # 0.16 Backup, Recovery & Data Lifecycle. Literal segments before the <int:pk> routes, and the
+        # five registers use the same `crud()` factory as the spine above.
+        path("backup/", views.backup_overview, name="backup_overview"),
+        path("backup/board/", views.backup_board, name="backup_board"),
+        # `recovery_posture_edit` is a SINGLETON, so it is NOT one of the `crud()` models: there is
+        # nothing to list, create or delete, only the one row to edit.
+        path("backup/posture/", views.recovery_posture_edit, name="recovery_posture_edit"),
     ]
+    + crud("backup/jobs", "backup_job")
+    + [
+        # POST-only action, declared after the literal `add/` route above so it cannot shadow it.
+        path("backup/jobs/<int:pk>/verify/", views.backup_job_verify, name="backup_job_verify"),
+    ]
+    + crud("backup/restores", "restore_record")
+    + crud("backup/archives", "data_archive")
+    + crud("backup/holds", "legal_hold")
+    + crud("backup/environments", "environment_instance")
+    + crud("backup/drills", "recovery_drill")
 )
