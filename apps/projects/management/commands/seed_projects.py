@@ -4712,7 +4712,7 @@ class Command(BaseCommand):
                     if conn is jira and local == "tasks.status":
                         value_map = {"done": "completed", "in progress": "in_progress"}
                     if conn is crm and local == "client.name":
-                        value_map = {"Acme Manufacturing": "Acme Manufacturing Ltd."}
+                        value_map = {"Closed Won": "active"}
                     ConnectorFieldMapping.objects.create(
                         tenant=tenant, connector=conn, local_field=local, remote_field=remote,
                         direction=direction, transform=transform, value_map=value_map,
@@ -4727,7 +4727,7 @@ class Command(BaseCommand):
                 (erp, "Cost Lines to GL", "cost_lines", "outbound", "scheduled", 60, "local_wins", True),
                 (erp, "Journal Entries Pull", "journals", "inbound", "scheduled", 120, "remote_wins", True),
                 (crm, "Client Projects Sync", "tasks", "bidirectional", "event", None, "newest_wins", True),
-                (crm, "Milestone Close Dates", "milestones", "from_remote_in", "scheduled", 240, "manual", True),
+                (sharepoint, "Library Folder Sync", "folders", "inbound", "manual", None, "manual", False),
                 (hris, "Resource Pool Refresh", "resources", "inbound", "scheduled", 60, "remote_wins", True),
                 (hris, "Time Entries Import", "time_entries", "inbound", "scheduled", 30, "remote_wins", True),
                 (jira, "Issue Sync", "issues", "bidirectional", "event", None, "newest_wins", True),
@@ -4736,7 +4736,6 @@ class Command(BaseCommand):
             ]
             jobs = []
             for conn, name, scope, direction, trigger, interval, policy, is_active in job_specs:
-                direction = "inbound" if direction == "from_remote_in" else direction
                 jobs.append(ProjectSyncJob.objects.create(
                     tenant=tenant, connector=conn, name=name, entity_scope=scope,
                     direction=direction, trigger_mode=trigger, interval_minutes=interval,
@@ -4749,14 +4748,27 @@ class Command(BaseCommand):
 
             # 4. Sync runs — 45 across the jobs spanning EVERY run status and trigger source,
             #    spread over ~10 days. Created through record() (the model's only writer).
+            #    The 7 failed runs are pinned one-per-connector (contract §8 "≥1 failure per
+            #    connector") instead of falling out of the i % len(jobs) cycle.
             status_plan = (
-                ["success"] * 25 + ["partial"] * 5 + ["failed"] * 6
+                ["success"] * 24 + ["partial"] * 5 + ["failed"] * 7
                 + ["skipped"] * 3 + ["simulated"] * 3 + ["pending"] * 2 + ["running"] * 1
             )
             trigger_cycle = ("manual", "schedule", "event")
+            failure_jobs = []
+            _seen_conn = set()
+            for _j in jobs:
+                if _j.connector_id not in _seen_conn:
+                    _seen_conn.add(_j.connector_id)
+                    failure_jobs.append(_j)
+            failure_cursor = 0
             run_index = 0
             for i, run_status in enumerate(status_plan):
-                job = jobs[i % len(jobs)]
+                if run_status == "failed":
+                    job = failure_jobs[failure_cursor % len(failure_jobs)]
+                    failure_cursor += 1
+                else:
+                    job = jobs[i % len(jobs)]
                 started = now - timedelta(days=i % 10, hours=(i * 3) % 24, minutes=(i * 17) % 60)
                 failed = 3 + (i % 4) if run_status == "failed" else (1 if run_status == "partial" else 0)
                 error_message = ""
@@ -4790,6 +4802,9 @@ class Command(BaseCommand):
                 job.run_count += 1
                 job.last_run_at = started
                 job.last_status = run_status
+            ProjectSyncJob.objects.bulk_update(
+                jobs, ["run_count", "last_run_at", "last_status"]
+            )
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 7.18 seeded: 7 connectors, 30 field mappings, 9 sync jobs, "
