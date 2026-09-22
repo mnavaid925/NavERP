@@ -47,7 +47,7 @@ STALE_RATE_DAYS = 7
 def _audit_changes(form):
     """The `{field: new_value}` diff for a hand-rolled singleton save's audit row.
 
-    A two-line local twin of `crud._changed`, which stays private: it is named explicitly by ~15 call
+    A two-line local twin of `crud._changed`, which stays private: it is named explicitly by ~75 call
     sites across scm/hrm/procurement/projects, so promoting it would mean a cross-app rename for no
     behavioural gain. Neither `LocaleProfile` nor `UserLocalePreference` carries a field on
     `_SENSITIVE_AUDIT_FIELDS`, so the redaction branch is not reproduced here.
