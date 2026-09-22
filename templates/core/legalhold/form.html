@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Legal Hold{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit legal hold{% else %}Issue a legal hold{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:legal_hold_list' %}">Legal holds</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="gavel"></i> <strong>A hold suspends the retention schedule covering its
+      scope.</strong> While it is in force, data that a policy would otherwise dispose of must be preserved.
+      Set the scope carefully: everything within it stops being disposable.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>A hold has no expiry.</strong> Its end is the release
+      event, not a duration — so <em>Released at</em> is the field that ends it.</p>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+        <a href="{% url 'core:legal_hold_list' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="shield-alert"></i> <strong>Releasing is refused while another active
+      hold covers the same scope.</strong> Releasing one hold would resume the retention schedule and destroy
+      records another hold still protects — that is spoliation, and it is checked at the model edge so no form,
+      admin page or seeder can bypass it.</p>
+    <p class="text-muted"><i data-lucide="info"></i> <strong>Who issued and who released are not on this
+      form.</strong> The actor is the signed-in user: a release that could be attributed to somebody else would
+      defeat the audit it exists to satisfy.</p>
+  </div></div>
+{% endblock %}
