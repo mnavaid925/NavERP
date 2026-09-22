@@ -191,5 +191,131 @@ cross-tenant exposure, no data loss — a fresh install simply renders a configu
   I spot-checked two of them myself (the `LIVE_LINKS` keys via `parse_catalog()`, and `get_template()` on all
   nine paths) and they hold.
 
+---
+
+## Lane 3 — `frontend-reviewer`
+
+**Verdict: REQUEST CHANGES.** Design-system compliance is genuinely clean (every modifier class resolves; the L33 badge/stat-icon regression has *not* recurred), the comment-leak guard is clean, pagination/CSRF/None-safety are clean, and all 9 pages render 200 as admin. Two real problems: a member-facing navigation dead-end on `userlocale/form.html`, and the timezone offset column printing raw minutes. Plus a detail page that is the only one of 18 missing its Back-to-list link.
+
+I rendered every page (admin **and** member) with the smoke harness plus an inline member probe.
+
+---
+
+### Critical
+
+**L3-C1 — `templates/core/userlocale/form.html:7,10,15,32` — every affordance on a member's own settings page 403s, including "Cancel".**
+`user_locale_edit` is `@login_required` (`apps/core/views/Localization.py:129`), so a plain member can reach this page. Verified with a real member login (`member: leaver@acme.example`): the page renders 200, and *every* in-page link targets an `@tenant_admin_required` view:
+- `:7` breadcrumb `<a … core:localization_overview>Localization</a>` → 403
+- `:10` page-action "Overview" → `core:localization_overview` → 403
+- `:15` body link "Regional Settings" → `core:locale_profile_edit` → 403
+- `:32` **"Cancel"** → `core:localization_overview` → 403
+
+A Cancel control that returns 403 is unambiguously wrong: the member's only in-page exit is the browser Back button.
+**Fix (house pattern — see the rule below):** `:7` make the crumb a plain `<span>Localization</span>`; `:10` empty the `.page-actions` (exactly `templates/core/my_preferences.html:9-10`); `:15` make "the workspace's regional settings" plain text; `:32` point Cancel at `{% url 'dashboard:home' %}` or drop it (`my_preferences.html:45-47` ships Save only).
+
+---
+
+### Important
+
+**L3-I1 / L3-I2 — `templates/core/language/list.html:10-11` and `templates/core/timezone/list.html:10-11` — both page-action buttons 403 for a member.**
+These two registries are `@login_required` **by design** (they must work for the tenant-less superuser) and are the only 0.15 pages a member can open. Verified on the member render: the page contains `<a href="/core/localization/board/">Board</a>` and `<a href="/core/localization/profile/">Regional settings</a>`, and `core:localization_board` / `core:locale_profile_edit` both return **403** for that member. **Fix:** drop "Board" (there is no member-reachable board) and re-point "Regional settings" at `{% url 'core:user_locale_edit' %}` — which *is* `@login_required` and is the member's own equivalent — or empty the `.page-actions` like `my_preferences.html`.
+
+**L3-I3 — `templates/core/timezone/list.html:44` (header) / `:50` (value) — the offset column prints raw minutes under a header with no unit.**
+Rendered values: `Europe/London → UTC+0`, `Asia/Kolkata → UTC+330`, `Asia/Tokyo → UTC+540`, `America/Los_Angeles → UTC-480`. `utc_offset_minutes` is a **minutes** integer, so "UTC+330" reads as 330 hours — the opposite of the clarity the model docstring (`apps/core/models/Localization.py:91-94`) asks for. A template cannot format this cleanly; add a `TimeZone.offset_display` property (e.g. `UTC+05:30` / `UTC-08:00`) and render that. (Route the model change to the code lane.)
+
+**L3-I4 — `templates/core/statutoryrule/detail.html:39` — missing "Back to list"; the only core detail page without one.**
+17 of 18 `templates/core/*/detail.html` carry `<a … class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>` as a trailing element after the last card (e.g. `party/detail.html:27`, `mapping/detail.html:45`, `dsar/detail.html:76`). `statutoryrule/detail.html` has `grep -c Back = 0` and ends at `</div>` → `{% endblock %}`. The Edit + POST-Delete pair in `.page-actions:9-15` is correct and matches `party/detail.html:9-15`; only the trailing link is absent. **Fix:** append `<a href="{% url 'core:statutory_rule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>` after line 39.
+
+---
+
+### Minor
+
+**L3-M1 — `templates/core/localeprofile/form.html:10`, `statutoryrule/form.html:10`, `userlocale/form.html:10` — the three new forms are the only core forms with a page-action.**
+`grep arrow-left` across all 43 `templates/core/**/form.html` returns exactly these three files. The closest sibling, `ratelimit/form.html:9-10`, ships an **empty** `.page-actions`. A back affordance is harmless-to-helpful, so this is only a note that the house form norm is a bare header — but for `userlocale/form.html` it is the L3-C1 defect, not a style choice.
+
+**L3-M2 — `templates/core/localizationoverview.html:98-101` — the closing "What this sub-module does NOT do" paragraph is a five-clause run-on, and it repeats `localizationboard.html:16` verbatim.**
+The *content* is right and matches the 0.13 precedent (`integrationoverview.html:62-67`, `integrationboard.html:93-95`). But this block packs "does not translate / does not fetch / does not convert / does not transmit" into one 6-line sentence, and "Nothing on this page is stored — the counts are derived on read" is word-for-word the sentence on `localizationboard.html:16`, one click away. **Fix:** convert the block to a short `<ul>` (four bullets), and let the board keep the "nothing is stored" line while the overview drops it.
+
+**L3-M3 — `templates/core/timezone/list.html:51`, `templates/core/language/list.html:51` — `badge-amber` used for a neutral registry fact.**
+"Observes DST" and "Right-to-left" are facts, not warnings, yet amber is the attention colour (it is used for genuinely actionable things at `localizationboard.html:21,22,28`). Valid classes both — no styling bug — but `badge-slate` or `badge-info` would read as neutral. Low priority; the palette is officially colour-named only.
+
+---
+
+### The member-affordance house rule (the question routed to me)
+
+**Rule: an affordance rendered to a member must resolve for a member. Route it to a member-reachable page where one exists; hide it where none does. Never ship a visible control whose only outcome is 403.** The house precedent supports exactly this, and does it both ways:
+
+- **Hide** — `templates/core/my_preferences.html:9-10` ships a deliberately **empty** `.page-actions`, and `:7` breadcrumbs `NavERP › My Notification Preferences` with **no** link to the admin-gated `core:notification_overview`, even though 0.12 has one. The rationale is written down at `apps/core/navigation.py:93-94`: *"`My Preferences` is deliberately NOT admin-gated — a preference a member cannot set is an admin setting with a different label."* The author went out of their way to make the member page self-contained.
+- **Route** — `templates/core/party/list.html:10` (member-reachable: `Party.py:17-18` `@login_required`) points "New Party" at `core:party_create`, which is *also* `@login_required` (`Party.py:28-29`). Same for `templates/core/activity/list.html:10` → `core:activity_create` (`Activity.py:35-36`). No affordance on either page points at an admin-gated view.
+- **The one counter-example, and why it isn't a licence:** the sidebar. `apps/core/navigation.py` has no role filter (grep for `is_tenant_admin|is_superuser` returns comments only) and `templates/partials/sidebar.html` has none either, so the member render of `language_list` already contains 11 `/core/localization/` links — `localization/board/` ×2, `localization/profile/` ×2, `localization/statutory/` ×1 — several of which 403. That is a **pre-existing, app-wide** condition affecting every admin-gated sub-module, not a 0.15 defect, and I am not filing it here. But "the sidebar does it too" does not justify adding more dead controls to a page's own chrome, which is where the author has consistently followed the rule.
+
+**So: three templates change.** `language/list.html:10-11` and `timezone/list.html:10-11` (re-point "Regional settings" → `core:user_locale_edit`, drop "Board"), and `userlocale/form.html:7,10,15,32` (plain-text crumb, empty actions, plain-text body reference, Cancel → `dashboard:home`). `localeprofile/form.html` is admin-gated, so its "Overview" action is legitimate and needs no change.
+
+---
+
+### Checked and clean
+
+- **Design-system classes (L33 / L13) — clean.** Ran the required `grep -oE '\.(badge-[a-z]+|stat-icon(\.[a-z]+)?|text-[a-z]+)' static/css/theme.css | sort -u` → `badge-{green,red,amber,info,muted,slate,group}`, `stat-icon.{blue,green,orange,purple,red,slate}`, `text-{brand,danger,muted,ok,red,right,warn}`. Then extracted **every** `class="…"` token from all 9 new templates and diffed against every selector in `theme.css`: **40 tokens, 0 missing.** No `badge-success`/`badge-danger`, no `.alert*`, no invented utility. `text-warn` (board:30, overview:98) and `text-muted` are both real. The palette regression has not recurred.
+- **Comment leak (L2) — clean.** No `{#` in any of the 9 templates; smoke leak-marker scan reports `clean` on all five checked pages.
+- **Badge fallbacks — clean.** Every badge is a boolean test with an `{% else %}`: `language/list.html:51,52,53`; `timezone/list.html:51,52`; `statutoryrule/list.html:51,53`; `statutoryrule/detail.html:26,31`; `localizationboard.html:19,21,22,28,47`; `localizationoverview.html:18,24,87`. No badge tests a CHOICES value here (the only enum, `e_invoicing_scheme`, is shown via `get_…_display`), so there is no unguarded enum branch and no all-one-colour redundancy.
+- **Pagination (L9) — clean.** All three lists delegate to `partials/pagination.html`, which guards `has_previous`/`has_next` and preserves all GET params. `?page=999` on `language_list` → 200.
+- **CSRF — clean.** Every POST form carries `{% csrf_token %}`: `statutoryrule/list.html:59`, `detail.html:12`, `form.html:16`, `localeprofile/form.html:17`, `userlocale/form.html:17`.
+- **Structure / div balance — clean.** Card nesting matches `ratelimit/list.html` exactly (the `.table-wrap` is a sibling of `.card-body` inside `.card`, closed by the final `</div>`); I balanced all 9 files. Delete is a POST form with `onsubmit="return confirm(…)"` in both list and detail.
+- **Filter bars (L9/L11) — clean.** `q` + FK/status `<select>`s re-select from `request.GET`, `|stringformat:"d"` is not needed (no pk filters), and junk values are safe: `?rtl=abc`, `?dst=nope&active=maybe`, `?scheme=zzz` all → 200 (boolean map + enum guard in `crud.py:160-179`).
+- **URLs — clean.** All 12 names used resolve; `accounting:tax_code_list` → `/accounting/tax-codes/` and `accounting:exchange_rate_list` → `/accounting/exchange-rates/` both reverse, and the board's `{{ exchange_rate_url }}` / `{{ tax_code_url }}` hrefs are correct.
+- **None-safety (L10) — clean.** `obj.tax_code`, `obj.language`, `obj.time_zone`, `row.currency`, `profile` are all guarded by `{% if %}` before any attribute access; nullable FKs render `—`.
+- **Accessibility / responsive — clean.** Search inputs carry `aria-label="Search"`; icon-only buttons carry `title` (matching `party/list.html:44-48`); tables wrapped in `.table-wrap`; inline `style="flex:1; min-width:200px;"` on the search group is copied verbatim from `ratelimit/list.html:18`.
+- **Read-only communication (per your context) — clean.** `language/list.html:16` and `timezone/list.html:16` both state "global registry … the page is read-only and there is no 'add' button". The read-only state is communicated; I am not filing the absent CRUD as a defect.
+- **Readability of the computed pages (your item 4).** The disclaimers read as **useful honesty, not noise** — they are in-house style (`integrationboard.html:28,91-97`, `integrationoverview.html:59-69`) and they pre-empt the two real misreadings ("this translates the UI", "rates refresh themselves"). The `dl.detail-grid` layouts are legible: `localizationboard.html:18-29` (10 items) and `localizationoverview.html:17-30` (12 items) sit in `repeat(auto-fit, minmax(240px,1fr))` with short uppercase `<dt>` labels. Only the two notes at L3-M2 apply.
+- **Structure (flat foundation-app layout).** `templates/core/language/list.html`, `…/statutoryrule/detail.html`, and computed pages at the app root are the correct shape for a foundation app; no banned `<entity>_<page>.html` inside a module.
+- **Dark mode / RTL.** No raw Tailwind colour utilities in the new templates (theme classes only), so no missing `dark:` variants; no hard-coded left/right. The Arabic `native_name` cell (`language/list.html:50`) is pure-RTL text so bidi renders correctly without `dir="auto"`.
+
+**Praise:** the L33 fix landed properly — this is the fourth attempt at the badge/stat-icon family and the first changeset in the family to ship **zero** non-existent modifier classes, including resisting the obvious `badge-warning` for the e-invoicing column. The read-only registries also say out loud that they are read-only, which is the right instinct.
+
+### Orchestrator verification — lane 3
+
+**L3-I3 — CONFIRMED by independent render.** I pulled the offset column straight out of the rendered HTML
+rather than trusting the description:
+
+```
+  America/Los_Angeles  Los Angeles (PST/PDT)  -> UTC-480
+  America/Chicago      Chicago (CST/CDT)      -> UTC-360
+  Europe/London        London (GMT/BST)       -> UTC+0
+  Europe/Berlin        Berlin (CET/CEST)      -> UTC+60
+  Asia/Kolkata         Kolkata (IST)          -> UTC+330
+  Asia/Tokyo           Tokyo (JST)            -> UTC+540
+```
+
+`UTC+330` for IST is the bug in one line: the column is minutes and the header says nothing. Lane 3 is right
+that this contradicts the model's own docstring, which goes out of its way to say the offset is a
+display convenience. **Real, Important.**
+
+**L3-I4 — CONFIRMED by count:** `grep -c "Back to list" templates/core/statutoryrule/detail.html` → **0**,
+while `grep -l "Back to list" templates/core/*/detail.html | wc -l` → **17 of 18**. The outlier is real.
+
+**L3-C1 vs L1-I1 — the same defect, two severities. I am consolidating them as ONE finding graded
+Important, and overruling lane 3's Critical.** Both lanes found the same root cause (the member's own
+settings page offers only admin-gated exits); lane 3 adds the four in-page symptoms, lane 1 the POST-redirect
+symptom. On **evidence** the grade is Important, not Critical: the member's save actually **succeeds** (the
+`UserLocalePreference` row is written — my probe followed the redirect and got 403 from the *landing page*,
+not from the write), nothing crashes, no tenant boundary is crossed, and the member is correctly *denied*
+admin pages rather than wrongly granted them. The Critical rubric is a closed list — cross-tenant
+read/write, missing tenant FK, authorization bypass, secret exposure, data corruption/loss, an unhandled
+crash on a mainline path, a schema change with no migration — and a dead-end landing page is none of those.
+Lane 1 reached the same conclusion explicitly; lane 3 graded on UX severity, which is the right instinct but
+the wrong column. **I2 (Important) carries all five symptoms; the fix is one pass over three templates.**
+
+**Lane 3's member-affordance rule is the most useful single output of the whole review so far.** It answers
+the question lane 1 routed to it with the house precedent *quoted* (`navigation.py:93-94`'s "a preference a
+member cannot set is an admin setting with a different label") rather than asserted, and it correctly
+declines to file the app-wide sidebar condition as a 0.15 defect — that is exactly the "carried, not folded
+in" discipline. I adopt the rule.
+
+**One thing I checked that lane 3 could not:** its claim that `localeprofile/form.html` needs no change
+because it is admin-gated is right, and the same reasoning means `statutoryrule/*` and the two computed
+pages need no change either — so the fix surface really is just three templates, as it says.
+
+
+
 
 
