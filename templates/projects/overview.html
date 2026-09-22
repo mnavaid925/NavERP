@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Project Management</h1>
       <div class="breadcrumb"><span>Projects</span></div>
-      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list), the 7.7 scope layer (requirements, boundaries, change control, acceptance), the 7.8 execution layer (assignments, priorities, the board, the gantt, blocking), the 7.9 collaboration layer (channels, shared documents, meetings, notifications, the activity feed) and the 7.10 document layer (the folder tree, the document register with its revisions and legal holds, the standard templates, the knowledge base and the retention board). The rest of Module 7 is separate sub-modules.</p>
+      <p class="text-muted">Intake, charter, stakeholders, kickoff, the 7.2 planning layer (WBS, dependencies, milestones, baselines), the 7.3 resourcing layer (pool, allocations, time), the 7.4 cost layer (budgets, control accounts, expenses), the 7.5 risk layer (register, response actions, issues, escalations), the 7.6 quality layer (plans, reviews, inspections, the punch list), the 7.7 scope layer (requirements, boundaries, change control, acceptance), the 7.8 execution layer (assignments, priorities, the board, the gantt, blocking), the 7.9 collaboration layer (channels, shared documents, meetings, notifications, the activity feed), the 7.10 document layer (the folder tree, the document register with its revisions and legal holds, the standard templates, the knowledge base and the retention board) and the 7.18 integration layer (connectors, field mappings, sync jobs and the simulated run log). The rest of Module 7 is separate sub-modules.</p>
     </div>
     <div class="page-actions">
       <a href="{% url 'projects:prq_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Request</a>
@@ -52,6 +52,9 @@
     <div class="stat-card"><div class="stat-icon purple"><i data-lucide="folder-tree"></i></div><div class="stat-value">{{ folder_count }}</div><div class="stat-label">Document folders</div></div>
     <div class="stat-card"><div class="stat-icon green"><i data-lucide="book-open"></i></div><div class="stat-value">{{ knowledge_count }}</div><div class="stat-label">Knowledge entries</div></div>
     <div class="stat-card"><div class="stat-icon red"><i data-lucide="lock"></i></div><div class="stat-value">{{ legal_hold_count }}</div><div class="stat-label">Under legal hold</div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="plug"></i></div><div class="stat-value">{{ integration_connector_count }}</div><div class="stat-label">Connectors</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="refresh-cw"></i></div><div class="stat-value">{{ sync_runs_today }}</div><div class="stat-label">Sync runs today</div></div>
+    <div class="stat-card"><div class="stat-icon red"><i data-lucide="circle-x"></i></div><div class="stat-value">{{ sync_runs_failed_today }}</div><div class="stat-label">Failed today</div></div>
   </div>
 
   <div class="card">
@@ -310,6 +313,26 @@
               <td class="fw-600"><a href="{% url 'projects:doc_retention' %}">Retention &amp; Archiving</a></td>
               <td>The records whose retention or review date has arrived, and the reminders Run.</td>
               <td><a href="{% url 'projects:doc_retention' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:integration_hub' %}">Integration Hub</a></td>
+              <td>Connector health by domain, today's sync activity and the recent run log.</td>
+              <td><a href="{% url 'projects:integration_hub' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:sync_monitor' %}">Sync Monitor</a></td>
+              <td>Live run filters — status, job, connector and date — over the append-only log.</td>
+              <td><a href="{% url 'projects:sync_monitor' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:ixc_list' %}">Connectors</a></td>
+              <td>Registered ERP, CRM, HR, DevOps and storage connections with credentials.</td>
+              <td><a href="{% url 'projects:ixc_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
+            </tr>
+            <tr>
+              <td class="fw-600"><a href="{% url 'projects:syj_list' %}">Sync Jobs</a></td>
+              <td>Scheduled and event-triggered jobs — conflict policy, interval and run-now.</td>
+              <td><a href="{% url 'projects:syj_list' %}" class="btn-icon" title="Open"><i data-lucide="arrow-right"></i></a></td>
             </tr>
           </tbody>
         </table>
