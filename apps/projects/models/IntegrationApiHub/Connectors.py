@@ -154,6 +154,15 @@ class ProjectIntegrationConnector(TenantNumbered):
             raise ValidationError({"project": "Project belongs to another workspace."})
         if self.notify_webhook_id and self.notify_webhook.tenant_id != self.tenant_id:
             raise ValidationError({"notify_webhook": "Webhook belongs to another workspace."})
+        # unique_together cannot bind NULL projects, so workspace-wide names need a manual guard.
+        if self.project_id is None and self.name:
+            siblings = ProjectIntegrationConnector.objects.filter(
+                tenant_id=self.tenant_id, project__isnull=True, name=self.name
+            )
+            if self.pk:
+                siblings = siblings.exclude(pk=self.pk)
+            if siblings.exists():
+                raise ValidationError({"name": "A workspace-wide connector with this name already exists."})
 
     # -- credential (Fernet, reversible — it must be presentable to the provider) ----------------
 
