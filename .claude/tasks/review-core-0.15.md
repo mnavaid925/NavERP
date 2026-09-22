@@ -465,6 +465,205 @@ offered. **No action, stated so the decision is visible.**
 **L4's 6-shared-query accounting is exactly the discipline I want** — attributing queries to the view rather
 than to the framework is what makes the per-view table above usable.
 
+---
+
+## Lane 5 — `qa-smoke-tester`
+
+**Verdict: NOT CLEAN — 1 critical defect class (user-reachable HTTP 500), 1 behavioural inconsistency.** Everything else I exercised — the full CRUD write path, both singletons, both model `clean()` rule sets, cross-tenant IDOR on every write verb, the tenant-less superuser, the empty tenant, and pagination boundaries — is clean. The dev database was left **byte-for-byte unaltered** (verified counts below).
+
+Harnesses (gitignored throwaways): `temp/qa15_writes.py`, `temp/qa15_writes2b.py`, `temp/_repro_dup.py`, `temp/_rootcause.py`. I did not re-run `temp/smoke_15.py` as the deliverable; its coverage was read and deliberately exceeded.
+
+---
+
+## Critical
+
+### L5-C1 — Duplicate `(tenant, name)` on `statutory_rule_create` → **HTTP 500** (IntegrityError), not a form error
+
+* `apps/core/forms/Localization.py:37-48` (`StatutoryRuleForm`) — no duplicate guard
+* `apps/core/models/Localization.py:237` — `unique_together = ("tenant", "name")`
+* `apps/core/crud.py:198` — `obj.save()` is where it dies
+
+**Exact request** (as `admin_acme`, seeded rule `pk=7` name `"EU VAT e-invoicing"`):
+```
+POST /core/localization/statutory/add/
+name=EU VAT e-invoicing&jurisdiction=L5&tax_code=&e_invoicing_scheme=none
+&effective_from=2026-01-01&is_active=on
+```
+**Exact observed response:** `HTTP 500`, body contains `IntegrityError` / `Duplicate entry '1-EU VAT e-invoicing' for key 'core_statutoryrule_tenant_id_name_c6784f7c_uniq'`. No `already exists` form error. Traceback: `apps/core/views/Localization.py:170` → `apps/core/crud.py:198 obj.save()` → `django.db.utils.IntegrityError (1062)`.
+
+**Root cause, verified directly** (`temp/_rootcause.py`):
+```
+form.is_valid() = True
+form.errors     = {}
+"tenant" in form._get_validation_exclusions() = True
+instance.validate_unique(exclude=['tenant']) -> no error (constraint SKIPPED)
+```
+`tenant` is not a `Meta.fields` member, so Django excludes it from validation; `Model._get_unique_checks()` drops **any** `unique_together` containing an excluded field — so the `(tenant, name)` constraint is never validated by the form. The form validates, `crud_create` saves, and MySQL rejects the INSERT.
+
+**No data corruption:** the row is never inserted (count 3 → 3). The user just gets a 500 with no feedback.
+
+**This is a missed house pattern, not an unknown:** CRM already blocks exactly this at the form level —
+`apps/crm/forms/CustomerSuccess/HealthScores.py:15-23` ("…returns a friendly error instead of an IntegrityError 500") and `apps/crm/forms/SalesForceAutomation/SalesQuotas.py:16-29`. `StatutoryRuleForm` omits the equivalent.
+
+### L5-C2 — Same defect on the **edit** verb: renaming a rule to a sibling's name → **HTTP 500**
+
+* `apps/core/crud.py:217` — `obj = form.save()`
+* `apps/core/views/Localization.py:182-185`
+
+**Exact request** (as `admin_acme`; rename `pk=7` `"EU VAT e-invoicing"` to the sibling `pk=9` name `"India GST e-invoice"`):
+```
+POST /core/localization/statutory/7/edit/
+name=India GST e-invoice&jurisdiction=L5&tax_code=&e_invoicing_scheme=none
+&effective_from=2026-01-01&is_active=on
+```
+**Exact observed response:** `HTTP 500`, `IntegrityError (1062) Duplicate entry '1-India GST e-invoice'`. Rule count unchanged at 3. Same root cause as L5-C1.
+
+---
+
+## Important
+
+### L5-I1 — Tenant-less superuser: the `statutory_rule_*` family does **not** take the documented redirect branch
+
+`apps/core/views/Localization.py:156-165` — `statutory_rule_list` has **no** `request.tenant is None` guard (unlike `localization_board:202`, `localization_overview:241`, `locale_profile_edit:106`, `user_locale_edit:132`). It calls `crud_list(request, StatutoryRule.objects.filter(tenant=request.tenant), …)`, i.e. literally `filter(tenant=None)`.
+
+**Exact requests as `admin` (`is_superuser=True`, `tenant=None`) — all 11 routes:**
+
+| route | status | Location | note |
+|---|---|---|---|
+| `localization_overview` | 302 | `/` | ✅ documented branch |
+| `localization_board` | 302 | `/` | ✅ documented branch |
+| `language_list` | **200** | — | ✅ global by design, real content |
+| `timezone_list` | **200** | — | ✅ global by design, real content |
+| `locale_profile_edit` | 302 | `/` | ✅ (via `messages.error`, not `info`) |
+| `user_locale_edit` | 302 | `/` | ✅ documented branch |
+| `statutory_rule_list` | **200** | — | ❌ renders the tenant-scoped register, empty |
+| `statutory_rule_create` | 302 | `/` | ✅ via `crud_create` (`crud.py:189-191`), `messages.error` not `info` |
+| `statutory_rule_detail` | **404** | — | ❌ not the documented branch |
+| `statutory_rule_edit` | **404** | — | ❌ not the documented branch |
+| `statutory_rule_delete` | **405** | — | ✅ correct (`@require_POST` outermost) |
+
+No 500 anywhere. `statutory_rule_list` was verified to render a genuine empty state (`"Statutory Rules"` heading + empty-state markup), not a silently-blank context.
+
+**Scope note for the fixer:** the contract pins the `tenant is None` branch only for the two **computed** views — `.claude/tasks/contract-core-0.15.md:212-213` ("both computed views … Never `filter(tenant=None)`") and `:224-225` for `user_locale_edit`. It does **not** pin it for the `crud_*`-backed statutory views. So this is a genuine inconsistency with the sibling views and with the prompt's stated expectation, but it is *not* a contract violation as written, and it leaks nothing. Decide whether to extend the guard to the four `statutory_rule_*` views or leave it. Flagging as Important only because the prompt listed it as expected behaviour.
+
+---
+
+## Minor
+
+### L5-M1 — Pre-existing dev-DB pollution (not created by this lane; affects later lanes/tests)
+
+Present in the dev DB before I ran anything and still present after:
+* tenant `423` `lane5-empty` ("Lane5 Empty") + users `admin_lane5-empty` / `ops_lane5-empty` / `sales_lane5-empty`
+* tenant `424` `smoke-empty` ("Smoke Empty") + `admin_smoke-empty` / `ops_smoke-empty` / `sales_smoke-empty`
+* tenant `70` with **`slug=''`**, name `SMOKETEST Acme`, and users `admin_` / `ops_` / `sales_` with malformed emails (`admin@.example`, `ops@.example`)
+
+I used `423` **read-only** for the empty-state test rather than creating a new tenant, so I added nothing. Flagging because a later lane or the test suite may be sensitive to these rows. `Tenant.slug` is `unique=True` but not `blank=False`-guarded at the DB level, so `slug=''` is storable.
+
+### L5-M2 — Message level inconsistency for the tenant-less branch
+
+`crud.py:190` and `Localization.py:107` use `messages.error`; `Localization.py:135,203,242` use `messages.info`. Cosmetic; fold into L5-I1 if that is fixed.
+
+---
+
+## Exercised and clean
+
+**1. StatutoryRule full CRUD round-trip** (as `admin_acme`, all in a rolled-back `atomic()`):
+GET create `200`; POST valid rule → `302` to `core:statutory_rule_list`; row created; **tenant taken from the session, not POST** — posted `tenant=<globex pk 2>` and the stored `tenant_id` was `1`; `AuditLog` `create` row written; GET edit `200` containing the rule name; POST edit `302`, change persisted; **no duplicate row** (count for that name stayed 1); `AuditLog` `update` row written; POST delete `302`, row gone; `AuditLog` `delete` row written. Rollback restored acme rules `3→3` and `AuditLog` `6748→6748`.
+
+**2. `locale_profile_edit` singleton** (as `admin_lane5-empty`, tenant with no profile): first POST **created** (count `0→1`); second POST **updated the same row** (count stayed 1, `date_format` `dd/MM/yyyy`→`yyyy-MM-dd`) — the OneToOne holds. Validation, as `admin_acme` against the existing row: `date_format="dd/MM/yyyy<script>"` → `200` + *"A format pattern may contain…"*, stored value unchanged; `time_format="HH:mm{0}"` rejected; `number_format="#,##0.00;DROP"` rejected; `first_day_of_week="0"` and `"99"` → `200` + *"Select a valid choice"*, stored value unchanged. All rejected by `LocaleProfile.clean()` (`models/Localization.py:155-161`), not merely the form.
+
+**3. `user_locale_edit` singleton**: admin POST created own row with `tenant = session tenant`; second POST updated the same row (no duplicate); bad `date_format` rejected; **POST as a member (`leaver@acme.example`, non-admin) wrote the member's row** (`date_format=MM/dd/yyyy`) and the admin's row was untouched.
+
+**4. `StatutoryRule.clean()` cross-field rules**: `e_invoicing_required=True` + `e_invoicing_scheme="none"` → `200` + *"Choose the scheme this jurisdiction uses."*, **not saved**; `effective_to=2026-01-01` < `effective_from=2026-06-01` → `200` + *"The end date cannot precede the start date."*, **not saved**.
+
+**5. Cross-tenant IDOR on every write verb**: POST `statutory_rule_edit` with a globex pk → `404`; POST `statutory_rule_delete` with a globex pk → `404`; the globex row was then **byte-identical** on `(name, jurisdiction, notes, is_active, e_invoicing_scheme, updated_at)` and the globex count was still 3 — the 404 does not mutate.
+
+**6. Empty-state boundary** (tenant `423`: 0 profiles, 0 rules, 0 exchange rates): `localization_board` `200` showing *"No exchange rates recorded"* + *"Not set"*; `localization_overview` `200` showing *"No statutory rules yet"* + *"Not configured"*; `statutory_rule_list` `200`. No crash, sensible zeroes.
+
+**7. Pagination boundary** (20 extra rules → 23 total, rolled back): 2 pages; page 1 = 15 rows, page 2 = 8 rows; `?page=999` and `?page=3` both clamp to page 2; `?page=0`, `?page=-1`, `?page=abc`, `?page=99999999999999999999999999` all `200`. Rollback restored the count to 3.
+
+**8. Additional form boundaries** (not in the existing harness): cross-tenant `TaxCode` pk rejected by the tenant-scoped queryset (*"Select a valid choice"*, not saved); own `TaxCode` accepted and persisted; missing required `effective_from` → required-field error; over-range `tax_code=99999999999999999999` → `200`, **not** a 500; bogus `e_invoicing_scheme="zzz"` → invalid-choice error; edit preserves `tenant_id`.
+
+**9. Global registry filters** (global-by-design, correct for both tenant admin and tenant-less superuser): `language_list?rtl=True` → RTL only (Arabic, Hebrew; no French); `?rtl=False` → LTR only; `?q=ar` search works; `timezone_list?dst=True` → DST zones only (Europe/London present, Asia/Kolkata absent); `?dst=False` → `200`.
+
+**10. Tenant-less superuser content (not just status)**: `language_list` `200` containing *Languages* / *Arabic* / *Right-to-left*; `timezone_list` `200` containing *Europe/London* / *Observes DST*.
+
+**11. Data-safety verification.** Counts before → after my entire session: tenants `5→5`; languages `8→8`; timezones `10→10`; `LocaleProfile` `2→2`; `UserLocalePreference` `1→1`; `StatutoryRule` `6→6` (ids `[7,8,9,10,11,12]`); `AuditLog` `6748→6748`; `ExchangeRate` `6→6`; rows matching `L5-QA-*` = `0`. Every write was inside `transaction.atomic()` + `set_rollback(True)`. `git status` shows no change attributable to this lane (all my scripts live under gitignored `temp/`); I created, edited and committed **no** tracked file.
+
+**False alarm I ruled out (not a defect):** my first pagination assertion expected the newest-created rule on page 1; the list orders by `Meta.ordering = ["jurisdiction", "name"]` (`models/Localization.py:236`), so that rule legitimately lands on page 2. Row counts per page are correct (15 / 8).
+
+### Orchestrator verification — lane 5
+
+**L5-C1 / L5-C2 — CONFIRMED, and this is the review's one true Critical.** I re-derived it from scratch with
+`temp/probe_15_dup.py` rather than accepting the diagnosis, and reproduced **both the mechanism and the
+symptom**:
+
+```
+tenant rules before: 3
+existing rule: 'EU VAT e-invoicing' pk 7
+
+--- 1. the raw Django claim: is the unique_together validated? ---
+  is_valid() = True
+  errors     = {} (none!)
+  'tenant' excluded from validation = True
+  instance.validate_unique(exclude=['tenant']) -> NO ERROR RAISED
+
+--- 2. CREATE with a duplicate name ---
+  status: 500
+
+--- 3. EDIT renaming onto a sibling's name ---
+  renaming 'EU VAT e-invoicing' -> 'India GST e-invoice' : status 500
+
+--- 4. did anything mutate? ---
+  rules before/after: 3 / 3 -> UNCHANGED
+```
+
+Both verbs 500 on a **plain, everyday** user action — typing a name that already exists, or renaming a rule
+onto a sibling's name. Nothing exotic is required. Lane 5 is also right that this is a *missed house
+pattern* rather than an unknown: `apps/crm/forms/CustomerSuccess/HealthScores.py:15-23` already solves it,
+so the fix is to copy a shape that exists in the repo. Severity **Critical, upheld** — an unhandled 500 on
+a mainline path is on the Critical rubric's closed list, and unlike lanes 1/3's dead-end this one is a
+crash. **The fix belongs in `StatutoryRuleForm` (a `clean_name`/`clean` duplicate guard scoped to
+`self.tenant`), not in `crud_create`** — `crud_create` is shared by every module and must not grow a
+per-model rule.
+
+**L5-I1 — DOWNGRADED TO NO ACTION. The error was MINE, in the brief.** I told lane 5 to expect the
+`tenant is None` redirect branch on "the tenant-scoped ones" including `statutory_rule_*`. That is not the
+house norm, and I should have checked before writing it:
+
+```
+$ grep -A 6 "def party_list" apps/core/views/Party.py
+18:def party_list(request):
+19-    return crud_list(
+20-        request, Party.objects.filter(tenant=request.tenant),   # <- no guard, by design
+...
+$ grep -rn "crud_list(" apps/*/views/*.py | wc -l                  -> 487
+$ grep -rn -B3 "crud_list(" apps/core/views/*.py | grep -c "tenant is None"  -> 0
+```
+
+**Zero of 487** `crud_list` call sites guard the tenant-less case, and `party_list` — the reference view —
+is structurally identical to `statutory_rule_list`. An empty register **is** the correct rendering for a
+superuser who "sees no module data by design". Lane 5 flagged it as Important *only* because my prompt
+asserted it; it even said so ("Flagging as Important only because the prompt listed it as expected
+behaviour"). I am recording this as an orchestrator error alongside L2-M3, and **filing no code action**.
+`statutory_rule_detail`/`_edit` → 404 and `_delete` → 405 are all correct.
+
+**L5-M1 — out of scope for this sub-module, but worth escalating.** Three junk tenants (including one with
+`slug=''`) predate 0.15 and were not created by this build. They are dev-DB residue from earlier smoke
+runs. Not a 0.15 finding, and deliberately **not** fixed here — but recorded, because lane 5 is right that a
+later test lane could trip over them.
+
+**L5-M2 — CONFIRMED as cosmetic**, and with L5-I1 dropped there is nothing to fold it into. `messages.error`
+vs `messages.info` across the five tenant-less branches is a one-word inconsistency with no functional
+effect. **No action.**
+
+**Lane 5's data-safety discipline is the best in the review:** every write inside a rolled-back
+`transaction.atomic()`, with before/after counts published for nine tables, and an explicit note that the
+one dev-DB oddity was pre-existing. It also refused to re-run the existing smoke harness as its deliverable
+and instead covered the write paths that harness omits — which is precisely how the Critical was found.
+
+
+
 
 
 
