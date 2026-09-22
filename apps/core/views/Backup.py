@@ -21,6 +21,7 @@ the page.
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.views._common import *  # noqa: F401,F403
@@ -121,7 +122,12 @@ def backup_job_edit(request, pk):
         tenant=request.tenant, pk=pk, integrity_verified_at__isnull=True).exists()
     return crud_edit(
         request, model=BackupJob, pk=pk, form_class=BackupJobForm,
-        template="core/backupjob/form.html", success_url="core:backup_job_detail",
+        template="core/backupjob/form.html",
+        # `reverse(...)` and not the bare name: `crud_edit` calls `redirect(success_url)` with no
+        # arguments, so a pk-taking route passed as a string raises `NoReverseMatch` AFTER the row is
+        # saved — the operator sees a 500 for a write that succeeded. House convention; see
+        # `apps/procurement/views/OrderFulfillment/Backorder.py`.
+        success_url=reverse("core:backup_job_detail", args=[pk]),
         extra_context={"unverified_note": unverified, "notes": BACKUP_NOTES},
     )
 
@@ -201,7 +207,8 @@ def restore_record_detail(request, pk):
 def restore_record_edit(request, pk):
     return crud_edit(
         request, model=RestoreRecord, pk=pk, form_class=RestoreRecordForm,
-        template="core/restorerecord/form.html", success_url="core:restore_record_detail",
+        template="core/restorerecord/form.html",
+        success_url=reverse("core:restore_record_detail", args=[pk]),
         extra_context={"notes": BACKUP_NOTES},
     )
 
@@ -258,7 +265,8 @@ def data_archive_detail(request, pk):
 def data_archive_edit(request, pk):
     return crud_edit(
         request, model=DataArchive, pk=pk, form_class=DataArchiveForm,
-        template="core/dataarchive/form.html", success_url="core:data_archive_detail",
+        template="core/dataarchive/form.html",
+        success_url=reverse("core:data_archive_detail", args=[pk]),
         extra_context={"notes": BACKUP_NOTES},
     )
 
@@ -320,7 +328,8 @@ def legal_hold_detail(request, pk):
 def legal_hold_edit(request, pk):
     return crud_edit(
         request, model=LegalHold, pk=pk, form_class=LegalHoldForm,
-        template="core/legalhold/form.html", success_url="core:legal_hold_detail",
+        template="core/legalhold/form.html",
+        success_url=reverse("core:legal_hold_detail", args=[pk]),
         extra_context={"notes": BACKUP_NOTES},
     )
 
@@ -381,7 +390,7 @@ def environment_instance_edit(request, pk):
     return crud_edit(
         request, model=EnvironmentInstance, pk=pk, form_class=EnvironmentInstanceForm,
         template="core/environmentinstance/form.html",
-        success_url="core:environment_instance_detail",
+        success_url=reverse("core:environment_instance_detail", args=[pk]),
         extra_context={"notes": BACKUP_NOTES},
     )
 
@@ -475,7 +484,8 @@ def recovery_drill_detail(request, pk):
 def recovery_drill_edit(request, pk):
     return crud_edit(
         request, model=RecoveryDrill, pk=pk, form_class=RecoveryDrillForm,
-        template="core/recoverydrill/form.html", success_url="core:recovery_drill_detail",
+        template="core/recoverydrill/form.html",
+        success_url=reverse("core:recovery_drill_detail", args=[pk]),
         extra_context={"notes": BACKUP_NOTES},
     )
 
