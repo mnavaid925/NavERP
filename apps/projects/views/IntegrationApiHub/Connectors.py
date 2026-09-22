@@ -81,7 +81,6 @@ def ixc_list(request, domain=None):
                 "connected": counts["connected"] or 0,
                 "error": counts["error"] or 0,
                 "unverified": counts["unverified"] or 0,
-                "due_rotation": 0,
             },
         },
     )
@@ -99,7 +98,7 @@ def ixc_detail(request, pk):
     jobs = ProjectSyncJob.objects.filter(tenant=request.tenant, connector=connector)
     recent_runs = ProjectSyncRun.objects.filter(
         tenant=request.tenant, job__connector=connector
-    ).order_by("-started_at")[:15]
+    ).select_related("job").order_by("-started_at")[:15]
 
     revealed_credential = None
     reveal_data = request.session.pop("_ixc_cred_reveal", None)
@@ -186,18 +185,30 @@ def ixc_rotate_credential(request, pk):
 @login_required
 @require_POST
 def ixc_test(request, pk):
-    """Simulated connection test: records a 'simulated' run on the connector's first job, no HTTP."""
+    """Simulated connection test: records a 'simulated' run on the connector's first job, no HTTP.
+
+    Precondition (contract §4): a run hangs off a job, so a connector with zero sync jobs
+    records nothing — the operator is warned to create a job first (distinct from the note
+    binding below, which is dropped only when a job exists but the form is invalid/blank).
+    The posted ``note`` is stored on the run's ``payload_excerpt`` (todo E2 / contract §3.1).
+    """
     connector = get_object_or_404(ProjectIntegrationConnector, pk=pk, tenant=request.tenant)
+    form = ConnectorTestForm(request.POST or None)
     job = ProjectSyncJob.objects.filter(tenant=request.tenant, connector=connector).first()
     if job is None:
         messages.warning(request, "Create a sync job for this connector before running a test.")
         return redirect("projects:ixc_detail", pk=connector.pk)
+    note = ""
+    if form.is_valid():
+        note = (form.cleaned_data.get("note") or "").strip()
+    excerpt = note[:500] if note else "Simulated connection test — no outbound request was made."
     ProjectSyncRun.record(
         job=job,
         status="simulated",
         trigger_source="manual",
         triggered_by=request.user,
         error_message="Simulated connection test — no outbound request was made.",
+        payload_excerpt=excerpt,
     )
     connector.last_sync_at = timezone.now()
     connector.save(update_fields=["last_sync_at", "updated_at"])
@@ -229,9 +240,14 @@ def connector_health(request, pk):
     mappings = ConnectorFieldMapping.objects.filter(tenant=request.tenant, connector=connector)
     runs = ProjectSyncRun.objects.filter(tenant=request.tenant, job__connector=connector)
     recent_runs = runs.order_by("-started_at")[:15]
-    total_runs = runs.count()
-    failed_runs = runs.filter(status="failed").count()
-    success_runs = runs.filter(status="success").count()
+    agg = runs.aggregate(
+        total_runs=Count("id"),
+        failed_runs=Count("id", filter=Q(status="failed")),
+        success_runs=Count("id", filter=Q(status="success")),
+    )
+    total_runs = agg["total_runs"] or 0
+    failed_runs = agg["failed_runs"] or 0
+    success_runs = agg["success_runs"] or 0
     success_rate = round((success_runs / total_runs) * 100) if total_runs else 0
 
     return render(
@@ -240,8 +256,8 @@ def connector_health(request, pk):
         {
             "connector": connector,
             "recent_runs": recent_runs,
-            "jobs": jobs,
-            "mappings": mappings,
+            "jobs_count": jobs.count(),
+            "mappings_count": mappings.count(),
             "stats": {
                 "total_runs": total_runs,
                 "failed_runs": failed_runs,
