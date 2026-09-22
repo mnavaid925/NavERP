@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Connector — {{ connector.number }}{% else %}New Connector{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Connector: {{ connector.number }}{% else %}Create Connector{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:ixc_list' %}">Connectors</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-4xl">
+  <div class="card-header"><h3 class="card-title">Connection Configuration</h3></div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.name.id_for_label }}" class="form-label">Connection Name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.domain.id_for_label }}" class="form-label">Domain *</label>
+          {{ form.domain }}
+          {% if form.domain.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.domain.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.provider.id_for_label }}" class="form-label">Provider</label>
+          {{ form.provider }}
+          {% if form.provider.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.provider.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.direction.id_for_label }}" class="form-label">Direction</label>
+          {{ form.direction }}
+          {% if form.direction.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.direction.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.environment.id_for_label }}" class="form-label">Environment</label>
+          {{ form.environment }}
+          {% if form.environment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.environment.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.project.id_for_label }}" class="form-label">Project Scope</label>
+          {{ form.project }}
+          <span class="text-xs text-muted">Leave blank for a workspace-wide connector.</span>
+          {% if form.project.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.project.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.owner.id_for_label }}" class="form-label">Owner</label>
+          {{ form.owner }}
+          {% if form.owner.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.owner.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.base_url.id_for_label }}" class="form-label">Base URL / Host</label>
+          {{ form.base_url }}
+          <span class="text-xs text-muted">Configuration reference only — NavERP does not call this address.</span>
+          {% if form.base_url.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.base_url.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.remote_scope_ref.id_for_label }}" class="form-label">Remote Scope Reference</label>
+          {{ form.remote_scope_ref }}
+          <span class="text-xs text-muted">E.g. a Jira project key, an org/repo, a SharePoint site id, an SAP company code.</span>
+          {% if form.remote_scope_ref.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.remote_scope_ref.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.auth_method.id_for_label }}" class="form-label">Auth Method</label>
+          {{ form.auth_method }}
+          {% if form.auth_method.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.auth_method.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.credential.id_for_label }}" class="form-label">Credential</label>
+          {{ form.credential }}
+          <span class="text-xs text-muted">{{ form.credential.help_text }}</span>
+          {% if form.credential.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.credential.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.trigger_mode.id_for_label }}" class="form-label">Trigger Mode</label>
+          {{ form.trigger_mode }}
+          {% if form.trigger_mode.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.trigger_mode.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.status.id_for_label }}" class="form-label">Status</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.schedule_note.id_for_label }}" class="form-label">Schedule Note</label>
+          {{ form.schedule_note }}
+          <span class="text-xs text-muted">Documentation of the intended cadence; nothing runs automatically.</span>
+          {% if form.schedule_note.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.schedule_note.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.notify_webhook.id_for_label }}" class="form-label">Failure-Notification Webhook (7.17)</label>
+          {{ form.notify_webhook }}
+          {% if form.notify_webhook.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notify_webhook.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2 flex items-center gap-2 mt-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}" class="form-label mb-0 cursor-pointer">Connector is active</label>
+          {% if form.is_active.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.is_active.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'projects:ixc_detail' connector.pk %}{% else %}{% url 'projects:ixc_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">{% if is_edit %}Save Changes{% else %}Create Connector{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
