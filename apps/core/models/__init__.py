@@ -108,3 +108,14 @@ from .Localization import (
     UserLocalePreference,
     StatutoryRule,
 )  # noqa: F401
+from .Backup import (
+    BackupJob,
+    DataArchive,
+    RestoreRecord,
+    EnvironmentInstance,
+    RecoveryPosture,
+    RecoveryDrill,
+)  # noqa: F401
+from .LegalHold import (
+    LegalHold,
+)  # noqa: F401
