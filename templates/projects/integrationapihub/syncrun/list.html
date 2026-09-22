@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sync Runs — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Sync Runs</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <span>Sync Runs</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:sync_monitor' %}" class="btn btn-outline"><i data-lucide="activity" class="w-4 h-4 mr-1"></i> Sync Monitor</a>
+    <a href="{% url 'projects:syj_list' %}" class="btn btn-outline"><i data-lucide="repeat" class="w-4 h-4 mr-1"></i> Sync Jobs</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Pending</div><div class="text-2xl font-bold text-slate-900">{{ stats.pending }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="loader" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Running</div><div class="text-2xl font-bold text-slate-900">{{ stats.running }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Partial</div><div class="text-2xl font-bold text-slate-900">{{ stats.partial }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="x-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Failed</div><div class="text-2xl font-bold text-slate-900">{{ stats.failed }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Simulated</div><div class="text-2xl font-bold text-slate-900">{{ stats.simulated }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="alert-octagon" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Failed Today</div><div class="text-2xl font-bold text-red-600">{{ stats.failed_today }}</div></div></div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number or error...">
+      </div>
+      <div class="form-group">
+        <label for="id_status" class="form-label">Status</label>
+        <select name="status" id="id_status" class="form-select">
+          <option value="">All</option>
+          {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_trigger_source" class="form-label">Trigger</label>
+        <select name="trigger_source" id="id_trigger_source" class="form-select">
+          <option value="">All</option>
+          {% for value, label in trigger_choices %}
+          <option value="{{ value }}" {% if trigger_source == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_job" class="form-label">Job</label>
+        <select name="job" id="id_job" class="form-select">
+          <option value="">All Jobs</option>
+          {% for j in jobs %}
+          <option value="{{ j.pk }}" {% if job_id == j.pk|stringformat:"d" %}selected{% endif %}>{{ j.number }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_date_from" class="form-label">From</label>
+        <input type="date" name="date_from" id="id_date_from" value="{{ date_from }}" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="id_date_to" class="form-label">To</label>
+        <input type="date" name="date_to" id="id_date_to" value="{{ date_to }}" class="form-input">
+      </div>
+      <div class="form-group md:col-span-6 flex items-end gap-2">
+        <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 mr-1"></i> Apply</button>
+        <a href="{% url 'projects:syr_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Run</th><th>Job</th><th>Direction</th><th>Status</th><th>Trigger</th><th>Read</th><th>Created</th><th>Updated</th><th>Failed</th><th>Duration</th><th>Attempt</th><th>Started</th><th class="text-right">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td><a href="{% url 'projects:syr_detail' r.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ r.number }}</a></td>
+          <td><a href="{% url 'projects:syj_detail' r.job.pk %}" class="text-blue-600 hover:underline text-sm">{{ r.job.number }}</a></td>
+          <td>{{ r.get_direction_display }}</td>
+          <td><span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span></td>
+          <td>{{ r.get_trigger_source_display }}</td>
+          <td>{{ r.records_read }}</td>
+          <td>{{ r.records_created }}</td>
+          <td>{{ r.records_updated }}</td>
+          <td class="{% if r.records_failed %}text-red-600 font-medium{% endif %}">{{ r.records_failed }}</td>
+          <td class="text-xs text-muted">{{ r.duration_ms }} ms</td>
+          <td>{{ r.attempt_no }}</td>
+          <td class="text-xs text-muted">{{ r.started_at|date:"M d, H:i" }}</td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:syr_detail' r.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+              {% if r.status == "failed" or r.status == "partial" %}
+              <form method="post" action="{% url 'projects:syr_retry' r.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="Retry (requeue)"><i data-lucide="rotate-cw" class="w-4 h-4 text-blue-600"></i></button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="13">
+          <div class="empty-state py-12 text-center">
+            <i data-lucide="activity" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+            <h4 class="text-lg font-medium text-slate-800">No Sync Runs Recorded</h4>
+            <p class="text-muted text-sm mt-1">Run a sync job (simulated) to record its outcome here.</p>
+            <div class="mt-4"><a href="{% url 'projects:syj_list' %}" class="btn btn-primary"><i data-lucide="repeat" class="w-4 h-4 mr-1"></i> Sync Jobs</a></div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if job_id %}&job={{ job_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if job_id %}&job={{ job_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
