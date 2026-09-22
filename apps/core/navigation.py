@@ -220,6 +220,24 @@ LIVE_LINKS = {
         "Localization Overview": "core:localization_overview",          # extra
         "My Regional Settings": "core:user_locale_edit",                # extra
     },
+    # 0.16 Backup, Recovery & Data Lifecycle. Bullet 4 (Data Archival & Purging) is largely 0.8's —
+    # `LIVE_LINKS["0.8"]` already claims it with `retention_board` plus the policy and disposal registers.
+    # 0.16 supplies only the two things a retention *schedule* structurally cannot express: legal holds
+    # (an event whose release SUSPENDS the schedule) and the archive catalogue that records WHERE archived
+    # data went. Pointing "Data Archival" at the archive list rather than at 0.8's board is deliberate:
+    # the board answers "what should be archived", this answers "where is it", which is what makes a
+    # restore possible at all.
+    "0.16": {
+        "Automated Backups": "core:backup_job_list",                  # bullet 1 (a register of evidence)
+        "Point-in-Time Recovery": "core:restore_record_list",         # bullet 2
+        "Disaster Recovery & Failover": "core:recovery_drill_list",   # bullet 3
+        "Data Archival & Purging": "core:data_archive_list",          # bullet 4 (0.8 owns the schedule)
+        "Sandbox & Environment Management": "core:environment_instance_list",  # bullet 5
+        "Legal Holds": "core:legal_hold_list",                        # extra (suspends the 0.8 schedule)
+        "Recovery Posture": "core:recovery_posture_edit",             # extra (RPO/RTO targets, singleton)
+        "Backup & Recovery Overview": "core:backup_overview",         # extra
+        "Recovery Board": "core:backup_board",                        # extra (the zero rule)
+    },
     # ========================= Module 1 — Customer Relationship Management (CRM)
     # 1.1 Core Data Management — Accounts/Contacts are core.Party lenses; Leads are CRM-owned.
     "1.1": {
