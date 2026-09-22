@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sync Run {{ run.number }} — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title flex items-center gap-3">{{ run.number }} <span class="badge {{ run.status_badge }}">{{ run.get_status_display }}</span></h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:syr_list' %}">Sync Runs</a>
+      <span>/</span>
+      <span>{{ run.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    {% if run.status == "failed" or run.status == "partial" %}
+    <form method="post" action="{% url 'projects:syr_retry' run.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="rotate-cw" class="w-4 h-4 mr-1"></i> Retry (Requeue)</button>
+    </form>
+    {% endif %}
+    <a href="{% url 'projects:syj_detail' run.job.pk %}" class="btn btn-outline"><i data-lucide="repeat" class="w-4 h-4 mr-1"></i> Job {{ run.job.number }}</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Record Counters</h3></div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+          <div><div class="text-xs text-muted">Read</div><div class="text-xl font-bold text-slate-900">{{ run.records_read }}</div></div>
+          <div><div class="text-xs text-muted">Created</div><div class="text-xl font-bold text-green-600">{{ run.records_created }}</div></div>
+          <div><div class="text-xs text-muted">Updated</div><div class="text-xl font-bold text-blue-600">{{ run.records_updated }}</div></div>
+          <div><div class="text-xs text-muted">Skipped</div><div class="text-xl font-bold text-slate-500">{{ run.records_skipped }}</div></div>
+          <div><div class="text-xs text-muted">Failed</div><div class="text-xl font-bold text-red-600">{{ run.records_failed }}</div></div>
+        </div>
+      </div>
+    </div>
+
+    {% if run.error_code or run.error_message %}
+    <div class="card border border-red-200">
+      <div class="card-header"><h3 class="card-title text-red-700">Error</h3></div>
+      <div class="card-body">
+        {% if run.error_code %}<div class="text-sm font-mono text-red-700 mb-1">{{ run.error_code }}</div>{% endif %}
+        {% if run.error_message %}<pre class="p-3 bg-red-50 rounded border border-red-100 text-xs whitespace-pre-wrap break-all">{{ run.error_message }}</pre>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if run.payload_excerpt %}
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Payload Excerpt</h3></div>
+      <div class="card-body">
+        <p class="text-xs text-muted mb-2">Truncated; may contain partner data.</p>
+        <pre class="p-3 bg-slate-50 rounded border border-slate-200 font-mono text-xs break-all">{{ run.payload_excerpt }}</pre>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Run Details</h3></div>
+      <div class="card-body">
+        <dl class="space-y-3 text-sm">
+          <div><dt class="text-muted">Job</dt><dd class="font-medium"><a href="{% url 'projects:syj_detail' run.job.pk %}" class="text-blue-600 hover:underline">{{ run.job.number }} — {{ run.job.name }}</a></dd></div>
+          <div><dt class="text-muted">Connector</dt><dd class="font-medium"><a href="{% url 'projects:ixc_detail' run.job.connector.pk %}" class="text-blue-600 hover:underline">{{ run.job.connector.number }}</a></dd></div>
+          <div><dt class="text-muted">Direction</dt><dd class="font-medium">{{ run.get_direction_display }}</dd></div>
+          <div><dt class="text-muted">Trigger Source</dt><dd class="font-medium">{{ run.get_trigger_source_display }}</dd></div>
+          <div><dt class="text-muted">Triggered By</dt><dd class="font-medium">{% if run.triggered_by %}{{ run.triggered_by.username }}{% else %}<span class="text-muted">System</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Attempt</dt><dd class="font-medium">{{ run.attempt_no }}</dd></div>
+          <div><dt class="text-muted">Duration</dt><dd class="font-medium">{{ run.duration_ms }} ms</dd></div>
+          <div><dt class="text-muted">Started</dt><dd class="font-medium">{{ run.started_at|date:"M d, Y H:i:s" }}</dd></div>
+          <div><dt class="text-muted">Finished</dt><dd class="font-medium">{% if run.finished_at %}{{ run.finished_at|date:"M d, Y H:i:s" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Next Retry</dt><dd class="font-medium">{% if run.next_retry_at %}{{ run.next_retry_at|date:"M d, Y H:i:s" }} <span class="text-xs text-muted">(recorded schedule — nothing runs automatically)</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Actions</h3></div>
+      <div class="card-body space-y-2">
+        <a href="{% url 'projects:syr_list' %}" class="btn btn-outline w-full"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to Runs</a>
+        <a href="{% url 'projects:sync_monitor' %}" class="btn btn-outline w-full"><i data-lucide="activity" class="w-4 h-4 mr-1"></i> Sync Monitor</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
