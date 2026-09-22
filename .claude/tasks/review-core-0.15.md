@@ -315,6 +315,158 @@ in" discipline. I adopt the rule.
 because it is admin-gated is right, and the same reasoning means `statutoryrule/*` and the two computed
 pages need no change either — so the fix surface really is just three templates, as it says.
 
+---
+
+## Lane 4 — `performance-reviewer`
+
+**Base `35cde520` → HEAD.** Read-only. Measured against the seeded MariaDB dev DB (`nav_erp`) via `django.test.Client` + `CaptureQueriesContext`, as tenant-1 admin (`admin@acme.example`, pk 2). All destructive probes ran inside `transaction.atomic()` blocks that were force-rolled-back (verified net-zero row counts afterwards).
+
+## Verdict
+
+**No Critical findings. One Important (the routed `_fx_rows` concern is real and I confirm it — with a corrected rationale and a verified cheaper query). Two routed/incidental Minors.** Every one of the 11 views is **constant** in query count with respect to row count — there is **no N+1 anywhere** in this sub-module, and `statutory_rule_list` already does the `select_related` it needs. The index posture is correct and the "missing index on tiny global tables" question resolves to *correctly absent*.
+
+Note for the orchestrator: every total below includes **6 shared queries** that no 0.15 view issues — session load, user load, tenant load, the `tenants_brandingsetting` context processor, and the `BEGIN`/`UPDATE django_session`/`COMMIT` written by the app-wide `SessionTimeoutMiddleware` on every request. I subtract those when attributing queries to a view.
+
+---
+
+## Important
+
+### L4-I1 — `_fx_rows` materialises the tenant's entire rate history to emit one row per currency
+`apps/core/views/Localization.py:46-69` (query at `:56-58`, dedupe loop `:58-61`)
+
+**Confirmed, and it is the only genuine growth-shape defect in the module.** The query count is constant (1 — good), but the **rows transferred** scale as O(currencies × days) while the output is O(currencies). Measured:
+
+| tenant 1 `ExchangeRate` rows | rows out of `_fx_rows` | queries | wall time |
+|---|---|---|---|
+| 3 (seeded) | 3 | 1 | <1 ms |
+| **2,193** (3 currencies × 730 daily rates, rolled back) | **3** | **1** | **207 ms** |
+
+The SQL is a full `INNER JOIN accounting_currency … WHERE tenant_id=1 ORDER BY currency.code ASC, rate_date DESC` with **no LIMIT** — every tenant row is fetched, joined and sorted, then discarded in Python. Extrapolating the measured 0.095 ms/row: a tenant with 10 currencies and 5 years of daily rates (≈18,250 rows) pays **≈1.7 s and ≈18k model instances per board render** — on a dashboard page. That is unbounded, so it is a real problem for this codebase, not a micro-optimization.
+
+**The docstring's tie-break rationale does not apply to this model.** `apps/core/views/Localization.py:49-51` justifies the choice over a `Max("rate_date")` subquery because the latter "silently returns the wrong row when two rates share a date". But `ExchangeRate.Meta.unique_together = ("tenant", "currency", "rate_date")` (`apps/accounting/models/GeneralLedger/ExchangeRates.py:17`) makes two rows for the same tenant+currency+date **impossible**, so the max date is unique per currency and the feared ambiguity cannot occur. The constraint is also backed by a real unique index (`accounting_exchangerate_tenant_id_currency_id_ra_40b1546e_uniq` on `(tenant_id, currency_id, rate_date)`, per `SHOW INDEX`), which serves the aggregate below directly.
+
+**Concrete cheaper query — 2 queries, O(currencies) rows, output verified identical:**
+
+```python
+from django.db.models import Max, Q
+
+latest = (ExchangeRate.objects.filter(tenant=tenant)
+          .values("currency_id").annotate(md=Max("rate_date")))
+q = Q()
+for r in latest:
+    q |= Q(currency_id=r["currency_id"], rate_date=r["md"])
+qs = (ExchangeRate.objects.filter(tenant=tenant).filter(q)
+      .select_related("currency").order_by("currency__code"))
+# then build the same row dicts from `qs`
+```
+
+I ran this against both the seeded data and a 2,190-row synthetic set: the `{(currency_id, rate, rate_date)}` sets are **equal** in both cases (`slow == fast -> True`), it issues **2** queries, and it preserves the `currency__code` display order. Correctness is preserved precisely *because* of the unique constraint above. A `django_assert_max_num_queries(2)` test on `localization_board` (hand to the test-writer) would lock this in.
+
+---
+
+## Minor
+
+### L4-M1 — `localization_overview` fetches the same `LocaleProfile` row twice (routed: CONFIRMED)
+`apps/core/views/Localization.py:251-252`
+
+Confirmed by measurement. The page issues two queries for the one singleton row:
+```
+SELECT ... FROM core_localeprofile WHERE tenant_id = 1 LIMIT 1      <- .first()
+SELECT 1 AS a FROM core_localeprofile WHERE tenant_id = 1 LIMIT 1   <- .exists()
+```
+Fix: fetch once and derive the flag — `profile = LocaleProfile.objects.filter(tenant=tenant).first()`, then `"profile": profile, "has_profile": profile is not None` (or the template's existing `{% if profile %}`). Saves exactly **one** query. **Honest grading:** this is a confirmed, trivially-correct fix, but it is a *constant* 1-query saving on a singleton — it does not grow with anything. I grade it Minor for impact while noting the fix is free.
+
+### L4-M2 — one COUNT query per stat card instead of one aggregate per table
+`apps/core/views/Localization.py:223-229` (board) and `:254-260` (overview)
+
+Board issues **6** COUNTs (2× `core_timezone`, 2× `core_language`, 2× `core_statutoryrule`); overview issues the same 6 plus a 7th on `core_userlocalepreference`. Per the persona's rule 5, KPIs over one table should share an aggregate. Each pair collapses to one query with a conditional aggregate, e.g.:
+
+```python
+z = TimeZone.objects.aggregate(total=Count("id", filter=Q(is_active=True)),
+                               dst=Count("id", filter=Q(is_active=True, observes_dst=True)))
+```
+
+Board 6→3 and overview 7→4. Graded Minor, not Important: these are `COUNT(*)` on tables bounded at 8/10 rows (global registries) and 6 rules, so the saving is constant and tiny — it is a query-count tidiness issue, not a scaling one. Do **not** let this distract from L4-I1.
+
+### L4-M3 — the profile's FK targets are lazily loaded one query each
+`apps/core/views/Localization.py:213` / `:251`; rendered at `templates/core/localizationoverview.html:19-21`, `templates/core/localizationboard.html:19`
+
+The profile fetch does not `select_related` its FKs, so each rendered relation costs a query: board loads `accounting_currency` for `profile.base_currency` (1 extra), overview loads `core_language`, `accounting_currency` and `core_timezone` (3 extra) — all visible in the per-view SQL. Fix: add `.select_related("language", "base_currency", "time_zone")` to the profile queryset. Constant (one row), so Minor.
+
+---
+
+## Measured and clean
+
+**Per-view query counts** (tenant-1 admin, seeded data; `total` then `module-owned = total − 6 shared`):
+
+| View | total | module-owned | shape |
+|---|---|---|---|
+| `language_list` | 9 | 2 (COUNT + page SELECT) | constant |
+| `timezone_list` | 9 | 2 | constant |
+| `statutory_rule_list` | 9 | 2 (COUNT + page SELECT) | constant |
+| `statutory_rule_create` | 8 | 1 (taxcode choices) | constant |
+| `statutory_rule_detail` | 8 | 1 (rule, tax_code JOINed) | constant |
+| `statutory_rule_edit` | 9 | 2 | constant |
+| `locale_profile_edit` | 11 | 4 (profile + 3 form choice sets) | constant |
+| `user_locale_edit` | 10 | 3 | constant |
+| `localization_board` | 17 | 10 | constant |
+| `localization_overview` | 21 | 14 | constant |
+
+**No page's query count grows with rows.** Verified at scale inside rolled-back transactions: `statutory_rule_list` stays at **9** queries with 3 rows *and* with 303 rows, on pages 1/2/5 (pagination keeps it flat); `localization_board` stays at **17** and `localization_overview` at **21** with 300 extra rules. **No N+1 found in this sub-module.**
+
+**`statutory_rule_list` `select_related` — present and sufficient.** `apps/core/views/Localization.py:159` applies `.select_related("tax_code")`, and the template touches `obj.tax_code.name` (`templates/core/statutoryrule/list.html:50`). The page emits **one** joined `core_statutoryrule` query and **zero** per-row `accounting_taxcode` queries. The list template does **not** touch `rate_pct`; the detail template does (`statutoryrule/detail.html:25`), and `crud_detail` is called with `select_related=("tax_code",)` (`Localization.py:178`) — also confirmed as a single joined query, no extra load.
+
+**Template loops do no per-row work.** `language/list.html` and `timezone/list.html` touch only the row's own scalar fields. `localizationboard.html:41-51` iterates a pre-built Python list of dicts whose `currency` is already resolved by `_fx_rows`'s `select_related("currency")`, and whose `source` is pre-computed via `get_source_display()` — no query inside the loop. `localizationoverview.html:82-88` touches no FK. Clean.
+
+**Indexes — correct, nothing missing, nothing redundant.**
+- `statrule_tenant_active_idx (tenant_id, is_active)` is present (`models/Localization.py:238`, `SHOW INDEX` confirms) and exactly covers the predicates the board/overview counts run (`WHERE tenant_id=… AND is_active=1`); the e-invoicing count narrows further on the covered prefix. `unique_together (tenant, name)` also backs the list's tenant filter.
+- `db_index=True` on `StatutoryRule.tenant` (`models/Localization.py:216-217`) does **not** create a redundant single-column index — `SHOW INDEX` on `core_statutoryrule` lists only PRIMARY, `(tenant_id, name)`, `tax_code_id`, and `statrule_tenant_active_idx`; `makemigrations --check core` reports *no drift*. So there is no redundant tenant-only index to trim.
+- `Language` and `TimeZone` carry only their unique natural-key index (`code` / `name`). An index on `is_rtl` / `is_active` / `observes_dst` **would be pointless and I say so**: both are global registries bounded at ~8 and ~10 rows (a full IANA set is ~600), the flags are low-cardinality so a btree index buys nothing, and the `icontains` search (`crud_list` → `__icontains`) could not use one anyway. Correctly absent.
+- `recent_rules` (`Localization.py:261`) orders by `created_at` with no index — considered and clean: `StatutoryRule` is a low-volume compliance register (dozens per tenant), so a `(tenant, created_at)` index is not warranted.
+
+**`currencies_without_rates` — cheap and correct, no cross-tenant concern.** `Currency.objects.filter(is_active=True).count()` (`Localization.py:210, 221`) is a single `COUNT(*)` with O(1) growth. Filtering the **global** `accounting.Currency` master with no tenant predicate is *right*, not a leak: `Currency` is a global, non-sensitive reference master (`apps/accounting/models/GeneralLedger/Currencies.py:6-7`) shared by all tenants, so the number means "currencies the platform offers that this tenant has not rated" (measured: 4 − 3 = 1 for both tenants). The only edge is that a tenant holding a rate on a *now-inactive* currency would under-count the gap — a logic nuance, not a performance one; I flag it for the logic lane, not mine.
+
+**Seeder cost — not worth flagging.** `_seed_localization_globals()` (`seed_core.py:704-709`, `:727-732`) is 8 language + 10 zone = **18 `get_or_create`** calls → 18 SELECTs on a re-run (36 statements on first run). `_seed_localization(tenant)` adds 2 guard SELECTs per tenant on a re-run (`:748`, `:764`). Against tables that hold 8 and 10 rows **forever**, run once, this is trivial, and `get_or_create` *is* the idempotency mechanism — a `bulk_create(ignore_conflicts=True)` would drop the created-count output and the natural-key guard for no measurable gain. The `if not X.objects.filter(tenant=…).exists()` per-entity guards are the deliberate anti-pattern-avoidance the docstring describes. Clean.
+
+**Pagination** is in place for all three list views via `crud_list` (`apps/core/crud.py:115, 180`, default `per_page=15`), and all three list models have deterministic `Meta.ordering`, so pages are stable. No `list(qs)`-to-count or `len(qs)` misuse: the board's `len(rate_rows)` (`Localization.py:219`) operates on an already-materialised Python list, and every other existence check uses `.exists()` — except the one duplicate at L4-M1.
+
+### Orchestrator verification — lane 4
+
+**L4-I1 — CONFIRMED, and this lane corrected a mistake of MINE.** The load-bearing fact is the constraint,
+which I re-read directly:
+
+```
+apps/accounting/models/GeneralLedger/ExchangeRates.py:17
+        unique_together = ("tenant", "currency", "rate_date")
+```
+
+Two rows for the same tenant+currency+date are therefore **impossible**, so the `Max("rate_date")` tie I
+wrote my own docstring to avoid *cannot occur*. My justification —
+
+> "The alternative — a `Max("rate_date")` subquery joined back — is the shape that silently returns the
+> wrong row when two rates share a date"
+
+— is **false for this model**, and lane 4 proved it by measurement rather than argument (2,193 rows →
+207 ms, then an A/B whose output sets are equal). This is the single most valuable finding of the review so
+far: not because the code is wrong, but because **the stated reason for the code being right was wrong**,
+and a future editor reading that docstring would have preserved a slow query to defend against a tie that
+cannot happen. Severity upheld as **Important** — unbounded rows on a landing page, but no incorrectness.
+
+**L4-M1 — CONFIRMED** (two queries for one singleton row; free fix).
+**L4-M3 — CONFIRMED** (profile FKs lazily loaded; free fix).
+**L4-M2 — CONFIRMED as a query-count tidy, and I agree with the lane's own downgrade to Minor.** 6 COUNTs
+on tables of 8/10/6 rows is not a scaling problem. I will fold M1+M2+M3 into one "trim the computed pages'
+queries" fix rather than three separate passes.
+**L4's `currencies_without_rates` edge case — carried, not folded in.** A tenant holding a rate on a
+now-inactive currency under-counts the gap. That is a *logic* nuance the lane explicitly declined to grade
+(it is not its column) and I am recording it as a known, accepted edge rather than fixing it: the number
+answers "currencies the platform offers that this tenant has not rated", and an inactive currency is not
+offered. **No action, stated so the decision is visible.**
+**L4's 6-shared-query accounting is exactly the discipline I want** — attributing queries to the view rather
+than to the framework is what makes the per-view table above usable.
+
+
+
 
 
 
