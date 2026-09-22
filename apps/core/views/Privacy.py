@@ -23,6 +23,10 @@ from apps.core.models import (
     RetentionPolicy,
     current_consent,
 )
+# 0.16 `LegalHold` — imported for ONE purpose: to name the hold that suspends a schedule this board
+# would otherwise report as due for disposal. The hold lives in its own model (0.16) and is *not*
+# re-declared here (L36); this board is the read side of the integration 0.16 promised.
+from apps.core.models.LegalHold import LegalHold
 from apps.core.forms import (
     ConsentPurposeForm,
     ConsentRecordForm,
@@ -388,13 +392,29 @@ def retention_board(request):
     For a policy pinned to a model, counts rows older than the retention window — but ONLY when that
     model actually has a `created_at`. Where it does not, the row says so instead of reporting 0,
     because a zero that means "cannot tell" is the most dangerous number a compliance board can show.
+
+    **A legal hold SUSPENDS the schedule covering its scope (0.16).** Reporting "N due for disposal" for
+    a scope under an active hold would be the same false all-clear in a worse direction: the number would
+    invite the disposal of data a court order protects, which is spoliation. So a held policy reports NO
+    count at all and names the hold instead. The match is `LegalHold.suspends_policy()`, which tests the
+    policy FK **or** the model label — the two ways a hold may be pinned.
     """
     policies = RetentionPolicy.objects.filter(tenant=request.tenant, is_active=True)
+    # Read once, in the view, then match in Python: `suspends_policy()` compares FKs and needs no query,
+    # and doing it here rather than per-row keeps this to two queries regardless of policy count.
+    holds = list(LegalHold.active_for_tenant(request.tenant))
     rows = []
     for policy in policies:
         due = None
         note = ""
-        if not policy.model_label:
+        held_by = [h for h in holds if h.suspends_policy(policy)]
+        if held_by:
+            # Named, never counted. The hold's scope and matter reference are what make the suspension
+            # actionable; a bare "on hold" would leave the reader unable to find out why.
+            names = ", ".join(h.name for h in held_by)
+            note = ("Suspended by an active legal hold (%s). Nothing may be disposed of in this scope "
+                    "while the hold is in force, so no count is reported." % names)
+        elif not policy.model_label:
             note = "No model pinned — this policy is a category, not a computable schedule."
         else:
             try:
@@ -413,12 +433,17 @@ def retention_board(request):
                     due = model.objects.filter(tenant=request.tenant, created_at__lt=cutoff).count()
                 else:
                     note = "This model has no tenant column, so nothing here is attributable."
-        rows.append({"policy": policy, "due": due, "note": note})
+        rows.append({"policy": policy, "due": due, "note": note, "held_by": held_by})
+    held_rows = [r for r in rows if r["held_by"]]
     context = {
         "rows": rows,
         "computable": sum(1 for r in rows if r["due"] is not None),
         "total_due": sum(r["due"] for r in rows if r["due"] is not None),
         "disposals": DisposalRecord.objects.filter(tenant=request.tenant).count(),
+        # Surfaced explicitly rather than left for the reader to infer from the note text: a board that
+        # silently drops a policy out of `computable` looks like a board with nothing to say.
+        "held_count": len(held_rows),
+        "held_names": ", ".join(sorted({h.name for r in held_rows for h in r["held_by"]})),
     }
     return render(request, "core/retentionboard.html", context)
 
