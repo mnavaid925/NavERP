@@ -744,8 +744,15 @@ class Command(BaseCommand):
         `Currency` and `TaxCode` are read through `django_apps.get_model` rather than imported: they
         belong to `accounting`, and this command seeds `core` only. Reading a peer's rows to build a
         coherent FK is fine; seeding them here would be the cross-app defect the audit's check 6 hunts.
+
+        **The guard alone is not enough for those two FKs.** On a fresh install this command runs
+        BEFORE `seed_accounting` — which is their only creator and itself refuses to run without
+        tenants — so the create below freezes `base_currency`/`tax_code` at NULL, and a bare
+        `if not exists()` would skip the existing rows forever. Hence the `else` branches backfill a
+        NULL link on re-run, once accounting data exists.
         """
-        if not LocaleProfile.objects.filter(tenant=tenant).exists():
+        profile = LocaleProfile.objects.filter(tenant=tenant).first()
+        if profile is None:
             Currency = django_apps.get_model("accounting", "Currency")
             LocaleProfile.objects.create(
                 tenant=tenant,
@@ -760,6 +767,14 @@ class Command(BaseCommand):
                 notes="Seeded default profile. Formats are patterns, not an enum — edit them here.",
             )
             self.stdout.write(f"  {tenant.name}: seeded the locale profile")
+        elif profile.base_currency_id is None:
+            # Re-run after `seed_accounting`: repair the NULL the fresh-install ordering froze.
+            Currency = django_apps.get_model("accounting", "Currency")
+            base_currency = Currency.objects.filter(code="USD").first()
+            if base_currency is not None:
+                profile.base_currency = base_currency
+                profile.save(update_fields=["base_currency", "updated_at"])
+                self.stdout.write(f"  {tenant.name}: linked the locale profile's base currency")
 
         if not StatutoryRule.objects.filter(tenant=tenant).exists():
             TaxCode = django_apps.get_model("accounting", "TaxCode")
@@ -784,3 +799,19 @@ class Command(BaseCommand):
                           "obligation.",
                 )
             self.stdout.write(f"  {tenant.name}: seeded {len(rules)} statutory rule(s)")
+        elif StatutoryRule.objects.filter(
+                tenant=tenant, name__in=["EU VAT e-invoicing", "US sales tax filing"],
+                tax_code__isnull=True).exists():
+            # Re-run after `seed_accounting`: repair the NULL tax codes the same ordering froze.
+            TaxCode = django_apps.get_model("accounting", "TaxCode")
+            codes = {
+                "EU VAT e-invoicing": TaxCode.objects.filter(tenant=tenant, tax_type="vat").first(),
+                "US sales tax filing": TaxCode.objects.filter(tenant=tenant, tax_type="sales").first(),
+            }
+            linked = 0
+            for name, code in codes.items():
+                if code is not None:
+                    linked += StatutoryRule.objects.filter(
+                        tenant=tenant, name=name, tax_code__isnull=True).update(tax_code=code)
+            if linked:
+                self.stdout.write(f"  {tenant.name}: linked {linked} statutory rule tax code(s)")
