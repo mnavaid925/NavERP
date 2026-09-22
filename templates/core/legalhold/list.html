@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Legal Holds{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Legal Holds</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_overview' %}">Backup &amp; Recovery</a><span class="sep">›</span><span>Legal holds</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:retention_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Retention board</a>
+      <a href="{% url 'core:legal_hold_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Issue a hold</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">A preservation order <strong>suspends</strong> every retention window covering its
+      scope, until it is released. A hold has no expiry — its end is an event, not a duration.</p>
+    {% if active_count %}
+      <p class="text-warn"><i data-lucide="gavel"></i> <strong>{{ active_count }} hold{{ active_count|pluralize }}</strong> in force. While one of these covers a scope, that scope's retention schedule is suspended and no "due for disposal" figure can be trusted.</p>
+    {% else %}
+      <p class="text-muted"><i data-lucide="check"></i> No hold is in force. No retention schedule is suspended.</p>
+    {% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, custodian, matter, authority…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:legal_hold_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Hold</th><th>Custodian</th><th>Scope</th><th>Matter</th><th>Status</th><th>Age</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:legal_hold_detail' obj.pk %}">{{ obj.name }}</a>
+              {% if obj.issuing_authority %}<div class="text-muted">{{ obj.issuing_authority|truncatechars:44 }}</div>{% endif %}</td>
+            <td>{{ obj.custodian|default:"—" }}</td>
+            <td>{{ obj.scope_label }}</td>
+            <td>{% if obj.matter_reference %}<code>{{ obj.matter_reference }}</code>{% else %}—{% endif %}</td>
+            <td>
+              {% if obj.status == "active" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "released" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.age_days }} day{{ obj.age_days|pluralize }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:legal_hold_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:legal_hold_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:legal_hold_delete' obj.pk %}" onsubmit="return confirm('Delete this hold record?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="gavel"></i><h3>No legal holds recorded</h3><p class="text-muted">Without a hold, the retention schedule runs uninterrupted.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
