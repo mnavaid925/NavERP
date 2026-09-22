@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Backup Jobs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Backup Jobs</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_overview' %}">Backup &amp; Recovery</a><span class="sep">›</span><span>Backups</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:backup_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Board</a>
+      <a href="{% url 'core:backup_job_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a backup</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">One row per backup a person reports as taken. Recording a row here does not take one.</p>
+    {% if unverified_count %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ unverified_count }} backup{{ unverified_count|pluralize }}</strong> carr{{ unverified_count|pluralize:"ies,y" }} no recorded integrity check. An unverified backup is an untested claim, not a safety net.</p>
+    {% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, scope, evidence…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="backup_type" class="form-select" aria-label="Type">
+          <option value="">Any type</option>
+          {% for value, label in backup_type_choices %}<option value="{{ value }}" {% if request.GET.backup_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="storage_tier" class="form-select" aria-label="Tier">
+          <option value="">Any tier</option>
+          {% for value, label in storage_tier_choices %}<option value="{{ value }}" {% if request.GET.storage_tier == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="integrity" class="form-select" aria-label="Integrity method">
+          <option value="">Any integrity check</option>
+          {% for value, label in integrity_method_choices %}<option value="{{ value }}" {% if request.GET.integrity == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:backup_job_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Backup</th><th>Type</th><th>Tier</th><th>Size</th><th>Status</th><th>Integrity</th><th>Duration</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:backup_job_detail' obj.pk %}">{{ obj.name }}</a>
+              {% if obj.scope_label %}<div class="text-muted">{{ obj.scope_label|truncatechars:48 }}</div>{% endif %}</td>
+            <td>{{ obj.get_backup_type_display }}</td>
+            <td>{{ obj.get_storage_tier_display }}</td>
+            <td>{{ obj.size_display }}</td>
+            <td>
+              {% if obj.status == "success" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "warning" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "failed" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>
+              {% if obj.is_verified %}<span class="badge badge-green">{{ obj.get_integrity_method_display }}</span>
+              {% else %}<span class="badge badge-amber">Not verified</span>{% endif %}
+            </td>
+            <td>{{ obj.duration_display }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:backup_job_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:backup_job_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:backup_job_delete' obj.pk %}" onsubmit="return confirm('Delete this backup record? This removes the record, not any backup file.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8"><div class="empty-state"><i data-lucide="database-backup"></i><h3>No backups recorded</h3><p class="text-muted">A backup taken outside NavERP has no row until somebody records it.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
