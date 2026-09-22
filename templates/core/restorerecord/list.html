@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Restores{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Restores</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_overview' %}">Backup &amp; Recovery</a><span class="sep">›</span><span>Restores</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:restore_record_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a restore</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">A restore recorded as an <strong>operation</strong> — a source, a target time and an
+      outcome. NavERP cannot perform one; this is the record it leaves.</p>
+    <p class="text-muted"><i data-lucide="info"></i> This is a <strong>pooled</strong> multi-tenant system, so no
+      managed backup can restore a single tenant. A per-tenant restore means recovering to a clone and
+      extracting that tenant's rows — which is why the target tenant and the reason are recorded.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search reason, outcome, evidence…">
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="scope" class="form-select" aria-label="Scope">
+          <option value="">Any scope</option>
+          {% for value, label in scope_choices %}<option value="{{ value }}" {% if request.GET.scope == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:restore_record_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Source</th><th>Scope</th><th>Target time</th><th>Status</th><th>Verified</th><th>Duration</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:restore_record_detail' obj.pk %}">{{ obj.source_label }}</a>
+              {% if obj.reason %}<div class="text-muted">{{ obj.reason|truncatechars:48 }}</div>{% endif %}</td>
+            <td>{{ obj.get_scope_display }}</td>
+            <td>{{ obj.target_time|date:"M d, Y H:i"|default:"—" }}</td>
+            <td>
+              {% if obj.status == "succeeded" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "partial" or obj.status == "rolled_back" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "failed" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td>{% if obj.is_verified %}<span class="badge badge-green">Verified</span>{% else %}<span class="badge badge-slate">Not verified</span>{% endif %}</td>
+            <td>{{ obj.duration_display }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:restore_record_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:restore_record_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:restore_record_delete' obj.pk %}" onsubmit="return confirm('Delete this restore record?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="history"></i><h3>No restores recorded</h3><p class="text-muted">A restore that ran but was never recorded cannot be audited.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
