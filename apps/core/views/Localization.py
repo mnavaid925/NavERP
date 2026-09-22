@@ -18,7 +18,7 @@ at import time.
 """
 from django.apps import apps as django_apps
 from django.contrib import messages
-from django.db.models import Max, Q
+from django.db.models import Count, Max, Q
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -236,9 +236,19 @@ def localization_board(request):
 
     rate_rows = _fx_rows(tenant)
     active_currencies = Currency.objects.filter(is_active=True).count()
-    zones = TimeZone.objects.filter(is_active=True)
-    languages = Language.objects.filter(is_active=True)
-    profile = LocaleProfile.objects.filter(tenant=tenant).first()
+    # One conditional aggregate per table instead of a COUNT per stat card.
+    zone_stats = TimeZone.objects.aggregate(
+        total=Count("id", filter=Q(is_active=True)),
+        dst=Count("id", filter=Q(is_active=True, observes_dst=True)))
+    language_stats = Language.objects.aggregate(
+        total=Count("id", filter=Q(is_active=True)),
+        rtl=Count("id", filter=Q(is_active=True, is_rtl=True)))
+    rule_stats = StatutoryRule.objects.filter(tenant=tenant).aggregate(
+        total=Count("id", filter=Q(is_active=True)),
+        e_invoicing=Count("id", filter=Q(is_active=True, e_invoicing_required=True)))
+    # `base_currency` is rendered, so load that FK with the row rather than lazily.
+    profile = (LocaleProfile.objects.filter(tenant=tenant)
+               .select_related("base_currency").first())
 
     context = {
         "profile": profile,
@@ -248,13 +258,12 @@ def localization_board(request):
         "stale_rate_count": sum(1 for row in rate_rows if row["age_days"] > STALE_RATE_DAYS),
         "currencies_without_rates": max(active_currencies - len(rate_rows), 0),
         "stale_after_days": STALE_RATE_DAYS,
-        "timezone_count": zones.count(),
-        "dst_zone_count": zones.filter(observes_dst=True).count(),
-        "language_count": languages.count(),
-        "rtl_count": languages.filter(is_rtl=True).count(),
-        "statutory_count": StatutoryRule.objects.filter(tenant=tenant, is_active=True).count(),
-        "e_invoicing_count": StatutoryRule.objects.filter(
-            tenant=tenant, is_active=True, e_invoicing_required=True).count(),
+        "timezone_count": zone_stats["total"],
+        "dst_zone_count": zone_stats["dst"],
+        "language_count": language_stats["total"],
+        "rtl_count": language_stats["rtl"],
+        "statutory_count": rule_stats["total"],
+        "e_invoicing_count": rule_stats["e_invoicing"],
         # The board points at accounting rather than duplicating its registers.
         "exchange_rate_url": reverse("accounting:exchange_rate_list"),
         "tax_code_url": reverse("accounting:tax_code_list"),
@@ -271,20 +280,31 @@ def localization_overview(request):
         return redirect("dashboard:home")
 
     tenant = request.tenant
-    zones = TimeZone.objects.filter(is_active=True)
-    languages = Language.objects.filter(is_active=True)
+    zone_stats = TimeZone.objects.aggregate(
+        total=Count("id", filter=Q(is_active=True)),
+        dst=Count("id", filter=Q(is_active=True, observes_dst=True)))
+    language_stats = Language.objects.aggregate(
+        total=Count("id", filter=Q(is_active=True)),
+        rtl=Count("id", filter=Q(is_active=True, is_rtl=True)))
     rules = StatutoryRule.objects.filter(tenant=tenant)
+    rule_stats = rules.aggregate(
+        total=Count("id", filter=Q(is_active=True)),
+        e_invoicing=Count("id", filter=Q(is_active=True, e_invoicing_required=True)))
+    # Fetched ONCE — the "configured" flag is derived from it, not a second query for the same
+    # singleton row; the FK targets are rendered, so they ride along.
+    profile = (LocaleProfile.objects.filter(tenant=tenant)
+               .select_related("language", "base_currency", "time_zone").first())
 
     context = {
-        "profile": LocaleProfile.objects.filter(tenant=tenant).first(),
-        "has_profile": LocaleProfile.objects.filter(tenant=tenant).exists(),
+        "profile": profile,
+        "has_profile": profile is not None,
         "my_pref": UserLocalePreference.objects.filter(tenant=tenant, user=request.user).first(),
-        "language_count": languages.count(),
-        "rtl_count": languages.filter(is_rtl=True).count(),
-        "timezone_count": zones.count(),
-        "dst_zone_count": zones.filter(observes_dst=True).count(),
-        "statutory_count": rules.filter(is_active=True).count(),
-        "e_invoicing_count": rules.filter(is_active=True, e_invoicing_required=True).count(),
+        "language_count": language_stats["total"],
+        "rtl_count": language_stats["rtl"],
+        "timezone_count": zone_stats["total"],
+        "dst_zone_count": zone_stats["dst"],
+        "statutory_count": rule_stats["total"],
+        "e_invoicing_count": rule_stats["e_invoicing"],
         "user_pref_count": UserLocalePreference.objects.filter(tenant=tenant).count(),
         "recent_rules": rules.order_by("-created_at")[:5],
     }
