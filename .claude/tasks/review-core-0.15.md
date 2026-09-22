@@ -885,30 +885,30 @@ orchestrator errors and neither produced a code change.**
 
 ## C — Critical
 
-| id | finding | source lanes | verified by |
-|---|---|---|---|
-| **C1** | **A duplicate `(tenant, name)` 500s on both create and edit.** `StatutoryRuleForm` never validates the model's `unique_together`, because `tenant` is not a `Meta.fields` member and Django's `_get_unique_checks()` drops any `unique_together` containing an excluded field. Typing an existing rule name — or renaming a rule onto a sibling's name — is an everyday action that ends in an unhandled `IntegrityError`/500 instead of a form error. **Fix:** add the duplicate guard to `StatutoryRuleForm` (scoped to `self.tenant`), copying the shape that already exists in the repo at `apps/crm/forms/CustomerSuccess/HealthScores.py:15-23`. Do **not** touch `crud_create` — it is shared by every module. | L5-C1, L5-C2 | **Orchestrator: reproduced from scratch** (`temp/probe_15_dup.py`): `is_valid()=True`, `errors={}`, `tenant` excluded, `validate_unique(exclude=['tenant'])` silent, then HTTP 500 on both verbs, DB unmutated. **Critical upheld** — an unhandled 500 on a mainline path. |
+| id | finding | source lanes | verified by | status |
+|---|---|---|---|---|
+| **C1** | **A duplicate `(tenant, name)` 500s on both create and edit.** `StatutoryRuleForm` never validates the model's `unique_together`, because `tenant` is not a `Meta.fields` member and Django's `_get_unique_checks()` drops any `unique_together` containing an excluded field. Typing an existing rule name — or renaming a rule onto a sibling's name — is an everyday action that ends in an unhandled `IntegrityError`/500 instead of a form error. **Fix:** add the duplicate guard to `StatutoryRuleForm` (scoped to `self.tenant`), copying the shape that already exists in the repo at `apps/crm/forms/CustomerSuccess/HealthScores.py:15-23`. Do **not** touch `crud_create` — it is shared by every module. | L5-C1, L5-C2 | **Orchestrator: reproduced from scratch** (`temp/probe_15_dup.py`): `is_valid()=True`, `errors={}`, `tenant` excluded, `validate_unique(exclude=['tenant'])` silent, then HTTP 500 on both verbs, DB unmutated. **Critical upheld** — an unhandled 500 on a mainline path. | [x] fixed — `fix(core): validate StatutoryRule (tenant, name) uniqueness in the form (0.15 C1)` (c2dfe385) |
 
 ## I — Important
 
-| id | finding | source lanes | verified by |
-|---|---|---|---|
-| **I1** | **Member-reachable pages offer only admin-gated exits.** Three templates: `userlocale/form.html` (breadcrumb, "Overview", body link, **and Cancel** all → `@tenant_admin_required` pages), `language/list.html` and `timezone/list.html` (both page-action buttons). A member who saves their own regional preference is POST-redirected to a 403, and their only in-page exit is the browser Back button. **Fix:** route to member-reachable pages where one exists (`core:user_locale_edit`, `dashboard:home`), hide where none does — lane 6's `{% if request.user.is_superuser or request.user.is_tenant_admin %}` idiom, or lane 3's "empty the `.page-actions`" precedent from `my_preferences.html`. | L1-I1, L1-M1, L1-M2, L3-C1, L3-I1/I2, L6-M1 | **Orchestrator: reproduced** (`temp/probe_15_member_flow.py`): member GET 200 → POST 302 to `/core/localization/` → **403**; and all three page-action targets 403. **Severity set to Important, overruling lane 3's Critical** — the save itself *succeeds*, nothing crashes, no boundary is crossed, and the member is correctly denied rather than wrongly granted. The Critical rubric is a closed list and a dead-end landing page is not on it. |
-| **I2** | **`_fx_rows` materialises the tenant's entire rate history to emit one row per currency.** O(currencies × days) rows fetched, joined and sorted, then discarded in Python. Measured 2,193 rows → 207 ms; extrapolates to ≈1.7 s on a landing page at 10 currencies × 5 years. **And the docstring's stated justification is false:** it claims a `Max("rate_date")` subquery can "return the wrong row when two rates share a date", but `ExchangeRate.Meta.unique_together = ("tenant","currency","rate_date")` makes that impossible. **Fix:** lane 4's 2-query replacement, A/B-verified to produce an identical output set. | L4-I1 | **Orchestrator: confirmed** the deciding constraint at `apps/accounting/models/GeneralLedger/ExchangeRates.py:17`. **This is the review's most valuable finding: the code is slow but not wrong — the *reason* I wrote for it was wrong, and a future editor would have defended a slow query against a tie that cannot occur.** |
-| **I3** | **The timezone offset column prints raw minutes.** `templates/core/timezone/list.html:44,50` renders `utc_offset_minutes` as `UTC+330` for IST and `UTC-480` for Los Angeles — reading as hours, under a header with no unit, and contradicting the model's own docstring. **Fix:** add a `TimeZone.offset_display` property (`UTC+05:30` / `UTC-08:00`) and render that. | L3-I3 | **Orchestrator: reproduced by render** — pulled the column straight out of the live HTML. |
-| **I4** | **The 0.15 seeder's peer-app FKs can never be populated on a fresh install.** `_seed_localization` reads `accounting.Currency` and `accounting.TaxCode`, but `seed_accounting` is their only creator and explicitly requires `seed_core` to run first ("No tenants found — run `seed_core` first"). On a fresh DB every lookup is `None`, and the per-entity guard then **freezes the NULLs permanently** — re-running `seed_core` after `seed_accounting` does not repair them. Latent on the dev DB only because accounting data pre-existed. **Fix:** backfill a NULL link on re-run inside `_seed_localization`, rather than skipping the whole entity. | L2-I1 | **Orchestrator: confirmed the premise** by grep — `seed_accounting.py:97-99` bails without tenants; it is the sole `Currency`/`TaxCode` creator. Dependency is circular in the documented order. |
+| id | finding | source lanes | verified by | status |
+|---|---|---|---|---|
+| **I1** | **Member-reachable pages offer only admin-gated exits.** Three templates: `userlocale/form.html` (breadcrumb, "Overview", body link, **and Cancel** all → `@tenant_admin_required` pages), `language/list.html` and `timezone/list.html` (both page-action buttons). A member who saves their own regional preference is POST-redirected to a 403, and their only in-page exit is the browser Back button. **Fix:** route to member-reachable pages where one exists (`core:user_locale_edit`, `dashboard:home`), hide where none does — lane 6's `{% if request.user.is_superuser or request.user.is_tenant_admin %}` idiom, or lane 3's "empty the `.page-actions`" precedent from `my_preferences.html`. | L1-I1, L1-M1, L1-M2, L3-C1, L3-I1/I2, L6-M1 | **Orchestrator: reproduced** (`temp/probe_15_member_flow.py`): member GET 200 → POST 302 to `/core/localization/` → **403**; and all three page-action targets 403. **Severity set to Important, overruling lane 3's Critical** — the save itself *succeeds*, nothing crashes, no boundary is crossed, and the member is correctly denied rather than wrongly granted. The Critical rubric is a closed list and a dead-end landing page is not on it. | [x] fixed — `fix(core): hide admin-gated exits on the member regional-settings page (0.15 I1)` (f19d1855), `…on the member language list` (aadf1164), `…on the member time-zone list` (830419fc), `…land the member locale save on its own page` (2a58b008), `…hide the admin-gated profile link from a member on the locale form` (26653443) |
+| **I2** | **`_fx_rows` materialises the tenant's entire rate history to emit one row per currency.** O(currencies × days) rows fetched, joined and sorted, then discarded in Python. Measured 2,193 rows → 207 ms; extrapolates to ≈1.7 s on a landing page at 10 currencies × 5 years. **And the docstring's stated justification is false:** it claims a `Max("rate_date")` subquery can "return the wrong row when two rates share a date", but `ExchangeRate.Meta.unique_together = ("tenant","currency","rate_date")` makes that impossible. **Fix:** lane 4's 2-query replacement, A/B-verified to produce an identical output set. | L4-I1 | **Orchestrator: confirmed** the deciding constraint at `apps/accounting/models/GeneralLedger/ExchangeRates.py:17`. **This is the review's most valuable finding: the code is slow but not wrong — the *reason* I wrote for it was wrong, and a future editor would have defended a slow query against a tie that cannot occur.** | [x] fixed — `perf(core): rewrite _fx_rows to a 2-query grouped Max and drop its false tie-break rationale (0.15 I2)` (89e71349) |
+| **I3** | **The timezone offset column prints raw minutes.** `templates/core/timezone/list.html:44,50` renders `utc_offset_minutes` as `UTC+330` for IST and `UTC-480` for Los Angeles — reading as hours, under a header with no unit, and contradicting the model's own docstring. **Fix:** add a `TimeZone.offset_display` property (`UTC+05:30` / `UTC-08:00`) and render that. | L3-I3 | **Orchestrator: reproduced by render** — pulled the column straight out of the live HTML. | [x] fixed — `feat(core): add TimeZone.offset_display property for UTC-offset rendering (0.15 I3)` (2b5df7a9), `…render the time-zone offset via offset_display, not raw minutes` (7c8b0c94) |
+| **I4** | **The 0.15 seeder's peer-app FKs can never be populated on a fresh install.** `_seed_localization` reads `accounting.Currency` and `accounting.TaxCode`, but `seed_accounting` is their only creator and explicitly requires `seed_core` to run first ("No tenants found — run `seed_core` first"). On a fresh DB every lookup is `None`, and the per-entity guard then **freezes the NULLs permanently** — re-running `seed_core` after `seed_accounting` does not repair them. Latent on the dev DB only because accounting data pre-existed. **Fix:** backfill a NULL link on re-run inside `_seed_localization`, rather than skipping the whole entity. | L2-I1 | **Orchestrator: confirmed the premise** by grep — `seed_accounting.py:97-99` bails without tenants; it is the sole `Currency`/`TaxCode` creator. Dependency is circular in the documented order. | [x] fixed — `fix(core): backfill the localization seeder NULL peer-app FKs on re-run (0.15 I4)` (948f85de) |
 
 ## M — Minor
 
-| id | finding | source | note |
-|---|---|---|---|
-| **M1** | `templates/core/statutoryrule/detail.html:39` — no "Back to list"; the only one of 18 core detail pages without it. | L3-I4 | Verified by count: 0 vs 17/18. |
-| **M2** | `views/Localization.py:119,146` — the two singleton saves write an audit row with `{"verb": ...}` but no field diff, where `crud.py:219` passes `_changed(form)`. Audit fidelity only; no secret involved. | L6-M2 | **New in lane 6.** Fixer must choose: explicit diff dict, or promote `_changed` (importing a `_`-name across modules is itself a smell). |
-| **M3** | Trim the two computed pages' queries: `localization_overview` fetches `LocaleProfile` twice (`.first()` + `.exists()`); 6 COUNTs per page where 3 conditional aggregates would do; the profile's FKs are not `select_related`. | L4-M1/M2/M3 | Constant savings, not scaling. Fold into **one** pass. |
-| **M4** | Dead context keys: `profile` is passed to the board and never used; `obj`/`is_edit` are passed to both form templates and never used. | L2-M1 | Harmless direction (the dangerous direction was checked and is absent). |
-| **M5** | `contract-core-0.15.md:197` records `rtl_choices` labels that differ from the shipped ones. | L2-M2 | Doc-only. Fix the contract. |
-| **M6** | `badge-amber` used for neutral registry facts ("Observes DST", "Right-to-left") where `badge-slate`/`badge-info` would read as neutral. | L3-M3 | Valid classes; polish only. |
-| **M7** | `localizationoverview.html:98-101` — a five-clause run-on that repeats `localizationboard.html:16` verbatim. Convert to a `<ul>`; let the board keep the "nothing is stored" line. | L3-M2 | Content is right; presentation only. |
+| id | finding | source | note | status |
+|---|---|---|---|---|
+| **M1** | `templates/core/statutoryrule/detail.html:39` — no "Back to list"; the only one of 18 core detail pages without it. | L3-I4 | Verified by count: 0 vs 17/18. | [x] fixed — `fix(core): add the missing Back-to-list link on the statutory rule detail (0.15 M1)` (61019a9c) |
+| **M2** | `views/Localization.py:119,146` — the two singleton saves write an audit row with `{"verb": ...}` but no field diff, where `crud.py:219` passes `_changed(form)`. Audit fidelity only; no secret involved. | L6-M2 | **New in lane 6.** Fixer must choose: explicit diff dict, or promote `_changed` (importing a `_`-name across modules is itself a smell). | [x] fixed — **explicit diff dict** chosen: a local `_audit_changes()` twin in the view module, `crud._changed` left private. `fix(core): record the field diff on the two hand-rolled locale saves (0.15 M2)` (d84d0184), `…correct the _audit_changes call-site count from ~15 to ~75` (0e78ce8b) |
+| **M3** | Trim the two computed pages' queries: `localization_overview` fetches `LocaleProfile` twice (`.first()` + `.exists()`); 6 COUNTs per page where 3 conditional aggregates would do; the profile's FKs are not `select_related`. | L4-M1/M2/M3 | Constant savings, not scaling. Fold into **one** pass. | [x] fixed — `perf(core): trim the two computed pages to one aggregate per table and one profile fetch (0.15 M3)` (36ffcd30) |
+| **M4** | Dead context keys: `profile` is passed to the board and never used; `obj`/`is_edit` are passed to both form templates and never used. | L2-M1 | Harmless direction (the dangerous direction was checked and is absent). | [x] fixed — `chore(core): drop the dead context keys from the locale singleton and board renders (0.15 M4)` (5c3edeac) |
+| **M5** | `contract-core-0.15.md:197` records `rtl_choices` labels that differ from the shipped ones. | L2-M2 | Doc-only. Fix the contract. | [x] fixed — `docs(core): correct the contract rtl_choices labels to the shipped ones (0.15 M5)` (5ab2f4a8) |
+| **M6** | `badge-amber` used for neutral registry facts ("Observes DST", "Right-to-left") where `badge-slate`/`badge-info` would read as neutral. | L3-M3 | Valid classes; polish only. | [x] fixed — `style(core): read "Observes DST" as a neutral fact, not an amber warning (0.15 M6)` (e920ff8c), `…"Right-to-left"…` (e7b5d180) |
+| **M7** | `localizationoverview.html:98-101` — a five-clause run-on that repeats `localizationboard.html:16` verbatim. Convert to a `<ul>`; let the board keep the "nothing is stored" line. | L3-M2 | Content is right; presentation only. | [x] fixed — `docs(core): turn the overview run-on into a four-bullet list and drop the board duplication (0.15 M7)` (11852be0) |
 
 ## No action — recorded so the decisions are visible
 
@@ -943,6 +943,72 @@ Recorded because a clean verdict on a checked item is evidence, not silence:
 4. **I4** — the seeder backfill.
 5. **I2** — `_fx_rows`, using lane 4's A/B-verified 2-query form, and **rewrite the docstring** (the old rationale is false).
 6. **M1–M7**, with **M3** as a single pass and **M5** a doc edit.
+
+---
+
+# FIXER'S NOTES — `code-fixer`
+
+**All 12 findings are `[x] fixed`. None skipped.** Fixes landed one file per commit, in ID order,
+Critical → Important → Minor.
+
+## I1 — the pattern chosen, and why
+
+**Hide**, using `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+
+The finding permitted either house pattern (route-where-a-member-page-exists, or hide). *Hide* was chosen because:
+
+- it is the idiom the repo already uses in **313** template locations, and it is byte-for-byte the condition
+  inside `apps/core/decorators.py:18` (`user.is_superuser or getattr(user, "is_tenant_admin", False)`) — so the
+  member's view of the page and the gate that guards the destination can never disagree;
+- it is the precedent set by the sibling member page `templates/core/my_preferences.html`, which ships a
+  deliberately **empty** `.page-actions` and a breadcrumb that does **not** link the admin-gated
+  `core:notification_overview` — the author made that page self-contained on purpose
+  (`apps/core/navigation.py:93-94`).
+
+The routing alternative was rejected on two grounds. Re-pointing "Regional settings" at
+`core:user_locale_edit` makes the label and the destination disagree ("Regional settings" would open
+"My Regional Settings"), and a "Cancel → `dashboard:home`" would send a member who opened the page from the
+sidebar all the way home. Neither is needed: a member has no dead end once the dead controls are gone — the
+sidebar and the browser Back both work, and the save now returns to the page itself (`core:user_locale_edit`),
+not to the admin-gated overview.
+
+Applied consistently across all three files: every admin-gated crumb renders as **plain text**
+(`<span>Localization</span>`, never a link to an inaccessible page), and every admin-gated page action —
+including `userlocale/form.html`'s **Cancel** and the body reference to Regional Settings — is hidden.
+`localeprofile/form.html` is itself `@tenant_admin_required`, so its "Overview" action is legitimate and was
+left alone.
+
+## App-wide recommendation (clone family)
+
+I1 is one instance of a condition that is **not** specific to 0.15: `resolve_nav` is role-blind, so *every*
+admin-gated sub-module's page actions and breadcrumbs are rendered to members (see N6). This burn-down fixed
+0.15's three pages only, deliberately, rather than forking one module out of step with the other ~12. A separate
+app-wide pass over member-visible admin affordances is worth scheduling.
+
+## Verification performed
+
+Every probe writes inside `transaction.atomic()` and rolls back; before/after counts are printed.
+
+| probe | finding | what it proves |
+|---|---|---|
+| `temp/probe_c1_dup.py` | C1 | create-duplicate **and** edit-duplicate both return **200 with the form error** (not 500) and leave the row unmutated; a legitimate new name and a legitimate rename both **302 and persist**; tenant-1 rule count 3 → 4 in-transaction → 3 after rollback |
+| `temp/probe_i2_fx.py` | I2 | the old (fetch-all, dedupe in Python) and new (grouped `Max`, 2-query) `_fx_rows` produce **identical** output rows on the seeded tenant **and** on a synthetic 730-day history; the new shape issues exactly **2** queries |
+| `temp/probe_i4_seed.py` | I4 | a forced NULL `base_currency` and two forced NULL `tax_code`s are **repaired** by a re-run, with **no row-count change** (no duplication); the India GST rule correctly stays without a `tax_code`; a second run is a no-op |
+| `temp/probe_m2_audit.py` | M2 | both hand-rolled singleton saves now write a real `{field: new_value}` diff next to the `verb` marker |
+| `temp/probe_15_render.py` | I1, I3, M6, M7 | all nine 0.15 pages return 200 with their expected content asserted for `admin_acme`; the three member-reachable pages contain **no admin-gated href** in their own chrome and body while the admin pages still return **403** to a member; the offset column shows `UTC+05:30` / `UTC-08:00` / `UTC+00:00` and no raw minutes |
+
+**I3 is not a schema change.** `offset_display` is a `@property`, not a field:
+`manage.py makemigrations --check --dry-run core` → *"No changes detected in app 'core'"*.
+
+## Observed but NOT fixed (out of scope for this burn-down)
+
+- **`contract-core-0.15.md` §3.3 and the two singleton rows of §3.2 are now stale.** §3.3 still describes
+  `_fx_rows` as "One query, grouped in Python (… no subquery-tie bug)" and still lists a `profile` key on the
+  board; §3.2 still lists `obj`/`is_edit` for `locale_profile_edit` and `obj` for `user_locale_edit`. I2 and M4
+  changed all of that. Left alone because the contract is the *pre-build pinned spec* and its own convention is
+  to record divergence in an **AS-BUILT CORRECTION** block, not to rewrite the pinned tables — and because only
+  M5 (the `rtl_choices` label drift) was in the finding list. Worth a follow-up correction block.
+
 
 
 
