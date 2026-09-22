@@ -931,7 +931,7 @@ class ProjectIntegrationConnectorAdmin(admin.ModelAdmin):
     list_filter = ("domain", "status", "environment", "is_active")
     list_select_related = ("tenant", "project", "owner", "notify_webhook")
     search_fields = ("number", "name", "remote_scope_ref", "base_url", "notes")
-    readonly_fields = ("number", "credential", "last_sync_at", "last_success_at", "consecutive_failures", "created_at", "updated_at")
+    readonly_fields = ("number", "last_sync_at", "last_success_at", "consecutive_failures", "created_at", "updated_at")
 
 
 @admin.register(ConnectorFieldMapping)
