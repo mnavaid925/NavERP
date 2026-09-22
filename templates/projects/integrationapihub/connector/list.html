@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Integration Connectors — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if domain %}{{ domain|capfirst }} Connectors{% else %}Integration Connectors{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <span>Connectors</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:integration_hub' %}" class="btn btn-outline">
+      <i data-lucide="layout-grid" class="w-4 h-4 mr-1"></i> Hub
+    </a>
+    <a href="{% url 'projects:ixc_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Connector
+    </a>
+  </div>
+</div>
+
+<div class="flex flex-wrap gap-2 mb-4">
+  <a href="{% url 'projects:ixc_list' %}" class="btn {% if not domain %}btn-primary{% else %}btn-outline{% endif %} btn-sm">All</a>
+  <a href="{% url 'projects:ixc_erp_list' %}" class="btn {% if domain == 'erp' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">ERP &amp; Finance</a>
+  <a href="{% url 'projects:ixc_crm_list' %}" class="btn {% if domain == 'crm' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">CRM</a>
+  <a href="{% url 'projects:ixc_hris_list' %}" class="btn {% if domain == 'hris' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">HR &amp; Talent</a>
+  <a href="{% url 'projects:ixc_devops_list' %}" class="btn {% if domain == 'devops' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">DevOps</a>
+  <a href="{% url 'projects:ixc_storage_list' %}" class="btn {% if domain == 'storage' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">File Storage</a>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="plug" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Total</div><div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Active</div><div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="link" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Connected</div><div class="text-2xl font-bold text-slate-900">{{ stats.connected }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Error</div><div class="text-2xl font-bold text-red-600">{{ stats.error }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="help-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Unverified</div><div class="text-2xl font-bold text-slate-900">{{ stats.unverified }}</div></div></div>
+</div>
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, name, scope ref...">
+      </div>
+      <div class="form-group">
+        <label for="id_status" class="form-label">Status</label>
+        <select name="status" id="id_status" class="form-select">
+          <option value="">All Statuses</option>
+          {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_provider" class="form-label">Provider</label>
+        <select name="provider" id="id_provider" class="form-select">
+          <option value="">All Providers</option>
+          {% for value, label in provider_choices %}
+          <option value="{{ value }}" {% if provider == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_project" class="form-label">Project</label>
+        <select name="project" id="id_project" class="form-select">
+          <option value="">All Projects (or Workspace-wide)</option>
+          {% for p in projects %}
+          <option value="{{ p.pk }}" {% if project_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.number }} — {{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">State</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All</option>
+          <option value="active" {% if is_active == "active" or is_active == "true" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" or is_active == "false" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="form-group md:col-span-5 flex items-end gap-2">
+        <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 mr-1"></i> Apply</button>
+        <a href="{% url 'projects:ixc_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Connector</th><th>Domain</th><th>Provider</th><th>Direction</th><th>Scope</th><th>Status</th><th>Credential</th><th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in connectors %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:ixc_detail' c.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ c.number }}</a>
+            <span class="block text-xs text-muted">{{ c.name }}</span>
+          </td>
+          <td><span class="badge {{ c.domain_badge }}">{{ c.get_domain_display }}</span></td>
+          <td>{{ c.get_provider_display }}</td>
+          <td>{{ c.get_direction_display }}</td>
+          <td>{% if c.project %}<span class="text-sm">{{ c.project.number }}</span>{% else %}<span class="text-xs text-muted">Workspace-wide</span>{% endif %}</td>
+          <td><span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span></td>
+          <td>{% if c.credential_set %}<span class="badge badge-green" title="{{ c.credential_masked }}">Set</span>{% else %}<span class="badge badge-slate">None</span>{% endif %}</td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:ixc_detail' c.pk %}" class="btn btn-icon" title="View Details"><i data-lucide="eye" class="w-4 h-4"></i></a>
+              <a href="{% url 'projects:ixc_edit' c.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+              <form method="post" action="{% url 'projects:ixc_toggle_active' c.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="{% if c.is_active %}Deactivate{% else %}Activate{% endif %}">
+                  <i data-lucide="power" class="w-4 h-4 {% if c.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'projects:ixc_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ c.number }}? Its jobs and mappings are removed too.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">
+          <div class="empty-state py-12 text-center">
+            <i data-lucide="plug" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+            <h4 class="text-lg font-medium text-slate-800">No Connectors Found</h4>
+            <p class="text-muted text-sm mt-1">Register a connection to SAP, Jira, Salesforce, SharePoint, or another system.</p>
+            <div class="mt-4"><a href="{% url 'projects:ixc_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Connector</a></div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if provider %}&provider={{ provider }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if provider %}&provider={{ provider }}{% endif %}{% if project_id %}&project={{ project_id }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
