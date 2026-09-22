@@ -55,6 +55,13 @@ from apps.core.models import (
     LocaleProfile,
     StatutoryRule,
     TimeZone,
+    BackupJob,
+    DataArchive,
+    EnvironmentInstance,
+    LegalHold,
+    RecoveryDrill,
+    RecoveryPosture,
+    RestoreRecord,
 )
 
 TENANTS = [
@@ -115,6 +122,7 @@ class Command(BaseCommand):
             self._seed_notifications(tenant)
             self._seed_integrations(tenant)
             self._seed_localization(tenant)
+            self._seed_backup(tenant)
 
         self.stdout.write(self.style.SUCCESS("core seed complete."))
         self.stdout.write("Next: run `seed_accounts` then `seed_tenants`.")
@@ -815,3 +823,173 @@ class Command(BaseCommand):
                         tenant=tenant, name=name, tax_code__isnull=True).update(tax_code=code)
             if linked:
                 self.stdout.write(f"  {tenant.name}: linked {linked} statutory rule tax code(s)")
+
+    def _seed_backup(self, tenant):
+        """0.16: the backup, recovery and data-lifecycle registers.
+
+        PER-ENTITY guards, never a tenant-wide one — the documented defect that left every entity added
+        to this command after the fact unreachable in workspaces that already existed.
+
+        **The rows are chosen to exercise the states a naive seed would omit.** One `BackupJob` is
+        seeded as `warning` (partial) with `partial_scope_skipped`, and one successful backup is left
+        with a NULL `integrity_verified_at`. A seed where every backup is green would hide the two
+        conditions the board exists to surface: a partial backup people would trust, and a backup
+        nobody has ever checked. `EncryptionKey` belongs to `tenants`, so it is read from there and
+        never created here.
+        """
+        EncryptionKey = django_apps.get_model("tenants", "EncryptionKey")
+        key = EncryptionKey.objects.filter(tenant=tenant).first()
+        now = timezone.now()
+
+        # ---- BackupJob: three rows covering success+verified, partial, and failed ----
+        if not BackupJob.objects.filter(tenant=tenant).exists():
+            jobs = [
+                dict(name="Nightly full backup", scope_label="nav_erp schema", backup_type="full",
+                     frequency="daily", retention_days=30, target_location="s3://acme-backups/nav_erp",
+                     storage_tier="standard", encryption_scheme="aes256", size_bytes=1_845_000_000,
+                     checksum="sha256:9f2c…", integrity_method="restore_test",
+                     integrity_verified_at=now, status="success", failure_reason="n_a",
+                     started_at=now - datetime.timedelta(hours=8),
+                     finished_at=now - datetime.timedelta(hours=8) + datetime.timedelta(minutes=24),
+                     evidence="OPS-1041"),
+                dict(name="Hourly transaction log", scope_label="nav_erp binlog", backup_type="log",
+                     frequency="hourly", retention_days=7, target_location="s3://acme-backups/binlog",
+                     storage_tier="infrequent", encryption_scheme="aes256", size_bytes=48_000_000,
+                     checksum="", integrity_method="checksum", integrity_verified_at=None,
+                     status="warning", failure_reason="partial_scope_skipped",
+                     started_at=now - datetime.timedelta(hours=1),
+                     finished_at=now - datetime.timedelta(hours=1) + datetime.timedelta(minutes=2),
+                     evidence="OPS-1042",
+                     notes="Two tables were locked and skipped. Partial — do not treat as a full "
+                           "recovery point."),
+                dict(name="Weekly offsite copy", scope_label="nav_erp + documents", backup_type="full",
+                     frequency="weekly", retention_days=90, target_location="glacier://acme-offsite",
+                     storage_tier="deep_archive", encryption_scheme="managed", size_bytes=None,
+                     checksum="", integrity_method="none", integrity_verified_at=None,
+                     status="failed", failure_reason="insufficient_space",
+                     started_at=now - datetime.timedelta(days=2),
+                     finished_at=now - datetime.timedelta(days=2) + datetime.timedelta(minutes=6),
+                     evidence="OPS-1039",
+                     notes="Target quota reached. Nothing was written."),
+            ]
+            for row in jobs:
+                BackupJob.objects.create(tenant=tenant, encryption_key=key, is_immutable=False,
+                                         performed_by=None, **row)
+            self.stdout.write(f"  {tenant.name}: seeded {len(jobs)} backup job(s)")
+
+        # ---- RecoveryPosture: the singleton (get_or_create, one row per tenant) ----
+        _, posture_created = RecoveryPosture.objects.get_or_create(
+            tenant=tenant,
+            defaults=dict(rpo_target_minutes=60, rto_target_minutes=240,
+                          replication_mode="async", primary_region="eu-west-1",
+                          dr_region="eu-central-1", backup_retention_days=30,
+                          dr_plan_reference="Confluence / OPS / DR-Plan-2026",
+                          last_reviewed_at=timezone.localdate()),
+        )
+        if posture_created:
+            self.stdout.write(f"  {tenant.name}: seeded the recovery posture")
+
+        # ---- RecoveryDrill: one run with measured actuals, one not yet run ----
+        if not RecoveryDrill.objects.filter(tenant=tenant).exists():
+            drills = [
+                dict(name="Q3 isolated failover test", kind="test_failover",
+                     scheduled_for=timezone.localdate() - datetime.timedelta(days=20),
+                     performed_at=now - datetime.timedelta(days=20), outcome="passed",
+                     measured_rpo_minutes=45, measured_rto_minutes=195,
+                     participants="Ops, DBA, Finance",
+                     findings="Failover completed inside the RTO. The application booted without "
+                              "manual intervention.",
+                     follow_up_actions="Automate the DNS cutover; it was done by hand.",
+                     evidence="OPS-1050"),
+                dict(name="Q4 unplanned failover drill", kind="unplanned_failover",
+                     scheduled_for=timezone.localdate() + datetime.timedelta(days=40),
+                     performed_at=None, outcome="not_run",
+                     measured_rpo_minutes=None, measured_rto_minutes=None,
+                     participants="Ops, DBA", findings="", follow_up_actions="", evidence="OPS-1061"),
+            ]
+            for row in drills:
+                RecoveryDrill.objects.create(tenant=tenant, **row)
+            self.stdout.write(f"  {tenant.name}: seeded {len(drills)} recovery drill(s)")
+
+        # ---- DataArchive: linked back to 0.8's retention policy where one exists ----
+        if not DataArchive.objects.filter(tenant=tenant).exists():
+            policy = RetentionPolicy.objects.filter(tenant=tenant, is_active=True).first()
+            archived_at = now - datetime.timedelta(days=400)
+            DataArchive.objects.create(
+                tenant=tenant, name="2024 activity archive", policy=policy, disposal=None,
+                model_label="core.Activity",
+                content_description="Activities closed before 2025, exported to Parquet.",
+                location="glacier://acme-archive/2024/activity.parquet", storage_tier="glacier",
+                format="parquet", record_count=182_450, size_bytes=640_000_000,
+                encryption_key=key, checksum="sha256:41ab…", immutable=True,
+                archived_at=archived_at, restored_at=None,
+                expires_at=archived_at + datetime.timedelta(days=365 * 7), status="active",
+                notes="Seeded catalogue entry. `location` is what makes this restorable.",
+            )
+            DataArchive.objects.create(
+                tenant=tenant, name="Legacy CRM export (media lost)", policy=None, disposal=None,
+                model_label="", content_description="Offline tape from the old CRM.",
+                location="", storage_tier="tape", format="native", record_count=None,
+                size_bytes=None, encryption_key=None, checksum="", immutable=False,
+                archived_at=archived_at - datetime.timedelta(days=200), restored_at=None,
+                expires_at=None, status="lost",
+                notes="Seeded deliberately WITHOUT a location: unrestorable, so the board's "
+                      "unrestorable count has something to say.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 2 data archive entry(ies)")
+
+        # ---- LegalHold: one active hold, so a suspended scope is visible ----
+        if not LegalHold.objects.filter(tenant=tenant).exists():
+            policy = RetentionPolicy.objects.filter(tenant=tenant, is_active=True).first()
+            LegalHold.objects.create(
+                tenant=tenant, name="Hold — Acme v. Initech", custodian="Finance team",
+                subject_party=None, matter_reference="CASE-2026-0042",
+                issuing_authority="Superior Court", retention_policy=policy,
+                model_label=policy.model_label if policy else "",
+                scope="All financial records, correspondence and activity logs for this workspace "
+                      "during 2024–2026.",
+                issued_at=now - datetime.timedelta(days=30), status="active", released_at=None,
+                release_reason="", authority_reference="PRESERVATION ORDER 2026/114",
+                notes="Seeded active hold. It SUSPENDS any retention window covering the same scope — "
+                      "the schedule does not run while this is in force.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 1 legal hold")
+
+        # ---- EnvironmentInstance: production + a sandbox refreshed from it ----
+        if not EnvironmentInstance.objects.filter(tenant=tenant).exists():
+            production = EnvironmentInstance.objects.create(
+                tenant=tenant, name="Production", kind="production", tier="",
+                source_environment=None, copy_scope="full", subset_rule="",
+                copy_includes_pii=True, masking_required=False, status="active",
+                refreshed_at=None, refresh_source=None, refresh_interval_days=None,
+                expires_at=None, storage_limit_mb=None, is_active=True,
+                notes="Seeded source environment. Nothing here provisions it.",
+            )
+            EnvironmentInstance.objects.create(
+                tenant=tenant, name="Sandbox — UAT", kind="sandbox", tier="partial copy",
+                source_environment=production, copy_scope="summary",
+                subset_rule="Last 12 months of orders and parties; users excluded.",
+                copy_includes_pii=True, masking_required=True, status="active",
+                refreshed_at=now - datetime.timedelta(days=14), refresh_source=production,
+                refresh_interval_days=29,
+                expires_at=now + datetime.timedelta(days=15), storage_limit_mb=5120, is_active=True,
+                notes="Seeded sandbox. `masking_required` records the obligation; NavERP does not "
+                      "mask anything.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 2 environment(s)")
+
+        # ---- RestoreRecord: a completed per-tenant restore with a reason ----
+        if not RestoreRecord.objects.filter(tenant=tenant).exists():
+            source = BackupJob.objects.filter(tenant=tenant, status="success").first()
+            target = EnvironmentInstance.objects.filter(tenant=tenant, kind="sandbox").first()
+            RestoreRecord.objects.create(
+                tenant=tenant, backup=source, archive=None, scope="per_tenant",
+                target_time=(source.started_at if source and source.started_at else None),
+                target_environment=target, status="succeeded", requested_by=None,
+                reason="Recover rows a user deleted by mistake during a bulk import.",
+                started_at=now - datetime.timedelta(days=6),
+                finished_at=now - datetime.timedelta(days=6) + datetime.timedelta(minutes=52),
+                outcome="Rows restored into production, verified against the source count.",
+                is_verified=True, evidence="OPS-1055",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 1 restore record")
