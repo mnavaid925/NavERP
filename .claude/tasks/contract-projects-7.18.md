@@ -279,7 +279,7 @@ integration/connectors/<int:pk>/health/            connector_health      (GET le
   - `run_count`: `PositiveIntegerField(default=0, editable=False)`.
   - `last_status`: `CharField(10, blank=True, editable=False)` (mirrors the newest run's status for the list column).
 - `clean()`: tenant guard — `connector.tenant_id != tenant_id` -> `ValidationError`.
-- `Meta`: `ordering = ["-created_at", "-id"]`; `unique_together = [("tenant","number"), ("tenant","connector","name")]`; `indexes` = `syj_tnt_conn_idx (tenant,connector)`, `syj_tnt_conn_act_act_idx (tenant,connector,is_active)`, `syj_tnt_status_idx (tenant,last_status)`, **`syj_tnt_active_idx (tenant,is_active)`** (added in Phase 5, M19 — migration `0027`).
+- `Meta`: `ordering = ["-created_at", "-id"]`; `unique_together = [("tenant","number"), ("tenant","connector","name")]`; `indexes` = `syj_tnt_conn_idx (tenant,connector)`, `syj_tnt_conn_act_idx (tenant,connector,is_active)`, `syj_tnt_status_idx (tenant,last_status)`, **`syj_tnt_active_idx (tenant,is_active)`** (added in Phase 5, M19 — migration `0027`).
 - `__str__` = `f"{self.number} — {self.name}"`.
 
   - `schedule_note`: `CharField(200, blank=True)` (documentation, not a cron).
