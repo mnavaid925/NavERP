@@ -8980,6 +8980,58 @@ landed before starting the next sub-module — a green test run is not a close-o
 
 ---
 
+### Module 0 0.15 — Localization & Regional Settings (close-out 2026-09-22)
+
+Migration **core.0012**. Seeder blocks `_seed_localization_globals()` (once, outside the tenant loop — the
+two registries are global) and `_seed_localization(tenant)` with **per-entity** guards. `LIVE_LINKS["0.15"]`,
+5 bullet keys byte-identical to the `NavERP.md` bullets (verified with the real `parse_catalog()`).
+
+Five models in `apps/core/models/Localization.py`: `Language` and `TimeZone` (**global**, no `tenant` FK —
+the `accounting.Currency` precedent), `LocaleProfile` (tenant `OneToOne` singleton), `UserLocalePreference`
+(per-user singleton), `StatutoryRule`. 3 forms, 11 views, 11 routes, 9 templates, 5 admin registrations.
+**`core` is now 15 of 21; 6 remain (0.16–0.21).**
+
+**L36 ownership call.** Bullets 2 and 4 are already half-built by `accounting`: `Currency` (2.2),
+`ExchangeRate` (2.2) and `TaxCode` (2.11) all exist. 0.15 **points at** them — `LocaleProfile.base_currency`
+and `StatutoryRule.tax_code` are FKs into accounting, and the board reads the real `ExchangeRate` rows —
+rather than growing a second currency or tax table. `core.BusinessCalendar.timezone_name` (0.10),
+`core.SettingDefinition` (0.10) and `core.SyncSchedule` (0.13) were likewise reused, not duplicated.
+
+**Review** — six serial reviewers → `.claude/tasks/review-core-0.15.md` (958 lines), raw 17 findings,
+deduped to **1 Critical, 4 Important, 7 Minor + 8 explicit no-action entries**. All 12 actionable findings
+fixed. Two lanes produced findings that were artifacts of **my own briefs** (L5-I1 and lane 2's M3) — both
+recorded as orchestrator errors and neither produced a code change. Headline items:
+
+- **C1** — `StatutoryRuleForm` never validated the model's `unique_together = ("tenant","name")`, because
+  `tenant` is not a `Meta.fields` member and Django's `_get_unique_checks()` drops any `unique_together`
+  containing an excluded field. Typing an existing rule name — or renaming onto a sibling's — was an
+  **unhandled 500 on both verbs**. Fixed in the form, copying `apps/crm/forms/CustomerSuccess/HealthScores.py`.
+- **I2** — `_fx_rows` fetched the tenant's entire rate history to emit one row per currency (measured 2,193
+  rows → 207 ms). The performance lane also proved **my own docstring's justification was false**: the
+  `Max("rate_date")` tie I claimed to be avoiding cannot occur, because
+  `unique_together = ("tenant","currency","rate_date")` forbids it. Replaced with an A/B-verified 2-query
+  form, and the false rationale removed.
+- **I1** — the three member-reachable pages offered only admin-gated exits (including a **Cancel** button
+  that 403'd). Fixed by wrapping the admin affordances in the same condition `core/decorators.py` gates on.
+- **I3** — the timezone column printed `UTC+330` (minutes, read as hours); now `offset_display`.
+- **I4** — the seeder's peer-app FKs could never populate on a fresh install (`seed_accounting` runs after
+  `seed_core` and is the sole creator of `Currency`/`TaxCode`), and the per-entity guard froze the NULLs.
+  Now backfills on re-run.
+
+**Tests** — 67 across four lanes (`test_localization_{models,forms,views,security}.py` = 18/14/21/14), one
+file per commit, plus the conftest block appended (L43). `apps/core/tests` full unfiltered suite **204
+passed**. `temp/audit_integrity.py` **all 6 checks pass**. The C1 regression is pinned at both the form and
+the view layer.
+
+**Process notes worth keeping.** (a) A lane that measures beats a lane that argues — the performance lane's
+A/B output is what made I2 undeniable, and the QA lane found the Critical only because it refused to re-run
+the existing smoke harness and covered the write paths instead. (b) Verify a lane's *premise*, not just its
+reasoning: two of the seven lanes' findings were caused by my prompt, and catching that is the orchestrator's
+job. (c) The first `code-fixer` attempt died on a rate limit **after committing 13 fixes**, so the second
+pass had to start by discovering that inherited state rather than assuming a clean tree.
+
+---
+
 # Sub-module 7.16 — Reporting & Business Intelligence (Module 7: Project Management, `projects`) — plan from research-projects-7.16.md (2026-09-19)
 
 Source of truth: `.claude/tasks/research-projects-7.16.md` (~491 lines, committed `906b72d3`).
