@@ -112,10 +112,10 @@
     <div class="text-sm text-muted">Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
     <div class="flex gap-2">
       {% if page_obj.has_previous %}
-      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}{% if direction %}&direction={{ direction }}{% endif %}{% if transform %}&transform={{ transform }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
       {% endif %}
       {% if page_obj.has_next %}
-      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}{% if direction %}&direction={{ direction }}{% endif %}{% if transform %}&transform={{ transform }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
       {% endif %}
     </div>
   </div>
