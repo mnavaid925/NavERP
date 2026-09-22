@@ -4625,32 +4625,6 @@ class Command(BaseCommand):
                 owner=approver,
                 notes="401 since the key rotation — re-enter the credential.",
             )
-
-    def _client(self, tenant):
-        """A Party carrying a customer role, else any party — never a new duplicate master."""
-        role = PartyRole.objects.filter(tenant=tenant, role="customer").select_related("party").first()
-        if role is not None and role.party_id:
-            return role.party
-        return Party.objects.filter(tenant=tenant).order_by("id").first()
-
-    def _currency(self):
-        """accounting.Currency is GLOBAL — no tenant filter (L29)."""
-        try:
-            from apps.accounting.models import Currency
-        except ImportError:
-            return None
-        return Currency.objects.order_by("id").first()
-
-    def _print_logins(self):
-        admins = list(get_user_model().objects.filter(
-            is_superuser=False, tenant__isnull=False).order_by("tenant__name", "username"))
-        self.stdout.write("")
-        self.stdout.write("Log in as a TENANT ADMIN to see the data:")
-        for u in admins[:8]:
-            self.stdout.write(f"  {u.username}  (tenant: {u.tenant})")
-        self.stdout.write(self.style.WARNING(
-            "  Superuser 'admin' has no tenant — data won't appear when logged in as admin"))
-
             jira = ProjectIntegrationConnector.objects.create(
                 tenant=tenant, project=active_proj, name="Jira Software Cloud",
                 domain="devops", provider="jira", direction="bidirectional", auth_method="pat",
@@ -4682,6 +4656,12 @@ class Command(BaseCommand):
 
             custom = ProjectIntegrationConnector.objects.create(
                 tenant=tenant, project=None, name="Legacy Billing FTP Drop",
+                domain="custom", provider="custom", direction="outbound", auth_method="basic",
+                base_url="ftps://files.acme-co.internal/billing", remote_scope_ref="/outbound/projects",
+                trigger_mode="scheduled", schedule_note="Weekly Friday 18:00", environment="sandbox",
+                status="disconnected", is_active=False, owner=manager,
+                notes="Workspace-wide; kept for the year-end batch only.",
+            )
 
             # 2. Field mappings — 30 across five connectors (>=1 is_key per connector).
             mapping_specs = {
@@ -4739,10 +4719,103 @@ class Command(BaseCommand):
                         is_key=is_key, is_required=is_key,
                     )
 
-                domain="custom", provider="custom", direction="outbound", auth_method="basic",
-                base_url="ftps://files.acme-co.internal/billing", remote_scope_ref="/outbound/projects",
-                trigger_mode="scheduled", schedule_note="Weekly Friday 18:00", environment="sandbox",
-                status="disconnected", is_active=False, owner=manager,
-                notes="Workspace-wide; kept for the year-end batch only.",
-            )
 
+
+            # 3. Sync jobs — nine across the connectors, spanning every entity family the five
+            #    bullets use, all four conflict policies, one scheduled, one inactive.
+            job_specs = [
+                (erp, "Cost Lines to GL", "cost_lines", "outbound", "scheduled", 60, "local_wins", True),
+                (erp, "Journal Entries Pull", "journals", "inbound", "scheduled", 120, "remote_wins", True),
+                (crm, "Client Projects Sync", "tasks", "bidirectional", "event", None, "newest_wins", True),
+                (crm, "Milestone Close Dates", "milestones", "from_remote_in", "scheduled", 240, "manual", True),
+                (hris, "Resource Pool Refresh", "resources", "inbound", "scheduled", 60, "remote_wins", True),
+                (hris, "Time Entries Import", "time_entries", "inbound", "scheduled", 30, "remote_wins", True),
+                (jira, "Issue Sync", "issues", "bidirectional", "event", None, "newest_wins", True),
+                (github, "Repo Activity Mirror", "documents", "inbound", "manual", None, "manual", False),
+                (custom, "Budget Batch Export", "budgets", "outbound", "scheduled", 10080, "local_wins", True),
+            ]
+            jobs = []
+            for conn, name, scope, direction, trigger, interval, policy, is_active in job_specs:
+                direction = "inbound" if direction == "from_remote_in" else direction
+                jobs.append(ProjectSyncJob.objects.create(
+                    tenant=tenant, connector=conn, name=name, entity_scope=scope,
+                    direction=direction, trigger_mode=trigger, interval_minutes=interval,
+                    schedule_note="Seeded cadence — recorded intent only",
+                    filter_expression="status != closed" if scope in ("tasks", "issues") else "",
+                    conflict_policy=policy, batch_size=100, is_active=is_active,
+                    run_count=0, last_status="",
+                ))
+
+
+            # 4. Sync runs — 45 across the jobs spanning EVERY run status and trigger source,
+            #    spread over ~10 days. Created through record() (the model's only writer).
+            status_plan = (
+                ["success"] * 25 + ["partial"] * 5 + ["failed"] * 6
+                + ["skipped"] * 3 + ["simulated"] * 3 + ["pending"] * 2 + ["running"] * 1
+            )
+            trigger_cycle = ("manual", "schedule", "event")
+            run_index = 0
+            for i, run_status in enumerate(status_plan):
+                job = jobs[i % len(jobs)]
+                started = now - timedelta(days=i % 10, hours=(i * 3) % 24, minutes=(i * 17) % 60)
+                failed = 3 + (i % 4) if run_status == "failed" else (1 if run_status == "partial" else 0)
+                error_message = ""
+                if run_status == "failed":
+                    error_message = (
+                        "Remote rejected the batch: authentication failed (401). "
+                        "The stored credential no longer decrypts to a valid token for this "
+                        f"environment; rotate it from the connector page. Batch {i} of "
+                        "job " + job.number + " was not applied."
+                    )
+                ProjectSyncRun.record(
+                    job=job,
+                    status=run_status,
+                    trigger_source=trigger_cycle[i % 3],
+                    triggered_by=manager if i % 3 == 0 else None,
+                    records_read=40 + i,
+                    records_created=(i % 12),
+                    records_updated=(i * 2) % 9,
+                    records_skipped=i % 5,
+                    records_failed=failed,
+                    error_code="AUTH_401" if run_status == "failed" else "",
+                    error_message=error_message,
+                    payload_excerpt='{"batch": %d, "records": %d, "truncated": true}' % (i, 40 + i),
+                    attempt_no=1 + (i % 3),
+                    next_retry_at=(started + timedelta(hours=5)) if run_status == "failed" else None,
+                    started_at=started,
+                    finished_at=started + timedelta(minutes=1 + (i % 7)) if run_status not in ("pending", "running") else None,
+                    duration_ms=(1 + (i % 7)) * 600,
+                )
+                run_index += 1
+                job.run_count += 1
+                job.last_run_at = started
+                job.last_status = run_status
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.18 seeded: 7 connectors, 30 field mappings, 9 sync jobs, "
+            f"{run_index} sync runs."))
+
+    def _client(self, tenant):
+        """A Party carrying a customer role, else any party — never a new duplicate master."""
+        role = PartyRole.objects.filter(tenant=tenant, role="customer").select_related("party").first()
+        if role is not None and role.party_id:
+            return role.party
+        return Party.objects.filter(tenant=tenant).order_by("id").first()
+
+    def _currency(self):
+        """accounting.Currency is GLOBAL — no tenant filter (L29)."""
+        try:
+            from apps.accounting.models import Currency
+        except ImportError:
+            return None
+        return Currency.objects.order_by("id").first()
+
+    def _print_logins(self):
+        admins = list(get_user_model().objects.filter(
+            is_superuser=False, tenant__isnull=False).order_by("tenant__name", "username"))
+        self.stdout.write("")
+        self.stdout.write("Log in as a TENANT ADMIN to see the data:")
+        for u in admins[:8]:
+            self.stdout.write(f"  {u.username}  (tenant: {u.tenant})")
+        self.stdout.write(self.style.WARNING(
+            "  Superuser 'admin' has no tenant — data won't appear when logged in as admin"))
