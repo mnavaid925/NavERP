@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Recovery Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Recovery Board</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_overview' %}">Backup &amp; Recovery</a><span class="sep">›</span><span>Board</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:backup_job_list' %}" class="btn btn-outline"><i data-lucide="database-backup"></i> Backups</a>
+      <a href="{% url 'core:legal_hold_list' %}" class="btn btn-outline"><i data-lucide="gavel"></i> Holds</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">What this workspace's backup posture actually <strong>is</strong>, computed on read.
+      Where a figure cannot be determined the page says so and prints <strong>—</strong>, never a <code>0</code>:
+      a zero that means "cannot tell" is the most dangerous number an operations board can show.</p>
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Backups recorded</dt><dd>{{ job_total }}</dd></div>
+      <div class="detail-item"><dt>Verified</dt><dd>{{ verified_total }}</dd></div>
+      <div class="detail-item"><dt>Successful backups never test-restored</dt>
+        <dd>{% if never_restored is None %}<span class="text-muted" title="There is no successful backup for this to be true of.">not applicable</span>{% else %}{{ never_restored }}{% endif %}</dd></div>
+      <div class="detail-item"><dt>Archives</dt><dd>{{ archive_total }} <span class="text-muted">({{ async_retrieval_count }} on asynchronous retrieval)</span></dd></div>
+      <div class="detail-item"><dt>Verification state unreadable</dt><dd>{% if unverifiable_count %}{{ unverifiable_count }}{% else %}0 — all records carry a readable verification state{% endif %}</dd></div>
+    </dl>
+    <p class="text-muted"><i data-lucide="info"></i> A backup on an asynchronous tier cannot be retrieved on
+      demand: a restore from it is a job that is requested and later completed, not a download.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Backups nobody has verified</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Named rather than counted: a count would hide <em>which</em> backup is an untested
+        claim. These are restorable-looking artefacts with no recorded integrity check.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Backup</th><th>Status</th><th>Target</th><th>Checksum</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for job in unverified_jobs %}
+            <tr>
+              <td class="fw-600">{{ job.name }}</td>
+              <td>{% if job.status == "warning" %}<span class="badge badge-amber">{{ job.get_status_display }}</span>{% elif job.status == "failed" %}<span class="badge badge-red">{{ job.get_status_display }}</span>{% else %}<span class="badge badge-slate">{{ job.get_status_display }}</span>{% endif %}</td>
+              <td>{% if job.target_location %}<code>{{ job.target_location }}</code>{% else %}<span class="text-muted">not recorded</span>{% endif %}</td>
+              <td>{% if job.checksum %}<code>{{ job.checksum|truncatechars:18 }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><a href="{% url 'core:backup_job_detail' job.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="shield-check"></i><h3>Every recorded backup carries a verification</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Latest ten jobs</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Backup</th><th>Status</th><th>Age</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for row in job_rows %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'core:backup_job_detail' row.job.pk %}">{{ row.job.name }}</a></td>
+              <td>{{ row.job.get_status_display }}</td>
+              <td>{% if row.age_days is not None %}{{ row.age_days }} day{{ row.age_days|pluralize }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.note %}<span class="text-warn">{{ row.note }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="database-backup"></i><h3>No backups recorded</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Archives with no location</h2></div>
+    <div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>An archive with no location cannot be
+        restored.</strong> Recording that something <em>should</em> have been archived is not the same as
+        recording where it <em>is</em> — these rows are the gap.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Archive</th><th>Status</th><th>Archived</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for archive in archives_without_location %}
+            <tr>
+              <td class="fw-600">{{ archive.name }}</td>
+              <td>{{ archive.get_status_display }}</td>
+              <td>{{ archive.archived_at|date:"M d, Y"|default:"—" }}</td>
+              <td><a href="{% url 'core:data_archive_detail' archive.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="archive"></i><h3>Every catalogued archive names a location</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Active legal holds — schedules suspended</h2></div>
+    <div class="card-body">
+      <p class="text-warn"><i data-lucide="gavel"></i> While one of these is in force, the retention schedule
+        covering its scope is <strong>suspended</strong>. Any "due for disposal" figure for that scope is one
+        this board cannot justify, so it names the hold instead.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Hold</th><th>Scope</th><th>Suspends</th><th>Age</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for row in holds_suspending %}
+            <tr>
+              <td class="fw-600">{{ row.hold.name }}</td>
+              <td>{{ row.hold.scope_label }}</td>
+              <td>{% if row.policy %}{{ row.policy.name }} <span class="text-muted">({{ row.policy.get_action_display }})</span>{% else %}<span class="text-muted">policy-agnostic</span>{% endif %}</td>
+              <td>{{ row.hold.age_days }} day{{ row.hold.age_days|pluralize }}</td>
+              <td><a href="{% url 'core:legal_hold_detail' row.hold.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="gavel"></i><h3>No active legal holds — no schedule is suspended</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Environments past their reaping date</h2></div>
+    <div class="card-body">
+      <p class="text-muted">An un-reaped sandbox is both a cost and a data-leak surface. Each row below is
+        past <code>expires_at</code> and is not yet marked expired or reaped.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Environment</th><th>Kind</th><th>Copy scope</th><th>Expiry</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for env in expired_environments %}
+            <tr>
+              <td class="fw-600">{{ env.name }}</td>
+              <td>{{ env.get_kind_display }}</td>
+              <td>{% if env.copy_includes_pii and env.copy_scope == "full" %}<span class="badge badge-red">Production PII</span>{% else %}{{ env.get_copy_scope_display }}{% endif %}</td>
+              <td>{{ env.expires_at|date:"M d, Y" }}</td>
+              <td><a href="{% url 'core:environment_instance_detail' env.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="server"></i><h3>No environment is past its reaping date</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>What this board does NOT do.</strong></p>
+    <ul class="list-disc list-inside space-y-1">
+      {% for note in notes %}<li>{{ note }}</li>{% endfor %}
+      <li>It cannot tell you whether a backup would actually restore. Only a performed restore test can, and this board can only report that one was recorded.</li>
+    </ul>
+  </div></div>
+{% endblock %}
