@@ -108,6 +108,19 @@ class TimeZone(models.Model):
     def __str__(self):
         return self.label
 
+    @property
+    def offset_display(self):
+        """`utc_offset_minutes` as a UTC offset — `UTC+05:30`, `UTC-08:00`, `UTC+00:00`.
+
+        A template cannot format a minutes integer into an offset, so the conversion lives here
+        rather than rendering `UTC+330` (which reads as 330 hours). DISPLAY ONLY, exactly like the
+        column it formats: this is the zone's *standard* offset and is wrong for roughly half the
+        year anywhere that observes DST — see the class docstring.
+        """
+        sign = "-" if self.utc_offset_minutes < 0 else "+"
+        hours, minutes = divmod(abs(self.utc_offset_minutes), 60)
+        return "UTC%s%02d:%02d" % (sign, hours, minutes)
+
 
 class LocaleProfile(models.Model):
     """A workspace's localization profile — the single row that answers "how does this tenant want
