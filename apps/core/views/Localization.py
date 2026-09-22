@@ -44,6 +44,17 @@ from apps.core.forms import (
 STALE_RATE_DAYS = 7
 
 
+def _audit_changes(form):
+    """The `{field: new_value}` diff for a hand-rolled singleton save's audit row.
+
+    A two-line local twin of `crud._changed`, which stays private: it is named explicitly by ~15 call
+    sites across scm/hrm/procurement/projects, so promoting it would mean a cross-app rename for no
+    behavioural gain. Neither `LocaleProfile` nor `UserLocalePreference` carries a field on
+    `_SENSITIVE_AUDIT_FIELDS`, so the redaction branch is not reproduced here.
+    """
+    return {name: str(form.cleaned_data.get(name))[:200] for name in form.changed_data}
+
+
 def _fx_rows(tenant):
     """The newest rate per currency for `tenant` — two queries, O(currencies) rows out.
 
@@ -128,7 +139,8 @@ def locale_profile_edit(request):
             # insert a NULL tenant on the create path and raise IntegrityError.
             obj.tenant = request.tenant
             obj.save()
-            write_audit_log(request.user, obj, "update", changes={"verb": "locale_profile_save"})
+            write_audit_log(request.user, obj, "update",
+                            changes={"verb": "locale_profile_save", **_audit_changes(form)})
             messages.success(request, "Regional settings saved.")
             return redirect("core:localization_overview")
     else:
@@ -155,7 +167,8 @@ def user_locale_edit(request):
             obj.tenant = request.tenant
             obj.user = request.user
             obj.save()
-            write_audit_log(request.user, obj, "update", changes={"verb": "user_locale_save"})
+            write_audit_log(request.user, obj, "update",
+                            changes={"verb": "user_locale_save", **_audit_changes(form)})
             messages.success(request, "Your regional preferences were saved.")
             # Redirect to THIS page, not to the admin-gated overview: a plain member is a supported
             # actor here (@login_required), and `localization_overview` would answer 403 — exactly the
