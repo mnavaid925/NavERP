@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Field Mapping — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title flex items-center gap-3">{{ mapping.local_field }} <span class="text-muted">&rarr;</span> {{ mapping.remote_field }}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:ixm_list' %}">Field Mappings</a>
+      <span>/</span>
+      <span>Mapping #{{ mapping.pk }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:ixm_edit' mapping.pk %}" class="btn btn-outline"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit</a>
+    <form method="post" action="{% url 'projects:ixm_delete' mapping.pk %}" class="inline" onsubmit="return confirm('Delete this field mapping?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Mapping Details</h3></div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><dt class="text-muted">Connector</dt><dd class="font-medium"><a href="{% url 'projects:ixc_detail' mapping.connector.pk %}" class="text-blue-600 hover:underline">{{ mapping.connector.number }} — {{ mapping.connector.name }}</a></dd></div>
+          <div><dt class="text-muted">Direction</dt><dd class="font-medium">{{ mapping.get_direction_display }}</dd></div>
+          <div><dt class="text-muted">Transform</dt><dd class="font-medium">{{ mapping.get_transform_display }}</dd></div>
+          <div><dt class="text-muted">Flags</dt><dd class="font-medium">{% if mapping.is_key %}<span class="badge badge-info">Key</span>{% endif %} {% if mapping.is_required %}<span class="badge badge-amber">Required</span>{% endif %}{% if not mapping.is_key and not mapping.is_required %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Default Value</dt><dd class="font-mono text-xs">{{ mapping.default_value|default:"—" }}</dd></div>
+          {% if mapping.notes %}<div class="md:col-span-2"><dt class="text-muted">Notes</dt><dd class="font-medium">{{ mapping.notes }}</dd></div>{% endif %}
+        </dl>
+        {% if mapping.value_map %}
+        <div class="mt-4">
+          <div class="text-xs text-muted mb-1">Value Map</div>
+          <pre class="p-3 bg-slate-50 rounded border border-slate-200 font-mono text-xs break-all">{{ mapping.value_map }}</pre>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Actions</h3></div>
+      <div class="card-body space-y-2">
+        <a href="{% url 'projects:ixm_edit' mapping.pk %}" class="btn btn-outline w-full"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Mapping</a>
+        <a href="{% url 'projects:ixm_list' %}" class="btn btn-outline w-full"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
