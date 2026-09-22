@@ -7,6 +7,100 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 
+# Build Plan — Module 0 0.16 Backup, Recovery & Data Lifecycle
+
+Source of truth: `.claude/tasks/research-core-0.16.md`.
+BASE = `6a834d9e`. Migration `core.0013` **claimed and committed at Phase 0** (`00122627`).
+App: `core` (foundation app — entity files sit **FLAT at the package root**, `urls.py` is a **flat file**).
+Template folder: `templates/core/<entity>/`. Test subslug: `backup`. Planned: 2026-09-22.
+
+## Ownership call (L36) — what 0.16 deliberately does NOT build
+
+The single most important thing about this sub-module. **0.8 already built most of bullet 4**, and
+`LIVE_LINKS["0.8"]` already claims the bullet. See `plan-1-0.16-ownership-reconcile.md`.
+
+| bullet 4's parts | already owned by | 0.16's role |
+|---|---|---|
+| Retention schedules per data category | `core.RetentionPolicy` (0.8) — `retention_months`, `action` ∈ {review, delete, anonymize, **archive**}, `basis`, `model_label` | **points at** it; re-declares nothing. `DataArchive.retention_policy` FKs it. |
+| Disposal evidence | `core.DisposalRecord` (0.8) — `method` ∈ {deleted, anonymized, **archived**, destroyed_media} | **points at** it; `DataArchive.disposal` FKs it. |
+| Computed "what is past its window" | `core:retention_board` (0.8), with its *"Reporting 0 here would be a false all-clear"* rule | **links** to it; 0.16's own boards follow the same zero rule. |
+| policy-based purging engine | `RetentionPolicy.action="delete"` + `DisposalRecord` | **not rebuilt** — doing so is the L36 violation this table exists to prevent. |
+| **legal holds** | **nobody** | **0.16 builds it** — a hold is an *event with a release* that **suspends** a schedule; a schedule structurally cannot express it. |
+| **archive catalogue** | **nobody** | **0.16 builds it** — 0.8 says *that* something should be archived; nothing records *where it went*, so a restore is impossible. |
+
+Also deferred, and named rather than silently absorbed: uptime/error/APM/capacity/status-page → **0.17**
+(`core.BusinessRuleLog` + `tenants.HealthMetric` are its raw material); WAF/rate-limit/IP-lists → **0.18**
+(`core.RateLimitPolicy` exists); entitlements/seats/cost → **0.19** (`tenants.UsageRecord` exists).
+
+## The honest limit (governs every model and page below)
+
+`core.Retention.py`'s docstring is the house ruling this sub-module inherits: *"'delete' in this codebase
+does not erase bytes… A 'destruction' feature that reports success while the file survives on disk would
+be actively dishonest."* **NavERP has no scheduler, no object storage client, and no ability to dump or
+restore its own MySQL database** (`config/settings.py:103`). So:
+
+- Every 0.16 model is a **register of evidence written by hand**, exactly like `DisposalRecord`.
+- Pages say **"recorded"**, never "completed"/"successful".
+- `NULL` renders as **"Not verified" / "—"**, never as a green tick or a `0` (0.8's zero rule).
+- **No page request performs the act** — no dump, restore, archive transfer or provisioning on GET.
+- Every page states that the act is **out of band**.
+
+## Models — 6 in `apps/core/models/Backup.py` (+ `Compliance.py` for the hold), flat (core convention)
+
+Five registers + one singleton. The 6th is the resolution of the research's flagged tension: RPO/RTO
+**targets** are policy and cannot live on a **drill** without collapsing target into actual.
+
+- [ ] `BackupJob` — **tenant**: `name` (CharField 150), `scope_label` (CharField 255, blank — free text; there is no backup-target object to FK), `backup_type` (choices `full`/`incremental`/`differential`/`log`/`snapshot`), `frequency` (choices reusing 0.13 `SyncSchedule.FREQUENCY_CHOICES`: manual/hourly/daily/weekly), `retention_days` (PositiveIntegerField null — the *artefact's* lifetime, distinct from `RetentionPolicy`), `target_location` (CharField 255, blank — free text; no object storage exists to name), `storage_tier` (choices standard/infrequent/archive/deep_archive/tape — bullet 4's "cold storage"), `encryption_key` (FK `tenants.EncryptionKey`, SET_NULL null blank — **FK only, never key material**), `encryption_scheme` (choices none/aes256/rsa/managed/other), `size_bytes` (BigIntegerField **null** ≠ 0), `checksum` (CharField 128, blank), `integrity_method` (choices none/checksum/hash/restore_test/vendor_reported), `integrity_verified_at` (DateTimeField null — **null renders as "Not verified"**), `status` (choices `queued`/`running`/`success`/**`warning`**/`failed`/`cancelled` — **`warning` = partial, the state a naive register omits**), `failure_reason` (choices source_unreachable/auth_failed/insufficient_space/timeout/integrity_check_failed/cancelled_by_operator/quota/partial_scope_skipped/unknown/n_a), `attempt_count` (PositiveSmallIntegerField default=1), `is_immutable` (BooleanField default=False — a **claim**, not enforcement), `retain_until` (DateTimeField null blank), `started_at`/`finished_at` (null blank; duration **derived**), `performed_by` (FK user SET_NULL null blank), `evidence` (CharField 255, blank — the `DisposalRecord.evidence` pattern), `notes`, `created_at`. Bullet 1.
+- [ ] `RestoreRecord` — **tenant**: `backup` (FK `BackupJob` SET_NULL null blank), `archive` (FK `DataArchive` SET_NULL null blank — a restore may come from either), `scope` (choices full_instance/per_tenant/table/record/**sandbox_refresh**/archive_retrieval — `sandbox_refresh` is bullet 2's mapping onto bullet 5), `target_time` (DateTimeField null blank — the PITR instant, validated **inside** the recorded window), `target_environment` (FK `EnvironmentInstance` SET_NULL null blank), `status` (choices planned/running/succeeded/**partial**/failed/rolled_back), `requested_by` (FK user SET_NULL null blank), `reason` (CharField 255 — every audit of a restore asks why), `started_at`/`finished_at`, `outcome` (TextField blank), `is_verified` (BooleanField default=False — a restore that *ran* is not a restore that *verified*), `evidence`, `created_at`. Bullet 2.
+- [ ] `DataArchive` — **tenant**: `name`, `policy` (FK `core.RetentionPolicy` SET_NULL — **points at 0.8**), `disposal` (FK `core.DisposalRecord` SET_NULL — **points at 0.8**), `model_label` (CharField 120, blank — 0.8's vocabulary), `content_description` (TextField blank), **`location` (CharField 255 — the field this model exists for: without it a restore is impossible)**, `storage_tier` (choices hot/cool/archive/glacier/deep_archive/offline/tape), `format` (choices sql/csv/jsonl/parquet/tarball/native/other), `record_count` (PositiveIntegerField **null** ≠ 0), `size_bytes` (**null** ≠ 0), `encryption_key` (FK `tenants.EncryptionKey` SET_NULL), `checksum`, `immutable` (BooleanField — claim only), `archived_at`/`restored_at`/`expires_at` (null blank), `status` (choices active/restored/expired/**lost**/destroyed — `lost` is real and necessary), `notes`, `created_at`. Bullet 4's open loop.
+- [ ] `LegalHold` — **tenant**, in `apps/core/models/Compliance.py` (the existing 0.8 compliance home): `name` (CharField 150), `custodian` (CharField 200, blank), `subject_party` (FK `core.Party` SET_NULL null blank), `matter_reference` (CharField 150, blank), `issuing_authority` (CharField 200, blank), `scope` (TextField blank), `retention_policy` (FK `core.RetentionPolicy` SET_NULL null blank — *which* schedule is suspended), `model_label` (CharField 120, blank), `issued_at` (DateTimeField default=now), `issued_by` (FK user SET_NULL), `status` (choices active/released/expired/superseded), `released_at` (DateTimeField null blank — **the release event; this is why a schedule cannot express a hold**), `released_by` (FK user SET_NULL), `release_reason` (CharField 255, blank), `authority_reference` (CharField 255, blank), `notes`, `created_at`/`updated_at`. Bullets 4. **`clean()`:** `released_at` ≥ `issued_at`; releasing is **refused** while another active hold covers the same scope (Exterro's anti-spoliation rule).
+- [ ] `EnvironmentInstance` — **tenant**: `name`, `kind` (choices production/development/test/staging/training/sandbox/preview), `tier` (CharField 20, blank — free text; Salesforce's tiers are commercial), `source_environment` (self-FK SET_NULL null blank), `copy_scope` (choices none/metadata_only/summary/full — bullet 5's "data-subset seeding"), `subset_rule` (TextField blank — a **declared** rule, not an execution), `copy_includes_pii` (BooleanField default=False), `masking_required` (BooleanField default=False), `status` (choices requested/provisioning/active/refreshing/ready_to_activate/suspended/expired/reaped), `refreshed_at` (null blank — bullet 2's "sandbox refresh"), `refresh_source` (self-FK SET_NULL null blank), `refresh_interval_days` (PositiveSmallIntegerField null blank), `expires_at` (null blank — the reaping date), `storage_limit_mb` (PositiveIntegerField null), `is_active`, `notes`, `created_at`/`updated_at`. Bullets 2 + 5, **built once**. **`clean()`:** no self-parent; `expires_at` ≥ `created_at`; `copy_scope="none"` with `copy_includes_pii=True` is refused.
+- [ ] `RecoveryPosture` — **tenant `OneToOneField` singleton** (precedent `LocaleProfile` 0.15, `BusinessCalendar` 0.10 → **edit page, not CRUD**): `rpo_target_minutes` (PositiveIntegerField null blank), `rto_target_minutes` (PositiveIntegerField null blank), `replication_mode` (choices none/sync/async), `primary_region` / `dr_region` (CharField 80, blank), `backup_retention_days` (PositiveIntegerField null blank), `dr_plan_reference` (CharField 255, blank), `last_reviewed_at` (DateField null blank), `updated_at`. Bullet 3's **target** half. Its `OneToOne` is why it costs almost no surface.
+- [ ] `RecoveryDrill` — **tenant**: `name`, `kind` (choices planned_failover/unplanned_failover/test_failover/tabletop/backup_restore_test — ASR's vocabulary), `scheduled_for` (DateField null blank), `performed_at` (DateTimeField null blank), `outcome` (choices passed/partial/failed/not_run), `measured_rpo_minutes` / `measured_rto_minutes` (PositiveIntegerField null blank — **actuals**, never overwriting `RecoveryPosture`'s targets), `participants` (CharField 255, blank), `findings` (TextField blank — the deliverable of a drill), `follow_up_actions` (TextField blank), `evidence` (CharField 255, blank), `performed_by` (FK user SET_NULL null blank), `notes`, `created_at`. Bullet 3's **actual** half.
+
+**Target vs actual, enforced by shape:** `RecoveryPosture` holds the editable target; `RecoveryDrill` holds
+the immutable measurement. Collapsing them would let a missed RPO silently rewrite itself into a met one.
+
+## Backend layers (`apps/core/{models,forms,views}/` + flat `apps/core/urls.py`)
+
+- [ ] Forms in `apps/core/forms/Backup.py` (+ `Compliance.py`): `BackupJobForm`, `RestoreRecordForm`, `DataArchiveForm`, `LegalHoldForm`, `EnvironmentInstanceForm`, `RecoveryPostureForm`, `RecoveryDrillForm` — all `TenantModelForm` subclasses, `Meta.fields` excluding `tenant` and every system-set stamp (L22). **`clean_<field>` guard on any `unique_together` that includes `tenant`** — the repo-wide 500 trap (SKILL.md; `Localization.py:251` for the shape).
+- [ ] Views in `apps/core/views/Backup.py` (+ `Compliance.py`) — function-based, tenant-scoped, `@tenant_admin_required` on writes, audit-logged via `write_audit_log` (verb in `changes`, never in `action` — it is `varchar(10)`):
+  - `backup_job_list`/`_create`/`_detail`/`_edit`/`_delete`, `restore_record_*`, `data_archive_*`, `legal_hold_*`, `environment_instance_*`, `recovery_drill_*` — full CRUD (search + filters + pagination + Actions).
+  - `recovery_posture_edit` — singleton editor, reads-or-`None` on GET, writes only on POST (never `get_or_create` on GET).
+  - `backup_overview` — COMPUTED hub, no table.
+  - `backup_board` — COMPUTED monitoring: **"N backups recorded · M verified"**, never a `0` that means "cannot tell"; unverified count named explicitly; archives with **no `location`** flagged (those are unrestorable); active holds that are suspending a schedule; environments past `expires_at` (un-reaped). Reads the real tables.
+  - `backup_job_verify` — a **`@require_POST`** action recording `integrity_verified_at` (the only write-action page; `@require_POST` **above** the role gate so a wrong method is 405 regardless of role, 7.7's ruling).
+- [ ] URLs (flat `apps/core/urls.py`, literals before `<int:pk>`): `backup/`, `backup/board/`, `backup/jobs/` (+`add/`, `<int:pk>/`, `<int:pk>/edit/`, `<int:pk>/delete/`, `<int:pk>/verify/`), the same quintuple for `restores/`, `archives/`, `holds/`, `environments/`, `drills/`, plus `backup/posture/` and `backup/overview/`.
+
+## Templates (`templates/core/`)
+
+- [ ] Per entity folder — `backupjob/{list,detail,form}.html`, `restorerecord/{…}`, `dataarchive/{…}`, `legalhold/{…}`, `environmentinstance/{…}`, `recoverydrill/{…}`; `recoveryposture/form.html` (singleton edit); `backupboard.html` + `backupoverview.html` (computed) + `backupboard.html`. Foundation apps are **flat** but templates are `<entity>/<page>.html` (CLAUDE.md rule 4).
+- [ ] Every page carries the honest-limit notice in the house voice (`.text-warn`, **not** `.alert-*`, which does not exist in `theme.css`). Lists: search + status/tier filters + pagination + Actions (eye/pencil/trash-2). Badge classes **colour-named only** (`badge-green`/`badge-amber`/`badge-slate`, never `-success`/`-warning`).
+
+## Shared files & Integration
+
+- [ ] Re-export blocks in `apps/core/{models,forms,views}/__init__.py` (models before views; views import from `apps.core.models`).
+- [ ] Admin registration in `apps/core/admin.py` for all 8 models.
+- [ ] Extend `apps/core/management/commands/seed_core.py`: `_seed_backup(tenant)` with a **per-entity guard** (never a tenant-wide one), reusing the existing tenant + an existing `EncryptionKey`, and `_seed_recovery_posture(tenant)` for the singleton.
+- [ ] Fill `apps/core/migrations/0013_backup_recovery_data_lifecycle.py` (the Phase-0 placeholder) via `makemigrations core`.
+- [ ] `LIVE_LINKS["0.16"]` in `apps/core/navigation.py` — 5 bullet keys **verified byte-identical to `NavERP.md`** via the real `parse_catalog()`, plus extra leaves.
+- [ ] `templates/core/core_overview.html` / the module landing page: link the new pages.
+
+## Verify
+
+- [ ] `makemigrations --check` → "No changes detected"; `migrate`; `seed_core` **twice** (2nd run idempotent); `manage.py check`.
+- [ ] `venv\Scripts\python.exe temp\audit_integrity.py` → **6/6 PASS**.
+- [ ] Smoke as `admin_acme`: every new page 200 with **content** asserted (not just status); junk-param and page-2 lists; cross-tenant IDOR → 404; `backup_job_verify` is 405 on GET.
+- [ ] Phase 4 review → `.claude/tasks/review-core-0.16.md`; Phase 5 `code-fixer`; Phase 6 tests (`test_backup_*`); Phase 7 docs + `README.md` counter → **16 of 21**.
+- [ ] **Final gate:** `apps/core/tests` **without** `--nomigrations` (the only run that catches an unapplied migration).
+
+## Close-out
+
+- [ ] `### Module 0 0.16 — Backup, Recovery & Data Lifecycle (close-out YYYY-MM-DD)` prose section.
+- [ ] Update `.claude/skills/core/SKILL.md` with the 0.16 section; update `NavERP.md` + `README.md` counters.
+
+---
+
 # Build Plan — Module 0 0.15 Localization & Regional Settings
 
 Source of truth: `.claude/tasks/research-core-0.15.md`.
