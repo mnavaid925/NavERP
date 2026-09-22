@@ -4,11 +4,13 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">Languages</h1>
-      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'core:localization_overview' %}">Localization</a><span class="sep">›</span><span>Languages</span></div>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span>{% if request.user.is_superuser or request.user.is_tenant_admin %}<a href="{% url 'core:localization_overview' %}">Localization</a>{% else %}<span>Localization</span>{% endif %}<span class="sep">›</span><span>Languages</span></div>
     </div>
     <div class="page-actions">
-      <a href="{% url 'core:localization_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Board</a>
-      <a href="{% url 'core:locale_profile_edit' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Regional settings</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'core:localization_board' %}" class="btn btn-outline"><i data-lucide="activity"></i> Board</a>
+        <a href="{% url 'core:locale_profile_edit' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Regional settings</a>
+      {% endif %}
     </div>
   </div>
 
