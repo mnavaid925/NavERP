@@ -4,10 +4,12 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">My Regional Settings</h1>
-      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span><a href="{% url 'core:localization_overview' %}">Localization</a><span class="sep">›</span><span>My Regional Settings</span></div>
+      <div class="breadcrumb"><a href="{% url 'dashboard:home' %}">NavERP</a><span class="sep">›</span>{% if request.user.is_superuser or request.user.is_tenant_admin %}<a href="{% url 'core:localization_overview' %}">Localization</a>{% else %}<span>Localization</span>{% endif %}<span class="sep">›</span><span>My Regional Settings</span></div>
     </div>
     <div class="page-actions">
-      <a href="{% url 'core:localization_overview' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Overview</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'core:localization_overview' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Overview</a>
+      {% endif %}
     </div>
   </div>
 
@@ -29,7 +31,9 @@
       <p class="text-muted">Leave <strong>Date format</strong> blank to inherit the workspace pattern.</p>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
-        <a href="{% url 'core:localization_overview' %}" class="btn btn-outline">Cancel</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <a href="{% url 'core:localization_overview' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
       </div>
     </form>
   </div></div>
