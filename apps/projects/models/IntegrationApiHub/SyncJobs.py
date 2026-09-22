@@ -72,6 +72,7 @@ class ProjectSyncJob(TenantNumbered):
             models.Index(fields=["tenant", "connector"], name="syj_tnt_conn_idx"),
             models.Index(fields=["tenant", "connector", "is_active"], name="syj_tnt_conn_act_idx"),
             models.Index(fields=["tenant", "last_status"], name="syj_tnt_status_idx"),
+            models.Index(fields=["tenant", "is_active"], name="syj_tnt_active_idx"),
         ]
 
     def __str__(self):
