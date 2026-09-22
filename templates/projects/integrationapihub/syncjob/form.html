@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Sync Job — {{ job.number }}{% else %}New Sync Job{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Sync Job: {{ job.number }}{% else %}Create Sync Job{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:syj_list' %}">Sync Jobs</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-4xl">
+  <div class="card-header"><h3 class="card-title">Job Configuration</h3></div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.connector.id_for_label }}" class="form-label">Connector *</label>
+          {{ form.connector }}
+          {% if form.connector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.connector.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.name.id_for_label }}" class="form-label">Job Name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.entity_scope.id_for_label }}" class="form-label">Entity Scope</label>
+          {{ form.entity_scope }}
+          {% if form.entity_scope.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.entity_scope.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.direction.id_for_label }}" class="form-label">Direction</label>
+          {{ form.direction }}
+          {% if form.direction.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.direction.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.trigger_mode.id_for_label }}" class="form-label">Trigger Mode</label>
+          {{ form.trigger_mode }}
+          <span class="text-xs text-muted">Recorded intent; nothing runs automatically.</span>
+          {% if form.trigger_mode.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.trigger_mode.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.conflict_policy.id_for_label }}" class="form-label">Conflict Policy</label>
+          {{ form.conflict_policy }}
+          {% if form.conflict_policy.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.conflict_policy.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.interval_minutes.id_for_label }}" class="form-label">Interval (minutes)</label>
+          {{ form.interval_minutes }}
+          <span class="text-xs text-muted">Recorded cadence; nothing schedules on it.</span>
+          {% if form.interval_minutes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.interval_minutes.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.batch_size.id_for_label }}" class="form-label">Batch Size</label>
+          {{ form.batch_size }}
+          {% if form.batch_size.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.batch_size.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.schedule_note.id_for_label }}" class="form-label">Schedule Note</label>
+          {{ form.schedule_note }}
+          {% if form.schedule_note.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.schedule_note.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.filter_expression.id_for_label }}" class="form-label">Filter Expression</label>
+          {{ form.filter_expression }}
+          <span class="text-xs text-muted">{{ form.fields.filter_expression.help_text }}</span>
+          {% if form.filter_expression.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.filter_expression.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2 flex items-center gap-2 mt-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}" class="form-label mb-0 cursor-pointer">Job is active</label>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'projects:syj_detail' job.pk %}{% else %}{% url 'projects:syj_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">{% if is_edit %}Save Changes{% else %}Create Job{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
