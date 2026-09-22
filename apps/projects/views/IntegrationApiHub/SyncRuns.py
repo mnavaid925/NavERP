@@ -58,15 +58,15 @@ def syr_list(request):
     qs, filters = _run_filters(request, qs)
 
     scope = ProjectSyncRun.objects.filter(tenant=request.tenant)
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     counts = scope.aggregate(
         pending=Count("id", filter=Q(status="pending")),
         running=Count("id", filter=Q(status="running")),
         failed=Count("id", filter=Q(status="failed")),
         partial=Count("id", filter=Q(status="partial")),
         simulated=Count("id", filter=Q(status="simulated")),
+        failed_today=Count("id", filter=Q(status="failed", started_at__gte=today_start)),
     )
-    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    failed_today = scope.filter(status="failed", started_at__gte=today_start).count()
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -84,7 +84,7 @@ def syr_list(request):
             "failed": counts["failed"] or 0,
             "partial": counts["partial"] or 0,
             "simulated": counts["simulated"] or 0,
-            "failed_today": failed_today,
+            "failed_today": counts["failed_today"] or 0,
         },
     }
     ctx.update(filters)
