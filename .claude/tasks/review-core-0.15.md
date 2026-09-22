@@ -662,6 +662,292 @@ effect. **No action.**
 one dev-DB oddity was pre-existing. It also refused to re-run the existing smoke harness as its deliverable
 and instead covered the write paths that harness omits — which is precisely how the Critical was found.
 
+---
+
+## Lane 6 — `security-reviewer`
+
+**Lane:** L6 (security) · **BASE** `35cde520` · **Scope:** `git diff 35cde520...HEAD` restricted to the `core` 0.15 surface · **Mode:** read-only
+
+---
+
+## Verdict
+
+**Clean.** No Critical, no Important, no cross-tenant exposure, no missing gate, no mass-assignment hole, no CSRF gap, no IDOR. Two Minor items, both non-confidentiality (an authorization/UX link mismatch and an audit-fidelity gap). The tenant-isolation posture is correct on every path I could reach, and I confirmed the load-bearing claims at runtime with a non-mutating probe (built in `temp/`, then deleted).
+
+---
+
+## Critical
+
+None.
+
+## Important
+
+None.
+
+## Minor
+
+### L6-M1 — Member-reachable 0.15 pages advertise admin-gated destinations (now-403 links)
+
+`apps/core/views/Localization.py:103` (`locale_profile_edit`), `:199` (`localization_board`) and `:238` (`localization_overview`) are all `@tenant_admin_required`, but three **member-reachable** templates (`@login_required` views) link to them:
+
+- `templates/core/language/list.html:7,10,11` → `localization_overview`, `localization_board`, `locale_profile_edit`
+- `templates/core/timezone/list.html:7,10,11` → same three
+- `templates/core/userlocale/form.html:7,10,15,32` → `localization_overview`, `locale_profile_edit`
+
+**Attack path (no data exposure):** a member opens `/localization/languages/` (200, allowed by `@login_required`) and clicks *Board* / *Regional settings* → `PermissionDenied` → 403. The gate holds server-side; nothing leaks. This is the persona's named AuthN/AuthZ item ("when a view gains a gate, the template must stop offering the now-403 button"), and the house already has the idiom in **214** templates.
+
+**Fix** (house-idiomatic), in `templates/core/language/list.html:10-11` and the two sibling files:
+
+```django
+{% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <a href="{% url 'core:localization_board' %}" class="btn btn-outline">Board</a>
+  <a href="{% url 'core:locale_profile_edit' %}" class="btn btn-outline">Regional settings</a>
+{% endif %}
+```
+
+Note the breadcrumb links (`:7`) hit the same 403 and need the same treatment or a neutral target.
+
+**Pattern-clone grep** — `grep -rn "url 'core:locale_profile_edit'\|url 'core:localization_board'\|url 'core:localization_overview'" templates/` returns exactly the three member-reachable files above; the rest are on admin-gated pages and are fine. The sidebar (`apps/core/navigation.py:2116` `LIVE_LINKS["0.15"]`) shows these same admin destinations to members too, but `resolve_nav` (`navigation.py:2195`) is role-blind for **every** module, so that is pre-existing architecture, not a 0.15 regression — I am not filing it.
+
+### L6-M2 — The two hand-rolled singleton saves write an audit row without the field diff
+
+`apps/core/views/Localization.py:119` and `:146` pass a bare verb:
+
+```python
+write_audit_log(request.user, obj, "update", changes={"verb": "locale_profile_save"})
+```
+
+where the equivalent house path uses the diff: `apps/core/crud.py:219` → `changes=_changed(form)`. So the trail records *that* a tenant admin changed the workspace's regional profile, not *what* changed (old→new language / base currency / zone / format patterns).
+
+**Security impact: negligible** — `LocaleProfile` and `UserLocalePreference` hold no secret, credential or personal data (the sub-module has no such field), so this is audit fidelity, not confidentiality. Filing it only because the persona names hand-rolled save paths explicitly.
+
+**Fix:** mirror `crud.py` — `from apps.core.crud import _changed` and pass `changes=_changed(form)` (or an explicit `{"field": "old→new"}` dict). If the verb marker is wanted, merge it: `changes={"verb": "...", **_changed(form)}`.
+
+---
+
+## Answers to the 8 questions
+
+**1. Are the two GLOBAL read-only lists an information disclosure? — No. Correct as built.**
+
+Verdict: **not a disclosure.** The argument holds on three independent legs:
+
+- **Precedent is exact and stricter in 0.15.** `apps/accounting/views/GeneralLedger/Currencies.py:15-20` — `currency_list` is `@login_required`, reads `Currency.objects.all()`, no tenant filter, and (unlike 0.15) *does* have write routes behind `@tenant_admin_required` (`:23`). `Language`/`TimeZone` take the same shape and add **no** CRUD routes at all, so 0.15 is the *more* restrictive of the two.
+- **The exposed data is public by construction.** I read `templates/core/language/list.html:44-53` — the page renders `code`, `name`, `native_name`, `is_rtl`, `is_default`, `is_active`. Those are ISO 639-1 identifiers and their own endonyms; `timezone_list` renders IANA names + standard offset + DST flag (`models/Localization.py:97-103`). Both are published facts, identical for every tenant, and contain **no tenant identifier, no tenant count, and no per-tenant row**. A cross-tenant reader learns nothing about any workspace.
+- **No tenant data is reachable through them.** The queryset is `Language.objects.all()` (`views/Localization.py:78`) / `TimeZone.objects.all()` (`:93`) with no join to any tenant-owned table, so there is no path from these pages to tenant rows.
+
+What the pages *do* confirm is that a registry exists — which the sidebar already advertises to every user. Verdict: **by design, not a finding.**
+
+**2. Can `UserLocalePreference.tenant` disagree with the user's tenant, and does any view cross the boundary? — They can disagree; no view crosses; the only consequence is an IntegrityError 500.**
+
+`user_locale_edit` (`views/Localization.py:129-151`) reads `filter(tenant=request.tenant, user=request.user).first()` (`:138`) and on POST **overwrites both** server-owned keys from the session:
+
+```python
+obj.tenant = request.tenant   # :143
+obj.user   = request.user     # :144
+```
+
+A crafted POST cannot move either: `UserLocalePreferenceForm.Meta.fields = ["language", "time_zone", "date_format"]` (`forms/Localization.py:34`), and my probe confirmed `tenant` and `user` are both **model fields absent from the form**, so Django discards them from POST entirely and both assignments are unconditional.
+
+Disagreement is only reachable by moving a user's tenant out-of-band. I grepped for it: **no application code reassigns a `User` row's tenant** (`grep -rn "\.tenant = " apps/accounts/ apps/tenants/` returns nothing for the `User` model; `UserForm.Meta.fields`, `forms.py:108-109`, omits `tenant`). The only reachable path is the Django admin — `apps/accounts/admin.py:22` `UserAdmin.list_display` includes `tenant` and does not make it read-only — i.e. **platform superuser only**.
+
+If it happens: GET finds no row (`obj=None`, blank form, reads nothing from the old tenant), and the next POST inserts a second row for the same `user` → the `OneToOneField` unique constraint fires → `IntegrityError` → 500. **No view then reads or writes across the boundary** — every read is `filter(tenant=..., user=...)` (`:138`, `:253`, `:260`). So: **no cross-tenant leak; an availability edge case requiring a superuser action.** Not filed as a finding (it is the same 500 class as Q6, with a narrower trigger).
+
+**3. Can a tenant admin write a `LocaleProfile` for a different tenant? — No.**
+
+`locale_profile_edit` (`views/Localization.py:104-125`) reads `filter(tenant=request.tenant).first()` (`:110`), and on save sets `obj.tenant = request.tenant` (`:117`) **after** `form.save(commit=False)`. `LocaleProfileForm.Meta.fields` (`forms/Localization.py:25-26`) excludes `tenant`, so a crafted `tenant=<other pk>` in the POST is dropped by Django; my probe confirmed `tenant` is a model field not on the form. The three FKs the form *does* expose — `language`, `base_currency`, `time_zone` — are the global registries, and my probe confirmed their querysets carry **no** tenant predicate (`core_language`, `accounting_currency`, `core_timezone`, unfiltered), which is correct: they have no `tenant` column to scope on. **No path writes another tenant's profile.**
+
+**4. Is `StatutoryRule.tax_code` genuinely tenant-scoped, in the form and in the seeder? — Yes, both.**
+
+**Form.** `accounting.TaxCode(TenantOwned)` — `apps/accounting/models/Tax/../TaxCodes.py:6` inherits `TenantOwned`, whose `tenant` FK is at `apps/accounting/models/_base.py:48`. `TenantModelForm.__init__` (`forms/_common.py:52-55`) filters any `ModelChoiceField` whose model has a `tenant` field. My probe, on a stub tenant `pk=4242`, produced:
+
+```sql
+SELECT ... FROM "accounting_taxcode" WHERE "accounting_taxcode"."tenant_id" = 4242 ORDER BY ...
+```
+
+So a crafted cross-tenant pk fails `ModelChoiceField` validation ("Select a valid choice") → form invalid → no write. The view side is closed twice over: `crud_create` re-sets `obj.tenant = request.tenant` (`crud.py:196-197`) and `crud_edit`/`crud_detail`/`crud_delete` all fetch `get_object_or_404(..., tenant=request.tenant)` (`crud.py:213, 230, 241`).
+
+**Seeder.** `seed_core.py:769-770`:
+
+```python
+vat_code   = TaxCode.objects.filter(tenant=tenant, tax_type="vat").first()
+sales_code = TaxCode.objects.filter(tenant=tenant, tax_type="sales").first()
+```
+
+Both are tenant-scoped, and the `Currency.objects.filter(code="USD")` lookup at `:753` is global by design (no tenant column). **The seeder never crosses tenants.**
+
+**5. Write-verb authorization — confirmed, all of it.**
+
+- **`@require_POST` is outermost on `statutory_rule_delete`** (`views/Localization.py:191-193`). Source order is `@require_POST` above `@tenant_admin_required`, so bottom-up application makes `require_POST` the outermost wrapper. Runtime-confirmed with a `RequestFactory` probe:
+
+  | caller | method | result |
+  |---|---|---|
+  | anonymous | GET | **405** |
+  | anonymous | POST | 302 → `/login/` |
+  | member | GET | **405** |
+  | member | POST | **403** `PermissionDenied` |
+
+  The 405-not-403 ruling (7.7) holds exactly: the method check precedes the role gate. Note this means an anonymous `GET` gets 405 rather than a login redirect — that reveals only that the route exists, and it is the documented house standard, so not a finding.
+- **Every mutating view is gated.** Probe over all 11 views: `language_list`/`timezone_list` `@login_required` (read-only, no write routes); `user_locale_edit` `@login_required` (own row only); `locale_profile_edit`, `statutory_rule_list/create/detail/edit/delete`, `localization_board`, `localization_overview` all `@tenant_admin_required`. No mutating view is login-only.
+- **Member cannot create/edit/delete a `StatutoryRule`.** Probe: member `GET` on `statutory_rule_create` → `PermissionDenied: Tenant administrator access required.` (403), raised before the view body runs. `crud_delete` is additionally self-defending (`crud.py:240-242`).
+- **Member *can* save their own `UserLocalePreference`** — `@login_required` at `:129`, writing only `tenant=request.tenant, user=request.user`.
+- **Template/route consistency:** the edit/delete buttons in `templates/core/statutoryrule/list.html:57-61` and `detail.html:10-14` live on `@tenant_admin_required` pages, so a member never reaches them. (The *inverse* mismatch on the member-reachable pages is L6-M1.)
+
+**6. Security impact of the duplicate-name HTTP 500 — none. Availability/UX bug only.**
+
+Mechanism confirmed at source level (Django 5.1.15): `_get_validation_exclusions()` excludes any model field not on the form (`venv/.../django/forms/models.py:404`), and `_get_unique_checks()` skips a `unique_together` tuple if *any* of its fields is excluded (`venv/.../django/db/models/base.py:1413-1415` — `if not any(name in exclude for name in check)`). My probe showed `tenant` and `created_at`/`updated_at` are model fields absent from `StatutoryRuleForm`, with `unique_together = (('tenant','name'),)`. So `("tenant","name")` is never validated → `crud_create` inserts → `IntegrityError` → 500. QA's finding is real.
+
+**Security judgement:**
+- **Not a DoS.** One failed INSERT per request, an authenticated request, no unbounded resource, no lock retained past the statement, no persistent state change. The server stays up.
+- **Not an information leak.** The 500 body is generic whenever `DEBUG=False`. And the oracle it would otherwise create is **intra-tenant only**: the constraint is `(tenant, name)`, so a same-named rule in *another* tenant does not collide — no cross-tenant existence oracle exists. The only actor who can trigger it is a tenant admin (`@tenant_admin_required`), and a tenant admin can already enumerate their own tenant's rule names via `statutory_rule_list`. **Information gain: zero.**
+- **Verdict: purely availability/UX.** It is a deviation from the repo's "no unhandled 500 from user input" ethos, which is QA's lane — I am not re-filing it.
+
+**7. CSRF, IDOR, mass assignment — all clean.**
+
+- **CSRF:** every POST form carries `{% csrf_token %}` — `templates/core/localeprofile/form.html:17`, `userlocale/form.html:17`, `statutoryrule/form.html:16`, `statutoryrule/detail.html:12`, `statutoryrule/list.html:59`. No `@csrf_exempt` anywhere in the 0.15 views/forms/models/urls (grepped, zero hits). `CsrfViewMiddleware` is in `MIDDLEWARE` and no view opts out.
+- **State-changing GET:** none. The only mutating route, `statutory_rule_delete`, is `@require_POST` *and* `crud_delete` re-checks `request.method` (`crud.py:242`). `crud_delete` still runs the tenant-scoped `get_object_or_404` on GET, but performs no mutation and redirects — no write.
+- **IDOR on `statutory_rule_*`:** `statutory_rule_detail` (`crud.py:230-233`), `_edit` (`:213`) and `_delete` (`:241`) all resolve through `filter(tenant=request.tenant)` → another tenant's pk yields **404**, which is the correct non-oracle response. `statutory_rule_list` filters `tenant=request.tenant` at the call site (`views/Localization.py:159`). No `Model.objects.get(pk=...)` or `.all()` on a tenant-owned model anywhere in the file.
+- **Mass assignment:** no view writes a POST-supplied `tenant` or `user`. All three forms exclude `tenant`; `UserLocalePreferenceForm` also excludes `user` (probe-confirmed). `statutory_rule_create` inherits `set_tenant=True` → `obj.tenant = request.tenant` (`crud.py:196-197`). The two singleton views assign both keys from the session after `commit=False` (`views/Localization.py:117`, `:143-144`). Status-like fields (`is_active`, `e_invoicing_required`) are legitimately user-editable domain data, not workflow-controlled. `created_at`/`updated_at` are `auto_now*` and off-form.
+
+**8. Does `DEBUG` affect what these views expose? — Only the generic 500 page, and only via the pre-existing config default.**
+
+`config/settings.py:16` → `DEBUG = _bool("DEBUG", "True")`. With `DEBUG=True` a traceback page renders SQL, table/column names, local paths and a filtered settings view — relevant to Q6's duplicate-name 500. With `DEBUG=False` (which `config/settings_test.py` sets, and which `.env` must set in production) it is Django's generic 500 with no detail. This is a **deployment-configuration** property affecting every 500 in the application, not a 0.15 defect, and the repo already documents the `SECRET_KEY`-fails-hard-when-not-DEBUG guard at `settings.py:23`. None of the 11 views read `settings.DEBUG`, and none render a conditional that widens on it. No 0.15-specific exposure.
+
+---
+
+## Assessed and clean
+
+| Check | Result |
+|---|---|
+| Cross-tenant IDOR on `statutory_rule_{list,detail,edit,delete}` | Scoped via `filter(tenant=request.tenant)`; foreign pk → 404 |
+| FK dropdown cross-tenant pk (`tax_code`) | `TenantModelForm` scopes to `tenant_id = <request.tenant>` — SQL-confirmed |
+| Global FK dropdowns (`language`, `time_zone`, `base_currency`) | Correctly unfiltered — those models have no `tenant` column |
+| Seeder cross-tenant `TaxCode` resolution | `filter(tenant=tenant, tax_type=...)` — scoped |
+| Mass assignment of `tenant` / `user` | All three forms exclude both; views assign from the session |
+| `@require_POST` outermost on delete (7.7 ruling) | Confirmed statically **and** at runtime (405 before 403) |
+| Member → `StatutoryRule` write | 403 `PermissionDenied` (probe) |
+| Member → own `UserLocalePreference` | Allowed (`@login_required`), own row only |
+| CSRF on every POST form | `{% csrf_token %}` present in all 5; no `@csrf_exempt` |
+| State-changing GET | None |
+| XSS in the 9 templates | Auto-escaped throughout; no `\|safe`, `mark_safe`, `{% autoescape off %}`; `linebreaksbr` escapes first |
+| CSS injection via `style="..."` | All 4 occurrences are static template literals, no user value interpolated |
+| SQL injection | ORM only; no `.raw()` / `.extra()` / `cursor.execute()` in the sub-module |
+| Secrets / credentials / hashes | **None exist in this sub-module** — no secret field, no reveal path, no `messages` secret |
+| Format-pattern allow-list (`FORMAT_TOKEN_RE`, `models/Localization.py:55`) | `%` excluded, so no `strftime`-injection shape; and no production consumer exists today (grepped) — defence-in-depth, not a live control |
+| Open redirect / `?next=` handling | None in 0.15 |
+| `AuditLog` coverage | `crud_create`/`_edit`/`_delete` audit automatically; both singleton saves write a row (diff omitted — L6-M2) |
+| Migration `core.0012` | Pure `CreateModel`/`AddIndex`; no `RunPython`, no `RunSQL`, no data backfill |
+| `admin.py` registrations | All 5 use the admin site's own staff/superuser gate; `UserLocalePreferenceAdmin` exposes `user` + `tenant` read-only in `list_display`, consistent with the rest of `admin.py` |
+| Tenant-less superuser (`tenant=None`) | `locale_profile_edit`/`user_locale_edit`/`localization_board`/`localization_overview` redirect with a message; `crud_create` redirects; lists return empty. No 500, no orphan write |
+| Unvalidated numeric input (L35) | No hand-parsed numerics; `utc_offset_minutes`/`first_day_of_week` are `IntegerField`/`PositiveSmallIntegerField` with choices |
+| Hand-parsed GET filters (L11) | All route through `crud_list`'s `as_db_int`/enum guards — no raw `int(request.GET[...])` |
+
+**Probe note:** I built one throwaway script in `temp/` (gitignored) that did in-memory form/queryset inspection plus `RequestFactory` calls that raise before any DB access; it opened no connection, wrote no row, ran no migration, and I deleted it. The runtime confirmations above are its output. I edited nothing else, ran no migration and did not run the seeder.
+
+**Hand-off:** nothing to escalate — no suspected exploit survived the check. The QA lane's duplicate-name 500 needs no security follow-up (Q6).
+
+### Orchestrator verification — lane 6
+
+**Clean, and I accept it.** Two things about this lane are worth recording:
+
+- **L6-M2 is a genuinely NEW finding** — no other lane raised it. I confirmed it by reading my own code:
+  `views/Localization.py:119` and `:146` pass `changes={"verb": "..."}` where `crud.py:219` passes
+  `changes=_changed(form)`. So the two singleton saves record *that* the profile changed but not *what*
+  changed — the audit trail for a config surface is thinner than for every CRUD surface beside it. Minor and
+  non-confidential, exactly as graded, but real. **Fix note for the fixer:** `_changed` is module-private in
+  `crud.py`; importing a `_`-prefixed name across modules is itself a smell, so prefer passing an explicit
+  `{field: new_value}` diff from the view, or promote the helper — the fixer should pick one and say which.
+- **L6-M1 duplicates lane 3's L3-I1/I2 and lane 1's L1-M1/M2** — the same three templates. That is
+  **corroboration, not noise**: three independent lanes reached the same conclusion, and lane 6 supplies the
+  house-idiomatic fix (`{% if request.user.is_superuser or request.user.is_tenant_admin %}`) plus the
+  pattern-clone grep. It consolidates to **one** finding.
+- **Lane 6's Q6 answer is the right call and I adopt it:** the duplicate-name 500 has **zero** security
+  impact — not a DoS, and the `(tenant, name)` constraint is intra-tenant so it creates no cross-tenant
+  existence oracle. It correctly declined to re-file QA's finding and left it in QA's lane. That is the
+  "carried, not folded in" discipline again.
+- **Lane 6's Q2 answer found a real edge case and correctly declined to file it**: a superuser changing a
+  user's tenant via the Django admin can leave a stale `UserLocalePreference`, and the next save 500s on the
+  OneToOne. Narrow, superuser-only, no cross-tenant read or write. **Recorded, no action.**
+- **The `admin.site` `list_display`-based gating is the right final note:** all five new admins inherit the
+  admin site's own staff/superuser gate, so no new exposure was introduced through the admin.
+
+**All six lanes are in.** Consolidated findings below.
+
+---
+
+# CONSOLIDATED FINDINGS
+
+**Six lanes:** `code-reviewer` · `explorer` · `frontend-reviewer` · `performance-reviewer` · `qa-smoke-tester` · `security-reviewer`.
+**Raw findings:** 17 across the six lanes → **1 Critical, 4 Important, 7 Minor, 8 explicit no-action entries.**
+
+Severity was re-set on evidence, not inherited. Where lanes disagreed, the resolution is recorded inline.
+**Two lanes filed findings that were artifacts of MY briefs (N1, and lane 2's M3) — both are recorded as
+orchestrator errors and neither produced a code change.**
+
+## C — Critical
+
+| id | finding | source lanes | verified by |
+|---|---|---|---|
+| **C1** | **A duplicate `(tenant, name)` 500s on both create and edit.** `StatutoryRuleForm` never validates the model's `unique_together`, because `tenant` is not a `Meta.fields` member and Django's `_get_unique_checks()` drops any `unique_together` containing an excluded field. Typing an existing rule name — or renaming a rule onto a sibling's name — is an everyday action that ends in an unhandled `IntegrityError`/500 instead of a form error. **Fix:** add the duplicate guard to `StatutoryRuleForm` (scoped to `self.tenant`), copying the shape that already exists in the repo at `apps/crm/forms/CustomerSuccess/HealthScores.py:15-23`. Do **not** touch `crud_create` — it is shared by every module. | L5-C1, L5-C2 | **Orchestrator: reproduced from scratch** (`temp/probe_15_dup.py`): `is_valid()=True`, `errors={}`, `tenant` excluded, `validate_unique(exclude=['tenant'])` silent, then HTTP 500 on both verbs, DB unmutated. **Critical upheld** — an unhandled 500 on a mainline path. |
+
+## I — Important
+
+| id | finding | source lanes | verified by |
+|---|---|---|---|
+| **I1** | **Member-reachable pages offer only admin-gated exits.** Three templates: `userlocale/form.html` (breadcrumb, "Overview", body link, **and Cancel** all → `@tenant_admin_required` pages), `language/list.html` and `timezone/list.html` (both page-action buttons). A member who saves their own regional preference is POST-redirected to a 403, and their only in-page exit is the browser Back button. **Fix:** route to member-reachable pages where one exists (`core:user_locale_edit`, `dashboard:home`), hide where none does — lane 6's `{% if request.user.is_superuser or request.user.is_tenant_admin %}` idiom, or lane 3's "empty the `.page-actions`" precedent from `my_preferences.html`. | L1-I1, L1-M1, L1-M2, L3-C1, L3-I1/I2, L6-M1 | **Orchestrator: reproduced** (`temp/probe_15_member_flow.py`): member GET 200 → POST 302 to `/core/localization/` → **403**; and all three page-action targets 403. **Severity set to Important, overruling lane 3's Critical** — the save itself *succeeds*, nothing crashes, no boundary is crossed, and the member is correctly denied rather than wrongly granted. The Critical rubric is a closed list and a dead-end landing page is not on it. |
+| **I2** | **`_fx_rows` materialises the tenant's entire rate history to emit one row per currency.** O(currencies × days) rows fetched, joined and sorted, then discarded in Python. Measured 2,193 rows → 207 ms; extrapolates to ≈1.7 s on a landing page at 10 currencies × 5 years. **And the docstring's stated justification is false:** it claims a `Max("rate_date")` subquery can "return the wrong row when two rates share a date", but `ExchangeRate.Meta.unique_together = ("tenant","currency","rate_date")` makes that impossible. **Fix:** lane 4's 2-query replacement, A/B-verified to produce an identical output set. | L4-I1 | **Orchestrator: confirmed** the deciding constraint at `apps/accounting/models/GeneralLedger/ExchangeRates.py:17`. **This is the review's most valuable finding: the code is slow but not wrong — the *reason* I wrote for it was wrong, and a future editor would have defended a slow query against a tie that cannot occur.** |
+| **I3** | **The timezone offset column prints raw minutes.** `templates/core/timezone/list.html:44,50` renders `utc_offset_minutes` as `UTC+330` for IST and `UTC-480` for Los Angeles — reading as hours, under a header with no unit, and contradicting the model's own docstring. **Fix:** add a `TimeZone.offset_display` property (`UTC+05:30` / `UTC-08:00`) and render that. | L3-I3 | **Orchestrator: reproduced by render** — pulled the column straight out of the live HTML. |
+| **I4** | **The 0.15 seeder's peer-app FKs can never be populated on a fresh install.** `_seed_localization` reads `accounting.Currency` and `accounting.TaxCode`, but `seed_accounting` is their only creator and explicitly requires `seed_core` to run first ("No tenants found — run `seed_core` first"). On a fresh DB every lookup is `None`, and the per-entity guard then **freezes the NULLs permanently** — re-running `seed_core` after `seed_accounting` does not repair them. Latent on the dev DB only because accounting data pre-existed. **Fix:** backfill a NULL link on re-run inside `_seed_localization`, rather than skipping the whole entity. | L2-I1 | **Orchestrator: confirmed the premise** by grep — `seed_accounting.py:97-99` bails without tenants; it is the sole `Currency`/`TaxCode` creator. Dependency is circular in the documented order. |
+
+## M — Minor
+
+| id | finding | source | note |
+|---|---|---|---|
+| **M1** | `templates/core/statutoryrule/detail.html:39` — no "Back to list"; the only one of 18 core detail pages without it. | L3-I4 | Verified by count: 0 vs 17/18. |
+| **M2** | `views/Localization.py:119,146` — the two singleton saves write an audit row with `{"verb": ...}` but no field diff, where `crud.py:219` passes `_changed(form)`. Audit fidelity only; no secret involved. | L6-M2 | **New in lane 6.** Fixer must choose: explicit diff dict, or promote `_changed` (importing a `_`-name across modules is itself a smell). |
+| **M3** | Trim the two computed pages' queries: `localization_overview` fetches `LocaleProfile` twice (`.first()` + `.exists()`); 6 COUNTs per page where 3 conditional aggregates would do; the profile's FKs are not `select_related`. | L4-M1/M2/M3 | Constant savings, not scaling. Fold into **one** pass. |
+| **M4** | Dead context keys: `profile` is passed to the board and never used; `obj`/`is_edit` are passed to both form templates and never used. | L2-M1 | Harmless direction (the dangerous direction was checked and is absent). |
+| **M5** | `contract-core-0.15.md:197` records `rtl_choices` labels that differ from the shipped ones. | L2-M2 | Doc-only. Fix the contract. |
+| **M6** | `badge-amber` used for neutral registry facts ("Observes DST", "Right-to-left") where `badge-slate`/`badge-info` would read as neutral. | L3-M3 | Valid classes; polish only. |
+| **M7** | `localizationoverview.html:98-101` — a five-clause run-on that repeats `localizationboard.html:16` verbatim. Convert to a `<ul>`; let the board keep the "nothing is stored" line. | L3-M2 | Content is right; presentation only. |
+
+## No action — recorded so the decisions are visible
+
+| # | item | why no action |
+|---|---|---|
+| **N1** | L5-I1: the `statutory_rule_*` views do not take the `tenant is None` redirect branch. | **Orchestrator error, not a defect.** I told lane 5 to expect it; the house norm is the opposite — **0 of 487** `crud_list` call sites guard it, and `party_list` (the reference view) is structurally identical. An empty register *is* the correct rendering for a superuser who sees no module data. Lane 5 said it filed it only because my brief asserted it. |
+| **N2** | L5-M2: `messages.error` vs `messages.info` across the tenant-less branches. | Cosmetic, one word; nothing to fold it into once N1 is dropped. |
+| **N3** | L4: `currencies_without_rates` under-counts if a rate exists on a now-inactive currency. | Accepted edge — the number answers "currencies the platform offers that this tenant has not rated", and an inactive currency is not offered. |
+| **N4** | L5-M1: three junk dev-DB tenants (ids 423, 424, 70 — one with `slug=''`) predate this build. | Out of scope for 0.15; **escalated** rather than fixed, since a later test lane could trip on them. |
+| **N5** | L6: a superuser changing a user's tenant via the Django admin can leave a stale `UserLocalePreference` whose next save 500s on the OneToOne. | Narrow, superuser-only, **no cross-tenant read or write** — every read is `filter(tenant=..., user=...)`. |
+| **N6** | L3/L6: the sidebar shows admin destinations to members. | Pre-existing and app-wide — `resolve_nav` is role-blind for **every** module. Not a 0.15 regression. |
+| **N7** | L6: `config/settings.py:16` defaults `DEBUG=True`. | Deployment configuration affecting every 500 in the app; no 0.15 view reads `settings.DEBUG`. |
+| **N8** | L1/L2: the changeset ships zero tests. | That is **Phase 6**, which has not run yet — recorded as a plan item, not a defect. |
+
+## Findings the review affirmatively cleared
+
+Recorded because a clean verdict on a checked item is evidence, not silence:
+
+- **No Critical in the security lane.** No cross-tenant read or write on any path; no missing tenant FK; no unscoped form queryset; no IDOR (`foreign pk → 404`, and the 404 does not mutate); no CSRF gap; no state-changing GET; no mass assignment of `tenant`/`user`; **no secret exists in this sub-module at all.**
+- **`@require_POST` outermost on `statutory_rule_delete`** — 7.7's 405-not-403 ruling holds, confirmed statically *and* at runtime (anonymous GET → 405, member GET → 405, member POST → 403).
+- **The two GLOBAL read-only registries are correct, not a disclosure** — the exposed data is ISO language codes and IANA zone names (public facts, identical for every tenant), there is no join to any tenant-owned table, and `accounting.currency_list` takes the same shape while being *less* restrictive. **By design, no finding.**
+- **No N+1 anywhere**; every one of the 11 views is constant in query count with respect to row count (verified at 3 rows and at 303 rows).
+- **Design-system compliance is fully clean** — 40 class tokens across the 9 templates, **0** missing from `theme.css`. The L33 badge/stat-icon regression has **not** recurred, on its fourth opportunity.
+- **The referential spine is closed** — re-export blocks, the 11-route triangle, template paths, `{% url %}` names, `LIVE_LINKS` keys (byte-identical to the NavERP.md bullets) and the orphan sweep in both directions.
+- **The seeder is idempotent** and the dev DB was left byte-identical by every lane that touched it.
+
+## Fix order for the `code-fixer`
+
+1. **C1** — the duplicate-name guard in `StatutoryRuleForm`. (Only Critical.)
+2. **I1** — the three member-reachable templates, one pass.
+3. **I3** — `TimeZone.offset_display` + the template.
+4. **I4** — the seeder backfill.
+5. **I2** — `_fx_rows`, using lane 4's A/B-verified 2-query form, and **rewrite the docstring** (the old rationale is false).
+6. **M1–M7**, with **M3** as a single pass and **M5** a doc edit.
+
+
+
+
+
 
 
 
