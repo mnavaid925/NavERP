@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_job_list' %}">Backups</a><span class="sep">›</span><span>{{ obj.name|truncatechars:40 }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:backup_job_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:backup_job_delete' obj.pk %}" onsubmit="return confirm('Delete this backup record?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% if not obj.is_verified %}
+    <div class="card"><div class="card-body">
+      <p class="text-warn"><i data-lucide="shield-off"></i> <strong>Nobody has verified this backup.</strong>
+        Until an integrity check is recorded, this is a claim rather than a safety net — nobody knows whether it
+        can actually be restored from.</p>
+      <form method="post" action="{% url 'core:backup_job_verify' obj.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="shield-check"></i> Record verification</button>
+      </form>
+      <p class="text-muted">This records that a check happened; it does not perform one.</p>
+    </div></div>
+  {% else %}
+    <div class="card"><div class="card-body">
+      <p class="text-ok"><i data-lucide="shield-check"></i> <strong>Verified</strong> — {{ obj.integrity_verified_at|date:"M d, Y H:i" }}
+        using {{ obj.get_integrity_method_display }}.</p>
+    </div></div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The backup</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_backup_type_display }}</dd></div>
+        <div class="detail-item"><dt>Frequency</dt><dd>{{ obj.get_frequency_display }} <span class="text-muted">(recorded intention)</span></dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>
+          {% if obj.status == "success" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "warning" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "failed" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Failure reason</dt><dd>{% if obj.status == "failed" or obj.is_partial %}{{ obj.get_failure_reason_display }}{% else %}{{ obj.get_failure_reason_display }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scope</dt><dd>{{ obj.scope_label|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Target</dt><dd>{% if obj.target_location %}<code>{{ obj.target_location }}</code>{% else %}<span class="text-muted">not recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Storage tier</dt><dd>{{ obj.get_storage_tier_display }}</dd></div>
+        <div class="detail-item"><dt>Size</dt><dd>{{ obj.size_display }} <span class="text-muted">— blank means not reported, not zero</span></dd></div>
+        <div class="detail-item"><dt>Checksum</dt><dd>{% if obj.checksum %}<code>{{ obj.checksum }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Encryption</dt><dd>{{ obj.get_encryption_scheme_display }}{% if obj.encryption_key %} <span class="text-muted">({{ obj.encryption_key.prefix }}…)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Immutable (claimed)</dt><dd>{% if obj.is_immutable %}<span class="badge badge-info">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Backup retention</dt><dd>{% if obj.retention_days is not None %}{{ obj.retention_days }} day{{ obj.retention_days|pluralize }}{% else %}<span class="text-muted">not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Retain until</dt><dd>{{ obj.retain_until|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{{ obj.started_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Finished</dt><dd>{{ obj.finished_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Duration</dt><dd>{{ obj.duration_display }}</dd></div>
+        <div class="detail-item"><dt>Attempts</dt><dd>{{ obj.attempt_count }}</dd></div>
+        <div class="detail-item"><dt>Evidence</dt><dd>{% if obj.evidence %}<code>{{ obj.evidence }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Restores from this backup</dt><dd>{{ restore_count }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if obj.is_partial %}
+    <div class="card"><div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>This backup is partial.</strong>
+        Some of the declared scope did not make it. A partial backup is more dangerous than a failed one because
+        people trust it — treat it as unverified until a restore test says otherwise.</p>
+    </div></div>
+  {% endif %}
+
+  {% if obj.notes %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body"><p>{{ obj.notes|linebreaksbr }}</p></div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> Deleting this record removes the <strong>row</strong>, not any
+      backup file. NavERP never unlinks a stored artefact on row delete, so nothing here erases bytes.</p>
+  </div></div>
+{% endblock %}
