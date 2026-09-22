@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Connector Health — {{ connector.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title flex items-center gap-3">Health — {{ connector.number }} <span class="badge {{ connector.health_badge }}">{{ connector.get_status_display }}</span></h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:ixc_detail' connector.pk %}">{{ connector.number }}</a>
+      <span>/</span>
+      <span>Health</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:ixc_detail' connector.pk %}" class="btn btn-outline"><i data-lucide="plug" class="w-4 h-4 mr-1"></i> Connector</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="activity" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Total Runs</div><div class="text-2xl font-bold text-slate-900">{{ stats.total_runs }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="x-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Failed Runs</div><div class="text-2xl font-bold text-red-600">{{ stats.failed_runs }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Success Rate</div><div class="text-2xl font-bold text-slate-900">{{ stats.success_rate }}%</div></div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="clock" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Last Success</div><div class="text-sm font-bold text-slate-900">{% if stats.last_success_at %}{{ stats.last_success_at|date:"M d, H:i" }}{% else %}Never{% endif %}</div></div></div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Connection Summary</h3></div>
+    <div class="card-body">
+      <dl class="space-y-3 text-sm">
+        <div><dt class="text-muted">Provider</dt><dd class="font-medium">{{ connector.get_provider_display }} ({{ connector.get_domain_display }})</dd></div>
+        <div><dt class="text-muted">Consecutive Failures</dt><dd class="font-medium {% if connector.consecutive_failures %}text-red-600{% endif %}">{{ connector.consecutive_failures }}</dd></div>
+        <div><dt class="text-muted">Last Sync</dt><dd class="font-medium">{% if connector.last_sync_at %}{{ connector.last_sync_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+        <div><dt class="text-muted">Sync Jobs</dt><dd class="font-medium">{{ jobs|length }}</dd></div>
+        <div><dt class="text-muted">Field Mappings</dt><dd class="font-medium">{{ mappings|length }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Recent Runs</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Run</th><th>Status</th><th>Failed</th><th>Started</th></tr></thead>
+        <tbody>
+          {% for r in recent_runs %}
+          <tr>
+            <td><a href="{% url 'projects:syr_detail' r.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ r.number }}</a></td>
+            <td><span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span></td>
+            <td class="{% if r.records_failed %}text-red-600 font-medium{% endif %}">{{ r.records_failed }}</td>
+            <td class="text-xs text-muted">{{ r.started_at|date:"M d, H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-6">No runs recorded for this connector.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
