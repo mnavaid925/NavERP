@@ -279,7 +279,7 @@ integration/connectors/<int:pk>/health/            connector_health      (GET le
   - `run_count`: `PositiveIntegerField(default=0, editable=False)`.
   - `last_status`: `CharField(10, blank=True, editable=False)` (mirrors the newest run's status for the list column).
 - `clean()`: tenant guard — `connector.tenant_id != tenant_id` -> `ValidationError`.
-- `Meta`: `ordering = ["-created_at", "-id"]`; `unique_together = [("tenant","number"), ("tenant","connector","name")]`; `indexes` = `syj_tnt_conn_idx (tenant,connector)`, `syj_tnt_conn_act_idx (tenant,connector,is_active)`, `syj_tnt_status_idx (tenant,last_status)`.
+- `Meta`: `ordering = ["-created_at", "-id"]`; `unique_together = [("tenant","number"), ("tenant","connector","name")]`; `indexes` = `syj_tnt_conn_idx (tenant,connector)`, `syj_tnt_conn_act_act_idx (tenant,connector,is_active)`, `syj_tnt_status_idx (tenant,last_status)`, **`syj_tnt_active_idx (tenant,is_active)`** (added in Phase 5, M19 — migration `0027`).
 - `__str__` = `f"{self.number} — {self.name}"`.
 
   - `schedule_note`: `CharField(200, blank=True)` (documentation, not a cron).
@@ -293,7 +293,12 @@ integration/connectors/<int:pk>/health/            connector_health      (GET le
   - `owner`: FK `settings.AUTH_USER_MODEL`, SET_NULL, null/blank, `related_name="owned_project_connectors"`.
   - `notes`: `TextField(blank=True)`.
 - Methods/properties: `set_credential(raw)` (encrypts; blank clears), `get_credential()` (decrypt; `""` on blank), `credential_masked` (degrades to `"(set — undecryptable with the current key)"`, never raises), `credential_set` (bool), `status_badge` (connected→`badge-green`, error→`badge-red`, unverified→`badge-slate`, disabled→`badge-muted`, disconnected→`badge-amber`), `domain_badge` (each of erp/crm/hris/devops/storage→`badge-info`, custom→`badge-slate`), `health_badge`. `save()` performs `self.credential = encrypt(self.credential or "")` as the single choke point (idempotent on a marked value — `crm.Webhook.save()`'s exact pattern).
-- `clean()`: tenant guard — `project.tenant_id != tenant_id` and `notify_webhook.tenant_id != tenant_id` each -> `ValidationError`.
+- `clean()`: tenant guard — `project.tenant_id != tenant_id` and `notify_webhook.tenant_id != tenant_id`
+  each -> `ValidationError`. **Amendment M11:** also a **`project IS NULL` name-duplicate guard** —
+  `unique_together=[("tenant","project","name")]` cannot bind NULL projects, so when `project_id is
+  None` and `name` is set, reject a sibling workspace-wide connector with the same name in the same
+  tenant (`ValidationError({"name": …})`). This was required by `todo.md:9425/:9437` and silently
+  dropped from the original freeze.
 - `Meta`: `ordering = ["-created_at", "-id"]`; `unique_together = [("tenant","number"), ("tenant","project","name")]`; `indexes` = `ixc_tnt_domain_idx (tenant,domain)`, `ixc_tnt_status_idx (tenant,status)`, `ixc_tnt_prj_idx (tenant,project)`, `ixc_tnt_active_idx (tenant,is_active)` (all ≤30 chars).
 - `__str__` = `f"{self.number} — {self.name} ({self.get_provider_display()})"`.
 
@@ -313,20 +318,30 @@ integration/connectors/<int:pk>/health/            connector_health      (GET le
   `domain_choices` (ALL `DOMAIN_CHOICES`), `provider_choices` (ALL `PROVIDER_CHOICES`),
   `status_choices` (`STATUS_CHOICES`), `domain` (echoed from the kwarg — the template echoes `domain`,
   **never** `request.GET.domain`), `q`, `status`, `provider`, `project_id`, `is_active`, and
-  `stats` = `{total, active, connected, error, unverified, due_rotation}`.
+  `stats` = `{total, active, connected, error, unverified}`.
+  **Amendment (Phase 5, M10):** the dead `due_rotation` key is **dropped** — it was hard-coded `0`,
+  never rendered by any template, and `todo.md:9448` never defined its window. Do not reintroduce it
+  without a defined computation.
   Filters: `q` (`name|number|remote_scope_ref` icontains), `status`, `provider`, `project` (pk,
   `.isdigit()`), `is_active` (`active`/`true`/`1`→True; `inactive`/`false`/`0`→False); when the
   `domain` kwarg is set, `qs.filter(domain=domain)`. Paginator 25.
-- `ixc_detail` — `connector/detail.html`. Context: `connector`, `mappings` (first 20), `jobs` (all
-  for the connector), `recent_runs` (15), `test_form` (`ConnectorTestForm`), `revealed_credential`
-  (session-once, session key `_ixc_cred_reveal`).
+- `ixc_detail` — `connector/detail.html`. Context: `connector`, `mappings` (first 20),
+  `mappings_total` (**full COUNT**, for the header label — the 20-row slice must not be presented as
+  the total), `jobs` (all for the connector), `recent_runs` (15, `select_related("job")`),
+  `test_form` (`ConnectorTestForm`), `revealed_credential` (session-once, session key
+  `_ixc_cred_reveal`).
 - `ixc_create` / `ixc_edit` — `connector/form.html`. Context: `form` (+ `is_edit` and `connector` on edit).
 - `ixc_delete`, `ixc_rotate_credential`, `ixc_test`, `ixc_toggle_active` — `@require_POST`, redirect;
   each `write_audit_log`. `ixc_rotate_credential` calls `set_credential(secrets.token_hex(32))` +
-  saves + stashes the one-time reveal in session. `ixc_test` writes a `simulated` `ProjectSyncRun` via
-  `record()` (no HTTP). `ixc_toggle_active` flips `is_active`.
+  saves +   stashes the one-time reveal in session. `ixc_test` **binds `ConnectorTestForm(request.POST)`**,
+  stores the posted `note` (truncated to 500 chars) as the run's `payload_excerpt`
+  (**Amendment I5**), and writes a `simulated` `ProjectSyncRun` via `record()` (no HTTP) **only when
+  the connector has ≥1 sync job** — a jobless connector is warned to create a job first
+  (**Amendment M9**, documented on the view docstring). `ixc_toggle_active` flips `is_active`.
 - `connector_health(request, pk)` — `boards/connector_health.html`. Context: `connector`,
-  `recent_runs` (15), `jobs`, `mappings`, `stats` = `{total_runs, failed_runs, success_rate, last_success_at}`.
+  `recent_runs` (15), `jobs_count` (int), `mappings_count` (int), `stats` = `{total_runs, failed_runs,
+  success_rate, last_success_at}` (**Amendment M17**: one `aggregate()`; counts passed as integers, not
+  querysets for `|length`).
 - `ixm_list` — `mapping/list.html`. Context: `mappings` (page_obj.object_list), `page_obj`,
   `connectors` (`ProjectIntegrationConnector.objects.filter(tenant=…)`), `connector_id`,
   `direction_choices`, `transform_choices`, `q`. Filters: `q` (`local_field|remote_field` icontains),
@@ -465,7 +480,9 @@ reveal appears exactly once).
 
 Phase 4: six reviewers one at a time read `9336e994...HEAD` and append to
 `.claude/tasks/review-projects-7.18.md` (dedupe, C/I/M IDs, commit). Phase 5: `code-fixer` fixes in ID
-order, one commit per file. Phase 6: test contract + `conftest.py`, then
+order, one commit per file — **COMPLETE 2026-09-22**: 0 Critical, 7 Important (6 fixed, I4
+`[~] skipped — process/history`), 19 Minor (17 fixed, M12/M13 `[~] skipped — process`). Contract
+amendments I4/I5/M9/M10/M11/M17/M19 applied. Phase 6: test contract + `conftest.py`, then
 `test_integrationapihub_{models,forms,views,security}.py` one at a time (all `test_integrationapihub_*`),
 finishing with the full unfiltered `apps/projects` suite green. Phase 7: update
 `.claude/skills/projects/SKILL.md` + `README.md`. One file per commit; never `git push`.
