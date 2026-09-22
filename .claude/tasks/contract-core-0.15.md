@@ -194,7 +194,7 @@ They must also work for a tenant-less superuser (`request.tenant is None`) — t
 
 | view | decorator | template | context keys |
 |---|---|---|---|
-| `language_list` | `@login_required` | `core/language/list.html` | `object_list`, `page_obj`, `q` (via `crud_list` with `search_fields=["code","name","native_name"]`, `filters=[("rtl","is_rtl",False),("active","is_active",False)]`, `extra_context={"rtl_choices":[("True","RTL only"),("False","LTR only")], "active_choices":[("True","Active"),("False","Inactive")]}`) |
+| `language_list` | `@login_required` | `core/language/list.html` | `object_list`, `page_obj`, `q` (via `crud_list` with `search_fields=["code","name","native_name"]`, `filters=[("rtl","is_rtl",False),("active","is_active",False)]`, `extra_context={"rtl_choices":[("True","Right-to-left"),("False","Left-to-right")], "active_choices":[("True","Active"),("False","Inactive")]}`) |
 | `timezone_list` | `@login_required` | `core/timezone/list.html` | same three + `extra_context={"dst_choices":[("True","Observes DST"),("False","No DST")], "active_choices":[...]}` with `search_fields=["name","label"]`, `filters=[("dst","observes_dst",False),("active","is_active",False)]` |
 | `locale_profile_edit` | `@tenant_admin_required` | `core/localeprofile/form.html` | `form`, `obj`, `is_edit=True` |
 | `user_locale_edit` | `@login_required` | `core/userlocale/form.html` | `form`, `obj` |
