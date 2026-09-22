@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sync Jobs — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Sync Jobs</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <span>Sync Jobs</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:syr_list' %}" class="btn btn-outline"><i data-lucide="list" class="w-4 h-4 mr-1"></i> Sync Runs</a>
+    <a href="{% url 'projects:syj_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Job</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="repeat" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Total Jobs</div><div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Active</div><div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="pause-circle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Inactive</div><div class="text-2xl font-bold text-slate-900">{{ stats.inactive }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="activity" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Total Runs</div><div class="text-2xl font-bold text-slate-900">{{ stats.runs_total }}</div></div></div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number or name...">
+      </div>
+      <div class="form-group">
+        <label for="id_connector" class="form-label">Connector</label>
+        <select name="connector" id="id_connector" class="form-select">
+          <option value="">All Connectors</option>
+          {% for c in connectors %}
+          <option value="{{ c.pk }}" {% if connector_id == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} — {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_entity_scope" class="form-label">Entity Scope</label>
+        <select name="entity_scope" id="id_entity_scope" class="form-select">
+          <option value="">All</option>
+          {% for value, label in entity_choices %}
+          <option value="{{ value }}" {% if entity_scope == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_trigger_mode" class="form-label">Trigger Mode</label>
+        <select name="trigger_mode" id="id_trigger_mode" class="form-select">
+          <option value="">All</option>
+          {% for value, label in trigger_choices %}
+          <option value="{{ value }}" {% if trigger_mode == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">State</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All</option>
+          <option value="active" {% if is_active == "active" or is_active == "true" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" or is_active == "false" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="form-group md:col-span-5 flex items-end gap-2">
+        <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 mr-1"></i> Apply</button>
+        <a href="{% url 'projects:syj_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Job</th><th>Connector</th><th>Entity Scope</th><th>Conflict Policy</th><th>Trigger</th><th>Last Status</th><th>Runs</th><th>Active</th><th class="text-right">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for j in jobs %}
+        <tr>
+          <td><a href="{% url 'projects:syj_detail' j.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ j.number }}</a><span class="block text-xs text-muted">{{ j.name }}</span></td>
+          <td><a href="{% url 'projects:ixc_detail' j.connector.pk %}" class="text-blue-600 hover:underline text-sm">{{ j.connector.number }}</a></td>
+          <td>{{ j.get_entity_scope_display }}</td>
+          <td>{{ j.get_conflict_policy_display }}</td>
+          <td>{{ j.get_trigger_mode_display }}</td>
+          <td>{{ j.last_status|default:"—" }}</td>
+          <td>{{ j.run_count }}</td>
+          <td>{% if j.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <form method="post" action="{% url 'projects:syj_run' j.pk %}" class="inline" title="Run now (simulated)">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="Run now (simulated)"><i data-lucide="play" class="w-4 h-4 text-blue-600"></i></button>
+              </form>
+              <a href="{% url 'projects:syj_detail' j.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+              <a href="{% url 'projects:syj_edit' j.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+              <form method="post" action="{% url 'projects:syj_toggle_active' j.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="{% if j.is_active %}Deactivate{% else %}Activate{% endif %}"><i data-lucide="power" class="w-4 h-4 {% if j.is_active %}text-amber-600{% else %}text-green-600{% endif %}"></i></button>
+              </form>
+              <form method="post" action="{% url 'projects:syj_delete' j.pk %}" class="inline" onsubmit="return confirm('Delete sync job {{ j.number }}? Its runs are removed too.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9">
+          <div class="empty-state py-12 text-center">
+            <i data-lucide="repeat" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+            <h4 class="text-lg font-medium text-slate-800">No Sync Jobs Found</h4>
+            <p class="text-muted text-sm mt-1">Define a repeatable data-transfer unit on a connector.</p>
+            <div class="mt-4"><a href="{% url 'projects:syj_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Job</a></div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
