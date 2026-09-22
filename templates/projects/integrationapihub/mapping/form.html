@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit Field Mapping{% else %}New Field Mapping{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Field Mapping{% else %}Create Field Mapping{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:ixm_list' %}">Field Mappings</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card max-w-4xl">
+  <div class="card-header"><h3 class="card-title">Mapping Configuration</h3></div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="p-3 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.connector.id_for_label }}" class="form-label">Connector *</label>
+          {{ form.connector }}
+          {% if form.connector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.connector.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.local_field.id_for_label }}" class="form-label">Local Field *</label>
+          {{ form.local_field }}
+          <span class="text-xs text-muted">e.g. task.status, client.name, document.title, time_entry.hours</span>
+          {% if form.local_field.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.local_field.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.remote_field.id_for_label }}" class="form-label">Remote Field *</label>
+          {{ form.remote_field }}
+          <span class="text-xs text-muted">e.g. fields.status.name, Account.Name, path, timeSpentSeconds</span>
+          {% if form.remote_field.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.remote_field.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.direction.id_for_label }}" class="form-label">Direction</label>
+          {{ form.direction }}
+          {% if form.direction.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.direction.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.transform.id_for_label }}" class="form-label">Transform</label>
+          {{ form.transform }}
+          {% if form.transform.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.transform.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group md:col-span-2">
+          <label for="{{ form.value_map.id_for_label }}" class="form-label">Value Map (JSON Object)</label>
+          {{ form.value_map }}
+          <span class="text-xs text-muted">Optional local value to remote value map, e.g. {"done": "completed"}</span>
+          {% if form.value_map.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.value_map.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.default_value.id_for_label }}" class="form-label">Default Value</label>
+          {{ form.default_value }}
+          {% if form.default_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_value.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.notes.id_for_label }}" class="form-label">Notes</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group flex items-center gap-2">
+          {{ form.is_key }}
+          <label for="{{ form.is_key.id_for_label }}" class="form-label mb-0 cursor-pointer">Match/identity key (de-dupe + idempotency)</label>
+        </div>
+        <div class="form-group flex items-center gap-2">
+          {{ form.is_required }}
+          <label for="{{ form.is_required.id_for_label }}" class="form-label mb-0 cursor-pointer">Required mapping</label>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'projects:ixm_detail' mapping.pk %}{% else %}{% url 'projects:ixm_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">{% if is_edit %}Save Changes{% else %}Create Mapping{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

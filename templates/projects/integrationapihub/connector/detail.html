@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Connector {{ connector.number }} — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title flex items-center gap-3">
+      {{ connector.number }} — {{ connector.name }}
+      <span class="badge {{ connector.status_badge }}">{{ connector.get_status_display }}</span>
+      <span class="badge {{ connector.domain_badge }}">{{ connector.get_domain_display }}</span>
+    </h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:ixc_list' %}">Connectors</a>
+      <span>/</span>
+      <span>{{ connector.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:connector_health' connector.pk %}" class="btn btn-outline"><i data-lucide="activity" class="w-4 h-4 mr-1"></i> Health</a>
+    <a href="{% url 'projects:ixc_edit' connector.pk %}" class="btn btn-outline"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit</a>
+    <form method="post" action="{% url 'projects:ixc_delete' connector.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ connector.number }}?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+{% if revealed_credential %}
+<div class="card mb-6 border border-amber-300 bg-amber-50">
+  <div class="card-body">
+    <h4 class="text-sm font-semibold text-amber-800 flex items-center gap-2"><i data-lucide="key" class="w-4 h-4"></i> Reveal once — stored encrypted</h4>
+    <p class="text-xs text-amber-700 mt-1">Copy this credential now. It will not be shown again after you leave this page.</p>
+    <pre class="mt-2 p-3 bg-white rounded border border-amber-200 font-mono text-sm break-all">{{ revealed_credential }}</pre>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Connection Details</h3></div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><dt class="text-muted">Provider</dt><dd class="font-medium">{{ connector.get_provider_display }}</dd></div>
+          <div><dt class="text-muted">Direction</dt><dd class="font-medium">{{ connector.get_direction_display }}</dd></div>
+          <div><dt class="text-muted">Auth Method</dt><dd class="font-medium">{{ connector.get_auth_method_display }}</dd></div>
+          <div><dt class="text-muted">Environment</dt><dd class="font-medium">{{ connector.get_environment_display }}</dd></div>
+          <div><dt class="text-muted">Trigger Mode</dt><dd class="font-medium">{{ connector.get_trigger_mode_display }}</dd></div>
+          <div><dt class="text-muted">Project Scope</dt><dd class="font-medium">{% if connector.project %}<a href="{% url 'projects:prj_detail' connector.project.pk %}" class="text-blue-600 hover:underline">{{ connector.project.number }}</a>{% else %}<span class="text-muted">Workspace-wide</span>{% endif %}</dd></div>
+          <div class="md:col-span-2"><dt class="text-muted">Base URL / Host</dt><dd class="font-mono text-xs">{{ connector.base_url|default:"—" }}</dd></div>
+          <div class="md:col-span-2"><dt class="text-muted">Remote Scope Reference</dt><dd class="font-mono text-xs">{{ connector.remote_scope_ref|default:"—" }}</dd></div>
+          <div><dt class="text-muted">Credential</dt><dd class="font-medium">{% if connector.credential_set %}<span class="badge badge-green">{{ connector.credential_masked }}</span>{% else %}<span class="badge badge-slate">None</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Owner</dt><dd class="font-medium">{% if connector.owner %}{{ connector.owner.get_full_name|default:connector.owner.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Last Sync</dt><dd class="font-medium">{% if connector.last_sync_at %}{{ connector.last_sync_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Consecutive Failures</dt><dd class="font-medium {% if connector.consecutive_failures %}text-red-600{% endif %}">{{ connector.consecutive_failures }}</dd></div>
+          <div class="md:col-span-2"><dt class="text-muted">Schedule Note</dt><dd class="font-medium">{{ connector.schedule_note|default:"—" }} <span class="text-xs text-muted">(recorded intent; nothing runs automatically)</span></dd></div>
+          {% if connector.notes %}<div class="md:col-span-2"><dt class="text-muted">Notes</dt><dd class="font-medium whitespace-pre-wrap">{{ connector.notes }}</dd></div>{% endif %}
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Field Mappings ({{ mappings|length }})</h3>
+        <a href="{% url 'projects:ixm_create' %}?connector={{ connector.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Mapping</a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Local Field</th><th></th><th>Remote Field</th><th>Direction</th><th>Transform</th><th>Key</th></tr></thead>
+          <tbody>
+            {% for m in mappings %}
+            <tr>
+              <td class="font-mono text-xs">{{ m.local_field }}</td>
+              <td class="text-muted">&rarr;</td>
+              <td class="font-mono text-xs">{{ m.remote_field }}</td>
+              <td>{{ m.get_direction_display }}</td>
+              <td>{{ m.get_transform_display }}</td>
+              <td>{% if m.is_key %}<span class="badge badge-info">Key</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-6">No field mappings yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h3 class="card-title">Sync Jobs ({{ jobs|length }})</h3>
+        <a href="{% url 'projects:syj_create' %}?connector={{ connector.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Job</a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Job</th><th>Entity</th><th>Conflict Policy</th><th>Last Status</th><th>Runs</th></tr></thead>
+          <tbody>
+            {% for j in jobs %}
+            <tr>
+              <td><a href="{% url 'projects:syj_detail' j.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ j.number }}</a><span class="block text-xs text-muted">{{ j.name }}</span></td>
+              <td>{{ j.get_entity_scope_display }}</td>
+              <td>{{ j.get_conflict_policy_display }}</td>
+              <td>{{ j.last_status|default:"—" }}</td>
+              <td>{{ j.run_count }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-6">No sync jobs yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Recent Sync Runs</h3></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Run</th><th>Job</th><th>Status</th><th>Started</th></tr></thead>
+          <tbody>
+            {% for r in recent_runs %}
+            <tr>
+              <td><a href="{% url 'projects:syr_detail' r.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ r.number }}</a></td>
+              <td class="text-xs text-muted">{{ r.job.number }}</td>
+              <td><span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span></td>
+              <td class="text-xs text-muted">{{ r.started_at|date:"M d, H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-6">No sync runs recorded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Simulated Connection Test</h3></div>
+      <div class="card-body">
+        <p class="text-xs text-muted mb-3">Records a <strong>simulated</strong> sync run on this connector&rsquo;s first job. NavERP performs no outbound request.</p>
+        <form method="post" action="{% url 'projects:ixc_test' connector.pk %}">
+          {% csrf_token %}
+          {{ test_form.note }}
+          <button type="submit" class="btn btn-primary w-full mt-3"><i data-lucide="zap" class="w-4 h-4 mr-1"></i> Run Test (Simulated)</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Actions</h3></div>
+      <div class="card-body space-y-2">
+        <form method="post" action="{% url 'projects:ixc_rotate_credential' connector.pk %}" onsubmit="return confirm('Rotate the credential for {{ connector.number }}? The new value is shown once.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline w-full"><i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i> Rotate Credential</button>
+        </form>
+        <form method="post" action="{% url 'projects:ixc_toggle_active' connector.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline w-full"><i data-lucide="power" class="w-4 h-4 mr-1"></i> {% if connector.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+        </form>
+        <a href="{% url 'projects:ixc_edit' connector.pk %}" class="btn btn-outline w-full"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Connector</a>
+        <a href="{% url 'projects:ixc_list' %}" class="btn btn-outline w-full"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

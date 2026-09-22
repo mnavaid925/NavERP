@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Field Mappings — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Field Mappings</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <span>Field Mappings</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:ixc_list' %}" class="btn btn-outline"><i data-lucide="plug" class="w-4 h-4 mr-1"></i> Connectors</a>
+    <a href="{% url 'projects:ixm_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Mapping</a>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Local or remote field...">
+      </div>
+      <div class="form-group">
+        <label for="id_connector" class="form-label">Connector</label>
+        <select name="connector" id="id_connector" class="form-select">
+          <option value="">All Connectors</option>
+          {% for c in connectors %}
+          <option value="{{ c.pk }}" {% if connector_id == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} — {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_direction" class="form-label">Direction</label>
+        <select name="direction" id="id_direction" class="form-select">
+          <option value="">All</option>
+          {% for value, label in direction_choices %}
+          <option value="{{ value }}" {% if request.GET.direction == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_transform" class="form-label">Transform</label>
+        <select name="transform" id="id_transform" class="form-select">
+          <option value="">All</option>
+          {% for value, label in transform_choices %}
+          <option value="{{ value }}" {% if request.GET.transform == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group md:col-span-4 flex items-end gap-2">
+        <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 mr-1"></i> Apply</button>
+        <a href="{% url 'projects:ixm_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Connector</th><th>Local Field</th><th></th><th>Remote Field</th><th>Direction</th><th>Transform</th><th>Flags</th><th class="text-right">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for m in mappings %}
+        <tr>
+          <td><a href="{% url 'projects:ixc_detail' m.connector.pk %}" class="text-blue-600 hover:underline text-sm">{{ m.connector.number }}</a></td>
+          <td class="font-mono text-xs">{{ m.local_field }}</td>
+          <td class="text-muted">&rarr;</td>
+          <td class="font-mono text-xs">{{ m.remote_field }}</td>
+          <td>{{ m.get_direction_display }}</td>
+          <td>{{ m.get_transform_display }}</td>
+          <td>
+            {% if m.is_key %}<span class="badge badge-info">Key</span>{% endif %}
+            {% if m.is_required %}<span class="badge badge-amber">Required</span>{% endif %}
+          </td>
+          <td class="text-right table-actions">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:ixm_detail' m.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye" class="w-4 h-4"></i></a>
+              <a href="{% url 'projects:ixm_edit' m.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></a>
+              <form method="post" action="{% url 'projects:ixm_delete' m.pk %}" class="inline" onsubmit="return confirm('Delete this field mapping?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-red-600" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">
+          <div class="empty-state py-12 text-center">
+            <i data-lucide="arrow-left-right" class="w-12 h-12 text-muted mx-auto mb-3"></i>
+            <h4 class="text-lg font-medium text-slate-800">No Field Mappings Found</h4>
+            <p class="text-muted text-sm mt-1">Map local project fields to remote system fields on a connector.</p>
+            <div class="mt-4"><a href="{% url 'projects:ixm_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Mapping</a></div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer pagination flex justify-between items-center py-3 px-6">
+    <div class="text-sm text-muted">Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if connector_id %}&connector={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
