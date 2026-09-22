@@ -36,6 +36,8 @@ def ixm_list(request):
             "page_obj": page_obj,
             "connectors": ProjectIntegrationConnector.objects.filter(tenant=request.tenant),
             "connector_id": connector_id,
+            "direction": direction,
+            "transform": transform,
             "direction_choices": ConnectorFieldMapping.DIRECTION_CHOICES,
             "transform_choices": ConnectorFieldMapping.TRANSFORM_CHOICES,
             "q": q,
