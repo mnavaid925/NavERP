@@ -50,7 +50,7 @@
             <td><code>{{ obj.code }}</code></td>
             <td class="fw-600">{{ obj.name }}</td>
             <td>{{ obj.native_name|default:"—" }}</td>
-            <td>{% if obj.is_rtl %}<span class="badge badge-amber">Right-to-left</span>{% else %}<span class="badge badge-slate">Left-to-right</span>{% endif %}</td>
+            <td>{% if obj.is_rtl %}<span class="badge badge-info">Right-to-left</span>{% else %}<span class="badge badge-slate">Left-to-right</span>{% endif %}</td>
             <td>{% if obj.is_default %}<span class="badge badge-info">Default</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
           </tr>
