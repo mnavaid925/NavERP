@@ -13,7 +13,7 @@
   </div>
 
   <div class="card"><div class="card-body">
-    <p class="text-muted">How this workspace presents language, money, dates and time. <strong>Nothing on this page is stored</strong> — the counts are derived on read from the registries and this tenant's rows.</p>
+    <p class="text-muted">How this workspace presents language, money, dates and time.</p>
     <dl class="detail-grid">
       <div class="detail-item"><dt>Workspace profile</dt><dd>{% if has_profile %}<span class="badge badge-green">Configured</span>{% else %}<span class="badge badge-amber">Not configured</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Default language</dt><dd>{% if profile.language %}{{ profile.language }}{% else %}<span class="text-muted">Not set</span>{% endif %}</dd></div>
@@ -95,9 +95,12 @@
   </div>
 
   <div class="card"><div class="card-body">
-    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>What this sub-module does NOT do.</strong> It does not translate the interface: the strings live in Django's
-      <code>gettext</code> catalogues, and this platform ships no <code>locale/</code> directory, so the languages registered here describe what is offered rather than what is translated.
-      It does not fetch exchange rates — there is no feed and no scheduler. It does not convert any date or time on any other page: the registry records the zone, and applying it
-      across the twenty apps that render dates is a separate change. And it does not transmit an e-invoice or file a return.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>What this sub-module does NOT do.</strong></p>
+    <ul class="list-disc list-inside space-y-1">
+      <li>It does not translate the interface: the strings live in Django's <code>gettext</code> catalogues, and this platform ships no <code>locale/</code> directory, so the languages registered here describe what is offered rather than what is translated.</li>
+      <li>It does not fetch exchange rates — there is no feed and no scheduler.</li>
+      <li>It does not convert any date or time on any other page: the registry records the zone, and applying it across the twenty apps that render dates is a separate change.</li>
+      <li>It does not transmit an e-invoice or file a return.</li>
+    </ul>
   </div></div>
 {% endblock %}
