@@ -14,7 +14,7 @@
   </div>
 
   <div class="card"><div class="card-body">
-    <p class="text-muted">Your own overrides. Anything you leave blank falls back to the workspace's regional settings, so you only need to set what is different for you. This is the per-user half of time-zone handling — the workspace default lives on <a href="{% url 'core:locale_profile_edit' %}">Regional Settings</a>.</p>
+    <p class="text-muted">Your own overrides. Anything you leave blank falls back to the workspace's regional settings, so you only need to set what is different for you. This is the per-user half of time-zone handling — the workspace default {% if request.user.is_superuser or request.user.is_tenant_admin %}lives on <a href="{% url 'core:locale_profile_edit' %}">Regional Settings</a>{% else %}is set by a workspace administrator{% endif %}.</p>
     <form method="post" novalidate>
       {% csrf_token %}
       {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
