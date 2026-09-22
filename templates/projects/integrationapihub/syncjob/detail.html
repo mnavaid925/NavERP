@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sync Job {{ job.number }} — Integration & API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title flex items-center gap-3">
+      {{ job.number }} — {{ job.name }}
+      {% if job.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}
+    </h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:integration_hub' %}">Integration Hub</a>
+      <span>/</span>
+      <a href="{% url 'projects:syj_list' %}">Sync Jobs</a>
+      <span>/</span>
+      <span>{{ job.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <form method="post" action="{% url 'projects:syj_run' job.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="play" class="w-4 h-4 mr-1"></i> Run Now (Simulated)</button>
+    </form>
+    <a href="{% url 'projects:syj_edit' job.pk %}" class="btn btn-outline"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit</a>
+    <form method="post" action="{% url 'projects:syj_delete' job.pk %}" class="inline" onsubmit="return confirm('Delete sync job {{ job.number }}?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Job Details</h3></div>
+      <div class="card-body">
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><dt class="text-muted">Connector</dt><dd class="font-medium"><a href="{% url 'projects:ixc_detail' connector.pk %}" class="text-blue-600 hover:underline">{{ connector.number }} — {{ connector.name }}</a></dd></div>
+          <div><dt class="text-muted">Entity Scope</dt><dd class="font-medium">{{ job.get_entity_scope_display }}</dd></div>
+          <div><dt class="text-muted">Direction</dt><dd class="font-medium">{{ job.get_direction_display }}</dd></div>
+          <div><dt class="text-muted">Conflict Policy</dt><dd class="font-medium">{{ job.get_conflict_policy_display }}</dd></div>
+          <div><dt class="text-muted">Trigger Mode</dt><dd class="font-medium">{{ job.get_trigger_mode_display }}</dd></div>
+          <div><dt class="text-muted">Interval</dt><dd class="font-medium">{% if job.interval_minutes %}{{ job.interval_minutes }} min{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Batch Size</dt><dd class="font-medium">{{ job.batch_size }}</dd></div>
+          <div><dt class="text-muted">Run Count</dt><dd class="font-medium">{{ job.run_count }}</dd></div>
+          <div><dt class="text-muted">Last Run</dt><dd class="font-medium">{% if job.last_run_at %}{{ job.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+          <div><dt class="text-muted">Last Status</dt><dd class="font-medium">{{ job.last_status|default:"—" }}</dd></div>
+          <div class="md:col-span-2"><dt class="text-muted">Schedule Note</dt><dd class="font-medium">{{ job.schedule_note|default:"—" }} <span class="text-xs text-muted">(recorded intent; nothing runs automatically)</span></dd></div>
+          {% if job.filter_expression %}<div class="md:col-span-2"><dt class="text-muted">Filter Expression</dt><dd class="font-mono text-xs">{{ job.filter_expression }}</dd><dd class="text-xs text-muted">Recorded, never evaluated.</dd></div>{% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Recent Runs ({{ runs|length }})</h3></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Run</th><th>Status</th><th>Read</th><th>Created</th><th>Updated</th><th>Failed</th><th>Started</th></tr></thead>
+          <tbody>
+            {% for r in runs %}
+            <tr>
+              <td><a href="{% url 'projects:syr_detail' r.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ r.number }}</a></td>
+              <td><span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span></td>
+              <td>{{ r.records_read }}</td>
+              <td>{{ r.records_created }}</td>
+              <td>{{ r.records_updated }}</td>
+              <td class="{% if r.records_failed %}text-red-600{% endif %}">{{ r.records_failed }}</td>
+              <td class="text-xs text-muted">{{ r.started_at|date:"M d, H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-6">No runs recorded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Actions</h3></div>
+      <div class="card-body space-y-2">
+        <form method="post" action="{% url 'projects:syj_toggle_active' job.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline w-full"><i data-lucide="power" class="w-4 h-4 mr-1"></i> {% if job.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+        </form>
+        <a href="{% url 'projects:syj_edit' job.pk %}" class="btn btn-outline w-full"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Job</a>
+        <a href="{% url 'projects:syj_list' %}" class="btn btn-outline w-full"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
