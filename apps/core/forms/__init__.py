@@ -83,3 +83,12 @@ from .Localization import (
     StatutoryRuleForm,
     UserLocalePreferenceForm,
 )  # noqa: F401
+from .Backup import (
+    BackupJobForm,
+    DataArchiveForm,
+    EnvironmentInstanceForm,
+    LegalHoldForm,
+    RecoveryDrillForm,
+    RecoveryPostureForm,
+    RestoreRecordForm,
+)  # noqa: F401
