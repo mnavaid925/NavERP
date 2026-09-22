@@ -1502,3 +1502,23 @@ half-written file is merely truncated. Adopt them (re-encode and carry the conte
 Related: L43 (migrations are where concurrent work collides), L45 (a dirty tree is not yours),
 L46 (harnesses live in gitignored `temp/`), L47 (never `-k` the final run), L52 (silence reads as
 success), L53 (in a shared checkout, `makemigrations` and `grep` both lie about scope).
+
+---
+
+## L55 — Four integration registers coexist deliberately (7.18 IXC ruling under L36)
+
+**Context (2026-09-20, projects 7.18 Integration & API Hub).** Four modules each ship their own
+integration connector register under different questions: scm 4.19 `IntegrationEndpoint` [`CNX-`]
+(supply-chain, transport-less), inventory 5.19 `IntegrationChannel` [`INT-`] (commerce-stock),
+accounting 2.15 `IntegrationConfig` (finance), and projects 7.18 `ProjectIntegrationConnector`
+[`IXC-`] (project-scoped). This is the L36 ships-first ruling applied four times over — four
+registers, four questions, **deliberately not merged**. 7.18 FKs NONE of them and re-declares none
+of their class names or columns. The ruling lands in three durable places: the model docstring
+(`Connectors.py:6-15`), a `navigation.py` comment (`:2116-2121`), and this lessons.md entry.
+
+**Rule:** do NOT "consolidate" the four registers into one shared model. They answer different
+domain questions and are intentionally parallel (same shape as L36's two coexisting
+`PurchaseOrder` classes). 7.18 also performs **zero outbound HTTP** and writes **no accounting
+row** — `ProjectSyncRun.status = "simulated"` is the honest status.
+
+See [[next-builds-one-submodule]], L36, L29.
