@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Integration Hub — Projects — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Integration &amp; API Hub</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <span>Integration Hub</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:sync_monitor' %}" class="btn btn-outline"><i data-lucide="activity" class="w-4 h-4 mr-1"></i> Sync Monitor</a>
+    <a href="{% url 'projects:ixc_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Connector</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="plug" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Connectors</div><div class="text-2xl font-bold text-slate-900">{{ stats.connectors_total }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="repeat" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Active Jobs</div><div class="text-2xl font-bold text-slate-900">{{ stats.jobs_active }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="arrow-left-right" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Field Mappings</div><div class="text-2xl font-bold text-slate-900">{{ stats.mappings_total }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Failed Today</div><div class="text-2xl font-bold text-red-600">{{ stats.failed_today }}</div></div></div>
+</div>
+
+<h3 class="text-sm font-semibold text-slate-700 mb-3">Connector Domains</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+  {% for d in domains %}
+  <a href="{% if d.value == 'erp' %}{% url 'projects:ixc_erp_list' %}{% elif d.value == 'crm' %}{% url 'projects:ixc_crm_list' %}{% elif d.value == 'hris' %}{% url 'projects:ixc_hris_list' %}{% elif d.value == 'devops' %}{% url 'projects:ixc_devops_list' %}{% elif d.value == 'storage' %}{% url 'projects:ixc_storage_list' %}{% else %}{% url 'projects:ixc_list' %}{% endif %}" class="card hover:shadow-md transition-shadow">
+    <div class="card-body">
+      <div class="text-xs text-muted uppercase tracking-wide">{{ d.label }}</div>
+      <div class="text-2xl font-bold text-slate-900 mt-1">{{ d.total }}</div>
+      <div class="flex gap-3 mt-2 text-xs">
+        <span class="text-green-600">{{ d.connected }} connected</span>
+        {% if d.failing %}<span class="text-red-600">{{ d.failing }} failing</span>{% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="card">
+    <div class="card-header flex justify-between items-center">
+      <h3 class="card-title">Connector Health</h3>
+      <a href="{% url 'projects:ixc_list' %}" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Connector</th><th>Domain</th><th>Status</th><th>Health</th><th>Last Sync</th></tr></thead>
+        <tbody>
+          {% for c in connectors %}
+          <tr>
+            <td><a href="{% url 'projects:ixc_detail' c.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ c.number }}</a><span class="block text-xs text-muted">{{ c.name }}</span></td>
+            <td><span class="badge {{ c.domain_badge }}">{{ c.get_domain_display }}</span></td>
+            <td><span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span></td>
+            <td><span class="badge {{ c.health_badge }}">&nbsp;</span></td>
+            <td class="text-xs text-muted">{% if c.last_sync_at %}{{ c.last_sync_at|date:"M d, H:i" }}{% else %}Never{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-6">No connectors registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header flex justify-between items-center">
+      <h3 class="card-title">Recent Sync Runs</h3>
+      <a href="{% url 'projects:syr_list' %}" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Run</th><th>Job</th><th>Status</th><th>Started</th></tr></thead>
+        <tbody>
+          {% for r in recent_runs %}
+          <tr>
+            <td><a href="{% url 'projects:syr_detail' r.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ r.number }}</a></td>
+            <td class="text-xs text-muted">{{ r.job.number }}</td>
+            <td><span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span></td>
+            <td class="text-xs text-muted">{{ r.started_at|date:"M d, H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-6">No sync runs recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="mt-6 flex flex-wrap gap-2">
+  <a href="{% url 'projects:ixc_list' %}" class="btn btn-outline btn-sm"><i data-lucide="plug" class="w-4 h-4 mr-1"></i> Connector Register</a>
+  <a href="{% url 'projects:ixm_list' %}" class="btn btn-outline btn-sm"><i data-lucide="arrow-left-right" class="w-4 h-4 mr-1"></i> Field Mappings</a>
+  <a href="{% url 'projects:syj_list' %}" class="btn btn-outline btn-sm"><i data-lucide="repeat" class="w-4 h-4 mr-1"></i> Sync Jobs</a>
+  <a href="{% url 'projects:syr_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list" class="w-4 h-4 mr-1"></i> Sync Runs</a>
+  <a href="{% url 'projects:sync_monitor' %}" class="btn btn-outline btn-sm"><i data-lucide="activity" class="w-4 h-4 mr-1"></i> Sync Monitor</a>
+</div>
+{% endblock %}
