@@ -145,7 +145,10 @@ def user_locale_edit(request):
             obj.save()
             write_audit_log(request.user, obj, "update", changes={"verb": "user_locale_save"})
             messages.success(request, "Your regional preferences were saved.")
-            return redirect("core:localization_overview")
+            # Redirect to THIS page, not to the admin-gated overview: a plain member is a supported
+            # actor here (@login_required), and `localization_overview` would answer 403 — exactly the
+            # dead end 0.12's `my_preferences` avoids by redirecting to itself.
+            return redirect("core:user_locale_edit")
     else:
         form = UserLocalePreferenceForm(instance=obj, tenant=request.tenant)
     return render(request, "core/userlocale/form.html", {"form": form, "obj": obj})
