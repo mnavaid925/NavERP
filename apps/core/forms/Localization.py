@@ -46,3 +46,20 @@ class StatutoryRuleForm(TenantModelForm):
         model = StatutoryRule
         fields = ["name", "jurisdiction", "tax_code", "e_invoicing_required", "e_invoicing_scheme",
                   "statutory_report", "effective_from", "effective_to", "is_active", "notes"]
+
+    def clean_name(self):
+        # `(tenant, name)` is `unique_together`, but `tenant` is not a `Meta.fields` member, so Django
+        # drops the constraint from validation (`Model._get_unique_checks()` discards any
+        # `unique_together` containing an excluded field) and a duplicate name reaches the DB as an
+        # `IntegrityError` 500 on both create and edit. Enforce it here instead, scoped to this
+        # tenant — the same guard `apps/crm/forms/CustomerSuccess/HealthScores.py` already ships.
+        name = self.cleaned_data.get("name")
+        if name and self.tenant is not None:
+            qs = StatutoryRule.objects.filter(tenant=self.tenant, name=name)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(
+                    "A statutory rule with this name already exists in this workspace — "
+                    "edit the existing one or choose a different name.")
+        return name
