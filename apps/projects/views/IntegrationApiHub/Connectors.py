@@ -95,6 +95,9 @@ def ixc_detail(request, pk):
         tenant=request.tenant,
     )
     mappings = ConnectorFieldMapping.objects.filter(tenant=request.tenant, connector=connector)[:20]
+    mappings_total = ConnectorFieldMapping.objects.filter(
+        tenant=request.tenant, connector=connector
+    ).count()
     jobs = ProjectSyncJob.objects.filter(tenant=request.tenant, connector=connector)
     recent_runs = ProjectSyncRun.objects.filter(
         tenant=request.tenant, job__connector=connector
@@ -111,6 +114,7 @@ def ixc_detail(request, pk):
         {
             "connector": connector,
             "mappings": mappings,
+            "mappings_total": mappings_total,
             "jobs": jobs,
             "recent_runs": recent_runs,
             "test_form": ConnectorTestForm(),
