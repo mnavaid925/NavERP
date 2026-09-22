@@ -23,25 +23,42 @@ def integration_hub(request):
         connected=Count("id", filter=Q(status="connected")),
         error=Count("id", filter=Q(status="error")),
     )
-    by_status = {row["status"]: row["c"] for row in connectors.values("status").annotate(c=Count("id"))}
-    by_domain = {row["domain"]: row["c"] for row in connectors.values("domain").annotate(c=Count("id"))}
+    # ONE cross-tab GROUP BY instead of a per-domain count loop + two separate pivots.
+    pivot_rows = list(
+        connectors.values("domain", "status").annotate(c=Count("id"))
+    )
+    by_status = {}
+    by_domain = {}
+    for row in pivot_rows:
+        by_status[row["status"]] = by_status.get(row["status"], 0) + row["c"]
+        by_domain[row["domain"]] = by_domain.get(row["domain"], 0) + row["c"]
 
     domains = []
     for value, label in ProjectIntegrationConnector.DOMAIN_CHOICES:
-        dom = connectors.filter(domain=value)
+        total = connected = failing = 0
+        for row in pivot_rows:
+            if row["domain"] != value:
+                continue
+            total += row["c"]
+            if row["status"] == "connected":
+                connected += row["c"]
+            elif row["status"] == "error":
+                failing += row["c"]
         domains.append({
             "value": value,
             "label": label,
-            "total": dom.count(),
-            "connected": dom.filter(status="connected").count(),
-            "failing": dom.filter(status="error").count(),
+            "total": total,
+            "connected": connected,
+            "failing": failing,
         })
 
     today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    runs_today = ProjectSyncRun.objects.filter(tenant=tenant, started_at__gte=today_start).count()
-    failed_today = ProjectSyncRun.objects.filter(
-        tenant=tenant, status="failed", started_at__gte=today_start
-    ).count()
+    runs_agg = ProjectSyncRun.objects.filter(tenant=tenant).aggregate(
+        runs_today=Count("id", filter=Q(started_at__gte=today_start)),
+        failed_today=Count("id", filter=Q(status="failed", started_at__gte=today_start)),
+    )
+    runs_today = runs_agg["runs_today"] or 0
+    failed_today = runs_agg["failed_today"] or 0
     jobs_active = ProjectSyncJob.objects.filter(tenant=tenant, is_active=True).count()
     mappings_total = ConnectorFieldMapping.objects.filter(tenant=tenant).count()
     credentials_due = connectors.filter(is_active=True, status__in=("error", "disconnected")).count()
@@ -78,14 +95,14 @@ def sync_monitor(request):
     qs, filters = _run_filters(request, qs)
 
     scope = ProjectSyncRun.objects.filter(tenant=tenant)
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     counts = scope.aggregate(
         total=Count("id"),
         failed=Count("id", filter=Q(status="failed")),
         success=Count("id", filter=Q(status="success")),
         simulated=Count("id", filter=Q(status="simulated")),
+        failed_today=Count("id", filter=Q(status="failed", started_at__gte=today_start)),
     )
-    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    failed_today = scope.filter(status="failed", started_at__gte=today_start).count()
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -101,7 +118,7 @@ def sync_monitor(request):
             "failed": counts["failed"] or 0,
             "success": counts["success"] or 0,
             "simulated": counts["simulated"] or 0,
-            "failed_today": failed_today,
+            "failed_today": counts["failed_today"] or 0,
         },
     }
     ctx.update(filters)
