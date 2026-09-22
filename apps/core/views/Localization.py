@@ -145,8 +145,7 @@ def locale_profile_edit(request):
             return redirect("core:localization_overview")
     else:
         form = LocaleProfileForm(instance=obj, tenant=request.tenant)
-    return render(request, "core/localeprofile/form.html",
-                  {"form": form, "obj": obj, "is_edit": True})
+    return render(request, "core/localeprofile/form.html", {"form": form})
 
 
 # ============================================================ bullet 5: the per-user override
@@ -176,7 +175,7 @@ def user_locale_edit(request):
             return redirect("core:user_locale_edit")
     else:
         form = UserLocalePreferenceForm(instance=obj, tenant=request.tenant)
-    return render(request, "core/userlocale/form.html", {"form": form, "obj": obj})
+    return render(request, "core/userlocale/form.html", {"form": form})
 
 
 # ============================================================ bullet 4: statutory rules
@@ -251,7 +250,6 @@ def localization_board(request):
                .select_related("base_currency").first())
 
     context = {
-        "profile": profile,
         "base_currency": profile.base_currency if profile else None,
         "rate_rows": rate_rows,
         "rate_count": len(rate_rows),
