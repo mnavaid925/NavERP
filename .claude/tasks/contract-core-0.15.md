@@ -144,19 +144,19 @@ read-only (see §3.1), and shipping a form no view calls is dead code a reviewer
 
 **Excluded everywhere:** `tenant`, `updated_at`, `created_at`, `user`.
 
-`LocaleProfileForm.clean_first_day_of_week` — must be 1–7, else
-`forms.ValidationError("Day 1 is Monday and day 7 is Sunday.")`.
-
-`LocaleProfileForm.clean_date_format` / `clean_time_format` / `clean_number_format` — validate against
-`_FORMAT_TOKEN_RE = re.compile(r"^[A-Za-z0-9#,. /:\-']+$")`; a pattern containing anything else is
-refused (`"A format pattern may contain letters, digits, # , . / : - and spaces only."`). This is the
-research file's "format strings are free text and must be validated" risk, pinned as a real validator.
-
-`StatutoryRuleForm.clean()` — when `e_invoicing_required` is True and `e_invoicing_scheme == "none"`,
-`add_error("e_invoicing_scheme", "Choose the scheme this jurisdiction uses.")`.
-When `effective_to` and `effective_to < effective_from`, `add_error("effective_to", ...)`.
-
-`UserLocalePreferenceForm` — `date_format` is `required=False`; blank means inherit.
+> **AS-BUILT CORRECTION (§2).** The first draft of this contract specified `clean_first_day_of_week`,
+> `clean_date_format` / `clean_time_format` / `clean_number_format` and `StatutoryRuleForm.clean()`.
+> All four are **dead code as form methods**, and none were built:
+> * `first_day_of_week` carries `choices=`, so the form field is a `TypedChoiceField` and an
+>   out-of-range day is already rejected — the check could never fire.
+> * The format-pattern rule and both `StatutoryRule` cross-field rules were moved into the **models'**
+>   `clean()`. `ModelForm._post_clean()` calls `instance.full_clean()`, so a model-level rule is
+>   enforced on every form anyway — a `clean_<field>` copy is a second copy that cannot fire on its own.
+>   One rule, one place, and the seeder and the admin are covered by the same rule.
+>
+> So the built forms are **`Meta`-only**, and the validation lives in `LocaleProfile.clean()` /
+> `UserLocalePreference.clean()` / `StatutoryRule.clean()` (see §1). `FORMAT_TOKEN_RE` is exported from
+> `apps.core.models.Localization` and imported by nothing else — the model is its only consumer.
 
 ---
 
@@ -212,10 +212,17 @@ so a member's GET gets **405**, not 403.
 **`request.tenant is None` branch** (both computed views): `messages.info(request, "...")` then
 `redirect("dashboard:home")` — exactly as 0.13's `integration_board` does. Never `filter(tenant=None)`.
 
-`locale_profile_edit` / `user_locale_edit` are hand-written (not `crud_*`) because both are **singletons**:
-`LocaleProfile.objects.get_or_create(tenant=request.tenant)` and
-`UserLocalePreference.objects.get_or_create(tenant=request.tenant, user=request.user)`. On POST they save
-and `write_audit_log(request.user, obj, "update")`.
+`locale_profile_edit` / `user_locale_edit` are hand-written (not `crud_*`) because both are **singletons**.
+
+> **AS-BUILT CORRECTION (§3.2).** This contract specified `get_or_create` on both. The build instead
+> **reads** the row (`...objects.filter(...).first()`, possibly `None`) and creates only on a valid
+> POST, because `get_or_create` on a GET inserts a row merely because somebody opened the page — a
+> write with no user intent behind it.
+> Because `tenant` (and, for the user row, `user`) is not a form field, both views use
+> `form.save(commit=False)`, set the missing keys, then `save()`. A plain `form.save()` would attempt
+> to insert a NULL tenant on the create path and raise `IntegrityError`.
+> `user_locale_edit` additionally takes the `request.tenant is None` branch with an informational
+> message: `UserLocalePreference.tenant` is NOT NULL, so a tenant-less superuser cannot own one.
 
 ### 3.3 `localization_board` context keys (COMPUTED — no table)
 
