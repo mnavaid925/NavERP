@@ -172,3 +172,9 @@ from .WorkflowAutomation.Webhooks import (  # noqa: F401
     ProjectWebhookEndpoint,
     ProjectWebhookDelivery,
 )
+
+# --- 7.18 Integration & API Hub -------------------------------------------------
+from .IntegrationApiHub.Connectors import ProjectIntegrationConnector  # noqa: F401
+from .IntegrationApiHub.FieldMappings import ConnectorFieldMapping  # noqa: F401
+from .IntegrationApiHub.SyncJobs import ProjectSyncJob  # noqa: F401
+from .IntegrationApiHub.SyncRuns import ProjectSyncRun  # noqa: F401
