@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Environments{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Environments</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_overview' %}">Backup &amp; Recovery</a><span class="sep">›</span><span>Environments</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:environment_instance_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record an environment</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">Development, test, staging and sandbox instances, what data each was seeded with,
+      and when it should be reaped. A row does <strong>not</strong> provision anything.</p>
+    {% if expired_count %}
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ expired_count }} environment{{ expired_count|pluralize }}</strong> past the reaping date and not yet reaped — a cost and a leak surface.</p>
+    {% endif %}
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, tier, subset rule…">
+      </div>
+      <div class="form-group">
+        <select name="kind" class="form-select" aria-label="Kind">
+          <option value="">Any kind</option>
+          {% for value, label in kind_choices %}<option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="status" class="form-select" aria-label="Status">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="copy_scope" class="form-select" aria-label="Copy scope">
+          <option value="">Any copy scope</option>
+          {% for value, label in copy_scope_choices %}<option value="{{ value }}" {% if request.GET.copy_scope == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:environment_instance_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Environment</th><th>Kind</th><th>Copy scope</th><th>Source</th><th>Status</th><th>Expires</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:environment_instance_detail' obj.pk %}">{{ obj.name }}</a>
+              {% if obj.tier %}<div class="text-muted">{{ obj.tier }}</div>{% endif %}</td>
+            <td>{{ obj.get_kind_display }}</td>
+            <td>
+              {{ obj.get_copy_scope_display }}
+              {% if obj.contains_production_data %}<div><span class="badge badge-red">production PII</span></div>
+              {% elif obj.copy_includes_pii %}<div><span class="badge badge-amber">includes PII</span></div>{% endif %}
+            </td>
+            <td>{% if obj.source_environment %}{{ obj.source_environment.name }}{% elif obj.refresh_source %}{{ obj.refresh_source.name }}{% else %}—{% endif %}</td>
+            <td>
+              {% if obj.status == "active" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == "expired" or obj.status == "reaped" %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-info">{{ obj.get_status_display }}</span>{% endif %}
+              {% if obj.is_expired %}<div><span class="badge badge-red">past expiry</span></div>{% endif %}
+            </td>
+            <td>{{ obj.expires_at|date:"M d, Y"|default:"—" }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:environment_instance_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:environment_instance_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:environment_instance_delete' obj.pk %}" onsubmit="return confirm('Delete this environment record? This removes the record, not the environment.');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="server"></i><h3>No environments recorded</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
