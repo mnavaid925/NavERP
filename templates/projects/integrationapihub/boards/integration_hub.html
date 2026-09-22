@@ -58,7 +58,7 @@
             <td><a href="{% url 'projects:ixc_detail' c.pk %}" class="font-medium text-slate-900 hover:text-blue-600">{{ c.number }}</a><span class="block text-xs text-muted">{{ c.name }}</span></td>
             <td><span class="badge {{ c.domain_badge }}">{{ c.get_domain_display }}</span></td>
             <td><span class="badge {{ c.status_badge }}">{{ c.get_status_display }}</span></td>
-            <td><span class="badge {{ c.health_badge }}">&nbsp;</span></td>
+            <td><span class="badge {{ c.health_badge }}" title="{% if c.consecutive_failures >= 3 %}Failing{% elif c.consecutive_failures %}Degraded{% else %}Healthy{% endif %}" aria-label="{% if c.consecutive_failures >= 3 %}Failing{% elif c.consecutive_failures %}Degraded{% else %}Healthy{% endif %}">&nbsp;</span></td>
             <td class="text-xs text-muted">{% if c.last_sync_at %}{{ c.last_sync_at|date:"M d, H:i" }}{% else %}Never{% endif %}</td>
           </tr>
           {% empty %}
