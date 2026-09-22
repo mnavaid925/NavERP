@@ -34,11 +34,11 @@ Template folder: `templates/core/<entity>/`. Test subslug: `localization`.
 
 ## Backend layers (`apps/core/{models,forms,views}/Localization.py` + flat `apps/core/urls.py`)
 
-- [ ] Forms: `LanguageForm`, `TimeZoneForm` (platform-admin only — see below), `LocaleProfileForm`, `UserLocalePreferenceForm`, `StatutoryRuleForm`. Exclude `tenant`, `updated_at`, and `is_default` on `Language`.
+- [ ] Forms: `LocaleProfileForm`, `UserLocalePreferenceForm`, `StatutoryRuleForm`. **Deviates from the first draft of this plan, which also listed `LanguageForm` / `TimeZoneForm`** — those two registries are GLOBAL and their pages are read-only, so a form no view calls would be dead code. The format-pattern and date-range rules live in the **models'** `clean()`, which `ModelForm._post_clean` already runs on every form, so a `clean_<field>` copy could never fire on its own. One rule, one place — and the seeder and the admin get it too.
 - [ ] Views — function-based, tenant-scoped, `@tenant_admin_required` on writes, audit-logged via `write_audit_log`:
   - `language_list` (GLOBAL read-only), `timezone_list` (GLOBAL read-only) — `@login_required`, **no tenant filter** (the models have no tenant FK) and **no create/edit/delete** (a write would need a platform-admin gate this repo does not have).
-  - `locale_profile_edit` — get-or-create the tenant's singleton, then save. Redirects to `dashboard:home` when `request.tenant is None`.
-  - `user_locale_edit` — get-or-create the actor's singleton ("My Regional Settings").
+  - `locale_profile_edit` — reads the tenant's singleton (or `None`), and only writes on POST. Deliberately **not** `get_or_create` on GET: that would insert a row merely because somebody opened the page. Redirects to `dashboard:home` when `request.tenant is None`.
+  - `user_locale_edit` — the same shape for the actor's row ("My Regional Settings").
   - `statutory_rule_list` / `_create` / `_detail` / `_edit` / `_delete` — full CRUD via the `crud_*` helpers.
   - `localization_overview` — COMPUTED hub, no table.
   - `localization_board` — COMPUTED monitoring: FX rate recency per currency (reads the REAL `accounting.ExchangeRate`), DST zone counts, statutory coverage, unconfigured-locale count.
