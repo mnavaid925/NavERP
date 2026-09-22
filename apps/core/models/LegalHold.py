@@ -88,13 +88,28 @@ class LegalHold(models.Model):
         return f"{self.name} · {self.get_status_display()}"
 
     def clean(self):
-        """Two rules. The second is the one that prevents spoliation."""
+        """Three rules. The second is the one that prevents spoliation; the third closes an incoherence."""
         super().clean()
 
         # 1. A release cannot precede the order it releases.
         if self.released_at is not None and self.released_at < self.issued_at:
             raise ValidationError(
                 {"released_at": "A hold cannot be released before it was issued."})
+
+        # 1b. STATUS MUST AGREE WITH THE RELEASE EVENT. Without this, `status="active"` + a release date
+        #     is a storable state, and `is_active` (which requires BOTH `status=="active"` and
+        #     `released_at is None`) then disagrees with the status badge on the same page: the detail view
+        #     announced "the retention schedule has resumed" while the register still said Active. Two
+        #     fields that must agree are one field's worth of information, so the rule belongs here rather
+        #     than in a template branch that can only choose which of the two to disbelieve.
+        if self.released_at is not None and self.status == "active":
+            raise ValidationError(
+                {"status": "This hold has a release date, so it cannot still be Active. Set the status to "
+                           "Released (or clear the release date if the hold is genuinely still in force)."})
+        if self.status == "released" and self.released_at is None:
+            raise ValidationError(
+                {"released_at": "A hold marked Released needs the date it was released — the release is an "
+                                "event, and recording it is what proves good faith."})
 
         # 2. ANTI-SPOLIATION. Releasing this hold while another active hold covers the same scope would
         #    strand the data: the schedule would resume and destroy records the other hold still
