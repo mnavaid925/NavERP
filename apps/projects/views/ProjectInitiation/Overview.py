@@ -49,6 +49,19 @@ from apps.projects.views._common import login_required, render
 _MONEY = DecimalField(max_digits=20, decimal_places=2)
 
 
+def _sync_today_stats(tenant):
+    """Today's run + failure counts for the 7.18 card — ONE aggregate, same filters as HubBoards."""
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    agg = ProjectSyncRun.objects.filter(tenant=tenant).aggregate(
+        runs=Count("id", filter=Q(started_at__gte=today_start)),
+        failed=Count("id", filter=Q(status="failed", started_at__gte=today_start)),
+    )
+    return {
+        "sync_runs_today": agg["runs"] or 0,
+        "sync_runs_failed_today": agg["failed"] or 0,
+    }
+
+
 @login_required
 def overview(request):
     tenant = request.tenant
@@ -168,16 +181,9 @@ def overview(request):
         "legal_hold_count": ProjectDocument.objects.filter(
             tenant=tenant, is_legal_hold=True).count(),
         # 7.18 integration — one flat connector count plus the two decision figures the hub
-        # opens with (today's runs and today's failures), the same column filters HubBoards
-        # uses so the landing page and the hub never disagree.
+        # opens with (today's runs and today's failures) from ONE aggregate so the landing
+        # page and the hub never disagree (same column filters HubBoards uses).
         "integration_connector_count": ProjectIntegrationConnector.objects.filter(
             tenant=tenant).count(),
-        "sync_runs_today": ProjectSyncRun.objects.filter(
-            tenant=tenant,
-            started_at__gte=timezone.now().replace(
-                hour=0, minute=0, second=0, microsecond=0)).count(),
-        "sync_runs_failed_today": ProjectSyncRun.objects.filter(
-            tenant=tenant, status="failed",
-            started_at__gte=timezone.now().replace(
-                hour=0, minute=0, second=0, microsecond=0)).count(),
+        **_sync_today_stats(tenant),
     })
