@@ -26,10 +26,6 @@
   <div class="page-actions flex items-center gap-2">
     <a href="{% url 'projects:connector_health' connector.pk %}" class="btn btn-outline"><i data-lucide="activity" class="w-4 h-4 mr-1"></i> Health</a>
     <a href="{% url 'projects:ixc_edit' connector.pk %}" class="btn btn-outline"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit</a>
-    <form method="post" action="{% url 'projects:ixc_delete' connector.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ connector.number }}?');">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete</button>
-    </form>
   </div>
 </div>
 
@@ -69,7 +65,7 @@
     </div>
     <div class="card">
       <div class="card-header flex justify-between items-center">
-        <h3 class="card-title">Field Mappings ({{ mappings|length }})</h3>
+        <h3 class="card-title">Field Mappings ({{ mappings_total }})</h3>
         <a href="{% url 'projects:ixm_create' %}?connector={{ connector.pk }}" class="btn btn-outline btn-sm"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Mapping</a>
       </div>
       <div class="table-wrap">
@@ -146,6 +142,7 @@
         <p class="text-xs text-muted mb-3">Records a <strong>simulated</strong> sync run on this connector&rsquo;s first job. NavERP performs no outbound request.</p>
         <form method="post" action="{% url 'projects:ixc_test' connector.pk %}">
           {% csrf_token %}
+          <label for="id_note" class="form-label">Note (optional)</label>
           {{ test_form.note }}
           <button type="submit" class="btn btn-primary w-full mt-3"><i data-lucide="zap" class="w-4 h-4 mr-1"></i> Run Test (Simulated)</button>
         </form>
@@ -164,6 +161,10 @@
           <button type="submit" class="btn btn-outline w-full"><i data-lucide="power" class="w-4 h-4 mr-1"></i> {% if connector.is_active %}Deactivate{% else %}Activate{% endif %}</button>
         </form>
         <a href="{% url 'projects:ixc_edit' connector.pk %}" class="btn btn-outline w-full"><i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Connector</a>
+        <form method="post" action="{% url 'projects:ixc_delete' connector.pk %}" onsubmit="return confirm('Delete connector {{ connector.number }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger w-full"><i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete Connector</button>
+        </form>
         <a href="{% url 'projects:ixc_list' %}" class="btn btn-outline w-full"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List</a>
       </div>
     </div>
