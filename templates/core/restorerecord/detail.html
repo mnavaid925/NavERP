@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Restore Record{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.get_scope_display }} restore</h1>
+      <div class="breadcrumb"><a href="{% url 'core:restore_record_list' %}">Restores</a><span class="sep">›</span><span>{{ obj.get_scope_display }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:restore_record_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'core:restore_record_delete' obj.pk %}" onsubmit="return confirm('Delete this restore record?');">
+        {% csrf_token %}
+        <button class="btn btn-outline danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What happened</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Source</dt><dd>
+          {% if obj.backup %}<a href="{% url 'core:backup_job_detail' obj.backup.pk %}">{{ obj.backup.name }}</a>
+          {% elif obj.archive %}<a href="{% url 'core:data_archive_detail' obj.archive.pk %}">{{ obj.archive.name }}</a>
+          {% else %}<span class="text-warn">no source recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scope</dt><dd>{{ obj.get_scope_display }}</dd></div>
+        <div class="detail-item"><dt>Recovery target</dt><dd>{{ obj.target_time|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Target environment</dt><dd>{% if obj.target_environment %}<a href="{% url 'core:environment_instance_detail' obj.target_environment.pk %}">{{ obj.target_environment.name }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>
+          {% if obj.status == "succeeded" %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "partial" or obj.status == "rolled_back" %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "failed" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Verified</dt><dd>{% if obj.is_verified %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">Not verified</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reason</dt><dd>{{ obj.reason|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{{ obj.started_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Finished</dt><dd>{{ obj.finished_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Duration</dt><dd>{{ obj.duration_display }}</dd></div>
+        <div class="detail-item"><dt>Evidence</dt><dd>{% if obj.evidence %}<code>{{ obj.evidence }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if not obj.is_verified and obj.status != "planned" %}
+    <div class="card"><div class="card-body">
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>The restore ran, but nobody has verified
+        the recovered data.</strong> A restore that executed is not a restore that verified — the two are
+        recorded separately on purpose.</p>
+    </div></div>
+  {% endif %}
+
+  {% if obj.outcome %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Outcome</h2></div>
+      <div class="card-body"><p>{{ obj.outcome|linebreaksbr }}</p></div>
+    </div>
+  {% endif %}
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted"><i data-lucide="info"></i> This workspace is a <strong>pooled</strong> multi-tenant
+      system: the tables are shared and separated by a tenant column, so a per-tenant restore means recovering to
+      a clone and extracting that tenant's rows. That is why the target tenant and the reason are part of the
+      record.</p>
+  </div></div>
+{% endblock %}
