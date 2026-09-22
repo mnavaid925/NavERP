@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Recovery Drills{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Recovery Drills</h1>
+      <div class="breadcrumb"><a href="{% url 'core:backup_overview' %}">Backup &amp; Recovery</a><span class="sep">›</span><span>Drills</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'core:recovery_posture_edit' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Recovery posture</a>
+      <a href="{% url 'core:recovery_drill_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a drill</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p class="text-muted">A rehearsal is the evidence a plan works. The <strong>measured</strong> RPO and RTO
+      recorded here are compared against the posture's <strong>targets</strong> — the two are kept apart so a
+      missed objective cannot rewrite itself into a met one.</p>
+    <p class="text-warn"><i data-lucide="alert-triangle"></i> Initiating a drill is not the same as passing one.
+      The deliverable of a drill is its <strong>findings</strong>, not its outcome alone.</p>
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:200px;">
+        <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, findings, participants…">
+      </div>
+      <div class="form-group">
+        <select name="kind" class="form-select" aria-label="Kind">
+          <option value="">Any kind</option>
+          {% for value, label in kind_choices %}<option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <select name="outcome" class="form-select" aria-label="Outcome">
+          <option value="">Any outcome</option>
+          {% for value, label in outcome_choices %}<option value="{{ value }}" {% if request.GET.outcome == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'core:recovery_drill_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Drill</th><th>Kind</th><th>Outcome</th><th>Measured RPO</th><th>Measured RTO</th><th>Performed</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+          <tr>
+            <td class="fw-600"><a href="{% url 'core:recovery_drill_detail' obj.pk %}">{{ obj.name }}</a>
+              {% if obj.participants %}<div class="text-muted">{{ obj.participants|truncatechars:44 }}</div>{% endif %}</td>
+            <td>{{ obj.get_kind_display }}</td>
+            <td>
+              {% if obj.outcome == "passed" %}<span class="badge badge-green">{{ obj.get_outcome_display }}</span>
+              {% elif obj.outcome == "partial" %}<span class="badge badge-amber">{{ obj.get_outcome_display }}</span>
+              {% elif obj.outcome == "failed" %}<span class="badge badge-red">{{ obj.get_outcome_display }}</span>
+              {% else %}<span class="badge badge-slate">{{ obj.get_outcome_display }}</span>{% endif %}
+            </td>
+            <td>{{ obj.measured_rpo_display }}</td>
+            <td>{{ obj.measured_rto_display }}</td>
+            <td>{{ obj.performed_at|date:"M d, Y"|default:"—" }}</td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'core:recovery_drill_detail' obj.pk %}" class="btn-icon" title="Open"><i data-lucide="eye"></i></a>
+                <a href="{% url 'core:recovery_drill_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                <form method="post" action="{% url 'core:recovery_drill_delete' obj.pk %}" onsubmit="return confirm('Delete this drill record?');">
+                  {% csrf_token %}
+                  <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No drills recorded</h3><p class="text-muted">An untested recovery plan is an intention, not a capability.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
