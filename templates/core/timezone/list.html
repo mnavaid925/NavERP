@@ -49,7 +49,7 @@
           <tr>
             <td><code>{{ obj.name }}</code></td>
             <td class="fw-600">{{ obj.label }}</td>
-            <td>UTC{% if obj.utc_offset_minutes >= 0 %}+{% endif %}{{ obj.utc_offset_minutes }}</td>
+            <td>{{ obj.offset_display }}</td>
             <td>{% if obj.observes_dst %}<span class="badge badge-amber">Observes DST</span>{% else %}<span class="badge badge-slate">No DST</span>{% endif %}</td>
             <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
           </tr>
