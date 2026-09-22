@@ -50,6 +50,13 @@ from .models import (
     LocaleProfile,
     UserLocalePreference,
     StatutoryRule,
+    BackupJob,
+    DataArchive,
+    RestoreRecord,
+    EnvironmentInstance,
+    RecoveryPosture,
+    RecoveryDrill,
+    LegalHold,
 )
 
 
@@ -484,3 +491,74 @@ class StatutoryRuleAdmin(admin.ModelAdmin):
     search_fields = ["name", "jurisdiction", "statutory_report"]
     list_select_related = ["tax_code", "tenant"]
     readonly_fields = ["created_at", "updated_at"]
+
+
+# ---------------------------------------------------------------- 0.16 Backup, Recovery & Data Lifecycle
+# Every registration below is read-mostly on purpose: `integrity_verified_at` is `readonly_fields` on
+# `BackupJobAdmin` because it is written only by the POST-only verify action, and the actor stamps are
+# readonly for the same reason they are excluded from the forms — an operator must not be able to
+# attribute a backup or the release of a legal hold to somebody else from the Django admin.
+@admin.register(BackupJob)
+class BackupJobAdmin(admin.ModelAdmin):
+    list_display = ["name", "backup_type", "status", "integrity_verified_at", "storage_tier",
+                    "started_at", "tenant"]
+    list_filter = ["status", "backup_type", "storage_tier", "integrity_method", "tenant"]
+    search_fields = ["name", "scope_label", "evidence"]
+    list_select_related = ["encryption_key", "performed_by", "tenant"]
+    readonly_fields = ["integrity_verified_at", "created_at"]
+
+
+@admin.register(DataArchive)
+class DataArchiveAdmin(admin.ModelAdmin):
+    list_display = ["name", "storage_tier", "format", "status", "archived_at", "expires_at", "tenant"]
+    list_filter = ["status", "storage_tier", "format", "tenant"]
+    search_fields = ["name", "location", "content_description"]
+    list_select_related = ["policy", "disposal", "encryption_key", "tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(RestoreRecord)
+class RestoreRecordAdmin(admin.ModelAdmin):
+    list_display = ["scope", "status", "target_time", "backup", "archive", "is_verified", "tenant"]
+    list_filter = ["status", "scope", "is_verified", "tenant"]
+    search_fields = ["reason", "outcome", "evidence"]
+    list_select_related = ["backup", "archive", "target_environment", "requested_by", "tenant"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(LegalHold)
+class LegalHoldAdmin(admin.ModelAdmin):
+    list_display = ["name", "custodian", "status", "issued_at", "released_at", "tenant"]
+    list_filter = ["status", "tenant"]
+    search_fields = ["name", "custodian", "matter_reference", "issuing_authority"]
+    list_select_related = ["retention_policy", "subject_party", "issued_by", "released_by", "tenant"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(EnvironmentInstance)
+class EnvironmentInstanceAdmin(admin.ModelAdmin):
+    list_display = ["name", "kind", "status", "copy_scope", "copy_includes_pii", "expires_at",
+                    "tenant"]
+    list_filter = ["kind", "status", "copy_scope", "copy_includes_pii", "is_active", "tenant"]
+    search_fields = ["name", "tier", "subset_rule"]
+    list_select_related = ["source_environment", "refresh_source", "tenant"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(RecoveryPosture)
+class RecoveryPostureAdmin(admin.ModelAdmin):
+    list_display = ["tenant", "rpo_target_minutes", "rto_target_minutes", "replication_mode",
+                    "dr_region", "last_reviewed_at"]
+    list_filter = ["replication_mode"]
+    list_select_related = ["tenant"]
+    readonly_fields = ["updated_at"]
+
+
+@admin.register(RecoveryDrill)
+class RecoveryDrillAdmin(admin.ModelAdmin):
+    list_display = ["name", "kind", "outcome", "measured_rpo_minutes", "measured_rto_minutes",
+                    "performed_at", "tenant"]
+    list_filter = ["kind", "outcome", "tenant"]
+    search_fields = ["name", "participants", "findings"]
+    list_select_related = ["performed_by", "tenant"]
+    readonly_fields = ["created_at"]
