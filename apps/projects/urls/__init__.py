@@ -106,6 +106,13 @@ from .WorkflowAutomation.ApprovalGates import urlpatterns as _wa_gates
 from .WorkflowAutomation.RecurringTasks import urlpatterns as _wa_recurring
 from .WorkflowAutomation.Webhooks import urlpatterns as _wa_webhooks
 from .WorkflowAutomation.AutomationBoards import urlpatterns as _wa_boards
+# 7.18 Integration & API Hub — first segment is the literal `integration/` (verified free); all
+# routes within each module are literal-first and use no greedy converter.
+from .IntegrationApiHub.Connectors import urlpatterns as _ih_connectors
+from .IntegrationApiHub.FieldMappings import urlpatterns as _ih_mappings
+from .IntegrationApiHub.SyncJobs import urlpatterns as _ih_syncjobs
+from .IntegrationApiHub.SyncRuns import urlpatterns as _ih_syncruns
+from .IntegrationApiHub.HubBoards import urlpatterns as _ih_boards
 
 app_name = "projects"
 
@@ -264,6 +271,16 @@ urlpatterns = (
     + _wa_recurring
     + _wa_webhooks
     + _wa_boards
+    # 7.18 Integration & API Hub — first segments (integration/hub/, integration/monitor/,
+    # integration/connectors/, integration/mappings/, integration/sync-jobs/, integration/runs/)
+    # all share the literal `integration/` first component, which is disjoint from every earlier
+    # sub-module's literals; the second components (connectors/, mappings/, sync-jobs/, runs/,
+    # hub/, monitor/) are disjoint from each other.
+    + _ih_connectors
+    + _ih_mappings
+    + _ih_syncjobs
+    + _ih_syncruns
+    + _ih_boards
 )
 
 
