@@ -2113,6 +2113,26 @@ LIVE_LINKS = {
         "Webhook Endpoints":                 "projects:pwh_list",
         "Webhook Deliveries":                "projects:pwh_delivery_list",
     },
+    # 7.18 — the five domain leaves are five category-scoped routes onto the ONE project-scoped
+    # connector register (`ProjectIntegrationConnector`), not five separate registries. The
+    # neighbouring integration registers are owned elsewhere and are deliberately not merged (L36):
+    # scm 4.19 `IntegrationEndpoint` (supply-chain EDI/IoT/3PL, CNX-), inventory 5.19
+    # `IntegrationChannel` (commerce stock, INT-), accounting 2.15 `IntegrationConfig` (finance).
+    # 7.18 performs no outbound HTTP and writes no accounting row.
+    "7.18": {
+        "ERP & Financial System Sync":       "projects:ixc_erp_list",
+        "CRM Integration":                   "projects:ixc_crm_list",
+        "HR & Talent Systems":               "projects:ixc_hris_list",
+        "Development & DevOps Tools":        "projects:ixc_devops_list",
+        "File Storage & Collaboration":      "projects:ixc_storage_list",
+        # Extra live leaves:
+        "Integration Hub":                   "projects:integration_hub",
+        "Sync Monitor":                      "projects:sync_monitor",
+        "Connector Register":                "projects:ixc_list",
+        "Field Mappings":                    "projects:ixm_list",
+        "Sync Jobs":                         "projects:syj_list",
+        "Sync Runs":                         "projects:syr_list",
+    },
 
 
 
