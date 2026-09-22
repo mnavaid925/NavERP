@@ -58,7 +58,7 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 
 | # | Module | Django app(s) | Status |
 |---|--------|---------------|--------|
-| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 14 of 21 built — 0.1–0.14 (7 remain: 0.15–0.21) |
+| 0 | System Admin & Security | `core` + `accounts` + `tenants` + `dashboard` | 🟦 15 of 21 built — 0.1–0.15 (6 remain: 0.16–0.21) |
 | 1 | Customer Relationship Management (CRM) | `crm` | ✅ 1.1–1.12 built |
 | 2 | Accounting & Finance | `accounting` | ✅ 2.1–2.15 built |
 | 3 | Human Resource Management (HRM) | `hrm` | ✅ 3.1–3.41 built — all 41 sub-modules |
