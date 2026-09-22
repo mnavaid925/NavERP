@@ -22,6 +22,7 @@ from apps.projects.models import (
     ProjectDocument,
     ProjectExpense,
     ProjectFolder,
+    ProjectIntegrationConnector,
     ProjectIssue,
     ProjectKickoff,
     ProjectMilestone,
@@ -29,6 +30,7 @@ from apps.projects.models import (
     ProjectRequest,
     ProjectRisk,
     ProjectStakeholder,
+    ProjectSyncRun,
     ProjectTask,
     QualityDefect,
     QualityPlan,
@@ -165,4 +167,17 @@ def overview(request):
         "knowledge_count": KnowledgeEntry.objects.filter(tenant=tenant).count(),
         "legal_hold_count": ProjectDocument.objects.filter(
             tenant=tenant, is_legal_hold=True).count(),
+        # 7.18 integration — one flat connector count plus the two decision figures the hub
+        # opens with (today's runs and today's failures), the same column filters HubBoards
+        # uses so the landing page and the hub never disagree.
+        "integration_connector_count": ProjectIntegrationConnector.objects.filter(
+            tenant=tenant).count(),
+        "sync_runs_today": ProjectSyncRun.objects.filter(
+            tenant=tenant,
+            started_at__gte=timezone.now().replace(
+                hour=0, minute=0, second=0, microsecond=0)).count(),
+        "sync_runs_failed_today": ProjectSyncRun.objects.filter(
+            tenant=tenant, status="failed",
+            started_at__gte=timezone.now().replace(
+                hour=0, minute=0, second=0, microsecond=0)).count(),
     })
