@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{% if domain %}{{ domain|capfirst }} Connectors{% else %}Integration Connectors{% endif %}</h1>
+    <h1 class="page-title">{% if domain %}{% for value, label in domain_choices %}{% if value == domain %}{{ label }}{% endif %}{% endfor %} Connectors{% else %}Integration Connectors{% endif %}</h1>
     <div class="breadcrumb">
       <a href="{% url 'dashboard:home' %}">Home</a>
       <span>/</span>
