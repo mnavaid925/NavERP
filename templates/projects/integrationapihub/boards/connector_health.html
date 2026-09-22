@@ -37,8 +37,8 @@
         <div><dt class="text-muted">Provider</dt><dd class="font-medium">{{ connector.get_provider_display }} ({{ connector.get_domain_display }})</dd></div>
         <div><dt class="text-muted">Consecutive Failures</dt><dd class="font-medium {% if connector.consecutive_failures %}text-red-600{% endif %}">{{ connector.consecutive_failures }}</dd></div>
         <div><dt class="text-muted">Last Sync</dt><dd class="font-medium">{% if connector.last_sync_at %}{{ connector.last_sync_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
-        <div><dt class="text-muted">Sync Jobs</dt><dd class="font-medium">{{ jobs|length }}</dd></div>
-        <div><dt class="text-muted">Field Mappings</dt><dd class="font-medium">{{ mappings|length }}</dd></div>
+        <div><dt class="text-muted">Sync Jobs</dt><dd class="font-medium">{{ jobs_count }}</dd></div>
+        <div><dt class="text-muted">Field Mappings</dt><dd class="font-medium">{{ mappings_count }}</dd></div>
       </dl>
     </div>
   </div>
