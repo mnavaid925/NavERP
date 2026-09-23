@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ locale_setting.name }} — Localization Profiles — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ locale_setting.name }}</h1>
+      {% if locale_setting.is_default %}
+        <span class="badge badge-amber">Default Workspace Profile</span>
+      {% endif %}
+      {% if locale_setting.is_active %}
+        <span class="badge badge-green">Active</span>
+      {% else %}
+        <span class="badge badge-muted">Inactive</span>
+      {% endif %}
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:pls_list' %}">Localization</a>
+      <span>/</span>
+      <span>{{ locale_setting.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:pls_edit' pk=locale_setting.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+    </a>
+    {% if not locale_setting.is_default and not locale_setting.project %}
+    <form method="post" action="{% url 'projects:pls_set_default' pk=locale_setting.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="bookmark" class="w-4 h-4 mr-1 text-amber-600"></i> Set as Default
+      </button>
+    </form>
+    {% endif %}
+    <form method="post" action="{% url 'projects:pls_delete' pk=locale_setting.pk %}" class="inline" onsubmit="return confirm('Delete this locale profile?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:pls_list' %}" class="btn btn-outline">Back to Profiles</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Regional &amp; Localization Configuration</h2>
+        <span class="font-mono text-xs text-muted">{{ locale_setting.number }}</span>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 py-3 border-b border-slate-200">
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Scope Tier</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">
+              {% if locale_setting.project %}
+                Project Override: <a href="{% url 'projects:prj_detail' pk=locale_setting.project.pk %}" class="text-primary hover:underline">{{ locale_setting.project.name }}</a>
+              {% else %}
+                Workspace-Wide Standard
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Language Pack</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">
+              {% if locale_setting.language %}{{ locale_setting.language.name }} ({{ locale_setting.language.code }}){% else %}Default{% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Authoritative Timezone</div>
+            <div class="text-sm font-mono text-slate-900 mt-1">
+              {% if locale_setting.time_zone %}{{ locale_setting.time_zone.name }}{% else %}UTC{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 py-4 border-b border-slate-200">
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Base Currency</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">
+              {% if locale_setting.currency %}{{ locale_setting.currency.code }} ({{ locale_setting.currency.name }}){% else %}USD{% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Date Format</div>
+            <div class="text-sm font-mono text-slate-900 mt-1">{{ locale_setting.get_date_format_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Time Format</div>
+            <div class="text-sm font-mono text-slate-900 mt-1">{{ locale_setting.get_time_format_display }}</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 py-4">
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Number Notation</div>
+            <div class="text-sm font-mono text-slate-900 mt-1">{{ locale_setting.get_number_format_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">First Day of Week</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ locale_setting.get_first_day_of_week_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Daily Working Hours</div>
+            <div class="text-sm font-semibold text-slate-900 mt-1">{{ locale_setting.working_hours_per_day }} hours / day</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Work-Week Operating Calendar</h3>
+      </div>
+      <div class="card-body">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="calendar" class="w-5 h-5 text-primary"></i>
+          <span class="text-sm font-medium text-slate-900">Configured Working Days:</span>
+          <span class="badge badge-info">{{ working_days_display }}</span>
+        </div>
+        <p class="text-xs text-muted">
+          Milestone target dates, task duration estimates, and effort calculations reference this operational schedule.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Profile Metadata</h3>
+      </div>
+      <div class="card-body space-y-4">
+        <div>
+          <div class="text-xs text-muted uppercase">Profile Identifier</div>
+          <div class="text-sm font-mono text-slate-900 mt-1">{{ locale_setting.code|default:"—" }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted uppercase">Default Status</div>
+          <div class="mt-1">
+            {% if locale_setting.is_default %}
+              <span class="badge badge-amber">Default Workspace Profile</span>
+            {% else %}
+              <span class="text-xs text-muted">Secondary Profile</span>
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-muted uppercase">Created Timestamp</div>
+          <div class="text-sm text-slate-800 mt-1">{{ locale_setting.created_at|date:"M d, Y H:i" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
