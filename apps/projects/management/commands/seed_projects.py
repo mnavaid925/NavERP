@@ -158,7 +158,13 @@ from apps.projects.models import (
     ConnectorFieldMapping,
     ProjectSyncJob,
     ProjectSyncRun,
+    ProjectTemplate,
+    ProjectCustomField,
+    ProjectTeam,
+    ProjectTeamMember,
+    ProjectLocaleSetting,
 )
+
 
 
 # -- 7.2 WBS specs -----------------------------------------------------------------------------
@@ -367,6 +373,13 @@ class Command(BaseCommand):
             ProjectSyncJob.objects.all().delete()
             ConnectorFieldMapping.objects.all().delete()
             ProjectIntegrationConnector.objects.all().delete()
+            # 7.19 Master Data & Configuration — children first (members -> teams, fields, templates, locales)
+            ProjectTeamMember.objects.all().delete()
+            ProjectTeam.objects.all().delete()
+            ProjectCustomField.objects.all().delete()
+            ProjectTemplate.objects.all().delete()
+            ProjectLocaleSetting.objects.all().delete()
+
             ProjectWebhookDelivery.objects.all().delete()
             ProjectWebhookEndpoint.objects.all().delete()
             RecurringTaskSchedule.objects.all().delete()
@@ -515,6 +528,9 @@ class Command(BaseCommand):
         self._workflow_automation(tenant, now)
         # 7.18 Integration & API Hub: connectors, field mappings, sync jobs, sync runs.
         self._integration_hub(tenant, now)
+        # 7.19 Master Data & Configuration: templates, custom fields, teams, locale settings.
+        self._master_data_configuration(tenant, now)
+
 
 
 
@@ -4721,7 +4737,7 @@ class Command(BaseCommand):
 
 
 
-            # 3. Sync jobs — nine across the connectors, spanning every entity family the five
+            # 3. Sync jobs — ten across the connectors, spanning every entity family the five
             #    bullets use, all four conflict policies, one scheduled, one inactive.
             job_specs = [
                 (erp, "Cost Lines to GL", "cost_lines", "outbound", "scheduled", 60, "local_wins", True),
@@ -4733,6 +4749,7 @@ class Command(BaseCommand):
                 (jira, "Issue Sync", "issues", "bidirectional", "event", None, "newest_wins", True),
                 (github, "Repo Activity Mirror", "documents", "inbound", "manual", None, "manual", False),
                 (custom, "Budget Batch Export", "budgets", "outbound", "scheduled", 10080, "local_wins", True),
+                (jira, "Jira Milestone Synchronization", "milestones", "bidirectional", "event", None, "newest_wins", True),
             ]
             jobs = []
             for conn, name, scope, direction, trigger, interval, policy, is_active in job_specs:
@@ -4807,12 +4824,268 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: 7.18 seeded: 7 connectors, 30 field mappings, 9 sync jobs, "
+            f"  {tenant.name}: 7.18 seeded: 7 connectors, 30 field mappings, 10 sync jobs, "
             f"{run_index} sync runs."))
+
+    def _master_data_configuration(self, tenant, now):
+        """Master Data & Configuration (7.19): templates, custom fields, teams, locale settings.
+
+        Guarded per tenant so a re-run is a no-op unless --flush is passed.
+        """
+        if ProjectTemplate.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: 7.19 master data already seeded. Skipping.")
+            return
+
+        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        admin_user = users[0] if users else None
+        second_user = users[1] if len(users) > 1 else admin_user
+        third_user = users[2] if len(users) > 2 else admin_user
+
+        projects = list(Project.objects.filter(tenant=tenant))
+        active_proj = next((p for p in projects if p.status == "active"), projects[0] if projects else None)
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        currency = self._currency()
+
+        from apps.core.models.Localization import Language, TimeZone
+        lang_en = Language.objects.filter(code="en").first() or Language.objects.first()
+        tz_utc = TimeZone.objects.filter(name="UTC").first() or TimeZone.objects.first()
+
+        with transaction.atomic():
+            # 1. Project Templates (3 templates across methodologies)
+            pt1 = ProjectTemplate.objects.create(
+                tenant=tenant,
+                name="Agile Software Delivery Template",
+                code="TMPL-AGILE-STD",
+                methodology="agile",
+                description="Standard enterprise 2-week sprint cadence with sprint backlog, user stories, and retrospectives.",
+                estimated_duration_days=90,
+                default_team_size=7,
+                wbs_structure=[
+                    {"name": "Sprint 0 - Inception & Architecture", "level": 1, "duration_days": 10},
+                    {"name": "Sprint 1 - MVP Core Services", "level": 2, "duration_days": 14},
+                    {"name": "Sprint 2 - User Interface & Integration", "level": 2, "duration_days": 14},
+                    {"name": "Hardening & UAT", "level": 1, "duration_days": 10},
+                ],
+                workflow_rules={"auto_advance_sprints": True, "require_pr_review": True},
+                custom_fields_schema={"story_points": {"type": "number", "required": True}},
+                is_active=True,
+                is_default=True,
+                created_by=admin_user,
+            )
+
+            pt2 = ProjectTemplate.objects.create(
+                tenant=tenant,
+                name="Waterfall Infrastructure Modernization",
+                code="TMPL-WATERFALL-INFRA",
+                methodology="waterfall",
+                description="Linear gated lifecycle for datacenter migration and cloud infrastructure modernization.",
+                estimated_duration_days=180,
+                default_team_size=12,
+                wbs_structure=[
+                    {"name": "Phase 1 - Discovery & Assessment", "level": 1, "duration_days": 30},
+                    {"name": "Phase 2 - Architecture Design & Governance", "level": 1, "duration_days": 30},
+                    {"name": "Phase 3 - Pilot Migration", "level": 1, "duration_days": 45},
+                    {"name": "Phase 4 - Production Cutover & Handover", "level": 1, "duration_days": 75},
+                ],
+                workflow_rules={"gate_approvals_required": True, "change_control_board": True},
+                custom_fields_schema={"cab_approval_id": {"type": "text", "required": True}},
+                is_active=True,
+                is_default=False,
+                created_by=admin_user,
+            )
+
+            pt3 = ProjectTemplate.objects.create(
+                tenant=tenant,
+                name="Hybrid Digital Transformation",
+                code="TMPL-HYBRID-TRANSFORM",
+                methodology="hybrid",
+                description="Blended governance with milestone stage-gates and agile sprint feature execution.",
+                estimated_duration_days=120,
+                default_team_size=9,
+                wbs_structure=[
+                    {"name": "Stage Gate 1 - Strategic Charter", "level": 1, "duration_days": 14},
+                    {"name": "Agile Build Wave 1", "level": 2, "duration_days": 42},
+                    {"name": "Stage Gate 2 - Security & Compliance Review", "level": 1, "duration_days": 14},
+                    {"name": "Agile Build Wave 2 & Rollout", "level": 2, "duration_days": 50},
+                ],
+                workflow_rules={"stage_gate_enforcement": True},
+                custom_fields_schema={},
+                is_active=True,
+                is_default=False,
+                created_by=admin_user,
+            )
+
+            # 2. Project Custom Fields (5 user-defined attributes)
+            cf1 = ProjectCustomField.objects.create(
+                tenant=tenant,
+                target_entity="project",
+                field_name="client_billing_code",
+                name="Client Billing Code",
+                field_type="text",
+                description="Cross-charge financial reference code.",
+                is_required=True,
+                position=10,
+                is_active=True,
+                validation_regex=r"^[A-Z0-9]{4,10}$",
+            )
+            cf2 = ProjectCustomField.objects.create(
+                tenant=tenant,
+                target_entity="task",
+                field_name="story_points",
+                name="Story Points",
+                field_type="number",
+                description="Fibonacci estimation sizing (1, 2, 3, 5, 8, 13).",
+                is_required=False,
+                position=20,
+                is_active=True,
+            )
+            cf3 = ProjectCustomField.objects.create(
+                tenant=tenant,
+                target_entity="issue",
+                field_name="root_cause_category",
+                name="Root Cause Category",
+                field_type="select",
+                description="Categorization of underlying fault or defect origin.",
+                options_list=["Architecture", "Configuration", "Code Defect", "Infrastructure", "Requirements Gap"],
+                is_required=True,
+                position=30,
+                is_active=True,
+            )
+            cf4 = ProjectCustomField.objects.create(
+                tenant=tenant,
+                target_entity="risk",
+                field_name="is_regulatory_compliance",
+                name="Regulatory Compliance Impact",
+                field_type="boolean",
+                description="Flag indicating if the risk impacts statutory or GDPR/SOX compliance.",
+                is_required=False,
+                position=40,
+                is_active=True,
+            )
+            cf5 = ProjectCustomField.objects.create(
+                tenant=tenant,
+                target_entity="sprint",
+                field_name="retrospective_theme",
+                name="Retrospective Theme",
+                field_type="text",
+                description="Key continuous improvement focus area agreed during retro.",
+                is_required=False,
+                position=50,
+                is_active=True,
+            )
+
+            # 3. Project Teams & Members (3 matrix teams)
+            t1 = ProjectTeam.objects.create(
+                tenant=tenant,
+                name="Core Engineering Squad",
+                code="TEAM-ENG-CORE",
+                team_type="cross_functional",
+                team_lead=admin_user,
+                org_unit=org_unit,
+                project=active_proj,
+                location="HQ / Remote",
+                description="Full-stack engineering squad handling core platform delivery and API integrations.",
+                is_active=True,
+            )
+            if admin_user:
+                ProjectTeamMember.objects.create(
+                    tenant=tenant,
+                    team=t1,
+                    user=admin_user,
+                    role="Lead Architect",
+                    allocation_percent=Decimal("100.00"),
+                    is_primary=True,
+                )
+            if second_user and second_user != admin_user:
+                ProjectTeamMember.objects.create(
+                    tenant=tenant,
+                    team=t1,
+                    user=second_user,
+                    role="Backend Senior Engineer",
+                    allocation_percent=Decimal("80.00"),
+                    is_primary=False,
+                )
+
+            t2 = ProjectTeam.objects.create(
+                tenant=tenant,
+                name="Enterprise Delivery Matrix Team",
+                code="TEAM-DELIV-MTX",
+                team_type="matrix",
+                team_lead=second_user or admin_user,
+                org_unit=org_unit,
+                project=None,
+                location="Regional Delivery Center",
+                description="Shared resource pool for cross-project deployment, QA validation, and release management.",
+                is_active=True,
+            )
+            if third_user:
+                ProjectTeamMember.objects.create(
+                    tenant=tenant,
+                    team=t2,
+                    user=third_user,
+                    role="QA Automation Lead",
+                    allocation_percent=Decimal("50.00"),
+                    is_primary=True,
+                )
+
+            t3 = ProjectTeam.objects.create(
+                tenant=tenant,
+                name="Client Advisory & Architecture",
+                code="TEAM-ADV-ARCH",
+                team_type="dedicated",
+                team_lead=admin_user,
+                org_unit=org_unit,
+                project=active_proj,
+                location="Client On-site",
+                description="Dedicated advisory group overseeing business alignment and client governance.",
+                is_active=True,
+            )
+
+            # 4. Project Locale Settings (2 profiles: workspace standard + project override)
+            pls1 = ProjectLocaleSetting.objects.create(
+                tenant=tenant,
+                name="Global Standard Profile (UTC/USD)",
+                code="LOC-GLOBAL-STD",
+                project=None,
+                language=lang_en,
+                time_zone=tz_utc,
+                currency=currency,
+                date_format="YYYY-MM-DD",
+                time_format="24h",
+                first_day_of_week=1,
+                number_format="comma_dot",
+                working_hours_per_day=Decimal("8.00"),
+                working_days=[1, 2, 3, 4, 5],
+                is_default=True,
+                is_active=True,
+            )
+
+            pls2 = ProjectLocaleSetting.objects.create(
+                tenant=tenant,
+                name="EMEA Regional Operations (London)",
+                code="LOC-EMEA-LON",
+                project=active_proj,
+                language=lang_en,
+                time_zone=tz_utc,
+                currency=currency,
+                date_format="DD/MM/YYYY",
+                time_format="24h",
+                first_day_of_week=1,
+                number_format="comma_dot",
+                working_hours_per_day=Decimal("7.50"),
+                working_days=[1, 2, 3, 4, 5],
+                is_default=False,
+                is_active=True,
+            )
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: 7.19 seeded: 3 templates, 5 custom fields, 3 teams, 2 locale profiles."
+        ))
 
     def _client(self, tenant):
         """A Party carrying a customer role, else any party — never a new duplicate master."""
         role = PartyRole.objects.filter(tenant=tenant, role="customer").select_related("party").first()
+
         if role is not None and role.party_id:
             return role.party
         return Party.objects.filter(tenant=tenant).order_by("id").first()
