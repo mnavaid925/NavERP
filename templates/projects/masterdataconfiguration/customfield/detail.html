@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ custom_field.label }} — Custom Fields — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ custom_field.label }}</h1>
+      <span class="badge {{ custom_field.target_badge_class }}">{{ custom_field.get_target_entity_display }}</span>
+      <span class="badge {{ custom_field.field_type_badge_class }}">{{ custom_field.get_field_type_display }}</span>
+      {% if custom_field.is_required %}
+        <span class="badge badge-amber">Required</span>
+      {% endif %}
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:pcf_list' %}">Custom Fields</a>
+      <span>/</span>
+      <span>{{ custom_field.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:pcf_edit' pk=custom_field.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:pcf_toggle_active' pk=custom_field.pk %}" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="power" class="w-4 h-4 mr-1"></i>
+        {% if custom_field.is_active %}Deactivate{% else %}Activate{% endif %}
+      </button>
+    </form>
+    <form method="post" action="{% url 'projects:pcf_delete' pk=custom_field.pk %}" class="inline" onsubmit="return confirm('Delete this custom field?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:pcf_list' %}" class="btn btn-outline">Back to List</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Field Specification</h2>
+        <span class="font-mono text-xs text-muted">{{ custom_field.number }}</span>
+      </div>
+      <div class="card-body">
+        {% if custom_field.description %}
+        <p class="text-sm text-slate-700 mb-6 bg-slate-50 p-3 rounded border border-slate-200">
+          {{ custom_field.description }}
+        </p>
+        {% endif %}
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 py-3 border-t border-b border-slate-200">
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Field Key (Slug)</div>
+            <div class="text-sm font-mono text-slate-900 mt-1">{{ custom_field.field_key }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Form Section</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ custom_field.get_form_section_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Display Sort Order</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ custom_field.display_order }}</div>
+          </div>
+        </div>
+
+        <div class="mt-6 space-y-4">
+          <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Validation Rules &amp; Constraints</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-3 rounded bg-slate-50 border border-slate-200">
+              <span class="text-xs text-muted block">Mandatory Required</span>
+              <span class="text-sm font-semibold text-slate-900 mt-1 block">
+                {% if custom_field.is_required %}Yes (Mandatory){% else %}No (Optional){% endif %}
+              </span>
+            </div>
+            <div class="p-3 rounded bg-slate-50 border border-slate-200">
+              <span class="text-xs text-muted block">Numeric Range</span>
+              <span class="text-sm font-mono text-slate-900 mt-1 block">
+                {% if custom_field.min_value or custom_field.max_value %}
+                  [{{ custom_field.min_value|default:"-∞" }} to {{ custom_field.max_value|default:"+∞" }}]
+                {% else %}
+                  Unbounded
+                {% endif %}
+              </span>
+            </div>
+            <div class="p-3 rounded bg-slate-50 border border-slate-200">
+              <span class="text-xs text-muted block">Regex Pattern</span>
+              <span class="text-sm font-mono text-slate-900 mt-1 block truncate">
+                {{ custom_field.regex_pattern|default:"None" }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {% if custom_field.choices_list %}
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-3">Dropdown Choices ({{ custom_field.choices_list|length }})</h3>
+          <div class="flex flex-wrap gap-2">
+            {% for choice in custom_field.choices_list %}
+            <span class="badge badge-info text-sm py-1 px-3">
+              {{ choice }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if custom_field.visibility_rule %}
+    <div class="card">
+      <div class="card-header">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Conditional Visibility Rule</h3>
+      </div>
+      <div class="card-body">
+        <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">{{ custom_field.visibility_rule }}</pre>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">UI Preview Simulation</h3>
+      </div>
+      <div class="card-body space-y-3">
+        <label class="form-label font-medium block">
+          {{ custom_field.label }}
+          {% if custom_field.is_required %}<span class="text-red-500">*</span>{% endif %}
+        </label>
+        {% if custom_field.field_type == "text" or custom_field.field_type == "url" %}
+          <input type="text" class="form-input bg-slate-50" placeholder="{{ custom_field.placeholder|default:custom_field.label }}" disabled>
+        {% elif custom_field.field_type == "textarea" %}
+          <textarea class="form-textarea bg-slate-50" rows="3" placeholder="{{ custom_field.placeholder|default:custom_field.label }}" disabled></textarea>
+        {% elif custom_field.field_type == "integer" or custom_field.field_type == "decimal" %}
+          <input type="number" class="form-input bg-slate-50" placeholder="{{ custom_field.placeholder|default:'0' }}" disabled>
+        {% elif custom_field.field_type == "date" %}
+          <input type="date" class="form-input bg-slate-50" disabled>
+        {% elif custom_field.field_type == "boolean" %}
+          <div class="flex items-center gap-2">
+            <input type="checkbox" class="form-checkbox" disabled>
+            <span class="text-sm text-slate-600">Yes / Enabled</span>
+          </div>
+        {% elif custom_field.field_type == "select" %}
+          <select class="form-select bg-slate-50" disabled>
+            <option>Select an option...</option>
+            {% for opt in custom_field.choices_list %}
+            <option>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <input type="text" class="form-input bg-slate-50" placeholder="{{ custom_field.label }}" disabled>
+        {% endif %}
+        <p class="text-xs text-muted">Preview of how this custom attribute renders on target forms.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
