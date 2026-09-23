@@ -48,21 +48,27 @@ class ProjectIntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # REFINE the base class's scoping -- do not replace it.
+        # `owner` is scoped HERE, deliberately, and self-sufficiently.
         #
-        # `TenantModelForm` has already scoped `owner` to this workspace, and has emptied it when there
-        # is no tenant at all (C7). The previous code rebuilt the queryset from
-        # `User.objects.filter(is_active=True)` and re-applied the tenant filter itself, which threw the
-        # base scoping away and re-opened on the `tenant is None` branch exactly the cross-tenant leak the
-        # base class had just closed. Measured on the dev DB before this change:
-        # `ProjectIntegrationConnectorForm(tenant=None).fields["owner"].queryset` held all 28 active
-        # users across 6 distinct tenant values, and `User.__str__` returns the email -- so the dropdown
-        # rendered other tenants' addresses. It was reachable: `ixc_create` is only `@login_required`,
-        # and the superuser `admin` carries `tenant=None` by design.
+        # The previous code built `User.objects.filter(is_active=True)` and applied the tenant filter
+        # only `if self.tenant is not None`, so a tenant-less form offered EVERY workspace's active
+        # users. `User.__str__` returns the email, so the <select> rendered other tenants' addresses.
+        # Measured on the dev DB: 28 rows across 6 distinct tenant values. It was reachable --
+        # `ixc_create` carries only `@login_required` (no tenant guard), and the superuser `admin`
+        # holds `tenant=None` by design.
         #
-        # Filtering the inherited queryset keeps the `is_active` refinement and inherits the scoping,
-        # including the empty case (`.none().filter(...)` is still empty).
-        self.fields["owner"].queryset = self.fields["owner"].queryset.filter(is_active=True)
+        # The `else` branch is the fix: "no tenant" means no tenant-owned object is selectable. This is
+        # written out in full rather than inherited from `TenantModelForm`, because the base class
+        # deliberately leaves the queryset unnarrowed when `tenant is None` so that `_reject_foreign`
+        # can return its precise "belongs to another workspace" message (that behaviour is pinned by
+        # committed tests in projects/procurement/scm). A form that is reachable WITHOUT a tenant must
+        # therefore narrow explicitly, and this is one.
+        owner_qs = User.objects.filter(is_active=True)
+        if self.tenant is not None:
+            owner_qs = owner_qs.filter(tenant=self.tenant)
+        else:
+            owner_qs = owner_qs.none()
+        self.fields["owner"].queryset = owner_qs
 
     def clean(self):
         cleaned = super().clean()
