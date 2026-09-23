@@ -350,7 +350,17 @@ def environment_instance_list(request):
     # therefore computed from the tenant's whole set, deliberately NOT from the filtered page, because
     # this count answers "how many sandboxes has nobody reaped?", which is a tenant-wide question and
     # must not change when somebody types a search term.
-    expired_count = sum(1 for e in qs.all() if e.is_expired)
+    #
+    # The set is read through `.only("id", "expires_at", "status")` (I5): `qs.all()` pulled EVERY column
+    # of every row — including the `subset_rule` and `notes` TextFields — and then `crud_list`'s
+    # Paginator read the same whole set again for the 15-row page, so one page view transferred the
+    # tenant's environment table twice. `.only(...)` leaves the predicate exactly where it is (one rule,
+    # one place, no SQL restatement) while pulling only the three columns `is_expired` reads. It is a
+    # fresh queryset rather than `qs.only(...)` because `qs` is `select_related` and Django refuses to
+    # defer a relation it is traversing.
+    expired_count = sum(
+        1 for e in EnvironmentInstance.objects.filter(tenant=request.tenant)
+        .only("id", "expires_at", "status") if e.is_expired)
     return crud_list(
         request,
         qs,
