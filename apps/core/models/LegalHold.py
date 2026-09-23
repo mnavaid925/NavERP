@@ -28,9 +28,12 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.core.models._base import *  # noqa: F401,F403
+# The tenant-consistency model edge (I2). Defined in `Backup.py`, which holds the other six 0.16
+# models; `Backup.py` does not import this module, so the import is one-way and cycle-free.
+from apps.core.models.Backup import TenantConsistentMixin
 
 
-class LegalHold(models.Model):
+class LegalHold(TenantConsistentMixin, models.Model):
     """A preservation order: it overrides every retention window covering its scope, until released."""
 
     STATUS_CHOICES = [
