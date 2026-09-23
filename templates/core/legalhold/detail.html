@@ -21,11 +21,29 @@
         window covering <strong>{{ obj.scope_label }}</strong> is suspended: data that would otherwise be due for
         disposal must be preserved. No "due for disposal" figure for this scope can be trusted while it stands.</p>
     </div></div>
+  {% elif obj.status == "released" %}
+    <div class="card"><div class="card-body">
+      <p class="text-muted"><i data-lucide="check"></i> <strong>Released</strong>{% if obj.released_at %}
+        on {{ obj.released_at|date:"M d, Y H:i" }}{% endif %}. The preservation duty has ended, so the retention
+        schedule covering {{ obj.scope_label }} has resumed{% if not obj.released_at %} — though no release date
+        was recorded, which is what proves good faith{% endif %}.</p>
+    </div></div>
+  {% elif obj.status == "expired" or obj.status == "superseded" %}
+    <div class="card"><div class="card-body">
+      <p class="text-muted"><i data-lucide="archive"></i> <strong>{{ obj.get_status_display }}</strong> —
+        superseded by a later order, or overtaken by the matter it was issued for. It suspends nothing: the
+        retention schedule covering {{ obj.scope_label }} was never interrupted by this record, and any
+        preservation duty has been carried by whichever order replaced it. Check that one before treating
+        the schedule as unencumbered.</p>
+    </div></div>
   {% else %}
     <div class="card"><div class="card-body">
-      <p class="text-muted"><i data-lucide="check"></i> <strong>Not in force</strong> —
-        {{ obj.get_status_display }}{% if obj.released_at %} as of {{ obj.released_at|date:"M d, Y H:i" }}{% endif %}.
-        The retention schedule covering {{ obj.scope_label }} has resumed.</p>
+      <p class="text-danger"><i data-lucide="alert-triangle"></i> <strong>Incoherent record</strong> — this
+        hold carries a release date of {{ obj.released_at|date:"M d, Y H:i" }} yet its status still reads
+        <strong>{{ obj.get_status_display }}</strong>. 0.16 refuses to save that combination, so this row
+        predates the rule (or was written around the form). It is <em>not</em> in force here — but until the
+        status is corrected, no board can say whether {{ obj.scope_label }} is held or free. Edit it and set
+        the status to match.</p>
     </div></div>
   {% endif %}
 
