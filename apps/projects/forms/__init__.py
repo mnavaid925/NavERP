@@ -215,3 +215,16 @@ from .IntegrationApiHub.Connectors import (  # noqa: F401
 from .IntegrationApiHub.FieldMappings import ConnectorFieldMappingForm  # noqa: F401
 from .IntegrationApiHub.SyncJobs import ProjectSyncJobForm  # noqa: F401
 
+# --- 7.19 Master Data & Configuration -------------------------------------------
+from .MasterDataConfiguration.ProjectTemplates import (  # noqa: F401
+    ProjectTemplateForm,
+    ProjectTemplateInstantiateForm,
+)
+from .MasterDataConfiguration.ProjectCustomFields import ProjectCustomFieldForm  # noqa: F401
+from .MasterDataConfiguration.ProjectTeams import (  # noqa: F401
+    ProjectTeamForm,
+    ProjectTeamMemberForm,
+)
+from .MasterDataConfiguration.ProjectLocaleSettings import ProjectLocaleSettingForm  # noqa: F401
+
+
