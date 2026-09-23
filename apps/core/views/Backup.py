@@ -153,6 +153,18 @@ def backup_job_verify(request, pk):
     `views/Localization.py` for the same pattern).
     """
     obj = get_object_or_404(BackupJob, pk=pk, tenant=request.tenant)
+    # A verification the record's own status contradicts is the inverted false all-clear this whole
+    # sub-module exists to prevent (I6): POSTing verify to a `failed` job set `integrity_verified_at`
+    # and the detail page then rendered a green "Verified" tick over a record whose own badge said
+    # Failed — and the job also left `unverified_jobs` and `never_restored`. A `cancelled` job is
+    # equally settled. Refused in the VIEW rather than by hiding the button or gating the tick, so the
+    # audit row is not written either and the action cannot be reached by a hand-made POST.
+    if obj.status in {"failed", "cancelled"}:
+        messages.error(
+            request,
+            "A %s backup cannot be recorded as verified — its own status contradicts it. Record the "
+            "re-run as a new backup instead." % obj.get_status_display())
+        return redirect("core:backup_job_detail", pk=obj.pk)
     now = timezone.now()
     obj.integrity_verified_at = now
     # A verification with no method recorded is a verification with no evidence, so default it.
