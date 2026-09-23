@@ -345,6 +345,10 @@ class DataArchive(TenantConsistentMixin, models.Model):
         ordering = ["-archived_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "status"], name="darch_tenant_status_idx"),
+            # The ordering above needs its own index (I5): `darch_tenant_status_idx` is on `status`, so
+            # the optimiser could not use it to satisfy `ORDER BY -archived_at` and fell back to
+            # `type=ALL` + `Using filesort` over the whole tenant at 5,000 rows.
+            models.Index(fields=["tenant", "-archived_at"], name="darch_tenant_at_idx"),
         ]
 
     def __str__(self):
@@ -579,6 +583,9 @@ class EnvironmentInstance(TenantConsistentMixin, models.Model):
         ordering = ["name"]
         indexes = [
             models.Index(fields=["tenant", "kind"], name="envinst_tenant_kind_idx"),
+            # The ordering above needs its own index (I5) — `envinst_tenant_kind_idx` is on `kind`, so
+            # `ORDER BY name` was an unindexed filesort over every environment in the tenant.
+            models.Index(fields=["tenant", "name"], name="envinst_tenant_name_idx"),
         ]
 
     def __str__(self):
@@ -722,6 +729,9 @@ class RecoveryDrill(TenantConsistentMixin, models.Model):
         ordering = ["-performed_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "outcome"], name="drill_tenant_outcome_idx"),
+            # The ordering above needs its own index (I5) — `drill_tenant_outcome_idx` is on `outcome`,
+            # so `ORDER BY -performed_at` was an unindexed filesort over every drill in the tenant.
+            models.Index(fields=["tenant", "-performed_at"], name="drill_tenant_perf_idx"),
         ]
 
     def __str__(self):
