@@ -178,3 +178,10 @@ from .IntegrationApiHub.Connectors import ProjectIntegrationConnector  # noqa: F
 from .IntegrationApiHub.FieldMappings import ConnectorFieldMapping  # noqa: F401
 from .IntegrationApiHub.SyncJobs import ProjectSyncJob  # noqa: F401
 from .IntegrationApiHub.SyncRuns import ProjectSyncRun  # noqa: F401
+
+# --- 7.19 Master Data & Configuration -------------------------------------------
+from .MasterDataConfiguration.ProjectTemplates import ProjectTemplate  # noqa: F401
+from .MasterDataConfiguration.ProjectCustomFields import ProjectCustomField  # noqa: F401
+from .MasterDataConfiguration.ProjectTeams import ProjectTeam, ProjectTeamMember  # noqa: F401
+from .MasterDataConfiguration.ProjectLocaleSettings import ProjectLocaleSetting  # noqa: F401
+
