@@ -557,12 +557,47 @@ def backup_board(request):
     tenant = request.tenant
     now = timezone.now()
 
-    jobs = list(BackupJob.objects.filter(tenant=tenant).select_related("encryption_key"))
+    # ---- ORDERING IS PART OF THE CORRECTNESS HERE (C5) ----
+    # `Meta.ordering` is ["-started_at", "-id"], and a backup that has not started yet has
+    # `started_at=NULL`. **MariaDB sorts NULLs LAST under `DESC`** (the opposite of PostgreSQL), so a
+    # queued or running backup -- the newest work in the register, and the row an operator is actually
+    # watching -- sorted to the BOTTOM and was the first thing `[:10]` discarded. Measured: with 9
+    # finished jobs it was still visible; at 10 it was gone.
+    #
+    # Ordered by `-id` instead: insertion order, which is what "latest" means for an append-only
+    # register. It is a single monotonic key, it never looks at a nullable column so the NULL
+    # placement cannot bite, and it is served by the primary key (no new index -- cf. I4, which
+    # rejects `-created_at` for needing one).
+    #
+    # `nulls_first=True` was the other candidate and was REJECTED: it emits
+    # `ORDER BY started_at IS NOT NULL, started_at DESC`, which floats *every* never-started row above
+    # *every* started one -- so a queued job abandoned two years ago would outrank a backup that
+    # finished five minutes ago.
+    jobs = list(BackupJob.objects.filter(tenant=tenant)
+                .select_related("encryption_key").order_by("-id"))
+
+    # An in-flight backup must never be invisible on a MONITORING board, whatever the ordering does.
+    # "Latest ten" is a window over settled work; a backup that is running right now is not history, it
+    # is the present, and it is the one row a reader came here to see. So in-flight rows are taken
+    # first and the window is then filled from the settled ones -- the list stays ten rows, so the
+    # heading remains true.
+    in_flight = [j for j in jobs if j.is_in_flight]
+    settled = [j for j in jobs if not j.is_in_flight]
+
     job_rows = []
-    for job in jobs[:10]:
+    for job in (in_flight + settled)[:10]:
         age = (now - job.started_at).days if job.started_at else None
         note = ""
-        if job.is_partial:
+        # IN-FLIGHT BRANCHES COME FIRST, and that order is load-bearing. A queued backup has never run,
+        # so `integrity_verified_at` is NULL and the old chain fell through to "No integrity check
+        # recorded against this backup" -- which reads as an accusation about a check somebody skipped,
+        # when in fact there is nothing yet to check. The register is saying "not started", not "not
+        # verified".
+        if job.status == "queued":
+            note = "Not started yet — this row records an intention to back up, not a backup."
+        elif job.status == "running":
+            note = "In progress — no result and no integrity check recorded yet."
+        elif job.is_partial:
             note = "Partial — some of the declared scope did not make it. Treat as unverified."
         elif job.status == "failed":
             note = f"Failed: {job.get_failure_reason_display()}."
@@ -571,7 +606,12 @@ def backup_board(request):
         job_rows.append({"job": job, "age_days": age, "note": note})
 
     verified_total = sum(1 for j in jobs if j.is_verified)
-    unverified_jobs = [j for j in jobs if not j.is_verified]
+    # In-flight jobs are excluded for the same reason they now get their own note above: this list is
+    # the register's "restorable-looking artefacts with no recorded integrity check", and a backup that
+    # has not run yet is neither restorable-looking nor an artefact. Leaving them in would have made
+    # this page contradict itself -- the ten-job table saying "Not started yet" two cards below a list
+    # that calls the same row an untested claim.
+    unverified_jobs = [j for j in jobs if not j.is_verified and not j.is_in_flight]
 
     archives = list(DataArchive.objects.filter(tenant=tenant))
     archives_without_location = [a for a in archives if not a.location]
