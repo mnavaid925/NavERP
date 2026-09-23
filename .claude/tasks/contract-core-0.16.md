@@ -423,7 +423,12 @@ Behaviour: GET reads `.filter(tenant=request.tenant).first()` (**may be `None`**
   "active_holds": [LegalHold],
   "holds_suspending": [{"hold": LegalHold, "policy": RetentionPolicy|None}],
   "expired_environments": [EnvironmentInstance],
-  "unverifiable_count": int,                 # jobs whose verification CANNOT be determined
+  "unverifiable_count": int|None,            # jobs whose verification CANNOT be determined;
+                                             # None (not 0) when there are no jobs at all — C6.
+                                             # Structurally 0 whenever rows exist: `is_verified`
+                                             # reads one nullable column, so nothing can be
+                                             # unreadable, and the row is a true statement about
+                                             # a populated set and a vacuous one about an empty set.
   "notes": [str],                            # the honest-limit lines the page prints verbatim
 }
 ```
