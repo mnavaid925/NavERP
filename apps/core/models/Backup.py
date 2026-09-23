@@ -50,7 +50,51 @@ _SCHEDULE_FREQUENCY_CHOICES = [
 ]
 
 
-class BackupJob(models.Model):
+class TenantConsistentMixin(models.Model):
+    """Model edge: a tenant-scoped FK on this row must point into the SAME workspace as the row.
+
+    **Why a model rule and not a form rule.** `TenantModelForm` narrows a FK's *choices* by tenant, but
+    that is a UI convenience and it is skipped entirely when `tenant is None` — which is C7, escalated
+    and deliberately left alone (the shared helper's behaviour is a Module-0 decision). The Django
+    admin uses a plain `ModelForm` with **no narrowing at all**, so without a rule here a workspace's
+    sandbox can be recorded as a clone of another tenant's production environment, or a hold pinned to
+    another tenant's retention policy. The contract and `LegalHold`'s docstring both rest on
+    "`_post_clean` calls `full_clean`, so every `clean()` is enforced everywhere — the seeder *and the
+    admin* get it too"; this is the rule that makes that sentence true for tenant consistency.
+
+    Deliberately generic: it walks every `ForeignKey`/`OneToOneField` on the model and checks the ones
+    whose target is itself tenant-scoped, so a tenant-scoped FK added later inherits the guard without
+    anyone remembering to write it.
+    """
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        super().clean()
+        if self.tenant_id is None:
+            # A tenant-less actor (the superuser, by design) has nothing to be consistent with, and
+            # every 0.16 view refuses to build a tenant-less row anyway.
+            return
+        for field in self._meta.get_fields():
+            if not isinstance(field, models.ForeignKey) or field.attname == "tenant_id":
+                continue
+            linked_id = getattr(self, field.attname)
+            if linked_id is None:
+                continue
+            target = field.related_model
+            if target is None or not any(f.name == "tenant" for f in target._meta.fields):
+                continue
+            linked_tenant_id = (target._default_manager.filter(pk=linked_id)
+                                .values_list("tenant_id", flat=True).first())
+            # `None` means the linked row is itself tenant-less (e.g. the superuser); only a *different*
+            # real tenant is a violation.
+            if linked_tenant_id is not None and linked_tenant_id != self.tenant_id:
+                raise ValidationError(
+                    {field.name: "That record belongs to another workspace."})
+
+
+class BackupJob(TenantConsistentMixin, models.Model):
     """One recorded backup — what was taken, where it went, and whether anyone checked it.
 
     The `warning` status is the field a naive register omits, and it is the one that matters: a **partial**
@@ -226,7 +270,7 @@ class BackupJob(models.Model):
         return self.status in self.IN_FLIGHT_STATUSES
 
 
-class DataArchive(models.Model):
+class DataArchive(TenantConsistentMixin, models.Model):
     """The catalogue entry that makes a restore possible — the loop 0.8 left open.
 
     `RetentionPolicy.action="archive"` records that something **should** be archived, and
@@ -343,7 +387,7 @@ class DataArchive(models.Model):
         return f"{size:.1f} TB"
 
 
-class RestoreRecord(models.Model):
+class RestoreRecord(TenantConsistentMixin, models.Model):
     """A restore as an **operation** with a source, a target and an outcome — not a button.
 
     This is where "per-tenant restore" lives and why it is hard: NavERP is a **pooled** multi-tenant
@@ -460,7 +504,7 @@ class RestoreRecord(models.Model):
         return "—"
 
 
-class EnvironmentInstance(models.Model):
+class EnvironmentInstance(TenantConsistentMixin, models.Model):
     """A provisioned environment — bullets 2 and 5, built **once**.
 
     Bullet 2 says "sandbox refresh"; bullet 5 says "dev/test/staging provisioning and data-subset
@@ -566,7 +610,7 @@ class EnvironmentInstance(models.Model):
         return self.copy_scope == "full" and self.copy_includes_pii
 
 
-class RecoveryPosture(models.Model):
+class RecoveryPosture(TenantConsistentMixin, models.Model):
     """The tenant's DR **targets** — one row, an edit page, no CRUD.
 
     A `OneToOne` because a workspace has exactly one recovery posture, so the house
@@ -633,7 +677,7 @@ class RecoveryPosture(models.Model):
         return self.replication_mode != "none" and bool(self.dr_region)
 
 
-class RecoveryDrill(models.Model):
+class RecoveryDrill(TenantConsistentMixin, models.Model):
     """One rehearsal — bullet 3's **actual** half, and the only place a measured RPO/RTO is recorded.
 
     ISO 22301 and NIST SP 800-34 both make the *exercise* the evidence that a plan works, and AWS's own
