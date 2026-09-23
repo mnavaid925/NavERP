@@ -1,0 +1,1 @@
+"""MasterDataConfiguration urls package."""
