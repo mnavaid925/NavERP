@@ -498,7 +498,10 @@ sub-module level, mirroring `templates/core/statutoryrule/list.html`).
 
 `_seed_backup(tenant)` with a **per-entity guard** (never a tenant-wide one — a tenant-wide guard
 silently strands every entity added later). Reuse the tenant's existing `EncryptionKey` if present.
-`_seed_recovery_posture(tenant)` for the singleton (`get_or_create`).
+The `RecoveryPosture` singleton is seeded by an inline `get_or_create` **inside `_seed_backup`**, not
+by a separate `_seed_recovery_posture(tenant)` helper — corrected 2026-09 (M9). The behaviour and the
+idempotency are identical (verified by running `seed_core` twice), so the helper was not split out; a
+reader checking §7 against the code should not conclude that a required function is missing.
 
 Rows: 3 `BackupJob` (one `success` + verified, one **`warning`/partial** with
 `partial_scope_skipped` — so the UI's partial state is exercised, one `failed`) · 1 `RestoreRecord` ·
