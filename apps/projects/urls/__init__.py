@@ -113,8 +113,15 @@ from .IntegrationApiHub.FieldMappings import urlpatterns as _ih_mappings
 from .IntegrationApiHub.SyncJobs import urlpatterns as _ih_syncjobs
 from .IntegrationApiHub.SyncRuns import urlpatterns as _ih_syncruns
 from .IntegrationApiHub.HubBoards import urlpatterns as _ih_boards
+# 7.19 Master Data & Configuration — first segment is the literal `master-data/`
+from .MasterDataConfiguration.ProjectTemplates import urlpatterns as _mdc_templates
+from .MasterDataConfiguration.ProjectCustomFields import urlpatterns as _mdc_customfields
+from .MasterDataConfiguration.ProjectTeams import urlpatterns as _mdc_teams
+from .MasterDataConfiguration.ProjectLocaleSettings import urlpatterns as _mdc_locales
+from .MasterDataConfiguration.ConfigurationHub import urlpatterns as _mdc_hub
 
 app_name = "projects"
+
 
 
 urlpatterns = (
@@ -281,7 +288,14 @@ urlpatterns = (
     + _ih_syncjobs
     + _ih_syncruns
     + _ih_boards
+    # 7.19 Master Data & Configuration — first segment is the literal `master-data/`
+    + _mdc_templates
+    + _mdc_customfields
+    + _mdc_teams
+    + _mdc_locales
+    + _mdc_hub
 )
+
 
 
 
