@@ -48,12 +48,21 @@ class ProjectIntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # `owner` is NOT auto-scoped by TenantModelForm: User has no tenant-safe default here because
-        # a superuser may carry tenant=None. Scope it to this workspace's active users instead.
-        owner_qs = User.objects.filter(is_active=True)
-        if self.tenant is not None:
-            owner_qs = owner_qs.filter(tenant=self.tenant)
-        self.fields["owner"].queryset = owner_qs
+        # REFINE the base class's scoping -- do not replace it.
+        #
+        # `TenantModelForm` has already scoped `owner` to this workspace, and has emptied it when there
+        # is no tenant at all (C7). The previous code rebuilt the queryset from
+        # `User.objects.filter(is_active=True)` and re-applied the tenant filter itself, which threw the
+        # base scoping away and re-opened on the `tenant is None` branch exactly the cross-tenant leak the
+        # base class had just closed. Measured on the dev DB before this change:
+        # `ProjectIntegrationConnectorForm(tenant=None).fields["owner"].queryset` held all 28 active
+        # users across 6 distinct tenant values, and `User.__str__` returns the email -- so the dropdown
+        # rendered other tenants' addresses. It was reachable: `ixc_create` is only `@login_required`,
+        # and the superuser `admin` carries `tenant=None` by design.
+        #
+        # Filtering the inherited queryset keeps the `is_active` refinement and inherits the scoping,
+        # including the empty case (`.none().filter(...)` is still empty).
+        self.fields["owner"].queryset = self.fields["owner"].queryset.filter(is_active=True)
 
     def clean(self):
         cleaned = super().clean()
