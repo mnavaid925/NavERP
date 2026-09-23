@@ -98,9 +98,22 @@ class LegalHold(TenantConsistentMixin, models.Model):
         super().clean()
 
         # 1. A release cannot precede the order it releases.
-        if self.released_at is not None and self.released_at < self.issued_at:
+        #
+        #    Compared at MINUTE granularity, because that is the finest the input can express (I7).
+        #    `issued_at` defaults to `timezone.now()` WITH seconds and microseconds, but `released_at`
+        #    is edited through a `datetime-local` widget whose format is `%Y-%m-%dT%H:%M` — seconds are
+        #    silently dropped. So a hold created at 20:27:03 and released "now" posts 20:27:00, the
+        #    strict comparison fired, and the operator was told "A hold cannot be released before it was
+        #    issued" — a message that is literally false (it WAS after issue) and that also SHADOWED
+        #    rule 2, so they could not tell which rule they had hit. Releasing a mistaken hold seconds
+        #    after issuing it is the most common real correction, and it was blocked for the rest of the
+        #    minute. Nothing is widened by comparing where the UI cannot express a difference.
+        if self.released_at is not None and \
+                self.released_at < self.issued_at.replace(second=0, microsecond=0):
             raise ValidationError(
-                {"released_at": "A hold cannot be released before it was issued."})
+                {"released_at": "A hold cannot be released before it was issued. (The release time is "
+                                "recorded to the minute, so a release in the same minute as the issue "
+                                "is accepted.)"})
 
         # 1b. STATUS MUST AGREE WITH THE RELEASE EVENT. Without this, `status="active"` + a release date
         #     is a storable state, and `is_active` (which requires BOTH `status=="active"` and
