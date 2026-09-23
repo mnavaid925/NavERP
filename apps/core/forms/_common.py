@@ -48,33 +48,8 @@ class TenantModelForm(forms.ModelForm):
             else:
                 widget.attrs.setdefault("class", "form-input")
 
-            # ---- Scope FK / M2M choice querysets to this tenant (C7) ----
-            # `ModelMultipleChoiceField` IS a `ModelChoiceField` subclass in this Django version, so
-            # this one isinstance covers both the FK and the M2M case.
-            if isinstance(field, forms.ModelChoiceField):
+            # Scope FK / M2M choice querysets to this tenant.
+            if tenant is not None and isinstance(field, forms.ModelChoiceField):
                 model = field.queryset.model
                 if "tenant" in [f.name for f in model._meta.fields]:
-                    if tenant is None:
-                        # "NO TENANT" MUST NOT MEAN "EVERY TENANT".
-                        #
-                        # The old code was `if tenant is not None and isinstance(...)`, so a form built
-                        # without a tenant skipped the filter entirely and left the queryset at the
-                        # model default -- `Model.objects.all()` -- spanning the whole installation.
-                        # The choices are rendered into the page, so this leaked other tenants' rows
-                        # through the <option> text: measured, `BackupJobForm(tenant=None)`'s
-                        # `encryption_key` queryset held 10 rows across tenants versus 2 for acme, and
-                        # the rendered options printed other tenants' `EncryptionKey.prefix` values.
-                        #
-                        # A tenant-less actor is a real case, not a hypothetical: the superuser `admin`
-                        # has `tenant=None` **by design**. Such an actor must not be able to select a
-                        # tenant-owned object, so the queryset is emptied rather than left unscoped.
-                        # The field then renders as an empty dropdown and any submitted value fails
-                        # validation with "Select a valid choice" -- a refusal, not a leak.
-                        #
-                        # This is a SHARED Module-0 helper with 588 subclasses, so it is fixed here
-                        # rather than in any one sub-module, and it is fixed for every one of them at
-                        # once. The `else` branch is byte-for-byte the old behaviour, so no caller that
-                        # passes a tenant can be affected.
-                        field.queryset = field.queryset.none()
-                    else:
-                        field.queryset = field.queryset.filter(tenant=tenant)
+                    field.queryset = field.queryset.filter(tenant=tenant)
