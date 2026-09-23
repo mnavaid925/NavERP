@@ -83,7 +83,13 @@ from .models import (
     ConnectorFieldMapping,
     ProjectSyncJob,
     ProjectSyncRun,
+    ProjectTemplate,
+    ProjectCustomField,
+    ProjectTeam,
+    ProjectTeamMember,
+    ProjectLocaleSetting,
 )
+
 
 
 @admin.register(ProjectRequest)
@@ -1028,3 +1034,62 @@ class DashboardWidgetAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "dashboard", "project", "portfolio")
     search_fields = ("title", "metric")
     readonly_fields = ("created_at", "updated_at")
+
+
+# --- 7.19 Master Data & Configuration -----------------------------------------
+
+@admin.register(ProjectTemplate)
+class ProjectTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "methodology", "project_type", "estimated_duration_days",
+                    "is_default", "is_active", "created_by", "tenant")
+    list_filter = ("methodology", "is_default", "is_active")
+    list_select_related = ("tenant", "project_type", "created_by")
+    search_fields = ("number", "name", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(ProjectCustomField)
+class ProjectCustomFieldAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "field_name", "target_entity", "field_type",
+                    "is_required", "is_active", "position", "tenant")
+    list_filter = ("target_entity", "field_type", "is_required", "is_active")
+    list_select_related = ("tenant",)
+    search_fields = ("number", "name", "field_name", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+class ProjectTeamMemberInline(admin.TabularInline):
+    model = ProjectTeamMember
+    extra = 1
+    fields = ("user", "role", "allocation_percent", "is_primary", "start_date", "end_date")
+
+
+@admin.register(ProjectTeam)
+class ProjectTeamAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "team_type", "team_lead", "org_unit",
+                    "project", "is_active", "tenant")
+    list_filter = ("team_type", "is_active")
+    list_select_related = ("tenant", "team_lead", "org_unit", "project")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+    inlines = [ProjectTeamMemberInline]
+
+
+@admin.register(ProjectTeamMember)
+class ProjectTeamMemberAdmin(admin.ModelAdmin):
+    list_display = ("team", "user", "role", "allocation_percent", "is_primary", "tenant")
+    list_filter = ("is_primary", "role")
+    list_select_related = ("tenant", "team", "user")
+    search_fields = ("team__name", "user__username", "role")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ProjectLocaleSetting)
+class ProjectLocaleSettingAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "project", "language", "time_zone", "currency",
+                    "is_default", "is_active", "tenant")
+    list_filter = ("is_default", "is_active")
+    list_select_related = ("tenant", "project", "language", "time_zone", "currency")
+    search_fields = ("number", "name", "code")
+    readonly_fields = ("number", "created_at", "updated_at")
+
