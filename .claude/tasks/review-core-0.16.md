@@ -140,6 +140,11 @@ All re-run against the real MariaDB (`10.4.14-MariaDB`) via `venv/Scripts/python
   no location — it cannot be a restore source."})`; or, at minimum, narrow the form field with a
   `ModelChoiceField(queryset=DataArchive.objects.filter(status__in=["active","restored"]).exclude(location=""))`.
   The model rule is preferable — it also covers the admin and the seeder.
+- **Status:** [x] fixed — `fix(core/0.16) I1: a RestoreRecord cannot name an archive its own page calls unrestorable`
+  (`2aaf93e6`). Took the model-rule option (so the admin and the seeder get it too). Probe
+  `temp/_0_16_i1_probe.py` tests **both directions**: the rule refuses the lost/destroyed/locationless archive
+  through the real create form, and still accepts a restorable one — plus the control that a restore with no
+  archive at all is unaffected.
 
 #### L1-I2 — `backup_overview` re-derives every count with a second query instead of reusing the lists it already has  [severity: Important]
 
@@ -162,6 +167,11 @@ All re-run against the real MariaDB (`10.4.14-MariaDB`) via `venv/Scripts/python
   `environments = list(EnvironmentInstance.objects.filter(tenant=tenant))`, then
   `"environment_count": len(environments)`, `"expired_count": sum(1 for e in environments if e.is_expired)`.
   Same for `jobs`/`archives` (and it makes L1-C1's `None` decision trivial, since emptiness is then a local fact).
+- **Status:** [x] fixed — `fix(core/0.16) I3: backup_overview fetches each set once and derives in Python`
+  (`81b1e20c`). Probe `temp/_0_16_i3_probe.py` measured the hub at **20 queries before → 13 after** (the board is
+  11; the hub's two extra are its own `RecoveryPosture` and `RecoveryDrill` fetches) and proved **one** statement
+  now touches `core_backupjob` (was four `COUNT(*)` plus a slice) and **one** touches
+  `core_environmentinstance` (was two). C4/C5/C6 probes re-run green.
 
 #### L1-M1 — Contract §5.1 claims `crud_list` derives the `*_choices` keys from `filters`, but it does not  [severity: Minor]
 
@@ -181,6 +191,10 @@ All re-run against the real MariaDB (`10.4.14-MariaDB`) via `venv/Scripts/python
 - **FIX:** Correct contract §5.1 to say the `*_choices` keys are **the caller's responsibility in
   `extra_context`** (which is what every 0.16 view does), or make `crud_list` actually derive them from
   `filters` — but the former is the smaller change and matches as-built behaviour.
+- **Status:** [x] fixed — `docs(core/0.16) I9: contract 5.1 - crud_list does NOT derive the *_choices keys`
+  (`158679fb`). Took the smaller option: the contract now states the caller owns the `*_choices` keys, matching
+  as-built behaviour, rather than adding machinery to `crud_list` that no current caller needs. (Contract edit,
+  not code — nothing was broken today; the fix is to stop the next entity walking into the trap.)
 
 #### L1-M2 — Model docstrings reference `Compliance.py`, a file that does not exist  [severity: Minor]
 
@@ -197,6 +211,8 @@ All re-run against the real MariaDB (`10.4.14-MariaDB`) via `venv/Scripts/python
 - **EVIDENCE:** `ls apps/core/models/ | grep -i complian` → nothing; `LegalHold.py:1` is the real home and the
   contract records the correction at `:161-168`.
 - **FIX:** Change `Backup.py:32` to `see ``LegalHold.py`` ` (or `apps/core/models/LegalHold.py`).
+- **Status:** [x] fixed — `core(0.16) M10: point the model docstring at the file that exists` (`13f93ba7`).
+  Probe asserts `Compliance.py` no longer appears in the file and that `apps/core/models/LegalHold.py` exists.
 
 #### L1-M3 — `_seed_backup` does not seed a backup with a NULL `started_at`, so L1-C2 stays invisible  [severity: Minor]
 
@@ -221,6 +237,11 @@ All re-run against the real MariaDB (`10.4.14-MariaDB`) via `venv/Scripts/python
 - **FIX:** Add a fourth seeded job — `status="queued"`, `started_at=None`, `finished_at=None`,
   `integrity_method="none"` — inside the existing `if not BackupJob.objects.filter(tenant=tenant).exists():`
   guard. It costs one dict, keeps the seeder idempotent, and makes L1-C2 fail loudly in any future sweep.
+- **Status:** [x] fixed — `core(0.16) M2/M11: seed an in-flight backup, and backfill encryption_key` (`e00cf25b`).
+  One deliberate departure from the FIX text above: the row got its **own** guard rather than a slot inside the
+  tenant-wide one, because a slot inside that guard would never reach the workspaces that already exist — the
+  module's own documented lesson. Probe re-runs `seed_core` twice inside a rolled-back savepoint and asserts the
+  row is present, in flight, and not duplicated.
 
 ---
 
@@ -297,10 +318,17 @@ All re-run against the real MariaDB (`10.4.14-MariaDB`) via `venv/Scripts/python
    = **29 names over 34 callables** — the *named routes* are 29 and the *view callables* are 34, so the two
    numbers are both right but the contract calls the 29 "url names" and the prompt calls the routes "34"
    without saying which is which). Worth one clarifying line so the next reviewer does not file a phantom.
+   - **Status (M12):** [x] fixed — `docs(core/0.16) M12/M3: contract 4 - 34 named routes, and the crud()
+     naming fork` (`09ea350d`). The contract now states both numbers and which is which (34 view callables,
+     29 named routes reached partly through `crud()`), and records the `crud()` naming fork (M3) in the same
+     edit, since both are §4 concerns.
 3. **§7's `_seed_recovery_posture(tenant)`** asks for a separate function; the build inlined `get_or_create`
    into `_seed_backup`. Behaviourally identical and idempotent (verified), so I did **not** file it — but the
    contract should either be corrected or the function split, because a reader checking §7 against the code
    will conclude a required function is missing.
+   - **Status (M9):** [x] fixed — `docs(core/0.16) M9: contract 7 - the posture singleton is seeded inline,
+     not by a helper` (`8baec6d9`). Took the contract-correction option, not the split: the behaviour is
+     identical and idempotent, so the cheaper honest fix is to describe what the code does.
 
 ---
 
@@ -477,6 +505,10 @@ doc never mentioned. Both are boundary findings, not code-style ones.
   reverse, no `NoReverseMatch`).
 - **FIX:** None required for correctness. If the lane-1 contract fix touches §4, note the two conventions
   there; otherwise leave it — this is a style fork, not a defect.
+- **Status:** [x] fixed — `docs(core/0.16) M12/M3: contract 4 - 34 named routes, and the crud() naming fork`
+  (`09ea350d`). Took the offered option: contract §4 now records both conventions and says the `crud()` factory
+  is the fork point, so the next author sees the split before they copy a call. No code changed — all 34 names
+  already reverse.
 
 #### L2-M2 — `_seed_backup` runs before `EncryptionKey` exists, so the seeded backups/archives silently have no key  [severity: Minor]
 
@@ -509,6 +541,12 @@ doc never mentioned. Both are boundary findings, not code-style ones.
   docstring that a `seed_core`-before-`seed_tenants` run leaves the key column NULL *on purpose* (the
   contract §7 already sanctions "Reuse the tenant's existing `EncryptionKey` **if present**"). The docstring
   line is the smaller, honest fix.
+- **Status:** [x] fixed — `core(0.16) M2/M11: seed an in-flight backup, and backfill encryption_key`
+  (`e00cf25b`). Took the **backfill** option rather than the docstring note: the NULL is an accident of run
+  order, not an intention, so the demo should end up consistent. The backfill matches only the names this
+  seeder itself creates, so a user-added row is never touched, and the deliberately keyless
+  "Legacy CRM export (media lost)" is left NULL. Probe runs the real `seed_core` inside a rolled-back savepoint
+  and asserts the seeded jobs and the located archive now carry the key while the lost archive does not.
 
 ---
 
@@ -726,6 +764,10 @@ on a sibling. See No-action note.
       {% elif unverifiable_count %}{{ unverifiable_count }}
       {% else %}0 — all records carry a readable verification state{% endif %}</dd>
   ```
+- **Status:** [x] already fixed — folded into **C6** (`668ae0fb`, `09c8bc5d`, `3a31f2b5`). This is the same
+  defect the Minor table lists as **M4** ("`backupboard.html:25` — see C6"); it was closed when C6 was, by
+  pinning `None` and rendering "not applicable" on a zero-row workspace. C6's probe (16 checks) asserts the two
+  sibling rows now **agree** on an empty workspace and that the true sentence still prints where rows exist.
 
 #### L3-I1 — the `BackupJob` form renders **21 fields as one undifferentiated block** with machine-generated labels — a human cannot use it  [severity: Important]
 
@@ -778,6 +820,17 @@ on a sibling. See No-action note.
   started_at, finished_at`), *"Evidence"* (`evidence, notes`). Also add `verbose_name=` (or `label=`) to
   the four unhumanised fields so the label reads "Copy includes PII", "Measured RPO (minutes)" etc. A
   shared `{% include "partials/form_fields.html" with fields=… %}` keeps the three forms DRY.
+- **Status:** [x] fixed — four commits, one file each:
+  `core(0.16) I11: humanise the four machine-derived form labels` (`35030847`, `apps/core/forms/Backup.py`),
+  then `… group the 21-field BackupJob form into labelled cards` (`249b3391`),
+  `… the 18-field DataArchive form …` (`df738f48`), `… the 16-field EnvironmentInstance form …` (`7a5b0c03`).
+  Two deliberate departures from the FIX text: the partial is the **existing** `partials/form_field.html`
+  (singular — it already ships and is used across the app; the FIX text's plural name would have been a new
+  file), and the **12-field drill form was left flat** — this finding is explicitly about the three *large*
+  forms, and 12 fields in a flat grid is the `Holiday`-sized case the house pattern handles fine.
+  Probe `temp/_0_16_i11_probe.py` (47 checks) asserts every field of all four forms still renders **exactly
+  once** (a grouping change is exactly the kind that silently drops one), the four labels are humanised, the
+  field *names* are unchanged, and each form still POSTs a valid payload to a 302.
 
 #### L3-M1 — `backupjob/detail.html:48` has a dead `{% if %}` whose two branches are identical  [severity: Minor]
 
@@ -792,6 +845,11 @@ on a sibling. See No-action note.
 - **EVIDENCE:** `sed -n '48p' templates/core/backupjob/detail.html`; render probe above.
 - **FIX:** Delete the `{% if %}`, leaving `{% if obj.failure_reason != "n_a" or obj.is_partial %}` if the
   intent was to hide "Not applicable" on a healthy backup — otherwise just `{{ obj.get_failure_reason_display }}`.
+- **Status:** [x] fixed — `core(0.16) M5: drop the dead {% if %} in the backup-job detail` (`430dc9a5`). Took the
+  bare-expression option, **not** the conditional one: the existing render already prints "Not applicable" for a
+  healthy backup via `get_failure_reason_display`, so adding a condition would have changed behaviour the
+  finding says nobody intended. Probe asserts the conditional is gone from the source and that a `warning` job's
+  reason still renders on a 200 detail page.
 
 #### L3-M2 — `backupoverview.html:32` shows a green **"Set"** badge when only *one* of RPO/RTO is recorded  [severity: Minor]
 
@@ -809,6 +867,14 @@ on a sibling. See No-action note.
   → `:32`.
 - **FIX:** Render the two targets separately (`RPO target: 1h / not set`, `RTO target: 4h / not set`) or use
   an amber `badge-amber` "Partly set" state when exactly one is present.
+- **Status:** [x] fixed — `core(0.16) M6: stop the hub showing green "Set" for a half-set RPO/RTO` (`cd2292ba`,
+  the template) + `core(0.16) M1/M6/M11: shared audit redaction, partial-target flag, in-flight count`
+  (`f03587f4`, the `targets_partial` view flag). Took the amber "Partly set" option (rendered as **Partial**,
+  with a `title` naming the gap) rather than splitting the row into two — the hub's `<dl>` is one row per
+  figure. Scope note: the finding also names `core/recoveryposture/form.html:19` as fed by the same `or`, but
+  that page is the *editor* for the targets — both fields are visible on it with their own values — so no
+  change was needed there. Probe asserts Partial / Set / Not set, and that the "no target is recorded" warning
+  does **not** fire when one target is set (a drill can still be judged against one).
 
 #### L3-M3 — `environmentinstance/list.html:17-19` shows a **tenant-wide** `expired_count` above a filtered table, with no label saying so  [severity: Minor]
 
@@ -827,6 +893,11 @@ on a sibling. See No-action note.
 - **EVIDENCE:** `sed -n '17,19p' templates/core/environmentinstance/list.html`; view comment `:339-343`.
 - **FIX:** Prefix the banner with "Workspace-wide:" (`<strong>Workspace-wide: {{ expired_count }} …`) so the
   scope is explicit, or move it below the filter bar.
+- **Status:** [x] fixed — `core(0.16) M7: label the workspace-wide expired count on the environment list`
+  (`c612531a`). Took the prefix option (kept the banner where it is, since the position is the house shape) and
+  added a muted sentence saying it counts every environment, not just the filtered rows. `expired_count`'s
+  deliberate tenant-wide semantics are untouched. Probe filters the list to a query that matches nothing and
+  asserts the banner still reads "Workspace-wide:" with the true count.
 
 ---
 
@@ -1035,6 +1106,15 @@ evidence behind **L4-I2**.
   A `django_assert_num_queries` test cannot catch this (the count never changes) — pin it with a
   `django_assert_max_num_queries` guard plus a comment, or assert `len(response.context["object_list"]) == 15`
   alongside a captured-SQL assertion that no `core_environmentinstance` `SELECT` lacks a `LIMIT`.
+- **Status:** [x] fixed — four commits: `fix(core/0.16) I5: index the three model orderings that had no index`
+  (`92488f0d`), `fix(core/0.16) I5: index LegalHold's -issued_at ordering` (`37da054e`),
+  `chore(core/0.16) I5: migration 0014 - the four list-ordering indexes` (`6f2de317`),
+  `fix(core/0.16) I5: environment_instance_list stops fetching the whole row twice` (`3a88475d`). All four
+  indexes landed as prescribed (`darch_tenant_at_idx`, `lghold_tenant_at_idx`, `drill_tenant_perf_idx`,
+  `envinst_tenant_name_idx`) in migration **0014**. One departure on (b): the finding suggested
+  `qs.values_list("expires_at","status")`, but `qs` is `select_related` and Django refuses to defer a relation
+  it traverses, so the count reads a **fresh** queryset with `.only("id","expires_at","status")` — same two
+  narrow columns, same one round-trip, and the Python predicate is still the single copy of the rule.
 
 #### L4-I2 — The `L1-C2` fix (`ORDER BY -created_at` on `backup_board`) would **itself need a new index**; ordering by `-id` is the fix that costs nothing  [severity: Important — cross-lane]
 
@@ -1083,6 +1163,11 @@ evidence behind **L4-I2**.
 - **FIX:** Implement L1-C2 as **`order_by("-id")`** (or `-created_at` *plus* a migration adding
   `bkpjob_tenant_created_idx`). Do not use bare `-created_at` without the index. Whichever is chosen,
   state it in L1-C2's fix so the fixer does not pick the unscanned variant by accident.
+- **Status:** [x] already fixed — the C5 fix took the `-id` branch (`7e1c9c0d`, `6673ace8`, `224f7a22`), which
+  is PK-served and needs no new index. Confirmed on the shipped code: both `backup_board` and `backup_overview`
+  order by `-id` (`views/Backup.py:645`, `:552`), and the only `-created_at` ordering in the sub-module is
+  `RestoreRecord`'s, which **has** its own index (`recrec_tenant_at_idx` — I5's work). This finding was a
+  warning about a fix that was not taken; nothing further to change.
 
 #### L4-M1 — `backup_board` fetches every row of four tables to render ten, and `unverified_jobs` is returned **unbounded**  [severity: Minor]
 
@@ -1134,6 +1219,11 @@ evidence behind **L4-I2**.
   (if these tables ever grow) is to narrow the fetch with `.only("id","name","status","started_at",…)`
   so the board never pulls `scope_label`/`content_description`/`subset_rule`/`notes` TextFields it does
   not render.
+- **Status:** [~] no action — accepted and documented. The finding itself calls the behaviour "acceptable at
+  this project's scale", so no code changed: the board keeps its `list()` pattern (which is what makes each
+  table **one** query and keeps the predicates in a single place), and the unbounded `unverified_jobs` /
+  `archive_total` lists stay as they are. Recorded here so the next reader does not rediscover it as a
+  surprise. If the tables ever grow, the `[:10]`-plus-count shape the FIX describes is the one to reach for.
 
 #### L4-M2 — `backup_overview` issues four separate `COUNT(*)` on `BackupJob` and pays a full scan for the unverified one  [severity: Minor — **do not confuse with L1-I2**]
 
@@ -1173,6 +1263,11 @@ evidence behind **L4-I2**.
 - **FIX:** Lane 1's `L1-I2` fix (already filed) — do not add a second finding. If a fixer wants the
   measured justification for treating L1-I2 as worth doing: it removes **4 queries → 1** on `BackupJob`,
   **2 → 1** on `DataArchive` and takes the hub from **20 → ~12**.
+- **Status:** [x] fixed — same commit as its parent finding **I3**:
+  `fix(core/0.16) I3: backup_overview fetches each set once and derives in Python` (`81b1e20c`). The measured
+  prediction held: the hub went **20 → 13** queries (not ~12 — the extra one is `RecoveryPosture`, which the
+  finding's "~12" did not account for), and the four `COUNT(*)` on `core_backupjob` — including the unindexed
+  `integrity_verified_at IS NULL` scan — are all gone. No partial index was added, as the finding advised.
 
 ### Acceptable and NOT filed (with the numbers that make it acceptable)
 
@@ -1390,6 +1485,13 @@ the worst of it is that **the shipped edit path 500s for all six registers**.
   `linked_obj.tenant_id != self.tenant_id` — so the rule sits at the model edge where the contract says it
   does; alternatively give each 0.16 `ModelAdmin` a `form = EnvironmentInstanceForm`-and-friends so the
   tenant-scoped queryset applies. The model rule is preferable (it also covers the seeder).
+- **Status:** [x] fixed — `fix(core/0.16) I2: the 0.16 models refuse a cross-tenant FK at the model edge`
+  (`2fd827c9`) + `fix(core/0.16) I2: LegalHold inherits the tenant-consistency model edge too` (`d4d5ebda`).
+  Took the mixin option: `TenantConsistentMixin` walks every FK/OneToOne on the row and refuses a
+  tenant-scoped target in another workspace with "That record belongs to another workspace." Applied to all
+  six 0.16 models plus `LegalHold` (a one-way import from `Backup`). Probe `temp/_0_16_i2_probe.py` drives the
+  **real admin** path that the finding proved was open, and tests both directions (the cross-tenant FK is
+  refused; the same-tenant FK is accepted).
 
 #### L5-I2 — A hold **cannot be released in the minute it was issued**, and the refusal names the wrong rule  [severity: Important]
 
@@ -1417,6 +1519,11 @@ the worst of it is that **the shipped edit path 500s for all six registers**.
   it — either accept `released_at` truncated to the minute (`if self.released_at < self.issued_at.replace(second=0, microsecond=0)`),
   or, better, make `released_at` a `DateTimeField` whose form widget keeps seconds. The first is a one-line
   model change and cannot widen anything (a minute is the finest the UI can express).
+- **Status:** [x] fixed — `fix(core/0.16) I7: a hold can be released in the minute it was issued` (`e12ca933`).
+  Took the one-line option exactly as written, and reworded the refusal so it no longer misattributes the
+  cause. C3's rule 1b (the `active` + `released_at` coherence rule) is preserved untouched. Probe
+  `temp/_0_16_i7_probe.py` releases a hold in its own issue-minute and asserts it is accepted, while the
+  genuinely-invalid earlier-than-issued release is still refused.
 
 #### L5-I3 — `backup_job_verify` will "verify" a **failed** backup and the detail page then shows a green tick  [severity: Important]
 
@@ -1441,6 +1548,10 @@ the worst of it is that **the shipped edit path 500s for all six registers**.
   gate the green tick in `backupjob/detail.html` on `obj.status not in {"failed","cancelled"}` so the page
   cannot assert a verification the record denies. The view guard is preferable (it also keeps the audit row
   from claiming it).
+- **Status:** [x] fixed — `fix(core/0.16) I6: backup_job_verify refuses a failed or cancelled backup`
+  (`43e4ba33`). Took the view-guard option, placed **before** any write so no audit row claims a verification
+  that did not happen. Probe `temp/_0_16_i6_probe.py` asserts the refusal for `failed` and `cancelled`, and —
+  the control — that a `success`/`warning` job is still verifiable.
 
 #### L5-I4 — An `EnvironmentInstance` **cycle** is reachable; `clean()` refuses only the self-edge  [severity: Important]
 
@@ -1464,6 +1575,12 @@ the worst of it is that **the shipped edit path 500s for all six registers**.
 - **FIX:** add a cycle check to `clean()` — walk `source_environment` (and `refresh_source`) upward with a
   visited set and refuse when `self.pk` reappears — or, cheaply, refuse when the proposed parent already
   descends from `self`. The walk is bounded by the number of environments in one tenant, which is small.
+- **Status:** [x] fixed — `fix(core/0.16) I8: an EnvironmentInstance cycle is no longer reachable` (`315cd464`).
+  Took the visited-set walk, over **both** `source_environment` and `refresh_source`, as the FIX prescribes.
+  Probe `temp/_0_16_i8_probe.py` reproduces the finding's exact `A→B→A` POST and asserts it is refused, plus
+  the control that a legitimate new child is still accepted (two of the probe's first-draft failures were its
+  own — `_post_clean` mutating the bound instance between cases, and a fixture with no parent — both recorded
+  in the probe).
 
 #### L5-M1 — `backup_job_verify` is not idempotent: a second POST silently re-dates the verification  [severity: Minor]
 
@@ -1723,6 +1840,21 @@ one-line-per-view API and nothing in it *prevents* a future caller from passing 
   Both return clean for 0.16. The pattern-clone grep across the whole family:
   `grep -rn "crud_list(" apps/*/views/ | grep -v "filter(tenant="` — run it over every app; it is the
   single highest-value check for this defect class and costs one second.
+- **Status:** [~] no code change — recorded as a pattern note, not a new defect (which is what the finding
+  asks for: "recorded as a pattern note, not a new defect"). **Re-run at close-out on the final tree:**
+  - 0.16, check 1 — `crud_list(` in `apps/core/views/Backup.py`: **6** call sites, and all **6** are fed by a
+    queryset filtered `tenant=request.tenant` (`:79`, `:192`, `:244`, `:302`, `:365`, `:473`). The file also
+    has **11** `filter(tenant=request.tenant)` occurrences in total.
+  - 0.16, check 2 — `objects.get(pk=` / `objects.filter(pk=` in `apps/core/views/Backup.py`: **0** hits
+    (the grep exits 1).
+  - Family-wide — **493** `crud_list(` call sites across `apps/*/views/`. The line-based grep flags any
+    multi-line call, so every flagged candidate was opened and checked: `currencies` (a global `Currency`
+    with **no** tenant FK — correctly unscoped), `Generation.py` / `LineTracking.py` (tenant-scoped),
+    `ReportRuns` / `ProjectReports` / `ActivityFeed` (tenant-scoped helper). **No live leak found.**
+  - **Recommendation (unchanged, for the owner):** keep the two standing greps as the check rather than
+    changing `crud_list`'s signature. The one thing that *would* close this class is the `TenantModelForm`
+    fail-closed change — which is **C7**, escalated, because it breaks 15 committed tests in three modules.
+    This finding and C7 are the same argument seen from two sides.
 
 #### L6-M1 — `_audit_changes` is a second redaction-free twin of `crud._changed`
 
@@ -1747,6 +1879,11 @@ one-line-per-view API and nothing in it *prevents* a future caller from passing 
   ```
   (Or promote `_changed`/`_SENSITIVE_AUDIT_FIELDS` to a public name — the sub-module docstring declines
   this because ~75 call sites say `crud._changed`; reusing the *list* alone avoids that rename.)
+- **Status:** [x] fixed — `core(0.16) M1/M6/M11: shared audit redaction, partial-target flag, in-flight
+  count` (`f03587f4`). Took the "reuse the list" option, not the promotion: `_audit_changes` now imports
+  `_SENSITIVE_AUDIT_FIELDS` from `apps.core.crud` and redacts a match, so a field added to the one list is
+  redacted on this path too — no ~75-site rename. Probe passes a stub form carrying `bank_account` and
+  `password` and asserts both come back `***redacted***` while a normal field keeps its value.
 
 ---
 
@@ -1858,7 +1995,7 @@ Probe tenants matching `slug__startswith="zz"` = **0**; probe users = **0**. The
 
 # CONSOLIDATED FINDINGS — 0.16 Backup, Recovery & Data Lifecycle
 
-Six lanes, strictly serial. **30 findings: 7 Critical, 11 Important, 12 Minor.** Lane-local ids are mapped
+Six lanes, strictly serial. **31 findings: 8 Critical, 11 Important, 12 Minor.** Lane-local ids are mapped
 to canonical `C#/I#/M#` below; the lane sections above retain their own ids.
 
 Method note (proven on 7.10, reused here): each lane was given the already-fixed defects as **sanity-checks**
@@ -1868,7 +2005,7 @@ own probe — including re-deriving the MariaDB NULL ordering rather than trusti
 the `RestoreRecord` edit path that lane 3's finding depends on. Three severities were re-set on evidence; two
 lane claims were corrected. The orchestrator's verification of each item is recorded in the block below.
 
-## Critical (7)
+## Critical (7 found in review + C8 found during the fix pass = 8)
 
 | id | title | lane src | verified by orchestrator |
 |---|---|---|---|
@@ -1879,6 +2016,7 @@ lane claims were corrected. The orchestrator's verification of each item is reco
 | **C5** | **`backup_board`'s "Latest ten jobs" cannot show an in-flight backup.** `Meta.ordering=["-started_at","-id"]` + a just-created `status="queued"` backup has `started_at=NULL`, and **MariaDB sorts NULLs LAST under `DESC`** — so the newest work sorts to the bottom and is sliced off by `jobs[:10]`. | L1-C2 | **YES — mechanism and threshold both reproduced.** Server is `10.4.14-MariaDB`; raw probe confirms NULLs last under `DESC`. **Exact break point measured by the orchestrator: with ≥10 finished backups the queued job is absent from `jobs[:10]`** (9 finished → shown; 10 finished → **not** shown). The `note` chain also has no branch for `queued`/`running`. |
 | **C6** | **`backup_board` asserts "0 — all records carry a readable verification state" on a workspace with zero records** — a claim about the members of an empty set, from a hard-coded `unverifiable_count = 0` that is always falsy. | L3-C2 | **YES — same shape as C4, different page and key**, so not a duplicate. The `never_restored` row two lines above gets it right ("not applicable"). |
 | **C7** | **`TenantModelForm` skips FK scoping entirely when `tenant is None`**, so a tenant-less form's `encryption_key` queryset spans **all tenants**, exposing `EncryptionKey.prefix`. **Latent for 0.16** (no 0.16 route reaches it — `crud_create` redirects tenant-less actors) but it is a **shared Module-0 helper**, so every sibling sub-module inherits the hole. | L6-C1 | **YES — measured.** `BackupJobForm(tenant=None).fields["encryption_key"].queryset.count()` → **10** (all tenants) vs **2** (acme-scoped), and the leaked choices print other tenants' prefixes. Fix belongs at `forms/_common.py:52`, not in 0.16. |
+| **C8** | **`backup_overview`'s five-row "Recent backup jobs" preview cannot show a queued backup** — **the same defect as C5, on the hub rather than the board.** `jobs = BackupJob.objects.filter(tenant=tenant)` relied on `Meta.ordering = ["-started_at", "-id"]` and `recent_jobs = jobs.select_related("encryption_key")[:5]` sliced five rows off it; a just-queued backup has `started_at=NULL`, MariaDB sorts NULLs LAST under `DESC`, so the newest work sorted below every finished job and fell off the window — silently, with no empty state and no gap marker. | *(found during the fix pass, not by a lane)* | **YES — measured by code-fixer.** With the pre-fix query the preview returned the five newest *finished* jobs and the queued row was absent; with `-id` ordering it is first. Fixed in `81b1e20c` (I3's commit) by ordering `-id` and taking in-flight rows first, exactly as C5's fix does on the board. **Found by:** code-fixer |
 
 ## Important (11)
 
@@ -2082,10 +2220,87 @@ pass — lucky, but not something to rely on. Every `temp/_0_16_c*_probe.py` now
 
 ## Still open
 
-**C7 is escalated, not fixed** (see its own section above) — it needs a Module-0-wide decision.
+**C7 is escalated, not fixed** (see its own section above) — it needs a Module-0-wide decision. It is the
+**one** open item in this document.
 
-**11 Important, 12 Minor** — untouched as of this section. The Criticals were done by hand rather than
-delegated, because each needed an independent probe and several needed a judgement the lane reports did
-not contain (C5's ordering choice, C7's blast radius). The remaining findings are being burnt down in one
-`code-fixer` pass.
+**11 Important, 12 Minor** — all 23 are now resolved (Phase 6 below): **19 fixed by code**, **2 closed as
+already-fixed** (I4, M4), **1 recorded as a pattern note with no code change** (I10), and **1 explicitly
+accepted with no action** (M8). The Criticals were done by hand rather than delegated, because each needed
+an independent probe and several needed a judgement the lane reports did not contain (C5's ordering
+choice, C7's blast radius). The Important and Minor findings were burnt down in one `code-fixer` pass.
+
+---
+
+# PHASE 6 — IMPORTANT & MINOR BURN-DOWN (one `code-fixer` pass)
+
+All 23 findings in the consolidated tables were worked **in ID order** — every `I#` first, then every
+`M#` — and each finding's own detail section above now carries a `- **Status:**` bullet naming its
+commit(s) and any departure from the prescribed FIX. House rules held throughout: **one file per commit**,
+nothing pushed, no `--no-verify`/`--amend`/`commit -a`, no test weakened or deleted, and
+`apps/core/forms/_common.py` was **not touched** (C7's escalated half).
+
+| id | status | commit(s) |
+|---|---|---|
+| **I1** | fixed | `2aaf93e6` |
+| **I2** | fixed | `2fd827c9`, `d4d5ebda` |
+| **I3** | fixed | `81b1e20c` |
+| **I4** | already fixed — C5's fix took the `-id` branch | (`6673ace8`) |
+| **I5** | fixed | `92488f0d`, `37da054e`, `6f2de317` (migration 0014), `3a88475d` |
+| **I6** | fixed | `43e4ba33` |
+| **I7** | fixed | `e12ca933` |
+| **I8** | fixed | `315cd464` |
+| **I9** | fixed (contract §5.1) | `158679fb` |
+| **I10** | no code change — pattern note, re-run and recorded | — |
+| **I11** | fixed | `35030847`, `249b3391`, `df738f48`, `7a5b0c03` |
+| **M1** | fixed | `f03587f4` |
+| **M2** | fixed | `e00cf25b` |
+| **M3** | fixed (contract §4) | `09ea350d` |
+| **M4** | already fixed — folded into C6 | `668ae0fb`, `09c8bc5d`, `3a31f2b5` |
+| **M5** | fixed | `430dc9a5` |
+| **M6** | fixed | `cd2292ba`, `f03587f4` |
+| **M7** | fixed | `c612531a` |
+| **M8** | no action — accepted and documented | — |
+| **M9** | fixed (contract §7) | `8baec6d9` |
+| **M10** | fixed | `13f93ba7` |
+| **M11** | fixed | `e00cf25b` (+ `f03587f4`, the coherence half) |
+| **M12** | fixed (contract §4) | `09ea350d` |
+
+## New finding surfaced by the burn-down
+
+**`C8` (Critical) — the hub's "Recent backup jobs" preview had C5's defect.** Recorded in the Critical
+table above and in `81b1e20c`. It is the same mechanism (NULL `started_at` sorts last under `DESC` on
+MariaDB, then a `[:5]` slice) on the *landing* page instead of the monitoring board, and it was equally
+silent. It surfaced only because I3 required reading the hub's ordering — the seeder's new queued row
+(M11) makes it observable in the demo data from now on.
+
+**A Minor, fixed in the same commit (`f03587f4`).** M11's queued row exposed a second, smaller
+disagreement: the hub's "Never verified" summed `not j.is_verified` over **every** row, in-flight ones
+included, while `backup_board` deliberately excludes them ("naming it would be an accusation rather than a
+finding"). With no queued row in the seed the two pages had never disagreed. The hub's denominator is now
+the **settled** set, which also preserves C4 (no settled backups → `None`, never a green `0`). This is the
+same shape as C4/C6 — two pages counting the same thing differently — and it is worth naming because the
+seeder change is what made it visible. **Found by:** code-fixer.
+
+## Verification
+
+Every fix was re-verified with a purpose-built probe under `temp/` (gitignored), each building its own
+workspaces inside a savepoint that is rolled back, so the shared dev DB is untouched. The probes test
+**both directions** where a rule could be over-applied — a rule that refuses *everything* passes a naive
+refusal test:
+
+| probe | covers | what it establishes beyond "it passes" |
+|---|---|---|
+| `_0_16_i1_probe.py` | I1 | refuses the lost/destroyed/locationless archive through the real create form **and** still accepts a restorable one; a restore with no archive is unaffected. |
+| `_0_16_i2_probe.py` | I2 | drives the **real Django admin** path the finding proved was open (8 cross-tenant FKs) and asserts the same-tenant FK is still accepted. |
+| `_0_16_i3_probe.py` | I3 (+C8) | hub **20 → 13** queries (board is 11); **one** statement touches `core_backupjob` (was four `COUNT(*)` + a slice) and **one** touches `core_environmentinstance` (was two); the five-row preview keeps a queued job first. |
+| `_0_16_i5_probe.py` | I5 | the four indexes `EXPLAIN` as `Using index` with no filesort; the environment list no longer transfers the whole row twice. |
+| `_0_16_i6_probe.py` | I6 | refuses `failed` and `cancelled`, and still verifies `success`/`warning` (the control). |
+| `_0_16_i7_probe.py` | I7 | releases a hold in its own issue-minute, and still refuses a genuinely earlier release. |
+| `_0_16_i8_probe.py` | I8 | reproduces the finding's exact `A→B→A` POST and refuses it, and still accepts a legitimate new child. |
+| `_0_16_i11_probe.py` | I11 | **47 checks**: every field of all four forms renders exactly **once** (a grouping change is the kind that silently drops one), the four labels are humanised, the field names are unchanged, each form still POSTs to a 302. |
+| `_0_16_m_probe.py` | M1, M2, M5, M6, M7, M10, M11 | **32 checks**: M2/M11 re-run the real `seed_core` twice inside a rolled-back savepoint (row present, in flight, idempotent, key backfilled, lost archive left NULL); M11-coherence asserts the hub reads "not applicable" / green `0` / amber `1` in the three matching workspaces **and** that the board's list agrees; M6's three states plus the warning suppression; M7's banner under a filter matching nothing; M1's redaction. |
+
+Regression: the **C4, C5, C6 and I3** probes were all re-run after the last change and are green, and
+`apps/core/tests/` is **204 passed / 0 failed** (`--nomigrations`). The four pre-existing failures listed
+above were not chased (they fail identically at the pre-session baseline `44c72ec3`).
 
