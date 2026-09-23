@@ -15,7 +15,7 @@
     <p class="text-muted">Development, test, staging and sandbox instances, what data each was seeded with,
       and when it should be reaped. A row does <strong>not</strong> provision anything.</p>
     {% if expired_count %}
-      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>{{ expired_count }} environment{{ expired_count|pluralize }}</strong> past the reaping date and not yet reaped — a cost and a leak surface.</p>
+      <p class="text-warn"><i data-lucide="alert-triangle"></i> <strong>Workspace-wide:</strong> {{ expired_count }} environment{{ expired_count|pluralize }} past the reaping date and not yet reaped — a cost and a leak surface. <span class="text-muted">This figure counts every environment in the workspace, not just the rows the filter below is showing.</span></p>
     {% endif %}
     <form method="get" class="filter-bar">
       <div class="form-group" style="flex:1; min-width:200px;">
