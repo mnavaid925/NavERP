@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ template.name }}{% else %}New Project Template{% endif %} — Project Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Template: {{ template.name }}{% else %}Create New Project Template{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:ptm_list' %}">Templates</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% if is_edit %}{% url 'projects:ptm_detail' pk=template.pk %}{% else %}{% url 'projects:ptm_list' %}{% endif %}" class="btn btn-outline">
+      Cancel
+    </a>
+  </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+  <div class="card-header">
+    <h2 class="text-base font-semibold text-slate-900">Blueprint Specification</h2>
+  </div>
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.name.id_for_label }}" class="form-label font-medium">Template Name <span class="text-red-500">*</span></label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.code.id_for_label }}" class="form-label">Template Code</label>
+          {{ form.code }}
+          {% if form.code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.code.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label for="{{ form.methodology.id_for_label }}" class="form-label font-medium">Methodology <span class="text-red-500">*</span></label>
+          {{ form.methodology }}
+          {% if form.methodology.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.methodology.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.category.id_for_label }}" class="form-label font-medium">Domain Category <span class="text-red-500">*</span></label>
+          {{ form.category }}
+          {% if form.category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.category.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.complexity.id_for_label }}" class="form-label font-medium">Complexity Tier <span class="text-red-500">*</span></label>
+          {{ form.complexity }}
+          {% if form.complexity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.complexity.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.description.id_for_label }}" class="form-label">Scope Description &amp; Usage Notes</label>
+        {{ form.description }}
+        {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.estimated_duration_days.id_for_label }}" class="form-label">Estimated Duration (Business Days)</label>
+          {{ form.estimated_duration_days }}
+          {% if form.estimated_duration_days.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.estimated_duration_days.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.target_budget.id_for_label }}" class="form-label">Target Baseline Budget ($)</label>
+          {{ form.target_budget }}
+          {% if form.target_budget.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_budget.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.default_roles_raw.id_for_label }}" class="form-label">{{ form.default_roles_raw.label }}</label>
+        {{ form.default_roles_raw }}
+        <p class="text-xs text-muted mt-1">{{ form.default_roles_raw.help_text }}</p>
+        {% if form.default_roles_raw.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_roles_raw.errors }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.wbs_structure_raw.id_for_label }}" class="form-label">{{ form.wbs_structure_raw.label }}</label>
+        {{ form.wbs_structure_raw }}
+        <p class="text-xs text-muted mt-1">{{ form.wbs_structure_raw.help_text }}</p>
+        {% if form.wbs_structure_raw.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.wbs_structure_raw.errors }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.workflow_config_raw.id_for_label }}" class="form-label">{{ form.workflow_config_raw.label }}</label>
+        {{ form.workflow_config_raw }}
+        <p class="text-xs text-muted mt-1">{{ form.workflow_config_raw.help_text }}</p>
+        {% if form.workflow_config_raw.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.workflow_config_raw.errors }}</div>{% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 py-3 border-t border-slate-200">
+        <div class="flex items-center gap-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+            Active for New Projects
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          {{ form.is_default }}
+          <label for="{{ form.is_default.id_for_label }}" class="text-sm font-medium text-slate-800">
+            Default Blueprint for this Methodology
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'projects:ptm_detail' pk=template.pk %}{% else %}{% url 'projects:ptm_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+          {% if is_edit %}Save Changes{% else %}Create Template{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
