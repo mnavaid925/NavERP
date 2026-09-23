@@ -74,6 +74,11 @@ class BackupJob(models.Model):
         ("failed", "Failed"),
         ("cancelled", "Cancelled"),
     ]
+    #: Statuses meaning "this backup has not finished". A row in one of these is **not yet an artefact**:
+    #: it has no result, and its absent `integrity_verified_at` means "there is nothing to check yet",
+    #: NOT "nobody checked". Kept next to `STATUS_CHOICES` so that whoever edits that vocabulary sees
+    #: this subset and has to decide where the new status belongs.
+    IN_FLIGHT_STATUSES = ("queued", "running")
     STORAGE_TIER_CHOICES = [
         ("standard", "Standard"),
         ("infrequent", "Infrequent access"),
@@ -209,6 +214,16 @@ class BackupJob(models.Model):
     @property
     def is_verified(self):
         return self.integrity_verified_at is not None
+
+    @property
+    def is_in_flight(self):
+        """Has this backup finished? `False` for every settled status — including `failed`/`cancelled`.
+
+        Deliberately NOT `not self.is_verified`, which is the conflation C5 was about: a failed backup
+        is *settled*, it has a result, and its missing integrity check is a **finding**. A queued backup
+        is not settled and its missing check is **not yet a question**. Two different absences.
+        """
+        return self.status in self.IN_FLIGHT_STATUSES
 
 
 class DataArchive(models.Model):
