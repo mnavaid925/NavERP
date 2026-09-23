@@ -351,9 +351,14 @@ listed last in the `crud("backup/jobs", …)` group by explicit hand-append to k
 ## 5. THE CONTEXT CONTRACT — every key every view passes (L7/L8)
 
 ### 5.1 The five `crud_list` registers
-`crud_list(request, qs, template, search_fields=…, filters=…, extra_context=…)` already provides
-**`object_list`**, **`page_obj`**, **`q`** and the **`*_choices`** produced by the `filters` tuples.
-Everything in the "extra" column below is what this sub-module adds and **must be pinned**.
+`crud_list(request, qs, template, search_fields=…, filters=…, extra_context=…)` provides exactly
+**`object_list`**, **`page_obj`** and **`q`**, plus whatever the caller passes in `extra_context`.
+**It does NOT derive the `*_choices` keys from the `filters` tuples** — corrected 2026-09 (I9): the
+earlier text claimed it did, and that was a live trap. A future caller following it would omit the
+`*_choices` from `extra_context` and get a silently empty filter dropdown — no error, no 500, just a
+control that cannot filter. The `*_choices` keys in the "extra" column below are **the caller's
+responsibility in `extra_context`**, which is what every 0.16 view already does by hand.
+Everything in that column is what this sub-module adds and **must be pinned**.
 
 | view | template | `search_fields` | `filters` | extra context keys (all mandatory) |
 |---|---|---|---|---|
