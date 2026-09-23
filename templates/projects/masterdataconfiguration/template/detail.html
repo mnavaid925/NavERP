@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ template.name }} — Project Templates — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ template.name }}</h1>
+      {% if template.methodology == "agile" %}
+        <span class="badge badge-green">{{ template.get_methodology_display }}</span>
+      {% elif template.methodology == "waterfall" %}
+        <span class="badge badge-info">{{ template.get_methodology_display }}</span>
+      {% else %}
+        <span class="badge badge-slate">{{ template.get_methodology_display }}</span>
+      {% endif %}
+      {% if template.is_default %}
+        <span class="badge badge-amber">Default Blueprint</span>
+      {% endif %}
+    </div>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:ptm_list' %}">Templates</a>
+      <span>/</span>
+      <span>{{ template.number }}</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:ptm_instantiate' pk=template.pk %}" class="btn btn-primary">
+      <i data-lucide="play" class="w-4 h-4 mr-1"></i> Instantiate Project
+    </a>
+    <a href="{% url 'projects:ptm_edit' pk=template.pk %}" class="btn btn-outline">
+      <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+    </a>
+    <form method="post" action="{% url 'projects:ptm_delete' pk=template.pk %}" class="inline" onsubmit="return confirm('Delete this project template?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+      </button>
+    </form>
+    <a href="{% url 'projects:ptm_list' %}" class="btn btn-outline">Back to Templates</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="card">
+      <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900">Template Overview &amp; Guidelines</h2>
+        <span class="text-sm font-mono text-muted">{{ template.number }}</span>
+      </div>
+      <div class="card-body">
+        {% if template.description %}
+        <div class="prose max-w-none text-slate-700 mb-6">
+          <p class="whitespace-pre-line">{{ template.description }}</p>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-t border-b border-slate-200">
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Methodology</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ template.get_methodology_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Domain Category</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ template.get_category_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Complexity Tier</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ template.get_complexity_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted uppercase font-semibold">Est. Duration</div>
+            <div class="text-sm font-medium text-slate-900 mt-1">{{ template.estimated_duration_days }} days</div>
+          </div>
+        </div>
+
+        {% if template.default_roles %}
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-slate-900 mb-3">Recommended Team Roles</h3>
+          <div class="flex flex-wrap gap-2">
+            {% for role in template.default_roles %}
+            <span class="badge badge-info text-sm py-1 px-3">
+              <i data-lucide="user" class="w-3.5 h-3.5 mr-1 inline"></i> {{ role }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Work Breakdown Structure (WBS) -->
+    <div class="card">
+      <div class="card-header flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="list-tree" class="w-5 h-5 text-primary"></i>
+          <h2 class="text-base font-semibold text-slate-900">Work Breakdown Structure (WBS)</h2>
+        </div>
+        <div class="flex items-center gap-3 text-sm text-muted">
+          <span><strong>{{ tasks_count }}</strong> Tasks</span>
+          <span>&bull;</span>
+          <span><strong>{{ milestones_count }}</strong> Milestones</span>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if wbs_phases %}
+          <div class="divide-y divide-slate-200">
+            {% for phase in wbs_phases %}
+            <div class="p-4 bg-slate-50">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-semibold text-slate-900 flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
+                    {{ forloop.counter }}
+                  </span>
+                  {{ phase.phase|default:"Unnamed Phase" }}
+                </span>
+                <span class="text-xs text-muted font-mono">{{ phase.tasks|length }} items</span>
+              </div>
+              {% if phase.tasks %}
+              <div class="mt-2 ml-8 space-y-1.5">
+                {% for t in phase.tasks %}
+                <div class="flex items-center justify-between py-1.5 px-3 rounded bg-white border border-slate-200 text-sm">
+                  <div class="flex items-center gap-2">
+                    {% if t.is_milestone %}
+                      <i data-lucide="flag" class="w-4 h-4 text-amber-500"></i>
+                      <span class="font-medium text-slate-900">{{ t.name }}</span>
+                      <span class="badge badge-amber text-xs">Milestone</span>
+                    {% else %}
+                      <i data-lucide="check-square" class="w-4 h-4 text-slate-400"></i>
+                      <span class="text-slate-800">{{ t.name }}</span>
+                    {% endif %}
+                  </div>
+                  <span class="text-xs text-muted font-mono">
+                    {% if t.duration_days %}{{ t.duration_days }}d{% else %}—{% endif %}
+                  </span>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-8 text-center text-muted text-sm">
+            No pre-built WBS phases defined for this template.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Governance &amp; Controls</h3>
+      </div>
+      <div class="card-body space-y-4">
+        <div>
+          <div class="text-xs text-muted uppercase">Template Code</div>
+          <div class="text-sm font-mono font-medium text-slate-900">{{ template.code|default:"—" }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted uppercase">Target Baseline Budget</div>
+          <div class="text-base font-semibold text-slate-900">${{ template.target_budget|floatformat:2 }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted uppercase">Status</div>
+          <div class="mt-1">
+            {% if template.is_active %}
+              <span class="badge badge-green">Active Blueprint</span>
+            {% else %}
+              <span class="badge badge-muted">Archived / Inactive</span>
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-muted uppercase">Created By</div>
+          <div class="text-sm text-slate-800 mt-0.5">{{ template.created_by.username|default:"System" }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted uppercase">Created Date</div>
+          <div class="text-sm text-slate-800 mt-0.5">{{ template.created_at|date:"M d, Y H:i" }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if template.workflow_config %}
+    <div class="card">
+      <div class="card-header">
+        <h3 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">Stage-Gate Workflow</h3>
+      </div>
+      <div class="card-body">
+        <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">{{ template.workflow_config }}</pre>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
