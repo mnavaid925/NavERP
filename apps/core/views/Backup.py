@@ -25,6 +25,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.views._common import *  # noqa: F401,F403
+from apps.core.crud import _SENSITIVE_AUDIT_FIELDS
 from apps.core.utils import write_audit_log
 from apps.core.models import (
     BackupJob,
@@ -61,9 +62,15 @@ def _audit_changes(form):
 
     A local twin of the same two-line helper 0.15 uses: `crud._changed` stays private because ~75 call
     sites name it across scm/hrm/procurement/projects, so promoting it would be a cross-app rename for no
-    behavioural gain.
+    behavioural gain. It is *not* a twin of `crud._changed`'s **redaction** though — that part is shared
+    rather than copied, so a field added to the one sensitive list is redacted on this path too. (No live
+    gap today: the recovery-posture form shares no field with the sensitive set.)
     """
-    return {name: str(form.cleaned_data.get(name))[:200] for name in form.changed_data}
+    return {
+        name: "***redacted***" if name in _SENSITIVE_AUDIT_FIELDS
+        else str(form.cleaned_data.get(name))[:200]
+        for name in form.changed_data
+    }
 
 
 # ============================================================ bullet 1: automated backups
@@ -559,14 +566,22 @@ def backup_overview(request):
     # printing a green zero. This is the same discipline `backup_board` already applies to
     # `never_restored` two views below, and the same one 0.8 states as "reporting 0 here would be a
     # false all-clear". Denominator zero -> the figure does not exist.
-    unverified_count = None if job_count == 0 else sum(1 for j in jobs if not j.is_verified)
-    unrestorable_count = None if archive_count == 0 else sum(
-        1 for a in archives if not a.location or a.status in {"lost", "destroyed"})
-
+    #
     # In-flight rows first, then the newest settled ones -- the window rule `backup_board` applies, so
     # a backup happening right now is never the row a five-row preview drops.
     in_flight = [j for j in jobs if j.is_in_flight]
     settled = [j for j in jobs if not j.is_in_flight]
+
+    # The denominator is the SETTLED backups, and that is load-bearing twice over. (a) C4: a workspace
+    # that has recorded no backup at all gets `None`, not a green `0`. (b) A queued or running row has
+    # no result and its absent check is "not yet a question" -- `backup_board` refuses to name one as an
+    # untested claim for exactly that reason ("naming it would be an accusation rather than a finding").
+    # Counting in-flight rows here would make this page disagree with that list, and a workspace whose
+    # only row is still queued would read as "1 never verified" when nothing has run to verify. The
+    # seeder now plants such a row (M11), so this is a live path, not a hypothetical one.
+    unverified_count = None if not settled else sum(1 for j in settled if not j.is_verified)
+    unrestorable_count = None if archive_count == 0 else sum(
+        1 for a in archives if not a.location or a.status in {"lost", "destroyed"})
 
     context = {
         "job_count": job_count,
@@ -582,7 +597,13 @@ def backup_overview(request):
         "expired_count": sum(1 for e in environments if e.is_expired),
         "drill_count": len(drills),
         "posture": posture,
+        # M6: `has_targets` is an `or`, so a workspace with only an RPO (or only an RTO) earned the same
+        # green "Set" badge as one carrying both. A green badge is an active reassurance, so it has to
+        # mean what it says: `targets_partial` names the half-filled case, and the warning below still
+        # keys off `targets_set` (no target at all), which is the only state where nothing can be judged.
         "targets_set": bool(posture and posture.has_targets),
+        "targets_partial": bool(posture and (posture.rpo_target_minutes is None)
+                                != (posture.rto_target_minutes is None)),
         "recent_jobs": (in_flight + settled)[:5],
         "recent_drills": [d for d in drills if d.performed_at is not None][:5],
         "notes": BACKUP_NOTES,
