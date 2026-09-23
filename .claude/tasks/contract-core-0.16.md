@@ -342,7 +342,23 @@ All subclass `TenantModelForm` (so `tenant` scoping of FK querysets is automatic
 | *(via `crud("backup/environments","environment_instance")`)* → `environment_instance_list/_create/_detail/_edit/_delete` | `backup/environments/…` | |
 | *(via `crud("backup/drills","recovery_drill")`)* → `recovery_drill_list/_create/_detail/_edit/_delete` | `backup/drills/…` | |
 
-**Total: 29 url names.** `backup_job_verify` must be registered **after** the literal `add/` route and
+**Total: 34 named routes**, backed by 34 view callables (the module's only other `def` is the private
+`_audit_changes` helper). The arithmetic: **six** `crud()` groups × 5 = 30 — `backup_job`,
+`restore_record`, `data_archive`, `legal_hold`, `environment_instance`, `recovery_drill` — plus the four
+hand-written names `backup_overview`, `backup_board`, `recovery_posture_edit` and `backup_job_verify`.
+The earlier "29 url names" was an arithmetic slip: it counted *five* `crud()` groups when there are six
+(corrected 2026-09, M12). The brief's "34 routes" and this table's 34 names are the same 34 — there is
+no second number, and nothing is being undercounted.
+
+**Naming-convention note (M3).** The six 0.16 `crud()` calls pass **snake_case** names
+(`crud("backup/jobs", "backup_job")`), whereas the nine pre-existing spine calls pass
+concatenated-lowercase (`crud("party-roles", "partyrole")`). All 34 names reverse and every template
+agrees, so this is a style fork, not a defect — but note that a grep for `backupjob_list` finds nothing.
+The hand-written routes in this same file already used snake_case (`custom_field_list`,
+`retention_policy_list`), so the file was mixed before 0.16 arrived; do not "fix" one side to match the
+other without a decision.
+
+`backup_job_verify` must be registered **after** the literal `add/` route and
 **before** nothing that would shadow it — it is a POST-only action, so placement is safe, but it is
 listed last in the `crud("backup/jobs", …)` group by explicit hand-append to keep the pattern visible.
 
