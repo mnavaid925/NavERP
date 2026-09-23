@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Project Templates &amp; Methodologies — Project Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Project Templates &amp; Methodologies</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:configuration_hub' %}">Configuration</a>
+      <span>/</span>
+      <span>Templates</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:configuration_hub' %}" class="btn btn-outline">
+      <i data-lucide="layout-grid" class="w-4 h-4 mr-1"></i> Hub
+    </a>
+    <a href="{% url 'projects:ptm_create' %}" class="btn btn-primary">
+      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Template
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+  <div class="stat-card">
+    <div class="stat-icon purple"><i data-lucide="layers" class="w-6 h-6"></i></div>
+    <div>
+      <div class="text-sm font-medium text-muted">Total Templates</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+    <div>
+      <div class="text-sm font-medium text-muted">Active</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="milestone" class="w-6 h-6"></i></div>
+    <div>
+      <div class="text-sm font-medium text-muted">Waterfall</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.waterfall }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange"><i data-lucide="zap" class="w-6 h-6"></i></div>
+    <div>
+      <div class="text-sm font-medium text-muted">Agile (Scrum)</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.agile }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon slate"><i data-lucide="git-merge" class="w-6 h-6"></i></div>
+    <div>
+      <div class="text-sm font-medium text-muted">Hybrid</div>
+      <div class="text-2xl font-bold text-slate-900">{{ stats.hybrid }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="form-group">
+        <label for="id_q" class="form-label">Search</label>
+        <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, name, code, description...">
+      </div>
+      <div class="form-group">
+        <label for="id_methodology" class="form-label">Methodology</label>
+        <select name="methodology" id="id_methodology" class="form-select">
+          <option value="">All Methodologies</option>
+          {% for val, label in methodology_choices %}
+          <option value="{{ val }}" {% if methodology == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_category" class="form-label">Category</label>
+        <select name="category" id="id_category" class="form-select">
+          <option value="">All Categories</option>
+          {% for val, label in category_choices %}
+          <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">Status</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All Statuses</option>
+          <option value="active" {% if is_active == "active" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary flex-1">
+          <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+        </button>
+        <a href="{% url 'projects:ptm_list' %}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Number</th>
+          <th>Template Name</th>
+          <th>Methodology</th>
+          <th>Category</th>
+          <th>Complexity</th>
+          <th>Est. Duration</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tmpl in templates %}
+        <tr>
+          <td class="font-mono text-sm font-semibold">
+            <a href="{% url 'projects:ptm_detail' pk=tmpl.pk %}" class="text-primary hover:underline">
+              {{ tmpl.number }}
+            </a>
+          </td>
+          <td>
+            <div class="font-medium text-slate-900">{{ tmpl.name }}</div>
+            {% if tmpl.code %}<span class="text-xs text-muted font-mono">{{ tmpl.code }}</span>{% endif %}
+            {% if tmpl.is_default %}<span class="badge badge-amber text-xs ml-1">Default</span>{% endif %}
+          </td>
+          <td>
+            {% if tmpl.methodology == "agile" %}
+              <span class="badge badge-green">{{ tmpl.get_methodology_display }}</span>
+            {% elif tmpl.methodology == "waterfall" %}
+              <span class="badge badge-info">{{ tmpl.get_methodology_display }}</span>
+            {% else %}
+              <span class="badge badge-slate">{{ tmpl.get_methodology_display }}</span>
+            {% endif %}
+          </td>
+          <td class="text-sm text-slate-700">{{ tmpl.get_category_display }}</td>
+          <td>
+            {% if tmpl.complexity == "small" %}
+              <span class="badge badge-green">{{ tmpl.get_complexity_display }}</span>
+            {% elif tmpl.complexity == "medium" %}
+              <span class="badge badge-info">{{ tmpl.get_complexity_display }}</span>
+            {% elif tmpl.complexity == "large" %}
+              <span class="badge badge-amber">{{ tmpl.get_complexity_display }}</span>
+            {% else %}
+              <span class="badge badge-red">{{ tmpl.get_complexity_display }}</span>
+            {% endif %}
+          </td>
+          <td class="text-sm text-slate-700">{{ tmpl.estimated_duration_days }} days</td>
+          <td>
+            {% if tmpl.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="table-actions text-right">
+            <div class="flex items-center justify-end gap-1">
+              <a href="{% url 'projects:ptm_instantiate' pk=tmpl.pk %}" class="btn btn-icon text-primary" title="Instantiate Project">
+                <i data-lucide="play" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'projects:ptm_detail' pk=tmpl.pk %}" class="btn btn-icon" title="View Details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+              <a href="{% url 'projects:ptm_edit' pk=tmpl.pk %}" class="btn btn-icon" title="Edit Template">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </a>
+              <form method="post" action="{% url 'projects:ptm_delete' pk=tmpl.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete template {{ tmpl.name }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-icon text-danger" title="Delete Template">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">
+            <div class="empty-state text-center py-12">
+              <i data-lucide="layers" class="w-12 h-12 mx-auto text-muted mb-3"></i>
+              <h3 class="text-lg font-medium text-slate-900 mb-1">No Project Templates Found</h3>
+              <p class="text-sm text-muted mb-4">Get started by creating standard project methodology blueprints.</p>
+              <a href="{% url 'projects:ptm_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create First Template
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200">
+    <div class="text-sm text-muted">
+      Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} templates
+    </div>
+    <div class="pagination flex gap-1">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if methodology %}&methodology={{ methodology }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      {% endif %}
+      <span class="btn btn-primary btn-sm pointer-events-none">{{ page_obj.number }}</span>
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if methodology %}&methodology={{ methodology }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
