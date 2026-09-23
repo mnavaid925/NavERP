@@ -643,9 +643,16 @@ def backup_board(request):
         "active_holds": holds,
         "holds_suspending": holds_suspending,
         "expired_environments": expired_environments,
-        # Jobs whose verification state cannot be determined: none here, but the key is pinned by the
-        # contract and carried so the page can print it rather than omitting the question.
-        "unverifiable_count": 0,
+        # ---- `unverifiable_count` AND THE ZERO RULE (C6) ----
+        # The key is structurally 0: `is_verified` reads one nullable column, so every row's
+        # verification state IS readable and nothing can be unreadable. That makes "0 — all records
+        # carry a readable verification state" a true and meaningful statement **when there are rows**
+        # -- and a claim about the members of an EMPTY SET when there are none, which is what C6 is.
+        # The board's own intro promises "Where a figure cannot be determined the page says so and
+        # prints —, never a 0", and the `never_restored` row a few keys up already obeys it. This row
+        # sat two lines below that one violating it. So: `None`, not `0`, when there is nothing for the
+        # claim to be about, and the page says "not applicable".
+        "unverifiable_count": 0 if jobs else None,
         "notes": BACKUP_NOTES,
     }
     return render(request, "core/backupboard.html", context)
