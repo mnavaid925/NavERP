@@ -1935,3 +1935,63 @@ lane claims were corrected. The orchestrator's verification of each item is reco
 - **Three stray probe tenants exist on the dev DB** (`lane5-empty`, `smoke-empty`, and a nameless
   `SMOKETEST Acme`) from earlier sessions. **Not deleted** — they are not mine and deletion is destructive.
   Flagged for the user.
+
+---
+
+# PHASE 5 — FIXES APPLIED (all 7 Criticals closed)
+
+Each Critical was fixed **and then re-verified with its own independent probe**, written fresh rather
+than reusing the lane's evidence. Every probe is a plain script under `temp/` that builds its own
+workspaces inside savepoints and rolls them back, so the shared dev DB is untouched. One file per
+commit throughout; nothing pushed.
+
+| id | fix commits | independent probe | what the probe establishes beyond "it passes" |
+|---|---|---|---|
+| **C1** | `15dbf2a6` | `temp/_0_16_post_sweep.py` | POSTs a valid payload to all six edit views and asserts **302 + DB persistence**, not just a 302. Closes the blind spot in my own smoke gate, which only GET-tested edit pages — that gap is *why* C1 survived a green sweep. |
+| **C2** | `e73d9930`, `68206458` | `temp/_0_16_sweep.py` (re-run) | Board drops to **0 rows past their window** and names the hold; verified against a hold whose `suspends_policy()` is `True`. |
+| **C3** | `520a4b0f`, `9c380e77` | `temp/_0_16_c3_probe.py` — 25 checks | Tests **both halves and the controls**: the rule refuses the incoherent state *and* accepts all four legitimate ones (a rule that refuses everything would pass the refusal test); the four template branches render four different claims; the pre-rule row is written around `clean()` with `.update()` so the template's third state is exercised. |
+| **C4** | `c4b563f7`, `d8efd503` | `temp/_0_16_c4_probe.py` — 31 checks | The control is the point: a **legitimate green `0` must still render** on a populated workspace. Also pins a row satisfying **both** disjuncts of `Q(location="")|Q(status in lost,destroyed)` as counted **once** — acme's archive #2 is such a row, and the probe's first draft double-counted it. **The probe was wrong; the view was right.** |
+| **C5** | `7e1c9c0d`, `6673ace8`, `224f7a22` | `temp/_0_16_c5_probe.py` | **Reproduces the defect first**, using the pre-fix query on the very workspace it then measures the fix on (10 finished + 1 queued → old query returns ten rows, queued absent). Pins the **9-vs-10 boundary**, the NULL ordering on the live server (`10.4.14-MariaDB`), and that a `cancelled` job is *settled*, not in flight. |
+| **C6** | `668ae0fb`, `09c8bc5d`, `3a31f2b5` | `temp/_0_16_c6_probe.py` — 16 checks | Asserts the two sibling rows now **AGREE** on an empty workspace (the actual defect) rather than merely that a string vanished, and that the true sentence is still printed where rows exist. |
+| **C7** | `c20ad27e`, `b59c9a02` | `temp/_0_16_c7_probe.py` | **Enumerates all 619 `TenantModelForm` subclasses** (652 forms modules imported) instead of spot-checking, and asserts the security invariant directly: *a tenant-scoped `ModelChoiceField` must never hold rows from more than one tenant*. **1130 fields inspected across 618 instantiable forms — 0 leaking.** |
+
+## C7's probe found a SECOND, LIVE leak — in `apps/projects`, not 0.16
+
+C7 was filed **latent for 0.16** because no 0.16 route reaches it. The enumeration found the same defect
+**live** one module over, in `ProjectIntegrationConnectorForm`, whose `__init__` rebuilt the `owner`
+queryset from `User.objects.filter(is_active=True)` and re-applied the tenant filter itself — discarding
+the base class's scoping, and so re-opening the leak on the `tenant is None` branch. Measured before the
+fix: **28 rows, 6 distinct tenant values**, and since `User.__str__` returns the email, the dropdown
+rendered `admin@globex.example`, `admin@lane5-empty.example` and others. Reachable: `ixc_create` is only
+`@login_required`, and the superuser `admin` carries `tenant=None` by design.
+
+Fixed in `b59c9a02` by **composing** with the base scoping (`self.fields["owner"].queryset =
+self.fields["owner"].queryset.filter(is_active=True)`) rather than replacing it. **Carried, not folded
+in**: it is a Module 7 defect and belongs in the projects changelog; it is recorded here because C7's
+*method* is what surfaced it, which is the strongest argument for the enumeration over a spot-check.
+
+## Two probe errors worth keeping
+
+Both were mine, not the code's, and both are recorded because the same mistake is available to anyone
+writing the next probe:
+
+1. **C4**: computing a count by subtraction (`total - complement`) **double-counts** a row satisfying two
+   OR'd conditions. acme's archive #2 has `location=''` **and** `status='lost'`, so the view's `filter()`
+   correctly returns 1 while the complement arithmetic returned 2. Fixed by computing in Python with a
+   row-wise `sum()`.
+2. **C7**: asserting "no choice label is truthy" fails on Django's standard blank choice, whose label is
+   `'---------'`. Replaced with the actual security claim — *no other tenant's `EncryptionKey.prefix`
+   appears among the labels* — which cannot produce that false failure.
+
+Also worth recording as a **probe-infrastructure** gotcha: `response.context` is `None` in a plain
+script without `django.test.utils.setup_test_environment()`. A `TestCase` calls it for you; a bare
+script does not, and the failure mode is a `TypeError` on subscripting `None` rather than a silent
+pass — lucky, but not something to rely on. Every `temp/_0_16_c*_probe.py` now calls it explicitly.
+
+## Still open
+
+**11 Important, 12 Minor** — untouched as of this section. The Criticals were done by hand rather than
+delegated, because each needed an independent probe and several needed a judgement the lane reports did
+not contain (C5's ordering choice, C7's blast radius). The remaining findings are being burnt down in one
+`code-fixer` pass.
+
