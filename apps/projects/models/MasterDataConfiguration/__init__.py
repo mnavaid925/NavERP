@@ -1,0 +1,1 @@
+"""MasterDataConfiguration models package."""
