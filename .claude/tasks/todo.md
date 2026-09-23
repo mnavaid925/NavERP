@@ -9677,3 +9677,91 @@ convention (`_`-prefixed inside the folder that includes them — cf.
 - [ ] `templates/projects/integrationapihub/boards/{integration_hub,sync_monitor,connector_health}.html` — standalone pages (no entity folder). `integration_hub`: the `stats` strip, a `domains` five-panel grid (value/label/total/connected/failing, each linking to its `ixc_<domain>_list`), the `connectors` health rows, and `recent_runs`. `sync_monitor`: filter card + the heat table + `stats`. `connector_health` (reached from `ixc_detail` and the hub): the one connector's status/last_success/failure-counters/`recent_runs`/jobs/mappings. Each links back to the register it reports on.
 - [ ] `templates/projects/overview.html` — add the 7.18 quick-link rows (Hub, Sync Monitor, Connectors, Sync Jobs) to the module landing table and stat cards reading NEW context keys (`integration_connector_count`, `sync_runs_failed_today`, `sync_runs_today`); extend the intro sentence with the integration layer; the matching keys are added by the Overview view change below.
 
+### Projects 7.18 Integration & API Hub (close-out 2026-09-23)
+
+- [x] Research, contract, backend package structure, CRUD routes, templates, navigation, migration `0026`, seeder, and six serial review lanes are present in the prior 7.18 changeset.
+- [x] Phase 5 code-fixer findings are reflected in the review record; the continuation fixer also closed JSON object validation, tenantless create disclosure, connector prefill, run/monitor filter controls, and the hub credential-attention stat.
+- [x] Phase 6 test contract and shared `integrationapihub_*` fixtures are present; four serial test modules are present with strict `test_integrationapihub_*` naming.
+- [x] `manage.py check` passes and the four focused 7.18 lanes pass under the isolated SQLite `--nomigrations` run.
+- [ ] Migration-enabled focused test run is blocked by the unrelated pre-existing HRM migration chain at `0049`; this must be rechecked before final close-out.
+- [ ] Full unfiltered `apps/projects` suite remains to be run.
+- [x] README, NavERP status, test contract, and `.claude/skills/projects/SKILL.md` now describe 7.18 as built.
+- [ ] Git commits are intentionally not created in this continuation because the checkout already contains unrelated dirty files and no explicit commit request was supplied; final one-file commit commands remain for the user.
+
+**Review result:** 7.18 remains transport-free by design. `ProjectSyncRun.record()` is the sole run writer; connector credentials are Fernet-encrypted, write-only, and revealed once through a session pop; all four models and all 26 view functions are tenant-scoped. The four integration registers remain deliberately separate under the L36 ruling.
+
+
+---
+# Sub-module 7.19 — Master Data & Configuration (Module 7: Project Management, projects) — plan from research-projects-7.19.md (2026-09-24)
+
+## Models (from research — 4 models + 1 child membership)
+- [ ] `ProjectTemplate` [PTM-] — `name`, `code`, `methodology` (choices: waterfall, agile, hybrid), `category` (choices: software, infrastructure, consulting, r_and_d, marketing, operational, internal), `complexity` (choices: small, medium, large, enterprise), `description`, `estimated_duration_days`, `target_budget`, `default_roles` (JSON list), `wbs_structure` (JSON list of phases/tasks/milestones), `workflow_config` (JSON dict), `is_active`, `is_default`, `created_by` (FK user). Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [ ] `ProjectCustomField` [PCF-] — `name`, `field_key` (slug), `label`, `target_entity` (choices: project, task, milestone, risk, team), `field_type` (choices: text, textarea, integer, decimal, date, boolean, select, multiselect, url, user_ref), `form_section` (choices: general, governance, technical, financial, risk, custom), `description`, `placeholder`, `default_value`, `is_required`, `min_value`, `max_value`, `regex_pattern`, `choices_list` (JSON list), `visibility_rule` (JSON dict), `display_order`, `is_active`. Unique together: `("tenant", "target_entity", "field_key")`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [ ] `ProjectTeam` [PTE-] — `name`, `code`, `team_type` (choices: dedicated, matrix, cross_functional, agile_pod, vendor_external), `org_unit` (FK core.OrgUnit), `project` (FK projects.Project null/blank), `team_lead` (FK user), `description`, `location`, `is_active`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+- [ ] `ProjectTeamMember` (unnumbered join row) — `team` (FK ProjectTeam), `user` (FK user), `role` (choices: project_manager, scrum_master, tech_lead, developer, designer, qa_engineer, business_analyst, consultant, stakeholder), `allocation_percentage` (1..100), `is_primary_contact`, `joined_date`, `left_date`. Unique together: `("team", "user")`.
+- [ ] `ProjectLocaleSetting` [PLS-] — `name`, `code`, `project` (FK projects.Project null/blank), `language` (FK core.Language), `time_zone` (FK core.TimeZone), `currency` (FK accounting.Currency), `date_format` (choices: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD), `time_format` (choices: 12h, 24h), `first_day_of_week` (choices: 1=Mon, 6=Sat, 7=Sun), `number_format` (choices: #,##0.00, #.##0,00, # ##0,00), `working_hours_per_day` (decimal), `working_days_pattern` (JSON list of days), `is_default`, `is_active`. Form excludes: `tenant`, auto-`number`, `created_at`, `updated_at`.
+
+## Backend (`apps/projects/{models,forms,views,urls}/MasterDataConfiguration/`)
+- [ ] `models/MasterDataConfiguration/ProjectTemplates.py`
+- [ ] `models/MasterDataConfiguration/ProjectCustomFields.py`
+- [ ] `models/MasterDataConfiguration/ProjectTeams.py`
+- [ ] `models/MasterDataConfiguration/ProjectLocaleSettings.py`
+- [ ] `models/MasterDataConfiguration/__init__.py`
+- [ ] `forms/MasterDataConfiguration/ProjectTemplates.py` (ProjectTemplateForm, ProjectTemplateInstantiateForm)
+- [ ] `forms/MasterDataConfiguration/ProjectCustomFields.py` (ProjectCustomFieldForm)
+- [ ] `forms/MasterDataConfiguration/ProjectTeams.py` (ProjectTeamForm, ProjectTeamMemberForm)
+- [ ] `forms/MasterDataConfiguration/ProjectLocaleSettings.py` (ProjectLocaleSettingForm)
+- [ ] `forms/MasterDataConfiguration/__init__.py`
+- [ ] `views/MasterDataConfiguration/ProjectTemplates.py` (`ptm_list`, `ptm_create`, `ptm_detail`, `ptm_edit`, `ptm_delete`, `ptm_instantiate`)
+- [ ] `views/MasterDataConfiguration/ProjectCustomFields.py` (`pcf_list`, `pcf_create`, `pcf_detail`, `pcf_edit`, `pcf_delete`, `pcf_toggle_active`)
+- [ ] `views/MasterDataConfiguration/ProjectTeams.py` (`pte_list`, `pte_create`, `pte_detail`, `pte_edit`, `pte_delete`, `pte_add_member`, `pte_remove_member`)
+- [ ] `views/MasterDataConfiguration/ProjectLocaleSettings.py` (`pls_list`, `pls_create`, `pls_detail`, `pls_edit`, `pls_delete`, `pls_set_default`)
+- [ ] `views/MasterDataConfiguration/ConfigurationHub.py` (`configuration_hub`)
+- [ ] `views/MasterDataConfiguration/__init__.py`
+- [ ] `urls/MasterDataConfiguration/ProjectTemplates.py`
+- [ ] `urls/MasterDataConfiguration/ProjectCustomFields.py`
+- [ ] `urls/MasterDataConfiguration/ProjectTeams.py`
+- [ ] `urls/MasterDataConfiguration/ProjectLocaleSettings.py`
+- [ ] `urls/MasterDataConfiguration/ConfigurationHub.py`
+- [ ] `urls/MasterDataConfiguration/__init__.py`
+
+## Integration & Wire-up
+- [ ] Append re-exports to `apps/projects/models/__init__.py`
+- [ ] Append re-exports to `apps/projects/forms/__init__.py`
+- [ ] Append re-exports to `apps/projects/views/__init__.py`
+- [ ] Append urlpatterns to `apps/projects/urls/__init__.py`
+- [ ] Register 7.19 models in `apps/projects/admin.py`
+- [ ] Extend `seed_projects.py` with `_master_data_configuration(tenant, now)` and `--flush`
+- [ ] Add `LIVE_LINKS["7.19"]` in `apps/core/navigation.py`
+- [ ] Generate migration `makemigrations projects` (expect `0028_...`) and run `migrate`
+
+## Templates (`templates/projects/masterdataconfiguration/`)
+- [ ] `templates/projects/masterdataconfiguration/template/list.html`
+- [ ] `templates/projects/masterdataconfiguration/template/detail.html`
+- [ ] `templates/projects/masterdataconfiguration/template/form.html`
+- [ ] `templates/projects/masterdataconfiguration/template/instantiate.html`
+- [ ] `templates/projects/masterdataconfiguration/customfield/list.html`
+- [ ] `templates/projects/masterdataconfiguration/customfield/detail.html`
+- [ ] `templates/projects/masterdataconfiguration/customfield/form.html`
+- [ ] `templates/projects/masterdataconfiguration/team/list.html`
+- [ ] `templates/projects/masterdataconfiguration/team/detail.html`
+- [ ] `templates/projects/masterdataconfiguration/team/form.html`
+- [ ] `templates/projects/masterdataconfiguration/localesetting/list.html`
+- [ ] `templates/projects/masterdataconfiguration/localesetting/detail.html`
+- [ ] `templates/projects/masterdataconfiguration/localesetting/form.html`
+- [ ] `templates/projects/masterdataconfiguration/boards/hub.html`
+
+## Verify & Smoke
+- [ ] `makemigrations projects`
+- [ ] `migrate`
+- [ ] `seed_projects` twice (idempotent)
+- [ ] `manage.py check` clean
+- [ ] Smoke test via script in `temp/` as `admin_acme`: all 200/302, IDOR 404, instantiate action works
+
+## Review & Tests & Skill
+- [ ] Phase 4 Review: 6 reviewers strictly serial -> `.claude/tasks/review-projects-7.19.md`
+- [ ] Phase 5 Fixer: burn down findings
+- [ ] Phase 6 Tests: test contract, conftest, 4 test files (`test_masterdataconfiguration_*`), full app suite
+- [ ] Phase 7: Update `projects` SKILL.md and README.md
+
+
