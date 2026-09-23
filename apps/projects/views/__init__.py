@@ -769,3 +769,41 @@ from .IntegrationApiHub.HubBoards import (  # noqa: F401
     sync_monitor,
 )
 
+# --- 7.19 Master Data & Configuration -------------------------------------------
+from .MasterDataConfiguration.ProjectTemplates import (  # noqa: F401
+    ptm_list,
+    ptm_create,
+    ptm_detail,
+    ptm_edit,
+    ptm_delete,
+    ptm_instantiate,
+)
+from .MasterDataConfiguration.ProjectCustomFields import (  # noqa: F401
+    pcf_list,
+    pcf_create,
+    pcf_detail,
+    pcf_edit,
+    pcf_delete,
+)
+from .MasterDataConfiguration.ProjectTeams import (  # noqa: F401
+    pte_list,
+    pte_create,
+    pte_detail,
+    pte_edit,
+    pte_delete,
+    pte_add_member,
+    pte_remove_member,
+)
+from .MasterDataConfiguration.ProjectLocaleSettings import (  # noqa: F401
+    pls_list,
+    pls_create,
+    pls_detail,
+    pls_edit,
+    pls_delete,
+    pls_set_default,
+)
+from .MasterDataConfiguration.ConfigurationHub import (  # noqa: F401
+    configuration_hub,
+)
+
+
