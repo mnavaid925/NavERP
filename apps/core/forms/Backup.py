@@ -87,6 +87,11 @@ class EnvironmentInstanceForm(TenantModelForm):
                   "copy_includes_pii", "masking_required", "status", "refreshed_at",
                   "refresh_source", "refresh_interval_days", "expires_at", "storage_limit_mb",
                   "is_active", "notes"]
+        # Django's default label for these two is `Copy includes pii` / `Storage limit mb` (I11) — a
+        # mid-level form that reads like a database dump. `Meta.labels` is the minimal fix: no field
+        # redeclaration, no model `verbose_name` (which would need a migration for a cosmetic change).
+        labels = {"copy_includes_pii": "Copy includes PII",
+                  "storage_limit_mb": "Storage limit (MB)"}
 
 
 class RecoveryPostureForm(TenantModelForm):
@@ -106,3 +111,7 @@ class RecoveryDrillForm(TenantModelForm):
         fields = ["name", "kind", "scheduled_for", "performed_at", "outcome",
                   "measured_rpo_minutes", "measured_rto_minutes", "participants", "findings",
                   "follow_up_actions", "evidence", "notes"]
+        # `Measured rpo minutes` -> `Measured RPO (minutes)` (I11): RPO/RTO are initialisms, not words,
+        # so Django's `capitalize()`-style label is wrong rather than merely ugly.
+        labels = {"measured_rpo_minutes": "Measured RPO (minutes)",
+                  "measured_rto_minutes": "Measured RTO (minutes)"}
