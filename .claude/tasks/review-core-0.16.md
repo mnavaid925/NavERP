@@ -1938,12 +1938,16 @@ lane claims were corrected. The orchestrator's verification of each item is reco
 
 ---
 
-# PHASE 5 — FIXES APPLIED (all 7 Criticals closed)
+# PHASE 5 — FIXES APPLIED (6 of 7 Criticals closed; C7 escalated on evidence)
 
 Each Critical was fixed **and then re-verified with its own independent probe**, written fresh rather
 than reusing the lane's evidence. Every probe is a plain script under `temp/` that builds its own
 workspaces inside savepoints and rolls them back, so the shared dev DB is untouched. One file per
 commit throughout; nothing pushed.
+
+**C7 is the exception and is NOT closed.** Its probe found one live leak (fixed) *and* found that
+fixing the shared helper breaks 15 committed tests across three modules, so that half was reverted and
+the issue escalated for a Module-0-wide decision. Read its section below before reporting C7 as fixed.
 
 | id | fix commits | independent probe | what the probe establishes beyond "it passes" |
 |---|---|---|---|
@@ -1953,22 +1957,110 @@ commit throughout; nothing pushed.
 | **C4** | `c4b563f7`, `d8efd503` | `temp/_0_16_c4_probe.py` — 31 checks | The control is the point: a **legitimate green `0` must still render** on a populated workspace. Also pins a row satisfying **both** disjuncts of `Q(location="")|Q(status in lost,destroyed)` as counted **once** — acme's archive #2 is such a row, and the probe's first draft double-counted it. **The probe was wrong; the view was right.** |
 | **C5** | `7e1c9c0d`, `6673ace8`, `224f7a22` | `temp/_0_16_c5_probe.py` | **Reproduces the defect first**, using the pre-fix query on the very workspace it then measures the fix on (10 finished + 1 queued → old query returns ten rows, queued absent). Pins the **9-vs-10 boundary**, the NULL ordering on the live server (`10.4.14-MariaDB`), and that a `cancelled` job is *settled*, not in flight. |
 | **C6** | `668ae0fb`, `09c8bc5d`, `3a31f2b5` | `temp/_0_16_c6_probe.py` — 16 checks | Asserts the two sibling rows now **AGREE** on an empty workspace (the actual defect) rather than merely that a string vanished, and that the true sentence is still printed where rows exist. |
-| **C7** | `c20ad27e`, `b59c9a02` | `temp/_0_16_c7_probe.py` | **Enumerates all 619 `TenantModelForm` subclasses** (652 forms modules imported) instead of spot-checking, and asserts the security invariant directly: *a tenant-scoped `ModelChoiceField` must never hold rows from more than one tenant*. **1130 fields inspected across 618 instantiable forms — 0 leaking.** |
+| **C7** | `c20ad27e` **REVERTED** by `68ebb8eb`; live leak closed by `2cf76bd4` | `temp/_0_16_c7_probe.py` | **Enumerates all 619 `TenantModelForm` subclasses** (652 forms modules imported) instead of spot-checking, and asserts the security invariant directly: *a tenant-scoped `ModelChoiceField` must never hold rows from more than one tenant*. **1130 fields inspected across 618 instantiable forms.** The sweep found **one live leak** — and also found that fixing the base class **breaks 15 committed tests across three modules**. The base-class change was therefore reverted and the issue **escalated, not fixed**. See below. |
 
-## C7's probe found a SECOND, LIVE leak — in `apps/projects`, not 0.16
+## C7 — ESCALATED, NOT FIXED. The shared-helper change was reverted on evidence.
 
-C7 was filed **latent for 0.16** because no 0.16 route reaches it. The enumeration found the same defect
-**live** one module over, in `ProjectIntegrationConnectorForm`, whose `__init__` rebuilt the `owner`
-queryset from `User.objects.filter(is_active=True)` and re-applied the tenant filter itself — discarding
-the base class's scoping, and so re-opening the leak on the `tenant is None` branch. Measured before the
-fix: **28 rows, 6 distinct tenant values**, and since `User.__str__` returns the email, the dropdown
-rendered `admin@globex.example`, `admin@lane5-empty.example` and others. Reachable: `ixc_create` is only
-`@login_required`, and the superuser `admin` carries `tenant=None` by design.
+C7's probe found **one live leak** and closed it. It also found that fixing the base class breaks
+**15 committed tests across three modules**, so that half was reverted (`68ebb8eb`).
 
-Fixed in `b59c9a02` by **composing** with the base scoping (`self.fields["owner"].queryset =
-self.fields["owner"].queryset.filter(is_active=True)`) rather than replacing it. **Carried, not folded
-in**: it is a Module 7 defect and belongs in the projects changelog; it is recorded here because C7's
-*method* is what surfaced it, which is the strongest argument for the enumeration over a spot-check.
+### The live leak: FIXED in the form that leaked (`2cf76bd4`)
+
+`ProjectIntegrationConnectorForm.__init__` built `User.objects.filter(is_active=True)` and applied the
+tenant filter only `if self.tenant is not None`, so a tenant-less form offered **every** workspace's
+active users. Measured before the fix: **28 rows, 6 distinct tenant values**, and since `User.__str__`
+returns the email, the `<select>` rendered `admin@globex.example`, `admin@lane5-empty.example` and
+others. Reachable: `ixc_create` carries only `@login_required` (no tenant guard) and the superuser
+`admin` holds `tenant=None` by design.
+
+Fixed by adding the missing `else: owner_qs.none()` — written out in full so it depends on nothing.
+**This half is independent of the revert** and is not affected by it.
+
+### The other half: why the base-class change was wrong as a 0.16 side effect
+
+Measured, same 4,866-test corpus, only the base class differing:
+
+| | tests | failures |
+|---|---|---|
+| with the `_common.py` change | 4,866 | **19** |
+| reverted | 4,866 | **4** |
+| **introduced by the revert** | | **0** |
+
+15 tests were broken by the change, across `inventory` (3), `procurement` (6) and `projects` (6) — and
+**0 new failures** came from reverting it. The change was a net negative.
+
+Those modules use a deliberate **two-layer** design, and my change silently disabled layer 2:
+
+- **Layer 1** — the create/edit view hoists `request.tenant is None` and redirects, so a tenant-less
+  form is unreachable from the UI.
+- **Layer 2** — `_reject_foreign(form, cleaned, [...])` in `clean()` rejects a foreign record with a
+  **precise** message: *"That record belongs to another workspace."*
+
+Layer 2 requires the queryset NOT to be pre-narrowed, because Django validates `ModelChoiceField` in
+`Field.clean`, which runs **before** `Form.clean`. An emptied queryset short-circuits at field level and
+the operator gets Django's generic *"Select a valid choice. That choice is not one of the available
+choices."* — so the change made their validation **worse**, not better.
+
+The tests say so themselves. `test_reqmgmt_forms.py`:
+
+```
+# Layer 2 (_reject_foreign): with the queryset NOT pre-narrowing the choices, the
+# hand-posted foreign pk must still land as the exact rule message.
+```
+
+and `test_initiation_forms.py`, whose docstring is an explicit warning to whoever tries this:
+
+```
+"""CURRENT, DOCUMENTED behaviour, pinned so a regression is visible either way."""
+```
+
+### The decision
+
+**"Where does tenant isolation live — in the form or in the caller?" is an architecture decision with
+two defensible answers**, three modules have committed to the second, and 0.16 cannot reach the path
+either way (this document itself records C7 as latent for 0.16). Overturning that as a side effect of a
+0.16 close-out is exactly the cross-module change the house rules say to **carry**, not fold in.
+
+**C7 therefore stays OPEN as a latent shared-helper issue.** It is not a 0.16 defect and must not be
+reported as fixed.
+
+### Proposed plan for the owner (needs a Module-0-wide decision, not a 0.16 fix)
+
+1. Add an explicit opt-out to `TenantModelForm`, e.g. `allow_unnarrowed_when_tenantless = False`, so
+   **safe is the default** and loose scope becomes a declared choice rather than an accident.
+2. Set the flag on the ~7 forms in `projects` / `procurement` / `scm` / `inventory` that deliberately
+   rely on layer 2, so their precise messages survive.
+3. Leave `_reject_foreign` in place — with the flag it becomes a genuine second layer instead of the
+   only layer.
+4. Re-run the 4,866-test corpus; the 15 currently-pinned tests should pass unchanged, which is the
+   signal that the migration was faithful.
+
+**Also worth noting from the sweep:** the two designs are not equally safe. Layer 1 alone fails silently
+when a view forgets the guard — which is exactly what happened in the connector form — whereas
+narrowing fails safe. A form reachable without a tenant must narrow explicitly. That is the rule the
+connector fix follows.
+
+### A related pre-existing defect the sweep surfaced
+
+`apps/inventory/tests/test_uom_forms.py::test_foreign_uom_rejected` expects `"another workspace"` in the
+errors and gets Django's generic message instead. It fails **identically at the pre-session baseline**
+(`44c72ec3`, verified in a git worktree), so it is **pre-existing and not 0.16's** — but it is the same
+shape: a field that happens to be narrowed, so `_reject_foreign` never fires and the precise message is
+lost. It is evidence that layer 2's message is fragile wherever narrowing and `_reject_foreign` coexist.
+Worth folding into the same plan.
+
+## Pre-existing failures, proven not ours
+
+Four tests fail in this session's runs and **fail identically at the pre-session baseline `44c72ec3`**
+(verified by checking out `44c72ec3` in a git worktree and re-running them there):
+
+- `apps/inventory/tests/test_uom_forms.py::test_foreign_uom_rejected`
+- `apps/scm/tests/test_forms.py::TestMeterReadingForm::test_a_valid_reading_saves_with_the_default_provenance`
+- `apps/scm/tests/test_forms.py::TestMeterReadingForm::test_a_crafted_provenance_pair_is_ignored_entirely`
+- `apps/scm/tests/test_integration_views.py::TestIntegrationWebhookSubscriptionList::test_integration_subscription_list_junk_filter_value_is_an_empty_200` (all 3 params)
+
+Reported with provenance rather than "fixed" (L45). The two `MeterReadingForm` failures are a
+**future-dated `read_at`** — a clock-dependent test, not a scoping defect.
 
 ## Two probe errors worth keeping
 
@@ -1989,6 +2081,8 @@ script does not, and the failure mode is a `TypeError` on subscripting `None` ra
 pass — lucky, but not something to rely on. Every `temp/_0_16_c*_probe.py` now calls it explicitly.
 
 ## Still open
+
+**C7 is escalated, not fixed** (see its own section above) — it needs a Module-0-wide decision.
 
 **11 Important, 12 Minor** — untouched as of this section. The Criticals were done by hand rather than
 delegated, because each needed an independent probe and several needed a judgement the lane reports did
