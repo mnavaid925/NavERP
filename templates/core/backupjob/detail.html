@@ -45,7 +45,7 @@
           {% elif obj.status == "failed" %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
           {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
         </dd></div>
-        <div class="detail-item"><dt>Failure reason</dt><dd>{% if obj.status == "failed" or obj.is_partial %}{{ obj.get_failure_reason_display }}{% else %}{{ obj.get_failure_reason_display }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Failure reason</dt><dd>{{ obj.get_failure_reason_display }}</dd></div>
         <div class="detail-item"><dt>Scope</dt><dd>{{ obj.scope_label|default:"—" }}</dd></div>
         <div class="detail-item"><dt>Target</dt><dd>{% if obj.target_location %}<code>{{ obj.target_location }}</code>{% else %}<span class="text-muted">not recorded</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Storage tier</dt><dd>{{ obj.get_storage_tier_display }}</dd></div>
