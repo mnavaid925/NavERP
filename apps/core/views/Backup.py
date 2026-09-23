@@ -508,13 +508,24 @@ def backup_overview(request):
     jobs = BackupJob.objects.filter(tenant=tenant)
     archives = DataArchive.objects.filter(tenant=tenant)
     environments = EnvironmentInstance.objects.filter(tenant=tenant)
+    job_count = jobs.count()
+    archive_count = archives.count()
     context = {
-        "job_count": jobs.count(),
-        "unverified_count": jobs.filter(integrity_verified_at__isnull=True).count(),
+        "job_count": job_count,
+        # ---- A GREEN BADGE IS AN ACTIVE REASSURANCE, SO IT MUST BE EARNED (C4) ----
+        # "Never verified: 0" is a claim about the members of a set -- "every backup has been integrity
+        # checked". On a workspace that has recorded NO backups that claim is vacuously true and reads as
+        # a clean bill of health, which is the one thing it is not: there is no evidence either way.
+        # `None` is the honest answer, and the page names it ("nothing recorded to verify") instead of
+        # printing a green zero. This is the same discipline `backup_board` already applies to
+        # `never_restored` two views below, and the same one 0.8 states as "reporting 0 here would be a
+        # false all-clear". Denominator zero -> the figure does not exist.
+        "unverified_count": None if job_count == 0 else jobs.filter(
+            integrity_verified_at__isnull=True).count(),
         "partial_count": jobs.filter(status="warning").count(),
         "failed_count": jobs.filter(status="failed").count(),
-        "archive_count": archives.count(),
-        "unrestorable_count": archives.filter(
+        "archive_count": archive_count,
+        "unrestorable_count": None if archive_count == 0 else archives.filter(
             Q(location="") | Q(status__in=["lost", "destroyed"])).count(),
         "active_hold_count": LegalHold.active_for_tenant(tenant).count(),
         "environment_count": environments.count(),
