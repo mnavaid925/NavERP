@@ -505,39 +505,64 @@ def backup_overview(request):
         return redirect("dashboard:home")
     tenant = request.tenant
     posture = RecoveryPosture.objects.filter(tenant=tenant).first()
-    jobs = BackupJob.objects.filter(tenant=tenant)
-    archives = DataArchive.objects.filter(tenant=tenant)
-    environments = EnvironmentInstance.objects.filter(tenant=tenant)
-    job_count = jobs.count()
-    archive_count = archives.count()
+
+    # ---- ONE QUERY PER MODEL, THEN DERIVE IN PYTHON (I3) ----
+    # This view used to re-derive every count with a second query: four separate `COUNT(*)` against the
+    # same `BackupJob` base, two against `DataArchive`, and it materialised `environments` **twice**
+    # (once for `.count()`, once for the `is_expired` generator). Measured: 20 queries against
+    # `backup_board`'s 11, on the landing page an operator opens first. `is_verified`, `is_expired` and
+    # the unrestorable test are Python properties on purpose -- restating them in SQL would be the
+    # second copy of a rule that then drifts -- so each set is fetched once and the rules stay in one
+    # place, exactly as `backup_board` two views below already does.
+    #
+    # `BackupJob` is ordered `-id` for the same reason the board is (C5): `Meta.ordering` is
+    # `["-started_at", "-id"]`, a queued backup has `started_at=NULL`, and MariaDB sorts NULLs LAST
+    # under `DESC` -- so the newest work sorted to the bottom of this five-row preview and vanished.
+    # Insertion order is what "recent" means for an append-only register, and `-id` is PK-served.
+    jobs = list(BackupJob.objects.filter(tenant=tenant)
+                .select_related("encryption_key").order_by("-id"))
+    archives = list(DataArchive.objects.filter(tenant=tenant))
+    environments = list(EnvironmentInstance.objects.filter(tenant=tenant))
+    holds = list(LegalHold.active_for_tenant(tenant))
+    drills = list(RecoveryDrill.objects.filter(tenant=tenant).order_by("-performed_at", "-id"))
+
+    job_count = len(jobs)
+    archive_count = len(archives)
+
+    # ---- A GREEN BADGE IS AN ACTIVE REASSURANCE, SO IT MUST BE EARNED (C4) ----
+    # "Never verified: 0" is a claim about the members of a set -- "every backup has been integrity
+    # checked". On a workspace that has recorded NO backups that claim is vacuously true and reads as
+    # a clean bill of health, which is the one thing it is not: there is no evidence either way.
+    # `None` is the honest answer, and the page names it ("nothing recorded to verify") instead of
+    # printing a green zero. This is the same discipline `backup_board` already applies to
+    # `never_restored` two views below, and the same one 0.8 states as "reporting 0 here would be a
+    # false all-clear". Denominator zero -> the figure does not exist.
+    unverified_count = None if job_count == 0 else sum(1 for j in jobs if not j.is_verified)
+    unrestorable_count = None if archive_count == 0 else sum(
+        1 for a in archives if not a.location or a.status in {"lost", "destroyed"})
+
+    # In-flight rows first, then the newest settled ones -- the window rule `backup_board` applies, so
+    # a backup happening right now is never the row a five-row preview drops.
+    in_flight = [j for j in jobs if j.is_in_flight]
+    settled = [j for j in jobs if not j.is_in_flight]
+
     context = {
         "job_count": job_count,
-        # ---- A GREEN BADGE IS AN ACTIVE REASSURANCE, SO IT MUST BE EARNED (C4) ----
-        # "Never verified: 0" is a claim about the members of a set -- "every backup has been integrity
-        # checked". On a workspace that has recorded NO backups that claim is vacuously true and reads as
-        # a clean bill of health, which is the one thing it is not: there is no evidence either way.
-        # `None` is the honest answer, and the page names it ("nothing recorded to verify") instead of
-        # printing a green zero. This is the same discipline `backup_board` already applies to
-        # `never_restored` two views below, and the same one 0.8 states as "reporting 0 here would be a
-        # false all-clear". Denominator zero -> the figure does not exist.
-        "unverified_count": None if job_count == 0 else jobs.filter(
-            integrity_verified_at__isnull=True).count(),
-        "partial_count": jobs.filter(status="warning").count(),
-        "failed_count": jobs.filter(status="failed").count(),
+        "unverified_count": unverified_count,
+        "partial_count": sum(1 for j in jobs if j.is_partial),
+        "failed_count": sum(1 for j in jobs if j.status == "failed"),
         "archive_count": archive_count,
-        "unrestorable_count": None if archive_count == 0 else archives.filter(
-            Q(location="") | Q(status__in=["lost", "destroyed"])).count(),
-        "active_hold_count": LegalHold.active_for_tenant(tenant).count(),
-        "environment_count": environments.count(),
+        "unrestorable_count": unrestorable_count,
+        "active_hold_count": len(holds),
+        "environment_count": len(environments),
         # `is_expired` is a property, so this is computed in Python off the already-fetched rows rather
         # than issuing a second query per row.
         "expired_count": sum(1 for e in environments if e.is_expired),
-        "drill_count": RecoveryDrill.objects.filter(tenant=tenant).count(),
+        "drill_count": len(drills),
         "posture": posture,
         "targets_set": bool(posture and posture.has_targets),
-        "recent_jobs": jobs.select_related("encryption_key")[:5],
-        "recent_drills": RecoveryDrill.objects.filter(tenant=tenant)
-                         .exclude(performed_at=None).order_by("-performed_at")[:5],
+        "recent_jobs": (in_flight + settled)[:5],
+        "recent_drills": [d for d in drills if d.performed_at is not None][:5],
         "notes": BACKUP_NOTES,
     }
     return render(request, "core/backupoverview.html", context)
