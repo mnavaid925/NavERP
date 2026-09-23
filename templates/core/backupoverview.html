@@ -29,7 +29,7 @@
       <div class="detail-item"><dt>Active legal holds</dt><dd>{% if active_hold_count %}<span class="badge badge-amber">{{ active_hold_count }}</span>{% else %}0{% endif %}</dd></div>
       <div class="detail-item"><dt>Environments</dt><dd>{{ environment_count }} <span class="text-muted">({{ expired_count }} past expiry)</span></dd></div>
       <div class="detail-item"><dt>Drills recorded</dt><dd>{{ drill_count }}</dd></div>
-      <div class="detail-item"><dt>RPO / RTO targets</dt><dd>{% if targets_set %}<span class="badge badge-green">Set</span>{% else %}<span class="badge badge-amber">Not set</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>RPO / RTO targets</dt><dd>{% if targets_partial %}<span class="badge badge-amber" title="Only one of the two targets is recorded — the other is still missing.">Partial</span>{% elif targets_set %}<span class="badge badge-green">Set</span>{% else %}<span class="badge badge-amber">Not set</span>{% endif %}</dd></div>
     </dl>
     {% if not targets_set %}
       <p class="text-warn"><i data-lucide="alert-triangle"></i> No RPO or RTO target is recorded for this
