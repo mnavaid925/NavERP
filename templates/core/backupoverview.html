@@ -21,11 +21,11 @@
       the act happens out of band, and these rows are the trail it leaves.</p>
     <dl class="detail-grid">
       <div class="detail-item"><dt>Backups recorded</dt><dd>{{ job_count }}</dd></div>
-      <div class="detail-item"><dt>Never verified</dt><dd>{% if unverified_count %}<span class="badge badge-amber">{{ unverified_count }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Never verified</dt><dd>{% if unverified_count is None %}<span class="text-muted" title="No backup has been recorded, so there is no verification state that could be unreadable. A green 0 here would read as a clean bill of health.">not applicable</span>{% elif unverified_count %}<span class="badge badge-amber">{{ unverified_count }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Partial backups</dt><dd>{% if partial_count %}<span class="badge badge-amber">{{ partial_count }}</span>{% else %}0{% endif %}</dd></div>
       <div class="detail-item"><dt>Failed backups</dt><dd>{% if failed_count %}<span class="badge badge-red">{{ failed_count }}</span>{% else %}0{% endif %}</dd></div>
       <div class="detail-item"><dt>Archives catalogued</dt><dd>{{ archive_count }}</dd></div>
-      <div class="detail-item"><dt>Unrestorable archives</dt><dd>{% if unrestorable_count %}<span class="badge badge-red">{{ unrestorable_count }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Unrestorable archives</dt><dd>{% if unrestorable_count is None %}<span class="text-muted" title="No archive has been catalogued, so there is nothing whose restorability could have been lost. A green 0 here would read as a clean bill of health.">not applicable</span>{% elif unrestorable_count %}<span class="badge badge-red">{{ unrestorable_count }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Active legal holds</dt><dd>{% if active_hold_count %}<span class="badge badge-amber">{{ active_hold_count }}</span>{% else %}0{% endif %}</dd></div>
       <div class="detail-item"><dt>Environments</dt><dd>{{ environment_count }} <span class="text-muted">({{ expired_count }} past expiry)</span></dd></div>
       <div class="detail-item"><dt>Drills recorded</dt><dd>{{ drill_count }}</dd></div>
