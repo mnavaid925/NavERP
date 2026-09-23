@@ -29,7 +29,7 @@ re-storing a key on a backup row would both break that rule and be a leak.
 
 **Bullet 4 is mostly built by 0.8.** `LIVE_LINKS["0.8"]` already claims "Data Archival & Purging". This
 sub-module supplies only the two things a *schedule* structurally cannot express: a **legal hold** (an
-event with a release that **suspends** the schedule — see `Compliance.py`) and an **archive catalogue**
+event with a release that **suspends** the schedule — see `LegalHold.py`) and an **archive catalogue**
 (`RetentionPolicy.action="archive"` says *that* something should be archived; nothing recorded *where it
 went*, so a restore was impossible).
 """
