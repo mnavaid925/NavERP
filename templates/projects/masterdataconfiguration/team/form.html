@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ team.name }}{% else %}New Project Team{% endif %} — Project Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Team: {{ team.name }}{% else %}Create New Project Team{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:pte_list' %}">Teams</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% if is_edit %}{% url 'projects:pte_detail' pk=team.pk %}{% else %}{% url 'projects:pte_list' %}{% endif %}" class="btn btn-outline">
+      Cancel
+    </a>
+  </div>
+</div>
+
+<div class="card max-w-3xl mx-auto">
+  <div class="card-header">
+    <h2 class="text-base font-semibold text-slate-900">Team Structure &amp; Governance Details</h2>
+  </div>
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.name.id_for_label }}" class="form-label font-medium">Team Name <span class="text-red-500">*</span></label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.code.id_for_label }}" class="form-label">Team Code</label>
+          {{ form.code }}
+          {% if form.code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.code.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.team_type.id_for_label }}" class="form-label font-medium">Structure Model <span class="text-red-500">*</span></label>
+          {{ form.team_type }}
+          {% if form.team_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.team_type.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.team_lead.id_for_label }}" class="form-label">Team Lead</label>
+          {{ form.team_lead }}
+          {% if form.team_lead.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.team_lead.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.org_unit.id_for_label }}" class="form-label">Corporate Org Unit (Department / Branch)</label>
+          {{ form.org_unit }}
+          {% if form.org_unit.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.org_unit.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.project.id_for_label }}" class="form-label">Assigned Project (Optional)</label>
+          {{ form.project }}
+          <p class="text-xs text-muted mt-1">Leave empty if this is a shared enterprise resource pool.</p>
+          {% if form.project.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.project.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.location.id_for_label }}" class="form-label">Location / Geographic Hub</label>
+        {{ form.location }}
+        {% if form.location.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.location.errors }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.description.id_for_label }}" class="form-label">Operational Remit &amp; Charter</label>
+        {{ form.description }}
+        {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+      </div>
+
+      <div class="flex items-center gap-2 py-3 border-t border-slate-200">
+        {{ form.is_active }}
+        <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+          Active Team Available for Staffing
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'projects:pte_detail' pk=team.pk %}{% else %}{% url 'projects:pte_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+          {% if is_edit %}Save Changes{% else %}Create Team{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
