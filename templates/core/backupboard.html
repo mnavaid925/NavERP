@@ -22,7 +22,7 @@
       <div class="detail-item"><dt>Successful backups never test-restored</dt>
         <dd>{% if never_restored is None %}<span class="text-muted" title="There is no successful backup for this to be true of.">not applicable</span>{% else %}{{ never_restored }}{% endif %}</dd></div>
       <div class="detail-item"><dt>Archives</dt><dd>{{ archive_total }} <span class="text-muted">({{ async_retrieval_count }} on asynchronous retrieval)</span></dd></div>
-      <div class="detail-item"><dt>Verification state unreadable</dt><dd>{% if unverifiable_count %}{{ unverifiable_count }}{% else %}0 — all records carry a readable verification state{% endif %}</dd></div>
+      <div class="detail-item"><dt>Verification state unreadable</dt><dd>{% if unverifiable_count is None %}<span class="text-muted" title="There are no backup records for this to be true of.">not applicable</span>{% elif unverifiable_count %}{{ unverifiable_count }}{% else %}0 — all records carry a readable verification state{% endif %}</dd></div>
     </dl>
     <p class="text-muted"><i data-lucide="info"></i> A backup on an asynchronous tier cannot be retrieved on
       demand: a restore from it is a job that is requested and later completed, not a download.</p>
