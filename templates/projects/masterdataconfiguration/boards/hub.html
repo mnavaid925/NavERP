@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Master Data &amp; Configuration Hub — Projects — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Master Data &amp; Configuration Hub</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <span>Configuration Hub</span>
+    </div>
+  </div>
+  <div class="page-actions flex items-center gap-2">
+    <a href="{% url 'projects:ptm_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Template</a>
+    <a href="{% url 'projects:pcf_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Custom Field</a>
+    <a href="{% url 'projects:pte_create' %}" class="btn btn-outline"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Team</a>
+    <a href="{% url 'projects:pls_create' %}" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Locale Profile</a>
+  </div>
+</div>
+
+<!-- Key Master Data KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <div class="text-xs text-muted uppercase font-semibold">Templates</div>
+      <i data-lucide="layers" class="w-4 h-4 text-primary"></i>
+    </div>
+    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.templates_count }}</div>
+    <div class="text-xs text-green-600 mt-1">{{ stats.active_templates }} Active</div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <div class="text-xs text-muted uppercase font-semibold">Custom Fields</div>
+      <i data-lucide="sliders" class="w-4 h-4 text-primary"></i>
+    </div>
+    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.custom_fields_count }}</div>
+    <div class="text-xs text-muted mt-1">Across Models</div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <div class="text-xs text-muted uppercase font-semibold">Project Teams</div>
+      <i data-lucide="users" class="w-4 h-4 text-primary"></i>
+    </div>
+    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.teams_count }}</div>
+    <div class="text-xs text-muted mt-1">Matrix &amp; Functional</div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <div class="text-xs text-muted uppercase font-semibold">Staffed Members</div>
+      <i data-lucide="user-check" class="w-4 h-4 text-primary"></i>
+    </div>
+    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.team_members_count }}</div>
+    <div class="text-xs text-muted mt-1">Allocated Resources</div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <div class="text-xs text-muted uppercase font-semibold">Locale Profiles</div>
+      <i data-lucide="globe" class="w-4 h-4 text-primary"></i>
+    </div>
+    <div class="text-2xl font-bold text-slate-900 mt-2">{{ stats.locale_profiles_count }}</div>
+    <div class="text-xs text-muted mt-1">Regional Calendars</div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <div class="text-xs text-muted uppercase font-semibold">Configuration</div>
+      <i data-lucide="settings" class="w-4 h-4 text-primary"></i>
+    </div>
+    <div class="text-2xl font-bold text-green-600 mt-2">100%</div>
+    <div class="text-xs text-muted mt-1">Standardized</div>
+  </div>
+</div>
+
+<!-- Four Domain Configuration Panels -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <div class="card">
+    <div class="card-header flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="folder-kanban" class="w-5 h-5 text-primary"></i>
+        <h3 class="text-sm font-semibold text-slate-900">Project Templates</h3>
+      </div>
+      <a href="{% url 'projects:ptm_list' %}" class="text-xs text-primary hover:underline">View All</a>
+    </div>
+    <div class="card-body">
+      <p class="text-xs text-muted mb-4">Waterfall, Agile, Scrum, and Hybrid templates with pre-configured WBS hierarchies.</p>
+      <div class="space-y-2">
+        {% for m in methodologies %}
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-700">{{ m.label }}</span>
+          <span class="font-medium text-slate-900">{{ m.count }} ({{ m.percentage }}%)</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5">
+          <div class="bg-primary h-1.5 rounded-full" style="width: {{ m.percentage }}%"></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-200">
+        <a href="{% url 'projects:ptm_create' %}" class="btn btn-outline btn-sm w-full text-center">Create Template</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="sliders" class="w-5 h-5 text-primary"></i>
+        <h3 class="text-sm font-semibold text-slate-900">Custom Fields</h3>
+      </div>
+      <a href="{% url 'projects:pcf_list' %}" class="text-xs text-primary hover:underline">View All</a>
+    </div>
+    <div class="card-body">
+      <p class="text-xs text-muted mb-4">Enterprise metadata attributes with regex validation and conditional visibility.</p>
+      <div class="space-y-2">
+        {% for e in target_entities %}
+        <div class="flex items-center justify-between text-xs py-1 border-b border-slate-100">
+          <span class="text-slate-700">{{ e.label }}</span>
+          <span class="badge badge-info">{{ e.count }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-200">
+        <a href="{% url 'projects:pcf_create' %}" class="btn btn-outline btn-sm w-full text-center">Add Custom Field</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="network" class="w-5 h-5 text-primary"></i>
+        <h3 class="text-sm font-semibold text-slate-900">Organization &amp; Teams</h3>
+      </div>
+      <a href="{% url 'projects:pte_list' %}" class="text-xs text-primary hover:underline">View All</a>
+    </div>
+    <div class="card-body">
+      <p class="text-xs text-muted mb-4">Cross-functional, dedicated, and matrix team delivery structures linked to OrgUnits.</p>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 p-2 rounded">
+          <span class="text-slate-700">Configured Teams</span>
+          <span class="font-bold text-slate-900">{{ stats.teams_count }}</span>
+        </div>
+        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 p-2 rounded">
+          <span class="text-slate-700">Assigned Members</span>
+          <span class="font-bold text-slate-900">{{ stats.team_members_count }}</span>
+        </div>
+      </div>
+      <div class="mt-6 pt-3 border-t border-slate-200">
+        <a href="{% url 'projects:pte_create' %}" class="btn btn-outline btn-sm w-full text-center">Setup New Team</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="languages" class="w-5 h-5 text-primary"></i>
+        <h3 class="text-sm font-semibold text-slate-900">Localization &amp; Calendars</h3>
+      </div>
+      <a href="{% url 'projects:pls_list' %}" class="text-xs text-primary hover:underline">View All</a>
+    </div>
+    <div class="card-body">
+      <p class="text-xs text-muted mb-4">Multi-language packs, time zones, currency formats, and operational working schedules.</p>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs py-2 bg-slate-50 p-2 rounded">
+          <span class="text-slate-700">Active Profiles</span>
+          <span class="font-bold text-slate-900">{{ stats.locale_profiles_count }}</span>
+        </div>
+        <div class="text-xs text-muted">
+          Ensure projects adhere to regional compliance and multi-currency delivery standards.
+        </div>
+      </div>
+      <div class="mt-6 pt-3 border-t border-slate-200">
+        <a href="{% url 'projects:pls_create' %}" class="btn btn-outline btn-sm w-full text-center">New Locale Profile</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Operational Lists -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Recent Templates -->
+  <div class="card">
+    <div class="card-header flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-slate-900">Recently Updated Templates</h3>
+      <a href="{% url 'projects:ptm_list' %}" class="btn btn-outline btn-sm">Manage Templates</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Template</th>
+            <th>Methodology</th>
+            <th>Est. Duration</th>
+            <th class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in recent_templates %}
+          <tr>
+            <td>
+              <a href="{% url 'projects:ptm_detail' pk=t.pk %}" class="font-medium text-slate-900 hover:text-primary">{{ t.name }}</a>
+              <span class="block text-xs font-mono text-muted">{{ t.number }}</span>
+            </td>
+            <td>
+              {% if t.methodology == 'agile' %}
+                <span class="badge badge-green">Agile</span>
+              {% elif t.methodology == 'waterfall' %}
+                <span class="badge badge-info">Waterfall</span>
+              {% elif t.methodology == 'hybrid' %}
+                <span class="badge badge-amber">Hybrid</span>
+              {% else %}
+                <span class="badge badge-slate">{{ t.get_methodology_display }}</span>
+              {% endif %}
+            </td>
+            <td class="text-xs text-slate-600">
+              {{ t.estimated_duration_days }} days
+            </td>
+            <td class="text-right">
+              <a href="{% url 'projects:ptm_instantiate' pk=t.pk %}" class="btn btn-outline btn-sm">
+                <i data-lucide="play" class="w-3.5 h-3.5 mr-1"></i> Instantiate
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-6">No project templates configured yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Matrix Teams -->
+  <div class="card">
+    <div class="card-header flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-slate-900">Active Delivery Teams</h3>
+      <a href="{% url 'projects:pte_list' %}" class="btn btn-outline btn-sm">Manage Teams</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Team Name</th>
+            <th>Structure Model</th>
+            <th>Lead / Members</th>
+            <th class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tm in recent_teams %}
+          <tr>
+            <td>
+              <a href="{% url 'projects:pte_detail' pk=tm.pk %}" class="font-medium text-slate-900 hover:text-primary">{{ tm.name }}</a>
+              <span class="block text-xs font-mono text-muted">{{ tm.number }}</span>
+            </td>
+            <td>
+              {% if tm.team_type == 'matrix' %}
+                <span class="badge badge-amber">Matrix</span>
+              {% elif tm.team_type == 'dedicated' %}
+                <span class="badge badge-green">Dedicated</span>
+              {% elif tm.team_type == 'cross_functional' %}
+                <span class="badge badge-info">Cross-Functional</span>
+              {% else %}
+                <span class="badge badge-slate">{{ tm.get_team_type_display }}</span>
+              {% endif %}
+            </td>
+            <td class="text-xs text-slate-600">
+              <div>{{ tm.team_lead.get_full_name|default:tm.team_lead.username|default:"Unassigned Lead" }}</div>
+              <span class="text-muted">{{ tm.member_count }} allocated member{{ tm.member_count|pluralize }}</span>
+            </td>
+            <td class="text-right">
+              <a href="{% url 'projects:pte_detail' pk=tm.pk %}" class="btn btn-outline btn-sm">
+                <i data-lucide="eye" class="w-3.5 h-3.5 mr-1"></i> View
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-6">No project teams configured yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
