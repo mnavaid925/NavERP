@@ -32,7 +32,10 @@
     <div class="card-header"><h2 class="card-title">Backups nobody has verified</h2></div>
     <div class="card-body">
       <p class="text-muted">Named rather than counted: a count would hide <em>which</em> backup is an untested
-        claim. These are restorable-looking artefacts with no recorded integrity check.</p>
+        claim. These are restorable-looking artefacts with no recorded integrity check. Backups still
+        <strong>queued or running are not listed here</strong>: one that has not run yet has no check that is
+        missing, so naming it would be an accusation rather than a finding. Those appear under
+        <strong>Latest ten jobs</strong> below, where they are marked as in flight.</p>
     </div>
     <div class="table-wrap">
       <table class="table">
@@ -56,6 +59,13 @@
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Latest ten jobs</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Ordered by when the row was <strong>recorded</strong>, not by <code>started_at</code>:
+        a backup that has not started has no start time at all, and the database sorts those <em>last</em>, which
+        used to push the newest work out of the window entirely. Backups still <strong>queued or running are
+        listed first</strong> — a backup happening right now is not history, and it must never be the one row
+        this board hides.</p>
+    </div>
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Backup</th><th>Status</th><th>Age</th><th>Note</th></tr></thead>
