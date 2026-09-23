@@ -85,6 +85,9 @@ class LegalHold(TenantConsistentMixin, models.Model):
         indexes = [
             models.Index(fields=["tenant", "status"], name="lghold_tenant_status_idx"),
             models.Index(fields=["tenant", "model_label"], name="lghold_tenant_model_idx"),
+            # The ordering above needs its own index (I5) — neither index above is on `issued_at`, so
+            # `ORDER BY -issued_at` was an unindexed filesort over every hold in the tenant.
+            models.Index(fields=["tenant", "-issued_at"], name="lghold_tenant_at_idx"),
         ]
 
     def __str__(self):
