@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit {{ custom_field.label }}{% else %}New Custom Field{% endif %} — Project Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Custom Field: {{ custom_field.label }}{% else %}Define New Custom Field{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'dashboard:home' %}">Home</a>
+      <span>/</span>
+      <a href="{% url 'projects:prj_list' %}">Projects</a>
+      <span>/</span>
+      <a href="{% url 'projects:pcf_list' %}">Custom Fields</a>
+      <span>/</span>
+      <span>{% if is_edit %}Edit{% else %}New{% endif %}</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% if is_edit %}{% url 'projects:pcf_detail' pk=custom_field.pk %}{% else %}{% url 'projects:pcf_list' %}{% endif %}" class="btn btn-outline">
+      Cancel
+    </a>
+  </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+  <div class="card-header">
+    <h2 class="text-base font-semibold text-slate-900">Custom Field Definition &amp; Validation Rules</h2>
+  </div>
+  <div class="card-body">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.label.id_for_label }}" class="form-label font-medium">Field Display Label <span class="text-red-500">*</span></label>
+          {{ form.label }}
+          {% if form.label.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.label.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.field_key.id_for_label }}" class="form-label font-medium">Programmatic Field Key (Slug) <span class="text-red-500">*</span></label>
+          {{ form.field_key }}
+          {% if form.field_key.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.field_key.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label for="{{ form.target_entity.id_for_label }}" class="form-label font-medium">Target Entity <span class="text-red-500">*</span></label>
+          {{ form.target_entity }}
+          {% if form.target_entity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_entity.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.field_type.id_for_label }}" class="form-label font-medium">Data Type <span class="text-red-500">*</span></label>
+          {{ form.field_type }}
+          {% if form.field_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.field_type.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.form_section.id_for_label }}" class="form-label font-medium">Form Section Group <span class="text-red-500">*</span></label>
+          {{ form.form_section }}
+          {% if form.form_section.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.form_section.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.name.id_for_label }}" class="form-label">Internal Name / Purpose <span class="text-red-500">*</span></label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.placeholder.id_for_label }}" class="form-label">Input Placeholder</label>
+          {{ form.placeholder }}
+          {% if form.placeholder.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.placeholder.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.description.id_for_label }}" class="form-label">Description / User Guidance</label>
+        {{ form.description }}
+        {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="form-group">
+          <label for="{{ form.default_value.id_for_label }}" class="form-label">Default Value</label>
+          {{ form.default_value }}
+          {% if form.default_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_value.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.min_value.id_for_label }}" class="form-label">Min Value (Numeric)</label>
+          {{ form.min_value }}
+          {% if form.min_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.min_value.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.max_value.id_for_label }}" class="form-label">Max Value (Numeric)</label>
+          {{ form.max_value }}
+          {% if form.max_value.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.max_value.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-group">
+          <label for="{{ form.regex_pattern.id_for_label }}" class="form-label">Regex Validation Pattern</label>
+          {{ form.regex_pattern }}
+          {% if form.regex_pattern.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.regex_pattern.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.display_order.id_for_label }}" class="form-label">Display Order</label>
+          {{ form.display_order }}
+          {% if form.display_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.display_order.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.choices_list_raw.id_for_label }}" class="form-label">{{ form.choices_list_raw.label }}</label>
+        {{ form.choices_list_raw }}
+        <p class="text-xs text-muted mt-1">{{ form.choices_list_raw.help_text }}</p>
+        {% if form.choices_list_raw.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.choices_list_raw.errors }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.visibility_rule_raw.id_for_label }}" class="form-label">{{ form.visibility_rule_raw.label }}</label>
+        {{ form.visibility_rule_raw }}
+        <p class="text-xs text-muted mt-1">{{ form.visibility_rule_raw.help_text }}</p>
+        {% if form.visibility_rule_raw.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.visibility_rule_raw.errors }}</div>{% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 py-3 border-t border-slate-200">
+        <div class="flex items-center gap-2">
+          {{ form.is_required }}
+          <label for="{{ form.is_required.id_for_label }}" class="text-sm font-medium text-slate-800">
+            Mandatory Required Field
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
+            Active for Data Capture
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'projects:pcf_detail' pk=custom_field.pk %}{% else %}{% url 'projects:pcf_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+          {% if is_edit %}Save Changes{% else %}Create Custom Field{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
