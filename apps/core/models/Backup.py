@@ -421,6 +421,17 @@ class RestoreRecord(models.Model):
         if self.scope == "archive_retrieval" and self.archive is None:
             raise ValidationError(
                 {"archive": "An archive retrieval needs the archive it retrieves from."})
+        # The source must be one that CAN be read. `DataArchive.is_restorable` is the property this
+        # sub-module added for exactly this purpose, and this register is the only evidence a restore
+        # happened — so recording a restore from an archive whose own page says it is lost, destroyed
+        # or has no location would be a false clearance of the same shape 0.8 refuses when it declines
+        # to report a `0` it cannot justify. The rule lives at the MODEL edge, not in the form's
+        # queryset, so the admin and the seeder are covered too — and the seeder plants the bait on
+        # purpose ("Legacy CRM export (media lost)", `status="lost"`, `location=""`).
+        if self.archive is not None and not self.archive.is_restorable:
+            raise ValidationError(
+                {"archive": "This archive is marked lost or destroyed, or has no location — it cannot "
+                            "be the source of a restore."})
         # A restore that is not merely planned must name a source.
         if self.status != "planned" and self.backup is None and self.archive is None:
             raise ValidationError(
