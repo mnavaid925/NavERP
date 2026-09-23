@@ -2151,6 +2151,16 @@ LIVE_LINKS = {
         "Sync Jobs":                         "projects:syj_list",
         "Sync Runs":                         "projects:syr_list",
     },
+    # ----- 7.19 Master Data & Configuration -----
+    "7.19": {
+        "Project Templates & Methodologies": "projects:ptm_list",
+        "Custom Fields & Forms":             "projects:pcf_list",
+        "Organization Hierarchy & Teams":    "projects:pte_list",
+        "Localization & Multi-Language":     "projects:pls_list",
+        # Extra live leaves:
+        "Configuration Hub":                 "projects:configuration_hub",
+    },
+
 
 
 
