@@ -834,8 +834,11 @@ class Command(BaseCommand):
         seeded as `warning` (partial) with `partial_scope_skipped`, and one successful backup is left
         with a NULL `integrity_verified_at`. A seed where every backup is green would hide the two
         conditions the board exists to surface: a partial backup people would trust, and a backup
-        nobody has ever checked. `EncryptionKey` belongs to `tenants`, so it is read from there and
-        never created here.
+        nobody has ever checked. A fourth job is seeded `queued` with a NULL `started_at` (M11), so the
+        in-flight state is present too. `EncryptionKey` belongs to `tenants`, so it is read from there and
+        never created here — and because `seed_core` runs *before* `seed_tenants` it is absent on a fresh
+        seed, which is why `encryption_key` is backfilled at the end of this method rather than only set
+        at insert time (M2).
         """
         EncryptionKey = django_apps.get_model("tenants", "EncryptionKey")
         key = EncryptionKey.objects.filter(tenant=tenant).first()
@@ -876,6 +879,27 @@ class Command(BaseCommand):
                 BackupJob.objects.create(tenant=tenant, encryption_key=key, is_immutable=False,
                                          performed_by=None, **row)
             self.stdout.write(f"  {tenant.name}: seeded {len(jobs)} backup job(s)")
+
+        # ---- BackupJob: a queued row, with its OWN guard (M11) ----
+        # `Meta.ordering` is `["-started_at", "-id"]` and MariaDB sorts a NULL `started_at` LAST under
+        # `DESC`, so a just-queued backup sank below every finished one and was sliced off the board's
+        # ten-row window -- that is C5. All three rows above carry a `started_at`, which is exactly why a
+        # green sweep never caught it. This row has `started_at=None`, so the in-flight state is actually
+        # present in the demo data; and it gets its OWN guard rather than riding on the tenant-wide one,
+        # so it also reaches workspaces that were seeded before this fix.
+        if not BackupJob.objects.filter(tenant=tenant, name="Queued nightly full backup").exists():
+            BackupJob.objects.create(
+                tenant=tenant, encryption_key=key, is_immutable=False, performed_by=None,
+                name="Queued nightly full backup", scope_label="nav_erp schema", backup_type="full",
+                frequency="daily", retention_days=30, target_location="s3://acme-backups/nav_erp",
+                storage_tier="standard", encryption_scheme="aes256", size_bytes=None,
+                checksum="", integrity_method="none", integrity_verified_at=None,
+                status="queued", failure_reason="n_a", started_at=None, finished_at=None,
+                evidence="",
+                notes="Seeded as queued with no start time: this row records an intention to back up, "
+                      "not a backup. Nothing has been written yet.",
+            )
+            self.stdout.write(f"  {tenant.name}: seeded 1 queued backup job")
 
         # ---- RecoveryPosture: the singleton (get_or_create, one row per tenant) ----
         _, posture_created = RecoveryPosture.objects.get_or_create(
@@ -993,3 +1017,23 @@ class Command(BaseCommand):
                 is_verified=True, evidence="OPS-1055",
             )
             self.stdout.write(f"  {tenant.name}: seeded 1 restore record")
+
+        # ---- M2: backfill `encryption_key` once `seed_tenants` has created one ----
+        # `seed_core` runs BEFORE `seed_tenants` (`seed_core -> seed_accounts -> seed_tenants`), so on a
+        # fresh seed no `EncryptionKey` exists yet and `key` above is None: every seeded backup, plus the
+        # located archive, is written with `encryption_key=NULL`. The per-entity guards above then never
+        # re-run, so the NULL would stick forever even after the key appears. Backfill here, on a later
+        # run, matched by the names this seeder itself creates — a user-added row is never touched, and
+        # the deliberately keyless "Legacy CRM export (media lost)" is not in either list.
+        if key is not None:
+            stale_jobs = BackupJob.objects.filter(
+                tenant=tenant, encryption_key__isnull=True,
+                name__in=["Nightly full backup", "Hourly transaction log", "Weekly offsite copy",
+                          "Queued nightly full backup"]).update(encryption_key=key)
+            stale_archives = DataArchive.objects.filter(
+                tenant=tenant, encryption_key__isnull=True,
+                name="2024 activity archive").update(encryption_key=key)
+            if stale_jobs or stale_archives:
+                self.stdout.write(
+                    f"  {tenant.name}: backfilled encryption_key on {stale_jobs} backup job(s) "
+                    f"and {stale_archives} archive(s)")
