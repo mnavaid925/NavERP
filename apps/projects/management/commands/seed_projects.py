@@ -4919,58 +4919,63 @@ class Command(BaseCommand):
             cf1 = ProjectCustomField.objects.create(
                 tenant=tenant,
                 target_entity="project",
-                field_name="client_billing_code",
+                field_key="client_billing_code",
+                label="Client Billing Code",
                 name="Client Billing Code",
                 field_type="text",
                 description="Cross-charge financial reference code.",
                 is_required=True,
-                position=10,
+                display_order=10,
                 is_active=True,
-                validation_regex=r"^[A-Z0-9]{4,10}$",
+                regex_pattern=r"^[A-Z0-9]{4,10}$",
             )
             cf2 = ProjectCustomField.objects.create(
                 tenant=tenant,
                 target_entity="task",
-                field_name="story_points",
+                field_key="story_points",
+                label="Story Points",
                 name="Story Points",
-                field_type="number",
+                field_type="integer",
                 description="Fibonacci estimation sizing (1, 2, 3, 5, 8, 13).",
                 is_required=False,
-                position=20,
+                display_order=20,
                 is_active=True,
             )
             cf3 = ProjectCustomField.objects.create(
                 tenant=tenant,
-                target_entity="issue",
-                field_name="root_cause_category",
-                name="Root Cause Category",
+                target_entity="milestone",
+                field_key="gating_criteria",
+                label="Gating Criteria",
+                name="Gating Criteria",
                 field_type="select",
-                description="Categorization of underlying fault or defect origin.",
-                options_list=["Architecture", "Configuration", "Code Defect", "Infrastructure", "Requirements Gap"],
+                description="Categorization of stage-gate milestone completion criteria.",
+                choices_list=["Executive Sign-Off", "Customer Acceptance", "Security Audit", "Regulatory Filing"],
                 is_required=True,
-                position=30,
+                display_order=30,
                 is_active=True,
             )
             cf4 = ProjectCustomField.objects.create(
                 tenant=tenant,
                 target_entity="risk",
-                field_name="is_regulatory_compliance",
-                name="Regulatory Compliance Impact",
+                field_key="regulatory_impact",
+                label="Regulatory Compliance Impact",
+                name="Regulatory Impact",
                 field_type="boolean",
                 description="Flag indicating if the risk impacts statutory or GDPR/SOX compliance.",
                 is_required=False,
-                position=40,
+                display_order=40,
                 is_active=True,
             )
             cf5 = ProjectCustomField.objects.create(
                 tenant=tenant,
-                target_entity="sprint",
-                field_name="retrospective_theme",
-                name="Retrospective Theme",
+                target_entity="team",
+                field_key="core_skillset",
+                label="Primary Technical Skillset",
+                name="Core Skillset",
                 field_type="text",
-                description="Key continuous improvement focus area agreed during retro.",
+                description="Key engineering specialisation of this delivery unit.",
                 is_required=False,
-                position=50,
+                display_order=50,
                 is_active=True,
             )
 
@@ -4992,18 +4997,18 @@ class Command(BaseCommand):
                     tenant=tenant,
                     team=t1,
                     user=admin_user,
-                    role="Lead Architect",
-                    allocation_percent=Decimal("100.00"),
-                    is_primary=True,
+                    role="tech_lead",
+                    allocation_percentage=100,
+                    is_primary_contact=True,
                 )
             if second_user and second_user != admin_user:
                 ProjectTeamMember.objects.create(
                     tenant=tenant,
                     team=t1,
                     user=second_user,
-                    role="Backend Senior Engineer",
-                    allocation_percent=Decimal("80.00"),
-                    is_primary=False,
+                    role="developer",
+                    allocation_percentage=80,
+                    is_primary_contact=False,
                 )
 
             t2 = ProjectTeam.objects.create(
@@ -5023,12 +5028,14 @@ class Command(BaseCommand):
                     tenant=tenant,
                     team=t2,
                     user=third_user,
-                    role="QA Automation Lead",
-                    allocation_percent=Decimal("50.00"),
-                    is_primary=True,
+                    role="qa_engineer",
+                    allocation_percentage=50,
+                    is_primary_contact=True,
                 )
 
             t3 = ProjectTeam.objects.create(
+
+
                 tenant=tenant,
                 name="Client Advisory & Architecture",
                 code="TEAM-ADV-ARCH",
