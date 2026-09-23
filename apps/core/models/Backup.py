@@ -591,12 +591,43 @@ class EnvironmentInstance(TenantConsistentMixin, models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_kind_display()})"
 
+    def _refuse_cycle(self, field_name):
+        """Walk `field_name` upward from the proposed parent and refuse if it leads back to `self`.
+
+        The self-FK is the NetSuite refresh chain ("production *or another sandbox*"), so the obvious
+        way to render "derived from → → production" is `while env.source_environment:` — which loops
+        forever on a cycle. A→B is legitimate; B→A is not, and the only guard was self-exclusion, which
+        the operator cannot even see (I8). The walk is bounded by the number of environments in the
+        workspace and stops early on a pre-existing cycle it did not cause.
+        """
+        proposed_parent_id = getattr(self, f"{field_name}_id")
+        if proposed_parent_id is None or self.pk is None:
+            return
+        model = type(self)
+        seen = set()
+        current_id = proposed_parent_id
+        while current_id is not None:
+            if current_id == self.pk:
+                raise ValidationError(
+                    {field_name: "That would create a loop — the environment you selected already "
+                                 "derives from this one."})
+            if current_id in seen:
+                break
+            seen.add(current_id)
+            current_id = (model.objects.filter(pk=current_id)
+                          .values_list(f"{field_name}_id", flat=True).first())
+
     def clean(self):
         super().clean()
         if self.source_environment_id is not None and self.source_environment_id == self.pk:
             raise ValidationError({"source_environment": "An environment cannot be derived from itself."})
         if self.refresh_source_id is not None and self.refresh_source_id == self.pk:
             raise ValidationError({"refresh_source": "An environment cannot be refreshed from itself."})
+        # A self-edge is the shortest cycle; these catch every longer one (A→B→A) that the shipped edit
+        # form accepted, because a one-dropdown mistake must not be able to create a state that hangs
+        # the next page written against the chain.
+        self._refuse_cycle("source_environment")
+        self._refuse_cycle("refresh_source")
         if self.expires_at is not None and self.created_at is not None:
             if self.expires_at < self.created_at:
                 raise ValidationError({"expires_at": "An environment cannot expire before it was created."})
