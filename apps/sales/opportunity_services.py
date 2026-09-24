@@ -743,6 +743,41 @@ def _opportunity_transition_validate_stage_projection(stage):
         raise ValidationError("Closed stage projection values are invalid.")
 
 
+def sales_allowed_transition_stages(placement):
+    if placement is None:
+        return []
+    tenant_id = getattr(placement, "tenant_id", None)
+    pipeline_id = getattr(placement, "pipeline_id", None)
+    current_stage_id = getattr(placement, "current_stage_id", None)
+    if not tenant_id or not pipeline_id or not current_stage_id:
+        return []
+    stages = list(
+        PipelineStage.objects.filter(
+            tenant_id=tenant_id,
+            pipeline_id=pipeline_id,
+            is_active=True,
+        ).order_by("sequence", "pk")
+    )
+    current = next((stage for stage in stages if stage.pk == current_stage_id), None)
+    if current is None:
+        return []
+    if current.stage_kind == "open":
+        next_open = next(
+            (
+                stage
+                for stage in stages
+                if stage.stage_kind == "open" and stage.sequence > current.sequence
+            ),
+            None,
+        )
+        targets = [next_open] if next_open is not None else []
+        targets.extend(stage for stage in stages if stage.stage_kind in {"won", "lost"})
+        return targets
+    if current.stage_kind in {"won", "lost"}:
+        return [stage for stage in stages if stage.stage_kind == "open"]
+    return []
+
+
 def sales_transition_opportunity(
     *,
     opportunity,
