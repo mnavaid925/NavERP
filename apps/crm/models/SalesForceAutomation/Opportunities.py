@@ -31,6 +31,7 @@ class Opportunity(TenantNumbered):
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default="prospecting")
     forecast_category = models.CharField(max_length=12, choices=FORECAST_CATEGORY_CHOICES, default="pipeline")
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True, related_name="crm_opportunities")
     probability = models.PositiveSmallIntegerField(default=10, validators=[MaxValueValidator(100)])
     close_date = models.DateField(null=True, blank=True)
     competitor = models.CharField(max_length=255, blank=True)
@@ -42,6 +43,7 @@ class Opportunity(TenantNumbered):
     source_lead = models.ForeignKey("crm.Lead", on_delete=models.SET_NULL, null=True, blank=True, related_name="opportunities")
     campaign = models.ForeignKey("crm.Campaign", on_delete=models.SET_NULL, null=True, blank=True, related_name="opportunities")
     next_step = models.CharField(max_length=255, blank=True)
+    next_step_due_date = models.DateField(null=True, blank=True)
     description = models.TextField(blank=True)
 
     class Meta:
@@ -51,6 +53,8 @@ class Opportunity(TenantNumbered):
             models.Index(fields=["tenant", "stage"], name="crm_opp_tenant_stage_idx"),
             models.Index(fields=["tenant", "created_at"], name="crm_opp_tenant_created_idx"),
             models.Index(fields=["tenant", "forecast_category"], name="crm_opp_tnt_fcast_idx"),
+            models.Index(fields=["tenant", "next_step_due_date"], name="crm_opp_next_due_idx"),
+            models.Index(fields=["tenant", "currency"], name="crm_opp_tenant_curr_idx"),
         ]
 
     @classmethod
