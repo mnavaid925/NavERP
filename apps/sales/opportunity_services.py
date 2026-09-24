@@ -125,12 +125,14 @@ def _opportunity_pipeline_create_baseline_stages(pipeline):
     return stages
 
 
-def _opportunity_pipeline_validate_active_shape(pipeline):
+def _opportunity_pipeline_validate_active_shape(pipeline, exclude_stage_id=None):
     active_stages = PipelineStage.objects.filter(
         tenant=pipeline.tenant,
         pipeline=pipeline,
         is_active=True,
     )
+    if exclude_stage_id is not None:
+        active_stages = active_stages.exclude(pk=exclude_stage_id)
     open_count = active_stages.filter(stage_kind="open").count()
     won_count = active_stages.filter(stage_kind="won").count()
     lost_count = active_stages.filter(stage_kind="lost").count()
@@ -295,6 +297,38 @@ def sales_save_pipeline_stage(stage, tenant, user, validated_data, pipeline=None
             tenant=tenant,
         )
     return locked_stage
+
+
+def sales_delete_pipeline_stage(stage, tenant, user):
+    tenant_id = _opportunity_pipeline_tenant_id(tenant)
+    if stage.tenant_id != tenant_id:
+        raise ValidationError("The pipeline stage must belong to this workspace.")
+    with transaction.atomic():
+        locked_pipeline = Pipeline.objects.select_for_update().get(
+            pk=stage.pipeline_id,
+            tenant=tenant,
+        )
+        locked_stage = PipelineStage.objects.select_for_update().get(
+            pk=stage.pk,
+            pipeline=locked_pipeline,
+            tenant=tenant,
+        )
+        if locked_stage.current_placements.exists():
+            raise ValidationError("A stage used by a placement cannot be deleted.")
+        if locked_pipeline.is_active:
+            _opportunity_pipeline_validate_active_shape(
+                locked_pipeline,
+                exclude_stage_id=locked_stage.pk,
+            )
+        write_audit_log(
+            user,
+            locked_stage,
+            "delete",
+            {"operation": "delete_pipeline_stage"},
+            tenant=tenant,
+        )
+        locked_stage.delete()
+    return True
 
 
 def sales_reorder_pipeline_stages(pipeline, tenant, user, ordered_stage_ids):
