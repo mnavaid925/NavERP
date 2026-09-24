@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.party.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} · {{ obj.party.name }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_competitor_profile_list' %}">Competitor Profiles</a><span class="sep">›</span><span>{{ obj.party.name }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:opportunity_competitor_profile_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to profiles</a>
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    <a href="{% url 'sales:opportunity_competitor_profile_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'sales:opportunity_competitor_profile_delete' obj.pk %}" onsubmit="return confirm('Delete this competitor profile? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="building-2"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Profile number</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ obj.is_active|yesno:"Active,Inactive" }}</div><div class="stat-label">Availability</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="link-2"></i></div><div class="stat-value">{{ opportunity_links|length }}</div><div class="stat-label">Opportunity links</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="calendar-check"></i></div><div class="stat-value">{{ obj.last_reviewed_on|date:"M d, Y"|default:"—" }}</div><div class="stat-label">Last reviewed</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Profile</h2></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Company</dt><dd>{{ obj.party.name }}</dd></div>
+      <div class="detail-item"><dt>Aliases</dt><dd>{{ obj.aliases|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Website</dt><dd>{% if obj.website_url %}<a href="{{ obj.website_url }}" target="_blank" rel="noopener noreferrer">{{ obj.website_url }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Last reviewed</dt><dd>{{ obj.last_reviewed_on|date:"M d, Y"|default:"Not reviewed" }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Description</dt><dd>{{ obj.description|default:"No description recorded." }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Market positioning</dt><dd>{{ obj.market_positioning|default:"No positioning recorded." }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Strengths</dt><dd>{{ obj.strengths|default:"No strengths recorded." }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Weaknesses</dt><dd>{{ obj.weaknesses|default:"No weaknesses recorded." }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Differentiators</dt><dd>{{ obj.differentiators|default:"No differentiators recorded." }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Objection handling</dt><dd>{{ obj.objection_handling|default:"No objection handling recorded." }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Opportunity links</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Opportunity</th><th>Relationship</th><th>Primary</th><th>Pricing notes</th><th>Deal notes</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for link in opportunity_links %}
+        <tr>
+          <td><a href="{% url 'crm:opportunity_detail' link.opportunity.pk %}" class="fw-600">{{ link.opportunity.number }} · {{ link.opportunity.name }}</a></td>
+          <td>{% if link.relationship == "preferred" or link.relationship == "incumbent" %}<span class="badge badge-info">{{ link.get_relationship_display }}</span>{% elif link.relationship == "identified" or link.relationship == "evaluating" or link.relationship == "shortlisted" %}<span class="badge badge-muted">{{ link.get_relationship_display }}</span>{% elif link.relationship == "eliminated" or link.relationship == "lost_to" or link.relationship == "beaten" or link.relationship == "withdrew" %}<span class="badge badge-red">{{ link.get_relationship_display }}</span>{% else %}<span class="badge badge-slate">{{ link.get_relationship_display }}</span>{% endif %}</td>
+          <td>{% if link.is_primary %}<span class="badge badge-green">Primary</span>{% else %}—{% endif %}</td>
+          <td>{{ link.pricing_notes|default:"—"|truncatechars:80 }}</td>
+          <td>{{ link.deal_notes|default:"—"|truncatechars:80 }}</td>
+          <td><div class="table-actions">
+            <a href="{% url 'sales:opportunity_competitor_link_edit' link.opportunity.pk link.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            <form method="post" action="{% url 'sales:opportunity_competitor_link_remove' link.opportunity.pk link.pk %}" onsubmit="return confirm('Remove this competitor from the opportunity?');">
+              {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button>
+            </form>
+          </div></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="link-2"></i><h3>No opportunity links</h3><p>This profile is not currently linked to an opportunity.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<a href="{% url 'sales:opportunity_competitor_profile_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to profiles</a>
+{% endblock %}
