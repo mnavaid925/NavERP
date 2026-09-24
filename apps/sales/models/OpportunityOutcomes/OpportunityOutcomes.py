@@ -31,12 +31,12 @@ class WinLossReason(TenantNumbered):
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     sequence = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
-    result = models.CharField(max_length=10, choices=RESULT_CHOICES)
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    result = models.CharField(max_length=10, choices=RESULT_CHOICES, default="both")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other")
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ["sequence", "name", "id"]
+        ordering = ["result", "sequence", "name", "id"]
         constraints = [
             models.UniqueConstraint(fields=["tenant", "number"], name="sales_wlr_tenant_number_uniq"),
             models.UniqueConstraint(fields=["tenant", "code"], name="sales_wlr_tenant_code_uniq"),
@@ -94,7 +94,7 @@ class OpportunityOutcome(TenantNumbered):
     )
 
     class Meta:
-        ordering = ["-closed_at", "-id"]
+        ordering = ["-closed_at", "-created_at", "-id"]
         constraints = [
             models.UniqueConstraint(fields=["tenant", "number"], name="sales_out_tenant_number_uniq"),
         ]
@@ -137,6 +137,16 @@ class OpportunityOutcome(TenantNumbered):
                 raise ValidationError({"competitor_link": "The competitor link must belong to the opportunity."})
             if competitor_link.relationship in {"lost_to", "beaten"} and self.result != "lost":
                 raise ValidationError({"competitor_link": "This competitor relationship requires a lost outcome."})
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Opportunity outcomes are append-only.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Opportunity outcomes cannot be deleted.")
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         try:
