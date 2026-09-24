@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} · {{ obj.name }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_pipeline_list' %}">Opportunity Pipelines</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:opportunity_pipeline_board' %}?pipeline={{ obj.pk|stringformat:'d' }}" class="btn btn-outline"><i data-lucide="kanban"></i> Board</a>
+    <a href="{% url 'sales:opportunity_pipeline_stages' obj.pk %}" class="btn btn-outline"><i data-lucide="list-ordered"></i> Stages</a>
+    {% if can_edit %}<a href="{% url 'sales:opportunity_pipeline_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ obj.is_default|yesno:"Yes,No" }}</div><div class="stat-label">Workspace default</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="badge-check"></i></div><div class="stat-value">{{ obj.is_active|yesno:"Active,Inactive" }}</div><div class="stat-label">Availability</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="users"></i></div><div class="stat-value">{{ placement_count }}</div><div class="stat-label">Placements</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="activity"></i></div><div class="stat-value">{{ open_placement_count }}</div><div class="stat-label">Open placements</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Configuration</h2><div class="page-actions">
+    {% if can_edit and obj.is_active and not obj.is_default %}
+    <form method="post" action="{% url 'sales:opportunity_pipeline_set_default' obj.pk %}" onsubmit="return confirm('Set this pipeline as the workspace default?');">
+      {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="star"></i> Set default</button>
+    </form>
+    {% endif %}
+    {% if can_edit %}
+    <form method="post" action="{% url 'sales:opportunity_pipeline_delete' obj.pk %}" onsubmit="return confirm('Delete this pipeline? This cannot be undone.');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+    {% endif %}
+  </div></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>State</dt><dd><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ obj.is_active|yesno:"Active,Inactive" }}</span></dd></div>
+      <div class="detail-item"><dt>Default</dt><dd>{% if obj.is_default %}<span class="badge badge-info">Default</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+    </dl>
+    <p>{{ obj.description|default:"No description."|linebreaksbr }}</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Stages</h2>{% if can_edit %}<a href="{% url 'sales:opportunity_pipeline_stage_create' obj.pk %}" class="btn btn-sm btn-primary"><i data-lucide="plus"></i> Add stage</a>{% endif %}</div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Order</th><th>Stage</th><th>Kind</th><th>Probability</th><th>Forecast</th><th>Target</th><th>Entry criteria</th><th>Exit criteria</th><th>State</th>{% if can_edit %}<th class="table-actions">Actions</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for stage in stages %}
+        <tr>
+          <td>{{ stage.sequence }}</td>
+          <td class="fw-600">{{ stage.name }}<div class="text-muted">{{ stage.code }} · {{ stage.get_crm_stage_key_display }}</div></td>
+          <td><span class="badge {% if stage.stage_kind == 'open' %}badge-info{% elif stage.stage_kind == 'won' %}badge-green{% elif stage.stage_kind == 'lost' %}badge-red{% else %}badge-slate{% endif %}">{{ stage.get_stage_kind_display }}</span></td>
+          <td>{{ stage.probability }}%</td>
+          <td>{{ stage.get_forecast_category_display }}</td>
+          <td>{% if stage.target_days is None %}—{% else %}{{ stage.target_days }} days{% endif %}</td>
+          <td>{% for criterion in stage.entry_criteria %}<span class="badge badge-slate">{{ criterion.label }}</span>{% empty %}—{% endfor %}</td>
+          <td>{% for criterion in stage.exit_criteria %}<span class="badge badge-slate">{{ criterion.label }}</span>{% empty %}—{% endfor %}</td>
+          <td><span class="badge {% if stage.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ stage.is_active|yesno:"Active,Inactive" }}</span></td>
+          {% if can_edit %}
+          <td><div class="table-actions">
+            <a href="{% url 'sales:opportunity_pipeline_stage_edit' obj.pk stage.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            <form method="post" action="{% url 'sales:opportunity_pipeline_stage_delete' obj.pk stage.pk %}" onsubmit="return confirm('Delete this pipeline stage?');">
+              {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+            </form>
+          </div></td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="10"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No stages</h3><p>Add a stage to make this pipeline usable.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<a href="{% url 'sales:opportunity_pipeline_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to pipelines</a>
+{% endblock %}
