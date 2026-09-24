@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Sales Lead Operations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Lead Operations</h1>
+      <div class="breadcrumb"><span>Sales</span><span class="sep">›</span><span>8.1 Lead Management</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:formsubmission_list' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Capture</a>
+      <a href="{% url 'crm:campaign_list' %}" class="btn btn-outline"><i data-lucide="megaphone"></i> Campaigns</a>
+      <a href="{% url 'sales:lead_score_event_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Score events</a>
+      <a href="{% url 'sales:lead_qualification_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Qualifications</a>
+      <a href="{% url 'sales:lead_nurture_enrollment_list' %}" class="btn btn-outline"><i data-lucide="mail"></i> Nurture</a>
+    </div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="users"></i></div><div><div class="stat-value">{{ stats.total_leads }}</div><div class="stat-label">Leads</div></div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="badge-check"></i></div><div><div class="stat-value">{{ stats.qualified_leads }}</div><div class="stat-label">Sales qualified</div></div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="mail"></i></div><div><div class="stat-value">{{ stats.active_nurture }}</div><div class="stat-label">Active nurture</div></div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="route"></i></div><div><div class="stat-value">{{ stats.routing_rule_count }}</div><div class="stat-label">Active routing rules</div></div></div>
+  </div>
+  <div class="card" id="handoff">
+    <div class="card-header"><h2 class="card-title">Lead readiness and handoff</h2></div>
+    <div class="card-body">
+      <p class="text-muted">CRM owns the canonical lead, account/contact, opportunity, and conversion path. Sales adds the readiness layers shown here.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Lead</th><th>Score / grade</th><th>Qualification</th><th>Owner</th><th>Nurture</th><th class="table-actions">Action</th></tr></thead>
+          <tbody>
+          {% for lead in leads %}
+            <tr>
+              <td><a href="{% url 'crm:lead_detail' lead.pk %}">{{ lead.number }} · {{ lead.name }}</a>{% if lead.company %}<br><small>{{ lead.company }}</small>{% endif %}</td>
+              <td>{{ lead.score }} · {{ lead.get_rating_display }}</td>
+              <td>{% if lead.sales_qualification %}<span class="badge {% if lead.sales_qualification.status == 'qualified' %}badge-green{% elif lead.sales_qualification.status == 'partially_qualified' %}badge-amber{% elif lead.sales_qualification.status == 'disqualified' %}badge-red{% elif lead.sales_qualification.status == 'archived' %}badge-muted{% else %}badge-info{% endif %}">{{ lead.sales_qualification.get_status_display }}</span>{% else %}<span class="text-muted">Unassessed</span>{% endif %}</td>
+              <td>{% if lead.owner %}{{ lead.owner.get_full_name|default:lead.owner.username }}{% else %}—{% endif %}</td>
+              <td>{% for enrollment in enrollments %}{% if enrollment.lead_id == lead.pk %}{{ enrollment.get_status_display }}{% if not forloop.last %} / {% endif %}{% endif %}{% empty %}—{% endfor %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:lead_detail' lead.pk %}" class="btn-icon" title="CRM lead"><i data-lucide="external-link"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}{% if lead.sales_qualification.status == 'qualified' and lead.status != 'converted' %}<form method="post" action="{% url 'sales:lead_handoff' lead.pk %}" onsubmit="return confirm('Hand this qualified lead off to CRM?');">{% csrf_token %}<button class="btn btn-primary" type="submit">Convert to opportunity</button></form>{% endif %}{% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="users"></i><h3>No CRM leads</h3><p>Capture leads in CRM to use Sales operations.</p></div></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Latest score signals</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Lead</th><th>Event</th><th>Delta</th><th>Reason</th><th>Date</th></tr></thead><tbody>{% for event in latest_score_events %}<tr><td><a href="{% url 'sales:lead_score_event_detail' event.pk %}">{{ event.lead.number }}</a></td><td>{{ event.get_event_type_display }}</td><td>{{ event.score_delta }}</td><td>{{ event.reason|default:"—"|truncatechars:50 }}</td><td>{{ event.occurred_at|date:"M d, Y H:i" }}</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="gauge"></i><p>No score signals yet.</p></div></td></tr>{% endfor %}</tbody></table></div>
+  </div>
+  {% if duplicate_warnings %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Existing Party warnings</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Lead</th><th>Warning</th><th>Existing Party</th></tr></thead><tbody>{% for warning in duplicate_warnings %}<tr><td><a href="{% url 'crm:lead_detail' warning.lead.pk %}">{{ warning.lead.number }} · {{ warning.lead.name }}</a></td><td>{{ warning.reason }}</td><td>{{ warning.party_name }}</td></tr>{% endfor %}</tbody></table></div>
+  </div>
+  {% endif %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Routing rules</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Rule</th><th>Mode</th><th>Priority</th><th>State</th><th>Last assignment</th></tr></thead><tbody>{% for rule in routing_rules %}<tr><td><a href="{% url 'sales:lead_routing_rule_detail' rule.pk %}">{{ rule.name }}</a></td><td>{{ rule.get_assignment_mode_display }}</td><td>{{ rule.priority }}</td><td>{% if rule.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td><td>{% if rule.last_assigned_owner %}{{ rule.last_assigned_owner.get_full_name|default:rule.last_assigned_owner.username }} · {% endif %}{{ rule.last_assigned_at|date:"M d, Y H:i"|default:"—" }}</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="route"></i><p>No routing rules.</p></div></td></tr>{% endfor %}</tbody></table></div>
+  </div>
+{% endblock %}
