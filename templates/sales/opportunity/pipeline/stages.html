@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ pipeline.name }} Stages{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ pipeline.name }} Stages</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_pipeline_list' %}">Opportunity Pipelines</a><span class="sep">›</span><a href="{% url 'sales:opportunity_pipeline_detail' pipeline.pk %}">{{ pipeline.name }}</a><span class="sep">›</span><span>Stages</span></div>
+  </div>
+  <div class="page-actions"><a href="{% url 'sales:opportunity_pipeline_detail' pipeline.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Pipeline detail</a>{% if request.user.is_superuser or request.user.is_tenant_admin %}<a href="{% url 'sales:opportunity_pipeline_stage_create' pipeline.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add stage</a>{% endif %}</div>
+</div>
+
+{% if request.user.is_superuser or request.user.is_tenant_admin %}
+<div class="card">
+  <div class="card-header"><h2>Stage order</h2></div>
+  <div class="card-body">
+    <form id="pipeline-stage-reorder-form" method="post" action="{% url 'sales:opportunity_pipeline_stages' pipeline.pk %}">
+      {% csrf_token %}
+      {{ reorder_form.ordered_stage_ids }}
+      {% for error in reorder_form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+      {% for error in reorder_form.ordered_stage_ids.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="arrow-up-down"></i> Save order</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><h2>Configured stages</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Order</th><th>Stage</th><th>Kind</th><th>CRM stage</th><th>Probability</th><th>Forecast</th><th>Target</th><th>State</th>{% if request.user.is_superuser or request.user.is_tenant_admin %}<th class="table-actions">Actions</th>{% endif %}</tr></thead>
+      <tbody id="pipeline-stage-order-body">
+        {% for stage in stages %}
+        <tr data-pipeline-stage-id="{{ stage.pk }}">
+          <td>{{ stage.sequence }}</td>
+          <td class="fw-600">{{ stage.name }}<div class="text-muted">{{ stage.code }}</div></td>
+          <td><span class="badge {% if stage.stage_kind == 'open' %}badge-info{% elif stage.stage_kind == 'won' %}badge-green{% elif stage.stage_kind == 'lost' %}badge-red{% else %}badge-slate{% endif %}">{{ stage.get_stage_kind_display }}</span></td>
+          <td>{{ stage.get_crm_stage_key_display }}</td>
+          <td>{{ stage.probability }}%</td>
+          <td>{{ stage.get_forecast_category_display }}</td>
+          <td>{% if stage.target_days is None %}—{% else %}{{ stage.target_days }} days{% endif %}</td>
+          <td><span class="badge {% if stage.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ stage.is_active|yesno:"Active,Inactive" }}</span></td>
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <td><div class="table-actions">
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}<button class="btn-icon" type="button" data-move-pipeline-stage="up" title="Move up"{% if forloop.first %} disabled{% endif %}><i data-lucide="chevron-up"></i></button><button class="btn-icon" type="button" data-move-pipeline-stage="down" title="Move down"{% if forloop.last %} disabled{% endif %}><i data-lucide="chevron-down"></i></button>{% endif %}
+            <a href="{% url 'sales:opportunity_pipeline_stage_edit' pipeline.pk stage.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            <form method="post" action="{% url 'sales:opportunity_pipeline_stage_delete' pipeline.pk stage.pk %}" onsubmit="return confirm('Delete this pipeline stage?');">
+              {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+            </form>
+          </div></td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-ordered"></i><h3>No stages</h3><p>Add the first stage to configure this pipeline.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if request.user.is_superuser or request.user.is_tenant_admin %}
+<div class="card">
+  <div class="card-header"><h2>Add stage</h2></div>
+  <div class="card-body">
+    <form method="post" action="{% url 'sales:opportunity_pipeline_stage_create' pipeline.pk %}" novalidate>
+      {% csrf_token %}
+      {% for error in stage_form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in stage_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {% if field.name == 'entry_criteria' or field.name == 'exit_criteria' %}<div class="badge-group">{{ field }}</div>{% else %}{{ field }}{% endif %}
+          {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add stage</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const form = document.getElementById("pipeline-stage-reorder-form");
+  const body = document.getElementById("pipeline-stage-order-body");
+  if (!form || !body) return;
+  const input = form.querySelector("input[name=ordered_stage_ids]");
+  const sync = function () {
+    input.value = Array.from(body.querySelectorAll("tr[data-pipeline-stage-id]"))
+      .map(function (row) { return row.dataset.pipelineStageId; })
+      .join(",");
+  };
+  body.addEventListener("click", function (event) {
+    const button = event.target.closest("button[data-move-pipeline-stage]");
+    if (!button) return;
+    const row = button.closest("tr");
+    if (button.dataset.movePipelineStage === "up" && row.previousElementSibling) {
+      body.insertBefore(row, row.previousElementSibling);
+    }
+    if (button.dataset.movePipelineStage === "down" && row.nextElementSibling) {
+      body.insertBefore(row.nextElementSibling, row);
+    }
+    sync();
+  });
+  form.addEventListener("submit", sync);
+}());
+</script>
+{% endblock %}
