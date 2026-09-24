@@ -408,7 +408,7 @@ def sales_validate_stage_criteria(
         "owner": opportunity.owner_id is not None,
         "active_team_member": bool(active_team_member),
     }
-    criteria = stage.entry_criteria if criteria is None else criteria
+    criteria = (stage.entry_criteria if criteria is None else criteria) or []
     if not isinstance(criteria, (list, tuple)) or len(criteria) > 20:
         raise ValidationError("Stage criteria are invalid.")
     missing = []
