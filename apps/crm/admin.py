@@ -68,7 +68,7 @@ class LeadAdmin(admin.ModelAdmin):
     list_display = ("number", "name", "company", "status", "rating", "score", "owner", "tenant")
     list_filter = ("status", "rating", "source", "tenant")
     search_fields = ("number", "name", "company", "email")
-    readonly_fields = ("number", "created_at", "updated_at")
+    readonly_fields = ("number", "rating", "score", "created_at", "updated_at")
 
 
 @admin.register(Opportunity)
