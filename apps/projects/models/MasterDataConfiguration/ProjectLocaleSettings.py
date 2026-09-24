@@ -124,6 +124,31 @@ class ProjectLocaleSetting(TenantNumbered):
 
     def clean(self):
         super().clean()
+        if self.tenant_id and self.project_id and self.project.tenant_id != self.tenant_id:
+            raise ValidationError({"project": "The project belongs to another tenant."})
+        if self.is_default and self.project_id:
+            raise ValidationError({"is_default": "Only a workspace-wide profile can be the default."})
+        if self.project_id and self.is_active:
+            overrides = ProjectLocaleSetting.objects.filter(
+                tenant=self.tenant,
+                project_id=self.project_id,
+                is_active=True,
+            )
+            if self.pk:
+                overrides = overrides.exclude(pk=self.pk)
+            if overrides.exists():
+                raise ValidationError({
+                    "project": "Only one active locale override can apply to a project."
+                })
+        if not isinstance(self.working_days_pattern, list) or not self.working_days_pattern:
+            raise ValidationError({"working_days_pattern": "Select at least one working day."})
+        if any(
+            isinstance(day, bool) or not isinstance(day, int) or day not in range(1, 8)
+            for day in self.working_days_pattern
+        ):
+            raise ValidationError({"working_days_pattern": "Working days must be integers from 1 to 7."})
+        if len(set(self.working_days_pattern)) != len(self.working_days_pattern):
+            raise ValidationError({"working_days_pattern": "Working days must be unique."})
         if self.is_default and self.tenant_id and not self.project_id:
             qs = ProjectLocaleSetting.objects.filter(
                 tenant=self.tenant,
@@ -136,8 +161,73 @@ class ProjectLocaleSetting(TenantNumbered):
                 raise ValidationError({"is_default": "A default workspace locale profile already exists."})
 
     @property
+    def active_badge_class(self):
+        return "badge-green" if self.is_active else "badge-muted"
+
+    @property
+    def scope_badge_class(self):
+        return "badge-info" if self.project_id else "badge-slate"
+
+    @property
     def working_days_display(self):
         days_map = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
         if not self.working_days_pattern:
-            return "Mon-Fri (Standard)"
+            return "Not configured"
         return ", ".join(days_map.get(d, str(d)) for d in self.working_days_pattern)
+
+
+def resolve_project_locale(project):
+    tenant = project.tenant
+    from apps.core.models.Calendar import BusinessCalendar
+    from apps.core.models.Localization import LocaleProfile
+
+    override = (
+        ProjectLocaleSetting.objects.filter(
+            tenant=tenant,
+            project=project,
+            is_active=True,
+        )
+        .select_related("language", "time_zone", "currency")
+        .order_by("-updated_at", "-id")
+        .first()
+    )
+    locale_profile = (
+        LocaleProfile.objects.filter(tenant=tenant)
+        .select_related("language", "time_zone", "base_currency")
+        .first()
+    )
+    calendar = BusinessCalendar.objects.filter(tenant=tenant).first()
+    working_days = override.working_days_pattern if override else None
+    if not working_days and calendar is not None:
+        working_days = calendar.working_days
+    return {
+        "tenant": tenant,
+        "override": override,
+        "locale_profile": locale_profile,
+        "calendar": calendar,
+        "language": override.language if override and override.language_id else (
+            locale_profile.language if locale_profile else None
+        ),
+        "time_zone": override.time_zone if override and override.time_zone_id else (
+            locale_profile.time_zone if locale_profile else None
+        ),
+        "currency": override.currency if override and override.currency_id else (
+            locale_profile.base_currency if locale_profile else None
+        ),
+        "date_format": override.date_format if override else (
+            locale_profile.date_format if locale_profile else None
+        ),
+        "time_format": override.time_format if override else (
+            locale_profile.time_format if locale_profile else None
+        ),
+        "number_format": override.number_format if override else (
+            locale_profile.number_format if locale_profile else None
+        ),
+        "first_day_of_week": override.first_day_of_week if override else (
+            locale_profile.first_day_of_week if locale_profile else None
+        ),
+        "working_days": list(working_days or []),
+        "working_hours_per_day": (
+            override.working_hours_per_day if override else None
+        ),
+    }
