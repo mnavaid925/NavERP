@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Visibility{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Pipeline Visibility</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">›</span><a href="{% url 'sales:opportunity_pipeline_list' %}">Opportunity Pipelines</a><span class="sep">›</span><span>Visibility</span></div>
+  </div>
+  <div class="page-actions"><a href="{% url 'sales:opportunity_pipeline_board' %}{% if pipeline_id %}?pipeline={{ pipeline_id|stringformat:'d' }}{% endif %}" class="btn btn-outline"><i data-lucide="kanban"></i> Board</a><a href="{% url 'sales:opportunity_pipeline_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Pipelines</a></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="min-width:220px;">
+        <label class="form-label" for="visibility-pipeline">Pipeline</label>
+        <select id="visibility-pipeline" name="pipeline" class="form-select">
+          <option value="">Select pipeline</option>
+          {% for pipeline in pipelines %}<option value="{{ pipeline.pk|stringformat:'d' }}"{% if pipeline_id == pipeline.pk|stringformat:'d' %} selected{% endif %}>{{ pipeline.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:190px;">
+        <label class="form-label" for="visibility-owner">Owner</label>
+        <select id="visibility-owner" name="owner" class="form-select">
+          <option value="">All owners</option>
+          {% for owner in owner_users %}<option value="{{ owner.pk|stringformat:'d' }}"{% if owner_id == owner.pk|stringformat:'d' %} selected{% endif %}>{{ owner.get_full_name|default:owner.email|default:owner.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:190px;">
+        <label class="form-label" for="visibility-territory">Territory</label>
+        <select id="visibility-territory" name="territory" class="form-select">
+          <option value="">All territories</option>
+          {% for territory in territories %}<option value="{{ territory.pk|stringformat:'d' }}"{% if territory_id == territory.pk|stringformat:'d' %} selected{% endif %}>{{ territory.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="visibility-health">Health</label>
+        <select id="visibility-health" name="health" class="form-select">
+          <option value="">All health states</option>
+          {% for value, label in health_choices %}<option value="{{ value }}"{% if health == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="visibility-currency">Currency</label>
+        <select id="visibility-currency" name="currency" class="form-select">
+          <option value="">Currency-safe total</option>
+          {% for row in currency_totals %}<option value="{{ row.filter_value }}"{% if currency == row.filter_value %} selected{% endif %}>{{ row.currency_label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" for="visibility-date-from">Entered from</label><input id="visibility-date-from" type="date" name="date_from" value="{% if date_from %}{{ date_from|date:'Y-m-d' }}{% endif %}" class="form-input"></div>
+      <div class="form-group"><label class="form-label" for="visibility-date-to">Entered to</label><input id="visibility-date-to" type="date" name="date_to" value="{% if date_to %}{{ date_to|date:'Y-m-d' }}{% endif %}" class="form-input"></div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'sales:opportunity_pipeline_visibility' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ health_counts.on_track }}</div><div class="stat-label">On track</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="eye"></i></div><div class="stat-value">{{ health_counts.watch }}</div><div class="stat-label">Watch</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ health_counts.at_risk }}</div><div class="stat-label">At risk</div></div>
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="clock"></i></div><div class="stat-value">{{ stage_age_rows|length }}</div><div class="stat-label">Stage-age rows</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Currency-safe totals</h2></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Currency</th><th>Placements</th><th>Open</th><th>Won</th><th>Lost</th><th>Amount</th><th>Weighted</th></tr></thead>
+    <tbody>
+      {% for row in currency_totals %}<tr><td class="fw-600">{{ row.currency_label }}</td><td>{{ row.count }}</td><td>{{ row.open_count }}</td><td>{{ row.won_count }}</td><td>{{ row.lost_count }}</td><td>{{ row.amount }}</td><td>{{ row.weighted_amount }}</td></tr>{% empty %}<tr><td colspan="7"><div class="empty-state"><i data-lucide="coins"></i><p>No currency totals are available.</p></div></td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Stage aging</h2></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Opportunity</th><th>Pipeline</th><th>Stage</th><th>Owner</th><th>Territory</th><th>Currency</th><th>Amount</th><th>Probability</th><th>Age</th><th>Target</th><th>State</th></tr></thead>
+    <tbody>
+      {% for row in stage_age_rows %}
+      <tr class="{% if row.is_stale %}row-warn{% endif %}">
+        <td><a href="{% url 'sales:opportunity_workspace_detail' row.opportunity_id %}">{{ row.opportunity_number }} · {{ row.opportunity_name }}</a><div class="text-muted">Entered {{ row.stage_entered_at|date:"M d, Y H:i" }}</div></td>
+        <td>{{ row.pipeline_name }}</td>
+        <td>{{ row.stage_name }}</td>
+        <td>{% if row.owner_name %}{{ row.owner_name }}{% else %}Unassigned{% endif %}</td>
+        <td>{% if row.territory_name %}{{ row.territory_name }}{% else %}—{% endif %}</td>
+        <td>{{ row.currency_label }}</td>
+        <td>{{ row.amount }}</td>
+        <td>{{ row.effective_probability }}%</td>
+        <td>{{ row.stage_age_days }} days</td>
+        <td>{% if row.target_days is None %}—{% else %}{{ row.target_days }} days{% endif %}</td>
+        <td><span class="badge {% if row.is_stale %}badge-red{% else %}badge-green{% endif %}">{% if row.is_stale %}Stale{% else %}Current{% endif %}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="11"><div class="empty-state"><i data-lucide="clock"></i><h3>No stage-age rows</h3><p>No placements match this pipeline, owner, territory, currency, health, or date scope.</p></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Win / loss outcomes</h2></div>
+  <div class="card-body"><div class="empty-state"><i data-lucide="trophy"></i><h3>No outcome rows in this entity group</h3><p>Structured win/loss reasons and outcomes are a later 8.2 entity group; no legacy transition is inferred here.</p></div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Competitor outcomes</h2></div>
+  <div class="card-body"><div class="empty-state"><i data-lucide="shield"></i><h3>No competitor rows in this entity group</h3><p>Structured competitive links are a later 8.2 entity group and are not inferred from legacy free text.</p></div></div>
+</div>
+{% endblock %}
