@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Opportunity Pipeline Board{% endblock %}
+{% block content %}
+<style>
+.op-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; align-items: start; }
+.op-board-column { background: var(--page-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; }
+.op-board-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .65rem; }
+.op-board-head h2 { margin: 0; font-size: .95rem; }
+.op-board-total { font-size: .78rem; color: var(--text-muted); margin-bottom: .65rem; }
+.op-board-cards { display: flex; flex-direction: column; gap: .65rem; }
+.op-board-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .7rem; box-shadow: var(--shadow); }
+.op-board-card-title { font-weight: 600; }
+.op-board-meta { display: flex; flex-wrap: wrap; gap: .3rem; margin: .45rem 0; }
+.op-board-detail { font-size: .8rem; color: var(--text-muted); margin-top: .35rem; }
+</style>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Opportunity Pipeline Board</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">›</span><a href="{% url 'sales:opportunity_pipeline_list' %}">Opportunity Pipelines</a><span class="sep">›</span><span>Board</span></div>
+  </div>
+  <div class="page-actions"><a href="{% url 'sales:opportunity_pipeline_visibility' %}" class="btn btn-outline"><i data-lucide="eye"></i> Visibility</a><a href="{% url 'sales:opportunity_pipeline_list' %}" class="btn btn-outline"><i data-lucide="settings"></i> Pipelines</a></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="min-width:220px;">
+        <label class="form-label" for="board-pipeline">Pipeline</label>
+        <select id="board-pipeline" name="pipeline" class="form-select">
+          <option value="">Select pipeline</option>
+          {% for pipeline in pipelines %}<option value="{{ pipeline.pk|stringformat:'d' }}"{% if pipeline_id == pipeline.pk|stringformat:'d' %} selected{% endif %}>{{ pipeline.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:190px;">
+        <label class="form-label" for="board-owner">Owner</label>
+        <select id="board-owner" name="owner" class="form-select">
+          <option value="">All owners</option>
+          {% for owner in owner_users %}<option value="{{ owner.pk|stringformat:'d' }}"{% if owner_id == owner.pk|stringformat:'d' %} selected{% endif %}>{{ owner.get_full_name|default:owner.email|default:owner.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:190px;">
+        <label class="form-label" for="board-territory">Territory</label>
+        <select id="board-territory" name="territory" class="form-select">
+          <option value="">All territories</option>
+          {% for territory in territories %}<option value="{{ territory.pk|stringformat:'d' }}"{% if territory_id == territory.pk|stringformat:'d' %} selected{% endif %}>{{ territory.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="board-health">Health</label>
+        <select id="board-health" name="health" class="form-select">
+          <option value="">All health states</option>
+          {% for value, label in health_choices %}<option value="{{ value }}"{% if health == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="board-currency">Currency</label>
+        <select id="board-currency" name="currency" class="form-select">
+          <option value="">Currency-safe total</option>
+          {% for row in currency_totals %}<option value="{{ row.filter_value }}"{% if currency == row.filter_value %} selected{% endif %}>{{ row.currency_label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'sales:opportunity_pipeline_board' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ health_counts.on_track }}</div><div class="stat-label">On track</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="eye"></i></div><div class="stat-value">{{ health_counts.watch }}</div><div class="stat-label">Watch</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ health_counts.at_risk }}</div><div class="stat-label">At risk</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="layers"></i></div><div class="stat-value">{{ unplaced_opportunities|length }}</div><div class="stat-label">Unplaced preview</div></div>
+</div>
+
+{% if selected_pipeline %}
+<div class="card">
+  <div class="card-header"><h2>{{ selected_pipeline.name }}</h2><span class="badge {% if selected_pipeline.is_default %}badge-info{% else %}badge-slate{% endif %}">{% if selected_pipeline.is_default %}Default{% else %}Pipeline{% endif %}</span></div>
+  <div class="card-body">
+    <div class="op-board">
+      {% for column in columns %}
+      <div class="op-board-column">
+        <div class="op-board-head"><h2>{{ column.label }}</h2><span class="badge {% if column.stage.stage_kind == 'won' %}badge-green{% elif column.stage.stage_kind == 'lost' %}badge-red{% else %}badge-info{% endif %}">{{ column.count }}</span></div>
+        <div class="op-board-total">{% if column.amount is None %}Mixed currencies{% else %}{{ column.amount }} · Weighted {{ column.weighted_amount }}{% endif %}{% if column.stale_count %} · {{ column.stale_count }} stale{% endif %}</div>
+        <div class="op-board-cards">
+          {% for card in column.opportunities %}
+          <div class="op-board-card">
+            <div class="op-board-card-title"><a href="{% url 'sales:opportunity_workspace_detail' card.opportunity.pk %}">{{ card.opportunity.number }} · {{ card.opportunity.name }}</a></div>
+            <div class="op-board-meta">
+              <span class="badge {% if card.health.status == 'on_track' %}badge-green{% elif card.health.status == 'watch' %}badge-amber{% elif card.health.status == 'at_risk' %}badge-red{% else %}badge-slate{% endif %}">{{ card.health.status|default:"Unknown"|title }}</span>
+              <span class="badge badge-slate">{{ card.currency_label }}</span>
+              <span class="badge badge-amber">{{ card.effective_probability }}%</span>
+              {% if card.is_stale %}<span class="badge badge-red">Stale</span>{% endif %}
+            </div>
+            <div class="op-board-detail">{{ card.opportunity.amount }} · Weighted {{ card.weighted_amount }}</div>
+            <div class="op-board-detail">Owner: {% if card.opportunity.owner %}{{ card.opportunity.owner.get_full_name|default:card.opportunity.owner.username }}{% else %}Unassigned{% endif %} · Stage age {{ card.stage_age_days }} days</div>
+          </div>
+          {% empty %}
+          <div class="empty-state"><i data-lucide="inbox"></i><p>No opportunities in this stage.</p></div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card"><div class="card-body"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No active pipeline</h3><p>Create and activate a pipeline to populate the board.</p></div></div></div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><h2>Pipeline rollup</h2></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Pipeline</th><th>Open</th><th>Won</th><th>Lost</th><th>Amount</th><th>Weighted</th><th>Currencies</th></tr></thead>
+    <tbody>
+      {% for row in summary_rows %}
+      <tr><td class="fw-600">{{ row.pipeline_name }}{% if row.is_default %} <span class="badge badge-info">Default</span>{% endif %}</td><td>{{ row.open_count }}</td><td>{{ row.won_count }}</td><td>{{ row.lost_count }}</td><td>{% if row.amount is None %}Mixed currencies{% else %}{{ row.amount }}{% endif %}</td><td>{% if row.weighted_amount is None %}Mixed currencies{% else %}{{ row.weighted_amount }}{% endif %}</td><td>{{ row.currencies|join:", " }}</td></tr>
+      {% empty %}<tr><td colspan="7"><div class="empty-state"><i data-lucide="bar-chart-3"></i><p>No placed opportunities match this scope.</p></div></td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Currency totals</h2></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Currency</th><th>Placements</th><th>Open</th><th>Won</th><th>Lost</th><th>Amount</th><th>Weighted</th></tr></thead>
+    <tbody>
+      {% for row in currency_totals %}<tr><td class="fw-600">{{ row.currency_label }}</td><td>{{ row.count }}</td><td>{{ row.open_count }}</td><td>{{ row.won_count }}</td><td>{{ row.lost_count }}</td><td>{{ row.amount }}</td><td>{{ row.weighted_amount }}</td></tr>{% empty %}<tr><td colspan="7"><div class="empty-state"><i data-lucide="coins"></i><p>No currency totals are available.</p></div></td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Unplaced opportunities</h2></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Opportunity</th><th>Owner</th><th>Amount</th><th>Close date</th></tr></thead>
+    <tbody>
+      {% for opportunity in unplaced_opportunities %}<tr><td><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}">{{ opportunity.number }} · {{ opportunity.name }}</a></td><td>{% if opportunity.owner %}{{ opportunity.owner.get_full_name|default:opportunity.owner.username }}{% else %}Unassigned{% endif %}</td><td>{{ opportunity.amount }}</td><td>{{ opportunity.close_date|default:"—" }}</td></tr>{% empty %}<tr><td colspan="4"><div class="empty-state"><i data-lucide="circle-check"></i><p>No unplaced open opportunities match this scope.</p></div></td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
