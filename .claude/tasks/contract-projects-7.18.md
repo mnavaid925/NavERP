@@ -465,8 +465,9 @@ reveal appears exactly once).
 - **30 mappings** across ≥5 connectors: ≥1 `is_key=True` per connector, a `value_map` on the Jira and
   Salesforce rows (`{"done":"completed"}`, `{"Closed Won":"active"}`), a `to_remote`/`from_remote`/`both`
   trio, one `transform="date_iso"`.
-- **9 jobs** spanning every `entity_scope` family the five bullets use, all four `conflict_policy`
-  values, `is_active` true/false, one `trigger_mode="scheduled"` with `interval_minutes=60`.
+- **10 jobs** spanning every `entity_scope` family the five bullets use, including a Jira
+  `milestones` job, all four `conflict_policy` values, `is_active` true/false, one
+  `trigger_mode="scheduled"` with `interval_minutes=60`.
 - **45 runs** (page 2 needs >25; the monitor needs heat) spanning **every** `RUN_STATUS` and every
   `trigger_source`, spread over ~10 days, `records_*` populated, ≥1 failure per connector, one long
   `error_message` to exercise truncation, one `next_retry_at` stamp. **All runs via
