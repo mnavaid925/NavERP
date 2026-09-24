@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.models import Tenant
 from apps.core.utils import write_audit_log
 from apps.crm.models import Opportunity
 from apps.sales.models.OpportunityPipeline.Pipelines import (
@@ -16,6 +17,10 @@ from apps.sales.models.OpportunityPipeline.Pipelines import (
 
 def _opportunity_pipeline_tenant_id(tenant):
     return getattr(tenant, "pk", tenant)
+
+
+def _opportunity_pipeline_lock_tenant(tenant):
+    Tenant.objects.select_for_update().get(pk=_opportunity_pipeline_tenant_id(tenant))
 
 
 def opportunity_pipeline_baseline_stages():
@@ -160,6 +165,7 @@ def sales_create_pipeline(tenant, validated_data, user):
     if desired_default and not desired_active:
         raise ValidationError("The default pipeline must be active.")
     with transaction.atomic():
+        _opportunity_pipeline_lock_tenant(tenant)
         pipeline = Pipeline(
             tenant=tenant,
             is_active=False,
@@ -192,6 +198,7 @@ def sales_set_default_pipeline(pipeline, tenant, user):
     if pipeline.tenant_id != tenant_id:
         raise ValidationError("The pipeline must belong to this workspace.")
     with transaction.atomic():
+        _opportunity_pipeline_lock_tenant(tenant)
         locked = Pipeline.objects.select_for_update().get(pk=pipeline.pk, tenant=tenant)
         if not locked.is_active:
             raise ValidationError("Only an active pipeline can be the default.")
@@ -216,6 +223,7 @@ def sales_save_pipeline(pipeline, tenant, user, validated_data):
     if pipeline.tenant_id != tenant_id:
         raise ValidationError("The pipeline must belong to this workspace.")
     with transaction.atomic():
+        _opportunity_pipeline_lock_tenant(tenant)
         locked = Pipeline.objects.select_for_update().get(pk=pipeline.pk, tenant=tenant)
         values = dict(validated_data)
         desired_active = bool(values.get("is_active", locked.is_active))
