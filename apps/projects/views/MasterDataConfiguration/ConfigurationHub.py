@@ -1,6 +1,7 @@
 """Projects 7.19 — Master Data & Configuration Hub view."""
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import render
 
 from apps.projects.models.MasterDataConfiguration.ProjectCustomFields import ProjectCustomField
@@ -18,22 +19,49 @@ def configuration_hub(request):
     fields_qs = ProjectCustomField.objects.filter(tenant=tenant)
     teams_qs = ProjectTeam.objects.filter(tenant=tenant)
     locales_qs = ProjectLocaleSetting.objects.filter(tenant=tenant)
-    members_qs = ProjectTeamMember.objects.filter(tenant=tenant)
+    members_qs = ProjectTeamMember.objects.filter(
+        tenant=tenant,
+        left_date__isnull=True,
+    )
 
-    templates_count = templates_qs.count()
-    active_templates = templates_qs.filter(is_active=True).count()
-    custom_fields_count = fields_qs.count()
-    teams_count = teams_qs.count()
-    team_members_count = members_qs.count()
-    locale_profiles_count = locales_qs.count()
+    template_stats = templates_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    field_stats = fields_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    team_stats = teams_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    member_count = members_qs.aggregate(total=Count("id"))["total"] or 0
+    locale_stats = locales_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    configured_total = (
+        template_stats["total"] + field_stats["total"] + team_stats["total"]
+        + locale_stats["total"]
+    )
+    active_total = (
+        template_stats["active"] + field_stats["active"] + team_stats["active"]
+        + locale_stats["active"]
+    )
+    standardization_pct = round((active_total / configured_total) * 100, 1) if configured_total else 0
 
     stats = {
-        "templates_count": templates_count,
-        "active_templates": active_templates,
-        "custom_fields_count": custom_fields_count,
-        "teams_count": teams_count,
-        "team_members_count": team_members_count,
-        "locale_profiles_count": locale_profiles_count,
+        "templates_count": template_stats["total"],
+        "active_templates": template_stats["active"],
+        "custom_fields_count": field_stats["total"],
+        "active_custom_fields": field_stats["active"],
+        "teams_count": team_stats["total"],
+        "active_teams": team_stats["active"],
+        "team_members_count": member_count,
+        "locale_profiles_count": locale_stats["total"],
+        "active_locale_profiles": locale_stats["active"],
+        "standardization_pct": standardization_pct,
     }
 
     # Methodology distribution
@@ -44,7 +72,7 @@ def configuration_hub(request):
     methodologies = []
     for val, lbl in ProjectTemplate.METHODOLOGY_CHOICES:
         cnt = methodology_counts.get(val, 0)
-        pct = round((cnt / templates_count * 100), 1) if templates_count > 0 else 0
+        pct = round((cnt / template_stats["total"] * 100), 1) if template_stats["total"] > 0 else 0
         methodologies.append({
             "value": val,
             "label": lbl,
@@ -69,16 +97,33 @@ def configuration_hub(request):
     # Recent active templates
     recent_templates = (
         templates_qs.filter(is_active=True)
-        .select_related("project_type", "created_by")
-        .order_by("-updated_at")[:5]
+        .select_related("created_by")
+        .defer("description", "default_roles", "wbs_structure", "workflow_config")
+        .order_by("-updated_at", "-id")[:5]
     )
 
     # Recent active teams with member count
     recent_teams = (
         teams_qs.filter(is_active=True)
         .select_related("team_lead", "org_unit", "project")
-        .annotate(member_count=Count("members"))
-        .order_by("-updated_at")[:5]
+        .defer("description")
+        .annotate(
+            member_count=Coalesce(
+                Subquery(
+                    ProjectTeamMember.objects.filter(
+                        team_id=OuterRef("pk"),
+                        tenant_id=OuterRef("tenant_id"),
+                        left_date__isnull=True,
+                    )
+                    .values("team")
+                    .annotate(c=Count("id"))
+                    .values("c")[:1],
+                    output_field=IntegerField(),
+                ),
+                Value(0),
+            )
+        )
+        .order_by("-updated_at", "-id")[:5]
     )
 
     return render(
