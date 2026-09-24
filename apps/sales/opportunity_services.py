@@ -13,6 +13,10 @@ from apps.sales.models.OpportunityPipeline.Pipelines import (
     Pipeline,
     PipelineStage,
 )
+from apps.sales.models.CompetitiveIntelligence.CompetitiveIntelligence import (
+    CompetitorProfile,
+    OpportunityCompetitor,
+)
 
 
 def _opportunity_pipeline_tenant_id(tenant):
@@ -519,4 +523,140 @@ def sales_unplace_opportunity(opportunity, tenant, user):
             tenant=tenant,
         )
         placement.delete()
+    return True
+
+
+def sales_save_opportunity_competitor(opportunity, competitor, tenant, user, validated_data):
+    tenant_id = _opportunity_pipeline_tenant_id(tenant)
+    if opportunity.tenant_id != tenant_id:
+        raise ValidationError("The opportunity must belong to this workspace.")
+    values = dict(validated_data or {})
+    with transaction.atomic():
+        locked_opportunity = Opportunity.objects.select_for_update().get(
+            pk=opportunity.pk,
+            tenant=tenant,
+        )
+        competitor_id = getattr(competitor, "pk", competitor)
+        if competitor_id:
+            locked_competitor = (
+                OpportunityCompetitor.objects.select_for_update()
+                .filter(
+                    pk=competitor_id,
+                    tenant=tenant,
+                    opportunity=locked_opportunity,
+                )
+                .first()
+            )
+            if locked_competitor is None:
+                raise ValidationError("The competitor link does not belong to this opportunity.")
+            created = False
+        else:
+            if competitor is not None and getattr(competitor, "opportunity_id", None) not in (
+                None,
+                locked_opportunity.pk,
+            ):
+                raise ValidationError("The competitor link does not belong to this opportunity.")
+            locked_competitor = OpportunityCompetitor(
+                tenant=tenant,
+                opportunity=locked_opportunity,
+            )
+            created = True
+        profile = values.get("competitor_profile")
+        profile_id = getattr(profile, "pk", profile)
+        if not profile_id:
+            raise ValidationError({"competitor_profile": "Choose a competitor profile."})
+        locked_profile = (
+            CompetitorProfile.objects.select_for_update()
+            .filter(pk=profile_id, tenant=tenant)
+            .first()
+        )
+        if locked_profile is None:
+            raise ValidationError({"competitor_profile": "Choose a competitor profile from this workspace."})
+        if not locked_profile.is_active and locked_competitor.competitor_profile_id != locked_profile.pk:
+            raise ValidationError({"competitor_profile": "Choose an active competitor profile."})
+        locked_competitor.tenant = tenant
+        locked_competitor.opportunity = locked_opportunity
+        locked_competitor.competitor_profile = locked_profile
+        for field_name in (
+            "relationship",
+            "is_primary",
+            "pricing_notes",
+            "deal_notes",
+            "positioning_notes",
+        ):
+            if field_name in values:
+                setattr(locked_competitor, field_name, values[field_name])
+        if "is_primary" in values and not isinstance(values["is_primary"], bool):
+            raise ValidationError({"is_primary": "Choose a valid primary setting."})
+        locked_competitor.full_clean()
+        cleared_primary_ids = []
+        if locked_competitor.is_primary:
+            other_links = OpportunityCompetitor.objects.select_for_update().filter(
+                tenant=tenant,
+                opportunity=locked_opportunity,
+                is_primary=True,
+            )
+            if locked_competitor.pk:
+                other_links = other_links.exclude(pk=locked_competitor.pk)
+            cleared_primary_ids = list(other_links.values_list("pk", flat=True))
+            if cleared_primary_ids:
+                OpportunityCompetitor.objects.filter(pk__in=cleared_primary_ids).update(
+                    is_primary=False,
+                    updated_at=timezone.now(),
+                )
+        locked_competitor.save()
+        write_audit_log(
+            user,
+            locked_competitor,
+            "create" if created else "update",
+            {
+                "operation": "add_competitor" if created else "update_competitor",
+                "link_id": locked_competitor.pk,
+                "opportunity_id": locked_opportunity.pk,
+                "competitor_profile_id": locked_profile.pk,
+                "relationship": locked_competitor.relationship,
+                "is_primary": locked_competitor.is_primary,
+                "cleared_primary_ids": cleared_primary_ids,
+            },
+            tenant=tenant,
+        )
+    return locked_competitor
+
+
+def sales_remove_opportunity_competitor(opportunity, competitor, tenant, user):
+    tenant_id = _opportunity_pipeline_tenant_id(tenant)
+    if opportunity.tenant_id != tenant_id:
+        raise ValidationError("The opportunity must belong to this workspace.")
+    competitor_id = getattr(competitor, "pk", competitor)
+    if not competitor_id:
+        raise ValidationError("The competitor link does not belong to this opportunity.")
+    with transaction.atomic():
+        locked_opportunity = Opportunity.objects.select_for_update().get(
+            pk=opportunity.pk,
+            tenant=tenant,
+        )
+        locked_competitor = (
+            OpportunityCompetitor.objects.select_for_update()
+            .filter(
+                pk=competitor_id,
+                tenant=tenant,
+                opportunity=locked_opportunity,
+            )
+            .first()
+        )
+        if locked_competitor is None:
+            raise ValidationError("The competitor link does not belong to this opportunity.")
+        write_audit_log(
+            user,
+            locked_competitor,
+            "delete",
+            {
+                "operation": "remove_competitor",
+                "link_id": locked_competitor.pk,
+                "opportunity_id": locked_opportunity.pk,
+                "competitor_profile_id": locked_competitor.competitor_profile_id,
+            },
+            tenant=tenant,
+        )
+        locked_competitor.delete()
     return True
