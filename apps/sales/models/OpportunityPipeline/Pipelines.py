@@ -87,6 +87,15 @@ class Pipeline(TenantNumbered):
             if duplicate.exists():
                 raise ValidationError({"is_default": "Only one active default pipeline is allowed."})
 
+    def save(self, *args, **kwargs):
+        if self.pk and not self.is_active and self.placements.filter(
+            current_stage__stage_kind="open"
+        ).exists():
+            raise ValidationError(
+                {"is_active": "A pipeline with open placements cannot be deactivated."}
+            )
+        return super().save(*args, **kwargs)
+
     def delete(self, *args, **kwargs):
         if self.placements.exists():
             raise ValidationError("A pipeline with placements cannot be deleted.")
@@ -213,6 +222,22 @@ class PipelineStage(TenantOwned):
             models.Index(fields=["tenant", "stage_kind", "is_active"], name="sales_pstage_tenant_kind_idx"),
         ]
 
+    def _referenced_locked_field(self):
+        if not self.pk or not self.current_placements.exists():
+            return None
+        previous = (
+            PipelineStage.objects.filter(pk=self.pk)
+            .values("stage_kind", "crm_stage_key", "probability", "forecast_category", "is_active")
+            .first()
+        )
+        if previous is None:
+            return None
+        locked_fields = ("stage_kind", "crm_stage_key", "probability", "forecast_category", "is_active")
+        for field_name in locked_fields:
+            if getattr(self, field_name) != previous[field_name]:
+                return field_name
+        return None
+
     def clean(self):
         super().clean()
         if self.pipeline_id and self.pipeline.tenant_id != self.tenant_id:
@@ -241,20 +266,18 @@ class PipelineStage(TenantOwned):
                 "closed",
             ):
                 raise ValidationError("Lost stages require Closed Lost, 0%, and Closed category.")
-        if self.pk and self.current_placements.exists():
-            previous = (
-                PipelineStage.objects.filter(pk=self.pk)
-                .values("stage_kind", "crm_stage_key", "probability", "forecast_category", "is_active")
-                .first()
+        locked_field = self._referenced_locked_field()
+        if locked_field:
+            raise ValidationError(
+                {locked_field: "A stage used by a placement has locked configuration fields."}
             )
-            locked_fields = ("stage_kind", "crm_stage_key", "probability", "forecast_category", "is_active")
-            for field_name in locked_fields:
-                if previous and getattr(self, field_name) != previous[field_name]:
-                    raise ValidationError(
-                        {field_name: "A stage used by a placement has locked configuration fields."}
-                    )
 
     def save(self, *args, **kwargs):
+        locked_field = self._referenced_locked_field()
+        if locked_field:
+            raise ValidationError(
+                {locked_field: "A stage used by a placement has locked configuration fields."}
+            )
         self.code = self.code.lower()
         super().save(*args, **kwargs)
 
