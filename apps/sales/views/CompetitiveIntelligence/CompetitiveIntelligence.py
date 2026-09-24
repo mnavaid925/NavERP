@@ -216,7 +216,7 @@ def opportunity_competitor_profile_delete(request, pk):
         )
         try:
             with transaction.atomic():
-                if obj.opportunity_links.exists():
+                if obj.opportunitycompetitor_set.exists():
                     raise ValidationError("A referenced competitor profile cannot be deleted.")
                 write_audit_log(
                     request.user,
