@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Update Pipeline Placement{% else %}Place Opportunity{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Update pipeline placement{% else %}Place opportunity{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_workspace_list' %}">Opportunity Workspace</a><span class="sep">›</span><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}">{{ opportunity.number }}</a><span class="sep">›</span><span>{% if is_edit %}Update{% else %}Place{% endif %}</span></div>
+  </div>
+  <a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to workspace</a>
+</div>
+
+<div class="card max-w-3xl mx-auto">
+  <div class="card-header"><h2>{% if is_edit %}Placement for {{ opportunity.number }}{% else %}Place {{ opportunity.number }} in a pipeline{% endif %}</h2></div>
+  <div class="card-body">
+    <p class="text-muted">The opportunity remains the canonical CRM deal. This action only adds the Sales pipeline projection and placement state.</p>
+    <form method="post" action="{% url 'sales:opportunity_place' opportunity.pk %}" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      {% for field in form %}
+        {% if field.is_hidden %}{{ field }}{% else %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endif %}
+      {% endfor %}
+      <div class="form-actions"><button class="btn btn-primary" type="submit"{% if not pipelines %} disabled{% endif %}><i data-lucide="git-branch"></i> {% if is_edit %}Update placement{% else %}Place in pipeline{% endif %}</button><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}" class="btn btn-outline">Cancel</a></div>
+      {% if not pipelines %}<div class="form-help" role="status">No active pipeline is available. Ask a tenant administrator to configure one first.</div>{% endif %}
+    </form>
+  </div>
+</div>
+
+{% if stages %}
+<div class="card max-w-3xl mx-auto">
+  <div class="card-header"><h2>Available active stages</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Order</th><th>Stage</th><th>Kind</th><th>Probability</th><th>Target days</th><th>Entry guidance</th></tr></thead>
+      <tbody>
+        {% for stage in stages %}<tr><td>{{ stage.sequence }}</td><td class="fw-600">{{ stage.name }}</td><td>{{ stage.get_stage_kind_display }}</td><td>{{ stage.probability }}%</td><td>{% if stage.target_days is None %}—{% else %}{{ stage.target_days }}{% endif %}</td><td>{{ stage.entry_guidance|default:"—" }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
