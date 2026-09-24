@@ -17,13 +17,15 @@
       <span>Custom Fields</span>
     </div>
   </div>
-  <div class="page-actions flex items-center gap-2">
+  <div class="page-actions flex flex-wrap items-center gap-2">
     <a href="{% url 'projects:configuration_hub' %}" class="btn btn-outline">
-      <i data-lucide="layout-grid" class="w-4 h-4 mr-1"></i> Hub
+      <i data-lucide="layout-grid" class="w-4 h-4 me-1"></i> Hub
     </a>
+    {% if request.user.is_tenant_admin or request.user.is_superuser %}
     <a href="{% url 'projects:pcf_create' %}" class="btn btn-primary">
-      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Custom Field
+      <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Custom Field
     </a>
+    {% endif %}
   </div>
 </div>
 
@@ -32,49 +34,49 @@
     <div class="stat-icon purple"><i data-lucide="form-input" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Total Fields</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.total }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Active</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.active }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon blue"><i data-lucide="folder-kanban" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Project Entity</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.project }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.project }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon orange"><i data-lucide="check-square" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Task Entity</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.task }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.task }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon slate"><i data-lucide="flag" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Milestones</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.milestone }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.milestone }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon red"><i data-lucide="shield-alert" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Risks</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.risk }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.risk }}</div>
     </div>
   </div>
 </div>
 
 <div class="card mb-6">
   <div class="card-body">
-    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
       <div class="form-group">
         <label for="id_q" class="form-label">Search</label>
         <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, label, key...">
@@ -106,9 +108,17 @@
           {% endfor %}
         </select>
       </div>
+      <div class="form-group">
+        <label for="id_is_active" class="form-label">Status</label>
+        <select name="is_active" id="id_is_active" class="form-select">
+          <option value="">All Statuses</option>
+          <option value="active" {% if is_active == "active" %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if is_active == "inactive" %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
       <div class="flex items-end gap-2">
         <button type="submit" class="btn btn-primary flex-1">
-          <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+          <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
         </button>
         <a href="{% url 'projects:pcf_list' %}" class="btn btn-outline">Reset</a>
       </div>
@@ -128,19 +138,19 @@
           <th>Section</th>
           <th>Validation</th>
           <th>Status</th>
-          <th class="text-right">Actions</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for cf in custom_fields %}
         <tr>
           <td class="font-mono text-sm font-semibold">
-            <a href="{% url 'projects:pcf_detail' pk=cf.pk %}" class="text-primary hover:underline">
+            <a href="{% url 'projects:pcf_detail' pk=cf.pk %}" class="text-brand hover:underline">
               {{ cf.number }}
             </a>
           </td>
           <td>
-            <div class="font-medium text-slate-900">{{ cf.label }}</div>
+            <div class="font-medium text-slate-900 dark:text-slate-100">{{ cf.label }}</div>
             <span class="text-xs text-muted font-mono">{{ cf.target_entity }}.{{ cf.field_key }}</span>
           </td>
           <td>
@@ -149,7 +159,7 @@
           <td>
             <span class="badge {{ cf.field_type_badge_class }}">{{ cf.get_field_type_display }}</span>
           </td>
-          <td class="text-sm text-slate-700">{{ cf.get_form_section_display }}</td>
+          <td class="text-sm text-slate-700 dark:text-slate-300">{{ cf.get_form_section_display }}</td>
           <td>
             {% if cf.is_required %}
               <span class="badge badge-amber text-xs">Required</span>
@@ -158,17 +168,14 @@
             {% endif %}
           </td>
           <td>
-            {% if cf.is_active %}
-              <span class="badge badge-green">Active</span>
-            {% else %}
-              <span class="badge badge-muted">Inactive</span>
-            {% endif %}
+            <span class="badge {{ cf.active_badge_class }}">{% if cf.is_active %}Active{% else %}Inactive{% endif %}</span>
           </td>
-          <td class="table-actions text-right">
+          <td class="table-actions text-end">
             <div class="flex items-center justify-end gap-1">
               <a href="{% url 'projects:pcf_detail' pk=cf.pk %}" class="btn btn-icon" title="View Field">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </a>
+              {% if request.user.is_tenant_admin or request.user.is_superuser %}
               <a href="{% url 'projects:pcf_edit' pk=cf.pk %}" class="btn btn-icon" title="Edit Field">
                 <i data-lucide="pencil" class="w-4 h-4"></i>
               </a>
@@ -178,12 +185,13 @@
                   <i data-lucide="power" class="w-4 h-4 {% if cf.is_active %}text-amber-500{% else %}text-muted{% endif %}"></i>
                 </button>
               </form>
-              <form method="post" action="{% url 'projects:pcf_delete' pk=cf.pk %}" class="inline" onsubmit="return confirm('Delete custom field {{ cf.label }}?');">
+              <form method="post" action="{% url 'projects:pcf_delete' pk=cf.pk %}" class="inline" onsubmit="return confirm('Delete this custom field definition? Captured historical values will be preserved and the synchronized core definition will be deactivated.');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-icon text-danger" title="Delete Field">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </form>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -192,11 +200,15 @@
           <td colspan="8">
             <div class="empty-state text-center py-12">
               <i data-lucide="form-input" class="w-12 h-12 mx-auto text-muted mb-3"></i>
-              <h3 class="text-lg font-medium text-slate-900 mb-1">No Custom Fields Defined</h3>
-              <p class="text-sm text-muted mb-4">Extend project and task forms with user-defined attributes and validation constraints.</p>
+              <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">{% if has_filters %}No matching custom fields{% else %}No custom fields defined{% endif %}</h3>
+              <p class="text-sm text-muted mb-4">{% if has_filters %}Clear the active filters to see the full project definition catalog.{% else %}Configure project-specific field definitions, validation rules, and conditional visibility for the five target forms.{% endif %}</p>
+              {% if has_filters %}
+              <a href="{% url 'projects:pcf_list' %}" class="btn btn-outline">Clear filters</a>
+              {% elif request.user.is_tenant_admin or request.user.is_superuser %}
               <a href="{% url 'projects:pcf_create' %}" class="btn btn-primary">
-                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Custom Field
+                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Add Custom Field
               </a>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -205,17 +217,17 @@
     </table>
   </div>
   {% if page_obj.has_other_pages %}
-  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200">
+  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200 dark:border-slate-700">
     <div class="text-sm text-muted">
       Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} fields
     </div>
     <div class="pagination flex gap-1">
       {% if page_obj.has_previous %}
-      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if target_entity %}&target_entity={{ target_entity }}{% endif %}{% if field_type %}&field_type={{ field_type }}{% endif %}{% if form_section %}&form_section={{ form_section }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if target_entity %}&target_entity={{ target_entity|urlencode }}{% endif %}{% if field_type %}&field_type={{ field_type|urlencode }}{% endif %}{% if form_section %}&form_section={{ form_section|urlencode }}{% endif %}{% if is_active %}&is_active={{ is_active|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
       {% endif %}
       <span class="btn btn-primary btn-sm pointer-events-none">{{ page_obj.number }}</span>
       {% if page_obj.has_next %}
-      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if target_entity %}&target_entity={{ target_entity }}{% endif %}{% if field_type %}&field_type={{ field_type }}{% endif %}{% if form_section %}&form_section={{ form_section }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if target_entity %}&target_entity={{ target_entity|urlencode }}{% endif %}{% if field_type %}&field_type={{ field_type|urlencode }}{% endif %}{% if form_section %}&form_section={{ form_section|urlencode }}{% endif %}{% if is_active %}&is_active={{ is_active|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
       {% endif %}
     </div>
   </div>
