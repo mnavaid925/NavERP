@@ -184,13 +184,15 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
 
 
 def crud_create(request, *, form_class, template, success_url, extra_context=None,
-                set_tenant=True, audit=True):
+                set_tenant=True, audit=True, form_kwargs=None):
     # A tenant-less user (e.g. the superuser, tenant=None) must not create orphan rows.
     if set_tenant and request.tenant is None:
         messages.error(request, "Select a tenant workspace before creating records.")
         return redirect("dashboard:home")
     if request.method == "POST":
-        form = form_class(request.POST, request.FILES, tenant=request.tenant)
+        form_kwargs = dict(form_kwargs or {})
+        form_kwargs.pop("tenant", None)
+        form = form_class(request.POST, request.FILES, tenant=request.tenant, **form_kwargs)
         if form.is_valid():
             obj = form.save(commit=False)
             if set_tenant and hasattr(obj, "tenant_id"):
@@ -202,25 +204,33 @@ def crud_create(request, *, form_class, template, success_url, extra_context=Non
             messages.success(request, "Created successfully.")
             return redirect(success_url)
     else:
-        form = form_class(tenant=request.tenant)
+        form_kwargs = dict(form_kwargs or {})
+        form_kwargs.pop("tenant", None)
+        form = form_class(tenant=request.tenant, **form_kwargs)
     ctx = {"form": form, "is_edit": False}
     ctx.update(extra_context or {})
     return render(request, template, ctx)
 
 
 def crud_edit(request, *, model, pk, form_class, template, success_url, extra_context=None,
-              audit=True):
+              audit=True, form_kwargs=None, audit_redacted_fields=()):
     obj = get_object_or_404(model, pk=pk, tenant=request.tenant)
     if request.method == "POST":
-        form = form_class(request.POST, request.FILES, instance=obj, tenant=request.tenant)
+        form_kwargs = dict(form_kwargs or {})
+        form_kwargs.pop("tenant", None)
+        form_kwargs.pop("instance", None)
+        form = form_class(request.POST, request.FILES, instance=obj, tenant=request.tenant, **form_kwargs)
         if form.is_valid():
             obj = form.save()
             if audit:
-                write_audit_log(request.user, obj, "update", changes=_changed(form))
+                write_audit_log(request.user, obj, "update", changes=_changed(form, audit_redacted_fields))
             messages.success(request, "Updated successfully.")
             return redirect(success_url)
     else:
-        form = form_class(instance=obj, tenant=request.tenant)
+        form_kwargs = dict(form_kwargs or {})
+        form_kwargs.pop("tenant", None)
+        form_kwargs.pop("instance", None)
+        form = form_class(instance=obj, tenant=request.tenant, **form_kwargs)
     ctx = {"form": form, "obj": obj, "is_edit": True}
     ctx.update(extra_context or {})
     return render(request, template, ctx)
@@ -264,17 +274,27 @@ _SENSITIVE_AUDIT_FIELDS = frozenset({
     # Procurement 6.9 PunchOutEndpoint.shared_secret — a punch-out credential; any future
     # refactor onto crud_edit must redact it, never copy the plaintext into the audit trail.
     "shared_secret",
+    "consent_evidence",
+    "need_summary",
+    "economic_buyer",
+    "decision_criteria",
+    "decision_process",
+    "technical_requirements",
+    "pain_points",
+    "success_metrics",
+    "disqualification_reason",
 })
 
 
-def _changed(form):
+def _changed(form, extra_sensitive=()):
     """Compact {field: new_value} of changed fields for the audit log.
 
     Sensitive fields are redacted so a plaintext account/secret never lands in the
     immutable audit trail (it would otherwise outlive any later encryption-at-rest)."""
+    sensitive = _SENSITIVE_AUDIT_FIELDS | set(extra_sensitive or ())
     out = {}
     for name in getattr(form, "changed_data", []):
-        if name in _SENSITIVE_AUDIT_FIELDS:
+        if name in sensitive:
             out[name] = "***redacted***"
         else:
             out[name] = str(form.cleaned_data.get(name))[:200]
