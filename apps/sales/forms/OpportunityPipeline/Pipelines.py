@@ -11,6 +11,16 @@ from apps.sales.models.OpportunityPipeline.Pipelines import (
 )
 
 
+def _opportunity_pipeline_positive_id(value):
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if 0 < parsed <= 9223372036854775807 else None
+
+
 class PipelineForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = Pipeline
@@ -155,10 +165,22 @@ class OpportunityPipelinePlacementForm(TenantUniqueMixin, TenantModelForm):
             if tenant is None
             else Pipeline.objects.filter(tenant=tenant, is_active=True).order_by("name")
         )
-        pipeline_id = self.data.get("pipeline") if self.is_bound else self.instance.pipeline_id
+        pipeline_id = _opportunity_pipeline_positive_id(
+            self.data.get("pipeline") if self.is_bound else self.instance.pipeline_id
+        )
+        if not self.is_bound and tenant is not None and pipeline_id is None:
+            default_pipeline = (
+                Pipeline.objects.filter(tenant=tenant, is_active=True)
+                .order_by("-is_default", "name", "-created_at")
+                .first()
+            )
+            if default_pipeline is not None:
+                pipeline_id = default_pipeline.pk
+                self.initial["pipeline"] = default_pipeline.pk
+                self.fields["pipeline"].initial = default_pipeline.pk
         self.fields["current_stage"].queryset = (
             PipelineStage.objects.none()
-            if tenant is None or not pipeline_id
+            if tenant is None or pipeline_id is None
             else PipelineStage.objects.filter(
                 tenant=tenant,
                 pipeline_id=pipeline_id,
