@@ -1,7 +1,4 @@
 """Projects 7.19 — ProjectLocaleSetting forms."""
-import json
-from decimal import Decimal
-
 from django import forms
 
 from apps.accounting.models.GeneralLedger.Currencies import Currency
@@ -14,19 +11,19 @@ from apps.projects.models.ProjectInitiation.Projects import Project
 class ProjectLocaleSettingForm(TenantUniqueMixin, TenantModelForm):
     """Admin/PM form for project regional and localization settings."""
 
-    working_days_choices = forms.MultipleChoiceField(
+    working_days_pattern = forms.MultipleChoiceField(
         choices=[
-            (1, "Monday"),
-            (2, "Tuesday"),
-            (3, "Wednesday"),
-            (4, "Thursday"),
-            (5, "Friday"),
-            (6, "Saturday"),
-            (7, "Sunday"),
+            ("1", "Monday"),
+            ("2", "Tuesday"),
+            ("3", "Wednesday"),
+            ("4", "Thursday"),
+            ("5", "Friday"),
+            ("6", "Saturday"),
+            ("7", "Sunday"),
         ],
-        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-checkbox"}),
-        required=False,
-        initial=[1, 2, 3, 4, 5],
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check"}),
+        required=True,
+        initial=["1", "2", "3", "4", "5"],
         label="Active Working Days",
         help_text="Standard business delivery days for scheduling and effort calculation.",
     )
@@ -45,7 +42,6 @@ class ProjectLocaleSettingForm(TenantUniqueMixin, TenantModelForm):
             "first_day_of_week",
             "number_format",
             "working_hours_per_day",
-            "is_default",
             "is_active",
         ]
         widgets = {
@@ -60,13 +56,14 @@ class ProjectLocaleSettingForm(TenantUniqueMixin, TenantModelForm):
             "first_day_of_week": forms.Select(attrs={"class": "form-select"}),
             "number_format": forms.Select(attrs={"class": "form-select"}),
             "working_hours_per_day": forms.NumberInput(attrs={"class": "form-input", "step": "0.25"}),
-            "is_default": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.tenant is not None:
+        if self.tenant is None:
+            self.fields["project"].queryset = Project.objects.none()
+        else:
             self.fields["project"].queryset = Project.objects.filter(
                 tenant=self.tenant
             ).order_by("-created_at")
@@ -75,19 +72,22 @@ class ProjectLocaleSettingForm(TenantUniqueMixin, TenantModelForm):
         self.fields["time_zone"].queryset = TimeZone.objects.filter(is_active=True).order_by("name")
         self.fields["currency"].queryset = Currency.objects.filter(is_active=True).order_by("code")
 
-        if self.instance and self.instance.pk:
-            if self.instance.working_days_pattern:
-                self.initial["working_days_choices"] = [str(d) for d in self.instance.working_days_pattern]
+        if self.instance and self.instance.pk and self.instance.working_days_pattern:
+            self.initial["working_days_pattern"] = [str(day) for day in self.instance.working_days_pattern]
 
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["project"])
+        selected_days = [int(day) for day in cleaned.get("working_days_pattern", [])]
+        cleaned["working_days_pattern"] = selected_days
+        self.instance.working_days_pattern = selected_days
         return cleaned
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        selected_days = self.cleaned_data.get("working_days_choices") or []
-        instance.working_days_pattern = [int(d) for d in selected_days]
+        instance.working_days_pattern = [
+            int(day) for day in self.cleaned_data.get("working_days_pattern", [])
+        ]
         if commit:
             instance.save()
         return instance
