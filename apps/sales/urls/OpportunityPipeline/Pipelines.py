@@ -18,6 +18,7 @@ from apps.sales.views.OpportunityPipeline.Pipelines import (
 
 
 urlpatterns = [
+    path("opportunity/pipelines/", opportunity_pipeline_list, name="opportunity_pipeline_list"),
     path("opportunity/board/", opportunity_pipeline_board, name="opportunity_pipeline_board"),
     path("opportunity/visibility/", opportunity_pipeline_visibility, name="opportunity_pipeline_visibility"),
     path("opportunity/pipelines/add/", opportunity_pipeline_create, name="opportunity_pipeline_create"),
