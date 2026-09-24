@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Win / Loss Reasons{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Win / Loss Reasons</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">›</span><span>Win / Loss Reasons</span></div>
+  </div>
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <div class="page-actions"><a href="{% url 'sales:opportunity_win_loss_reason_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New reason</a></div>
+  {% endif %}
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="list-checks"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Total reasons</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ stats.active }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="archive"></i></div><div class="stat-value">{{ stats.inactive }}</div><div class="stat-label">Inactive</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="trophy"></i></div><div class="stat-value">{{ stats.won }}</div><div class="stat-label">Won reasons</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="circle-x"></i></div><div class="stat-value">{{ stats.lost }}</div><div class="stat-label">Lost reasons</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="split"></i></div><div class="stat-value">{{ stats.both }}</div><div class="stat-label">Shared reasons</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar">
+      <div class="form-group" style="flex:1; min-width:240px;">
+        <label class="form-label" for="winloss-search">Search</label>
+        <input id="winloss-search" name="q" value="{{ q }}" class="form-input" placeholder="Code, name, or description">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="winloss-result">Result</label>
+        <select id="winloss-result" name="result" class="form-select">
+          <option value="">All results</option>
+          {% for value, label in result_choices %}<option value="{{ value }}"{% if result == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="winloss-category">Category</label>
+        <select id="winloss-category" name="category" class="form-select">
+          <option value="">All categories</option>
+          {% for value, label in category_choices %}<option value="{{ value }}"{% if category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="winloss-active">State</label>
+        <select id="winloss-active" name="active" class="form-select">
+          <option value="">All states</option>
+          {% for value, label in active_choices %}<option value="{{ value }}"{% if active == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+      <a href="{% url 'sales:opportunity_win_loss_reason_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Reason</th><th>Result</th><th>Category</th><th>Sequence</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for obj in object_list %}
+        <tr>
+          <td><a href="{% url 'sales:opportunity_win_loss_reason_detail' obj.pk %}" class="fw-600">{{ obj.number }} · {{ obj.name }}</a>{% if obj.description %}<div class="text-muted">{{ obj.description|truncatechars:100 }}</div>{% endif %}</td>
+          <td>{% if obj.result == 'won' %}<span class="badge badge-green">{{ obj.get_result_display }}</span>{% elif obj.result == 'lost' %}<span class="badge badge-red">{{ obj.get_result_display }}</span>{% elif obj.result == 'both' %}<span class="badge badge-info">{{ obj.get_result_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_result_display|default:"—" }}</span>{% endif %}</td>
+          <td><span class="badge badge-slate">{{ obj.get_category_display|default:"—" }}</span></td>
+          <td>{{ obj.sequence }}</td>
+          <td><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ obj.is_active|yesno:"Active,Inactive" }}</span></td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'sales:opportunity_win_loss_reason_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              {% if request.user.is_superuser or request.user.is_tenant_admin %}
+              <a href="{% url 'sales:opportunity_win_loss_reason_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'sales:opportunity_win_loss_reason_delete' obj.pk %}" onsubmit="return confirm('Delete this win/loss reason?');">
+                {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No win/loss reasons</h3><p>Add a reason before recording structured opportunity outcomes.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}
