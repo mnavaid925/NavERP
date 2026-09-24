@@ -57,7 +57,7 @@
 
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Forecast</th><th>Amount</th><th>Weighted</th><th>Close</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
+        <thead><tr><th>Number</th><th>Name</th><th>Account</th><th>Stage</th><th>Forecast</th><th>Amount</th><th>Currency</th><th>Weighted</th><th>Close</th><th>Owner</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
@@ -67,6 +67,7 @@
               <td><span class="badge badge-{% if obj.stage == 'closed_won' %}green{% elif obj.stage == 'closed_lost' %}red{% elif obj.stage == 'negotiation' %}amber{% elif obj.stage == 'proposal' %}info{% else %}muted{% endif %}">{{ obj.get_stage_display }}</span></td>
               <td>{{ obj.get_forecast_category_display }}</td>
               <td>{{ obj.amount }}</td>
+              <td>{% if obj.currency %}{{ obj.currency.code }}{% else %}Unspecified{% endif %}</td>
               <td>{{ obj.weighted_amount|floatformat:0 }}</td>
               <td>{% if obj.close_date %}{{ obj.close_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
@@ -82,7 +83,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="10"><div class="empty-state"><i data-lucide="target"></i><h3>No opportunities found</h3><p>Create your first deal to build your pipeline.</p></div></td></tr>
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="target"></i><h3>No opportunities found</h3><p>Create your first deal to build your pipeline.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
