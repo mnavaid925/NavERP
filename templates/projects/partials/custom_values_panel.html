@@ -1,0 +1,13 @@
+{% if custom_values %}
+  <div class="card">
+    <div class="card-header"><h2>Custom values</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        {% for item in custom_values %}
+          <dt>{{ item.label }}{% if not item.is_active %} <span class="badge badge-muted">Inactive</span>{% endif %}</dt>
+          <dd>{{ item.value }}</dd>
+        {% endfor %}
+      </dl>
+    </div>
+  </div>
+{% endif %}
