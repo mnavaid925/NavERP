@@ -301,7 +301,7 @@ def opportunity_transition(request, opportunity_pk):
                 competitor_link=form.cleaned_data.get("competitor_link"),
                 notes=form.cleaned_data.get("notes", ""),
             )
-        except ValidationError as exc:
+        except (ValidationError, IntegrityError) as exc:
             messages.error(request, _win_loss_reason_validation_message(exc))
         else:
             messages.success(request, "Opportunity transitioned.")
