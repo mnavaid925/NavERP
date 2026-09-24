@@ -30,6 +30,99 @@ Scope verified: 4 models, 3 forms (+ deliberate run-form absence), 26 views, 31 
 
 ---
 
+## Lane 2 — explorer
+
+**Verdict: no new Critical/Important findings; 4 Minor findings, seams clean.**
+
+| ID | Severity | File:line | What | Why it matters | Suggested fix |
+|----|----------|-----------|------|----------------|---------------|
+| E1 | Minor | `apps/projects/management/commands/seed_projects.py:4563+` (`job_specs`) | No `entity_scope="milestones"` job — the nine specs cover `cost_lines, journals, tasks, folders, resources, time_entries, issues, documents, budgets` only. The M1 fix swapped the crm `milestones` spec out for the sharepoint `folders` spec instead of adding it. | Contract §0 devops row pins jobs `tasks·issues·milestones`, and §8 requires the 9 jobs "spanning **every** entity_scope family the five bullets use". `milestones` appears only in mapping `local_fields`, never as a job scope. Count stays 9 so count-only checks miss it. | Add a 10th spec (or retarget one) with `entity_scope="milestones"`, or fold milestones into an existing spec and amend contract §8's count. |
+| E2 | Minor | `apps/projects/forms/__init__.py:210`, `apps/projects/views/__init__.py:734` | The 7.18 re-export blocks have **no in-range commit** — they were swept into 7.16's commits `10dff912` / `c7645b2e` from the shared working tree. End-state is correct but the changeset is not self-contained. | Plan §6 integrate requires its own commit per shared file; a range-revert of 7.18 leaves re-export lines pointing at deleted sub-packages. | No code change at HEAD. Note in review/todo that forms/views re-export commits were L45-swept. |
+| E3 | Minor | `apps/projects/migrations/0026_*.py` (commit `dac0ec42`) | One commit bundles 3 files — migration 0026 + `models/__init__.py` + `urls/IntegrationApiHub/HubBoards.py` — under a migration-only message. `HubBoards.py` has no dedicated commit. | Violates one-file-per-commit; migration is not independently revertable from the re-export/url wiring. | Historical — do not amend. Record only; `HubBoards.py` content itself is correct. |
+| E4 | Minor (doc) | `.claude/tasks/contract-projects-7.18.md` | Contract is structurally scrambled: §2.4 `record()` signature split across §3; tails of §2.1/§2.3 sit inside/after §4's URL block (lines 249–310). | All content is present and matches as-built field-for-field — no content amendment — but a future reader following §-numbers lands mid-signature. | Reflow sections 2.1/2.3/2.4 back before §3, renumber. No content amendment needed. |
+
+**Clean areas (evidence):** contract §3–§8 completeness (only gap E1); sibling seams additive (7.17-before-7.16 block order pre-dates the range); URLconf literals-before-pk, no `<str:>` greedies, unique names; template folders match L-rules; backend packages 1:1; append-only SyncRun; zero outbound HTTP; prefixes IXC/SYJ/SYR unique; seeder flush/guard/45-runs/summary OK.
+
+---
+
+## Lane 3 — frontend-reviewer
+
+**Verdict: REQUEST CHANGES** — 3 Important, 7 Minor, no Critical.
+
+| ID | Severity | File:line | What | Why it matters | Suggested fix |
+|----|----------|-----------|------|----------------|---------------|
+| F1 | Important | `connector/list.html:146-158`, `mapping/list.html:110-122`, `syncjob/list.html:129-141`, `syncrun/list.html:128-140`, `boards/sync_monitor.html:95-107` | None of the 5 paginated pages include `partials/pagination.html`; each hand-rolls prev/next with a hardcoded param echo (same root as M5). | L9 house rule; the partial preserves *every* GET param automatically. | Replace inline block with `{% include "partials/pagination.html" %}`. **Caveat:** partial iterates `page_obj.window`, which only `apps.core.crud.paginate()` sets — switch views to `paginate()` or set `page.window`, else number chips render blank. |
+| F2 | Important | `syncrun/list.html:35-79`, `boards/sync_monitor.html:34-69` | No Connector `<select>` in either filter card although views parse `connector` and pass contract-pinned `connectors` (dead context); monitor also has no Trigger select (`trigger_choices` not passed). | Contract §4: syr_list filters include "connector pk"; monitor "filters mirror syr_list"; filter rule #1. | Add Connector select echoing `connector_id`; pass `trigger_choices` in `sync_monitor` view and render Trigger select. |
+| F3 | Important | `connector/detail.html:69,95` | "Add Mapping"/"Add Job" emit `?connector={{ connector.pk }}`, but `ixm_create`/`syj_create` never read it — no `initial={"connector": …}`. | Template advertises a prefill the backend ignores; user lands unscoped. | Add validated `initial={"connector": …}` in both create views, or drop the querystring from the template. |
+| F4 | Minor | `boards/sync_monitor.html:90` | Empty row is a plain `<td>` — no `.empty-state`. | L9 requires `.empty-state` on every list. | Wrap like `syncrun/list.html:117-122`. |
+| F5 | Minor | `connector/detail.html:57` (also `connector/list.html:115` title) | Credential chip renders `{{ connector.credential_masked }}` as its text instead of a literal "Set"/"None" chip (`credential_set`). | Contract §5 wording; no plaintext leak — off-contract wording only. | Chip text → `Set`/`None`. |
+| F6 | Minor | `connector/list.html:90` | "Reset" always links `projects:ixc_list` — on the five category routes Reset silently exits the category. | Kwarg `domain` lost. | `href="{{ request.path }}"` (drops query, keeps kwarg). |
+| F7 | Minor | `boards/connector_health.html:9` | Header badge pairs `connector.health_badge` (health colour) with `connector.get_status_display` (status label) — can render red "Connected" or slate "Error". | Colour and label disagree. | Use status_badge+status label, or health_badge+health word. |
+| F8 | Minor | `syncjob/list.html:94`, `syncjob/detail.html:47` | `last_status` printed as raw DB code — no badge, no display label. | Same vocabulary is badged everywhere else. | Badge via run-status map with `get_status_display`-style label. |
+| F9 | Minor | the 5 pagination footers (e.g. `connector/list.html:147`) | `card-footer` exists nowhere in `static/` — inert modifier (inherited from 7.17). | L33/L40 "grep before you use". | Drop — or disappears when F1 replaces the block. |
+| F10 | Minor | `boards/integration_hub.html:24-29` | `stats.credentials_due` computed and passed but never rendered; hub shows only 4 of 8 pinned stats. | Contract §4 pins it; the one stat that changes an operator's action. | Add a 5th stat card, or remove the key from contract/template expectations. |
+
+**Clean:** L2 clean; L10 clean; L33 clean except F9; filter rules clean except F2; badge fidelity clean; CRUD complete; credential honesty clean (F5 wording only); all four honesty labels present; category routes echo kwarg (F6 nit); icons clean (98 Lucide names); overview 3 cards + 4 rows resolve; all `{% url %}` names resolve.
+
+---
+
+## Lane 4 — performance-reviewer
+
+**Verdict:** 0 Critical · 1 Important (P6) · 3 Minor (P7–P9). Query counts per view all in the 1–8 range; filters-before-pagination clean; Overview 7.18 keys = 2 queries (house shape).
+
+| ID | Severity | File:line | What (measured/estimated cost) | Why it matters | Suggested fix |
+|----|----------|-----------|-------------------------------|----------------|---------------|
+| P6 | Important | `models/IntegrationApiHub/SyncRuns.py:79–83` (migration `0026`); hit by `SyncRuns.py:57` + `HubBoards.py:94` | `ProjectSyncRun` has **no `(tenant, started_at)` index** yet `Meta.ordering = ["-started_at","-id"]` over an unbounded append-only table. Both run-register landings filesort **all tenant runs** every page view; date filters without status likewise unserved. Sibling `inventory.StockSyncRun` ships exactly `(tenant, started_at)` for this precise filesort; contract §4 even justifies date-widening "so (tenant, started_at) is usable". | O(total tenant runs) sort per view, growing forever. | Add `models.Index(fields=["tenant","started_at"], name="syr_tnt_started_idx")` + `makemigrations`. Contract §2.4 amendment (pinned 3-index list). |
+| P7 | Minor | `SyncRuns.py:57` (`syr_list`), `HubBoards.py:94` (`sync_monitor`); also `Connectors.py:22`, `SyncJobs.py:14`, recent-run slices | Lists SELECT `TextField`s no rendered column reads: run lists load `payload_excerpt` + `error_message`; ixc `notes`; syj `filter_expression`. Tens of KB/page wasted. | House pattern is ~60 `.defer()` sites repo-wide, including scm deferring this identical pair. | `.defer("payload_excerpt","error_message")` on run lists/slices; `.defer("notes")` on `ixc_list`; `.defer("filter_expression")` on `syj_list`. |
+| P8 | Minor | `connector/list.html:115` → `credential_masked` | `title="{{ c.credential_masked }}"` runs Fernet **decrypt per row = 25 decrypts per list view** purely to fill a tooltip. | Crypto on the module's hottest list; checklist ≤ once/request. | Drop the `title` (chip already says Set/None — covers F5 too) or derive tooltip from `credential_set` only. |
+| P9 | Minor | `HubBoards.py:20–25, 73` | `conn_counts` aggregate = 1 COUNT whose 3 of 4 columns are dead; only `total` is read, and it equals `sum(pivot)`. Hub = 8 queries where 7 suffice. | Leftover overlapping COUNT on the same table. | Delete `conn_counts`; `connectors_total = sum(r["c"] for r in pivot_rows)`. −1 query. |
+
+**Clean evidence:** all 5 lists `select_related` every rendered FK; no related-manager calls in row loops; detail side panels capped + joined; boards = single cross-tab (no O(connectors) loop post-I7); Overview = 2 queries (house shape); filters before Paginator on all 5; Meta ↔ migration indexes match except P6; credential encrypt never in a loop; seeder no O(n²); no property-query in template loops.
+
+---
+
+## Lane 5 — qa-smoke-tester (report-only)
+
+**Scripts:** `temp/smoke_718b.py` + `temp/probe_718b_followup.py`. **New Q findings: 0.**
+
+### REGRESSIONS (CRITICAL) — all stale assertions, not product bugs
+
+| # | Check | Expected (old smoke) | Actual | Root cause |
+|---|-------|----------------------|--------|------------|
+| R1 | `ixc_erp_list` H1 | `Erp Connectors` | `ERP & Finance Connectors` | M6 fix intentionally renders `DOMAIN_CHOICES` labels; original 76-check script predates that fix. |
+| R2 | `ixc_crm_list` H1 | `Crm Connectors` | `CRM Connectors` | same |
+| R3 | `ixc_hris_list` H1 | `Hris Connectors` | `HR & Talent Connectors` | same |
+| R4 | `ixc_devops_list` H1 | `Devops Connectors` | `DevOps Connectors` | same |
+
+**Product behaviour is correct; the original smoke's 4 title needles are outdated.** No code regression.
+
+### Still-open on-file findings (fixes not landed or not verifiable this run)
+
+| ID | Status | Evidence |
+|----|--------|----------|
+| E1 | **Open in code** | Current `job_specs` has `folders`, **no `milestones`** job. |
+| M1 | Fix in code, **DB stale** | Code has SharePoint `folders` job; live DB has no `folders` job and SharePoint has **0 jobs**. |
+| I2 | Fix in code, **DB stale** | `bulk_update` present after run loop; DB still `run_count=0` on SYJ-00001…00008 (seed ran before fix; existence guard skips re-seed). |
+| I3 | Fix in code, **DB stale** | `failure_jobs` pinning present; DB still 0 failures on IXC-00001/00002/00006. |
+| F3 | Open | `ixm_create` builds form without `initial`; `?connector=7` option present, **not selected**. |
+| F10 | Open | Hub stat labels = Connectors / Active Jobs / Field Mappings / Failed Today only — **no credentials-due stat**. |
+| F2 | Open | No Connector `<select>` on `syr_list` / `sync_monitor`. |
+
+**Root cause for I2/I3/M1 DB gaps:** database seeded with the **pre-fix** seeder. Runtime verify of those three needs `manage.py seed_projects --flush` (not run this lane — concurrent-session risk).
+
+### VERIFIED-FIXED (runtime or static this run)
+
+I1 (credential out of admin readonly_fields), M2 (direction choices), M4 (`has_change_permission` → False), M6 (DOMAIN_CHOICES H1s), M9 (jobless `ixc_test` → warning, 0 runs), F1/M5 on `syr_list` (filter survives page 2), IDOR/junk/tenant-less/sidebar/append-only/session-once/rotate all pass.
+
+### Counts
+
+| Run | PASS | FAIL | SKIP |
+|-----|------|------|------|
+| Original 76 replay | 72 | 4 (R1–R4, stale titles) | 0 |
+| `smoke_718b.py` | 97 | 5 real (4 stale + E1-code; I2/I3/M1 stale-DB; F1/M5-ixm false positive; F3 on-file) | 6 |
+
+---
+
 ## Lane 2 — explorer (structural / plan-vs-as-built / sibling-seam)
 
 Scope: `c6a4d0da...HEAD`, 7.18 paths only; new findings (no overlap with Lane 1's I1–I3 / M1–M9); contract `contract-projects-7.18.md`, plan `todo.md:9389+`.
