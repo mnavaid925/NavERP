@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div><h1 class="page-title">{{ obj.name }}</h1><div class="breadcrumb"><a href="{% url 'sales:lead_routing_rule_list' %}">Routing Rules</a><span class="sep">›</span><span>{{ obj.name }}</span></div></div>
+    <div class="page-actions">{% if request.user.is_superuser or request.user.is_tenant_admin %}<a href="{% url 'sales:lead_routing_rule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a><form method="post" action="{% url 'sales:lead_routing_rule_toggle' obj.pk %}" onsubmit="return confirm('Toggle this rule?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="power"></i> {% if obj.is_active %}Disable{% else %}Enable{% endif %}</button></form>{% endif %}</div>
+  </div>
+  <div class="card"><div class="card-body"><dl class="detail-grid">
+    <div class="detail-item"><dt>State</dt><dd><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ obj.is_active|yesno:"Active,Inactive" }}</span></dd></div>
+    <div class="detail-item"><dt>Assignment</dt><dd>{{ obj.get_assignment_mode_display }}</dd></div>
+    <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }}</dd></div>
+    <div class="detail-item"><dt>Match mode</dt><dd>{{ obj.get_match_mode_display }}</dd></div>
+    <div class="detail-item"><dt>Default owner</dt><dd>{% if obj.default_owner %}{{ obj.default_owner.get_full_name|default:obj.default_owner.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Territory</dt><dd>{% if obj.territory %}{{ obj.territory.name }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Fallback</dt><dd>{% if obj.fallback_owner %}{{ obj.fallback_owner.get_full_name|default:obj.fallback_owner.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Open lead cap</dt><dd>{{ obj.max_open_leads|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Last owner</dt><dd>{% if obj.last_assigned_owner %}{{ obj.last_assigned_owner.get_full_name|default:obj.last_assigned_owner.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Last assigned</dt><dd>{{ obj.last_assigned_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+  </dl><p>{{ obj.description|default:"No description."|linebreaksbr }}</p></div></div>
+  <div class="card"><div class="card-header"><h2 class="card-title">Eligible owners</h2></div><div class="card-body">{% for owner in eligible_owners %}<span class="badge badge-info">{{ owner.get_full_name|default:owner.username }}</span>{% empty %}<span class="text-muted">No eligible owners configured.</span>{% endfor %}</div></div>
+  <div class="card"><div class="card-header"><h2 class="card-title">Conditions</h2></div><div class="card-body">{% if obj.conditions %}<pre class="form-textarea">{{ conditions_json }}</pre>{% else %}<p class="text-muted">Catch-all rule: all leads match when active.</p>{% endif %}</div></div>
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Preview routing</h2></div>
+    <div class="card-body">
+      <form method="get" action="{% url 'sales:lead_routing_rule_preview' obj.pk %}" class="form-grid">
+        <div class="form-group"><label class="form-label" for="preview-lead">Lead</label><select id="preview-lead" name="lead" class="form-select" required><option value="">Choose a lead</option>{% for lead in leads %}<option value="{{ lead.pk|stringformat:"d" }}" {% if request.GET.lead == lead.pk|stringformat:"d" %}selected{% endif %}>{{ lead.number }} · {{ lead.name }}</option>{% endfor %}</select></div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="eye"></i> Preview</button></div>
+      </form>
+      {% if preview_result %}<div class="detail-grid" style="margin-top:1rem;"><div class="detail-item"><dt>Matched rule</dt><dd>{{ preview_result.rule.name|default:"—" }}</dd></div><div class="detail-item"><dt>Owner</dt><dd>{% if preview_result.owner %}{{ preview_result.owner.get_full_name|default:preview_result.owner.username }}{% else %}—{% endif %}</dd></div><div class="detail-item"><dt>Reason</dt><dd>{{ preview_result.reason }}</dd></div></div>{% endif %}
+    </div>
+  </div>
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}<div class="card"><div class="card-header"><h2 class="card-title">Run this rule</h2></div><div class="card-body"><form method="post" action="{% url 'sales:lead_routing_rule_run' obj.pk %}" class="form-grid" onsubmit="return confirm('Run this routing rule for the selected lead?');">{% csrf_token %}<div class="form-group"><label class="form-label" for="run-lead">Lead</label><select id="run-lead" name="lead" class="form-select" required><option value="">Choose a lead</option>{% for lead in leads %}<option value="{{ lead.pk|stringformat:"d" }}">{{ lead.number }} · {{ lead.name }}</option>{% endfor %}</select></div><div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="route"></i> Run routing</button></div></form></div></div>{% endif %}
+  <a href="{% url 'sales:lead_routing_rule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
