@@ -56,6 +56,7 @@ class OpportunityTransitionForm(forms.Form):
         allowed_target_stages=None,
         current_placement=None,
         allowed_stages=None,
+        target_stages=None,
         **kwargs,
     ):
         self.tenant = tenant
@@ -63,7 +64,9 @@ class OpportunityTransitionForm(forms.Form):
         self.placement = placement if placement is not None else current_placement
         self.current_stage = current_stage
         self.allowed_target_stages = (
-            allowed_target_stages if allowed_target_stages is not None else allowed_stages
+            allowed_target_stages
+            if allowed_target_stages is not None
+            else allowed_stages if allowed_stages is not None else target_stages
         )
         super().__init__(*args, **kwargs)
         self._placement_valid = self._validate_context()
