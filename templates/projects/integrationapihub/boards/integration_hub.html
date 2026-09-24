@@ -21,11 +21,12 @@
   </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
   <div class="stat-card"><div class="stat-icon purple"><i data-lucide="plug" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Connectors</div><div class="text-2xl font-bold text-slate-900">{{ stats.connectors_total }}</div></div></div>
   <div class="stat-card"><div class="stat-icon blue"><i data-lucide="repeat" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Active Jobs</div><div class="text-2xl font-bold text-slate-900">{{ stats.jobs_active }}</div></div></div>
   <div class="stat-card"><div class="stat-icon green"><i data-lucide="arrow-left-right" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Field Mappings</div><div class="text-2xl font-bold text-slate-900">{{ stats.mappings_total }}</div></div></div>
   <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Failed Today</div><div class="text-2xl font-bold text-red-600">{{ stats.failed_today }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon red"><i data-lucide="key-round" class="w-6 h-6"></i></div><div><div class="text-sm font-medium text-muted">Credentials Due</div><div class="text-2xl font-bold {% if stats.credentials_due %}text-red-600{% else %}text-slate-900{% endif %}">{{ stats.credentials_due }}</div></div></div>
 </div>
 
 <h3 class="text-sm font-semibold text-slate-700 mb-3">Connector Domains</h3>
