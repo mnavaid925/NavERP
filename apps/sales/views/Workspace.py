@@ -1,3 +1,4 @@
+from copy import copy
 from decimal import Decimal
 
 from django import forms
@@ -8,8 +9,6 @@ from django.core.exceptions import FieldDoesNotExist, FieldError, ObjectDoesNotE
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Q
-from django.db.models import functions as django_model_functions
-from django.db.models.expressions import ExpressionWrapper
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -43,9 +42,6 @@ from apps.sales.models.OpportunityPipeline.Pipelines import (
     PipelineStage,
 )
 from apps.sales.models.OpportunityTeams.OpportunityTeams import OpportunityTeamMember
-
-if not hasattr(django_model_functions, "ExpressionWrapper"):
-    django_model_functions.ExpressionWrapper = ExpressionWrapper
 
 from apps.sales.opportunity_analytics import (
     SALES_HEALTH_CHOICES,
@@ -130,6 +126,12 @@ def _workspace_default_pipeline(pipelines):
     return pipelines[0] if pipelines else None
 
 
+def _workspace_selected_pipeline(request, pipelines):
+    requested_id = _workspace_positive_id(request.GET.get("pipeline"))
+    selected = next((pipeline for pipeline in pipelines if pipeline.pk == requested_id), None)
+    return selected or _workspace_default_pipeline(pipelines)
+
+
 def _workspace_stage_queryset(tenant, pipeline):
     if tenant is None or pipeline is None:
         return PipelineStage.objects.none()
@@ -180,14 +182,29 @@ def _workspace_attach_row_data(opportunity, placement, health):
 def _workspace_health_fallback():
     return {
         "opportunity_id": None,
-        "status": "on_track",
-        "health_status": "on_track",
-        "factors": [],
+        "status": "watch",
+        "health_status": "watch",
+        "factors": [
+            {
+                "key": "health_unavailable",
+                "label": "Health unavailable",
+                "severity": "watch",
+                "detail": "Deal health could not be computed; review the opportunity data.",
+                "date": None,
+            }
+        ],
         "stage_age_days": 0,
         "target_days": None,
         "last_activity_at": None,
         "as_of": timezone.now().isoformat(),
     }
+
+
+def _workspace_health_row(projection, opportunity_id):
+    row = projection.get(opportunity_id)
+    if not isinstance(row, dict) or not row.get("status"):
+        return _workspace_health_fallback()
+    return row
 
 
 def _workspace_currency_stats(opportunities):
@@ -358,8 +375,15 @@ def _workspace_audit_entries(
     )
 
 
-def _workspace_placement_form(opportunity, tenant, *, data=None, instance=None):
-    form_instance = instance or OpportunityPipelinePlacement(
+def _workspace_placement_form(
+    opportunity,
+    tenant,
+    *,
+    data=None,
+    instance=None,
+    selected_pipeline=None,
+):
+    form_instance = copy(instance) if instance is not None else OpportunityPipelinePlacement(
         tenant=tenant,
         opportunity=opportunity,
     )
@@ -367,6 +391,7 @@ def _workspace_placement_form(opportunity, tenant, *, data=None, instance=None):
         data,
         instance=form_instance,
         tenant=tenant,
+        selected_pipeline=selected_pipeline,
     )
     form.fields["opportunity"].queryset = Opportunity.objects.filter(
         tenant=tenant,
@@ -375,22 +400,11 @@ def _workspace_placement_form(opportunity, tenant, *, data=None, instance=None):
     form.fields["opportunity"].widget = forms.HiddenInput()
     form.fields["opportunity"].disabled = True
     form.fields["opportunity"].initial = opportunity.pk
+    if selected_pipeline is not None:
+        form.initial["pipeline"] = selected_pipeline.pk
+        form.fields["pipeline"].initial = selected_pipeline.pk
+        form.fields["pipeline"].disabled = True
     return form
-
-
-def _workspace_form_stages(tenant, pipelines, form, placement=None):
-    pipeline_id = None
-    if form.is_bound:
-        pipeline_id = _workspace_positive_id(form.data.get("pipeline"))
-    if pipeline_id is None and placement is not None:
-        pipeline_id = placement.pipeline_id
-    if pipeline_id is None and not form.is_bound:
-        pipeline = _workspace_default_pipeline(pipelines)
-        pipeline_id = pipeline.pk if pipeline is not None else None
-    pipeline = next((item for item in pipelines if item.pk == pipeline_id), None)
-    if pipeline is None and placement is not None and placement.pipeline_id:
-        pipeline = placement.pipeline
-    return list(_workspace_stage_queryset(tenant, pipeline))
 
 
 def _workspace_error_message(exc):
@@ -450,12 +464,8 @@ def opportunity_workspace_list(request):
         placements,
         as_of=as_of,
     )
-    health_counts = {"on_track": 0, "watch": 0, "at_risk": 0}
     for opportunity in scope_opportunities:
-        health_row = health_projection.get(opportunity.pk, _workspace_health_fallback())
-        status = health_row.get("status", "on_track")
-        if status in health_counts:
-            health_counts[status] += 1
+        health_row = _workspace_health_row(health_projection, opportunity.pk)
         _workspace_attach_row_data(opportunity, _workspace_cached_placement(opportunity), health_row)
 
     visible_opportunities = []
@@ -463,6 +473,11 @@ def opportunity_workspace_list(request):
         if health and opportunity.workspace_health.get("status") != health:
             continue
         visible_opportunities.append(opportunity)
+    health_counts = {"on_track": 0, "watch": 0, "at_risk": 0}
+    for opportunity in visible_opportunities:
+        status = opportunity.workspace_health.get("status")
+        if status in health_counts:
+            health_counts[status] += 1
     page_obj = Paginator(visible_opportunities, _WORKSPACE_PAGE_SIZE).get_page(request.GET.get("page"))
     stats = _workspace_stats(visible_opportunities)
     stats["scope_total"] = len(scope_opportunities)
@@ -507,6 +522,7 @@ def opportunity_workspace_detail(request, opportunity_pk):
         opportunity,
         tenant,
         instance=placement,
+        selected_pipeline=pipeline,
     )
     team_member_form = OpportunityTeamMemberForm(
         opportunity=opportunity,
@@ -610,7 +626,7 @@ def opportunity_workspace_detail(request, opportunity_pk):
         [placement] if placement is not None else [],
         as_of=as_of,
     )
-    health = health_projection.get(opportunity.pk, _workspace_health_fallback())
+    health = _workspace_health_row(health_projection, opportunity.pk)
     activity_timeline = _workspace_activity_timeline(
         tasks,
         communications,
@@ -630,7 +646,7 @@ def opportunity_workspace_detail(request, opportunity_pk):
             "pipelines": pipelines,
             "stages": stages,
             "health": health,
-            "health_status": health.get("status", "on_track"),
+            "health_status": health.get("status", "watch"),
             "health_factors": health.get("factors", []),
             "health_stage_age_days": health.get("stage_age_days", 0),
             "health_target_days": health.get("target_days"),
@@ -672,11 +688,13 @@ def opportunity_place(request, opportunity_pk):
     if placement is None:
         placement = _workspace_placement_queryset(tenant, opportunity).first()
     pipelines = list(_workspace_pipeline_queryset(tenant))
+    selected_pipeline = _workspace_selected_pipeline(request, pipelines)
     form = _workspace_placement_form(
         opportunity,
         tenant,
         data=request.POST if request.method == "POST" else None,
         instance=placement,
+        selected_pipeline=selected_pipeline,
     )
     if request.method == "POST" and form.is_valid():
         selected_opportunity = form.cleaned_data.get("opportunity") or opportunity
@@ -707,7 +725,7 @@ def opportunity_place(request, opportunity_pk):
                 "sales:opportunity_workspace_detail",
                 opportunity_pk=opportunity.pk,
             )
-    stages = _workspace_form_stages(tenant, pipelines, form, placement)
+    stages = list(_workspace_stage_queryset(tenant, selected_pipeline))
     return render(
         request,
         "sales/opportunity/placement.html",
