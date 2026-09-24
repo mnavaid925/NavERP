@@ -17,6 +17,11 @@ from apps.sales.models.CompetitiveIntelligence.CompetitiveIntelligence import (
     CompetitorProfile,
     OpportunityCompetitor,
 )
+from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import (
+    OpportunityOutcome,
+    WinLossReason,
+)
+from apps.sales.models.OpportunityTeams.OpportunityTeams import OpportunityTeamMember
 
 
 def _opportunity_pipeline_tenant_id(tenant):
@@ -385,7 +390,13 @@ def sales_reorder_pipeline_stages(pipeline, tenant, user, ordered_stage_ids):
     return locked_pipeline
 
 
-def sales_validate_stage_criteria(stage, opportunity, active_team_member=False):
+def sales_validate_stage_criteria(
+    stage,
+    opportunity,
+    active_team_member=False,
+    criteria=None,
+    criterion_name="entry",
+):
     next_step_due_date = getattr(opportunity, "next_step_due_date", None)
     checks = {
         "account": opportunity.account_id is not None,
@@ -397,12 +408,21 @@ def sales_validate_stage_criteria(stage, opportunity, active_team_member=False):
         "owner": opportunity.owner_id is not None,
         "active_team_member": bool(active_team_member),
     }
+    criteria = stage.entry_criteria if criteria is None else criteria
+    if not isinstance(criteria, (list, tuple)) or len(criteria) > 20:
+        raise ValidationError("Stage criteria are invalid.")
     missing = []
-    for item in stage.entry_criteria or []:
-        if isinstance(item, dict) and item.get("key") in checks and not checks[item["key"]]:
-            missing.append(item.get("label") or item["key"])
+    for item in criteria:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("key")
+        if key not in checks or checks[key]:
+            continue
+        missing.append(str(item.get("label") or key))
     if missing:
-        raise ValidationError("Stage entry criteria are not met: " + ", ".join(missing))
+        raise ValidationError(
+            f"Stage {criterion_name} criteria are not met: " + ", ".join(missing)
+        )
     return True
 
 
@@ -660,3 +680,232 @@ def sales_remove_opportunity_competitor(opportunity, competitor, tenant, user):
         )
         locked_competitor.delete()
     return True
+
+
+def _opportunity_transition_pk(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if 0 < parsed <= 9223372036854775807 else None
+
+
+def _opportunity_transition_lock_stage(stage_id, tenant_id, pipeline_id=None):
+    queryset = PipelineStage.objects.select_for_update().filter(
+        pk=stage_id,
+        tenant_id=tenant_id,
+    )
+    if pipeline_id is not None:
+        queryset = queryset.filter(pipeline_id=pipeline_id)
+    try:
+        return queryset.get()
+    except PipelineStage.DoesNotExist as exc:
+        raise ValidationError("The stage does not belong to this workspace.") from exc
+
+
+def _opportunity_transition_lock_reason(reason_id, tenant_id):
+    try:
+        return WinLossReason.objects.select_for_update().get(
+            pk=reason_id,
+            tenant_id=tenant_id,
+        )
+    except WinLossReason.DoesNotExist as exc:
+        raise ValidationError("The win/loss reason does not belong to this workspace.") from exc
+
+
+def _opportunity_transition_lock_competitor(competitor_id, tenant_id, opportunity_id):
+    try:
+        return OpportunityCompetitor.objects.select_for_update().get(
+            pk=competitor_id,
+            tenant_id=tenant_id,
+            opportunity_id=opportunity_id,
+        )
+    except OpportunityCompetitor.DoesNotExist as exc:
+        raise ValidationError("The competitor link does not belong to this opportunity.") from exc
+
+
+def sales_transition_opportunity(
+    *,
+    opportunity,
+    target_stage,
+    tenant,
+    user,
+    reason=None,
+    competitor_link=None,
+    notes="",
+):
+    tenant_id = _opportunity_pipeline_tenant_id(tenant)
+    opportunity_id = _opportunity_transition_pk(getattr(opportunity, "pk", opportunity))
+    target_stage_id = _opportunity_transition_pk(getattr(target_stage, "pk", target_stage))
+    if tenant_id is None or opportunity_id is None or target_stage_id is None:
+        raise ValidationError("A tenant, opportunity, and target stage are required.")
+    if opportunity.tenant_id != tenant_id:
+        raise ValidationError("The opportunity must belong to this workspace.")
+    if notes is None:
+        notes = ""
+    if not isinstance(notes, str) or len(notes) > 4000:
+        raise ValidationError("Transition notes must be text of at most 4000 characters.")
+    notes = notes.strip()
+    if user is not None and getattr(user, "is_authenticated", False):
+        if getattr(user, "tenant_id", None) != tenant_id:
+            raise ValidationError("The user must belong to this workspace.")
+    reason_id = _opportunity_transition_pk(getattr(reason, "pk", reason))
+    competitor_id = _opportunity_transition_pk(getattr(competitor_link, "pk", competitor_link))
+    with transaction.atomic():
+        try:
+            locked_opportunity = Opportunity.objects.select_for_update().get(
+                pk=opportunity_id,
+                tenant_id=tenant_id,
+            )
+        except Opportunity.DoesNotExist as exc:
+            raise ValidationError("The opportunity does not belong to this workspace.") from exc
+        try:
+            locked_placement = OpportunityPipelinePlacement.objects.select_for_update().get(
+                opportunity_id=locked_opportunity.pk,
+                tenant_id=tenant_id,
+            )
+        except OpportunityPipelinePlacement.DoesNotExist as exc:
+            raise ValidationError("Place this opportunity in a pipeline before transitioning it.") from exc
+        try:
+            locked_pipeline = Pipeline.objects.select_for_update().get(
+                pk=locked_placement.pipeline_id,
+                tenant_id=tenant_id,
+            )
+        except Pipeline.DoesNotExist as exc:
+            raise ValidationError("The placement pipeline does not belong to this workspace.") from exc
+        locked_current = _opportunity_transition_lock_stage(
+            locked_placement.current_stage_id,
+            tenant_id,
+            locked_placement.pipeline_id,
+        )
+        locked_target = _opportunity_transition_lock_stage(
+            target_stage_id,
+            tenant_id,
+            locked_placement.pipeline_id,
+        )
+        if not locked_pipeline.is_active:
+            raise ValidationError("The placement pipeline must be active.")
+        if not locked_current.is_active or not locked_target.is_active:
+            raise ValidationError("The current and target stages must be active.")
+        if locked_current.pipeline_id != locked_placement.pipeline_id or locked_target.pipeline_id != locked_placement.pipeline_id:
+            raise ValidationError("The current and target stages must belong to the placement pipeline.")
+        if locked_current.pk == locked_target.pk:
+            return locked_placement
+        if locked_current.stage_kind == "open":
+            if locked_target.stage_kind == "open":
+                if locked_target.sequence <= locked_current.sequence:
+                    raise ValidationError("An open opportunity cannot move backward between stages.")
+                next_open_id = (
+                    PipelineStage.objects.filter(
+                        tenant_id=tenant_id,
+                        pipeline_id=locked_placement.pipeline_id,
+                        is_active=True,
+                        stage_kind="open",
+                        sequence__gt=locked_current.sequence,
+                    )
+                    .order_by("sequence", "pk")
+                    .values_list("pk", flat=True)
+                    .first()
+                )
+                if next_open_id != locked_target.pk:
+                    raise ValidationError("An open opportunity must move to the next active open stage.")
+            elif locked_target.stage_kind not in {"won", "lost"}:
+                raise ValidationError("That pipeline transition is not available.")
+        elif locked_current.stage_kind in {"won", "lost"}:
+            if locked_target.stage_kind != "open":
+                raise ValidationError("A closed opportunity can only reopen to an open stage.")
+        else:
+            raise ValidationError("The current pipeline stage is invalid.")
+        active_team_member = (
+            OpportunityTeamMember.objects.select_for_update()
+            .filter(
+                tenant_id=tenant_id,
+                opportunity_id=locked_opportunity.pk,
+                is_active=True,
+            )
+            .exists()
+        )
+        sales_validate_stage_criteria(
+            locked_current,
+            locked_opportunity,
+            active_team_member=active_team_member,
+            criteria=locked_current.exit_criteria,
+            criterion_name="exit",
+        )
+        sales_validate_stage_criteria(
+            locked_target,
+            locked_opportunity,
+            active_team_member=active_team_member,
+            criteria=locked_target.entry_criteria,
+            criterion_name="entry",
+        )
+        locked_reason = _opportunity_transition_lock_reason(reason_id, tenant_id) if reason_id else None
+        locked_competitor = (
+            _opportunity_transition_lock_competitor(
+                competitor_id,
+                tenant_id,
+                locked_opportunity.pk,
+            )
+            if competitor_id
+            else None
+        )
+        if locked_target.stage_kind == "open":
+            if locked_reason is not None or locked_competitor is not None:
+                raise ValidationError("Open transitions cannot carry closure evidence.")
+        else:
+            if locked_reason is None:
+                raise ValidationError("A reason is required when closing an opportunity.")
+            if not locked_reason.is_active:
+                raise ValidationError("Choose an active win/loss reason.")
+            if locked_reason.result not in {"both", locked_target.stage_kind}:
+                raise ValidationError("The reason is not compatible with the closing result.")
+            if (
+                locked_competitor is not None
+                and locked_competitor.relationship in {"lost_to", "beaten"}
+                and locked_target.stage_kind != "lost"
+            ):
+                raise ValidationError("This competitor relationship requires a lost outcome.")
+        now = timezone.now()
+        outcome = None
+        if locked_target.stage_kind in {"won", "lost"}:
+            recorded_by = user if getattr(user, "is_authenticated", False) else None
+            outcome = OpportunityOutcome(
+                tenant_id=tenant_id,
+                opportunity=locked_opportunity,
+                result=locked_target.stage_kind,
+                reason=locked_reason,
+                competitor_link=locked_competitor,
+                notes=notes,
+                closed_at=now,
+                recorded_by=recorded_by,
+            )
+            outcome.full_clean()
+            outcome.save()
+        locked_placement.current_stage = locked_target
+        locked_placement.probability_override = None
+        locked_placement.stage_entered_at = now
+        locked_placement.full_clean()
+        locked_placement.save()
+        locked_opportunity.stage = locked_target.crm_stage_key
+        locked_opportunity.probability = locked_target.probability
+        locked_opportunity.forecast_category = locked_target.forecast_category
+        locked_opportunity.save()
+        write_audit_log(
+            user,
+            locked_placement,
+            "update",
+            {
+                "operation": "transition",
+                "opportunity_id": locked_opportunity.pk,
+                "from_stage_id": locked_current.pk,
+                "to_stage_id": locked_target.pk,
+                "result": locked_target.stage_kind if locked_target.stage_kind in {"won", "lost"} else None,
+                "reason_id": locked_reason.pk if locked_reason is not None else None,
+                "competitor_link_id": locked_competitor.pk if locked_competitor is not None else None,
+                "outcome_id": outcome.pk if outcome is not None else None,
+            },
+            tenant=tenant,
+        )
+    return locked_placement
