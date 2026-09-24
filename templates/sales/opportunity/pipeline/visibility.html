@@ -100,11 +100,47 @@
 
 <div class="card">
   <div class="card-header"><h2>Win / loss outcomes</h2></div>
-  <div class="card-body"><div class="empty-state"><i data-lucide="trophy"></i><h3>No outcome rows in this entity group</h3><p>Structured win/loss reasons and outcomes are a later 8.2 entity group; no legacy transition is inferred here.</p></div></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Result</th><th>Reason</th><th>Category</th><th>Currency</th><th>Outcomes</th><th>Amount</th><th>First closed</th><th>Last closed</th></tr></thead>
+    <tbody>
+      {% for row in win_loss_rows %}
+      <tr>
+        <td>{% if row.result == 'won' %}<span class="badge badge-green">Won</span>{% elif row.result == 'lost' %}<span class="badge badge-red">Lost</span>{% else %}<span class="badge badge-slate">{{ row.result_label|default:"—" }}</span>{% endif %}</td>
+        <td>{% if row.reason_name %}<span class="fw-600">{{ row.reason_name }}</span><div class="text-muted">{{ row.reason_code }}</div>{% else %}<span class="text-muted">Unspecified</span>{% endif %}</td>
+        <td>{% if row.category_label %}<span class="badge badge-slate">{{ row.category_label }}</span>{% else %}<span class="text-muted">Unspecified</span>{% endif %}</td>
+        <td>{{ row.currency_label }}</td>
+        <td>{{ row.count }}</td>
+        <td>{{ row.amount }}</td>
+        <td>{% if row.first_closed_at %}{{ row.first_closed_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
+        <td>{% if row.last_closed_at %}{{ row.last_closed_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8"><div class="empty-state"><i data-lucide="trophy"></i><h3>No win or loss outcomes</h3><p>No structured closure outcomes match this pipeline, owner, territory, currency, or date scope.</p></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
 </div>
 
 <div class="card">
   <div class="card-header"><h2>Competitor outcomes</h2></div>
-  <div class="card-body"><div class="empty-state"><i data-lucide="shield"></i><h3>No competitor rows in this entity group</h3><p>Structured competitive links are a later 8.2 entity group and are not inferred from legacy free text.</p></div></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Competitor</th><th>Relationship</th><th>Result</th><th>Currency</th><th>Outcomes</th><th>Amount</th><th>First closed</th><th>Last closed</th></tr></thead>
+    <tbody>
+      {% for row in competitor_rows %}
+      <tr>
+        <td>{% if row.competitor_name %}<span class="fw-600">{{ row.competitor_name }}</span>{% else %}<span class="text-muted">Unspecified</span>{% endif %}</td>
+        <td>{% if row.relationship_label %}<span class="badge {% if row.relationship == 'lost_to' or row.relationship == 'beaten' %}badge-red{% else %}badge-slate{% endif %}">{{ row.relationship_label }}</span>{% else %}<span class="text-muted">Unspecified</span>{% endif %}</td>
+        <td>{% if row.result == 'won' %}<span class="badge badge-green">Won</span>{% elif row.result == 'lost' %}<span class="badge badge-red">Lost</span>{% else %}<span class="badge badge-slate">{{ row.result_label|default:"—" }}</span>{% endif %}</td>
+        <td>{{ row.currency_label }}</td>
+        <td>{{ row.count }}</td>
+        <td>{{ row.amount }}</td>
+        <td>{% if row.first_closed_at %}{{ row.first_closed_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
+        <td>{% if row.last_closed_at %}{{ row.last_closed_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield"></i><h3>No competitor outcomes</h3><p>No structured competitor closure outcomes match this scope.</p></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
 </div>
 {% endblock %}
