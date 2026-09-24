@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Lead Score Events{% endblock %}
+{% block content %}
+  <div class="page-header"><div><h1 class="page-title">Lead Score Events</h1><div class="breadcrumb"><a href="{% url 'sales:lead_overview' %}">Sales</a><span class="sep">›</span><span>Score Events</span></div></div></div>
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Record manual adjustment</h2></div><div class="card-body">
+    <form method="post" action="{% url 'sales:lead_score_event_adjust' %}" class="form-grid">
+      {% csrf_token %}<div class="form-group"><label class="form-label" for="adjust-lead">Lead</label><select id="adjust-lead" name="lead" class="form-select" required><option value="">Choose a lead</option>{% for lead in leads %}<option value="{{ lead.pk }}">{{ lead.number }} · {{ lead.name }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="form-label" for="adjust-delta">Score delta</label><input id="adjust-delta" name="score_delta" type="number" min="-100" max="100" class="form-input" required></div>
+      <div class="form-group"><label class="form-label" for="adjust-reason">Reason</label><textarea id="adjust-reason" name="reason" class="form-textarea" rows="2" required></textarea></div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Record adjustment</button></div>
+    </form>
+  </div></div>
+  {% endif %}
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Recompute a lead projection</h2></div><div class="card-body"><form method="post" action="{% url 'sales:lead_score_event_recompute' %}" class="form-grid"><div class="form-group"><label class="form-label" for="recompute-lead">Lead</label><select id="recompute-lead" name="lead_id" class="form-select" required><option value="">Choose a lead</option>{% for lead in leads %}<option value="{{ lead.pk }}">{{ lead.number }} · {{ lead.name }}</option>{% endfor %}</select></div><div class="form-actions"><button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Recompute</button></div></form></div></div>
+  {% endif %}
+  <div class="card"><div class="card-body"><form method="get" class="filter-bar">
+    <div class="form-group" style="flex:1; min-width:200px;"><label class="sr-only" for="score-search">Search score events</label><input id="score-search" type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search score events…"></div>
+    <div class="form-group"><label class="sr-only" for="score-signal">Signal</label><select id="score-signal" name="signal_category" class="form-select"><option value="">All signals</option>{% for val,label in signal_category_choices %}<option value="{{ val }}" {% if request.GET.signal_category == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label class="sr-only" for="score-event-type">Event type</label><select id="score-event-type" name="event_type" class="form-select"><option value="">All events</option>{% for val,label in event_type_choices %}<option value="{{ val }}" {% if request.GET.event_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label class="sr-only" for="score-source">Source</label><select id="score-source" name="source_kind" class="form-select"><option value="">All sources</option>{% for val,label in source_kind_choices %}<option value="{{ val }}" {% if request.GET.source_kind == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label class="sr-only" for="score-lead">Lead</label><select id="score-lead" name="lead" class="form-select"><option value="">All leads</option>{% for lead in leads %}<option value="{{ lead.pk|stringformat:"d" }}" {% if request.GET.lead == lead.pk|stringformat:"d" %}selected{% endif %}>{{ lead.number }} · {{ lead.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label class="form-label" for="date-from">From</label><input id="date-from" name="date_from" type="date" value="{{ date_from }}" class="form-input"></div>
+    <div class="form-group"><label class="form-label" for="date-to">To</label><input id="date-to" name="date_to" type="date" value="{{ date_to }}" class="form-input"></div>
+    <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button><a href="{% url 'sales:lead_score_event_list' %}" class="btn btn-outline">Reset</a>
+  </form></div></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th>Occurred</th><th>Lead</th><th>Event</th><th>Delta</th><th>Source</th><th>Reason</th><th class="table-actions">Actions</th></tr></thead><tbody>
+    {% for obj in object_list %}<tr><td>{{ obj.occurred_at|date:"M d, Y H:i" }}</td><td><a href="{% url 'crm:lead_detail' obj.lead.pk %}">{{ obj.lead.number }}</a></td><td>{{ obj.get_event_type_display }}</td><td>{{ obj.score_delta }}</td><td>{{ obj.get_source_kind_display }}</td><td>{{ obj.reason|default:"—"|truncatechars:60 }}</td><td><div class="table-actions"><a href="{% url 'sales:lead_score_event_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td></tr>{% empty %}<tr><td colspan="7"><div class="empty-state"><i data-lucide="gauge"></i><h3>No score events</h3><p>Recorded scoring signals will appear here.</p></div></td></tr>{% endfor %}
+  </tbody></table></div>{% include "partials/pagination.html" %}
+{% endblock %}
