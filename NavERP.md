@@ -66,7 +66,7 @@ balances and on-hand quantities are always **derived**, never hand-edited. See t
 | 5 | Inventory Management System (IMS) | `inventory` | ✅ 5.1–5.20 built — all 20 sub-modules |
 | 6 | Procurement Management System | `procurement` | ✅ 6.1–6.19 built — all 19 sub-modules |
 | 7 | Project Management | `projects` | 🟦 7.1–7.17 built — 17 of 19 sub-modules |
-| 8 | Sales Management System | `sales` | ⬜ Roadmap |
+| 8 | Sales Management System | `sales` | 🟦 8.1 built — Lead Management (8.2–8.19 roadmap) |
 | 9 | eCommerce Management System | `ecommerce` | ⬜ Roadmap |
 | 10 | Business Intelligence (BI) | `bi` | ⬜ Roadmap (read-only over the spine) |
 | 11 | Asset Management System | `assets` | ⬜ Roadmap |
