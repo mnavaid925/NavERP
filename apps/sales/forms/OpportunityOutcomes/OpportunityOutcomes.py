@@ -19,6 +19,8 @@ class WinLossReasonForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
+        self.fields["result"].required = True
+        self.fields["category"].required = True
         if tenant is not None and self.instance.tenant_id is None:
             self.instance.tenant = tenant
 
