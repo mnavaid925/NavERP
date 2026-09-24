@@ -372,6 +372,7 @@ def _opportunity_pipeline_filtered_placements(
         "opportunity__owner",
         "opportunity__territory",
         "opportunity__account",
+        "opportunity__currency",
     )
     if owner_id is not None:
         queryset = queryset.filter(opportunity__owner_id=owner_id)
