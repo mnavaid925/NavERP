@@ -6551,5 +6551,302 @@ def workflowautomation_delivery_a(db, tenant_a, workflowautomation_webhook_a):
     return _workflowautomation_delivery(tenant_a, workflowautomation_webhook_a)
 
 
+INTEGRATIONAPIHUB_PAGE_SIZE = 25
 
+
+def _integrationapihub_connector(tenant, project=None, **overrides):
+    from apps.projects.models import ProjectIntegrationConnector
+
+    sequence = ProjectIntegrationConnector.objects.filter(tenant=tenant).count() + 1
+    data = dict(
+        tenant=tenant,
+        project=project,
+        name=f"Integration connector {sequence:02d}",
+        domain="erp",
+        provider="sap",
+        direction="bidirectional",
+        auth_method="api_key",
+        base_url="https://config.example.invalid",
+        remote_scope_ref="NAVERP",
+        trigger_mode="manual",
+        schedule_note="Manual rehearsal only.",
+        environment="sandbox",
+        status="unverified",
+        is_active=True,
+        notes="Integration Hub test connector.",
+    )
+    data.update(overrides)
+    obj = ProjectIntegrationConnector(**data)
+    obj.save()
+    return obj
+
+
+def _integrationapihub_mapping(tenant, connector, **overrides):
+    from apps.projects.models import ConnectorFieldMapping
+
+    sequence = ConnectorFieldMapping.objects.filter(tenant=tenant, connector=connector).count() + 1
+    data = dict(
+        tenant=tenant,
+        connector=connector,
+        local_field=f"task.field_{sequence:02d}",
+        remote_field=f"fields.Field{sequence:02d}",
+        direction="both",
+        transform="none",
+        value_map={},
+        default_value="",
+        is_key=False,
+        is_required=False,
+        notes="Integration Hub test mapping.",
+    )
+    data.update(overrides)
+    obj = ConnectorFieldMapping(**data)
+    obj.save()
+    return obj
+
+
+def _integrationapihub_job(tenant, connector, **overrides):
+    from apps.projects.models import ProjectSyncJob
+
+    sequence = ProjectSyncJob.objects.filter(tenant=tenant, connector=connector).count() + 1
+    data = dict(
+        tenant=tenant,
+        connector=connector,
+        name=f"Sync job {sequence:02d}",
+        entity_scope="tasks",
+        direction="bidirectional",
+        trigger_mode="manual",
+        interval_minutes=None,
+        schedule_note="Manual rehearsal only.",
+        filter_expression="",
+        conflict_policy="manual",
+        batch_size=100,
+        is_active=True,
+    )
+    data.update(overrides)
+    obj = ProjectSyncJob(**data)
+    obj.save()
+    return obj
+
+
+def _integrationapihub_run(tenant, job, **overrides):
+    from apps.projects.models import ProjectSyncRun
+
+    if tenant is None or job.tenant_id != tenant.pk:
+        raise ValueError("The run tenant must match the job tenant.")
+
+    data = dict(
+        status="simulated",
+        trigger_source="manual",
+        triggered_by=None,
+        direction=None,
+        records_read=0,
+        records_created=0,
+        records_updated=0,
+        records_skipped=0,
+        records_failed=0,
+        error_code="",
+        error_message="",
+        payload_excerpt="",
+        attempt_no=1,
+        next_retry_at=None,
+        started_at=None,
+        finished_at=None,
+        duration_ms=0,
+    )
+    data.update(overrides)
+    return ProjectSyncRun.record(job=job, **data)
+
+
+@pytest.fixture
+def integrationapihub_project_a(db, tenant_a, admin_user):
+    return _projectinitiation_project(
+        tenant_a,
+        name="Integration Hub Project A",
+        code="IHA-01",
+        status="active",
+        charter_status="approved",
+        charter_approved_by=admin_user,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=2),
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def integrationapihub_project_b(db, tenant_b, admin_b):
+    return _projectinitiation_project(
+        tenant_b,
+        name="Integration Hub Project B",
+        code="IHB-01",
+        status="active",
+        charter_status="approved",
+        charter_approved_by=admin_b,
+        charter_approved_at=timezone.now() - datetime.timedelta(days=2),
+        created_by=admin_b,
+    )
+
+
+@pytest.fixture
+def integrationapihub_connector_a(db, tenant_a, admin_user, integrationapihub_project_a):
+    return _integrationapihub_connector(
+        tenant_a,
+        project=integrationapihub_project_a,
+        name="Acme ERP connector",
+        domain="erp",
+        provider="sap",
+        status="connected",
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def integrationapihub_connector_b(db, tenant_b, admin_b, integrationapihub_project_b):
+    return _integrationapihub_connector(
+        tenant_b,
+        project=integrationapihub_project_b,
+        name="Globex CRM connector",
+        domain="crm",
+        provider="salesforce",
+        status="error",
+        owner=admin_b,
+    )
+
+
+@pytest.fixture
+def integrationapihub_connector_workspace_a(db, tenant_a, admin_user):
+    return _integrationapihub_connector(
+        tenant_a,
+        project=None,
+        name="Acme workspace connector",
+        domain="storage",
+        provider="sharepoint",
+        status="disconnected",
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def integrationapihub_connector_credential_a(db, tenant_a, admin_user, integrationapihub_project_a):
+    return _integrationapihub_connector(
+        tenant_a,
+        project=integrationapihub_project_a,
+        name="Acme credential connector",
+        domain="devops",
+        provider="jira",
+        credential="provider-secret-1234",
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def integrationapihub_mapping_a(db, tenant_a, integrationapihub_connector_a):
+    return _integrationapihub_mapping(
+        tenant_a,
+        integrationapihub_connector_a,
+        local_field="task.status",
+        remote_field="fields.status.name",
+        direction="to_remote",
+        transform="upper",
+        value_map={"todo": "To Do"},
+        is_key=True,
+        is_required=True,
+    )
+
+
+@pytest.fixture
+def integrationapihub_mapping_b(db, tenant_b, integrationapihub_connector_b):
+    return _integrationapihub_mapping(
+        tenant_b,
+        integrationapihub_connector_b,
+        local_field="client.name",
+        remote_field="Account.Name",
+        direction="from_remote",
+        transform="trim",
+        value_map={"Closed Won": "active"},
+        is_key=True,
+    )
+
+
+@pytest.fixture
+def integrationapihub_job_a(db, tenant_a, integrationapihub_connector_a):
+    return _integrationapihub_job(
+        tenant_a,
+        integrationapihub_connector_a,
+        name="Acme task sync",
+        entity_scope="tasks",
+        direction="outbound",
+        trigger_mode="scheduled",
+        interval_minutes=60,
+        schedule_note="Recorded hourly cadence.",
+        filter_expression="status = active",
+        conflict_policy="local_wins",
+        batch_size=50,
+    )
+
+
+@pytest.fixture
+def integrationapihub_job_b(db, tenant_b, integrationapihub_connector_b):
+    return _integrationapihub_job(
+        tenant_b,
+        integrationapihub_connector_b,
+        name="Globex issue sync",
+        entity_scope="issues",
+        direction="inbound",
+        trigger_mode="event",
+        interval_minutes=None,
+        schedule_note="Event-triggered rehearsal.",
+        filter_expression="stage = open",
+        conflict_policy="remote_wins",
+        batch_size=25,
+        is_active=False,
+    )
+
+
+@pytest.fixture
+def integrationapihub_run_a(db, tenant_a, admin_user, integrationapihub_job_a):
+    return _integrationapihub_run(
+        tenant_a,
+        integrationapihub_job_a,
+        status="simulated",
+        trigger_source="manual",
+        triggered_by=admin_user,
+        records_read=4,
+        records_created=1,
+        records_updated=2,
+        payload_excerpt="Simulated task payload.",
+        error_message="Simulated run — no outbound request was made.",
+        duration_ms=25,
+    )
+
+
+@pytest.fixture
+def integrationapihub_run_failed_a(db, tenant_a, admin_user, integrationapihub_job_a):
+    return _integrationapihub_run(
+        tenant_a,
+        integrationapihub_job_a,
+        status="failed",
+        trigger_source="event",
+        triggered_by=admin_user,
+        records_read=6,
+        records_failed=2,
+        error_code="PARTNER_TIMEOUT",
+        error_message="The partner timed out during the simulated rehearsal.",
+        payload_excerpt="Truncated partner payload.",
+        finished_at=timezone.now(),
+        duration_ms=1200,
+    )
+
+
+@pytest.fixture
+def integrationapihub_run_b(db, tenant_b, admin_b, integrationapihub_job_b):
+    return _integrationapihub_run(
+        tenant_b,
+        integrationapihub_job_b,
+        status="success",
+        trigger_source="schedule",
+        triggered_by=admin_b,
+        records_read=3,
+        records_updated=3,
+        error_message="",
+        duration_ms=10,
+    )
 
