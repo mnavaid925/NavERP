@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Score Event {{ obj.pk }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div><h1 class="page-title">{{ obj.get_event_type_display }}</h1><div class="breadcrumb"><a href="{% url 'sales:lead_overview' %}">Sales</a><span class="sep">›</span><a href="{% url 'sales:lead_score_event_list' %}">Score Events</a><span class="sep">›</span><span>{{ obj.pk }}</span></div></div>
+    <div class="page-actions"><a href="{% url 'sales:lead_score_event_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back</a></div>
+  </div>
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Lead</dt><dd><a href="{% url 'crm:lead_detail' lead.pk %}">{{ lead.number }} · {{ lead.name }}</a></dd></div>
+      <div class="detail-item"><dt>Event</dt><dd>{{ obj.get_event_type_display }}</dd></div>
+      <div class="detail-item"><dt>Signal</dt><dd>{{ obj.get_signal_category_display }}</dd></div>
+      <div class="detail-item"><dt>Score delta</dt><dd>{{ obj.score_delta }}</dd></div>
+      <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_kind_display }}{% if obj.source_ref %} · {{ obj.source_ref }}{% endif %}</dd></div>
+      <div class="detail-item"><dt>Occurred</dt><dd>{{ obj.occurred_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Effective until</dt><dd>{{ obj.effective_until|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Recorded by</dt><dd>{% if obj.recorded_by %}{{ obj.recorded_by.get_full_name|default:obj.recorded_by.username }}{% else %}System{% endif %}</dd></div>
+      <div class="detail-item"><dt>Current projection</dt><dd>{{ projection_score }} / 100 · {{ projection_rating|title }}</dd></div>
+      <div class="detail-item"><dt>Reason</dt><dd>{{ obj.reason|default:"—"|linebreaksbr }}</dd></div>
+      {% if obj.corrects_event %}<div class="detail-item"><dt>Corrects</dt><dd><a href="{% url 'sales:lead_score_event_detail' obj.corrects_event.pk %}">#{{ obj.corrects_event.pk }}</a></dd></div>{% endif %}
+    </dl>
+  </div></div>
+  {% if can_correct %}{% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <div class="card"><div class="card-header"><h2 class="card-title">Record correction</h2></div><div class="card-body">
+    <form method="post" action="{% url 'sales:lead_score_event_correct' obj.pk %}" class="form-grid">
+      {% csrf_token %}<input type="hidden" name="lead" value="{{ lead.pk }}"><input type="hidden" name="corrects_event" value="{{ obj.pk }}">
+      <div class="form-group"><label class="form-label" for="correction-delta">Inverse delta</label><input id="correction-delta" name="score_delta" type="number" min="-100" max="100" class="form-input" value="{{ inverse_score_delta }}" required></div>
+      <div class="form-group"><label class="form-label" for="correction-reason">Reason</label><textarea id="correction-reason" name="reason" class="form-textarea" rows="2" required></textarea></div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="undo-2"></i> Record correction</button></div>
+    </form>
+  </div></div>
+  {% endif %}{% endif %}
+{% endblock %}
