@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load project_custom_fields %}
 {% block title %}{{ obj.number }} — Milestone{% endblock %}
 {% block content %}
   <div class="page-header">
@@ -45,6 +46,9 @@
       {% if obj.description %}<p><strong>Description.</strong> {{ obj.description|linebreaksbr }}</p>{% endif %}
     </div>
   </div>
+
+  {% project_custom_values obj as custom_values %}
+  {% include "projects/partials/custom_values_panel.html" %}
 
   {% if obj.is_phase_gate %}
     <div class="card">
