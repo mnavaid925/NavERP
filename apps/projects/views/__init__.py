@@ -784,6 +784,7 @@ from .MasterDataConfiguration.ProjectCustomFields import (  # noqa: F401
     pcf_detail,
     pcf_edit,
     pcf_delete,
+    pcf_toggle_active,
 )
 from .MasterDataConfiguration.ProjectTeams import (  # noqa: F401
     pte_list,
