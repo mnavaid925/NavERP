@@ -183,5 +183,8 @@ from .IntegrationApiHub.SyncRuns import ProjectSyncRun  # noqa: F401
 from .MasterDataConfiguration.ProjectTemplates import ProjectTemplate  # noqa: F401
 from .MasterDataConfiguration.ProjectCustomFields import ProjectCustomField  # noqa: F401
 from .MasterDataConfiguration.ProjectTeams import ProjectTeam, ProjectTeamMember  # noqa: F401
-from .MasterDataConfiguration.ProjectLocaleSettings import ProjectLocaleSetting  # noqa: F401
+from .MasterDataConfiguration.ProjectLocaleSettings import (  # noqa: F401
+    ProjectLocaleSetting,
+    resolve_project_locale,
+)
 
