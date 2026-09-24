@@ -46,7 +46,7 @@
   <div class="card-header"><h2>Opportunity links</h2></div>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Opportunity</th><th>Relationship</th><th>Primary</th><th>Pricing notes</th><th>Deal notes</th><th class="table-actions">Actions</th></tr></thead>
+      <thead><tr><th>Opportunity</th><th>Relationship</th><th>Primary</th><th>Pricing notes</th><th>Deal notes</th><th>Positioning notes</th><th class="table-actions">Actions</th></tr></thead>
       <tbody>
         {% for link in opportunity_links %}
         <tr>
@@ -55,6 +55,7 @@
           <td>{% if link.is_primary %}<span class="badge badge-green">Primary</span>{% else %}—{% endif %}</td>
           <td>{{ link.pricing_notes|default:"—"|truncatechars:80 }}</td>
           <td>{{ link.deal_notes|default:"—"|truncatechars:80 }}</td>
+          <td>{{ link.positioning_notes|default:"—"|truncatechars:80 }}</td>
           <td><div class="table-actions">
             <a href="{% url 'sales:opportunity_competitor_link_edit' link.opportunity.pk link.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
             <form method="post" action="{% url 'sales:opportunity_competitor_link_remove' link.opportunity.pk link.pk %}" onsubmit="return confirm('Remove this competitor from the opportunity?');">
@@ -63,7 +64,7 @@
           </div></td>
         </tr>
         {% empty %}
-        <tr><td colspan="6"><div class="empty-state"><i data-lucide="link-2"></i><h3>No opportunity links</h3><p>This profile is not currently linked to an opportunity.</p></div></td></tr>
+        <tr><td colspan="7"><div class="empty-state"><i data-lucide="link-2"></i><h3>No opportunity links</h3><p>This profile is not currently linked to an opportunity.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>
