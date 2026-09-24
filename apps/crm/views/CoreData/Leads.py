@@ -7,6 +7,8 @@ from apps.crm.models import (
 from apps.crm.forms import (
     LeadForm,
 )
+from apps.crm.services import convert_lead
+from apps.sales.services import exit_nurture_for_lead
 
 
 # ===================================================================== Leads (1.1)
@@ -26,7 +28,7 @@ def lead_list(request):
 @login_required
 def lead_create(request):
     return crud_create(request, form_class=LeadForm, template="crm/directory/lead/form.html",
-                       success_url="crm:lead_list")
+                       success_url="crm:lead_list", form_kwargs={"user": request.user})
 
 
 @login_required
@@ -44,44 +46,52 @@ def lead_detail(request, pk):
 @login_required
 def lead_edit(request, pk):
     return crud_edit(request, model=Lead, pk=pk, form_class=LeadForm,
-                     template="crm/directory/lead/form.html", success_url="crm:lead_list")
+                     template="crm/directory/lead/form.html", success_url="crm:lead_list", form_kwargs={"user": request.user})
 
 
 @login_required
 @require_POST
 def lead_delete(request, pk):
+    from apps.sales.models import LeadNurtureEnrollment, LeadQualification, LeadScoreEvent
+
+    lead = get_object_or_404(Lead, pk=pk, tenant=request.tenant)
+    if (LeadScoreEvent.objects.filter(tenant=request.tenant, lead=lead).exists()
+            or LeadQualification.objects.filter(tenant=request.tenant, lead=lead).exists()
+            or LeadNurtureEnrollment.objects.filter(tenant=request.tenant, lead=lead).exists()):
+        messages.error(request, "This lead has Sales history and must be retained.")
+        return redirect("crm:lead_detail", pk=lead.pk)
     return crud_delete(request, model=Lead, pk=pk, success_url="crm:lead_list")
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def lead_convert(request, pk):
-    """One-click conversion (1.1): Lead -> Account (org Party) + Contact (person Party) +
-    Opportunity. Idempotent guard: a converted lead is not re-converted."""
     lead = get_object_or_404(Lead, pk=pk, tenant=request.tenant)
-    if lead.status == "converted":
-        messages.info(request, "This lead has already been converted.")
-        return redirect("crm:lead_detail", pk=lead.pk)
     with transaction.atomic():
-        account = None
-        if lead.company:
-            account = Party.objects.create(tenant=request.tenant, kind="organization", name=lead.company)
-            PartyRole.objects.create(tenant=request.tenant, party=account, role="customer",
-                                     status="active", start_date=timezone.localdate())
-        contact = Party.objects.create(tenant=request.tenant, kind="person", name=lead.name)
-        PartyRole.objects.create(tenant=request.tenant, party=contact, role="contact",
-                                 status="active", start_date=timezone.localdate())
-        if lead.email:
-            ContactMethod.objects.create(tenant=request.tenant, party=contact, kind="email", value=lead.email)
-        opp = Opportunity.objects.create(
-            tenant=request.tenant, name=f"{lead.company or lead.name} Opportunity",
-            account=account, primary_contact=contact, stage="prospecting",
-            amount=lead.est_value, probability=10, owner=lead.owner, source_lead=lead,
-        )
-        lead.status = "converted"
-        lead.converted_party = account or contact
-        lead.save(update_fields=["status", "converted_party", "updated_at"])
-    write_audit_log(request.user, lead, "update", {"action": "convert"})
-    write_audit_log(request.user, opp, "create")
-    messages.success(request, f"Lead converted — opportunity {opp.number} created.")
+        locked_lead = Lead.objects.select_for_update().get(pk=lead.pk, tenant=request.tenant)
+        already_converted = locked_lead.status == "converted"
+        if not already_converted:
+            from apps.sales.models import LeadQualification
+            qualification = LeadQualification.objects.filter(tenant=request.tenant, lead=locked_lead).first()
+            if qualification is not None and qualification.status != "qualified":
+                messages.error(request, "A qualified assessment is required before conversion.")
+                return redirect("crm:lead_detail", pk=locked_lead.pk)
+        try:
+            opp = convert_lead(locked_lead, request.tenant)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect("crm:lead_detail", pk=locked_lead.pk)
+        locked_lead.refresh_from_db()
+        if locked_lead.status != "converted" or not Opportunity.objects.filter(pk=opp.pk, tenant=request.tenant, source_lead=locked_lead).exists():
+            transaction.set_rollback(True)
+            messages.error(request, "CRM conversion could not be verified.")
+            return redirect("crm:lead_detail", pk=locked_lead.pk)
+        exit_nurture_for_lead(locked_lead, request.tenant, request.user, "converted")
+        if not already_converted:
+            write_audit_log(request.user, locked_lead, "update", {"action": "convert"})
+            write_audit_log(request.user, opp, "create")
+    if already_converted:
+        messages.info(request, "This lead has already been converted.")
+    else:
+        messages.success(request, f"Lead converted — opportunity {opp.number} created.")
     return redirect("crm:opportunity_detail", pk=opp.pk)
