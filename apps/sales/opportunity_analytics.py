@@ -32,7 +32,7 @@ def _sales_guarded_id(value):
         parsed = int(value)
     except (TypeError, ValueError):
         return None
-    return parsed if parsed > 0 else None
+    return parsed if 0 < parsed <= 9223372036854775807 else None
 
 
 def _sales_currency_expressions():
