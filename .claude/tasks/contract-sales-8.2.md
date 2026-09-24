@@ -512,10 +512,14 @@ The next CRM migration number must be rechecked immediately before generation. A
 ```text
 templates/sales/opportunity/
   workspace.html
+  placement.html
   pipeline/{list,detail,form,stages,board,visibility}.html
-  competitor/{list,detail,form}.html
+  team_member/form.html
+  competitor/{list,detail,form,link_form}.html
   winlossreason/{list,detail,form}.html
 ```
+
+The team-member and competitor-link forms are focused embedded-action pages, not duplicate list/detail registers. Placement has a focused form page. Transition is POST-only and returns errors through the fixed workspace redirect.
 
 Every template extends `base.html`. Lists have search, filters before pagination, Actions where CRUD exists, POST/CSRF delete or remove, guarded pagination and an empty state. Details have Edit/Delete/Back actions for mutable primary records.
 
