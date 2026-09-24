@@ -213,6 +213,7 @@ def sales_stage_age_rows(
         "opportunity__owner",
         "opportunity__territory",
         "opportunity__account",
+        "opportunity__currency",
     )
     if date_from is not None:
         queryset = queryset.filter(stage_entered_at__date__gte=date_from)
