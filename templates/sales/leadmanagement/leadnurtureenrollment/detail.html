@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div><h1 class="page-title">{{ obj.number }}</h1><div class="breadcrumb"><a href="{% url 'sales:lead_nurture_enrollment_list' %}">Nurture Enrollments</a><span class="sep">›</span><span>{{ obj.number }}</span></div></div>
+    <div class="page-actions"><a href="{% url 'crm:lead_detail' lead.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> CRM lead</a>{% if obj.status == 'pending' %}<a href="{% url 'sales:lead_nurture_enrollment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}</div>
+  </div>
+  <p class="text-warn">This page records lifecycle state only. CRM campaign content remains in CRM, and no outbound message is sent by this module. Activation requires an active consent purpose and evidence when that purpose is optional.</p>
+  <div class="card"><div class="card-body"><dl class="detail-grid">
+    <div class="detail-item"><dt>Lead</dt><dd><a href="{% url 'crm:lead_detail' lead.pk %}">{{ lead.number }} · {{ lead.name }}</a></dd></div>
+    <div class="detail-item"><dt>CRM campaign</dt><dd><a href="{% url 'crm:emailcampaign_detail' email_campaign.pk %}">{{ email_campaign.number }} · {{ email_campaign.name }}</a></dd></div>
+    <div class="detail-item"><dt>Status</dt><dd><span class="badge {% if obj.status == 'active' %}badge-green{% elif obj.status == 'paused' %}badge-amber{% elif obj.status == 'completed' %}badge-info{% elif obj.status in 'cancelled,replied,converted' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+    <div class="detail-item"><dt>Trigger</dt><dd>{{ obj.get_trigger_kind_display }}</dd></div>
+    <div class="detail-item"><dt>Score at enrollment</dt><dd>{% if obj.score_at_enrollment is not None %}{{ obj.score_at_enrollment }} / 100{% else %}Not activated{% endif %}</dd></div>
+    <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Consent purpose</dt><dd>{% if consent_purpose %}{{ consent_purpose.name }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Consent evidence</dt><dd>{{ obj.consent_evidence|default:"—"|truncatechars:80 }}</dd></div>
+    <div class="detail-item"><dt>Started</dt><dd>{{ obj.started_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Last touch</dt><dd>{{ obj.last_touch_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Next touch target</dt><dd>{{ obj.next_touch_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Touches</dt><dd>{{ obj.touch_count }}</dd></div>
+    <div class="detail-item"><dt>Exit reason</dt><dd>{{ obj.get_exit_reason_display|default:"—" }}</dd></div>
+  </dl>{% if obj.notes %}<p>{{ obj.notes|linebreaksbr }}</p>{% endif %}</div></div>
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lifecycle actions</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}{% if obj.status == 'pending' or obj.status == 'paused' %}<form method="post" action="{% url 'sales:lead_nurture_enrollment_activate' obj.pk %}" class="form-grid">{% csrf_token %}<div class="form-group"><label class="form-label" for="next-touch">Next touch target</label><input id="next-touch" name="next_touch_at" type="datetime-local" class="form-input" value="{{ obj.next_touch_at|date:'Y-m-d\TH:i' }}"></div><div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="play"></i> {% if obj.status == 'paused' %}Resume state{% else %}Activate state{% endif %}</button></div></form>{% endif %}{% endif %}
+      {% if obj.status == 'active' %}<form method="post" action="{% url 'sales:lead_nurture_enrollment_pause' obj.pk %}" class="form-actions" onsubmit="return confirm('Pause this enrollment?');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="pause"></i> Pause</button></form>{% elif obj.status == 'paused' %}{% if request.user.is_superuser or request.user.is_tenant_admin %}<form method="post" action="{% url 'sales:lead_nurture_enrollment_resume' obj.pk %}" class="form-actions" onsubmit="return confirm('Resume this enrollment?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Resume</button></form>{% endif %}{% endif %}
+      {% if obj.status == 'active' or obj.status == 'paused' %}<form method="post" action="{% url 'sales:lead_nurture_enrollment_complete' obj.pk %}" class="form-actions" onsubmit="return confirm('Mark this nurture sequence complete?');">{% csrf_token %}<input type="hidden" name="exit_reason" value="completed"><button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Complete</button></form><form method="post" action="{% url 'sales:lead_nurture_enrollment_cancel' obj.pk %}" class="form-actions" onsubmit="return confirm('Cancel this enrollment?');">{% csrf_token %}<input type="hidden" name="exit_reason" value="cancelled"><button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Cancel</button></form><form method="post" action="{% url 'sales:lead_nurture_enrollment_reply' obj.pk %}" class="form-actions" onsubmit="return confirm('Mark this enrollment replied?');">{% csrf_token %}<input type="hidden" name="exit_reason" value="replied"><button class="btn btn-outline" type="submit"><i data-lucide="reply"></i> Mark replied</button></form>{% endif %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}{% if obj.status == 'active' or obj.status == 'paused' %}{% if lead.status == 'converted' %}<form method="post" action="{% url 'sales:lead_nurture_enrollment_convert_exit' obj.pk %}" class="form-actions" onsubmit="return confirm('Close nurture for the verified conversion?');">{% csrf_token %}<input type="hidden" name="exit_reason" value="converted"><button class="btn btn-danger" type="submit"><i data-lucide="arrow-right-left"></i> Close after conversion</button></form>{% endif %}{% endif %}{% endif %}
+    </div>
+  </div>
+  <a href="{% url 'sales:lead_nurture_enrollment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+{% endblock %}
