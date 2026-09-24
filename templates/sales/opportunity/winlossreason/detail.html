@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} · {{ obj.name }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_win_loss_reason_list' %}">Win / Loss Reasons</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'sales:opportunity_win_loss_reason_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to reasons</a>
+    {% if can_edit %}
+    <a href="{% url 'sales:opportunity_win_loss_reason_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'sales:opportunity_win_loss_reason_delete' obj.pk %}" onsubmit="return confirm('Delete this win/loss reason?');">
+      {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="hash"></i></div><div class="stat-value">{{ obj.number }}</div><div class="stat-label">Reason number</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="check-circle"></i></div><div class="stat-value">{{ obj.is_active|yesno:"Yes,No" }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="link-2"></i></div><div class="stat-value">{{ outcomes|length }}</div><div class="stat-label">Recorded outcomes</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="list-ordered"></i></div><div class="stat-value">{{ obj.sequence }}</div><div class="stat-label">Display sequence</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Reason configuration</h2></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
+      <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+      <div class="detail-item"><dt>Result</dt><dd>{% if obj.result == 'won' %}<span class="badge badge-green">{{ obj.get_result_display }}</span>{% elif obj.result == 'lost' %}<span class="badge badge-red">{{ obj.get_result_display }}</span>{% elif obj.result == 'both' %}<span class="badge badge-info">{{ obj.get_result_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_result_display|default:"—" }}</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Category</dt><dd><span class="badge badge-slate">{{ obj.get_category_display|default:"—" }}</span></dd></div>
+      <div class="detail-item"><dt>Sequence</dt><dd>{{ obj.sequence }}</dd></div>
+      <div class="detail-item"><dt>State</dt><dd><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ obj.is_active|yesno:"Active,Inactive" }}</span></dd></div>
+      <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item" style="grid-column:1/-1;"><dt>Description</dt><dd>{{ obj.description|default:"No description recorded."|linebreaksbr }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Outcome timeline</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Closed</th><th>Result</th><th>Opportunity</th><th>Competitor</th><th>Notes</th><th>Recorded by</th></tr></thead>
+      <tbody>
+        {% for outcome in outcomes %}
+        <tr>
+          <td>{{ outcome.closed_at|date:"M d, Y H:i" }}</td>
+          <td>{% if outcome.result == 'won' %}<span class="badge badge-green">{{ outcome.get_result_display }}</span>{% elif outcome.result == 'lost' %}<span class="badge badge-red">{{ outcome.get_result_display }}</span>{% else %}<span class="badge badge-slate">{{ outcome.get_result_display|default:"—" }}</span>{% endif %}</td>
+          <td><a href="{% url 'sales:opportunity_workspace_detail' outcome.opportunity_id %}" class="fw-600">{{ outcome.opportunity.number }} · {{ outcome.opportunity.name }}</a></td>
+          <td>{% if outcome.competitor_link %}{% if outcome.competitor_link.competitor_profile_id %}<a href="{% url 'sales:opportunity_competitor_profile_detail' outcome.competitor_link.competitor_profile_id %}">{{ outcome.competitor_link.competitor_profile }}</a>{% else %}{{ outcome.competitor_link }}{% endif %}<div class="text-muted">{{ outcome.competitor_link.get_relationship_display }}</div>{% else %}<span class="text-muted">None recorded</span>{% endif %}</td>
+          <td>{{ outcome.notes|default:"—"|truncatechars:120 }}</td>
+          <td>{% if outcome.recorded_by %}{{ outcome.recorded_by.get_full_name|default:outcome.recorded_by.username|default:"—" }}{% else %}—{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="history"></i><h3>No recorded outcomes</h3><p>Closed opportunity transitions will append immutable outcome evidence here.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<a href="{% url 'sales:opportunity_win_loss_reason_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to reasons</a>
+{% endblock %}
