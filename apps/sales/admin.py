@@ -1,0 +1,91 @@
+from django.contrib import admin
+
+from .models import (
+    LeadNurtureEnrollment,
+    LeadQualification,
+    LeadRoutingRule,
+    LeadScoreEvent,
+)
+
+
+
+@admin.register(LeadScoreEvent)
+class LeadScoreEventAdmin(admin.ModelAdmin):
+    list_display = ("lead", "event_type", "score_delta", "source_kind", "occurred_at", "recorded_by", "tenant")
+    list_filter = ("signal_category", "event_type", "source_kind", "tenant")
+    search_fields = ("lead__number", "lead__name", "source_ref", "reason")
+    readonly_fields = ("tenant", "lead", "signal_category", "event_type", "score_delta", "source_kind", "source_ref", "reason", "effective_until", "idempotency_key", "corrects_event", "occurred_at", "recorded_by", "created_at")
+    list_select_related = ("lead", "recorded_by")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LeadQualification)
+class LeadQualificationAdmin(admin.ModelAdmin):
+    list_display = ("lead", "framework", "status", "next_review_on", "assessed_by", "tenant")
+    list_filter = ("framework", "status", "tenant")
+    search_fields = ("lead__number", "lead__name", "notes")
+    readonly_fields = ("tenant", "status", "disqualification_reason", "assessed_by", "assessed_at", "created_at", "updated_at")
+    list_select_related = ("lead", "assessed_by")
+    raw_id_fields = ("lead",)
+    assessment_fields = (
+        "lead", "framework", "country_code", "region", "city", "industry", "employee_count",
+        "seniority", "budget_status", "budget_amount", "budget_currency", "authority_level",
+        "need_summary", "expected_purchase_on", "economic_buyer", "decision_criteria",
+        "decision_process", "technical_requirements", "pain_points", "success_metrics",
+        "next_review_on", "notes",
+    )
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(self.readonly_fields)
+        if obj is not None and obj.status in {"qualified", "disqualified", "archived"}:
+            fields.extend(self.assessment_fields)
+        return tuple(dict.fromkeys(fields))
+
+
+@admin.register(LeadRoutingRule)
+class LeadRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "assignment_mode", "priority", "is_active", "last_assigned_owner", "tenant")
+    list_filter = ("assignment_mode", "match_mode", "is_active", "tenant")
+    search_fields = ("name", "description")
+    readonly_fields = ("tenant", "cursor", "last_assigned_owner", "last_assigned_at", "created_at", "updated_at")
+    list_select_related = ("default_owner", "territory", "fallback_owner", "last_assigned_owner")
+    filter_horizontal = ("eligible_owners",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if db_field.name in {"default_owner", "fallback_owner"} and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        if db_field.name == "territory" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        tenant = getattr(request, "tenant", None)
+        if db_field.name == "eligible_owners" and tenant is not None:
+            kwargs["queryset"] = db_field.remote_field.model._default_manager.filter(tenant=tenant, is_active=True)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
+@admin.register(LeadNurtureEnrollment)
+class LeadNurtureEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "lead", "email_campaign", "status", "next_touch_at", "owner", "tenant")
+    list_filter = ("status", "trigger_kind", "tenant")
+    search_fields = ("number", "lead__number", "lead__name", "email_campaign__name")
+    readonly_fields = ("tenant", "number", "status", "score_at_enrollment", "started_at", "last_touch_at", "touch_count", "completed_at", "created_at", "updated_at")
+    list_select_related = ("lead", "email_campaign", "owner", "consent_purpose")
+    raw_id_fields = ("lead", "email_campaign", "consent_purpose")
+    identity_fields = ("lead", "email_campaign", "trigger_kind", "consent_purpose", "consent_evidence", "owner", "notes")
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(self.readonly_fields)
+        if obj is not None and obj.status != "pending":
+            fields.extend(self.identity_fields)
+        return tuple(dict.fromkeys(fields))
