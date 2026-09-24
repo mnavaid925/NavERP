@@ -12,6 +12,7 @@ from apps.sales.models.OpportunityPipeline.Pipelines import (
     OpportunityPipelinePlacement,
     Pipeline,
     PipelineStage,
+    _validate_pipeline_criteria,
 )
 from apps.sales.models.CompetitiveIntelligence.CompetitiveIntelligence import (
     CompetitorProfile,
@@ -397,6 +398,13 @@ def sales_validate_stage_criteria(
     criteria=None,
     criterion_name="entry",
 ):
+    entry_criteria = _validate_pipeline_criteria(getattr(stage, "entry_criteria", None))
+    _validate_pipeline_criteria(getattr(stage, "exit_criteria", None))
+    selected_criteria = (
+        entry_criteria
+        if criteria is None
+        else _validate_pipeline_criteria(criteria)
+    )
     next_step_due_date = getattr(opportunity, "next_step_due_date", None)
     checks = {
         "account": opportunity.account_id is not None,
@@ -408,17 +416,13 @@ def sales_validate_stage_criteria(
         "owner": opportunity.owner_id is not None,
         "active_team_member": bool(active_team_member),
     }
-    criteria = (stage.entry_criteria if criteria is None else criteria) or []
-    if not isinstance(criteria, (list, tuple)) or len(criteria) > 20:
-        raise ValidationError("Stage criteria are invalid.")
     missing = []
-    for item in criteria:
-        if not isinstance(item, dict):
-            continue
-        key = item.get("key")
-        if key not in checks or checks[key]:
-            continue
-        missing.append(str(item.get("label") or key))
+    for item in selected_criteria:
+        key = item["key"]
+        if key not in checks:
+            raise ValidationError("Stage criteria contain an unsupported key.")
+        if not checks[key]:
+            missing.append(item["label"])
     if missing:
         raise ValidationError(
             f"Stage {criterion_name} criteria are not met: " + ", ".join(missing)
