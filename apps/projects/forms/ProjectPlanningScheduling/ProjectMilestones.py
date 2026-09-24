@@ -8,10 +8,12 @@ leaving it on the form would let any member achieve a milestone through the unga
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
+from apps.projects.forms.MasterDataConfiguration.CustomFieldMixin import ProjectCustomFieldFormMixin
 from apps.projects.models import ProjectMilestone
 
 
-class MilestoneForm(TenantUniqueMixin, TenantModelForm):
+class MilestoneForm(ProjectCustomFieldFormMixin, TenantUniqueMixin, TenantModelForm):
+    custom_field_target = "milestone"
     class Meta:
         model = ProjectMilestone
         fields = [
