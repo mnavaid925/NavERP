@@ -4828,273 +4828,447 @@ class Command(BaseCommand):
             f"{run_index} sync runs."))
 
     def _master_data_configuration(self, tenant, now):
-        """Master Data & Configuration (7.19): templates, custom fields, teams, locale settings.
-
-        Guarded per tenant so a re-run is a no-op unless --flush is passed.
-        """
-        if ProjectTemplate.objects.filter(tenant=tenant).exists():
-            self.stdout.write(f"  {tenant.name}: 7.19 master data already seeded. Skipping.")
+        """Master Data & Configuration (7.19): templates, custom fields, teams, locale settings."""
+        model_rows = (
+            ProjectTemplate.objects.filter(tenant=tenant),
+            ProjectCustomField.objects.filter(tenant=tenant),
+            ProjectTeam.objects.filter(tenant=tenant),
+            ProjectTeamMember.objects.filter(tenant=tenant),
+            ProjectLocaleSetting.objects.filter(tenant=tenant),
+        )
+        if any(queryset.exists() for queryset in model_rows):
+            self.stdout.write(
+                f"  {tenant.name}: Data already exists. Use --flush to re-seed."
+            )
             return
 
-        users = list(get_user_model().objects.filter(tenant=tenant).order_by("id"))
+        users = list(
+            get_user_model().objects.filter(tenant=tenant)
+            .only("id", "username", "tenant_id", "is_active")
+            .order_by("id")[:3]
+        )
         admin_user = users[0] if users else None
         second_user = users[1] if len(users) > 1 else admin_user
         third_user = users[2] if len(users) > 2 else admin_user
 
-        projects = list(Project.objects.filter(tenant=tenant))
-        active_proj = next((p for p in projects if p.status == "active"), projects[0] if projects else None)
+        projects = list(
+            Project.objects.filter(tenant=tenant)
+            .only("id", "name", "status", "tenant_id", "created_at")
+            .order_by("id")[:25]
+        )
+        active_proj = next(
+            (project for project in projects if project.status == "active"),
+            projects[0] if projects else None,
+        )
         org_unit = OrgUnit.objects.filter(tenant=tenant).first()
         currency = self._currency()
 
         from apps.core.models.Localization import Language, TimeZone
-        lang_en = Language.objects.filter(code="en").first() or Language.objects.first()
-        tz_utc = TimeZone.objects.filter(name="UTC").first() or TimeZone.objects.first()
+        language = Language.objects.filter(code="en").first() or Language.objects.first()
+        time_zone = TimeZone.objects.filter(name="UTC").first() or TimeZone.objects.first()
 
         with transaction.atomic():
-            # 1. Project Templates (3 templates across methodologies)
-            pt1 = ProjectTemplate.objects.create(
+            ProjectTemplate.objects.get_or_create(
                 tenant=tenant,
-                name="Agile Software Delivery Template",
                 code="TMPL-AGILE-STD",
-                methodology="agile",
-                category="software",
-                complexity="medium",
-                description="Standard enterprise 2-week sprint cadence with sprint backlog, user stories, and retrospectives.",
-                estimated_duration_days=90,
-                target_budget=Decimal("75000.00"),
-                default_roles=["tech_lead", "developer", "qa_engineer"],
-                wbs_structure=[
-                    {"name": "Sprint 0 - Inception & Architecture", "level": 1, "duration_days": 10},
-                    {"name": "Sprint 1 - MVP Core Services", "level": 2, "duration_days": 14},
-                    {"name": "Sprint 2 - User Interface & Integration", "level": 2, "duration_days": 14},
-                    {"name": "Hardening & UAT", "level": 1, "duration_days": 10},
-                ],
-                workflow_config={"auto_advance_sprints": True, "require_pr_review": True},
-                is_active=True,
-                is_default=True,
-                created_by=admin_user,
+                defaults={
+                    "name": "Agile Software Delivery Template",
+                    "methodology": "agile",
+                    "category": "software",
+                    "complexity": "medium",
+                    "description": "Standard enterprise sprint cadence with backlog governance, user stories, and retrospectives.",
+                    "estimated_duration_days": 90,
+                    "target_budget": Decimal("75000.00"),
+                    "default_roles": ["tech_lead", "developer", "qa_engineer"],
+                    "wbs_structure": [
+                        {
+                            "phase": "Inception & Architecture",
+                            "tasks": [
+                                {"name": "Inception workshop", "duration_days": 3},
+                                {"name": "Architecture baseline approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Architecture definition", "duration_days": 6},
+                            ],
+                        },
+                        {
+                            "phase": "MVP Core Services",
+                            "tasks": [
+                                {"name": "Core service implementation", "duration_days": 10},
+                                {"name": "MVP feature review", "duration_days": 1, "is_milestone": True},
+                                {"name": "Integration and hardening", "duration_days": 3},
+                            ],
+                        },
+                        {
+                            "phase": "User Interface & Integration",
+                            "tasks": [
+                                {"name": "Interface implementation", "duration_days": 10},
+                                {"name": "End-to-end integration", "duration_days": 3},
+                                {"name": "Release candidate approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                            ],
+                        },
+                        {
+                            "phase": "Hardening & UAT",
+                            "tasks": [
+                                {"name": "User acceptance testing", "duration_days": 7},
+                                {"name": "Production readiness approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Handover", "duration_days": 2},
+                            ],
+                        },
+                    ],
+                    "workflow_config": {
+                        "rules": [{
+                            "name": "Sprint milestone review",
+                            "description": "Record milestone completion for delivery governance.",
+                            "trigger_entity": "milestone",
+                            "trigger_event": "status_changed",
+                            "trigger_field": "status",
+                            "trigger_value": "achieved",
+                            "conditions": [],
+                            "actions": [{"type": "log"}],
+                        }],
+                        "approval_gates": [{
+                            "gate_type": "phase_gate",
+                            "title": "Architecture gate review",
+                            "description": "Confirm architecture evidence before the build wave.",
+                            "target_kind": "milestone",
+                            "target_index": 2,
+                            "timeout_hours": 48,
+                        }],
+                    },
+                    "is_active": True,
+                    "is_default": True,
+                    "created_by": admin_user,
+                },
             )
-
-            pt2 = ProjectTemplate.objects.create(
+            ProjectTemplate.objects.get_or_create(
                 tenant=tenant,
-                name="Waterfall Infrastructure Modernization",
                 code="TMPL-WATERFALL-INFRA",
-                methodology="waterfall",
-                category="infrastructure",
-                complexity="large",
-                description="Linear gated lifecycle for datacenter migration and cloud infrastructure modernization.",
-                estimated_duration_days=180,
-                target_budget=Decimal("250000.00"),
-                default_roles=["project_manager", "tech_lead", "consultant"],
-                wbs_structure=[
-                    {"name": "Phase 1 - Discovery & Assessment", "level": 1, "duration_days": 30},
-                    {"name": "Phase 2 - Architecture Design & Governance", "level": 1, "duration_days": 30},
-                    {"name": "Phase 3 - Pilot Migration", "level": 1, "duration_days": 45},
-                    {"name": "Phase 4 - Production Cutover & Handover", "level": 1, "duration_days": 75},
-                ],
-                workflow_config={"gate_approvals_required": True, "change_control_board": True},
-                is_active=True,
-                is_default=False,
-                created_by=admin_user,
+                defaults={
+                    "name": "Waterfall Infrastructure Modernization",
+                    "methodology": "waterfall",
+                    "category": "infrastructure",
+                    "complexity": "large",
+                    "description": "Linear gated lifecycle for datacenter migration and cloud infrastructure modernization.",
+                    "estimated_duration_days": 180,
+                    "target_budget": Decimal("250000.00"),
+                    "default_roles": ["project_manager", "tech_lead", "consultant"],
+                    "wbs_structure": [
+                        {
+                            "phase": "Discovery & Assessment",
+                            "tasks": [
+                                {"name": "Current-state assessment", "duration_days": 20},
+                                {"name": "Discovery gate approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Requirements and constraints", "duration_days": 9},
+                            ],
+                        },
+                        {
+                            "phase": "Architecture Design & Governance",
+                            "tasks": [
+                                {"name": "Target architecture", "duration_days": 20},
+                                {"name": "Architecture gate approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Migration controls", "duration_days": 9},
+                            ],
+                        },
+                        {
+                            "phase": "Pilot Migration",
+                            "tasks": [
+                                {"name": "Pilot environment migration", "duration_days": 35},
+                                {"name": "Pilot acceptance", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Pilot remediation", "duration_days": 9},
+                            ],
+                        },
+                        {
+                            "phase": "Production Cutover & Handover",
+                            "tasks": [
+                                {"name": "Production migration", "duration_days": 55},
+                                {"name": "Go-live review", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Transition support", "duration_days": 19},
+                            ],
+                        },
+                    ],
+                    "workflow_config": {
+                        "rules": [{
+                            "name": "Migration gate review",
+                            "description": "Record migration gate decisions.",
+                            "trigger_entity": "milestone",
+                            "trigger_event": "status_changed",
+                            "trigger_field": "status",
+                            "trigger_value": "achieved",
+                            "conditions": [],
+                            "actions": [{"type": "log"}],
+                        }],
+                        "approval_gates": [{
+                            "gate_type": "phase_gate",
+                            "title": "Migration control review",
+                            "description": "Review migration controls before cutover.",
+                            "target_kind": "milestone",
+                            "target_index": 2,
+                            "timeout_hours": 72,
+                        }],
+                    },
+                    "is_active": True,
+                    "is_default": False,
+                    "created_by": admin_user,
+                },
             )
-
-            pt3 = ProjectTemplate.objects.create(
+            ProjectTemplate.objects.get_or_create(
                 tenant=tenant,
-                name="Hybrid Digital Transformation",
                 code="TMPL-HYBRID-TRANSFORM",
-                methodology="hybrid",
-                category="consulting",
-                complexity="enterprise",
-                description="Blended governance with milestone stage-gates and agile sprint feature execution.",
-                estimated_duration_days=120,
-                target_budget=Decimal("150000.00"),
-                default_roles=["project_manager", "scrum_master", "developer"],
-                wbs_structure=[
-                    {"name": "Stage Gate 1 - Strategic Charter", "level": 1, "duration_days": 14},
-                    {"name": "Agile Build Wave 1", "level": 2, "duration_days": 42},
-                    {"name": "Stage Gate 2 - Security & Compliance Review", "level": 1, "duration_days": 14},
-                    {"name": "Agile Build Wave 2 & Rollout", "level": 2, "duration_days": 50},
-                ],
-                workflow_config={"stage_gate_enforcement": True},
-                is_active=True,
-                is_default=False,
-                created_by=admin_user,
+                defaults={
+                    "name": "Hybrid Digital Transformation",
+                    "methodology": "hybrid",
+                    "category": "consulting",
+                    "complexity": "enterprise",
+                    "description": "Blended governance with milestone stage-gates and agile delivery waves.",
+                    "estimated_duration_days": 120,
+                    "target_budget": Decimal("150000.00"),
+                    "default_roles": ["project_manager", "scrum_master", "developer"],
+                    "wbs_structure": [
+                        {
+                            "phase": "Strategic Charter",
+                            "tasks": [
+                                {"name": "Business case and charter", "duration_days": 10},
+                                {"name": "Strategic charter approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Mobilization planning", "duration_days": 3},
+                            ],
+                        },
+                        {
+                            "phase": "Agile Build Wave 1",
+                            "tasks": [
+                                {"name": "Priority capabilities", "duration_days": 30},
+                                {"name": "Wave 1 increment accepted", "duration_days": 1, "is_milestone": True},
+                                {"name": "Feedback incorporation", "duration_days": 11},
+                            ],
+                        },
+                        {
+                            "phase": "Security & Compliance Review",
+                            "tasks": [
+                                {"name": "Control assessment", "duration_days": 10},
+                                {"name": "Compliance gate approved", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Remediation evidence", "duration_days": 3},
+                            ],
+                        },
+                        {
+                            "phase": "Agile Build Wave 2 & Rollout",
+                            "tasks": [
+                                {"name": "Remaining capabilities", "duration_days": 35},
+                                {"name": "Operational readiness", "duration_days": 10},
+                                {"name": "Rollout accepted", "duration_days": 1, "is_milestone": True, "is_phase_gate": True},
+                                {"name": "Transition closure", "duration_days": 4},
+                            ],
+                        },
+                    ],
+                    "workflow_config": {
+                        "rules": [{
+                            "name": "Stage-gate completion review",
+                            "description": "Record hybrid stage-gate decisions.",
+                            "trigger_entity": "milestone",
+                            "trigger_event": "status_changed",
+                            "trigger_field": "status",
+                            "trigger_value": "achieved",
+                            "conditions": [],
+                            "actions": [{"type": "log"}],
+                        }],
+                        "approval_gates": [{
+                            "gate_type": "phase_gate",
+                            "title": "Hybrid governance review",
+                            "description": "Review governance evidence at the phase boundary.",
+                            "target_kind": "milestone",
+                            "target_index": 2,
+                            "timeout_hours": 48,
+                        }],
+                    },
+                    "is_active": True,
+                    "is_default": False,
+                    "created_by": admin_user,
+                },
             )
 
-
-            # 2. Project Custom Fields (5 user-defined attributes)
-            cf1 = ProjectCustomField.objects.create(
-                tenant=tenant,
-                target_entity="project",
-                field_key="client_billing_code",
-                label="Client Billing Code",
-                name="Client Billing Code",
-                field_type="text",
-                description="Cross-charge financial reference code.",
-                is_required=True,
-                display_order=10,
-                is_active=True,
-                regex_pattern=r"^[A-Z0-9]{4,10}$",
-            )
-            cf2 = ProjectCustomField.objects.create(
-                tenant=tenant,
-                target_entity="task",
-                field_key="story_points",
-                label="Story Points",
-                name="Story Points",
-                field_type="integer",
-                description="Fibonacci estimation sizing (1, 2, 3, 5, 8, 13).",
-                is_required=False,
-                display_order=20,
-                is_active=True,
-            )
-            cf3 = ProjectCustomField.objects.create(
-                tenant=tenant,
-                target_entity="milestone",
-                field_key="gating_criteria",
-                label="Gating Criteria",
-                name="Gating Criteria",
-                field_type="select",
-                description="Categorization of stage-gate milestone completion criteria.",
-                choices_list=["Executive Sign-Off", "Customer Acceptance", "Security Audit", "Regulatory Filing"],
-                is_required=True,
-                display_order=30,
-                is_active=True,
-            )
-            cf4 = ProjectCustomField.objects.create(
-                tenant=tenant,
-                target_entity="risk",
-                field_key="regulatory_impact",
-                label="Regulatory Compliance Impact",
-                name="Regulatory Impact",
-                field_type="boolean",
-                description="Flag indicating if the risk impacts statutory or GDPR/SOX compliance.",
-                is_required=False,
-                display_order=40,
-                is_active=True,
-            )
-            cf5 = ProjectCustomField.objects.create(
-                tenant=tenant,
-                target_entity="team",
-                field_key="core_skillset",
-                label="Primary Technical Skillset",
-                name="Core Skillset",
-                field_type="text",
-                description="Key engineering specialisation of this delivery unit.",
-                is_required=False,
-                display_order=50,
-                is_active=True,
-            )
-
-            # 3. Project Teams & Members (3 matrix teams)
-            t1 = ProjectTeam.objects.create(
-                tenant=tenant,
-                name="Core Engineering Squad",
-                code="TEAM-ENG-CORE",
-                team_type="cross_functional",
-                team_lead=admin_user,
-                org_unit=org_unit,
-                project=active_proj,
-                location="HQ / Remote",
-                description="Full-stack engineering squad handling core platform delivery and API integrations.",
-                is_active=True,
-            )
-            if admin_user:
-                ProjectTeamMember.objects.create(
-                    tenant=tenant,
-                    team=t1,
-                    user=admin_user,
-                    role="tech_lead",
-                    allocation_percentage=100,
-                    is_primary_contact=True,
+            custom_field_defaults = [
+                {
+                    "target_entity": "project",
+                    "field_key": "client_billing_code",
+                    "label": "Client Billing Code",
+                    "name": "Client Billing Code",
+                    "field_type": "text",
+                    "description": "Cross-charge financial reference code.",
+                    "is_required": True,
+                    "display_order": 10,
+                    "is_active": True,
+                    "regex_pattern": r"^[A-Z0-9]{4,10}$",
+                },
+                {
+                    "target_entity": "task",
+                    "field_key": "client_acceptance_required",
+                    "label": "Client Acceptance Required",
+                    "name": "Client Acceptance Required",
+                    "field_type": "boolean",
+                    "description": "Flags a task whose completion requires recorded client acceptance.",
+                    "is_required": False,
+                    "display_order": 20,
+                    "is_active": True,
+                },
+                {
+                    "target_entity": "milestone",
+                    "field_key": "gating_criteria",
+                    "label": "Gating Criteria",
+                    "name": "Gating Criteria",
+                    "field_type": "select",
+                    "description": "Categorization of stage-gate milestone completion criteria.",
+                    "choices_list": ["Executive Sign-Off", "Customer Acceptance", "Security Audit", "Regulatory Filing"],
+                    "is_required": True,
+                    "display_order": 30,
+                    "is_active": True,
+                },
+                {
+                    "target_entity": "risk",
+                    "field_key": "regulatory_impact",
+                    "label": "Regulatory Compliance Impact",
+                    "name": "Regulatory Impact",
+                    "field_type": "boolean",
+                    "description": "Flag indicating if the risk impacts statutory or GDPR/SOX compliance.",
+                    "is_required": False,
+                    "display_order": 40,
+                    "is_active": True,
+                },
+                {
+                    "target_entity": "team",
+                    "field_key": "core_skillset",
+                    "label": "Primary Technical Skillset",
+                    "name": "Core Skillset",
+                    "field_type": "text",
+                    "description": "Key engineering specialisation of this delivery unit.",
+                    "is_required": False,
+                    "display_order": 50,
+                    "is_active": True,
+                },
+            ]
+            for values in custom_field_defaults:
+                lookup = {
+                    "tenant": tenant,
+                    "target_entity": values["target_entity"],
+                    "field_key": values["field_key"],
+                }
+                ProjectCustomField.objects.get_or_create(
+                    **lookup,
+                    defaults={key: value for key, value in values.items() if key not in lookup},
                 )
-            if second_user and second_user != admin_user:
-                ProjectTeamMember.objects.create(
+
+            team_specs = [
+                {
+                    "name": "Core Engineering Squad",
+                    "code": "TEAM-ENG-CORE",
+                    "team_type": "cross_functional",
+                    "team_lead": admin_user,
+                    "org_unit": org_unit,
+                    "project": active_proj,
+                    "location": "HQ / Remote",
+                    "description": "Full-stack engineering squad handling core platform delivery and API integrations.",
+                    "is_active": True,
+                },
+                {
+                    "name": "Enterprise Delivery Matrix Team",
+                    "code": "TEAM-DELIV-MTX",
+                    "team_type": "matrix",
+                    "team_lead": second_user or admin_user,
+                    "org_unit": org_unit,
+                    "project": None,
+                    "location": "Regional Delivery Center",
+                    "description": "Shared resource pool for cross-project deployment, QA validation, and release management.",
+                    "is_active": True,
+                },
+                {
+                    "name": "Client Advisory & Architecture",
+                    "code": "TEAM-ADV-ARCH",
+                    "team_type": "dedicated",
+                    "team_lead": admin_user,
+                    "org_unit": org_unit,
+                    "project": active_proj,
+                    "location": "Client On-site",
+                    "description": "Dedicated advisory group overseeing business alignment and client governance.",
+                    "is_active": True,
+                },
+            ]
+            teams = {}
+            for values in team_specs:
+                team, _ = ProjectTeam.objects.get_or_create(
                     tenant=tenant,
-                    team=t1,
-                    user=second_user,
-                    role="developer",
-                    allocation_percentage=80,
-                    is_primary_contact=False,
+                    name=values["name"],
+                    defaults={key: value for key, value in values.items() if key != "name"},
+                )
+                teams[values["name"]] = team
+
+            member_specs = [
+                (teams["Core Engineering Squad"], admin_user, "tech_lead", 100, True),
+                (teams["Core Engineering Squad"], second_user, "developer", 80, False),
+                (teams["Enterprise Delivery Matrix Team"], third_user, "qa_engineer", 50, True),
+                (teams["Client Advisory & Architecture"], admin_user, "business_analyst", 60, True),
+            ]
+            for team, user, role, allocation, primary in member_specs:
+                if user is None:
+                    continue
+                ProjectTeamMember.objects.get_or_create(
+                    tenant=tenant,
+                    team=team,
+                    user=user,
+                    defaults={
+                        "role": role,
+                        "allocation_percentage": allocation,
+                        "is_primary_contact": primary,
+                        "joined_date": now.date(),
+                    },
                 )
 
-            t2 = ProjectTeam.objects.create(
+            ProjectLocaleSetting.objects.get_or_create(
                 tenant=tenant,
-                name="Enterprise Delivery Matrix Team",
-                code="TEAM-DELIV-MTX",
-                team_type="matrix",
-                team_lead=second_user or admin_user,
-                org_unit=org_unit,
-                project=None,
-                location="Regional Delivery Center",
-                description="Shared resource pool for cross-project deployment, QA validation, and release management.",
-                is_active=True,
+                name="Global Standard Profile",
+                defaults={
+                    "code": "LOC-GLOBAL-STD",
+                    "project": None,
+                    "language": language,
+                    "time_zone": time_zone,
+                    "currency": currency,
+                    "date_format": "YYYY-MM-DD",
+                    "time_format": "24h",
+                    "first_day_of_week": 1,
+                    "number_format": "#,##0.00",
+                    "working_hours_per_day": Decimal("8.00"),
+                    "working_days_pattern": [1, 2, 3, 4, 5],
+                    "is_default": False,
+                    "is_active": True,
+                },
             )
-            if third_user:
-                ProjectTeamMember.objects.create(
+            if active_proj is not None:
+                ProjectLocaleSetting.objects.get_or_create(
                     tenant=tenant,
-                    team=t2,
-                    user=third_user,
-                    role="qa_engineer",
-                    allocation_percentage=50,
-                    is_primary_contact=True,
+                    name="EMEA Regional Operations (London)",
+                    defaults={
+                        "code": "LOC-EMEA-LON",
+                        "project": active_proj,
+                        "language": language,
+                        "time_zone": time_zone,
+                        "currency": currency,
+                        "date_format": "DD/MM/YYYY",
+                        "time_format": "24h",
+                        "first_day_of_week": 1,
+                        "number_format": "#,##0.00",
+                        "working_hours_per_day": Decimal("7.50"),
+                        "working_days_pattern": [1, 2, 3, 4, 5],
+                        "is_default": False,
+                        "is_active": True,
+                    },
                 )
 
-            t3 = ProjectTeam.objects.create(
-
-
-                tenant=tenant,
-                name="Client Advisory & Architecture",
-                code="TEAM-ADV-ARCH",
-                team_type="dedicated",
-                team_lead=admin_user,
-                org_unit=org_unit,
-                project=active_proj,
-                location="Client On-site",
-                description="Dedicated advisory group overseeing business alignment and client governance.",
-                is_active=True,
+        if had_data:
+            self.stdout.write(
+                f"  {tenant.name}: 7.19 data already exists; missing rows completed. "
+                "Data already exists. Use --flush to re-seed."
             )
-
-            # 4. Project Locale Settings (2 profiles: workspace standard + project override)
-            pls1 = ProjectLocaleSetting.objects.create(
-                tenant=tenant,
-                name="Global Standard Profile (UTC/USD)",
-                code="LOC-GLOBAL-STD",
-                project=None,
-                language=lang_en,
-                time_zone=tz_utc,
-                currency=currency,
-                date_format="YYYY-MM-DD",
-                time_format="24h",
-                first_day_of_week=1,
-                number_format="#,##0.00",
-                working_hours_per_day=Decimal("8.00"),
-                working_days_pattern=[1, 2, 3, 4, 5],
-                is_default=True,
-                is_active=True,
-            )
-
-            pls2 = ProjectLocaleSetting.objects.create(
-                tenant=tenant,
-                name="EMEA Regional Operations (London)",
-                code="LOC-EMEA-LON",
-                project=active_proj,
-                language=lang_en,
-                time_zone=tz_utc,
-                currency=currency,
-                date_format="DD/MM/YYYY",
-                time_format="24h",
-                first_day_of_week=1,
-                number_format="#,##0.00",
-                working_hours_per_day=Decimal("7.50"),
-                working_days_pattern=[1, 2, 3, 4, 5],
-                is_default=False,
-                is_active=True,
-            )
-
-
         self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: 7.19 seeded: 3 templates, 5 custom fields, 3 teams, 2 locale profiles."
+            f"  {tenant.name}: 7.19 available: "
+            f"{ProjectTemplate.objects.filter(tenant=tenant).count()} templates, "
+            f"{ProjectCustomField.objects.filter(tenant=tenant).count()} custom fields, "
+            f"{ProjectTeam.objects.filter(tenant=tenant).count()} teams, "
+            f"{ProjectLocaleSetting.objects.filter(tenant=tenant).count()} locale profiles."
         ))
 
     def _client(self, tenant):
