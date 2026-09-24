@@ -10,7 +10,9 @@ from apps.projects.views._common import *
 @login_required
 def pcf_list(request):
     """List custom field definitions with filters, search, and section counts."""
-    qs = ProjectCustomField.objects.filter(tenant=request.tenant)
+    qs = ProjectCustomField.objects.filter(tenant=request.tenant).defer(
+        "description", "regex_pattern", "choices_list", "visibility_rule"
+    )
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -30,8 +32,10 @@ def pcf_list(request):
 
     is_active = request.GET.get("is_active", "").strip()
     if is_active in ("active", "true", "1"):
+        is_active = "active"
         qs = qs.filter(is_active=True)
     elif is_active in ("inactive", "false", "0"):
+        is_active = "inactive"
         qs = qs.filter(is_active=False)
 
     stats = ProjectCustomField.objects.filter(tenant=request.tenant).aggregate(
@@ -61,6 +65,7 @@ def pcf_list(request):
             "form_section": form_section,
             "is_active": is_active,
             "stats": stats,
+            "has_filters": bool(q or target_entity or field_type or form_section or is_active),
         },
     )
 
@@ -79,8 +84,12 @@ def pcf_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def pcf_create(request):
     """Create a new custom field definition."""
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating records.")
+        return redirect("dashboard:home")
     if request.method == "POST":
         form = ProjectCustomFieldForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -110,6 +119,7 @@ def pcf_create(request):
 
 
 @login_required
+@tenant_admin_required
 def pcf_edit(request, pk):
     """Edit an existing custom field definition."""
     custom_field = get_object_or_404(ProjectCustomField, pk=pk, tenant=request.tenant)
@@ -162,6 +172,7 @@ def pcf_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def pcf_toggle_active(request, pk):
     """Toggle active status of a custom field definition."""
     custom_field = get_object_or_404(ProjectCustomField, pk=pk, tenant=request.tenant)
