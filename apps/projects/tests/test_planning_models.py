@@ -447,7 +447,8 @@ def test_planning_index_names_are_the_as_built_set():
     7.8's in-place execution extension added tsk's assignee and priority indexes (migration 0011)."""
     assert _planning_index_names(ProjectTask) == {
         "tsk_tnt_project_idx", "tsk_tnt_status_idx", "tsk_tnt_prj_parent_idx",
-        "tsk_tnt_ntype_idx", "tsk_tnt_assignee_idx", "tsk_tnt_priority_idx"}
+        "tsk_tnt_ntype_idx", "tsk_tnt_assignee_idx", "tsk_tnt_priority_idx",
+        "tsk_tnt_sprint_idx", "tsk_tnt_epic_idx", "tsk_tnt_release_idx"}
     assert _planning_index_names(TaskDependency) == {"dep_tnt_succ_idx"}
     assert _planning_index_names(ProjectMilestone) == {
         "mst_tnt_project_idx", "mst_tnt_status_idx"}
