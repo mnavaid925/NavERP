@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Opportunity Team Member{% else %}Add Opportunity Team Member{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Opportunity Team Member{% else %}Add Opportunity Team Member{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'sales:opportunity_workspace_detail' opportunity_pk=opportunity.pk %}">{{ opportunity }}</a>
+      <span class="sep">›</span>
+      <span>{% if is_edit %}Edit{% else %}Add{% endif %}</span>
+    </div>
+  </div>
+  <a class="btn btn-outline" href="{% url 'sales:opportunity_workspace_detail' opportunity_pk=opportunity.pk %}">Back to workspace</a>
+</div>
+<div class="card max-w-3xl mx-auto">
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="form-error" role="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+      {% for field in form %}
+      <div class="form-group">
+        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+        {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">{% if is_edit %}Save changes{% else %}Add member{% endif %}</button>
+        <a class="btn btn-outline" href="{% url 'sales:opportunity_workspace_detail' opportunity_pk=opportunity.pk %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
