@@ -6,10 +6,12 @@ so there is nothing here for 7.4 to collide with.
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import _reject_foreign
+from apps.projects.forms.MasterDataConfiguration.CustomFieldMixin import ProjectCustomFieldFormMixin
 from apps.projects.models import Project
 
 
-class ProjectForm(TenantUniqueMixin, TenantModelForm):
+class ProjectForm(ProjectCustomFieldFormMixin, TenantUniqueMixin, TenantModelForm):
+    custom_field_target = "project"
     class Meta:
         model = Project
         exclude = [
