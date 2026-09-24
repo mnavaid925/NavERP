@@ -54,7 +54,7 @@ class CompetitorProfile(TenantNumbered):
             raise ValidationError({"party": "Choose a same-tenant organization."})
 
     def delete(self, *args, **kwargs):
-        if self.opportunity_links.exists():
+        if OpportunityCompetitor.objects.filter(competitor_profile=self).exists():
             raise ValidationError("A referenced competitor profile cannot be deleted.")
         return super().delete(*args, **kwargs)
 
@@ -87,7 +87,6 @@ class OpportunityCompetitor(TenantOwned):
     competitor_profile = models.ForeignKey(
         "sales.CompetitorProfile",
         on_delete=models.PROTECT,
-        related_name="opportunity_links",
     )
     relationship = models.CharField(max_length=20, choices=RELATIONSHIP_CHOICES)
     is_primary = models.BooleanField(default=False)
