@@ -17,13 +17,15 @@
       <span>Teams</span>
     </div>
   </div>
-  <div class="page-actions flex items-center gap-2">
+  <div class="page-actions flex flex-wrap items-center gap-2">
     <a href="{% url 'projects:configuration_hub' %}" class="btn btn-outline">
-      <i data-lucide="layout-grid" class="w-4 h-4 mr-1"></i> Hub
+      <i data-lucide="layout-grid" class="w-4 h-4 me-1"></i> Hub
     </a>
+    {% if request.user.is_tenant_admin or request.user.is_superuser %}
     <a href="{% url 'projects:pte_create' %}" class="btn btn-primary">
-      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Project Team
+      <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Project Team
     </a>
+    {% endif %}
   </div>
 </div>
 
@@ -32,35 +34,35 @@
     <div class="stat-icon purple"><i data-lucide="users" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Total Teams</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.total }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Active</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.active }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon blue"><i data-lucide="network" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Matrix Teams</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.matrix }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.matrix }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon orange"><i data-lucide="layers" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Cross-Functional</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.cross_functional }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.cross_functional }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon slate"><i data-lucide="zap" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Agile Pods</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.agile_pod }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.agile_pod }}</div>
     </div>
   </div>
 </div>
@@ -100,7 +102,7 @@
       </div>
       <div class="flex items-end gap-2">
         <button type="submit" class="btn btn-primary flex-1">
-          <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+          <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
         </button>
         <a href="{% url 'projects:pte_list' %}" class="btn btn-outline">Reset</a>
       </div>
@@ -121,32 +123,32 @@
           <th>Members</th>
           <th>Location</th>
           <th>Status</th>
-          <th class="text-right">Actions</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for team in teams %}
         <tr>
           <td class="font-mono text-sm font-semibold">
-            <a href="{% url 'projects:pte_detail' pk=team.pk %}" class="text-primary hover:underline">
+            <a href="{% url 'projects:pte_detail' pk=team.pk %}" class="text-brand hover:underline">
               {{ team.number }}
             </a>
           </td>
           <td>
-            <div class="font-medium text-slate-900">{{ team.name }}</div>
+            <div class="font-medium text-slate-900 dark:text-slate-100">{{ team.name }}</div>
             {% if team.code %}<span class="text-xs text-muted font-mono">{{ team.code }}</span>{% endif %}
           </td>
           <td>
             <span class="badge {{ team.team_type_badge_class }}">{{ team.get_team_type_display }}</span>
           </td>
-          <td class="text-sm text-slate-700">
+          <td class="text-sm text-slate-700 dark:text-slate-300">
             {% if team.org_unit %}
               {{ team.org_unit.name }}
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}
           </td>
-          <td class="text-sm text-slate-700">
+          <td class="text-sm text-slate-700 dark:text-slate-300">
             {% if team.team_lead %}
               <span class="flex items-center gap-1.5">
                 <i data-lucide="user-check" class="w-3.5 h-3.5 text-muted"></i>
@@ -159,28 +161,26 @@
           <td>
             <span class="badge badge-info">{{ team.member_count_annotated }} members</span>
           </td>
-          <td class="text-sm text-slate-600">{{ team.location|default:"—" }}</td>
+          <td class="text-sm text-slate-600 dark:text-slate-400">{{ team.location|default:"—" }}</td>
           <td>
-            {% if team.is_active %}
-              <span class="badge badge-green">Active</span>
-            {% else %}
-              <span class="badge badge-muted">Inactive</span>
-            {% endif %}
+            <span class="badge {{ team.active_badge_class }}">{% if team.is_active %}Active{% else %}Inactive{% endif %}</span>
           </td>
-          <td class="table-actions text-right">
+          <td class="table-actions text-end">
             <div class="flex items-center justify-end gap-1">
               <a href="{% url 'projects:pte_detail' pk=team.pk %}" class="btn btn-icon" title="View Team">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </a>
+              {% if request.user.is_tenant_admin or request.user.is_superuser %}
               <a href="{% url 'projects:pte_edit' pk=team.pk %}" class="btn btn-icon" title="Edit Team">
                 <i data-lucide="pencil" class="w-4 h-4"></i>
               </a>
-              <form method="post" action="{% url 'projects:pte_delete' pk=team.pk %}" class="inline" onsubmit="return confirm('Delete project team {{ team.name }}?');">
+              <form method="post" action="{% url 'projects:pte_delete' pk=team.pk %}" class="inline" onsubmit="return confirm('Delete this project team?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-icon text-danger" title="Delete Team">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </form>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -189,11 +189,15 @@
           <td colspan="9">
             <div class="empty-state text-center py-12">
               <i data-lucide="users" class="w-12 h-12 mx-auto text-muted mb-3"></i>
-              <h3 class="text-lg font-medium text-slate-900 mb-1">No Project Teams Configured</h3>
-              <p class="text-sm text-muted mb-4">Organize resources into cross-functional, dedicated, or matrix delivery teams.</p>
+              <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">{% if has_filters %}No matching project teams{% else %}No project teams configured{% endif %}</h3>
+              <p class="text-sm text-muted mb-4">{% if has_filters %}Clear the active filters to review the full team directory.{% else %}Organize resources into cross-functional, dedicated, or matrix delivery teams.{% endif %}</p>
+              {% if has_filters %}
+              <a href="{% url 'projects:pte_list' %}" class="btn btn-outline">Clear filters</a>
+              {% elif request.user.is_tenant_admin or request.user.is_superuser %}
               <a href="{% url 'projects:pte_create' %}" class="btn btn-primary">
-                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create First Team
+                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First Team
               </a>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -202,17 +206,17 @@
     </table>
   </div>
   {% if page_obj.has_other_pages %}
-  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200">
+  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200 dark:border-slate-700">
     <div class="text-sm text-muted">
       Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} teams
     </div>
     <div class="pagination flex gap-1">
       {% if page_obj.has_previous %}
-      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if team_type %}&team_type={{ team_type }}{% endif %}{% if org_unit_id %}&org_unit={{ org_unit_id }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if team_type %}&team_type={{ team_type|urlencode }}{% endif %}{% if org_unit_id %}&org_unit={{ org_unit_id|urlencode }}{% endif %}{% if is_active %}&is_active={{ is_active|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
       {% endif %}
       <span class="btn btn-primary btn-sm pointer-events-none">{{ page_obj.number }}</span>
       {% if page_obj.has_next %}
-      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if team_type %}&team_type={{ team_type }}{% endif %}{% if org_unit_id %}&org_unit={{ org_unit_id }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if team_type %}&team_type={{ team_type|urlencode }}{% endif %}{% if org_unit_id %}&org_unit={{ org_unit_id|urlencode }}{% endif %}{% if is_active %}&is_active={{ is_active|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
       {% endif %}
     </div>
   </div>
