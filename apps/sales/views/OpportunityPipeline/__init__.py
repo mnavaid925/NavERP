@@ -1,0 +1,31 @@
+from apps.sales.views.OpportunityPipeline.Pipelines import (
+    opportunity_pipeline_board,
+    opportunity_pipeline_create,
+    opportunity_pipeline_delete,
+    opportunity_pipeline_detail,
+    opportunity_pipeline_edit,
+    opportunity_pipeline_list,
+    opportunity_pipeline_set_default,
+    opportunity_pipeline_stage_create,
+    opportunity_pipeline_stage_delete,
+    opportunity_pipeline_stage_edit,
+    opportunity_pipeline_stage_reorder,
+    opportunity_pipeline_stages,
+    opportunity_pipeline_visibility,
+)
+
+__all__ = [
+    "opportunity_pipeline_board",
+    "opportunity_pipeline_create",
+    "opportunity_pipeline_delete",
+    "opportunity_pipeline_detail",
+    "opportunity_pipeline_edit",
+    "opportunity_pipeline_list",
+    "opportunity_pipeline_set_default",
+    "opportunity_pipeline_stage_create",
+    "opportunity_pipeline_stage_delete",
+    "opportunity_pipeline_stage_edit",
+    "opportunity_pipeline_stage_reorder",
+    "opportunity_pipeline_stages",
+    "opportunity_pipeline_visibility",
+]
