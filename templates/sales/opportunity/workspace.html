@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}{% if opportunity %}{{ opportunity.number }} · {{ opportunity.name }}{% else %}Opportunity Workspace{% endif %}{% endblock %}
+{% block content %}
+{% if opportunity %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ opportunity.number }} · {{ opportunity.name }}</h1>
+    <div class="breadcrumb"><a href="{% url 'sales:opportunity_workspace_list' %}">Opportunity Workspace</a><span class="sep">›</span><span>{{ opportunity.number }}</span></div>
+  </div>
+  <div class="page-actions">
+    {% if can_edit_crm %}<a href="{{ crm_edit_url }}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit in CRM</a>{% endif %}
+    <a href="{% url 'sales:opportunity_workspace_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to workspace</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="badge-dollar-sign"></i></div><div class="stat-value">{{ opportunity.amount }}</div><div class="stat-label">{{ currency_label }} face value</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ opportunity.probability }}%</div><div class="stat-label">CRM probability</div></div>
+  <div class="stat-card"><div class="stat-icon purple"><i data-lucide="calculator"></i></div><div class="stat-value">{{ weighted_amount|floatformat:2 }}</div><div class="stat-label">Weighted · {{ currency_label }}</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="activity"></i></div><div class="stat-value">{{ health_status|title }}</div><div class="stat-label">Deal health</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Opportunity summary</h2></div>
+  <div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Account</dt><dd>{% if opportunity.account %}{{ opportunity.account.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Primary contact</dt><dd>{% if opportunity.primary_contact %}{{ opportunity.primary_contact.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if opportunity.owner %}{{ opportunity.owner.get_full_name|default:opportunity.owner.username|default:opportunity.owner.email }}{% else %}Unassigned{% endif %}</dd></div>
+      <div class="detail-item"><dt>Territory</dt><dd>{% if opportunity.territory %}{{ opportunity.territory.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Close date</dt><dd>{% if opportunity.close_date %}{{ opportunity.close_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Next step</dt><dd>{{ opportunity.next_step|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Next-step due date</dt><dd>{% if opportunity.next_step_due_date %}{{ opportunity.next_step_due_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Current stage</dt><dd>{% if current_stage %}<span class="badge {% if current_stage.stage_kind == 'won' %}badge-green{% elif current_stage.stage_kind == 'lost' %}badge-red{% else %}badge-info{% endif %}">{{ current_stage.name }}</span>{% else %}<span class="badge badge-muted">Unplaced</span>{% endif %}</dd></div>
+      <div class="detail-item"><dt>Pipeline</dt><dd>{% if pipeline %}{{ pipeline.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Stage entered</dt><dd>{% if placement %}{{ placement.stage_entered_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Last qualifying activity</dt><dd>{{ last_activity_at|default:"No qualifying activity" }}</dd></div>
+      <div class="detail-item"><dt>Currency</dt><dd>{{ currency_label }}</dd></div>
+    </dl>
+    {% if opportunity.description %}<p class="text-muted">{{ opportunity.description }}</p>{% endif %}
+    <p class="text-muted">CRM owns opportunity create, edit, and delete. This Sales workspace adds pipeline, health, collaboration, competitive, outcome, and activity context around the canonical CRM deal.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Deal health</h2><span class="badge {% if health_status == 'on_track' %}badge-green{% elif health_status == 'watch' %}badge-amber{% elif health_status == 'at_risk' %}badge-red{% else %}badge-slate{% endif %}">{{ health_status|title }}</span></div>
+  <div class="card-body">
+    <p class="text-muted">{{ health_stage_age_days }} day{{ health_stage_age_days|pluralize }} in current stage{% if health_target_days %} · target {{ health_target_days }} day{{ health_target_days|pluralize }}{% endif %}</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Signal</th><th>Severity</th><th>Explanation</th><th>Date</th></tr></thead>
+        <tbody>
+          {% for factor in health_factors %}
+          <tr><td class="fw-600">{{ factor.label }}</td><td><span class="badge {% if factor.severity == 'at_risk' %}badge-red{% elif factor.severity == 'watch' %}badge-amber{% elif factor.severity == 'info' %}badge-info{% else %}badge-slate{% endif %}">{{ factor.severity|title }}</span></td><td>{{ factor.detail }}</td><td>{% if factor.date %}{{ factor.date }}{% else %}—{% endif %}</td></tr>
+          {% empty %}
+          <tr><td colspan="4"><div class="empty-state"><i data-lucide="circle-check"></i><p>No health factors are active.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Pipeline placement</h2><div class="page-actions">{% if placement %}<form method="post" action="{% url 'sales:opportunity_unplace' opportunity.pk %}" onsubmit="return confirm('Remove this opportunity from its pipeline?');">{% csrf_token %}<button class="btn btn-danger btn-sm" type="submit"><i data-lucide="unlink"></i> Unplace</button></form>{% endif %}</div></div>
+  <div class="card-body">
+    <form method="post" action="{% url 'sales:opportunity_place' opportunity.pk %}" novalidate>
+      {% csrf_token %}
+      {% for error in placement_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in placement_form %}
+          {% if field.is_hidden %}{{ field }}{% else %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"{% if not pipelines %} disabled{% endif %}><i data-lucide="git-branch"></i> {% if placement %}Update placement{% else %}Place in pipeline{% endif %}</button>{% if not pipelines %}<span class="form-help">Create an active pipeline before placing this opportunity.</span>{% endif %}</div>
+    </form>
+    {% if stages %}
+    <div class="table-wrap" style="margin-top:1rem;">
+      <table class="table">
+        <thead><tr><th>Order</th><th>Active stage</th><th>Kind</th><th>Probability</th><th>Target</th><th>Entry guidance</th></tr></thead>
+        <tbody>
+          {% for stage in stages %}<tr><td>{{ stage.sequence }}</td><td class="fw-600">{{ stage.name }}</td><td>{{ stage.get_stage_kind_display }}</td><td>{{ stage.probability }}%</td><td>{% if stage.target_days is None %}—{% else %}{{ stage.target_days }} days{% endif %}</td><td>{{ stage.entry_guidance|default:"—" }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><i data-lucide="git-branch"></i><p>No active pipeline stages are available.</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Pipeline transition</h2></div>
+  <div class="card-body">
+    {% if placement %}
+    <form method="post" action="{% url 'sales:opportunity_transition' opportunity.pk %}" novalidate>
+      {% csrf_token %}
+      {% for error in closure_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in closure_form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="arrow-right-left"></i> Apply transition</button></div>
+    </form>
+    {% else %}
+    <div class="empty-state"><i data-lucide="lock"></i><p>Place this opportunity in a pipeline before enabling transitions.</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Opportunity team</h2><a href="{% url 'sales:opportunity_team_member_add' opportunity.pk %}" class="btn btn-sm btn-outline"><i data-lucide="user-plus"></i> Add member</a></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Member</th><th>Role</th><th>Org unit</th><th>Responsibility</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for member in team_members %}
+        <tr><td class="fw-600">{% if member.user %}{{ member.user.get_full_name|default:member.user.username|default:member.user.email }}{% else %}—{% endif %}</td><td>{{ member.get_role_display }}</td><td>{% if member.org_unit %}{{ member.org_unit.name }}{% else %}—{% endif %}</td><td>{{ member.responsibility|default:"—" }}</td><td><span class="badge {% if member.is_active %}badge-green{% else %}badge-muted{% endif %}">{{ member.is_active|yesno:"Active,Inactive" }}</span></td><td><div class="table-actions"><a href="{% url 'sales:opportunity_team_member_edit' opportunity.pk member.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a><form method="post" action="{% url 'sales:opportunity_team_member_remove' opportunity.pk member.pk %}" onsubmit="return confirm('Remove this team member?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form></div></td></tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="users"></i><p>No team members are assigned.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <h3 class="card-title">Add a team member</h3>
+    <form method="post" action="{% url 'sales:opportunity_team_member_add' opportunity.pk %}" novalidate>
+      {% csrf_token %}
+      {% for error in team_member_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in team_member_form %}
+        <div class="form-group"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>{{ field }}{% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}</div>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="user-plus"></i> Add member</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Competitive intelligence</h2><a href="{% url 'sales:opportunity_competitor_link_add' opportunity.pk %}" class="btn btn-sm btn-outline"><i data-lucide="plus"></i> Add competitor</a></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Competitor</th><th>Relationship</th><th>Primary</th><th>Pricing notes</th><th>Deal notes</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for link in competitor_links %}
+        <tr><td class="fw-600">{% if link.competitor_profile %}{% if link.competitor_profile.party %}{{ link.competitor_profile.party.name }}{% else %}—{% endif %}{% else %}—{% endif %}</td><td>{{ link.get_relationship_display }}</td><td>{% if link.is_primary %}<span class="badge badge-info">Primary</span>{% else %}—{% endif %}</td><td>{{ link.pricing_notes|default:"—" }}</td><td>{{ link.deal_notes|default:"—" }}</td><td><div class="table-actions"><a href="{% url 'sales:opportunity_competitor_link_edit' opportunity.pk link.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a><form method="post" action="{% url 'sales:opportunity_competitor_link_remove' opportunity.pk link.pk %}" onsubmit="return confirm('Remove this competitor link?');">{% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove"><i data-lucide="trash-2"></i></button></form></div></td></tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="radar"></i><p>No competitors are linked.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <h3 class="card-title">Link a competitor</h3>
+    <form method="post" action="{% url 'sales:opportunity_competitor_link_add' opportunity.pk %}" novalidate>
+      {% csrf_token %}
+      {% for error in competitor_form.non_field_errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in competitor_form %}
+        <div class="form-group"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>{{ field }}{% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="form-error" role="alert">{{ error }}</div>{% endfor %}</div>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Link competitor</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Win / loss outcome history</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Closed</th><th>Result</th><th>Reason</th><th>Competitor</th><th>Recorded by</th><th>Notes</th></tr></thead>
+      <tbody>
+        {% for outcome in outcomes %}
+        <tr><td>{{ outcome.closed_at|date:"M d, Y H:i" }}</td><td><span class="badge {% if outcome.result == 'won' %}badge-green{% elif outcome.result == 'lost' %}badge-red{% else %}badge-slate{% endif %}">{{ outcome.get_result_display }}</span></td><td>{% if outcome.reason %}{{ outcome.reason.name }}{% else %}—{% endif %}</td><td>{% if outcome.competitor_link %}{% if outcome.competitor_link.competitor_profile %}{% if outcome.competitor_link.competitor_profile.party %}{{ outcome.competitor_link.competitor_profile.party.name }}{% else %}—{% endif %}{% else %}—{% endif %}{% else %}—{% endif %}</td><td>{% if outcome.recorded_by %}{{ outcome.recorded_by.get_full_name|default:outcome.recorded_by.username|default:outcome.recorded_by.email }}{% else %}—{% endif %}</td><td>{{ outcome.notes|default:"—" }}</td></tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i data-lucide="trophy"></i><p>No win or loss outcomes have been recorded.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Merged activity timeline</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>When</th><th>Kind</th><th>Activity</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for row in activity_timeline %}
+        <tr><td class="nowrap">{{ row.at|date:"M d, Y H:i" }}</td><td><span class="badge {% if row.kind == 'outcome' %}badge-slate{% elif row.kind == 'audit' %}badge-muted{% else %}badge-info{% endif %}">{{ row.kind|title }}</span></td><td>{% if row.url %}<a href="{{ row.url }}" class="fw-600">{{ row.title }}</a>{% else %}<span class="fw-600">{{ row.title }}</span>{% endif %}</td><td>{{ row.detail|default:"—" }}</td></tr>
+        {% empty %}
+        <tr><td colspan="4"><div class="empty-state"><i data-lucide="history"></i><p>No qualifying activity has been recorded.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Recent CRM activity</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Tasks</th><th>Communications</th><th>Calendar events</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>{% for task in tasks %}<div><a href="{% url 'crm:task_detail' task.pk %}">{{ task.number }}</a> · {{ task.subject }} · {{ task.get_status_display }}</div>{% empty %}<span class="text-muted">No linked tasks.</span>{% endfor %}</td>
+          <td>{% for communication in communications %}<div><a href="{% url 'crm:communicationlog_detail' communication.pk %}">{{ communication.number }}</a> · {{ communication.subject|default:communication.get_channel_display }} · {{ communication.occurred_at|date:"M d, Y" }}</div>{% empty %}<span class="text-muted">No logged communications.</span>{% endfor %}</td>
+          <td>{% for event in events %}<div><a href="{% url 'crm:calendarevent_detail' event.pk %}">{{ event.number }}</a> · {{ event.title }} · {{ event.start|date:"M d, Y" }}</div>{% empty %}<span class="text-muted">No calendar events.</span>{% endfor %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Contracts and documents</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Type</th><th>Reference</th><th>Status</th><th>Updated</th><th>Link</th></tr></thead>
+      <tbody>
+        {% for contract in contracts %}<tr><td>Contract</td><td class="fw-600">{{ contract.number }} · {{ contract.name }}</td><td>{{ contract.get_status_display }}</td><td>{{ contract.updated_at|date:"M d, Y" }}</td><td><a href="{% url 'crm:contractdocument_detail' contract.pk %}">Open contract</a></td></tr>{% endfor %}
+        {% for document in documents %}<tr><td>Document</td><td class="fw-600">{{ document.name }}</td><td>{{ document.get_classification_display }}</td><td>{{ document.uploaded_at|date:"M d, Y" }}</td><td><a href="{% url 'core:document_detail' document.pk %}">Open record</a>{% if document.workspace_file_url %} · <a href="{{ document.workspace_file_url }}" target="_blank" rel="noopener noreferrer">Open file</a>{% endif %}</td></tr>{% endfor %}
+        {% if not contracts and not documents %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="folder-open"></i><p>No contracts or generic documents are linked.</p></div></td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Audit trail</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>When</th><th>Action</th><th>Target</th><th>Actor</th><th>Operation</th></tr></thead>
+      <tbody>
+        {% for entry in audit_entries %}<tr><td>{{ entry.at|date:"M d, Y H:i" }}</td><td>{{ entry.get_action_display }}</td><td><a href="{% url 'core:auditlog_detail' entry.pk %}">{{ entry.target|default:"—" }}</a></td><td>{% if entry.user %}{{ entry.user.get_full_name|default:entry.user.username|default:entry.user.email }}{% else %}—{% endif %}</td><td>{% if entry.changes.operation %}{{ entry.changes.operation }}{% elif entry.changes.action %}{{ entry.changes.action }}{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="scroll-text"></i><p>No audit entries are linked to this opportunity.</p></div></td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<a href="{% url 'sales:opportunity_workspace_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to opportunity workspace</a>
+{% else %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Opportunity Workspace</h1>
+    <div class="breadcrumb"><span>Sales</span><span class="sep">›</span><span>Opportunity Workspace</span></div>
+  </div>
+  <div class="page-actions"><a href="{% url 'sales:opportunity_pipeline_board' %}" class="btn btn-outline"><i data-lucide="kanban"></i> Pipeline board</a></div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-icon blue"><i data-lucide="briefcase-business"></i></div><div class="stat-value">{{ stats.total }}</div><div class="stat-label">Matching opportunities</div></div>
+  <div class="stat-card"><div class="stat-icon green"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ stats.placed }}</div><div class="stat-label">Pipeline placed</div></div>
+  <div class="stat-card"><div class="stat-icon orange"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.unplaced }}</div><div class="stat-label">Unplaced</div></div>
+  <div class="stat-card"><div class="stat-icon slate"><i data-lucide="alert-triangle"></i></div><div class="stat-value">{{ health_counts.at_risk }}</div><div class="stat-label">At risk</div></div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="filter-bar" action="{% url 'sales:opportunity_workspace_list' %}">
+      <div class="form-group" style="flex:1; min-width:240px;"><label class="form-label" for="workspace-q">Search</label><input id="workspace-q" name="q" value="{{ q }}" class="form-input" placeholder="Number, name, account, contact, or owner"></div>
+      <div class="form-group"><label class="form-label" for="workspace-health">Health</label><select id="workspace-health" name="health" class="form-select"><option value="">All health states</option>{% for value, label in health_choices %}<option value="{{ value }}"{% if health == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="form-label" for="workspace-owner">Owner</label><select id="workspace-owner" name="owner" class="form-select"><option value="">All owners</option>{% for owner in owners %}<option value="{{ owner.pk|stringformat:'d' }}"{% if owner_id == owner.pk|stringformat:'d' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username|default:owner.email }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="form-label" for="workspace-territory">Territory</label><select id="workspace-territory" name="territory" class="form-select"><option value="">All territories</option>{% for territory in territories %}<option value="{{ territory.pk|stringformat:'d' }}"{% if territory_id == territory.pk|stringformat:'d' %} selected{% endif %}>{{ territory.name }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label class="form-label" for="workspace-pipeline">Pipeline</label><select id="workspace-pipeline" name="pipeline" class="form-select"><option value="">All pipelines</option>{% for pipeline_option in pipelines %}<option value="{{ pipeline_option.pk|stringformat:'d' }}"{% if pipeline_id == pipeline_option.pk|stringformat:'d' %} selected{% endif %}>{{ pipeline_option.name }}</option>{% endfor %}</select></div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> Apply</button>
+      <a href="{% url 'sales:opportunity_workspace_list' %}" class="btn btn-outline">Reset</a>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Opportunity</th><th>Health</th><th>Owner</th><th>Pipeline / stage</th><th>Amount</th><th>Next step</th><th>Close date</th><th class="table-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for opportunity in opportunities %}
+        <tr>
+          <td><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}" class="fw-600">{{ opportunity.number }} · {{ opportunity.name }}</a>{% if opportunity.account %}<div class="text-muted">{{ opportunity.account.name }}</div>{% endif %}{% if opportunity.primary_contact %}<div class="text-muted">Contact: {{ opportunity.primary_contact.name }}</div>{% endif %}</td>
+          <td><span class="badge {% if opportunity.workspace_health.status == 'on_track' %}badge-green{% elif opportunity.workspace_health.status == 'watch' %}badge-amber{% elif opportunity.workspace_health.status == 'at_risk' %}badge-red{% else %}badge-slate{% endif %}">{{ opportunity.workspace_health.status|title }}</span></td>
+          <td>{% if opportunity.owner %}{{ opportunity.owner.get_full_name|default:opportunity.owner.username|default:opportunity.owner.email }}{% else %}Unassigned{% endif %}</td>
+          <td>{% if opportunity.workspace_pipeline %}<div class="fw-600">{{ opportunity.workspace_pipeline.name }}</div><div class="text-muted">{{ opportunity.workspace_stage.name }}</div>{% else %}<span class="badge badge-muted">Unplaced</span>{% endif %}</td>
+          <td><div class="fw-600">{{ opportunity.amount }} {{ opportunity.workspace_currency_label }}</div><div class="text-muted">Weighted {{ opportunity.workspace_weighted_amount|floatformat:2 }}</div></td>
+          <td>{{ opportunity.next_step|default:"—" }}</td>
+          <td>{% if opportunity.close_date %}{{ opportunity.close_date|date:"M d, Y" }}{% else %}—{% endif %}</td>
+          <td><div class="table-actions"><a href="{% url 'sales:opportunity_workspace_detail' opportunity.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i data-lucide="briefcase-business"></i><h3>No opportunities match</h3><p>Adjust the filters or place a CRM opportunity into a pipeline.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Currency-safe totals</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Currency</th><th>Opportunities</th><th>Face amount</th><th>Weighted amount</th></tr></thead>
+      <tbody>
+        {% for currency_row in stats.currency_totals %}<tr><td class="fw-600">{{ currency_row.currency_label }}</td><td>{{ currency_row.count }}</td><td>{{ currency_row.amount }}</td><td>{{ currency_row.weighted_amount|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="4"><div class="empty-state"><i data-lucide="coins"></i><p>No currency totals are available.</p></div></td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "partials/pagination.html" %}
+{% endif %}
+{% endblock %}
