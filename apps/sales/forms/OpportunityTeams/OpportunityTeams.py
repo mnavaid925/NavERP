@@ -4,11 +4,11 @@ from django.db.models import Q
 from apps.accounts.models import User
 from apps.core.models import OrgUnit
 from apps.crm.models import Opportunity
-from apps.sales.forms._common import TenantModelForm
+from apps.sales.forms._common import TenantModelForm, TenantUniqueMixin
 from apps.sales.models.OpportunityTeams.OpportunityTeams import OpportunityTeamMember
 
 
-class OpportunityTeamMemberForm(TenantModelForm):
+class OpportunityTeamMemberForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = OpportunityTeamMember
         fields = ["user", "org_unit", "role", "responsibility", "is_active"]
