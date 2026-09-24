@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load project_custom_fields %}
 {% block title %}{{ obj.number }} — Risk{% endblock %}
 {% block content %}
   <div class="page-header">
@@ -48,6 +49,9 @@
       {% if obj.contingency_account %}<p class="text-muted">The contingency amount on that control account stays 7.4's to set — this page sizes it, it does not write it.</p>{% endif %}
     </div>
   </div>
+
+  {% project_custom_values obj as custom_values %}
+  {% include "projects/partials/custom_values_panel.html" %}
 
   <div class="card">
     <div class="card-header"><h2>Response plan</h2></div>
