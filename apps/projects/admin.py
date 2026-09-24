@@ -1038,6 +1038,11 @@ class DashboardWidgetAdmin(admin.ModelAdmin):
 
 # --- 7.19 Master Data & Configuration -----------------------------------------
 
+from apps.projects.forms.MasterDataConfiguration.ProjectTeams import (
+    ProjectTeamMemberInlineForm,
+)
+
+
 @admin.register(ProjectTemplate)
 class ProjectTemplateAdmin(admin.ModelAdmin):
     list_display = ("number", "name", "methodology", "category", "complexity", "estimated_duration_days",
@@ -1046,6 +1051,11 @@ class ProjectTemplateAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "created_by")
     search_fields = ("number", "name", "description")
     readonly_fields = ("number", "created_at", "updated_at")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer(
+            "description", "default_roles", "wbs_structure", "workflow_config"
+        )
 
 
 @admin.register(ProjectCustomField)
@@ -1057,11 +1067,17 @@ class ProjectCustomFieldAdmin(admin.ModelAdmin):
     search_fields = ("number", "name", "field_key", "label", "description")
     readonly_fields = ("number", "created_at", "updated_at")
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer(
+            "description", "regex_pattern", "choices_list", "visibility_rule"
+        )
+
 
 class ProjectTeamMemberInline(admin.TabularInline):
     model = ProjectTeamMember
+    form = ProjectTeamMemberInlineForm
     extra = 1
-    fields = ("user", "role", "allocation_percentage", "is_primary_contact", "joined_date", "left_date")
+    fields = ("user", "role", "allocation_percentage", "is_primary_contact", "joined_date")
 
 
 @admin.register(ProjectTeam)
@@ -1074,6 +1090,9 @@ class ProjectTeamAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "created_at", "updated_at")
     inlines = [ProjectTeamMemberInline]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer("description")
+
 
 @admin.register(ProjectTeamMember)
 class ProjectTeamMemberAdmin(admin.ModelAdmin):
@@ -1081,7 +1100,7 @@ class ProjectTeamMemberAdmin(admin.ModelAdmin):
     list_filter = ("is_primary_contact", "role")
     list_select_related = ("tenant", "team", "user")
     search_fields = ("team__name", "user__username", "role")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("left_date", "created_at", "updated_at")
 
 
 @admin.register(ProjectLocaleSetting)
@@ -1091,6 +1110,6 @@ class ProjectLocaleSettingAdmin(admin.ModelAdmin):
     list_filter = ("is_default", "is_active")
     list_select_related = ("tenant", "project", "language", "time_zone", "currency")
     search_fields = ("number", "name", "code")
-    readonly_fields = ("number", "created_at", "updated_at")
+    readonly_fields = ("number", "is_default", "created_at", "updated_at")
 
 
