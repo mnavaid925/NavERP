@@ -19,11 +19,11 @@ from apps.sales.models.OpportunityOutcomes.OpportunityOutcomes import (
     OpportunityOutcome,
     WinLossReason,
 )
-from apps.sales.models.OpportunityPipeline.Pipelines import (
-    OpportunityPipelinePlacement,
-    PipelineStage,
+from apps.sales.models.OpportunityPipeline.Pipelines import OpportunityPipelinePlacement
+from apps.sales.opportunity_services import (
+    sales_allowed_transition_stages,
+    sales_transition_opportunity,
 )
-from apps.sales.opportunity_services import sales_transition_opportunity
 
 
 WIN_LOSS_ACTIVE_CHOICES = [("active", "Active"), ("inactive", "Inactive")]
@@ -229,32 +229,6 @@ def opportunity_win_loss_reason_delete(request, pk):
     return redirect("sales:opportunity_win_loss_reason_list")
 
 
-def _opportunity_transition_target_stages(placement):
-    if placement is None:
-        return []
-    stages = list(
-        PipelineStage.objects.filter(
-            tenant_id=placement.tenant_id,
-            pipeline_id=placement.pipeline_id,
-            is_active=True,
-        ).order_by("sequence", "pk")
-    )
-    current = next((stage for stage in stages if stage.pk == placement.current_stage_id), None)
-    if current is None:
-        return []
-    if current.stage_kind == "open":
-        next_open = next(
-            (stage for stage in stages if stage.stage_kind == "open" and stage.sequence > current.sequence),
-            None,
-        )
-        targets = [next_open] if next_open is not None else []
-        targets.extend(stage for stage in stages if stage.stage_kind in {"won", "lost"})
-        return targets
-    if current.stage_kind in {"won", "lost"}:
-        return [stage for stage in stages if stage.stage_kind == "open"]
-    return []
-
-
 def _opportunity_transition_form_error(form):
     errors = list(form.non_field_errors())
     if not errors:
@@ -288,7 +262,7 @@ def opportunity_transition(request, opportunity_pk):
         opportunity=opportunity,
         placement=placement,
         current_stage=current_stage,
-        allowed_target_stages=_opportunity_transition_target_stages(placement),
+        allowed_target_stages=sales_allowed_transition_stages(placement),
     )
     if form.is_valid():
         try:
