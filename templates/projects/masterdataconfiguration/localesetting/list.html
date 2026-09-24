@@ -17,13 +17,15 @@
       <span>Localization</span>
     </div>
   </div>
-  <div class="page-actions flex items-center gap-2">
+  <div class="page-actions flex flex-wrap items-center gap-2">
     <a href="{% url 'projects:configuration_hub' %}" class="btn btn-outline">
-      <i data-lucide="layout-grid" class="w-4 h-4 mr-1"></i> Hub
+      <i data-lucide="layout-grid" class="w-4 h-4 me-1"></i> Hub
     </a>
+    {% if request.user.is_tenant_admin or request.user.is_superuser %}
     <a href="{% url 'projects:pls_create' %}" class="btn btn-primary">
-      <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Locale Profile
+      <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Locale Profile
     </a>
+    {% endif %}
   </div>
 </div>
 
@@ -32,38 +34,65 @@
     <div class="stat-icon purple"><i data-lucide="globe" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Total Profiles</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.total }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.total }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon green"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Active</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.active }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.active }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon blue"><i data-lucide="bookmark" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Workspace Defaults</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.default_profiles }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.default_profiles }}</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon orange"><i data-lucide="folder-kanban" class="w-6 h-6"></i></div>
     <div>
       <div class="text-sm font-medium text-muted">Project Overrides</div>
-      <div class="text-2xl font-bold text-slate-900">{{ stats.project_overrides }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stats.project_overrides }}</div>
     </div>
   </div>
 </div>
 
 <div class="card mb-6">
   <div class="card-body">
-    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-7 gap-4">
       <div class="form-group md:col-span-2">
         <label for="id_q" class="form-label">Search</label>
         <input type="text" name="q" id="id_q" value="{{ q }}" class="form-input" placeholder="Number, name, code...">
+      </div>
+      <div class="form-group">
+        <label for="id_language" class="form-label">Language</label>
+        <select name="language" id="id_language" class="form-select">
+          <option value="">All Languages</option>
+          {% for language in languages %}
+          <option value="{{ language.pk }}" {% if language_id == language.pk|stringformat:"d" %}selected{% endif %}>{{ language.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_time_zone" class="form-label">Time Zone</label>
+        <select name="time_zone" id="id_time_zone" class="form-select">
+          <option value="">All Time Zones</option>
+          {% for time_zone in time_zones %}
+          <option value="{{ time_zone.pk }}" {% if time_zone_id == time_zone.pk|stringformat:"d" %}selected{% endif %}>{{ time_zone.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_currency" class="form-label">Currency</label>
+        <select name="currency" id="id_currency" class="form-select">
+          <option value="">All Currencies</option>
+          {% for currency in currencies %}
+          <option value="{{ currency.pk }}" {% if currency_id == currency.pk|stringformat:"d" %}selected{% endif %}>{{ currency.code }} — {{ currency.name }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="form-group">
         <label for="id_is_active" class="form-label">Status</label>
@@ -75,7 +104,7 @@
       </div>
       <div class="flex items-end gap-2">
         <button type="submit" class="btn btn-primary flex-1">
-          <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+          <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
         </button>
         <a href="{% url 'projects:pls_list' %}" class="btn btn-outline">Reset</a>
       </div>
@@ -97,59 +126,52 @@
           <th>Date Format</th>
           <th>Working Days</th>
           <th>Status</th>
-          <th class="text-right">Actions</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for profile in locale_settings %}
         <tr>
           <td class="font-mono text-sm font-semibold">
-            <a href="{% url 'projects:pls_detail' pk=profile.pk %}" class="text-primary hover:underline">
+            <a href="{% url 'projects:pls_detail' pk=profile.pk %}" class="text-brand hover:underline">
               {{ profile.number }}
             </a>
           </td>
           <td>
-            <div class="font-medium text-slate-900">{{ profile.name }}</div>
+            <div class="font-medium text-slate-900 dark:text-slate-100">{{ profile.name }}</div>
             {% if profile.is_default %}<span class="badge badge-amber text-xs">Default Workspace</span>{% endif %}
           </td>
           <td class="text-sm">
-            {% if profile.project %}
-              <span class="badge badge-info">Project Override</span>
-            {% else %}
-              <span class="badge badge-slate">Workspace-Wide</span>
-            {% endif %}
+            <span class="badge {{ profile.scope_badge_class }}">{% if profile.project %}Project Override{% else %}Workspace-Wide{% endif %}</span>
           </td>
-          <td class="text-sm text-slate-700">
-            {% if profile.language %}{{ profile.language.name }}{% else %}<span class="text-muted">Platform Default</span>{% endif %}
+          <td class="text-sm text-slate-700 dark:text-slate-300">
+             {% if profile.language %}{{ profile.language.name }}{% elif workspace_locale.language %}{{ workspace_locale.language.name }} (core default){% else %}<span class="text-muted">Not configured</span>{% endif %}
           </td>
-          <td class="text-sm font-mono text-slate-700">
-            {% if profile.time_zone %}{{ profile.time_zone.name }}{% else %}UTC{% endif %}
+          <td class="text-sm font-mono text-slate-700 dark:text-slate-300">
+             {% if profile.time_zone %}{{ profile.time_zone.name }}{% elif workspace_locale.time_zone %}{{ workspace_locale.time_zone.name }} (core default){% else %}<span class="text-muted">Not configured</span>{% endif %}
           </td>
-          <td class="text-sm font-semibold text-slate-800">
-            {% if profile.currency %}{{ profile.currency.code }}{% else %}USD{% endif %}
+          <td class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+             {% if profile.currency %}{{ profile.currency.code }}{% elif workspace_locale.base_currency %}{{ workspace_locale.base_currency.code }} (core default){% else %}<span class="text-muted">Not configured</span>{% endif %}
           </td>
-          <td class="text-sm font-mono text-slate-600">
+          <td class="text-sm font-mono text-slate-600 dark:text-slate-400">
             {{ profile.date_format }}
           </td>
-          <td class="text-sm text-slate-600">
+          <td class="text-sm text-slate-600 dark:text-slate-400">
             {{ profile.working_days_display }}
           </td>
           <td>
-            {% if profile.is_active %}
-              <span class="badge badge-green">Active</span>
-            {% else %}
-              <span class="badge badge-muted">Inactive</span>
-            {% endif %}
+            <span class="badge {{ profile.active_badge_class }}">{% if profile.is_active %}Active{% else %}Inactive{% endif %}</span>
           </td>
-          <td class="table-actions text-right">
+          <td class="table-actions text-end">
             <div class="flex items-center justify-end gap-1">
               <a href="{% url 'projects:pls_detail' pk=profile.pk %}" class="btn btn-icon" title="View Profile">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </a>
+              {% if request.user.is_tenant_admin or request.user.is_superuser %}
               <a href="{% url 'projects:pls_edit' pk=profile.pk %}" class="btn btn-icon" title="Edit Profile">
                 <i data-lucide="pencil" class="w-4 h-4"></i>
               </a>
-              {% if not profile.is_default and not profile.project %}
+              {% if not profile.is_default and not profile.project and profile.is_active %}
               <form method="post" action="{% url 'projects:pls_set_default' pk=profile.pk %}" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-icon text-amber-600" title="Set as Default">
@@ -157,12 +179,13 @@
                 </button>
               </form>
               {% endif %}
-              <form method="post" action="{% url 'projects:pls_delete' pk=profile.pk %}" class="inline" onsubmit="return confirm('Delete locale profile {{ profile.name }}?');">
+              <form method="post" action="{% url 'projects:pls_delete' pk=profile.pk %}" class="inline" onsubmit="return confirm('Delete this locale profile?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-icon text-danger" title="Delete Profile">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </form>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -171,11 +194,15 @@
           <td colspan="10">
             <div class="empty-state text-center py-12">
               <i data-lucide="globe" class="w-12 h-12 mx-auto text-muted mb-3"></i>
-              <h3 class="text-lg font-medium text-slate-900 mb-1">No Locale Profiles Configured</h3>
-              <p class="text-sm text-muted mb-4">Set up regional calendars, working hours, and language preferences for global delivery.</p>
+              <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">{% if has_filters %}No matching locale profiles{% else %}No locale profiles configured{% endif %}</h3>
+              <p class="text-sm text-muted mb-4">{% if has_filters %}Clear the active filters to review all configured profiles.{% else %}Set up regional calendars, working hours, and language preferences for global delivery.{% endif %}</p>
+              {% if has_filters %}
+              <a href="{% url 'projects:pls_list' %}" class="btn btn-outline">Clear filters</a>
+              {% elif request.user.is_tenant_admin or request.user.is_superuser %}
               <a href="{% url 'projects:pls_create' %}" class="btn btn-primary">
-                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create First Profile
+                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First Profile
               </a>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -184,17 +211,17 @@
     </table>
   </div>
   {% if page_obj.has_other_pages %}
-  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200">
+  <div class="card-footer flex items-center justify-between py-3 px-4 border-t border-slate-200 dark:border-slate-700">
     <div class="text-sm text-muted">
       Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} profiles
     </div>
     <div class="pagination flex gap-1">
       {% if page_obj.has_previous %}
-      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if language_id %}&language={{ language_id|urlencode }}{% endif %}{% if time_zone_id %}&time_zone={{ time_zone_id|urlencode }}{% endif %}{% if currency_id %}&currency={{ currency_id|urlencode }}{% endif %}{% if is_active %}&is_active={{ is_active|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
       {% endif %}
       <span class="btn btn-primary btn-sm pointer-events-none">{{ page_obj.number }}</span>
       {% if page_obj.has_next %}
-      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if is_active %}&is_active={{ is_active }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if language_id %}&language={{ language_id|urlencode }}{% endif %}{% if time_zone_id %}&time_zone={{ time_zone_id|urlencode }}{% endif %}{% if currency_id %}&currency={{ currency_id|urlencode }}{% endif %}{% if is_active %}&is_active={{ is_active|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
       {% endif %}
     </div>
   </div>
