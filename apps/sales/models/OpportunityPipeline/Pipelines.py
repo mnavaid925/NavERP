@@ -55,11 +55,6 @@ class Pipeline(TenantNumbered):
         ordering = ["-is_default", "name", "-created_at"]
         constraints = [
             models.UniqueConstraint(fields=["tenant", "number"], name="sales_pipe_tenant_number_uniq"),
-            models.UniqueConstraint(
-                fields=["tenant"],
-                condition=Q(is_active=True, is_default=True),
-                name="sales_pipe_active_default_uniq",
-            ),
         ]
         indexes = [
             models.Index(fields=["tenant", "is_active"], name="sales_pipe_tenant_active_idx"),
@@ -188,6 +183,7 @@ class PipelineStage(TenantOwned):
                         crm_stage_key__in=("prospecting", "qualification", "proposal", "negotiation"),
                         probability__gte=1,
                         probability__lte=99,
+                        forecast_category__in=("omitted", "pipeline", "best_case", "commit"),
                     )
                 ),
                 name="sales_pstage_open_integrity",
@@ -249,9 +245,12 @@ class PipelineStage(TenantOwned):
                 self.crm_stage_key in {"prospecting", "qualification", "proposal", "negotiation"}
                 and self.probability is not None
                 and 1 <= self.probability <= 99
+                and self.forecast_category != "closed"
             )
             if not valid:
-                raise ValidationError("Open stages require an open CRM stage and probability from 1 to 99.")
+                raise ValidationError(
+                    "Open stages require an open CRM stage, probability from 1 to 99, and a non-closed forecast category."
+                )
         elif self.stage_kind == "won":
             if (self.crm_stage_key, self.probability, self.forecast_category) != (
                 "closed_won",
