@@ -17,6 +17,7 @@ urlpatterns = [
     path("inventory/", include("apps.inventory.urls")),  # /inventory/, catalog attributes/prices/files
     path("procurement/", include("apps.procurement.urls")),  # /procurement/, portal/alerts/reports
     path("projects/", include("apps.projects.urls")),  # /projects/, requests/charters/stakeholders/kickoffs
+    path("sales/", include("apps.sales.urls")),         # /sales/, lead operations/qualification/routing/nurture
 ]
 
 if settings.DEBUG:
