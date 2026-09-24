@@ -26,7 +26,7 @@
 
 <div class="card max-w-4xl mx-auto">
   <div class="card-header">
-    <h2 class="text-base font-semibold text-slate-900">Custom Field Definition &amp; Validation Rules</h2>
+    <h2 class="text-base font-semibold text-slate-900 dark:text-slate-100">Custom Field Definition &amp; Validation Rules</h2>
   </div>
   <div class="card-body">
     <form method="post" class="space-y-6">
@@ -133,27 +133,29 @@
         {% if form.visibility_rule_raw.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.visibility_rule_raw.errors }}</div>{% endif %}
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 py-3 border-t border-slate-200">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 py-3 border-t border-slate-200 dark:border-slate-700">
         <div class="flex items-center gap-2">
           {{ form.is_required }}
-          <label for="{{ form.is_required.id_for_label }}" class="text-sm font-medium text-slate-800">
-            Mandatory Required Field
-          </label>
+           <label for="{{ form.is_required.id_for_label }}" class="text-sm font-medium text-slate-800 dark:text-slate-200">
+             Mandatory Required Field
+           </label>
+           {% if form.is_required.errors %}<div class="form-error text-xs">{{ form.is_required.errors }}</div>{% endif %}
         </div>
         <div class="flex items-center gap-2">
           {{ form.is_active }}
-          <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800">
-            Active for Data Capture
-          </label>
+           <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-800 dark:text-slate-200">
+             Active for Data Capture
+           </label>
+           {% if form.is_active.errors %}<div class="form-error text-xs">{{ form.is_active.errors }}</div>{% endif %}
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
         <a href="{% if is_edit %}{% url 'projects:pcf_detail' pk=custom_field.pk %}{% else %}{% url 'projects:pcf_list' %}{% endif %}" class="btn btn-outline">
           Cancel
         </a>
         <button type="submit" class="btn btn-primary">
-          <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+          <i data-lucide="check" class="w-4 h-4 me-1"></i>
           {% if is_edit %}Save Changes{% else %}Create Custom Field{% endif %}
         </button>
       </div>
