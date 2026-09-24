@@ -781,7 +781,6 @@ def sales_competitor_rows(
     )
     grouped = queryset.values(
         "result",
-        "competitor_link_id",
         "competitor_link__relationship",
         "competitor_link__competitor_profile_id",
         "competitor_link__competitor_profile__party_id",
@@ -792,6 +791,7 @@ def sales_competitor_rows(
         currency_code=currency_code_expression,
     ).annotate(
         count=Count("id"),
+        competitor_link_count=Count("competitor_link_id", distinct=True),
         amount=Sum("opportunity__amount"),
         first_closed_at=Min("closed_at"),
         last_closed_at=Max("closed_at"),
@@ -807,7 +807,7 @@ def sales_competitor_rows(
             {
                 "result": row["result"],
                 "result_label": result_labels.get(row["result"]),
-                "competitor_link_id": row["competitor_link_id"],
+                "competitor_link_count": row["competitor_link_count"] or 0,
                 "competitor_id": row["competitor_link__competitor_profile_id"],
                 "competitor_profile_id": row["competitor_link__competitor_profile_id"],
                 "competitor_party_id": row["competitor_link__competitor_profile__party_id"],
