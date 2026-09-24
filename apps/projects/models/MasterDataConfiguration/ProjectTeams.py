@@ -61,10 +61,22 @@ class ProjectTeam(TenantNumbered):
             models.Index(fields=["tenant", "team_type"], name="pte_tnt_type_idx"),
             models.Index(fields=["tenant", "org_unit"], name="pte_tnt_org_idx"),
             models.Index(fields=["tenant", "project"], name="pte_tnt_prj_idx"),
+            models.Index(fields=["tenant", "-created_at"], name="pte_tnt_created_idx"),
         ]
 
     def __str__(self):
         return f"{self.number} — {self.name}"
+
+    def clean(self):
+        super().clean()
+        if self.tenant_id is None:
+            return
+        if self.org_unit_id and self.org_unit.tenant_id != self.tenant_id:
+            raise ValidationError({"org_unit": "The organizational unit belongs to another tenant."})
+        if self.project_id and self.project.tenant_id != self.tenant_id:
+            raise ValidationError({"project": "The project belongs to another tenant."})
+        if self.team_lead_id and self.team_lead.tenant_id not in (None, self.tenant_id):
+            raise ValidationError({"team_lead": "The team lead belongs to another tenant."})
 
     @property
     def team_type_badge_class(self):
@@ -72,10 +84,23 @@ class ProjectTeam(TenantNumbered):
             "dedicated": "badge-green",
             "matrix": "badge-info",
             "cross_functional": "badge-amber",
-            "agile_pod": "badge-purple" if False else "badge-green",
+            "agile_pod": "badge-green",
             "vendor_external": "badge-slate",
         }
         return mapping.get(self.team_type, "badge-slate")
+
+    @property
+    def active_badge_class(self):
+        return "badge-green" if self.is_active else "badge-muted"
+
+    def get_team_type_badge(self):
+        return self.team_type_badge_class
+
+    def member_count(self):
+        return self.members.filter(
+            tenant_id=self.tenant_id,
+            left_date__isnull=True,
+        ).count()
 
 
 class ProjectTeamMember(TenantOwned):
@@ -130,7 +155,17 @@ class ProjectTeamMember(TenantOwned):
     def __str__(self):
         return f"{self.user.username} ({self.get_role_display()} - {self.allocation_percentage}%) in {self.team.name}"
 
+    @property
+    def is_current(self):
+        return self.left_date is None
+
     def clean(self):
         super().clean()
+        if self.tenant_id is None:
+            return
+        if self.team_id and self.team.tenant_id != self.tenant_id:
+            raise ValidationError({"team": "The team belongs to another tenant."})
+        if self.user_id and self.user.tenant_id not in (None, self.tenant_id):
+            raise ValidationError({"user": "The user belongs to another tenant."})
         if self.joined_date and self.left_date and self.joined_date > self.left_date:
             raise ValidationError({"left_date": "Departure date cannot be prior to joined date."})
