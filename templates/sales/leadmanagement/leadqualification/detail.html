@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Qualification · {{ lead.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div><h1 class="page-title">{{ lead.name }}</h1><div class="breadcrumb"><a href="{% url 'sales:lead_qualification_list' %}">Qualifications</a><span class="sep">›</span><span>{{ lead.number }}</span></div></div>
+    <div class="page-actions">
+      <a href="{% url 'crm:lead_detail' lead.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> CRM lead</a>
+      <a href="{% url 'sales:lead_qualification_route_preview' obj.pk %}" class="btn btn-outline"><i data-lucide="route"></i> Preview routing</a>
+      {% if obj.status != 'archived' and lead.status != 'converted' %}<a href="{% url 'sales:lead_qualification_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+  <div class="card"><div class="card-body"><dl class="detail-grid">
+    <div class="detail-item"><dt>Framework</dt><dd>{{ obj.get_framework_display }}</dd></div>
+    <div class="detail-item"><dt>Status</dt><dd><span class="badge {% if obj.status == 'qualified' %}badge-green{% elif obj.status == 'partially_qualified' %}badge-amber{% elif obj.status == 'disqualified' %}badge-red{% elif obj.status == 'archived' %}badge-muted{% else %}badge-info{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+    <div class="detail-item"><dt>Country</dt><dd>{{ obj.country_code|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Region / city</dt><dd>{{ obj.region|default:"—" }} / {{ obj.city|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Industry</dt><dd>{{ obj.industry|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Employees</dt><dd>{{ obj.employee_count|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Seniority</dt><dd>{{ obj.get_seniority_display }}</dd></div>
+    <div class="detail-item"><dt>Authority</dt><dd>{{ obj.get_authority_level_display }}</dd></div>
+    <div class="detail-item"><dt>Budget</dt><dd>{{ obj.get_budget_status_display }}{% if obj.budget_amount and obj.budget_currency %} · {{ obj.budget_amount }} {{ obj.budget_currency.code }}{% endif %}</dd></div>
+    <div class="detail-item"><dt>Expected purchase</dt><dd>{{ obj.expected_purchase_on|date:"M d, Y"|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Assessor</dt><dd>{% if obj.assessed_by %}{{ obj.assessed_by.get_full_name|default:obj.assessed_by.username }}{% else %}—{% endif %}</dd></div>
+    <div class="detail-item"><dt>Assessed</dt><dd>{{ obj.assessed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+    <div class="detail-item"><dt>Need</dt><dd>{{ obj.need_summary|default:"—"|linebreaksbr }}</dd></div>
+    <div class="detail-item"><dt>Decision process</dt><dd>{{ obj.decision_process|default:"—"|linebreaksbr }}</dd></div>
+  </dl>{% if obj.disqualification_reason %}<div class="form-error">{{ obj.disqualification_reason|linebreaksbr }}</div>{% endif %}</div></div>
+
+  {% if obj.status != 'archived' and lead.status != 'converted' %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Qualification decision</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'sales:lead_qualification_partial' obj.pk %}" class="form-grid" onsubmit="return confirm('Mark this assessment partially qualified?');">{% csrf_token %}<input type="hidden" name="status" value="partially_qualified"><div class="form-actions"><button class="btn btn-outline" type="submit"><i data-lucide="circle-help"></i> Mark partial</button></div></form>
+      <form method="post" action="{% url 'sales:lead_qualification_qualify' obj.pk %}" class="form-grid" onsubmit="return confirm('Mark this lead qualified?');">{% csrf_token %}<input type="hidden" name="status" value="qualified"><div class="form-group"><label class="form-label" for="qualify-notes">Notes</label><textarea id="qualify-notes" name="notes" class="form-textarea" rows="2"></textarea></div><div class="form-actions"><button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Mark qualified</button></div></form>
+      <form method="post" action="{% url 'sales:lead_qualification_disqualify' obj.pk %}" class="form-grid" onsubmit="return confirm('Mark this lead disqualified?');">{% csrf_token %}<input type="hidden" name="status" value="disqualified"><div class="form-group"><label class="form-label" for="disqualify-reason">Reason</label><textarea id="disqualify-reason" name="disqualification_reason" class="form-textarea" rows="2" required></textarea></div><div class="form-actions"><button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Disqualify</button></div></form>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}<form method="post" action="{% url 'sales:lead_qualification_archive' obj.pk %}" onsubmit="return confirm('Archive this assessment?');">{% csrf_token %}<input type="hidden" name="status" value="archived"><button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button></form>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Routing preview</h2></div>
+    <div class="card-body">
+      <form method="get" action="{% url 'sales:lead_qualification_route_preview' obj.pk %}" class="form-grid">
+        <div class="form-group"><label class="form-label" for="qualification-preview-lead">Lead</label><select id="qualification-preview-lead" name="lead" class="form-select" required><option value="{{ lead.pk }}">{{ lead.number }} · {{ lead.name }}</option></select></div>
+        <div class="form-actions"><button class="btn btn-outline" type="submit"><i data-lucide="eye"></i> Preview route</button></div>
+      </form>
+      {% if routing_preview %}<div class="detail-grid" style="margin-top:1rem;"><div class="detail-item"><dt>Matched rule</dt><dd>{{ routing_preview.rule.name|default:"—" }}</dd></div><div class="detail-item"><dt>Owner</dt><dd>{% if routing_preview.owner %}{{ routing_preview.owner.get_full_name|default:routing_preview.owner.username }}{% else %}—{% endif %}</dd></div><div class="detail-item"><dt>Reason</dt><dd>{{ routing_preview.reason }}</dd></div></div>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Score events</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Event</th><th>Delta</th><th>Reason</th><th>Recorded by</th></tr></thead><tbody>{% for event in score_events %}<tr><td>{{ event.occurred_at|date:"M d, Y H:i" }}</td><td>{{ event.get_event_type_display }}</td><td>{{ event.score_delta }}</td><td>{{ event.reason|default:"—"|truncatechars:60 }}</td><td>{% if event.recorded_by %}{{ event.recorded_by.get_full_name|default:event.recorded_by.username }}{% else %}System{% endif %}</td></tr>{% empty %}<tr><td colspan="5"><div class="empty-state"><i data-lucide="gauge"></i><p>No score history.</p></div></td></tr>{% endfor %}</tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Nurture enrollments</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Number</th><th>Campaign</th><th>Status</th><th>Next touch</th></tr></thead><tbody>{% for enrollment in enrollments %}<tr><td><a href="{% url 'sales:lead_nurture_enrollment_detail' enrollment.pk %}">{{ enrollment.number }}</a></td><td>{{ enrollment.email_campaign.name }}</td><td>{{ enrollment.get_status_display }}</td><td>{{ enrollment.next_touch_at|date:"M d, Y H:i"|default:"—" }}</td></tr>{% empty %}<tr><td colspan="4"><div class="empty-state"><i data-lucide="mail"></i><p>No nurture enrollments.</p></div></td></tr>{% endfor %}</tbody></table></div>
+  </div>
+  <div class="card"><div class="card-body"><div class="form-actions"><a href="{% url 'sales:lead_qualification_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a><form method="post" action="{% url 'sales:lead_qualification_recalculate' obj.pk %}">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Recompute score</button></form></div></div></div>
+{% endblock %}
