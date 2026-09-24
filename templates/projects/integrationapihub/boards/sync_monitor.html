@@ -46,11 +46,29 @@
         </select>
       </div>
       <div class="form-group">
+        <label for="id_trigger_source" class="form-label">Trigger Source</label>
+        <select name="trigger_source" id="id_trigger_source" class="form-select">
+          <option value="">All</option>
+          {% for value, label in trigger_choices %}
+          <option value="{{ value }}" {% if request.GET.trigger_source == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
         <label for="id_job" class="form-label">Job</label>
         <select name="job" id="id_job" class="form-select">
           <option value="">All Jobs</option>
           {% for j in jobs %}
           <option value="{{ j.pk }}" {% if job_id == j.pk|stringformat:"d" %}selected{% endif %}>{{ j.number }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="id_connector" class="form-label">Connector</label>
+        <select name="connector" id="id_connector" class="form-select">
+          <option value="">All Connectors</option>
+          {% for c in connectors %}
+          <option value="{{ c.pk }}" {% if connector_id == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} — {{ c.name }}</option>
           {% endfor %}
         </select>
       </div>
