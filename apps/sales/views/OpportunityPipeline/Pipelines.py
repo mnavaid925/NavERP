@@ -34,6 +34,7 @@ from apps.sales.opportunity_analytics import (
 )
 from apps.sales.opportunity_services import (
     sales_create_pipeline,
+    sales_delete_pipeline_stage,
     sales_reorder_pipeline_stages,
     sales_save_pipeline,
     sales_save_pipeline_stage,
@@ -104,12 +105,12 @@ def opportunity_pipeline_create(request):
     )
     if request.method == "POST" and form.is_valid():
         try:
-            sales_create_pipeline(request.tenant, form.cleaned_data, request.user)
+            pipeline = sales_create_pipeline(request.tenant, form.cleaned_data, request.user)
         except ValidationError as exc:
             form.add_error(None, exc)
         else:
             messages.success(request, "Pipeline created with its baseline stages.")
-            return redirect("sales:opportunity_pipeline_list")
+            return redirect("sales:opportunity_pipeline_detail", pk=pipeline.pk)
     return render(
         request,
         "sales/opportunity/pipeline/form.html",
@@ -290,32 +291,19 @@ def opportunity_pipeline_stage_edit(request, pk, stage_pk):
 @require_POST
 @tenant_admin_required
 def opportunity_pipeline_stage_delete(request, pk, stage_pk):
-    with transaction.atomic():
-        pipeline = get_object_or_404(
-            Pipeline.objects.select_for_update(),
-            pk=pk,
-            tenant=request.tenant,
-        )
-        stage = get_object_or_404(
-            PipelineStage.objects.select_for_update(),
-            pk=stage_pk,
-            pipeline=pipeline,
-            tenant=request.tenant,
-        )
-        try:
-            with transaction.atomic():
-                write_audit_log(
-                    request.user,
-                    stage,
-                    "delete",
-                    {"operation": "delete_pipeline_stage"},
-                    tenant=request.tenant,
-                )
-                stage.delete()
-        except ValidationError as exc:
-            messages.error(request, _opportunity_pipeline_validation_message(exc))
-        else:
-            messages.success(request, "Pipeline stage deleted.")
+    pipeline = get_object_or_404(Pipeline, pk=pk, tenant=request.tenant)
+    stage = get_object_or_404(
+        PipelineStage,
+        pk=stage_pk,
+        pipeline=pipeline,
+        tenant=request.tenant,
+    )
+    try:
+        sales_delete_pipeline_stage(stage, request.tenant, request.user)
+    except ValidationError as exc:
+        messages.error(request, _opportunity_pipeline_validation_message(exc))
+    else:
+        messages.success(request, "Pipeline stage deleted.")
     return redirect("sales:opportunity_pipeline_stages", pk=pipeline.pk)
 
 
@@ -634,6 +622,7 @@ def opportunity_pipeline_visibility(request):
                 owner_id=context["owner_id"],
                 territory_id=context["territory_id"],
                 currency=context["currency"],
+                health=context["health"],
                 date_from=date_from,
                 date_to=date_to,
             ),
