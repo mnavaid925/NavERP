@@ -7,10 +7,12 @@ treatment 7.1 gives ``project_manager`` / ``executive_sponsor`` on ProjectForm. 
 """
 from apps.projects.forms._common import *  # noqa: F401,F403
 from apps.projects.forms._common import TenantModelForm, TenantUniqueMixin, _reject_foreign
+from apps.projects.forms.MasterDataConfiguration.CustomFieldMixin import ProjectCustomFieldFormMixin
 from apps.projects.models import ProjectTask
 
 
-class TaskForm(TenantUniqueMixin, TenantModelForm):
+class TaskForm(ProjectCustomFieldFormMixin, TenantUniqueMixin, TenantModelForm):
+    custom_field_target = "task"
     class Meta:
         model = ProjectTask
         fields = [
