@@ -244,7 +244,12 @@ def sales_save_pipeline(pipeline, tenant, user, validated_data):
 
 def sales_save_pipeline_stage(stage, tenant, user, validated_data, pipeline=None):
     values = dict(validated_data)
-    pipeline_id = values.get("pipeline") or getattr(pipeline, "pk", None) or getattr(stage, "pipeline_id", None)
+    bound_pipeline_id = getattr(pipeline, "pk", None)
+    submitted_pipeline = values.get("pipeline")
+    if bound_pipeline_id is not None and submitted_pipeline is not None:
+        if submitted_pipeline.pk != bound_pipeline_id:
+            raise ValidationError("A pipeline stage cannot move to another pipeline.")
+    pipeline_id = bound_pipeline_id or getattr(submitted_pipeline, "pk", None) or getattr(stage, "pipeline_id", None)
     if pipeline_id is None:
         raise ValidationError("Choose a pipeline for this stage.")
     with transaction.atomic():
@@ -415,6 +420,11 @@ def sales_place_opportunity(
             return locked_placement
         now = timezone.now()
         created = locked_placement is None
+        stage_changed = (
+            created
+            or locked_placement.pipeline_id != locked_pipeline.pk
+            or locked_placement.current_stage_id != locked_stage.pk
+        )
         if created:
             locked_placement = OpportunityPipelinePlacement(
                 tenant=tenant,
@@ -423,7 +433,8 @@ def sales_place_opportunity(
         locked_placement.pipeline = locked_pipeline
         locked_placement.current_stage = locked_stage
         locked_placement.probability_override = probability_override
-        locked_placement.stage_entered_at = now
+        if stage_changed:
+            locked_placement.stage_entered_at = now
         locked_placement.full_clean()
         locked_placement.save()
         locked_opportunity.stage = locked_stage.crm_stage_key
