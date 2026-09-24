@@ -2164,6 +2164,18 @@ LIVE_LINKS = {
 
 
 
+    "8.1": {
+        "Lead Capture & Ingestion": "crm:formsubmission_list",
+        "Lead Scoring & Grading": "sales:lead_score_event_list",
+        "Lead Qualification & Routing": "sales:lead_qualification_list",
+        "Lead Nurturing & Drip Campaigns": "sales:lead_nurture_enrollment_list",
+        "Lead Conversion & Handoff": "sales:lead_overview#handoff",
+        "Lead Operations Board": "sales:lead_overview",
+        "Score Events": "sales:lead_score_event_list",
+        "Qualification Assessments": "sales:lead_qualification_list",
+        "Routing Rules": "sales:lead_routing_rule_list",
+        "Nurture Enrollments": "sales:lead_nurture_enrollment_list",
+    },
     # NO sidebar key for `SpendClassificationRule`, the classification workbench or
     # `SpendReportSnapshot`, and each omission has its own reason. The RULE REGISTER is
     # configuration behind an analysis page (the `ReceiptTolerancePolicy` / `KpiTarget` rule) and
