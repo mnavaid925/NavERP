@@ -113,6 +113,7 @@ def sync_monitor(request):
         "jobs": ProjectSyncJob.objects.filter(tenant=tenant),
         "connectors": ProjectIntegrationConnector.objects.filter(tenant=tenant),
         "status_choices": ProjectSyncRun.RUN_STATUS_CHOICES,
+        "trigger_choices": ProjectSyncRun.TRIGGER_SOURCE_CHOICES,
         "stats": {
             "total": counts["total"] or 0,
             "failed": counts["failed"] or 0,
