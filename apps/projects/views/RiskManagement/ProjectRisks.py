@@ -95,7 +95,9 @@ def rsk_create(request):
             obj.created_by = request.user
             if not obj.identified_by_id:
                 obj.identified_by = request.user
-            obj.save()
+            with transaction.atomic():
+                obj.save()
+                form.save_custom_values(obj, updated_by=request.user)
             write_audit_log(request.user, obj, "create")
             messages.success(request, f"Risk {obj.number} logged.")
             return redirect("projects:rsk_detail", pk=obj.pk)
@@ -127,7 +129,8 @@ def rsk_edit(request, pk):
         return redirect("projects:rsk_detail", pk=obj.pk)
     return crud_edit(
         request, model=ProjectRisk, pk=pk, form_class=ProjectRiskForm,
-        template="projects/risk/projectrisk/form.html", success_url="projects:rsk_list")
+        template="projects/risk/projectrisk/form.html", success_url="projects:rsk_list",
+        form_kwargs={"updated_by": request.user})
 
 
 @login_required
