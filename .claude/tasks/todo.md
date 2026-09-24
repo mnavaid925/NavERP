@@ -9919,4 +9919,14 @@ convention (`_`-prefixed inside the folder that includes them — cf.
 - [ ] Phase 6 Tests: test contract, conftest, 4 test files (`test_masterdataconfiguration_*`), full app suite
 - [ ] Phase 7: Update `projects` SKILL.md and README.md
 
+### Projects 7.19 Master Data & Configuration (close-out 2026-09-25)
 
+- [x] Research, frozen contract, four tenant-scoped models plus team membership, package re-exports, admin, URLconf, 26 routes, 14 templates, seeder, navigation, and migrations `0028`–`0030` are present.
+- [x] Six serial review lanes and the fixer pass are recorded in `.claude/tasks/review-projects-7.19.md`; every finding is fixed, refuted, or explicitly skipped with a reason.
+- [x] Tenant-admin authorization, tenant isolation, JSON/numeric bounds, WBS validation, locale-default concurrency, team-departure history, seeder idempotency, and deterministic hub ordering are verified.
+- [x] Project custom fields synchronize to `core.CustomFieldDefinition`; real Project/Task/Milestone/Risk/Team forms and details use the shared mixin/partials while values remain in `core.CustomFieldValue`.
+- [x] `manage.py check`, migration drift detection, seed-twice idempotency, 182/182 smoke, 256/256 fixer probe, 27/27 custom-field probe, and 44/44 focused tests pass; the full Projects suite passes 4,159 tests with `--nomigrations` (4 skipped).
+- [x] README, NavERP status, test contract, and `.claude/skills/projects/SKILL.md` now describe 7.19 as built and Module 7 as complete.
+- [x] 7.19 changes are committed one file at a time; no push is performed.
+
+**Review result:** 7.19 closes Module 7 with reusable templates, real project-entity custom fields, auditable team membership, and locale profiles. Configuration writes are tenant-admin-only, core-owned custom-field values remain authoritative, and all reads/mutations stay tenant-scoped. The migration-enabled full-suite blocker is unrelated concurrent CRM schema drift (`crm_opportunity.currency_id`); the Projects suite is green without migrations.
